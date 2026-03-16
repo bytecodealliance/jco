@@ -262,7 +262,9 @@ impl LiftIntrinsic {
                         if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
                             throw new Error('not enough storage remaining for lift');
                         }}
+
                         val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true) === 1;
+
                         ctx.storagePtr += 1;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 1; }}
 
@@ -369,9 +371,14 @@ impl LiftIntrinsic {
                         if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 2) {{
                             throw new Error('not enough storage remaining for lift');
                         }}
+
                         val = new DataView(ctx.memory.buffer).getUint16(ctx.storagePtr, true);
+
                         ctx.storagePtr += 2;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 2; }}
+
+                        const rem = ctx.storagePtr % 2;
+                        if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
 
                         return [val, ctx];
                     }}
@@ -490,10 +497,10 @@ impl LiftIntrinsic {
 
             Self::LiftFlatFloat32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let lift_flat_u32_fn = self.name();
+                let lift_flat_f32_fn = self.name();
                 output.push_str(&format!("
-                    function {lift_flat_u32_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_u32_fn}()] args', {{ ctx }});
+                    function {lift_flat_f32_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_f32_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -507,6 +514,7 @@ impl LiftIntrinsic {
                             throw new Error('not enough storage remaining for lift');
                         }}
                         val = new DataView(ctx.memory.buffer).getFloat32(ctx.storagePtr, true);
+
                         ctx.storagePtr += 4;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
 
@@ -595,8 +603,7 @@ impl LiftIntrinsic {
                         const codeUnits = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr + 4, true);
                         val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
 
-                        ctx.storagePtr += codeUnits;
-                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= codeUnits; }}
+                        ctx.storagePtr += 8;
 
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
@@ -641,7 +648,8 @@ impl LiftIntrinsic {
             Self::LiftFlatRecord => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_record_fn = self.name();
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     function {lift_flat_record_fn}(keysAndLiftFns) {{
                         return function {lift_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_record_fn}()] args', {{ ctx }});
@@ -652,19 +660,19 @@ impl LiftIntrinsic {
 
                             const res = {{}};
                             for (const [key, liftFn, _size32, align32] of keysAndLiftFns) {{
-                                ctx.storagePtr = Math.ceil(ctx.storagePtr / align32) * align32;
                                 let [val, newCtx] = liftFn(ctx);
                                 res[key] = val;
                                 ctx = newCtx;
 
                                 const rem = ctx.storagePtr % align32;
-                                if (rem !== 0) {{ newCtx.storagePtr + (alignment32 - rem); }}
+                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                             }}
 
                             return [res, ctx];
                         }}
                     }}
-                "#));
+                "#
+                ));
             }
 
             Self::LiftFlatVariant => {
@@ -673,7 +681,7 @@ impl LiftIntrinsic {
                 let lift_u8 = Self::LiftFlatU8.name();
                 let lift_u16 = Self::LiftFlatU16.name();
                 let lift_u32 = Self::LiftFlatU32.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lift_flat_variant_fn}(casesAndLiftFns) {{
                         return function {lift_flat_variant_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_variant_fn}()] args', {{ ctx }});
@@ -681,47 +689,53 @@ impl LiftIntrinsic {
                             const origUseParams = ctx.useDirectParams;
 
                             let caseIdx;
+                            let liftRes;
+                            const originalPtr = ctx.storagePtr;
+                            const numCases =  casesAndLiftFns.length;
                             if (casesAndLiftFns.length < 256) {{
-                                let discriminantByteLen = 1;
-                                const [idx, newCtx] = {lift_u8}(ctx);
-                                caseIdx = idx;
-                                ctx = newCtx;
-                            }} else if (casesAndLiftFns.length > 256 && discriminantByteLen < 65536) {{
-                                discriminantByteLen = 2;
-                                const [idx, newCtx] = {lift_u16}(ctx);
-                                caseIdx = idx;
-                                ctx = newCtx;
-                            }} else if (casesAndLiftFns.length > 65536 && discriminantByteLen < 4_294_967_296) {{
-                                discriminantByteLen = 4;
-                                const [idx, newCtx] = {lift_u32}(ctx);
-                                caseIdx = idx;
-                                ctx = newCtx;
+                                liftRes = {lift_u8}(ctx);
+                            }} else if (numCases >= 256 && numCases < 65536) {{
+                                liftRes = {lift_u16}(ctx);
+                            }} else if (numCases >= 65536 && numCases < 4_294_967_296) {{
+                                liftRes = {lift_u32}(ctx);
                             }} else {{
-                                throw new Error('unsupported number of cases [' + casesAndLIftFns.legnth + ']');
+                                throw new Error(`unsupported number of variant cases [${{numCases}}]`);
                             }}
+                            caseIdx = liftRes[0];
+                            ctx = liftRes[1];
 
-                            const [ tag, liftFn, size32, alignment32, payloadOffset32 ] = casesAndLiftFns[caseIdx];
+                            const [ tag, liftFn, size32, align32, payloadOffset32 ] = casesAndLiftFns[caseIdx];
+                            if (payloadOffset32 === undefined) {{ throw new Error('unexpectedly missing payload offset'); }}
+
+                            if (originalPtr !== undefined) {{
+                                ctx.storagePtr = originalPtr + payloadOffset32;
+                            }}
 
                             let val;
                             if (liftFn === null) {{
                                 val = {{ tag }};
-                                return [val, ctx];
+                                // NOTE: here we need to move past the entire object in memory
+                                // despite moving to the payload which we now know is missing/unnecessary
+                                ctx.storagePtr = originalPtr + size32;
+                            }} else {{
+                                const [newVal, newCtx] = liftFn(ctx);
+                                val = {{ tag, val: newVal }};
+                                ctx = newCtx;
+
+                                // NOTE: Padding can be left over after doing the lift if it was less than
+                                // space left for the payload normally.
+                                if (ctx.storagePtr < originalPtr + size32) {{
+                                    ctx.storagePtr = originalPtr + size32;
+                                }}
                             }}
 
-                            if (payloadOffset32) {{ ctx.storagePtr += payloadOffset32; }}
-
-                            const [newVal, newCtx] = liftFn(ctx);
-                            ctx = newCtx;
-
-                            const rem = alignment32 % ctx.storagePtr;
-                            if (rem !== 0) {{ ctx.storagePtr += (alignment32 - rem); }}
-
-                            val = {{ tag, val: newVal }};
+                            const rem = ctx.storagePtr % align32;
+                            if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
 
                             return [val, ctx];
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatList => {
@@ -729,7 +743,7 @@ impl LiftIntrinsic {
                 let lift_flat_list_fn = self.name();
                 let lift_u32 = Self::LiftFlatU32.name();
                 output.push_str(&format!("
-                    function {lift_flat_list_fn}(elemLiftFn, alignment32, knownLen) {{
+                    function {lift_flat_list_fn}(elemLiftFn, align32, knownLen) {{
                         function {lift_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
 
@@ -772,10 +786,12 @@ impl LiftIntrinsic {
 
                             const val = [];
                             for (var i = 0; i < len; i++) {{
-                                ctx.storagePtr = Math.ceil(ctx.storagePtr / alignment32) * alignment32;
                                 const [res, nextCtx] = elemLiftFn(ctx);
                                 val.push(res);
                                 ctx = nextCtx;
+
+                                const rem = ctx.storagePtr % align32;
+                                if (rem !== 0) {{ newCtx.storagePtr += (align32 - rem); }}
                             }}
 
                             return [val, ctx];

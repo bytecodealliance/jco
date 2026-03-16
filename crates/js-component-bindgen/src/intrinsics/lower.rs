@@ -506,49 +506,58 @@ impl LowerIntrinsic {
 
             Self::LowerFlatVariant => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_flat_variant_fn = self.name();
                 let lower_u8_fn = Self::LowerFlatU8.name();
                 let lower_u16_fn = Self::LowerFlatU16.name();
                 let lower_u32_fn = Self::LowerFlatU32.name();
-                output.push_str(&format!(r#"
-                    function _lowerFlatVariant(metadata, extra) {{
-                        const {{ discriminantSizeBytes, lowerMetas }} = metadata;
 
-                        return function _lowerFlatVariantInner(ctx) {{
-                            {debug_log_fn}('[_lowerFlatVariantInner()] args', ctx, discriminantSizeBytes, lowerMetas);
+                output.push_str(&format!(r#"
+                    function {lower_flat_variant_fn}(lowerMetas) {{
+                        return function {lower_flat_variant_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_variant_fn}()] args', ctx);
+
                             const {{ memory, realloc, vals, storageLen, componentIdx }} = ctx;
                             let storagePtr = ctx.storagePtr;
 
                             const {{ tag, val }} = vals[0];
-                            const variant = lowerMetas.find(vm => vm.tag === tag);
-                            if (!variant) {{ throw new Error(`missing/invalid variant, no tag matches [${{tag}}] (options were ${{variantMetas.map(vm => vm.tag)}})`); }}
-                            if (!variant.discriminant) {{ throw new Error(`missing/invalid discriminant for variant [${{variant}}]`); }}
-
-                            let bytesWritten;
-                            let discriminantLowerArgs = {{ memory, realloc, vals: [variant.discriminant], storagePtr, componentIdx }}
-                            switch (discriminantSizeBytes) {{
-                                case 1:
-                                    bytesWritten = {lower_u8_fn}(discriminantLowerArgs);
-                                    break;
-                                case 2:
-                                    bytesWritten = {lower_u16_fn}(discriminantLowerArgs);
-                                    break;
-                                case 4:
-                                    bytesWritten = {lower_u32_fn}(discriminantLowerArgs);
-                                    break;
-                                default:
-                                    throw new Error(`unexpected discriminant size bytes [${{discriminantSizeBytes}}]`);
+                            const disc = lowerMetas.findIndex(m => m[0] === tag);
+                            if (disc === -1) {{
+                                throw new Error(`invalid variant tag/discriminant [${{tag}}] (valid tags: ${{variantMetas.map(m => m[0])}})`);
                             }}
-                            if (bytesWritten !== discriminantSizeBytes) {{
-                                throw new Error("unexpectedly wrote more bytes than discriminant");
+
+                            const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = lowerMetas[disc];
+
+                            const originalPtr = ctx.resultPtr;
+                            ctx.vals = [disc];
+                            let discLowerRes;
+                            if (lowerMetas.length < 256) {{
+                                discLowerRes = {lower_u8_fn}(ctx);
+                            }} else if (lowerMetas.length >= 256 && lowerMetas.length < 65536) {{
+                                discLowerRes = {lower_u16_fn}(ctx);
+                            }} else if (lowerMetas.length >= 65536 && lowerMetas.length < 4_294_967_296) {{
+                                discLowerRes = {lower_u32_fn}(ctx);
+                            }} else {{
+                                throw new Error('unsupported number of cases [' + lowerMetas.legnth + ']');
                             }}
-                            storagePtr += bytesWritten;
 
-                            // Adjust alignment after discriminant write
-                            const rem = storagePtr % variant.align32;
-                            if (rem !== 0) {{ storagePtr += (variant.align32 - rem); }}
-                            bytesWritten += rem;
+                            ctx.resultPtr = originalPtr + payloadOffset32;
 
-                            bytesWritten += variant.lowerFn({{ memory, realloc, vals: [val], storagePtr, storageLen, componentIdx }});
+                            const payloadBytesWritten = lowerFn({{
+                                memory,
+                                realloc,
+                                vals: [val],
+                                storagePtr,
+                                storageLen,
+                                componentIdx,
+                            }});
+                            let bytesWritten = payloadOffset + payloadBytesWritten;
+
+                            const rem = ctx.storagePtr % align32;
+                            if (rem !== 0) {{
+                                const pad = align32 - rem;
+                                ctx.storagePtr += pad;
+                                bytesWritten += pad;
+                            }}
 
                             return bytesWritten;
                         }}
@@ -651,34 +660,31 @@ impl LowerIntrinsic {
 
             Self::LowerFlatOption => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _lowerFlatOption(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatOption()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        let [start] = vals;
-                        if (storageLen !== undefined && size !== undefined && size > storageLen) {{
-                            throw new Error('not enough storage remaining for option flat lower');
+                let lower_flat_option_fn = self.name();
+                let lower_variant_fn = Self::LowerFlatVariant.name();
+                output.push_str(&format!(
+                    "
+                    function {lower_flat_option_fn}(lowerMetas) {{
+                        function {lower_flat_option_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_option_fn}()] args', {{ ctx }});
+                            return {lower_variant_fn}(lowerMetas)(ctx);
                         }}
-                        const data = new Uint8Array(memory.buffer, start, size);
-                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
-                        return data.byteLength;
                     }}
-                "));
+                "
+                ));
             }
 
             // Results are just a special case of lowering variants
             Self::LowerFlatResult => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_flat_result_fn = self.name();
                 let lower_variant_fn = Self::LowerFlatVariant.name();
                 output.push_str(&format!(
                     r#"
-                    function _lowerFlatResult(lowerMetas) {{
-                       const invalidTag = lowerMetas.find(t => t.tag !== 'ok' && t.tag !== 'error')
-                       if (invalidTag) {{ throw new Error(`invalid variant tag [${{invalidTag}}] found for result`); }}
-
-                       return function _lowerFlatResultInner() {{
-                           {debug_log_fn}('[_lowerFlatResult()] args', {{ lowerMetas }});
-                           let lowerFn = {lower_variant_fn}({{ discriminantSizeBytes: 1, lowerMetas }}, {{ forResult: true }});
-                           return lowerFn.apply(null, arguments);
+                    function {lower_flat_result_fn}(lowerMetas) {{
+                       return function {lower_flat_result_fn}Inner(ctx) {{
+                           {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ lowerMetas }});
+                           return {lower_variant_fn}(lowerMetas)(ctx);
                        }};
                     }}
                     "#

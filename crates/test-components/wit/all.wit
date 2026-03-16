@@ -13,6 +13,7 @@ interface get-stream-async {
         num(u32),
         str(string),
         float(f32),
+        maybe-bool(option<u32>),
     }
 
     enum example-enum {
