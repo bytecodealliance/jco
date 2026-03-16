@@ -4577,19 +4577,19 @@ pub fn gen_flat_lift_fn_js_expr(
             let mut cases_and_lifts_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
                 let lift_args = match maybe_ty {
-                    None => format!("['{}', null, null, null],", name),
+                    None => format!("['{}', null, 0, 0, 0],", name),
                     Some(ty) => {
                         format!(
-                            "['{}', {}, {}, {}],",
-                            name,
+                            "['{name}', {}, {}, {}, {}],",
                             gen_flat_lift_fn_js_expr(
                                 intrinsic_mgr,
                                 component_types,
                                 ty,
                                 string_encoding
                             ),
-                            component_types.canonical_abi(ty).size32,
-                            component_types.canonical_abi(ty).align32,
+                            variant_ty.abi.size32,
+                            variant_ty.abi.align32,
+                            variant_ty.info.payload_offset32,
                         )
                     }
                 };
@@ -4650,9 +4650,9 @@ pub fn gen_flat_lift_fn_js_expr(
             );
             // NOTE: options are treated as variants
             format!(
-                "{f}.bind(null, [
-                     ['some', {lift_fn_js}, {align_32}, {size_32}, {payload_offset_32} ],
-                     ['none', null, null, null, null ],
+                "{f}([
+                     ['none', null, {size_32}, {align_32}, {payload_offset_32} ],
+                     ['some', {lift_fn_js}, {size_32}, {align_32}, {payload_offset_32} ],
                  ])"
             )
         }
@@ -4662,46 +4662,40 @@ pub fn gen_flat_lift_fn_js_expr(
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
             let result_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
-            cases_and_lifts_expr.push_str(&format!(
-                "['{}', {}, {}],",
-                "ok",
-                result_ty
-                    .ok
-                    .as_ref()
-                    .map(|ty| gen_flat_lift_fn_js_expr(
+
+            if let Some(ok_ty) = result_ty.ok {
+                cases_and_lifts_expr.push_str(&format!(
+                    "['ok', {}, {}, {}, {}],",
+                    gen_flat_lift_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
-                        ty,
+                        &ok_ty,
                         string_encoding
-                    ))
-                    .unwrap_or(String::from("null")),
-                result_ty
-                    .ok
-                    .as_ref()
-                    .map(|ty| component_types.canonical_abi(ty).size32)
-                    .map(|n| n.to_string())
-                    .unwrap_or(String::from("null")),
-            ));
-            cases_and_lifts_expr.push_str(&format!(
-                "['{}', {}, {}],",
-                "error",
-                result_ty
-                    .err
-                    .as_ref()
-                    .map(|ty| gen_flat_lift_fn_js_expr(
+                    ),
+                    result_ty.abi.size32,
+                    result_ty.abi.align32,
+                    result_ty.info.payload_offset32,
+                ))
+            } else {
+                cases_and_lifts_expr.push_str("['ok', null, 0, 0, 0],");
+            }
+
+            if let Some(err_ty) = &result_ty.err {
+                cases_and_lifts_expr.push_str(&format!(
+                    "['error', {}, {}, {}, {}],",
+                    gen_flat_lift_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
-                        ty,
+                        err_ty,
                         string_encoding
-                    ))
-                    .unwrap_or(String::from("null")),
-                result_ty
-                    .err
-                    .as_ref()
-                    .map(|ty| component_types.canonical_abi(ty).size32)
-                    .map(|n| n.to_string())
-                    .unwrap_or(String::from("null")),
-            ));
+                    ),
+                    result_ty.abi.size32,
+                    result_ty.abi.align32,
+                    result_ty.info.payload_offset32,
+                ))
+            } else {
+                cases_and_lifts_expr.push_str("['err', null, 0, 0, 0],");
+            }
 
             cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})")
@@ -4881,7 +4875,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 // can properly generate a function that lowers the fields.
                 keys_and_lowers_expr.push_str(&format!(
                     "['{}', {}, {}, {} ],",
-                    f.name,
+                    f.name.to_lower_camel_case(),
                     gen_flat_lower_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
@@ -4900,33 +4894,27 @@ pub fn gen_flat_lower_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
+            let size32 = variant_ty.abi.size32;
+            let align32 = variant_ty.abi.align32;
+            let payload_offset32 = variant_ty.info.payload_offset32;
+
             let mut lower_metas_expr = String::from("[");
-            for (case_idx, (name, maybe_ty)) in variant_ty.cases.iter().enumerate() {
+            for (name, maybe_ty) in variant_ty.cases.iter() {
                 lower_metas_expr.push_str(&format!(
-                    "{{ discriminant: {}, tag: '{}', lowerFn: {}, align32: {}, }},",
-                    case_idx,
-                    name,
+                    "[ '{name}', {}, {size32}, {align32}, {payload_offset32} ],",
                     maybe_ty
-                        .as_ref()
                         .map(|ty| gen_flat_lower_fn_js_expr(
                             intrinsic_mgr,
                             component_types,
-                            ty,
+                            &ty,
                             string_encoding,
                         ))
-                        .unwrap_or(String::from("null")),
-                    maybe_ty
-                        .as_ref()
-                        .map(|ty| component_types.canonical_abi(ty).align32)
-                        .map(|n| n.to_string())
-                        .unwrap_or(String::from("null")),
+                        .unwrap_or_else(|| "null".into()),
                 ));
             }
             lower_metas_expr.push(']');
-            format!(
-                "{lower_fn}({{ discriminantSizeBytes: {}, lowerMetas: {lower_metas_expr} }})",
-                variant_ty.info.size.byte_size(),
-            )
+
+            format!("{lower_fn}({lower_metas_expr})")
         }
 
         InterfaceType::List(ty_idx) => {
@@ -4981,57 +4969,64 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::Option(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
-            let ty_idx = ty_idx.as_u32();
+            let option_ty = &component_types[*ty_idx];
+            let size32 = option_ty.abi.size32;
+            let align32 = option_ty.abi.align32;
+            let payload_offset32 = option_ty.info.payload_offset32;
+
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
-            format!("{f}.bind(null, {ty_idx})")
+
+            let mut cases_and_lowers_expr = String::from("[");
+            cases_and_lowers_expr.push_str(&format!(
+                "[ 'some', {}, {size32}, {align32}, {payload_offset32} ],",
+                gen_flat_lower_fn_js_expr(
+                    intrinsic_mgr,
+                    component_types,
+                    &option_ty.ty,
+                    string_encoding,
+                )
+            ));
+            cases_and_lowers_expr.push_str(&format!(
+                "[ 'none', null, {size32}, {align32}, {payload_offset32} ],",
+            ));
+            cases_and_lowers_expr.push(']');
+
+            format!("{f}({cases_and_lowers_expr})")
         }
 
         InterfaceType::Result(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
             let result_ty = &component_types[*ty_idx];
+            let size32 = result_ty.abi.size32;
+            let align32 = result_ty.abi.align32;
+            let payload_offset32 = result_ty.info.payload_offset32;
+
             let mut cases_and_lowers_expr = String::from("[");
             cases_and_lowers_expr.push_str(&format!(
-                "{{ discriminant: 0, tag: '{}', lowerFn: {}, align32: {} }},",
-                "ok",
+                "[ 'ok', {}, {size32}, {align32}, {payload_offset32} ],",
                 result_ty
                     .ok
-                    .as_ref()
                     .map(|ty| gen_flat_lower_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
-                        ty,
+                        &ty,
                         string_encoding,
                     ))
-                    .unwrap_or(String::from("null")),
-                result_ty
-                    .ok
-                    .as_ref()
-                    .map(|ty| component_types.canonical_abi(ty).align32)
-                    .map(|n| n.to_string())
-                    .unwrap_or(String::from("null")),
+                    .unwrap_or_else(|| "null".into())
             ));
             cases_and_lowers_expr.push_str(&format!(
-                "{{ discriminant: 1, tag: '{}', lowerFn: {}, align32: {} }},",
-                "error",
+                "[ 'err', {}, {size32}, {align32}, {payload_offset32} ],",
                 result_ty
                     .err
-                    .as_ref()
                     .map(|ty| gen_flat_lower_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
-                        ty,
+                        &ty,
                         string_encoding,
                     ))
-                    .unwrap_or(String::from("null")),
-                result_ty
-                    .err
-                    .as_ref()
-                    .map(|ty| component_types.canonical_abi(ty).align32)
-                    .map(|n| n.to_string())
-                    .unwrap_or(String::from("null")),
+                    .unwrap_or_else(|| "null".into())
             ));
-
             cases_and_lowers_expr.push(']');
             format!("{lower_fn}({cases_and_lowers_expr})")
         }

@@ -45,18 +45,18 @@ suite("stream<T> lifts", () => {
 
         let vals = [11, 22, 33];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
-        await checkStreamValues(stream, vals, "u32");
+        await checkStreamValues({ stream, vals, typeName: "u32" });
 
         vals = [-11, -22, -33];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS32(vals);
-        await checkStreamValues(stream, vals, "s32");
+        await checkStreamValues({ stream, vals, typeName: "s32" });
     });
 
     test("bool", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamBool, AsyncFunction);
         const vals = [true, false];
         const stream = await instance["jco:test-components/get-stream-async"].getStreamBool(vals);
-        await checkStreamValues(stream, vals, "bool");
+        await checkStreamValues({ stream, vals, typeName: "bool" });
     });
 
     test("u16/s16", async () => {
@@ -65,12 +65,12 @@ suite("stream<T> lifts", () => {
 
         let vals = [0, 100, 65535];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU16(vals);
-        await checkStreamValues(stream, vals, "u16");
+        await checkStreamValues({ stream, vals, typeName: "u16" });
         // TODO(fix): under/overflowing values hang
 
         vals = [-32_768, 0, 32_767];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS16(vals);
-        await checkStreamValues(stream, vals, "u16");
+        await checkStreamValues({ stream, vals, typeName: "u16" });
         // TODO(fix): under/overflowing values hang
     });
 
@@ -80,12 +80,12 @@ suite("stream<T> lifts", () => {
 
         let vals = [0n, 100n, 65535n];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU64(vals);
-        await checkStreamValues(stream, vals, "u64");
+        await checkStreamValues({ stream, vals, typeName: "u64" });
         // TODO(fix): under/overflowing values hang
 
         vals = [-32_768n, 0n, 32_767n];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS64(vals);
-        await checkStreamValues(stream, vals, "s64");
+        await checkStreamValues({ stream, vals, typeName: "s64" });
         // TODO(fix): under/overflowing values hang
     });
 
@@ -96,7 +96,7 @@ suite("stream<T> lifts", () => {
 
         // let vals = [0, 1, 255];
         // let stream = await instance["jco:test-components/get-stream-async"].getStreamU8(vals);
-        // await checkStreamValues(stream, vals, "u8");
+        // await checkStreamValues({ stream, vals, typeName: "u8" });
         //
         // vals = [-11, -22, -33, -128, 127, 128];
         // stream = await instance["jco:test-components/get-stream-async"].getStreamS8(vals);
@@ -135,10 +135,10 @@ suite("stream<T> lifts", () => {
 
         let vals = ["hello", "world", "!"];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamString(vals);
-        await checkStreamValues(stream, vals, "string");
+        await checkStreamValues({ stream, vals, typeName: "string" });
     });
 
-    test.only("record", async () => {
+    test("record", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamRecord, AsyncFunction);
 
         let vals = [
@@ -171,9 +171,13 @@ suite("stream<T> lifts", () => {
     });
 });
 
-async function checkStreamValues(stream, vals, typeName, assertEqFn) {
+async function checkStreamValues(args) {
+    const { stream, vals, typeName, assertEqFn } = args ?? {};
+    const expectedValues = args.expectedValues ?? [];
+
     const eq = assertEqFn ?? assert.equal;
-    for (const [idx, expected] of vals.entries()) {
+    for (const [idx, v] of vals.entries()) {
+        const expected = expectedValues[idx] ?? v;
         eq(await stream.next(), expected, `${typeName} [${idx}] read is incorrect`);
     }
 
