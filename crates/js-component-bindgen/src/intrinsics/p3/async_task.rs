@@ -1262,8 +1262,6 @@ impl AsyncTaskIntrinsic {
 
                             if (this.isResolvedState() || this.#rejected) {{ return; }}
 
-                            console.log("SUBTASKS?", this.#subtasks);
-                            console.log("UPPER??", this.#parentSubtask);
                             for (const subtask of this.#subtasks) {{
                                 subtask.reject(taskErr);
                             }}

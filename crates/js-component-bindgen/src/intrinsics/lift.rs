@@ -574,7 +574,8 @@ impl LiftIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let decoder = Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8).name();
                 let lift_flat_string_utf8_fn = self.name();
-                output.push_str(&format!("
+
+                output.push_str(&format!(r#"
                     function {lift_flat_string_utf8_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_string_utf8_fn}()] args', {{ ctx }});
                         let val;
@@ -590,15 +591,19 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, params[0], true);
-                        const codeUnits = new DataView(memory.buffer).getUint32(ctx.storagePtr, params[0] + 4, true);
+                        const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
+                        const codeUnits = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr + 4, true);
                         val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
+
                         ctx.storagePtr += codeUnits;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= codeUnits; }}
 
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         return [val, ctx];
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatStringUtf16 => {
@@ -709,6 +714,8 @@ impl LiftIntrinsic {
                             const [newVal, newCtx] = liftFn(ctx);
                             ctx = newCtx;
                             val = {{ tag, val: newVal }};
+
+                            // TODO: adjust for alignment, as lift fn may not adjust for it (e.g. strings)!
 
                             return [val, ctx];
                         }}

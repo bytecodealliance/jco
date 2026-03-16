@@ -1221,20 +1221,25 @@ impl Bindgen for FunctionBindgen<'_> {
                     StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
 
-                let encode_intrinsic = match (self.encoding, self.is_async) {
-                    (StringEncoding::UTF16, true) => {
-                        Intrinsic::String(StringIntrinsic::Utf16EncodeAsync)
-                    }
+                let (call_prefix, encode_intrinsic) = match (self.encoding, self.is_async) {
+                    (StringEncoding::UTF16, true) => (
+                        "await ",
+                        Intrinsic::String(StringIntrinsic::Utf16EncodeAsync),
+                    ),
                     (StringEncoding::UTF16, false) => {
-                        Intrinsic::String(StringIntrinsic::Utf16Encode)
+                        ("", Intrinsic::String(StringIntrinsic::Utf16Encode))
                     }
-                    (StringEncoding::UTF8, true) => {
-                        Intrinsic::String(StringIntrinsic::Utf8EncodeAsync)
+                    (StringEncoding::UTF8, true) => (
+                        "await ",
+                        Intrinsic::String(StringIntrinsic::Utf8EncodeAsync),
+                    ),
+                    (StringEncoding::UTF8, false) => {
+                        ("", Intrinsic::String(StringIntrinsic::Utf8Encode))
                     }
-                    (StringEncoding::UTF8, false) => Intrinsic::String(StringIntrinsic::Utf8Encode),
                     _ => unreachable!("unsupported encoding {}", self.encoding),
                 };
                 let encode = self.intrinsic(encode_intrinsic);
+
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
                 let str = String::from("cabi_realloc");
@@ -1243,7 +1248,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     r#"
-                      var encodeRes = {encode}({s}, {realloc}, {memory});
+                      var encodeRes = {call_prefix}{encode}({s}, {realloc}, {memory});
                       var ptr{tmp} = encodeRes.ptr;
                       var len{tmp} = {encoded_len};
                     "#,
