@@ -137,6 +137,19 @@ suite("stream<T> lifts", () => {
         let stream = await instance["jco:test-components/get-stream-async"].getStreamString(vals);
         await checkStreamValues(stream, vals, "string");
     });
+
+    test.only("record", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamRecord, AsyncFunction);
+
+        let vals = [
+            { id: 1, idStr: "one" },
+            { id: 2, idStr: "two" },
+            { id: 3, idStr: "three" },
+        ];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamRecord(vals);
+        await checkStreamValues(stream, vals, "record");
+    });
+
 });
 
 async function checkStreamValues(stream, vals, typeName) {
