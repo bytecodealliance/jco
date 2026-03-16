@@ -638,15 +638,10 @@ impl LiftIntrinsic {
                 "));
             }
 
-            // NOTE: lifting records requires lifting the requisite fields of a record.
-            //
-            // For that reason, lifting records is a higher level function --
-            // we must take a list of keys and lifting functions for the fields,
-            // then do the logic of actually lifting.
             Self::LiftFlatRecord => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_record_fn = self.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lift_flat_record_fn}(keysAndLiftFns) {{
                         return function {lift_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_record_fn}()] args', {{ ctx }});
@@ -656,17 +651,20 @@ impl LiftIntrinsic {
                             }}
 
                             const res = {{}};
-                            for (const [key, liftFn, alignment32] in keysAndLiftFns) {{
-                                ctx.storagePtr = Math.ceil(ctx.storagePtr / alignment32) * alignment32;
+                            for (const [key, liftFn, _size32, align32] of keysAndLiftFns) {{
+                                ctx.storagePtr = Math.ceil(ctx.storagePtr / align32) * align32;
                                 let [val, newCtx] = liftFn(ctx);
                                 res[key] = val;
                                 ctx = newCtx;
+
+                                const rem = ctx.storagePtr % align32;
+                                if (rem !== 0) {{ newCtx.storagePtr + (alignment32 - rem); }}
                             }}
 
                             return [res, ctx];
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatVariant => {
@@ -702,7 +700,7 @@ impl LiftIntrinsic {
                                 throw new Error('unsupported number of cases [' + casesAndLIftFns.legnth + ']');
                             }}
 
-                            const [ tag, liftFn, size32, alignment32 ] = casesAndLiftFns[caseIdx];
+                            const [ tag, liftFn, size32, alignment32, payloadOffset32 ] = casesAndLiftFns[caseIdx];
 
                             let val;
                             if (liftFn === null) {{
@@ -710,11 +708,15 @@ impl LiftIntrinsic {
                                 return [val, ctx];
                             }}
 
+                            if (payloadOffset32) {{ ctx.storagePtr += payloadOffset32; }}
+
                             const [newVal, newCtx] = liftFn(ctx);
                             ctx = newCtx;
-                            val = {{ tag, val: newVal }};
 
-                            // TODO: adjust for alignment, as lift fn may not adjust for it (e.g. strings)!
+                            const rem = alignment32 % ctx.storagePtr;
+                            if (rem !== 0) {{ ctx.storagePtr += (alignment32 - rem); }}
+
+                            val = {{ tag, val: newVal }};
 
                             return [val, ctx];
                         }}
