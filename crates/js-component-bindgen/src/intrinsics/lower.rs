@@ -461,6 +461,7 @@ impl LowerIntrinsic {
                 output.push_str(&format!("
                     function _lowerFlatStringUTF8(ctx) {{
                         {debug_log_fn}('[_lowerFlatStringUTF8()] args', ctx);
+
                         const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
 
                         const s = vals[0];
@@ -585,7 +586,6 @@ impl LowerIntrinsic {
                                 ctx.storagePtr = elemLowerCtx.storagePtr;
                                 return bytesLowered;
                             }}
-
 
                             if (ctx.vals.length !== 2) {{
                                 throw new Error('indirect parameter loading must have a pointer and length as vals');
