@@ -57,6 +57,15 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
     async fn get_stream_f64(vals: Vec<f64>) -> Result<StreamReader<f64>, String> {
         stream_values_async(vals)
     }
+
+    // NOTE: stream<char> is not yet supported upstream (stream<u8> can be used instead)
+    // async fn get_stream_char(vals: Vec<char>) -> Result<StreamReader<char>, String> {
+    //     stream_values_async(vals)
+    // }
+
+    async fn get_stream_string(vals: Vec<String>) -> Result<StreamReader<String>, String> {
+        stream_values_async(vals)
+    }
 }
 
 fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {
