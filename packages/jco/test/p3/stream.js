@@ -147,14 +147,34 @@ suite("stream<T> lifts", () => {
             { id: 3, idStr: "three" },
         ];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamRecord(vals);
-        await checkStreamValues(stream, vals, "record");
+        await checkStreamValues({ stream, vals, typeName: "record", assertEqFn: assert.deepEqual });
     });
 
+    test("variant", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariant, AsyncFunction);
+
+        const vals = [
+            { tag: "maybe-bool", val: 123 }, // NOTE: non-nullable option<t> values are *not* wrapped as objects
+            { tag: "maybe-bool", val: null },
+            { tag: "float", val: 123.1 },
+            { tag: "str", val: "string-value" },
+            { tag: "num", val: 1 },
+        ];
+        const stream = await instance["jco:test-components/get-stream-async"].getStreamVariant(vals);
+        assert.deepEqual(await stream.next(), { tag: "maybe-bool", val: { tag: "some", val: 123 } });
+        assert.deepEqual(await stream.next(), { tag: "maybe-bool", val: { tag: "none" } });
+        const floatMember = await stream.next();
+        assert.equal(floatMember.tag, "float");
+        assert.closeTo(floatMember.val, 123.1, 0.00001);
+        assert.deepEqual(await stream.next(), vals[3]);
+        assert.deepEqual(await stream.next(), vals[4]);
+    });
 });
 
-async function checkStreamValues(stream, vals, typeName) {
+async function checkStreamValues(stream, vals, typeName, assertEqFn) {
+    const eq = assertEqFn ?? assert.equal;
     for (const [idx, expected] of vals.entries()) {
-        assert.equal(expected, await stream.next(), `${typeName} [${idx}] read is incorrect`);
+        eq(await stream.next(), expected, `${typeName} [${idx}] read is incorrect`);
     }
 
     // If we get this far, the fourth read will do one of the following:
