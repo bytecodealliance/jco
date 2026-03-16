@@ -9,22 +9,22 @@ interface async-add-s32 {
 }
 
 interface get-stream-async {
-    // variant example-variant {
-    //     num(u32),
-    //     str(string),
-    //     float(f32),
-    // }
+    variant example-variant {
+        num(u32),
+        str(string),
+        float(f32),
+    }
 
-    // variant example-enum {
-    //     first,
-    //     second,
-    //     third,
-    // }
+    enum example-enum {
+        first,
+        second,
+        third,
+    }
 
-    // record example-record {
-    //     id: u32,
-    //     id-str: string,
-    // }
+    record example-record {
+        id: u32,
+        id-str: string,
+    }
 
     // resource example-resource {
     //     constructor(id: u32);
@@ -49,13 +49,14 @@ interface get-stream-async {
 
     get-stream-bool: async func(vals: list<bool>) -> result<stream<bool>, string>;
 
-    //get-stream-char: async func(vals: list<char>) -> result<stream<char>, string>;
+    // NOTE: stream<char> is not yet supported upstream (stream<u8> can be used instead)
+    // get-stream-char: async func(vals: list<char>) -> result<stream<char>, string>;
 
-    //get-stream-string: async func(vals: list<string>) -> result<stream<string>, string>;
+    get-stream-string: async func(vals: list<string>) -> result<stream<string>, string>;
 
-    //get-stream-record: async func(vals: list<example-record>) -> result<stream<example-record>, string>;
+    // get-stream-record: async func(vals: list<example-record>) -> result<stream<example-record>, string>;
 
-    //get-stream-variant: async func(vals: list<example-variant>) -> result<stream<example-variant>, string>;
+    // get-stream-variant: async func(vals: list<example-variant>) -> result<stream<example-variant>, string>;
 
     //get-stream-list-u8: async func(vals: list<list<u8>>) -> result<stream<list<u8>>, string>;
     //get-stream-list-string: async func(vals: list<list<string>>) -> result<stream<list<string>>, string>;
