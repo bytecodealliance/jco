@@ -894,6 +894,121 @@ suite("Sandboxing", () => {
     }),
   );
 });
+suite("FS openAt descriptor flags", () => {
+  async function createTmpPreopen(setup) {
+    const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { sep, normalize } = await import("node:path");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const tmpDir = await mkdtemp(normalize(tmpdir() + sep));
+    if (setup) {
+      await setup({ tmpDir, mkdir, writeFile });
+    }
+
+    const shim = new WASIShim({
+      sandbox: { preopens: { "/work": tmpDir } },
+    });
+    const importObj = shim.getImportObject();
+    const [[rootDescriptor]] = importObj["wasi:filesystem/preopens"].getDirectories();
+    return rootDescriptor;
+  }
+
+  test("preopen descriptor has read, write, and mutateDirectory flags", async () => {
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
+    const [[rootDescriptor]] = filesystem.preopens.getDirectories();
+    const flags = rootDescriptor.getFlags();
+    assert.strictEqual(flags.read, true);
+    assert.strictEqual(flags.write, true);
+    assert.strictEqual(flags.mutateDirectory, true);
+  });
+
+  test(
+    "openAt with mutateDirectory descriptor flag succeeds on preopen",
+    testWithGCWrap(async () => {
+      const root = await createTmpPreopen(({ tmpDir, mkdir }) => mkdir(`${tmpDir}/subdir`));
+      const fd = root.openAt(
+        {},
+        "subdir",
+        { directory: true },
+        { read: true, mutateDirectory: true },
+      );
+      fd[symbolDispose]();
+    }),
+  );
+
+  test(
+    "openAt with create and write flags succeeds on preopen",
+    testWithGCWrap(async () => {
+      const root = await createTmpPreopen();
+      const fd = root.openAt({}, "test-file.txt", { create: true }, { write: true });
+      fd[symbolDispose]();
+    }),
+  );
+
+  suite("on read-only base descriptor", () => {
+    const readOnlySetup = ({ tmpDir, mkdir, writeFile }) =>
+      mkdir(`${tmpDir}/subdir`).then(() => writeFile(`${tmpDir}/subdir/existing.txt`, "hello"));
+
+    [
+      {
+        name: "read succeeds",
+        path: "existing.txt",
+        openFlags: {},
+        descriptorFlags: { read: true },
+      },
+      {
+        name: "write throws read-only",
+        path: "existing.txt",
+        openFlags: {},
+        descriptorFlags: { write: true },
+        error: "read-only",
+      },
+      {
+        name: "create throws read-only",
+        path: "new-file.txt",
+        openFlags: { create: true },
+        descriptorFlags: { read: true },
+        error: "read-only",
+      },
+      {
+        name: "truncate throws read-only",
+        path: "existing.txt",
+        openFlags: { truncate: true },
+        descriptorFlags: { write: true },
+        error: "read-only",
+      },
+      {
+        name: "mutateDirectory throws read-only",
+        path: "x",
+        openFlags: { directory: true },
+        descriptorFlags: { read: true, mutateDirectory: true },
+        error: "read-only",
+      },
+    ].forEach(({ name, path, openFlags, descriptorFlags, error }) => {
+      test(
+        name,
+        testWithGCWrap(async () => {
+          const root = await createTmpPreopen(readOnlySetup);
+          const readOnlyDir = root.openAt({}, "subdir", { directory: true }, { read: true });
+
+          if (error) {
+            throws(
+              () => readOnlyDir.openAt({}, path, openFlags, descriptorFlags),
+              (err) => err === error,
+            );
+          } else {
+            const fd = readOnlyDir.openAt({}, path, openFlags, descriptorFlags);
+            fd[symbolDispose]();
+          }
+
+          readOnlyDir[symbolDispose]();
+        }),
+      );
+    });
+  });
+});
+
 suite("Browser shim guards", () => {
   test("pollList throws on empty list", async () => {
     const { poll } = await import("../lib/browser/io.js");
