@@ -9,6 +9,7 @@ mod bindings {
 use bindings::wit_stream;
 use wit_bindgen::StreamReader;
 
+use crate::bindings::exports::jco::test_components::get_stream_async;
 use crate::bindings::wit_stream::StreamPayload;
 
 struct Component;
@@ -64,6 +65,18 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
     // }
 
     async fn get_stream_string(vals: Vec<String>) -> Result<StreamReader<String>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_record(
+        vals: Vec<get_stream_async::ExampleRecord>,
+    ) -> Result<StreamReader<get_stream_async::ExampleRecord>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_variant(
+        vals: Vec<get_stream_async::ExampleVariant>,
+    ) -> Result<StreamReader<get_stream_async::ExampleVariant>, String> {
         stream_values_async(vals)
     }
 }

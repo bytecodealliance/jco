@@ -54,9 +54,9 @@ interface get-stream-async {
 
     get-stream-string: async func(vals: list<string>) -> result<stream<string>, string>;
 
-    // get-stream-record: async func(vals: list<example-record>) -> result<stream<example-record>, string>;
+    get-stream-record: async func(vals: list<example-record>) -> result<stream<example-record>, string>;
 
-    // get-stream-variant: async func(vals: list<example-variant>) -> result<stream<example-variant>, string>;
+    get-stream-variant: async func(vals: list<example-variant>) -> result<stream<example-variant>, string>;
 
     //get-stream-list-u8: async func(vals: list<list<u8>>) -> result<stream<list<u8>>, string>;
     //get-stream-list-string: async func(vals: list<list<string>>) -> result<stream<list<string>>, string>;
