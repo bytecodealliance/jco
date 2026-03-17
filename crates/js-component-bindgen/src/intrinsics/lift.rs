@@ -650,10 +650,9 @@ impl LiftIntrinsic {
                     function {lift_flat_record_fn}(keysAndLiftFns) {{
                         return function {lift_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_record_fn}()] args', {{ ctx }});
-                            const {{ memory, useDirectParams, storagePtr, storageLen, params }} = ctx;
 
-                            if (useDirectParams) {{
-                                storagePtr = params[0]
+                            if (ctx.useDirectParams) {{
+                                ctx.storagePtr = ctx.params[0];
                             }}
 
                             const res = {{}};
@@ -664,7 +663,7 @@ impl LiftIntrinsic {
                                 ctx = newCtx;
                             }}
 
-                            return res;
+                            return [res, ctx];
                         }}
                     }}
                 "));
