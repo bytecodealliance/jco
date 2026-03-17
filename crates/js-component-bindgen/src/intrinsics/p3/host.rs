@@ -344,7 +344,6 @@ impl HostIntrinsic {
 
                         const params = preparedTask.getCalleeParams();
                         if (paramCount !== params.length) {{
-console.log("callee params", params);
                             throw new Error(`unexpected callee param count [${{ params.length }}], {async_start_call_fn} invocation expected [${{ paramCount }}]`);
                         }}
 
