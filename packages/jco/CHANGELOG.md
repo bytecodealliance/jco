@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.17.1] - 2026-03-17
+
+### 🧪 Testing
+
+- _(jco)_ add stream<string> test, refactor & uncomment existing by @vados-cosmonic in #1304
+
+- _(jco)_ increase timeout in CI by @vados-cosmonic in #1291
+
+- _(jco)_ update and add async tests by @vados-cosmonic
+
+- _(jco)_ add initial, incomplete tests for returned streams by @vados-cosmonic
+
+- _(jco)_ re-enable stream tests by @vados-cosmonic
+
+- _(jco)_ uncomment s32 stream test by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ fmt by @vados-cosmonic in #1273
+
+- _(jco)_ lint by @vados-cosmonic
+
+- _(jco)_ ignore build-output TS files in lint by @vados-cosmonic
+
 ## [1.17.0] - 2026-02-13
 
 ### 🐛 Bug Fixes
