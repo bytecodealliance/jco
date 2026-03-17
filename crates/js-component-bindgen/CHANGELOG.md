@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.16.0] - 2026-03-17
+
+### 🚀 Features
+
+- _(bindgen)_ add stubs for {Enter,Exit}SyncCall by @vados-cosmonic in #1279
+
+- _(bindgen)_ add basic avoidance of overlapping async task runs by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ flat string lift by @vados-cosmonic
+
+- _(bindgen)_ allow overriding lower import trampolines for deno by @vados-cosmonic
+
+- _(bindgen)_ err ctx impl by @vados-cosmonic
+
+- _(bindgen)_ stream impl, determinism, async machinery by @vados-cosmonic
+
+- _(bindgen)_ wait for exits rather than result returns by @vados-cosmonic
+
+- _(bindgen)_ avoid component invariant checking for host tasks by @vados-cosmonic
+
+- _(bindgen)_ remove lift/lower duplication on task.resolve by @vados-cosmonic
+
+- _(bindgen)_ stream end handling, event loop by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ consistent use of promise with resolvers ponyfill by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ remove leftover debug line by @vados-cosmonic in #1308
+
+- _(bindgen)_ add debugging to unexpected results branch by @vados-cosmonic
+
+- _(bindgen)_ update upstream deps by @vados-cosmonic
+
+- _(bindgen)_ remove extra tick by @vados-cosmonic
+
+- _(bindgen)_ fmt by @vados-cosmonic
+
+
+
+
 ## [1.15.0] - 2026-02-13
 
 ### 🚀 Features
