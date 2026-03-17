@@ -128,3 +128,11 @@ world sleep-post-return-callee {
   import sleep;
   export sleep-post-return;
 }
+
+interface fixed-length-lists-fn {
+  takes-returns-fixed: func(bools: list<bool, 17>) -> result<list<u8, 32>, string>;
+}
+
+world fixed-length-lists {
+  export fixed-length-lists-fn;
+}
