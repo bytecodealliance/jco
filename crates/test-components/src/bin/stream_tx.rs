@@ -80,7 +80,15 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
         stream_values_async(vals)
     }
 
-    async fn get_stream_tuple(vals: Vec<(u32, i32, String)>) -> Result<StreamReader<(u32, i32, String)>, String> {
+    async fn get_stream_tuple(
+        vals: Vec<(u32, i32, String)>,
+    ) -> Result<StreamReader<(u32, i32, String)>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_flags(
+        vals: Vec<get_stream_async::ExampleFlags>,
+    ) -> Result<StreamReader<get_stream_async::ExampleFlags>, String> {
         stream_values_async(vals)
     }
 }
