@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.2] - 2026-03-18
+
+### 🧪 Testing
+
+- _(jco)_ reverse expeted/actual values for stream testing helper by @vados-cosmonic
+
+- _(jco)_ add record test by @vados-cosmonic
+
 ## [1.17.1] - 2026-03-17
 
 ### 🧪 Testing
