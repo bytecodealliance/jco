@@ -4622,9 +4622,20 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Tuple(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
-            let ty_idx = ty_idx.as_u32();
+            let tuple_ty = &component_types[*ty_idx];
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let size_u32 = tuple_ty.abi.size32;
+            let align_u32 = tuple_ty.abi.align32;
+
+            let mut elem_lifts_expr = String::from("[");
+            for ty in &tuple_ty.types {
+                let lift_fn_js =
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, &ty, string_encoding);
+                elem_lifts_expr.push_str(&format!("[{lift_fn_js}, {size_u32}, {align_u32}],"));
+            }
+            elem_lifts_expr.push(']');
+
+            format!("{f}({elem_lifts_expr})")
         }
 
         InterfaceType::Flags(ty_idx) => {
