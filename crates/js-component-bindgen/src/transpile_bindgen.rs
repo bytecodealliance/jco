@@ -4640,9 +4640,30 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Flags(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let flags_ty = &component_types[*ty_idx];
+            let size_u32 = flags_ty.abi.size32;
+            let align_u32 = flags_ty.abi.align32;
+            let names_expr = format!(
+                "[{}]",
+                flags_ty
+                    .names
+                    .iter()
+                    .map(|s| format!("'{s}'"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            let num_flags = flags_ty.names.len();
+            let elem_size = if num_flags <= 8 {
+                1
+            } else if num_flags <= 16 {
+                2
+            } else {
+                4
+            };
+            format!(
+                "{f}({{ names: {names_expr}, size32: {size_u32}, align32: {align_u32}, intSize: {elem_size} }})"
+            )
         }
 
         InterfaceType::Enum(ty_idx) => {
