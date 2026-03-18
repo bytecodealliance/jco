@@ -318,7 +318,9 @@ impl LiftIntrinsic {
                         if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
                             throw new Error('not enough storage remaining for lift');
                         }}
+
                         val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true);
+
                         ctx.storagePtr += 1;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 1; }}
 
@@ -877,12 +879,47 @@ impl LiftIntrinsic {
             Self::LiftFlatFlags => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_flags_fn = self.name();
+                let lift_u8 = Self::LiftFlatU8.name();
+                let lift_u16 = Self::LiftFlatU16.name();
+                let lift_u32 = Self::LiftFlatU32.name();
+
                 output.push_str(&format!(
                     r#"
-                    function {lift_flat_flags_fn}(cases) {{
+                    function {lift_flat_flags_fn}(meta) {{
+                        const {{ names, size32, align32, intSize }} = meta;
+
                         return function {lift_flat_flags_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_flags_fn}()] args', {{ ctx }});
-                            throw new Error('flat lift for flags not yet implemented!');
+
+                            const val = {{}};
+
+                            let liftRes;
+                            let align;
+                            switch (intSize) {{
+                                case 1:
+                                    liftRes = {lift_u8}(ctx);
+                                    break;
+                                case 2:
+                                    liftRes = {lift_u16}(ctx);
+                                    break;
+                                case 4:
+                                    liftRes = {lift_u32}(ctx);
+                                    break;
+                                default:
+                                    throw new Error('invalid flags size');
+                            }}
+                            let bits = liftRes[0];
+                            ctx = liftRes[1];
+
+                            for (const name of names) {{
+                                val[name] = (bits & 1) === 1;
+                                bits >>>= 1;
+                            }}
+
+                            const rem = ctx.storagePtr % align32;
+                            if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+
+                            return [val, ctx];
                         }}
                     }}
                     "#
