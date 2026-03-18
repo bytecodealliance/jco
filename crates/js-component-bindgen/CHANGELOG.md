@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.16.2] - 2026-03-18
+
+### 🚀 Features
+
+- _(bindgen)_ implement fixed length lists by @yannbolliger
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ make all bindings const by @yannbolliger in #1315
+
+
+
+
 ## [1.16.1] - 2026-03-18
 
 ### 🐛 Bug Fixes
