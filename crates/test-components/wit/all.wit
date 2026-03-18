@@ -32,6 +32,12 @@ interface get-stream-async {
     //     get-id() -> u32;
     // }
 
+    flags example-flags {
+        first,
+        second,
+        third,
+    }
+
     get-stream-u32: async func(vals: list<u32>) -> result<stream<u32>, string>;
     get-stream-s32: async func(vals: list<s32>) -> result<stream<s32>, string>;
 
@@ -65,7 +71,7 @@ interface get-stream-async {
 
     get-stream-tuple: async func(vals: list<tuple<u32, s32, string>>) -> result<stream<tuple<u32, s32, string>>, string>;
 
-    //get-stream-flags: async func(vals: list<flags>) -> result<stream<flags>, string>;
+    get-stream-flags: async func(vals: list<example-flags>) -> result<stream<example-flags>, string>;
 
     //get-stream-enum: async func(vals: list<example-enum>) -> result<stream<example-enum>, string>;
 

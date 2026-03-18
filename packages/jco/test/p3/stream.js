@@ -170,7 +170,7 @@ suite("stream<T> lifts", () => {
         assert.deepEqual(await stream.next(), vals[4]);
     });
 
-    test.only("tuple", async () => {
+    test("tuple", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamTuple, AsyncFunction);
 
         let vals = [
@@ -180,6 +180,18 @@ suite("stream<T> lifts", () => {
         ];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamTuple(vals);
         await checkStreamValues({ stream, vals, typeName: "tuple", assertEqFn: assert.deepEqual });
+    });
+
+    test("flags", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamFlags, AsyncFunction);
+
+        let vals = [
+            {first: true, second: false, third: false},
+            {first: false, second: true, third: false},
+            {first: false, second: false, third: true},
+        ];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamFlags(vals);
+        await checkStreamValues({ stream, vals, typeName: "flags", assertEqFn: assert.deepEqual });
     });
 
 });
