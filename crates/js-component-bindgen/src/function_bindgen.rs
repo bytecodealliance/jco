@@ -1346,6 +1346,63 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwrite!(self.src, "}}\n");
             }
 
+            Instruction::FixedLengthListLower { size, .. } => {
+                let tmp = self.tmp();
+                let array = format!("array{tmp}");
+                uwriteln!(self.src, "var {array} = {};", operands[0]);
+                for i in 0..*size {
+                    results.push(format!("{array}[{i}]"));
+                }
+            }
+
+            Instruction::FixedLengthListLift { .. } => {
+                let tmp = self.tmp();
+                let result = format!("result{tmp}");
+                uwriteln!(self.src, "var {result} = [{}];", operands.join(", "));
+                results.push(result);
+            }
+
+            Instruction::FixedLengthListLowerToMemory {
+                element, size: len, ..
+            } => {
+                let (body, body_results) = self.blocks.pop().unwrap();
+                assert!(body_results.is_empty());
+
+                let tmp = self.tmp();
+                let array = format!("array{tmp}");
+                uwriteln!(self.src, "var {array} = {};", operands[0]);
+                let addr = format!("addr{tmp}");
+                uwriteln!(self.src, "var {addr} = {};", operands[1]);
+                let elem_size = self.sizes.size(element).size_wasm32();
+
+                uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
+                uwriteln!(self.src, "const e = {array}[i];");
+                uwrite!(self.src, "const base = {addr} + i * {elem_size};");
+                self.src.push_str(&body);
+                uwrite!(self.src, "}}\n");
+            }
+
+            Instruction::FixedLengthListLiftFromMemory {
+                element, size: len, ..
+            } => {
+                let (body, body_results) = self.blocks.pop().unwrap();
+                assert_eq!(body_results.len(), 1);
+
+                let tmp = self.tmp();
+                let addr = format!("addr{tmp}");
+                uwriteln!(self.src, "var {addr} = {};", operands[0]);
+                let elem_size = self.sizes.size(element).size_wasm32();
+                let result = format!("result{tmp}");
+                uwriteln!(self.src, "var {result} = [];");
+                results.push(result.clone());
+
+                uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
+                uwrite!(self.src, "const base = {addr} + i * {elem_size};");
+                self.src.push_str(&body);
+                uwriteln!(self.src, "{result}.push({});", body_results[0]);
+                uwrite!(self.src, "}}\n");
+            }
+
             Instruction::IterElem { .. } => results.push("e".to_string()),
 
             Instruction::IterBasePointer => results.push("base".to_string()),
@@ -2585,13 +2642,6 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::GuestDeallocateString
             | Instruction::GuestDeallocateList { .. }
             | Instruction::GuestDeallocateVariant { .. } => unimplemented!("Guest deallocation"),
-
-            Instruction::FixedLengthListLift { .. }
-            | Instruction::FixedLengthListLiftFromMemory { .. }
-            | Instruction::FixedLengthListLower { .. }
-            | Instruction::FixedLengthListLowerToMemory { .. } => {
-                unimplemented!("Fixed length lists")
-            }
         }
     }
 }

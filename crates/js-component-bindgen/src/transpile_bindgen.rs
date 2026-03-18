@@ -3477,6 +3477,12 @@ impl<'a> Instantiator<'a, '_> {
                     self.connect_resource_types(*id, &t2.element, resource_map);
                 }
             }
+            (TypeDefKind::FixedLengthList(t1, _len1), InterfaceType::FixedLengthList(t2)) => {
+                let t2 = &self.types[*t2];
+                if let Type::Id(id) = t1 {
+                    self.connect_resource_types(*id, &t2.element, resource_map);
+                }
+            }
 
             // Connect named types
             (TypeDefKind::Type(ty), _) => {
