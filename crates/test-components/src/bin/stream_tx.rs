@@ -79,6 +79,10 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
     ) -> Result<StreamReader<get_stream_async::ExampleVariant>, String> {
         stream_values_async(vals)
     }
+
+    async fn get_stream_tuple(vals: Vec<(u32, i32, String)>) -> Result<StreamReader<(u32, i32, String)>, String> {
+        stream_values_async(vals)
+    }
 }
 
 fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {
