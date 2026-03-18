@@ -63,7 +63,7 @@ interface get-stream-async {
     //get-stream-list-string: async func(vals: list<list<string>>) -> result<stream<list<string>>, string>;
     //get-stream-list-record: async func(vals: list<list<example-record>>) -> result<stream<list<example-record>>, string>;
 
-    //get-stream-tuple: async func(vals: list<tuple<u32,s32>>) -> result<stream<tuple<u32,s32>>, string>;
+    get-stream-tuple: async func(vals: list<tuple<u32, s32, string>>) -> result<stream<tuple<u32, s32, string>>, string>;
 
     //get-stream-flags: async func(vals: list<flags>) -> result<stream<flags>, string>;
 
