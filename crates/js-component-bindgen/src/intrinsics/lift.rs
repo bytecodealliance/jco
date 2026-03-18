@@ -791,7 +791,7 @@ impl LiftIntrinsic {
                                 ctx = nextCtx;
 
                                 const rem = ctx.storagePtr % align32;
-                                if (rem !== 0) {{ newCtx.storagePtr += (align32 - rem); }}
+                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                             }}
 
                             return [val, ctx];
@@ -802,21 +802,24 @@ impl LiftIntrinsic {
 
             Self::LiftFlatTuple => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let lift_record = Self::LiftFlatRecord.name();
                 let lift_flat_tuple_fn = self.name();
                 output.push_str(&format!(
                     "
-                    function {lift_flat_tuple_fn}(numberedLiftFns) {{
+                    function {lift_flat_tuple_fn}(elemLiftFns) {{
                         return function {lift_flat_tuple_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_tuple_fn}()] args', {{ ctx }});
 
-                            const obj = {lift_record}(numberedLiftFns)(ctx);
                             const val = [];
-                            for (var i = 0; i++; i < nubmeredLiftFns.length) {{
-                                val.push(obj[i]);
+                            for (const [ liftFn, size32, align32 ]  of elemLiftFns) {{
+                                const [newValue, newCtx] = liftFn(ctx);
+                                val.push(newValue);
+                                ctx = newCtx;
+
+                                const rem = ctx.storagePtr % align32;
+                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                             }}
 
-                            return val;
+                            return [val, ctx];
                         }}
                     }}
                 "
