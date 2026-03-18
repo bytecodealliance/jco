@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.16.1] - 2026-03-18
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ variant lifting impl, update code for lowering by @vados-cosmonic in #1316
+
+- _(bindgen)_ record lift implementation by @vados-cosmonic
+
+
+
+
 ## [1.16.0] - 2026-03-17
 
 ### 🚀 Features
