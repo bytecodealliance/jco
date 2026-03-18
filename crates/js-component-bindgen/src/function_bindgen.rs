@@ -1349,7 +1349,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::FixedLengthListLower { size, .. } => {
                 let tmp = self.tmp();
                 let array = format!("array{tmp}");
-                uwriteln!(self.src, "var {array} = {};", operands[0]);
+                uwriteln!(self.src, "const {array} = {};", operands[0]);
                 for i in 0..*size {
                     results.push(format!("{array}[{i}]"));
                 }
@@ -1358,7 +1358,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::FixedLengthListLift { .. } => {
                 let tmp = self.tmp();
                 let result = format!("result{tmp}");
-                uwriteln!(self.src, "var {result} = [{}];", operands.join(", "));
+                uwriteln!(self.src, "const {result} = [{}];", operands.join(", "));
                 results.push(result);
             }
 
@@ -1370,9 +1370,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let tmp = self.tmp();
                 let array = format!("array{tmp}");
-                uwriteln!(self.src, "var {array} = {};", operands[0]);
+                uwriteln!(self.src, "const {array} = {};", operands[0]);
                 let addr = format!("addr{tmp}");
-                uwriteln!(self.src, "var {addr} = {};", operands[1]);
+                uwriteln!(self.src, "const {addr} = {};", operands[1]);
                 let elem_size = self.sizes.size(element).size_wasm32();
 
                 uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
@@ -1390,10 +1390,10 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let tmp = self.tmp();
                 let addr = format!("addr{tmp}");
-                uwriteln!(self.src, "var {addr} = {};", operands[0]);
+                uwriteln!(self.src, "const {addr} = {};", operands[0]);
                 let elem_size = self.sizes.size(element).size_wasm32();
                 let result = format!("result{tmp}");
-                uwriteln!(self.src, "var {result} = [];");
+                uwriteln!(self.src, "const {result} = [];");
                 results.push(result.clone());
 
                 uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
