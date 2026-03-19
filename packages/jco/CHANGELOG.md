@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.17.3] - 2026-03-19
+
+### 🧪 Testing
+
+- _(jco)_ add tests for fixed length lists by @yannbolliger
+
+## New Contributors
+
+- @yannbolliger made their first contribution
+
 ## [1.17.2] - 2026-03-18
 
 ### 🧪 Testing
