@@ -745,50 +745,12 @@ impl LiftIntrinsic {
                 let lift_flat_list_fn = self.name();
                 let lift_u32 = Self::LiftFlatU32.name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lift_flat_list_fn}(meta) {{
                         const {{ elemLiftFn, align32, knownLen }} = meta;
 
-                        return function {lift_flat_list_fn}Inner(ctx) {{
-                            {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
-
-                            let metaPtr;
-                            let dataPtr;
-                            let len;
-                            if (ctx.useDirectParams) {{
-                                if (knownLen) {{
-                                    dataPtr = {lift_u32}(ctx);
-                                }} else {{
-                                    metaPtr = {lift_u32}(ctx);
-                                }}
-                            }} else {{
-                                if (knownLen) {{
-                                    dataPtr = {lift_u32}(ctx);
-                                }} else {{
-                                    metaPtr = {lift_u32}(ctx);
-                                }}
-                            }}
-
-                            if (metaPtr) {{
-                                if (dataPtr !== undefined) {{ throw new Error('both meta and data pointers should not be set yet'); }}
-
-                                if (ctx.useDirectParams) {{
-                                    ctx.useDirectParams = false;
-                                    ctx.storagePtr = metaPtr;
-                                    ctx.storageLen = 8;
-
-                                    dataPtr = {lift_u32}(ctx);
-                                    len = {lift_u32}(ctx);
-
-                                    ctx.useDirectParams = true;
-                                    ctx.storagePtr = null;
-                                    ctx.storageLen = null;
-                                }} else {{
-                                    dataPtr = {lift_u32}(ctx);
-                                    len = {lift_u32}(ctx);
-                                }}
-                            }}
-
+                        const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {{
+                            ctx.storagePtr = dataPtr;
                             const val = [];
                             for (var i = 0; i < len; i++) {{
                                 const [res, nextCtx] = elemLiftFn(ctx);
@@ -798,11 +760,76 @@ impl LiftIntrinsic {
                                 const rem = ctx.storagePtr % align32;
                                 if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                             }}
-
+                            if (originalPtr !== null) {{ ctx.storagePtr = originalPtr; }}
                             return [val, ctx];
+                        }};
+
+                        return function {lift_flat_list_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
+
+                            let liftResults;
+                            if (knownLen) {{ // list with known length
+
+                                if (ctx.useDirectParams) {{
+                                    // list with known length w/ direct params
+                                    const dataPtr = ctx.params[0];
+                                    ctx.params = ctx.params.slice(1);
+
+                                    // TODO: is it possible for all values to come in from params?
+
+                                    ctx.useDirectParams = false;
+                                    const originalPtr = ctx.storagePtr;
+                                    ctx.storageLen = 8;
+
+                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+
+                                    ctx.useDirectParams = true;
+                                    ctx.storagePtr = null;
+                                    ctx.storageLen = null;
+
+                                }} else {{
+                                    liftResults = readValuesAndReset(ctx, null, ctx.storagePtr, knownLen);
+                                }}
+
+                            }} else {{ // unknown length list
+
+                                if (ctx.useDirectParams) {{
+                                    // unknown length list ptr w/ direct params
+                                    const dataPtr = ctx.params[0];
+                                    const len = ctx.params[1];
+                                    ctx.params = ctx.params.slice(2);
+
+                                    ctx.useDirectParams = false;
+                                    const originalPtr = ctx.storagePtr;
+                                    ctx.storageLen = 8;
+
+                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+
+                                    ctx.useDirectParams = true;
+                                    ctx.storagePtr = null;
+                                    ctx.storageLen = null;
+
+                                }} else {{
+                                    // unknown length list ptr w/ in-memory params
+                                    const dataPtrLiftRes = {lift_u32}(ctx);
+                                    const dataPtr = dataPtrLiftRes[0];
+                                    ctx = dataPtrLiftRes[1];
+
+                                    const lenLiftRes = {lift_u32}(ctx);
+                                    const len = lenLiftRes[0];
+                                    ctx = lenLiftRes[1];
+
+                                    const originalPtr = ctx.storagePtr;
+                                    ctx.storagePtr = dataPtr;
+
+                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+                                }}
+                            }}
+
+                            return liftResults;
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatTuple => {
