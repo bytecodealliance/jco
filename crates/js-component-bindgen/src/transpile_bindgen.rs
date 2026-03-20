@@ -4754,7 +4754,7 @@ pub fn gen_flat_lift_fn_js_expr(
 
             if let Some(err_ty) = &result_ty.err {
                 cases_and_lifts_expr.push_str(&format!(
-                    "['error', {}, {}, {}, {}],",
+                    "['err', {}, {}, {}, {}],",
                     gen_flat_lift_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
