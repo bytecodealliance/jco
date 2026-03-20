@@ -66,8 +66,9 @@ interface get-stream-async {
     get-stream-variant: async func(vals: list<example-variant>) -> result<stream<example-variant>, string>;
 
     //get-stream-list-u8: async func(vals: list<list<u8>>) -> result<stream<list<u8>>, string>;
-    //get-stream-list-string: async func(vals: list<list<string>>) -> result<stream<list<string>>, string>;
-    //get-stream-list-record: async func(vals: list<list<example-record>>) -> result<stream<list<example-record>>, string>;
+    get-stream-list-string: async func(vals: list<list<string>>) -> result<stream<list<string>>, string>;
+    get-stream-list-record: async func(vals: list<list<example-record>>) -> result<stream<list<example-record>>, string>;
+    get-stream-fixed-list: async func(vals: list<list<u32, 5>>) -> result<stream<list<u32, 5>>, string>;
 
     get-stream-tuple: async func(vals: list<tuple<u32, s32, string>>) -> result<stream<tuple<u32, s32, string>>, string>;
 
@@ -75,9 +76,9 @@ interface get-stream-async {
 
     get-stream-enum: async func(vals: list<example-enum>) -> result<stream<example-enum>, string>;
 
-    // get-stream-option-string: async func(vals: list<option<string>>) -> result<stream<option<string>>, string>;
+    get-stream-option-string: async func(vals: list<option<string>>) -> result<stream<option<string>>, string>;
 
-    // get-stream-result-string: async func(vals: list<result<string, _>>) -> result<stream<result<string, _>>, string>;
+    get-stream-result-string: async func(vals: list<result<string, string>>) -> result<stream<result<string, string>>, string>;
 
     //get-stream-example-resource-borrow: async func(vals: list<borrow<example-resource>>) -> result<stream<borrow<example-resource>>, string>;
 
