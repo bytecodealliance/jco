@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, assert, expect } from "vitest";
 
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
@@ -31,10 +31,7 @@ suite("Async (WASI P3)", () => {
         const result = await instance.asyncAddS32.add(2, 2);
         assert.strictEqual(result, 4);
 
-        // TODO(fix): this line should throw the value, not return a result object,
-        // this behavior does not match the default for non-erroring call
-        const res = await instance.asyncAddS32.add(1, 2147483647);
-        assert.deepStrictEqual(res, { tag: "error", val: "overflow" });
+        await expect(() => instance.asyncAddS32.add(1, 2147483647)).rejects.toThrowError(/overflow/);
 
         await cleanup();
     });

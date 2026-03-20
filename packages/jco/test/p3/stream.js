@@ -18,13 +18,13 @@ suite("stream<T> lifts", () => {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`),
                 skipInstantiation: true,
             },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                },
-            },
+            // jco: {
+            //     transpile: {
+            //         extraArgs: {
+            //             minify: false,
+            //         },
+            //     },
+            // },
         });
 
         esModule = setupRes.esModule;
