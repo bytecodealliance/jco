@@ -4652,7 +4652,7 @@ pub fn gen_flat_lift_fn_js_expr(
             let mut elem_lifts_expr = String::from("[");
             for ty in &tuple_ty.types {
                 let lift_fn_js =
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, &ty, string_encoding);
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, ty, string_encoding);
                 elem_lifts_expr.push_str(&format!("[{lift_fn_js}, {size_u32}, {align_u32}],"));
             }
             elem_lifts_expr.push(']');
