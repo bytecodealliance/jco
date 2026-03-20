@@ -122,7 +122,7 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
         stream_values_async(vals)
     }
 
-    async fn get_stream_fixed_list(vals: Vec<[u32; 5]>) -> Result<StreamReader<[u32; 5]>, String> {
+    async fn get_stream_fixed_list_u32(vals: Vec<[u32; 5]>) -> Result<StreamReader<[u32; 5]>, String> {
         stream_values_async(vals)
     }
 }

@@ -221,9 +221,8 @@ suite("stream<T> lifts", () => {
         ]});
     });
 
-    test.only("list<string>", async () => {
+    test("list<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListString, AsyncFunction);
-
         let vals = [
             [ 'first', 'second', 'third' ],
             [],
@@ -232,9 +231,19 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "list<string>", assertEqFn: assert.deepEqual});
     });
 
+    test("list<u32, 5>", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamFixedListU32, AsyncFunction);
+        let vals = [
+            [ 1, 2, 3, 4, 5 ],
+            [ 0, 0, 0, 0, 0 ],
+        ];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamFixedListU32(vals);
+        await checkStreamValues({ stream, vals, typeName: "list<string>", assertEqFn: assert.deepEqual});
+        // TODO: test misuse of fixed length list
+    });
+
     // test.only("list<record>", async () => {
     //     assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListRecord, AsyncFunction);
-
     //     let vals = [
     //         [ { id: 1, idStr: "one" } ],
     //         [ { id: 1, idStr: "one" }, { id: 2, idStr: "two" } ]
@@ -247,7 +256,6 @@ suite("stream<T> lifts", () => {
 
     // test.only("result<string>", async () => {
     //     assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamResultString, AsyncFunction);
-
     //     let vals = [
     //         'present string',
     //         null,
