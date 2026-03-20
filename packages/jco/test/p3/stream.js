@@ -39,7 +39,7 @@ suite("stream<T> lifts", () => {
         instance = await esModule.instantiate(undefined, new WASIShim().getImportObject());
     });
 
-    test("u32/s32", async () => {
+    test.concurrent("u32/s32", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU32, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS32, AsyncFunction);
 
@@ -52,14 +52,14 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "s32" });
     });
 
-    test("bool", async () => {
+    test.concurrent("bool", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamBool, AsyncFunction);
         const vals = [true, false];
         const stream = await instance["jco:test-components/get-stream-async"].getStreamBool(vals);
         await checkStreamValues({ stream, vals, typeName: "bool" });
     });
 
-    test("u16/s16", async () => {
+    test.concurrent("u16/s16", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU16, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS16, AsyncFunction);
 
@@ -74,7 +74,7 @@ suite("stream<T> lifts", () => {
         // TODO(fix): under/overflowing values hang
     });
 
-    test("u64/s64", async () => {
+    test.concurrent("u64/s64", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU64, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS64, AsyncFunction);
 
@@ -107,7 +107,7 @@ suite("stream<T> lifts", () => {
         // assert.equal(vals[4], await stream.next());
     });
 
-    test("f32/f64", async () => {
+    test.concurrent("f32/f64", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamF64, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamF32, AsyncFunction);
 
@@ -130,7 +130,7 @@ suite("stream<T> lifts", () => {
         assert.closeTo(vals[5], await stream.next(), 0.00001);
     });
 
-    test("string", async () => {
+    test.concurrent("string", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamString, AsyncFunction);
 
         let vals = ["hello", "world", "!"];
@@ -138,7 +138,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "string" });
     });
 
-    test("record", async () => {
+    test.concurrent("record", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamRecord, AsyncFunction);
 
         let vals = [
@@ -150,7 +150,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "record", assertEqFn: assert.deepEqual });
     });
 
-    test("variant", async () => {
+    test.concurrent("variant", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariant, AsyncFunction);
 
         const vals = [
@@ -170,7 +170,7 @@ suite("stream<T> lifts", () => {
         assert.deepEqual(await stream.next(), vals[4]);
     });
 
-    test("tuple", async () => {
+    test.concurrent("tuple", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamTuple, AsyncFunction);
 
         let vals = [
@@ -182,7 +182,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "tuple", assertEqFn: assert.deepEqual });
     });
 
-    test("flags", async () => {
+    test.concurrent("flags", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamFlags, AsyncFunction);
 
         let vals = [
@@ -194,7 +194,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "flags", assertEqFn: assert.deepEqual });
     });
 
-    test("enum", async () => {
+    test.concurrent("enum", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamEnum, AsyncFunction);
 
         let vals = ["first", "second", "third"];
@@ -202,7 +202,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "enum", assertEqFn: assert.deepEqual });
     });
 
-    test("option<string>", async () => {
+    test.concurrent("option<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamOptionString, AsyncFunction);
 
         let vals = ["present string", null];
@@ -220,7 +220,7 @@ suite("stream<T> lifts", () => {
         });
     });
 
-    test("list<u8>", async () => {
+    test.concurrent("list<u8>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListU8, AsyncFunction);
         let vals = [[0x01, 0x02, 0x03, 0x04, 0x05], new Uint8Array([0x05, 0x04, 0x03, 0x02, 0x01]), []];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamListU8(vals);
@@ -238,14 +238,14 @@ suite("stream<T> lifts", () => {
         });
     });
 
-    test("list<string>", async () => {
+    test.concurrent("list<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListString, AsyncFunction);
         let vals = [["first", "second", "third"], []];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamListString(vals);
         await checkStreamValues({ stream, vals, typeName: "list<string>", assertEqFn: assert.deepEqual });
     });
 
-    test("list<u32, 5>", async () => {
+    test.concurrent("list<u32, 5>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamFixedListU32, AsyncFunction);
         let vals = [
             [1, 2, 3, 4, 5],
@@ -256,7 +256,7 @@ suite("stream<T> lifts", () => {
         // TODO: test misuse of fixed length list
     });
 
-    test("list<record>", async () => {
+    test.concurrent("list<record>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListRecord, AsyncFunction);
         let vals = [
             [{ id: 1, idStr: "one" }],
@@ -275,7 +275,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "list<record>", assertEqFn: assert.deepEqual });
     });
 
-    test("result<string>", async () => {
+    test.concurrent("result<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamResultString, AsyncFunction);
         let vals = [
             { tag: "ok", val: "present string" },
