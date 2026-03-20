@@ -3484,6 +3484,14 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
 
+            // Connect list<t> to list types
+            (TypeDefKind::FixedLengthList(t1, _len), InterfaceType::FixedLengthList(t2)) => {
+                let t2 = &self.types[*t2];
+                if let Type::Id(id) = t1 {
+                    self.connect_resource_types(*id, &t2.element, resource_map);
+                }
+            }
+
             // Connect named types
             (TypeDefKind::Type(ty), _) => {
                 if let Type::Id(id) = ty {
@@ -4607,17 +4615,37 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let list_ty = &component_types[*ty_idx];
+            let lift_fn_expr = gen_flat_lift_fn_js_expr(
+                intrinsic_mgr,
+                component_types,
+                &list_ty.element,
+                string_encoding,
+            );
+            let elem_cabi = component_types.canonical_abi(&list_ty.element);
+            let align_32 = elem_cabi.align32;
+            let size_32 = elem_cabi.size32;
+            format!("{f}({{ elemLiftFn: {lift_fn_expr}, align32: {align_32}, size32: {size_32} }})")
         }
 
         InterfaceType::FixedLengthList(ty_idx) => {
-            // TODO(fix): add more robust handling for fixed length lists
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let list_ty = &component_types[*ty_idx];
+            let lift_fn_expr = gen_flat_lift_fn_js_expr(
+                intrinsic_mgr,
+                component_types,
+                &list_ty.element,
+                string_encoding,
+            );
+            let list_len = list_ty.size;
+            let elem_cabi = component_types.canonical_abi(&list_ty.element);
+            let align_32 = elem_cabi.align32;
+            let size_32 = elem_cabi.size32;
+            format!(
+                "{f}({{ elemLiftFn: {lift_fn_expr}, align32: {align_32}, size32: {size_32}, knownLen: {list_len} }})"
+            )
         }
 
         InterfaceType::Tuple(ty_idx) => {

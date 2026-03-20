@@ -744,8 +744,11 @@ impl LiftIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_list_fn = self.name();
                 let lift_u32 = Self::LiftFlatU32.name();
+
                 output.push_str(&format!("
-                    function {lift_flat_list_fn}(elemLiftFn, align32, knownLen) {{
+                    function {lift_flat_list_fn}(meta) {{
+                        const {{ elemLiftFn, align32, knownLen }} = meta;
+
                         function {lift_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
 
