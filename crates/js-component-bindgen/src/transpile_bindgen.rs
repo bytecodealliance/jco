@@ -4668,9 +4668,21 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Enum(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let enum_ty = &component_types[*ty_idx];
+            let size_32 = enum_ty.abi.size32;
+            let align_32 = enum_ty.abi.align32;
+            let payload_offset_32 = enum_ty.info.payload_offset32;
+
+            let mut elem_lifts_expr = String::from("[");
+            for name in &enum_ty.names {
+                elem_lifts_expr.push_str(&format!(
+                    "['{name}', null, {size_32}, {align_32}, {payload_offset_32}],"
+                ));
+            }
+            elem_lifts_expr.push(']');
+
+            format!("{f}({elem_lifts_expr})")
         }
 
         InterfaceType::Option(ty_idx) => {

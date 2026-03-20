@@ -828,6 +828,8 @@ impl LiftIntrinsic {
                 ));
             }
 
+            // NOTE: enums are returned as the string tag that would normally
+            // e.g. `{tag: 'member0' }` -> `'member0'`
             Self::LiftFlatEnum => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_variant = Self::LiftFlatVariant.name();
@@ -837,7 +839,9 @@ impl LiftIntrinsic {
                     function {lift_flat_enum_fn}(casesAndLiftFns) {{
                         return function {lift_flat_enum_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_enum_fn}()] args', {{ ctx }});
-                            return {lift_variant}(casesAndLiftFns)(ctx);
+                            const res = {lift_variant}(casesAndLiftFns)(ctx);
+                            res[0] = res[0].tag;
+                            return res;
                         }}
                     }}
                     "#
