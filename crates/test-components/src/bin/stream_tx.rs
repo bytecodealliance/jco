@@ -110,6 +110,10 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
         stream_values_async(vals)
     }
 
+    async fn get_stream_list_u8(vals: Vec<Vec<u8>>) -> Result<StreamReader<Vec<u8>>, String> {
+        stream_values_async(vals)
+    }
+
     async fn get_stream_list_string(
         vals: Vec<Vec<String>>,
     ) -> Result<StreamReader<Vec<String>>, String> {

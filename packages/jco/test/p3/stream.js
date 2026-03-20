@@ -220,6 +220,24 @@ suite("stream<T> lifts", () => {
         });
     });
 
+    test("list<u8>", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListU8, AsyncFunction);
+        let vals = [[0x01, 0x02, 0x03, 0x04, 0x05], new Uint8Array([0x05, 0x04, 0x03, 0x02, 0x01]), []];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamListU8(vals);
+        await checkStreamValues({
+            stream,
+            vals,
+            typeName: "list<u8>",
+            assertEqFn: assert.deepEqual,
+            expectedValues: [
+                // TODO: wit type representation smoothing mismatch
+                vals[0],
+                [...vals[1]],
+                [],
+            ],
+        });
+    });
+
     test("list<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListString, AsyncFunction);
         let vals = [["first", "second", "third"], []];
@@ -234,7 +252,7 @@ suite("stream<T> lifts", () => {
             [0, 0, 0, 0, 0],
         ];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamFixedListU32(vals);
-        await checkStreamValues({ stream, vals, typeName: "list<string>", assertEqFn: assert.deepEqual });
+        await checkStreamValues({ stream, vals, typeName: "list<u32, 5>", assertEqFn: assert.deepEqual });
         // TODO: test misuse of fixed length list
     });
 
