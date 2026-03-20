@@ -91,6 +91,12 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
     ) -> Result<StreamReader<get_stream_async::ExampleFlags>, String> {
         stream_values_async(vals)
     }
+
+    async fn get_stream_enum(
+        vals: Vec<get_stream_async::ExampleEnum>,
+    ) -> Result<StreamReader<get_stream_async::ExampleEnum>, String> {
+        stream_values_async(vals)
+    }
 }
 
 fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {

@@ -194,6 +194,18 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "flags", assertEqFn: assert.deepEqual });
     });
 
+    test.only("enum", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamEnum, AsyncFunction);
+
+        let vals = [
+            'first',
+            'second',
+            'third',
+        ];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamEnum(vals);
+        await checkStreamValues({ stream, vals, typeName: "enum", assertEqFn: assert.deepEqual});
+    });
+
 });
 
 async function checkStreamValues(args) {

@@ -73,13 +73,11 @@ interface get-stream-async {
 
     get-stream-flags: async func(vals: list<example-flags>) -> result<stream<example-flags>, string>;
 
-    //get-stream-enum: async func(vals: list<example-enum>) -> result<stream<example-enum>, string>;
+    get-stream-enum: async func(vals: list<example-enum>) -> result<stream<example-enum>, string>;
 
-    //get-stream-option-string: async func(vals: list<option<string>>) -> result<stream<option<string>>, string>;
+    // get-stream-option-string: async func(vals: list<option<string>>) -> result<stream<option<string>>, string>;
 
-    //get-stream-result-string: async func(vals: list<result<string, _>>) -> result<stream<result<string, _>>, string>;
-
-    //get-stream-result-string: async func(vals: list<result<string, _>>) -> result<stream<result<string, _>>, string>;
+    // get-stream-result-string: async func(vals: list<result<string, _>>) -> result<stream<result<string, _>>, string>;
 
     //get-stream-example-resource-borrow: async func(vals: list<borrow<example-resource>>) -> result<stream<borrow<example-resource>>, string>;
 
@@ -87,8 +85,6 @@ interface get-stream-async {
 
     //get-stream-stream-string: async func(vals: list<stream<string>>) -> result<stream<stream<string>>, string>;
     //get-stream-future-string: async func(vals: list<future<string>>) -> result<stream<future<string>>, string>;
-
-    //get-stream-err-ctx: async func(vals: list<error-context>) -> result<stream<error-context>, string>;
 }
 
 world async-simple-import {
