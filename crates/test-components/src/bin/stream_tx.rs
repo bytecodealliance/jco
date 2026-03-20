@@ -97,6 +97,34 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
     ) -> Result<StreamReader<get_stream_async::ExampleEnum>, String> {
         stream_values_async(vals)
     }
+
+    async fn get_stream_option_string(
+        vals: Vec<Option<String>>,
+    ) -> Result<StreamReader<Option<String>>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_result_string(
+        vals: Vec<Result<String, String>>,
+    ) -> Result<StreamReader<Result<String, String>>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_list_string(
+        vals: Vec<Vec<String>>,
+    ) -> Result<StreamReader<Vec<String>>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_list_record(
+        vals: Vec<Vec<get_stream_async::ExampleRecord>>,
+    ) -> Result<StreamReader<Vec<get_stream_async::ExampleRecord>>, String> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_fixed_list(vals: Vec<[u32; 5]>) -> Result<StreamReader<[u32; 5]>, String> {
+        stream_values_async(vals)
+    }
 }
 
 fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {

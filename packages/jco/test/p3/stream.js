@@ -194,7 +194,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "flags", assertEqFn: assert.deepEqual });
     });
 
-    test.only("enum", async () => {
+    test("enum", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamEnum, AsyncFunction);
 
         let vals = [
@@ -205,6 +205,56 @@ suite("stream<T> lifts", () => {
         let stream = await instance["jco:test-components/get-stream-async"].getStreamEnum(vals);
         await checkStreamValues({ stream, vals, typeName: "enum", assertEqFn: assert.deepEqual});
     });
+
+    test("option<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamOptionString, AsyncFunction);
+
+        let vals = [
+            'present string',
+            null,
+        ];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamOptionString(vals);
+        await checkStreamValues({ stream, vals, typeName: "option<string>", assertEqFn: assert.deepEqual, expectedValues: [
+            // TODO: wit type representation smoothing mismatch
+            { tag: "some", val: "present string" },
+            { tag: "none" },
+        ]});
+    });
+
+    test.only("list<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListString, AsyncFunction);
+
+        let vals = [
+            [ 'first', 'second', 'third' ],
+            [],
+        ];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamListString(vals);
+        await checkStreamValues({ stream, vals, typeName: "list<string>", assertEqFn: assert.deepEqual});
+    });
+
+    // test.only("list<record>", async () => {
+    //     assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListRecord, AsyncFunction);
+
+    //     let vals = [
+    //         [ { id: 1, idStr: "one" } ],
+    //         [ { id: 1, idStr: "one" }, { id: 2, idStr: "two" } ]
+    //         [ { id: 1, idStr: "one" }, { id: 2, idStr: "two" }, { id: 3, idStr: "three" } ]
+    //         [],
+    //     ];
+    //     let stream = await instance["jco:test-components/get-stream-async"].getStreamListRecord(vals);
+    //     await checkStreamValues({ stream, vals, typeName: "list<record>", assertEqFn: assert.deepEqual});
+    // });
+
+    // test.only("result<string>", async () => {
+    //     assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamResultString, AsyncFunction);
+
+    //     let vals = [
+    //         'present string',
+    //         null,
+    //     ];
+    //     let stream = await instance["jco:test-components/get-stream-async"].getStreamResultString(vals);
+    //     await checkStreamValues({ stream, vals, typeName: "result<string>", assertEqFn: assert.deepEqual});
+    // });
 
 });
 
