@@ -827,6 +827,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results: result_types,
                 ..
             } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let (mut some, some_results) = self.blocks.pop().unwrap();
                 let (mut none, none_results) = self.blocks.pop().unwrap();
 
@@ -847,20 +848,21 @@ impl Bindgen for FunctionBindgen<'_> {
                 if maybe_null(resolve, payload) {
                     uwriteln!(
                         self.src,
-                        "switch (variant{tmp}.tag) {{
+                        r#"switch (variant{tmp}.tag) {{
                             case 'none': {{
-                                {none}\
+                                {none}
                                 break;
                             }}
                             case 'some': {{
                                 const e = variant{tmp}.val;
-                                {some}\
+                                {some}
                                 break;
                             }}
                             default: {{
+                                {debug_log_fn}("ERROR: invalid value (expected option as object with 'tag' member)", {{ value: variant{tmp} }});
                                 throw new TypeError('invalid variant specified for option');
                             }}
-                        }}",
+                        }}"#,
                     );
                 } else {
                     uwriteln!(
@@ -940,6 +942,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results: result_types,
                 ..
             } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let (mut err, err_results) = self.blocks.pop().unwrap();
                 let (mut ok, ok_results) = self.blocks.pop().unwrap();
 
@@ -959,21 +962,22 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(
                     self.src,
-                    "switch (variant{tmp}.tag) {{
+                    r#"switch (variant{tmp}.tag) {{
                         case 'ok': {{
                             const e = variant{tmp}.val;
-                            {ok}\
+                            {ok}
                             break;
                         }}
                         case 'err': {{
                             const e = variant{tmp}.val;
-                            {err}\
+                            {err}
                             break;
                         }}
                         default: {{
+                            {debug_log_fn}("ERROR: invalid value (expected result as object with 'tag' member)", {{ value: variant{tmp} }});
                             throw new TypeError('invalid variant specified for result');
                         }}
-                    }}",
+                    }}"#,
                 );
             }
 
