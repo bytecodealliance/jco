@@ -749,7 +749,7 @@ impl LiftIntrinsic {
                     function {lift_flat_list_fn}(meta) {{
                         const {{ elemLiftFn, align32, knownLen }} = meta;
 
-                        function {lift_flat_list_fn}Inner(ctx) {{
+                        return function {lift_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
 
                             let metaPtr;
