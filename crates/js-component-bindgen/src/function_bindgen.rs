@@ -859,7 +859,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 break;
                             }}
                             default: {{
-                                {debug_log_fn}("ERROR: invalid value (expected option as object with 'tag' member)", {{ value: variant{tmp} }});
+                                {debug_log_fn}("ERROR: invalid value (expected option as object with 'tag' member)", {{ value: variant{tmp}, valueType: typeof variant{tmp} }});
                                 throw new TypeError('invalid variant specified for option');
                             }}
                         }}"#,
@@ -974,7 +974,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             break;
                         }}
                         default: {{
-                            {debug_log_fn}("ERROR: invalid value (expected result as object with 'tag' member)", {{ value: variant{tmp} }});
+                            {debug_log_fn}("ERROR: invalid value (expected result as object with 'tag' member)", {{ value: variant{tmp}, valueType: typeof variant{tmp} }});
                             throw new TypeError('invalid variant specified for result');
                         }}
                     }}"#,
