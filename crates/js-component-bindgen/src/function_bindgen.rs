@@ -1442,7 +1442,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO(threads): thread_func will contain the actual call rather than attempting to execute immediately
 
                 // If we're dealing with an async task, do explicit task enter
-                if self.requires_async_porcelain {
+                if self.is_async || self.requires_async_porcelain {
                     uwriteln!(
                         self.src,
                         r#"
