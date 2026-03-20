@@ -1124,12 +1124,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("enum{tmp}"));
             }
 
-            // The ListCanonLower instruction is called on async function parameter lowers
+            // The ListCanonLower instruction is called on async function parameter lowers,
+            // which are separated in memory by one pointer follow.
             //
             // We ignore `realloc` in the instruction because it's the name of the *import* from the
             // component's side (i.e. `"cabi_realloc"`). Bindings have already set up the appropriate
             // realloc for the current component (e.g. `realloc0`) and it is available in the bindgen
             // object @ `self.realloc`
+            //
+            // Note that this can be called *inside* a "regular" ListCanonLower, for example
+            // when a list of lists or list of Uint8Arrays is sent.
             //
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
@@ -1143,7 +1147,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Alias the list to a local variable
                 uwriteln!(self.src, "var val{tmp} = {};", operands[0]);
                 if matches!(element, Type::U8) {
-                    uwriteln!(self.src, "var len{tmp} = val{tmp}.byteLength;");
+                    uwriteln!(
+                        self.src,
+                        "var len{tmp} = Array.isArray(val{tmp}) ? val{tmp}.length : val{tmp}.byteLength;"
+                    );
                 } else {
                     uwriteln!(self.src, "var len{tmp} = val{tmp}.length;");
                 }
