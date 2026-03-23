@@ -26,6 +26,12 @@ interface resources {
 interface get-stream-async {
     use resources.{example-resource};
 
+    resource example-guest-resource {
+        constructor(id: u32);
+        get-id: func() -> u32;
+        get-id-async: async func() -> u32;
+    }
+
     variant example-variant {
         num(u32),
         str(string),
@@ -99,12 +105,9 @@ interface get-stream-async {
     //   vals: list<borrow<example-resource>>
     // ) -> result<stream<borrow<example-resource>>, string>;
 
-    // // NOTE: the resource exported by a component is *not* the same as the one
-    // // that has been provided by the host. They can be linked/have a linking managed by the component,
-    // // but are not exactly the same.
-    // get-stream-example-resource-own: async func(vals: list<u32>) -> result<stream<example-resource>, string>;
+    get-stream-example-resource-own: async func(vals: list<u32>) -> result<stream<example-guest-resource>, string>;
+    get-example-resource-own-disposes: func() -> u32;
 
-    // NOTE: the test below is a special case to ensure that the host resource alone is usable.
     get-stream-example-resource-own-attr: async func(vals: list<example-resource>) -> result<stream<u32>, string>;
 
     //get-stream-stream-string: async func(vals: list<stream<string>>) -> result<stream<stream<string>>, string>;
@@ -134,7 +137,6 @@ world async-simple-return {
 
 world stream-tx {
   import resources;
-  // export resources;
   export get-stream-async;
 }
 

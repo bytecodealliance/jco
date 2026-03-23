@@ -28,13 +28,13 @@ suite("stream<T> lifts", () => {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`),
                 skipInstantiation: true,
             },
-            // jco: {
-            //     transpile: {
-            //         extraArgs: {
-            //             minify: false,
-            //         },
-            //     },
-            // },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                },
+            },
         });
 
         esModule = setupRes.esModule;
@@ -50,7 +50,7 @@ suite("stream<T> lifts", () => {
             ...new WASIShim().getImportObject(),
             "jco:test-components/resources": {
                 ExampleResource,
-            }
+            },
         });
     });
 
@@ -295,40 +295,43 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "result<string>", assertEqFn: assert.deepEqual });
     });
 
-    // test.only("example-resource", async () => {
-    //     assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn, AsyncFunction);
-    //     let vals = [
-    //         2,
-    //         1,
-    //         0,
-    //     ];
-    //     let stream = await instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn(vals);
-    //     for (const v of vals) {
-    //         const exportedResource = await stream.next();
-    //         assert.isNotNull(exportedResource);
-    //         assert.instanceOf(instance["jco:test-components/get-stream-async"].ExampleResource);
-    //         test.assert(exportedResource.getId(), v);
-    //     }
-    // });
+    test("example-resource", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn, AsyncFunction);
+        let vals = [2, 1, 0];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn(vals);
+        const disposeSymbol = Symbol.dispose || Symbol.for("dispose");
+        let numDisposed = 0;
+        for (const expectedResourceId of vals) {
+            const resource = await stream.next();
+            assert.isNotNull(resource);
+            assert.instanceOf(resource, instance["jco:test-components/get-stream-async"].ExampleGuestResource);
+            assert.strictEqual(resource.getId(), expectedResourceId);
+            assert.strictEqual(resource.getId(), await resource.getIdAsync());
+
+            assert.doesNotThrow(() => resource[disposeSymbol]());
+            numDisposed += 1;
+            assert.strictEqual(
+                instance["jco:test-components/get-stream-async"].getExampleResourceOwnDisposes(),
+                numDisposed,
+            );
+        }
+    });
 
     test("example-resource#get-id", async () => {
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwnAttr, AsyncFunction);
-        let vals = [
-            new ExampleResource(2),
-            new ExampleResource(1),
-            new ExampleResource(0),
-        ];
+        assert.instanceOf(
+            instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwnAttr,
+            AsyncFunction,
+        );
+        let vals = [new ExampleResource(2), new ExampleResource(1), new ExampleResource(0)];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwnAttr(vals);
 
         await checkStreamValues({
             stream,
             vals,
             typeName: "example-resource#get-id (output)",
-            expectedValues: [2,1,0],
+            expectedValues: [2, 1, 0],
         });
     });
-
-    // TODO: test resources which contain async functions
 });
 
 async function checkStreamValues(args) {

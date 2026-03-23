@@ -1,40 +1,62 @@
+use std::sync::atomic::AtomicU32;
+
 mod bindings {
     use super::Component;
     wit_bindgen::generate!({
         world: "stream-tx",
+        with: {
+            "jco:test-components/get-stream-async/example-guest-resource": generate,
+        }
     });
     export!(Component);
 }
 
-use bindings::wit_stream;
 use wit_bindgen::StreamReader;
 
-use crate::bindings::exports::jco::test_components::get_stream_async;
-use crate::bindings::wit_stream::StreamPayload;
+use bindings::exports::jco::test_components::get_stream_async;
+use bindings::exports::jco::test_components::get_stream_async::GuestExampleGuestResource;
+use bindings::jco::test_components::resources::ExampleResource;
+use bindings::wit_stream;
+use bindings::wit_stream::StreamPayload;
 
 struct Component;
 
-// /// Guest-local implementation of `example-resource`
-// ///
-// /// This resource is returned by component exported fucntions, but note
-// /// that is is *distinct* from the resource that is provided by the host
-// /// and passed in.
-// ///
-// /// This component can look and behave and be linked to the external resource
-// /// implementation (forwarding calls to it), but it is *not* the same.
-// struct ExR(u32);
+static RESOURCE_DISPOSE_COUNT: AtomicU32 = AtomicU32::new(0);
 
-// impl get_stream_async::GuestExampleResource for ExR {
-//     fn new(id: u32) -> Self {
-//         Self(id)
-//     }
+/// Guest-local implementation of `example-resource`
+///
+/// This resource is returned by component exported fucntions, but note
+/// that is is *distinct* from the resource that is provided by the host
+/// and passed in.
+///
+/// This component can look and behave and be linked to the external resource
+/// implementation (forwarding calls to it), but it is *not* the same.
+///
+pub struct ExR(u32);
 
-//     fn get_id(&self) -> u32 {
-//         return self.0;
-//     }
-// }
+impl get_stream_async::GuestExampleGuestResource for ExR {
+    fn new(id: u32) -> Self {
+        ExR(id)
+    }
+
+    fn get_id(&self) -> u32 {
+        self.0
+    }
+
+    async fn get_id_async(&self) -> u32 {
+        self.0
+    }
+}
+
+impl Drop for ExR {
+    fn drop(&mut self) {
+        RESOURCE_DISPOSE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Release);
+    }
+}
 
 impl get_stream_async::Guest for Component {
+    type ExampleGuestResource = ExR;
+
     async fn get_stream_u32(vals: Vec<u32>) -> Result<StreamReader<u32>, String> {
         stream_values_async(vals)
     }
@@ -152,18 +174,27 @@ impl get_stream_async::Guest for Component {
         stream_values_async(vals)
     }
 
-    // async fn get_stream_example_resource_own(
-    //     vals: Vec<u32>,
-    // ) -> Result<StreamReader<Self::ExampleResource>, String> {
-    //     let resources: Vec<ExR> = vals
-    //         .iter()
-    //         .map(|v| <ExR as get_stream_async::GuestExampleResource>::new(*v))
-    //         .collect();
+    // async fn get_stream_example_resource_own(vals: Vec<u32>) -> Result<StreamReader<ExR>, String> {
+    //     let resources: Vec<ExR> = vals.iter().map(|v| ExR::new(*v)).collect();
     //     stream_values_async(resources)
     // }
 
+    async fn get_stream_example_resource_own(
+        vals: Vec<u32>,
+    ) -> Result<StreamReader<get_stream_async::ExampleGuestResource>, String> {
+        let resources = vals
+            .iter()
+            .map(|v| get_stream_async::ExampleGuestResource::new(ExR::new(*v)))
+            .collect::<Vec<_>>();
+        stream_values_async(resources)
+    }
+
+    fn get_example_resource_own_disposes() -> u32 {
+        RESOURCE_DISPOSE_COUNT.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     async fn get_stream_example_resource_own_attr(
-        vals: Vec<get_stream_async::ExampleResource>,
+        vals: Vec<ExampleResource>,
     ) -> Result<StreamReader<u32>, String> {
         let (mut tx, rx) = wit_stream::new();
         wit_bindgen::spawn(async move {
