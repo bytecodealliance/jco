@@ -1145,8 +1145,9 @@ impl AsyncTaskIntrinsic {
 
                             const ready = readyFn();
                             if (ready && {global_async_determinism} === 'random') {{
-                                const coinFlip = {coin_flip_fn}();
-                                if (coinFlip) {{ return true }}
+                                // const coinFlip = {coin_flip_fn}();
+                                // if (coinFlip) {{ return true }}
+                                return true;
                             }}
 
                             const keepGoing = await this.immediateSuspend({{ cancellable, readyFn }});
