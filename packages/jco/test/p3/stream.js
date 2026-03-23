@@ -66,12 +66,10 @@ suite("stream<T> lifts", () => {
         let vals = [0, 100, 65535];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU16(vals);
         await checkStreamValues({ stream, vals, typeName: "u16" });
-        // TODO(fix): under/overflowing values hang
 
         vals = [-32_768, 0, 32_767];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS16(vals);
         await checkStreamValues({ stream, vals, typeName: "u16" });
-        // TODO(fix): under/overflowing values hang
     });
 
     test.concurrent("u64/s64", async () => {
@@ -81,30 +79,27 @@ suite("stream<T> lifts", () => {
         let vals = [0n, 100n, 65535n];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU64(vals);
         await checkStreamValues({ stream, vals, typeName: "u64" });
-        // TODO(fix): under/overflowing values hang
 
         vals = [-32_768n, 0n, 32_767n];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS64(vals);
         await checkStreamValues({ stream, vals, typeName: "s64" });
-        // TODO(fix): under/overflowing values hang
     });
 
-    // // TODO(fix): stream gets stuck waiting, u8/s8 require special case
-    test.skip("u8/s8", async () => {
+    test.concurrent("u8/s8", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU8, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS8, AsyncFunction);
 
-        // let vals = [0, 1, 255];
-        // let stream = await instance["jco:test-components/get-stream-async"].getStreamU8(vals);
-        // await checkStreamValues({ stream, vals, typeName: "u8" });
-        //
-        // vals = [-11, -22, -33, -128, 127, 128];
-        // stream = await instance["jco:test-components/get-stream-async"].getStreamS8(vals);
-        // assert.equal(vals[0], await stream.next());
-        // assert.equal(vals[1], await stream.next());
-        // assert.equal(vals[2], await stream.next());
-        // assert.equal(vals[3], await stream.next());
-        // assert.equal(vals[4], await stream.next());
+        let vals = [0, 1, 255];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamU8(vals);
+        await checkStreamValues({ stream, vals, typeName: "u8" });
+
+        vals = [-11, -22, -33, -128, 127, 128];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamS8(vals);
+        assert.equal(vals[0], await stream.next());
+        assert.equal(vals[1], await stream.next());
+        assert.equal(vals[2], await stream.next());
+        assert.equal(vals[3], await stream.next());
+        assert.equal(vals[4], await stream.next());
     });
 
     test.concurrent("f32/f64", async () => {
