@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.17.4] - 2026-03-23
+
+### 🧪 Testing
+
+- _(jco)_ re-enable all stream tests by @vados-cosmonic in #1329
+
+- _(jco)_ run p3 stream tests in parallel w/ diff instantiations by @vados-cosmonic in #1327
+
+- _(jco)_ add test for stream lift of list<u8> by @vados-cosmonic
+
+- _(jco)_ remove todo on throwing for overflow by @vados-cosmonic in #1326
+
+- _(jco)_ add list, record stream lift tests by @vados-cosmonic
+
+- _(jco)_ add test for fixed length lists by @vados-cosmonic
+
+- _(jco)_ enable test for stream list, fixed size list by @vados-cosmonic
+
+- _(jco)_ add test for stream lift enum by @vados-cosmonic
+
+- _(jco)_ enable stream tx test for flags by @vados-cosmonic
+
+- _(jco)_ enable flat lift test for tuple<t> by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ fmt by @vados-cosmonic
+
 ## [1.17.3] - 2026-03-19
 
 ### 🧪 Testing
