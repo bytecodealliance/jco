@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.16.3] - 2026-03-23
+
+### 🚀 Features
+
+- _(bindgen)_ add stream lift for flags by @vados-cosmonic
+
+- _(bindgen)_ add flat lift for tuple<t> by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ stream timing issue by @vados-cosmonic
+
+- _(bindgen)_ list canon lower for special cased list<u8> by @vados-cosmonic
+
+- _(bindgen)_ use of async enter by @vados-cosmonic
+
+- _(bindgen)_ error tag name by @vados-cosmonic
+
+- _(bindgen)_ async flat lift impl for fixed length lists by @vados-cosmonic
+
+- _(bindgen)_ list async lift impls for list & fixed size list by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ impl for fixed/unknown length lists by @vados-cosmonic
+
+- _(bindgen)_ rework async lift for enums by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ clippy by @vados-cosmonic
+
+- _(bindgen)_ show value in debug msg for incorrect variant input by @vados-cosmonic
+
+
+
+
 ## [1.16.2] - 2026-03-18
 
 ### 🚀 Features
