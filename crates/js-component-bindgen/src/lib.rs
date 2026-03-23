@@ -1,4 +1,3 @@
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 use std::collections::HashSet;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};

@@ -563,7 +563,11 @@ impl Intrinsic {
                                 }} else {{
                                     let currentCount = count;
                                     let startPtr = this.#ptr;
-                                    let liftCtx = {{ storagePtr: startPtr, memory: this.#memory }};
+                                    let liftCtx = {{
+                                        storagePtr: startPtr,
+                                        memory: this.#memory,
+                                        componentIdx: this.#componentIdx,
+                                    }};
                                     if (currentCount < 0) {{ throw new Error('unexpectedly invalid count'); }}
                                     while (currentCount > 0) {{
                                         const [value, _ctx] = this.#elemMeta.liftFn(liftCtx);
@@ -600,6 +604,7 @@ impl Intrinsic {
                                         startPtr += this.#elemMeta.lowerFn({{
                                             memory: this.#memory,
                                             storagePtr: startPtr,
+                                            componentIdx: this.#componentIdx,
                                             vals: [v],
                                         }});
                                     }}

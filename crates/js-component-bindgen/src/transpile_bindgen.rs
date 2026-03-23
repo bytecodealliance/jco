@@ -34,6 +34,7 @@ use crate::function_bindgen::{
     ErrHandling, FunctionBindgen, ResourceData, ResourceExtraData, ResourceMap, ResourceTable,
 };
 use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::js_helper::JsHelperIntrinsic;
 use crate::intrinsics::lift::LiftIntrinsic;
 use crate::intrinsics::lower::LowerIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
@@ -281,7 +282,11 @@ pub fn transpile_bindgen(
         used_instance_flags: Default::default(),
         defined_resource_classes: Default::default(),
         imports_resource_types: Default::default(),
+        imports_resource_index_types: Default::default(),
         exports_resource_types: Default::default(),
+        exports_resource_index_types: Default::default(),
+        resource_exports: Default::default(),
+        resource_imports: Default::default(),
         resources_initialized: BTreeMap::new(),
         resource_tables_initialized: BTreeMap::new(),
         stream_tables,
@@ -570,7 +575,7 @@ impl JsBindgen<'_> {
 /// Helper structure used to generate the `instantiate` method of a component.
 ///
 /// This is the main structure for parsing the output of Wasmtime.
-struct Instantiator<'a, 'b> {
+pub(crate) struct Instantiator<'a, 'b> {
     src: Source,
     bindgen: &'a mut JsBindgen<'b>,
     modules: &'a PrimaryMap<StaticModuleIndex, core::Translation<'a>>,
@@ -590,8 +595,17 @@ struct Instantiator<'a, 'b> {
     /// Component-level translation information, including trampolines
     translation: &'a ComponentTranslation,
 
+    /// Lookup of exported types to resource indices
     exports_resource_types: BTreeMap<TypeId, ResourceIndex>,
+    /// Lookup of resource indices to exported types
+    exports_resource_index_types: BTreeMap<ResourceIndex, TypeId>,
+
+    /// Lookup of imported types to resource indices
     imports_resource_types: BTreeMap<TypeId, ResourceIndex>,
+    /// Lookup of resource indices to imported types
+    #[allow(unused)]
+    imports_resource_index_types: BTreeMap<ResourceIndex, TypeId>,
+
     resources_initialized: BTreeMap<ResourceIndex, bool>,
     resource_tables_initialized: BTreeMap<TypeResourceTableIndex, bool>,
 
@@ -605,12 +619,17 @@ struct Instantiator<'a, 'b> {
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 
-    // Mapping of stream table indices to component indices
+    /// Mapping of stream table indices to component indices
     stream_tables: BTreeMap<TypeStreamTableIndex, RuntimeComponentInstanceIndex>,
 
-    // Mapping of err ctx indices to component indices
+    /// Mapping of err ctx indices to component indices
     err_ctx_tables:
         BTreeMap<TypeComponentLocalErrorContextTableIndex, RuntimeComponentInstanceIndex>,
+
+    /// Map of exported resources built during export bindgen
+    resource_exports: ResourceMap,
+    /// Map of imported resources built during export bindgen
+    resource_imports: ResourceMap,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -714,8 +733,9 @@ impl<'a> Instantiator<'a, '_> {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
                                 let resource_table_ty = &self.types[resource];
-                                self.exports_resource_types
-                                    .insert(ty, resource_table_ty.unwrap_concrete_ty());
+                                let concrete_ty = resource_table_ty.unwrap_concrete_ty();
+                                self.exports_resource_types.insert(ty, concrete_ty);
+                                self.exports_resource_index_types.insert(concrete_ty, ty);
                             }
                             Export::Type(_) => {}
                             _ => unreachable!(
@@ -829,6 +849,12 @@ impl<'a> Instantiator<'a, '_> {
             self.instantiation_global_initializer(init);
         }
 
+        // Process exports and build mappings
+        //
+        // NOTE: generating exports fills out export resource map information
+        // that is needed for some trampolines.
+        self.exports(&self.component.exports);
+
         // Some trampolines that correspond to host-provided imports need to be defined before the
         // instantiation bits since they are referred to.
         for (i, trampoline) in self
@@ -844,8 +870,6 @@ impl<'a> Instantiator<'a, '_> {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
         }
-
-        self.exports(&self.component.exports);
 
         // Trampolines here so we have static module indices, and resource maps populated
         // (both imports and exports may still be populting resource map)
@@ -1042,7 +1066,7 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js_init.prepend_str(&instance_flag_defs);
     }
 
-    // Trampolines defined in trampoline() below that use:
+    // Trampolines defined in is_early_trampoline() below that use:
     //   const trampoline{} = ...
     // require early initialization since their bindings aren't auto-hoisted
     // like JS functions are in the JS runtime.
@@ -1300,7 +1324,6 @@ impl<'a> Instantiator<'a, '_> {
                             .unwrap_or_else(|| "null".into()),
                         gen_flat_lift_fn_js_expr(
                             self,
-                            self.types,
                             &ty,
                             &wasmtime_environ::component::StringEncoding::Utf8,
                         ),
@@ -2000,12 +2023,8 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Build list of lift functions for the params of the lowered import
                 let param_types = &self.types.index(func_ty.params).types;
-                let param_lift_fns_js = gen_flat_lift_fn_list_js_expr(
-                    self,
-                    self.types,
-                    param_types.iter().as_slice(),
-                    canon_opts,
-                );
+                let param_lift_fns_js =
+                    gen_flat_lift_fn_list_js_expr(self, param_types.iter().as_slice(), canon_opts);
 
                 // Build list of lower functions for the results of the lowered import
                 let result_types = &self.types.index(func_ty.results).types;
@@ -2427,8 +2446,7 @@ impl<'a> Instantiator<'a, '_> {
                 let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
                     lift_fns.push(gen_flat_lift_fn_js_expr(
-                        self.bindgen,
-                        self.types,
+                        self,
                         result_ty,
                         &canon_opts.string_encoding,
                     ));
@@ -2838,6 +2856,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // Create mappings for resources
         let mut import_resource_map = ResourceMap::new();
+
         self.create_resource_fn_map(func, func_ty, &mut import_resource_map);
 
         let (callee_name, call_type) = match func.kind {
@@ -3052,6 +3071,9 @@ impl<'a> Instantiator<'a, '_> {
                 }
             };
 
+            // Save information about imported resources for later
+            self.resource_imports.extend(import_resource_map.clone());
+
             let resource_tables = {
                 let mut resource_tables: Vec<TypeResourceTableIndex> = Vec::new();
 
@@ -3124,16 +3146,15 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::AsyncStatic(tid)
             | FunctionKind::Constructor(tid) => {
                 let ty = &self.resolve.types[tid];
-                (
-                    ty.name.as_ref().unwrap().to_upper_camel_case(),
-                    Instantiator::resource_name(
-                        self.resolve,
-                        &mut self.bindgen.local_names,
-                        tid,
-                        &self.imports_resource_types,
-                    )
-                    .to_string(),
+                let class_name = ty.name.as_ref().unwrap().to_upper_camel_case();
+                let resource_name = Instantiator::resource_name(
+                    self.resolve,
+                    &mut self.bindgen.local_names,
+                    tid,
+                    &self.imports_resource_types,
                 )
+                .to_string();
+                (class_name, resource_name)
             }
         };
 
@@ -3911,11 +3932,12 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
+        let mut export_resource_map = ResourceMap::new();
         for (export_name, export_idx) in exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
-            let mut export_resource_map = ResourceMap::new();
+
             match export {
                 Export::LiftedFunction {
                     func: def,
@@ -3930,20 +3952,23 @@ impl<'a> Instantiator<'a, '_> {
                     };
                     self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
-                    let local_name = if let FunctionKind::Constructor(resource_id)
-                    | FunctionKind::Method(resource_id)
-                    | FunctionKind::Static(resource_id) = func.kind
-                    {
-                        Instantiator::resource_name(
+                    let local_name = String::from(match func.kind {
+                        // For resources, we must take the type name (adding `.prototype.<fn name>` later)
+                        FunctionKind::Constructor(resource_id)
+                        | FunctionKind::Method(resource_id)
+                        | FunctionKind::AsyncMethod(resource_id)
+                        | FunctionKind::Static(resource_id)
+                        | FunctionKind::AsyncStatic(resource_id) => Instantiator::resource_name(
                             self.resolve,
                             &mut self.bindgen.local_names,
                             resource_id,
                             &self.exports_resource_types,
-                        )
-                    } else {
-                        self.bindgen.local_names.create_once(export_name)
-                    }
-                    .to_string();
+                        ),
+                        // Fore free standing functions we can use the exoprt name directly as a local name
+                        FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                            self.bindgen.local_names.create_once(export_name)
+                        }
+                    });
 
                     let options = self
                         .component
@@ -3961,25 +3986,28 @@ impl<'a> Instantiator<'a, '_> {
                         &export_resource_map,
                     );
 
-                    // Determine the correct export func name
-                    let js_func_name = if let FunctionKind::Constructor(ty)
-                    | FunctionKind::Method(ty)
-                    | FunctionKind::Static(ty) = func.kind
-                    {
-                        self.resolve.types[ty]
+                    let js_binding_name = match func.kind {
+                        // For resources, we must take the type name (adding `.prototype.<fn name>` later)
+                        FunctionKind::Constructor(ty)
+                        | FunctionKind::Method(ty)
+                        | FunctionKind::AsyncMethod(ty)
+                        | FunctionKind::Static(ty)
+                        | FunctionKind::AsyncStatic(ty) => self.resolve.types[ty]
                             .name
                             .as_ref()
                             .unwrap()
-                            .to_upper_camel_case()
-                    } else {
-                        export_name.to_lower_camel_case()
+                            .to_upper_camel_case(),
+                        // For free standing functions we can use the export name directly
+                        FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                            export_name.to_lower_camel_case()
+                        }
                     };
 
                     // Add the export binding
                     self.bindgen.esm_bindgen.add_export_binding(
                         None,
                         local_name,
-                        js_func_name,
+                        js_binding_name,
                         func,
                     );
                 }
@@ -4007,20 +4035,25 @@ impl<'a> Instantiator<'a, '_> {
 
                         self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
-                        let local_name = if let FunctionKind::Constructor(resource_id)
-                        | FunctionKind::Method(resource_id)
-                        | FunctionKind::Static(resource_id) = func.kind
-                        {
-                            Instantiator::resource_name(
-                                self.resolve,
-                                &mut self.bindgen.local_names,
-                                resource_id,
-                                &self.exports_resource_types,
-                            )
-                        } else {
-                            self.bindgen.local_names.create_once(func_name)
-                        }
-                        .to_string();
+                        let local_name = String::from(match func.kind {
+                            // For resources, we must use the name of the type
+                            FunctionKind::Constructor(resource_id)
+                            | FunctionKind::Method(resource_id)
+                            | FunctionKind::AsyncMethod(resource_id)
+                            | FunctionKind::Static(resource_id)
+                            | FunctionKind::AsyncStatic(resource_id) => {
+                                Instantiator::resource_name(
+                                    self.resolve,
+                                    &mut self.bindgen.local_names,
+                                    resource_id,
+                                    &self.exports_resource_types,
+                                )
+                            }
+                            // For free standing functions we can use the bare func name
+                            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                                self.bindgen.local_names.create_once(func_name)
+                            }
+                        });
 
                         let options = self
                             .component
@@ -4038,25 +4071,29 @@ impl<'a> Instantiator<'a, '_> {
                             &export_resource_map,
                         );
 
-                        // Determine the export func name
-                        let export_func_name = if let FunctionKind::Constructor(ty)
-                        | FunctionKind::Method(ty)
-                        | FunctionKind::Static(ty) = func.kind
-                        {
-                            self.resolve.types[ty]
+                        // Determine the export func name (this can also be a class name)
+                        let export_binding_name = match func.kind {
+                            // For resources, we must use the type name (later adding `.prototype.<actual fn>`)
+                            FunctionKind::Constructor(ty)
+                            | FunctionKind::Method(ty)
+                            | FunctionKind::AsyncMethod(ty)
+                            | FunctionKind::Static(ty)
+                            | FunctionKind::AsyncStatic(ty) => self.resolve.types[ty]
                                 .name
                                 .as_ref()
                                 .unwrap()
-                                .to_upper_camel_case()
-                        } else {
-                            func_name.to_lower_camel_case()
+                                .to_upper_camel_case(),
+                            // Free standing functions we can use the function name directly
+                            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                                func_name.to_lower_camel_case()
+                            }
                         };
 
                         // Add the export binding
                         self.bindgen.esm_bindgen.add_export_binding(
                             Some(export_name),
                             local_name,
-                            export_func_name,
+                            export_binding_name,
                             func,
                         );
                     }
@@ -4069,6 +4106,9 @@ impl<'a> Instantiator<'a, '_> {
                 Export::ModuleStatic { .. } | Export::ModuleImport { .. } => unimplemented!(),
             }
         }
+
+        // Save information about exported resources for later
+        self.resource_exports.extend(export_resource_map);
         self.bindgen.esm_bindgen.populate_export_aliases();
     }
 
@@ -4432,8 +4472,7 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 
 /// Generate the javascript that corresponds to a list of lifting functions for a given list of types
 pub fn gen_flat_lift_fn_list_js_expr(
-    intrinsic_mgr: &mut impl ManagesIntrinsics,
-    component_types: &ComponentTypes,
+    intrinsic_mgr: &mut Instantiator,
     types: &[InterfaceType],
     canon_opts: &CanonicalOptions,
 ) -> String {
@@ -4441,7 +4480,6 @@ pub fn gen_flat_lift_fn_list_js_expr(
     for ty in types.iter() {
         lift_fns.push(gen_flat_lift_fn_js_expr(
             intrinsic_mgr,
-            component_types,
             ty,
             &canon_opts.string_encoding,
         ));
@@ -4464,11 +4502,12 @@ pub fn gen_flat_lift_fn_list_js_expr(
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
 pub fn gen_flat_lift_fn_js_expr(
-    intrinsic_mgr: &mut impl ManagesIntrinsics,
-    component_types: &ComponentTypes,
+    intrinsic_mgr: &mut Instantiator,
     ty: &InterfaceType,
     string_encoding: &wasmtime_environ::component::StringEncoding,
 ) -> String {
+    let component_types = intrinsic_mgr.types;
+
     match ty {
         InterfaceType::Bool => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
@@ -4564,12 +4603,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}, {}],",
                     f.name.to_lower_camel_case(),
-                    gen_flat_lift_fn_js_expr(
-                        intrinsic_mgr,
-                        component_types,
-                        &f.ty,
-                        string_encoding
-                    ),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &f.ty, string_encoding),
                     component_types.canonical_abi(ty).size32,
                     component_types.canonical_abi(ty).align32,
                 ));
@@ -4589,12 +4623,7 @@ pub fn gen_flat_lift_fn_js_expr(
                     Some(ty) => {
                         format!(
                             "['{name}', {}, {}, {}, {}],",
-                            gen_flat_lift_fn_js_expr(
-                                intrinsic_mgr,
-                                component_types,
-                                ty,
-                                string_encoding
-                            ),
+                            gen_flat_lift_fn_js_expr(intrinsic_mgr, ty, string_encoding),
                             variant_ty.abi.size32,
                             variant_ty.abi.align32,
                             variant_ty.info.payload_offset32,
@@ -4611,12 +4640,8 @@ pub fn gen_flat_lift_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let lift_fn_expr = gen_flat_lift_fn_js_expr(
-                intrinsic_mgr,
-                component_types,
-                &list_ty.element,
-                string_encoding,
-            );
+            let lift_fn_expr =
+                gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element, string_encoding);
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let align_32 = elem_cabi.align32;
             let size_32 = elem_cabi.size32;
@@ -4627,12 +4652,8 @@ pub fn gen_flat_lift_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let lift_fn_expr = gen_flat_lift_fn_js_expr(
-                intrinsic_mgr,
-                component_types,
-                &list_ty.element,
-                string_encoding,
-            );
+            let lift_fn_expr =
+                gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element, string_encoding);
             let list_len = list_ty.size;
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let align_32 = elem_cabi.align32;
@@ -4651,8 +4672,7 @@ pub fn gen_flat_lift_fn_js_expr(
 
             let mut elem_lifts_expr = String::from("[");
             for ty in &tuple_ty.types {
-                let lift_fn_js =
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, ty, string_encoding);
+                let lift_fn_js = gen_flat_lift_fn_js_expr(intrinsic_mgr, ty, string_encoding);
                 elem_lifts_expr.push_str(&format!("[{lift_fn_js}, {size_u32}, {align_u32}],"));
             }
             elem_lifts_expr.push(']');
@@ -4714,12 +4734,8 @@ pub fn gen_flat_lift_fn_js_expr(
             let payload_offset_32 = option_ty.info.payload_offset32;
             let align_32 = option_ty.abi.align32;
             let size_32 = option_ty.abi.size32;
-            let lift_fn_js = gen_flat_lift_fn_js_expr(
-                intrinsic_mgr,
-                component_types,
-                &option_ty.ty,
-                string_encoding,
-            );
+            let lift_fn_js =
+                gen_flat_lift_fn_js_expr(intrinsic_mgr, &option_ty.ty, string_encoding);
             // NOTE: options are treated as variants
             format!(
                 "{f}([
@@ -4738,12 +4754,7 @@ pub fn gen_flat_lift_fn_js_expr(
             if let Some(ok_ty) = result_ty.ok {
                 cases_and_lifts_expr.push_str(&format!(
                     "['ok', {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(
-                        intrinsic_mgr,
-                        component_types,
-                        &ok_ty,
-                        string_encoding
-                    ),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &ok_ty, string_encoding),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
@@ -4755,12 +4766,7 @@ pub fn gen_flat_lift_fn_js_expr(
             if let Some(err_ty) = &result_ty.err {
                 cases_and_lifts_expr.push_str(&format!(
                     "['err', {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(
-                        intrinsic_mgr,
-                        component_types,
-                        err_ty,
-                        string_encoding
-                    ),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, err_ty, string_encoding),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
@@ -4775,9 +4781,102 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Own(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-            let table_idx = ty_idx.as_u32();
+            intrinsic_mgr.add_intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
+            intrinsic_mgr.add_intrinsic(Intrinsic::SymbolResourceHandle);
+            intrinsic_mgr.add_intrinsic(Intrinsic::SymbolDispose);
+            intrinsic_mgr
+                .add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
-            format!("{f}.bind(null, {table_idx})")
+            let table_ty = &component_types[*ty_idx];
+            let component_idx = table_ty.unwrap_concrete_instance().as_u32();
+            let resource_idx = table_ty.unwrap_concrete_ty();
+
+            let resource_typedef = intrinsic_mgr
+                .exports_resource_index_types
+                .get(&resource_idx)
+                .expect("unexpectedly missing owned resource type in lookup");
+
+            let (resource_class_name, create_resource_fn_js) = match intrinsic_mgr
+                .resource_exports
+                .get(resource_typedef)
+            {
+                None => ("null".into(), "() => null".into()),
+                Some(ResourceTable { imported, data }) => {
+                    assert!(
+                        !imported,
+                        "imported resources cannot be owned and returned via lifting"
+                    );
+
+                    match data {
+                        ResourceData::Guest { .. } => {
+                            unimplemented!(
+                                "owned resources created by guests should must have host-side data"
+                            )
+                        }
+                        ResourceData::Host {
+                            tid,
+                            local_name,
+                            dtor_name,
+                            ..
+                        } => {
+                            let empty_func = JsHelperIntrinsic::EmptyFunc.name();
+                            let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
+                            let symbol_dispose = Intrinsic::SymbolDispose.name();
+                            let rsc_table_remove = ResourceIntrinsic::ResourceTableRemove.name();
+                            let tid = tid.as_u32();
+                            let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
+
+                            let dtor_setup_js = dtor_name.as_ref().map(|dtor|
+                                format!(
+                                    r#"
+                                      Object.defineProperty(
+                                          resourceObj,
+                                          {symbol_dispose},
+                                          {{
+                                              writable: true,
+                                              value: function() {{
+                                                  finalizationRegistry{tid}.unregister(resourceObj);
+                                                  {rsc_table_remove}(handleTable{tid}, handle);
+                                                  resourceObj[{symbol_dispose}] = {empty_func};
+                                                  resourceObj[{symbol_resource_handle}] = undefined;
+                                                  {dtor}(handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag});
+                                              }}
+                                         }}
+                                     );
+                                    "#
+                                )
+                            ).unwrap_or_default();
+
+                            let create_resource_fn_js = format!(
+                                r#"
+                                  (handle) => {{
+                                      const resourceObj = Object.create({local_name}.prototype);
+                                      Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
+                                          writable: true,
+                                          value: handle,
+                                      }});
+                                      finalizationRegistry{tid}.register(resourceObj, handle, resourceObj);
+                                      {dtor_setup_js}
+                                      return resourceObj;
+                                  }}
+                                 "#
+                            );
+
+                            (local_name.to_string(), create_resource_fn_js)
+                        }
+                    }
+                }
+            };
+
+            format!(
+                r#"{f}({{
+                       componentIdx: {component_idx},
+                       className: {resource_class_name},
+                       createResourceFn: {create_resource_fn_js},
+                    }})
+                "#,
+            )
         }
 
         InterfaceType::Borrow(ty_idx) => {

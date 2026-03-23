@@ -14,7 +14,27 @@ use crate::bindings::wit_stream::StreamPayload;
 
 struct Component;
 
-impl bindings::exports::jco::test_components::get_stream_async::Guest for Component {
+// /// Guest-local implementation of `example-resource`
+// ///
+// /// This resource is returned by component exported fucntions, but note
+// /// that is is *distinct* from the resource that is provided by the host
+// /// and passed in.
+// ///
+// /// This component can look and behave and be linked to the external resource
+// /// implementation (forwarding calls to it), but it is *not* the same.
+// struct ExR(u32);
+
+// impl get_stream_async::GuestExampleResource for ExR {
+//     fn new(id: u32) -> Self {
+//         Self(id)
+//     }
+
+//     fn get_id(&self) -> u32 {
+//         return self.0;
+//     }
+// }
+
+impl get_stream_async::Guest for Component {
     async fn get_stream_u32(vals: Vec<u32>) -> Result<StreamReader<u32>, String> {
         stream_values_async(vals)
     }
@@ -130,6 +150,28 @@ impl bindings::exports::jco::test_components::get_stream_async::Guest for Compon
         vals: Vec<[u32; 5]>,
     ) -> Result<StreamReader<[u32; 5]>, String> {
         stream_values_async(vals)
+    }
+
+    // async fn get_stream_example_resource_own(
+    //     vals: Vec<u32>,
+    // ) -> Result<StreamReader<Self::ExampleResource>, String> {
+    //     let resources: Vec<ExR> = vals
+    //         .iter()
+    //         .map(|v| <ExR as get_stream_async::GuestExampleResource>::new(*v))
+    //         .collect();
+    //     stream_values_async(resources)
+    // }
+
+    async fn get_stream_example_resource_own_attr(
+        vals: Vec<get_stream_async::ExampleResource>,
+    ) -> Result<StreamReader<u32>, String> {
+        let (mut tx, rx) = wit_stream::new();
+        wit_bindgen::spawn(async move {
+            for r in vals.iter() {
+                tx.write(vec![r.get_id()]).await;
+            }
+        });
+        Ok(rx)
     }
 }
 

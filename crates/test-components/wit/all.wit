@@ -16,7 +16,16 @@ interface async-add-s32 {
     add: async func(a: s32, b: s32) -> result<s32, string>;
 }
 
+interface resources {
+    resource example-resource {
+        constructor(id: u32);
+        get-id: func() -> u32;
+    }
+}
+
 interface get-stream-async {
+    use resources.{example-resource};
+
     variant example-variant {
         num(u32),
         str(string),
@@ -34,11 +43,6 @@ interface get-stream-async {
         id: u32,
         id-str: string,
     }
-
-    // resource example-resource {
-    //     constructor(id: u32);
-    //     get-id() -> u32;
-    // }
 
     flags example-flags {
         first,
@@ -65,6 +69,7 @@ interface get-stream-async {
     get-stream-bool: async func(vals: list<bool>) -> result<stream<bool>, string>;
 
     // NOTE: stream<char> is not yet supported upstream (stream<u8> can be used instead)
+    //
     // get-stream-char: async func(vals: list<char>) -> result<stream<char>, string>;
 
     get-stream-string: async func(vals: list<string>) -> result<stream<string>, string>;
@@ -88,9 +93,19 @@ interface get-stream-async {
 
     get-stream-result-string: async func(vals: list<result<string, string>>) -> result<stream<result<string, string>>, string>;
 
-    //get-stream-example-resource-borrow: async func(vals: list<borrow<example-resource>>) -> result<stream<borrow<example-resource>>, string>;
+    // NOTE: stream<borrow<t>> is not supoprted
+    //
+    // get-stream-example-resource-borrow: async func(
+    //   vals: list<borrow<example-resource>>
+    // ) -> result<stream<borrow<example-resource>>, string>;
 
-    //get-stream-example-resource-own: async func(vals: list<example-resource>) -> result<stream<example-resource>, string>;
+    // // NOTE: the resource exported by a component is *not* the same as the one
+    // // that has been provided by the host. They can be linked/have a linking managed by the component,
+    // // but are not exactly the same.
+    // get-stream-example-resource-own: async func(vals: list<u32>) -> result<stream<example-resource>, string>;
+
+    // NOTE: the test below is a special case to ensure that the host resource alone is usable.
+    get-stream-example-resource-own-attr: async func(vals: list<example-resource>) -> result<stream<u32>, string>;
 
     //get-stream-stream-string: async func(vals: list<stream<string>>) -> result<stream<stream<string>>, string>;
     //get-stream-future-string: async func(vals: list<future<string>>) -> result<stream<future<string>>, string>;
@@ -118,6 +133,8 @@ world async-simple-return {
 }
 
 world stream-tx {
+  import resources;
+  // export resources;
   export get-stream-async;
 }
 

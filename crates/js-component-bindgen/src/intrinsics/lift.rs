@@ -963,10 +963,25 @@ impl LiftIntrinsic {
             Self::LiftFlatOwn => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_own_fn = self.name();
-                output.push_str(&format!(r#"
-                    function {lift_flat_own_fn}(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[{lift_flat_own_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lift for owned resources not yet implemented!');
+                let lift_flat_u32_fn = Self::LiftFlatU32.name();
+
+                output.push_str(&format!(
+                    r#"
+                    function {lift_flat_own_fn}(meta) {{
+                        const {{ className, createResourceFn, componentIdx }} = meta;
+
+                        return function {lift_flat_own_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_own_fn}()] args', {{ ctx, className }});
+
+                            if (ctx.componentIdx !== componentIdx) {{
+                                throw new Error('invalid component for resource lift');
+                            }}
+
+                            const [handle, newCtx] = {lift_flat_u32_fn}(ctx);
+                            const resource = createResourceFn(handle);
+
+                            return [resource, newCtx];
+                        }}
                     }}
                 "#
                 ));
@@ -978,7 +993,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function {lift_flat_borrow_fn}(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[{lift_flat_borrow_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lift for borrowed resources not yet implemented!');
+                        throw new Error('flat lift for borrowed resources is not supported!');
                     }}
                 "));
             }
