@@ -10,7 +10,7 @@ use wit_bindgen::rt::async_support::ErrorContext;
 
 struct Component;
 
-impl bindings::exports::jco::test_components::local_run::Guest for Component {
+impl bindings::exports::jco::test_components::local_run_async::Guest for Component {
     async fn run() {
         let err_ctx = ErrorContext::new("error");
         assert_eq!("error", err_ctx.debug_message());

@@ -27,7 +27,7 @@ suite("Error Context (WASI P3)", () => {
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
         const instance = await esModule.instantiate(undefined, new WASIShim().getImportObject());
 
-        const runFn = instance["jco:test-components/local-run"].run;
+        const runFn = instance["jco:test-components/local-run-async"].run;
         assert.strictEqual(runFn instanceof AsyncFunction, true, "run function should be async");
 
         await runFn();

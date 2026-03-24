@@ -1,7 +1,15 @@
 package jco:test-components;
 
-interface local-run {
+interface local-run-async {
     run: async func();
+}
+
+interface local-run-string {
+    run: func() -> string;
+}
+
+interface get-string {
+    get-string: func() -> string;
 }
 
 interface async-add-s32 {
@@ -97,7 +105,7 @@ world async-simple-import {
 }
 
 world async-error-context {
-  export local-run;
+  export local-run-async;
 }
 
 world async-flat-param-adder {
@@ -138,4 +146,10 @@ interface fixed-length-lists-fn {
 
 world fixed-length-lists {
   export fixed-length-lists-fn;
+}
+
+world basic-run-string {
+    import get-string;
+    export get-string;
+    export local-run-string;
 }
