@@ -2185,10 +2185,14 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_import_backwards_compat_fn = Self::LowerImportBackwardsCompat.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let create_new_current_task_fn = Self::CreateNewCurrentTask.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
+                let clear_global_current_task_meta_fn =
+                    Intrinsic::ClearGlobalCurrentTaskMetaFn.name();
                 let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(
@@ -2211,10 +2215,52 @@ impl AsyncTaskIntrinsic {
                             importFn,
                         }} = args;
 
-                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+                        let meta = {get_global_current_task_meta_fn}(componentIdx);
+                        let createdTask;
+
+                        // Some components depend on initialization logic (i.e. `_initialize` or some such
+                        // core wasm export) that is embedded in the component, but is not executed or wizer'd
+                        // away before the transpiled component is attempted to be used.
+                        //
+                        // These components execut their initialization logic *when they are imported* in the
+                        // transpiled context -- so we may get a call to an export that is lowered without going
+                        // through `CallWasm` or `CallInterface`.
+                        //
+                        if (!meta) {{
+                           if (funcTypeIsAsync || (isAsync && !isManualAsync)) {{
+                               throw new Error('p3 async wasm exports cannot use backwards compat auto-task init');
+                           }}
+
+                            const [newTask, newTaskID] = {create_new_current_task_fn}({{
+                                componentIdx,
+                                isAsync,
+                                isManualAsync,
+                                callingWasmExport: false,
+                            }});
+                            createdTask = newTask;
+
+                            // Since we're managing the task creation ourselves we must clear ourselves
+                            createdTask.registerOnResolveHandler(() => {{
+                                {clear_global_current_task_meta_fn}({{
+                                    taskID: task.id(),
+                                    componentIdx: task.componentIdx(),
+                                }});
+                            }});
+
+                            {set_global_current_task_meta_fn}({{
+                                componentIdx,
+                                taskID: newTaskID,
+                            }});
+
+                            meta = {get_global_current_task_meta_fn}(componentIdx);
+                        }}
+
+                        const {{ taskID }} = meta;
 
                         const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+                        if (!taskMeta) {{
+                            throw new Error('invalid/missing async task meta');
+                        }}
 
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
@@ -2258,13 +2304,20 @@ impl AsyncTaskIntrinsic {
                         // TODO(breaking): remove once we get rid of manual async import specification,
                         // as func types cannot be detected in that case only (and we don't need that w/ p3)
                         if (!isManualAsync && !isAsync && !funcTypeIsAsync) {{
+                            if (createdTask) {{ createdTask.enterSync(); }}
+
                             const res = importFn(...params);
+
                             // TODO(breaking): remove once we get rid of manual async import specification,
                             // as func types cannot be detected in that case only (and we don't need that w/ p3)
                             if (!funcTypeIsAsync && !subtask.isReturned()) {{
                                 throw new Error('post-execution subtasks must either be async or returned');
                             }}
-                            return subtask.getResult();
+
+                            const syncRes = subtask.getResult();
+                            if (createdTask) {{ createdTask.resolve([syncRes]); }}
+
+                            return syncRes;
                         }}
 
                         // Sync-lowered async functions requires async behavior because the callee *can* block,
@@ -2333,10 +2386,16 @@ impl AsyncTaskIntrinsic {
                         queueMicrotask(async () => {{
                             try {{
                                 {debug_log_fn}('[{lower_import_backwards_compat_fn}()] calling lowered import', {{ importFn, params }});
-                                const res = await importFn(...params);
+                                if (createdTask) {{ await createdTask.enter(); }}
+
+                                const asyncRes = await importFn(...params);
                                 if (requiresManualAsyncResult) {{
                                     manualAsyncResult.resolve(subtask.getResult());
                                 }}
+
+                                if (createdTask) {{ createdTask.resolve([asyncRes]); }}
+
+
                             }} catch (err) {{
                                 {debug_log_fn}("[{lower_import_backwards_compat_fn}()] import fn error:", err);
                                 if (requiresManualAsyncResult) {{
