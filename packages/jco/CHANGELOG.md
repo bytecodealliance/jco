@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.5] - 2026-03-24
+
+### 🧪 Testing
+
+- _(jco)_ add regression test for bare export initialize by @vados-cosmonic in #1335
+
 ## [1.17.4] - 2026-03-23
 
 ### 🧪 Testing
