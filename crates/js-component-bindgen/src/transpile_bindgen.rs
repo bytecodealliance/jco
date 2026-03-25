@@ -3932,11 +3932,11 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
-        let mut export_resource_map = ResourceMap::new();
         for (export_name, export_idx) in exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
+            let mut export_resource_map = ResourceMap::new();
 
             match export {
                 Export::LiftedFunction {
@@ -4105,10 +4105,11 @@ impl<'a> Instantiator<'a, '_> {
                 // This can't be tested at this time so leave it unimplemented
                 Export::ModuleStatic { .. } | Export::ModuleImport { .. } => unimplemented!(),
             }
+
+            // Save information about exported resources for later
+            self.resource_exports.extend(export_resource_map);
         }
 
-        // Save information about exported resources for later
-        self.resource_exports.extend(export_resource_map);
         self.bindgen.esm_bindgen.populate_export_aliases();
     }
 
@@ -4795,14 +4796,9 @@ pub fn gen_flat_lift_fn_js_expr(
             if let Some(resource_typedef) = intrinsic_mgr
                 .exports_resource_index_types
                 .get(&resource_idx)
-                && let Some(ResourceTable { imported, data }) =
+                && let Some(ResourceTable { data, .. }) =
                     intrinsic_mgr.resource_exports.get(resource_typedef)
             {
-                assert!(
-                    !imported,
-                    "imported resources cannot be owned and returned via lifting"
-                );
-
                 let (resource_class_name, create_resource_fn_js) = match data {
                     ResourceData::Guest { .. } => {
                         unimplemented!(
