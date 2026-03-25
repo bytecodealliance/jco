@@ -295,7 +295,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "result<string>", assertEqFn: assert.deepEqual });
     });
 
-    test.only("example-resource", async () => {
+    test("example-resource", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn, AsyncFunction);
         const disposeSymbol = Symbol.dispose || Symbol.for("dispose");
 
@@ -313,9 +313,10 @@ suite("stream<T> lifts", () => {
         // NOTE: we have to pull all objects out of the stream and drop the stream,
         // *before* attempting to call async functions on the resources, to avoid
         // recursive re-entrancy into the same component instance
-
-        // TODO(fix): streams should be droppable from the host side...
-        // otherwise we can't force the writer to give up writing?
+        //
+        // We use the line below to *ensure* the stream is dropped, and
+        // correspondingly (somewhat racily) that the async task the writer was undergoing is done.
+        stream[disposeSymbol]();
 
         let numDisposed = 0;
         for (const resource of resources) {
