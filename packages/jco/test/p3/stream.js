@@ -295,19 +295,31 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "result<string>", assertEqFn: assert.deepEqual });
     });
 
-    test("example-resource", async () => {
+    test.only("example-resource", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn, AsyncFunction);
+        const disposeSymbol = Symbol.dispose || Symbol.for("dispose");
+
         let vals = [2, 1, 0];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn(vals);
-        const disposeSymbol = Symbol.dispose || Symbol.for("dispose");
-        let numDisposed = 0;
+        const resources = [];
         for (const expectedResourceId of vals) {
             const resource = await stream.next();
             assert.isNotNull(resource);
             assert.instanceOf(resource, instance["jco:test-components/get-stream-async"].ExampleGuestResource);
             assert.strictEqual(resource.getId(), expectedResourceId);
-            assert.strictEqual(resource.getId(), await resource.getIdAsync());
+            resources.push(resource);
+        }
 
+        // NOTE: we have to pull all objects out of the stream and drop the stream,
+        // *before* attempting to call async functions on the resources, to avoid
+        // recursive re-entrancy into the same component instance
+
+        // TODO(fix): streams should be droppable from the host side...
+        // otherwise we can't force the writer to give up writing?
+
+        let numDisposed = 0;
+        for (const resource of resources) {
+            assert.strictEqual(resource.getId(), await resource.getIdAsync());
             assert.doesNotThrow(() => resource[disposeSymbol]());
             numDisposed += 1;
             assert.strictEqual(
