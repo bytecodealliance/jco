@@ -4897,7 +4897,41 @@ pub fn gen_flat_lift_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name();
-            format!("{f}.bind(null, {table_idx})")
+            let table_ty = &component_types[*ty_idx];
+            let component_idx = table_ty.instance.as_u32();
+            let stream_ty_idx = table_ty.ty;
+            let stream_ty = &component_types[stream_ty_idx];
+            let payload = stream_ty.payload;
+            let (is_borrowed, is_none_type_js, is_numeric_type_js) = match payload {
+                None => (false, true, false),
+                Some(t) => (
+                    matches!(t, InterfaceType::Borrow(_)),
+                    false,
+                    matches!(
+                        ty,
+                        InterfaceType::U8
+                            | InterfaceType::U16
+                            | InterfaceType::U32
+                            | InterfaceType::U64
+                            | InterfaceType::S8
+                            | InterfaceType::S16
+                            | InterfaceType::S32
+                            | InterfaceType::S64
+                            | InterfaceType::Float32
+                            | InterfaceType::Float64
+                    ),
+                ),
+            };
+
+            format!(
+                r#"{f}({{
+                 streamTableIdx: {table_idx},
+                 componentIdx: {component_idx},
+                 isBorrowedType: {is_borrowed},
+                 isNoneType: {is_none_type_js},
+                 isNumericTypeJs: {is_numeric_type_js},
+             }})"#
+            )
         }
 
         InterfaceType::ErrorContext(ty_idx) => {

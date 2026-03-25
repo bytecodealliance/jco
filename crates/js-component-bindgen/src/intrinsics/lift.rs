@@ -1017,43 +1017,65 @@ impl LiftIntrinsic {
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass).name();
                 let lift_flat_stream_fn = self.name();
                 let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
+                let lift_u32 = Self::LiftFlatU32.name();
 
                 output.push_str(&format!(r#"
-                    function {lift_flat_stream_fn}(streamTableIdx, ctx) {{
-                        {debug_log_fn}('[{lift_flat_stream_fn}()] args', {{ streamTableIdx, ctx }});
-                        const {{ memory, useDirectParams, params }} = ctx;
+                    function {lift_flat_stream_fn}(meta) {{
+                        const {{
+                            streamTableIdx,
+                            componentIdx,
+                            isBorrowedType,
+                            isNoneType,
+                            isNumericTypeJs,
+                        }} = meta;
 
-                        const {{ table, componentIdx }} = {global_stream_table_map}[streamTableIdx];
-                        if (componentIdx === undefined || !table) {{
-                            throw new Error(`invalid global stream table state for table [${{tableIdx}}]`);
+                        return function {lift_flat_stream_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_stream_fn}()] args', {{ ctx }});
+
+                            const streamMeta = {global_stream_table_map}[streamTableIdx];
+                            if (streamMeta.componentIdx !== componentIdx) {{
+                                throw new Error('unexpectedly mismatched component idx');
+                            }}
+                            const {{ table }} = streamMeta;
+                            if (componentIdx === undefined || !table) {{
+                                throw new Error(`invalid global stream table state for table [${{tableIdx}}]`);
+                            }}
+
+                            let streamEndWaitableIdx;
+                            if (ctx.useDirectParams) {{
+                                streamEndWaitableIdx = ctx.params[0];
+                                ctx.params = ctx.params.slice(1);
+                            }} else {{
+                                const [waitableIdx, newCtx] = {lift_u32}(ctx);
+                                ctx = newCtx;
+                                streamEndWaitableIdx = waitableIdx;
+                            }}
+
+                            if (!streamEndWaitableIdx) {{ throw new Error('missing stream idx'); }}
+
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
+
+                            const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                            if (!streamEnd) {{
+                                throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}]) in component [${{componentIdx}}] during lift`);
+                            }}
+
+                            if (ctx.isBorrowed) {{ throw new Error('cannot lift flat stream of borrowed type'); }}
+                            if (streamEnd.isWritable()) {{ throw new Error('only readable streams can be lifted'); }}
+                            if (!streamEnd.isIdle()) {{ throw new Error('streams must be in idle state'); }}
+
+                            const stream = new {external_stream_class}({{
+                                globalRep: streamEnd.globalStreamMapRep(),
+                                isReadable: streamEnd.isReadable(),
+                                isWritable: streamEnd.isWritable(),
+                                writeFn: (v) => {{ return streamEnd.write(v); }},
+                                readFn: () => {{ return streamEnd.read(); }},
+                                dropFn: () => {{ return streamEnd.drop(); }},
+                            }});
+
+                            return [ stream, ctx ];
                         }}
-
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
-
-                        const streamEndWaitableIdx = params[0];
-                        if (!streamEndWaitableIdx) {{ throw new Error('missing stream idx'); }}
-
-                        const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
-                        if (!streamEnd) {{
-                            throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}]) in component [${{componentIdx}}] during lift`);
-                        }}
-
-                        // TODO: check for borrowed type
-                        // TODO: check for readable only
-                        // TODO: confirm shared type matches tyep for lift
-                        // TODO: check for IDLE state
-
-                        const stream = new {external_stream_class}({{
-                            globalRep: streamEnd.globalStreamMapRep(),
-                            isReadable: streamEnd.isReadable(),
-                            isWritable: streamEnd.isWritable(),
-                            writeFn: (v) => {{ return streamEnd.write(v); }},
-                            readFn: () => {{ return streamEnd.read(); }},
-                            dropFn: () => {{ return streamEnd.drop(); }},
-                        }});
-
-                        return [ stream, ctx ];
                     }}
                 "#));
             }

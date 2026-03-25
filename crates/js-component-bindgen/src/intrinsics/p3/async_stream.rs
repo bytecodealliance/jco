@@ -1006,6 +1006,7 @@ impl AsyncStreamIntrinsic {
                         isDone() {{ return this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
                         isCompleted() {{ return this.getCopyState() === {stream_end_class}.CopyState.COMPLETED; }}
                         isDropped() {{ return this.getCopyState() === {stream_end_class}.CopyState.DROPPED; }}
+                        isIdle() {{ return this.getCopyState() === {stream_end_class}.CopyState.IDLE; }}
 
                         {action_impl}
                         {inner_rw_impl}
