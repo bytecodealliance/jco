@@ -4792,42 +4792,37 @@ pub fn gen_flat_lift_fn_js_expr(
             let component_idx = table_ty.unwrap_concrete_instance().as_u32();
             let resource_idx = table_ty.unwrap_concrete_ty();
 
-            let resource_typedef = intrinsic_mgr
+            if let Some(resource_typedef) = intrinsic_mgr
                 .exports_resource_index_types
                 .get(&resource_idx)
-                .expect("unexpectedly missing owned resource type in lookup");
-
-            let (resource_class_name, create_resource_fn_js) = match intrinsic_mgr
-                .resource_exports
-                .get(resource_typedef)
+                && let Some(ResourceTable { imported, data }) =
+                    intrinsic_mgr.resource_exports.get(resource_typedef)
             {
-                None => ("null".into(), "() => null".into()),
-                Some(ResourceTable { imported, data }) => {
-                    assert!(
-                        !imported,
-                        "imported resources cannot be owned and returned via lifting"
-                    );
+                assert!(
+                    !imported,
+                    "imported resources cannot be owned and returned via lifting"
+                );
 
-                    match data {
-                        ResourceData::Guest { .. } => {
-                            unimplemented!(
-                                "owned resources created by guests should must have host-side data"
-                            )
-                        }
-                        ResourceData::Host {
-                            tid,
-                            local_name,
-                            dtor_name,
-                            ..
-                        } => {
-                            let empty_func = JsHelperIntrinsic::EmptyFunc.name();
-                            let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
-                            let symbol_dispose = Intrinsic::SymbolDispose.name();
-                            let rsc_table_remove = ResourceIntrinsic::ResourceTableRemove.name();
-                            let tid = tid.as_u32();
-                            let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
+                let (resource_class_name, create_resource_fn_js) = match data {
+                    ResourceData::Guest { .. } => {
+                        unimplemented!(
+                            "owned resources created by guests should must have host-side data"
+                        )
+                    }
+                    ResourceData::Host {
+                        tid,
+                        local_name,
+                        dtor_name,
+                        ..
+                    } => {
+                        let empty_func = JsHelperIntrinsic::EmptyFunc.name();
+                        let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
+                        let symbol_dispose = Intrinsic::SymbolDispose.name();
+                        let rsc_table_remove = ResourceIntrinsic::ResourceTableRemove.name();
+                        let tid = tid.as_u32();
+                        let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
 
-                            let dtor_setup_js = dtor_name.as_ref().map(|dtor|
+                        let dtor_setup_js = dtor_name.as_ref().map(|dtor|
                                 format!(
                                     r#"
                                       Object.defineProperty(
@@ -4848,8 +4843,8 @@ pub fn gen_flat_lift_fn_js_expr(
                                 )
                             ).unwrap_or_default();
 
-                            let create_resource_fn_js = format!(
-                                r#"
+                        let create_resource_fn_js = format!(
+                            r#"
                                   (handle) => {{
                                       const resourceObj = Object.create({local_name}.prototype);
                                       Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
@@ -4861,22 +4856,31 @@ pub fn gen_flat_lift_fn_js_expr(
                                       return resourceObj;
                                   }}
                                  "#
-                            );
+                        );
 
-                            (local_name.to_string(), create_resource_fn_js)
-                        }
+                        (local_name.to_string(), create_resource_fn_js)
                     }
-                }
-            };
+                };
 
-            format!(
-                r#"{f}({{
+                format!(
+                    r#"{f}({{
                        componentIdx: {component_idx},
                        className: {resource_class_name},
                        createResourceFn: {create_resource_fn_js},
                     }})
                 "#,
-            )
+                )
+            } else {
+                // In this case we couldn't find required type information
+                format!(
+                    r#"{f}({{
+                       componentIdx: {component_idx},
+                       className: null,
+                       createResourceFn: () => {{ throw new Error('invalid/missing resource type data'); }},
+                    }})
+                "#,
+                )
+            }
         }
 
         InterfaceType::Borrow(ty_idx) => {
