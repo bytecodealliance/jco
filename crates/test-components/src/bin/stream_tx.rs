@@ -204,6 +204,20 @@ impl get_stream_async::Guest for Component {
         });
         Ok(rx)
     }
+
+    async fn get_stream_stream_string(
+        vals: Vec<String>,
+    ) -> Result<StreamReader<StreamReader<String>>, String> {
+        let (mut tx, rx) = wit_stream::new();
+        wit_bindgen::spawn(async move {
+            for v in vals {
+                let (mut nested_tx, nested_rx) = wit_stream::new();
+                tx.write(vec![nested_rx]).await;
+                nested_tx.write(vec![v]).await;
+            }
+        });
+        Ok(rx)
+    }
 }
 
 fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {

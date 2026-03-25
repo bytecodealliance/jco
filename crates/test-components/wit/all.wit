@@ -110,7 +110,8 @@ interface get-stream-async {
 
     get-stream-example-resource-own-attr: async func(vals: list<example-resource>) -> result<stream<u32>, string>;
 
-    //get-stream-stream-string: async func(vals: list<stream<string>>) -> result<stream<stream<string>>, string>;
+    get-stream-stream-string: async func(vals: list<string>) -> result<stream<stream<string>>, string>;
+
     //get-stream-future-string: async func(vals: list<future<string>>) -> result<stream<future<string>>, string>;
 }
 

@@ -345,6 +345,16 @@ suite("stream<T> lifts", () => {
             expectedValues: [2, 1, 0],
         });
     });
+
+    test("stream<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamStreamString, AsyncFunction);
+        let vals = ["first", "third", "second"];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamStreamString(vals);
+        for (const v of vals) {
+            const nestedStream = await stream.next();
+            assert.strictEqual(v, await nestedStream.next());
+        }
+    });
 });
 
 async function checkStreamValues(args) {
