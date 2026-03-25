@@ -1050,6 +1050,7 @@ impl LiftIntrinsic {
                             isWritable: streamEnd.isWritable(),
                             writeFn: (v) => {{ return streamEnd.write(v); }},
                             readFn: () => {{ return streamEnd.read(); }},
+                            dropFn: () => {{ return streamEnd.drop(); }},
                         }});
 
                         return [ stream, ctx ];

@@ -1015,8 +1015,9 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 31] = [
+const EARLY_INTRINSICS: [Intrinsic; 32] = [
     Intrinsic::PromiseWithResolversPonyfill,
+    Intrinsic::SymbolDispose,
     Intrinsic::DebugLog,
     Intrinsic::GlobalAsyncDeterminism,
     Intrinsic::GlobalComponentMemoryMap,

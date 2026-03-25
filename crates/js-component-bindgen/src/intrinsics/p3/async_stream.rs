@@ -1212,6 +1212,8 @@ impl AsyncStreamIntrinsic {
             Self::ExternalStreamClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let external_stream_class_name = self.name();
+                let symbol_dispose = Intrinsic::SymbolDispose.name();
+
                 output.push_str(&format!(
                     r#"
                     class {external_stream_class_name} {{
@@ -1220,6 +1222,7 @@ impl AsyncStreamIntrinsic {
                         #isWritable;
                         #writeFn;
                         #readFn;
+                        #dropFn;
 
                         constructor(args) {{
                             {debug_log_fn}('[{external_stream_class_name}#constructor()] args', args);
@@ -1237,6 +1240,8 @@ impl AsyncStreamIntrinsic {
 
                             if (this.#isReadable && args.readFn === undefined) {{ throw new TypeError("missing read fn"); }}
                             this.#readFn = args.readFn;
+
+                            this.#dropFn = args.dropFn;
                         }}
 
                         globalRep() {{ return this.#globalRep; }}
@@ -1259,6 +1264,11 @@ impl AsyncStreamIntrinsic {
 
                             this.#writeFn(obj);
                         }}
+
+                        [{symbol_dispose}]() {{
+                            this.#dropFn();
+                        }}
+
                     }}
                     "#
                 ));
