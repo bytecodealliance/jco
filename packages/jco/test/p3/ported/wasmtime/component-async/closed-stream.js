@@ -1,9 +1,8 @@
 import { join } from "node:path";
 
-import { assert, suite, test, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { assert, suite, test } from "vitest";
 
 import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from "./common.js";
-import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
