@@ -1063,7 +1063,7 @@ impl LiftIntrinsic {
 
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat stream of borrowed type'); }}
                             if (streamEnd.isWritable()) {{ throw new Error('only readable streams can be lifted'); }}
-                            if (!streamEnd.isIdle()) {{ throw new Error('streams must be in idle state'); }}
+                            if (!streamEnd.isIdleState()) {{ throw new Error('streams must be in idle state'); }}
 
                             const stream = new {external_stream_class}({{
                                 globalRep: streamEnd.globalStreamMapRep(),

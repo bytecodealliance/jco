@@ -281,10 +281,11 @@ impl AsyncStreamIntrinsic {
                         #idx = null; // stream end index in the table
 
                         #componentIdx = null;
-                        #dropped = false;
-                        #onDrop;
 
                         #copyState = {stream_end_class}.CopyState.IDLE;
+
+                        #setDroppedFn;
+                        #isDroppedFn;
 
                         target;
 
@@ -300,7 +301,9 @@ impl AsyncStreamIntrinsic {
 
                             this.#tableIdx = args.tableIdx;
                             this.#waitable = args.waitable;
-                            this.#onDrop = args.onDrop;
+                            this.#setDroppedFn = args.setDroppedFn;
+                            this.#isDroppedFn = args.isDroppedFn;
+
                             this.target = args.target;
                         }}
 
@@ -359,7 +362,8 @@ impl AsyncStreamIntrinsic {
                             return event;
                         }}
 
-                        isDropped() {{ return this.#dropped; }}
+                        isDropped() {{ return this.#isDroppedFn(); }}
+                        setDropped() {{ return this.#setDroppedFn(); }}
 
                         drop() {{
                             {debug_log_fn}('[{stream_end_class}#drop()]', {{
@@ -368,7 +372,7 @@ impl AsyncStreamIntrinsic {
                                 componentIdx: this.#waitable.componentIdx(),
                             }});
 
-                            if (this.#dropped) {{
+                            if (this.isDropped()) {{
                                 {debug_log_fn}('[{stream_end_class}#drop()] already dropped', {{
                                     waitable: this.#waitable,
                                     waitableinSet: this.#waitable.isInSet(),
@@ -382,7 +386,7 @@ impl AsyncStreamIntrinsic {
                                 w.drop();
                             }}
 
-                            this.#dropped = true;
+                            this.setDropped();
                         }}
                     }}
                 "#
@@ -825,7 +829,7 @@ impl AsyncStreamIntrinsic {
                                     }});
 
                                     const copied = packedResult >> 4;
-                                    if (copied === 0 && this.isDone()) {{
+                                    if (copied === 0 && this.isDoneState()) {{
                                        reject(new Error("read end dropped during write"));
                                     }}
 
@@ -928,7 +932,7 @@ impl AsyncStreamIntrinsic {
                                     }});
 
                                     const copied = packedResult >> 4;
-                                    if (copied === 0 && this.isDone()) {{
+                                    if (copied === 0 && this.isDoneState()) {{
                                        reject(new Error("write end dropped during read"));
                                     }}
 
@@ -1003,10 +1007,8 @@ impl AsyncStreamIntrinsic {
 
                         {type_getter_impl}
 
-                        isDone() {{ return this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
-                        isCompleted() {{ return this.getCopyState() === {stream_end_class}.CopyState.COMPLETED; }}
-                        isDropped() {{ return this.getCopyState() === {stream_end_class}.CopyState.DROPPED; }}
-                        isIdle() {{ return this.getCopyState() === {stream_end_class}.CopyState.IDLE; }}
+                        isDoneState() {{ return this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
+                        isIdleState() {{ return this.getCopyState() === {stream_end_class}.CopyState.IDLE; }}
 
                         {action_impl}
                         {inner_rw_impl}
@@ -1041,10 +1043,10 @@ impl AsyncStreamIntrinsic {
                         drop() {{
                             {debug_log_fn}('[{stream_end_class}#drop()]');
                             if (this.isDropped()) {{ return; }}
+                            super.drop();
                             if (this.#pendingBufferMeta) {{
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.DROPPED);
                             }}
-                            super.drop();
                         }}
                     }}
                 "#));
@@ -1085,12 +1087,18 @@ impl AsyncStreamIntrinsic {
 
                             this.#elemMeta = elemMeta;
 
+                            let dropped = false;
+                            const setDroppedFn = () => {{ dropped = true }};
+                            const isDroppedFn = () => dropped;
+
                             this.#readEnd = new {read_end_class}({{
                                 tableIdx,
                                 elemMeta: this.#elemMeta,
                                 pendingBufferMeta: this.#pendingBufferMeta,
                                 target: "stream read end (@ init)",
                                 waitable: readWaitable,
+                                setDroppedFn,
+                                isDroppedFn,
                             }});
 
                             this.#writeEnd = new {write_end_class}({{
@@ -1099,6 +1107,8 @@ impl AsyncStreamIntrinsic {
                                 pendingBufferMeta: this.#pendingBufferMeta,
                                 target: "stream write end (@ init)",
                                 waitable: writeWaitable,
+                                setDroppedFn,
+                                isDroppedFn,
                             }});
                         }}
 
@@ -1140,7 +1150,7 @@ impl AsyncStreamIntrinsic {
                     r#"
                     class {host_stream_class_name} {{
                         #componentIdx;
-                        #streamEndIdx;
+                        #streamEndWaitableIdx;
                         #streamTableIdx;
 
                         #payloadLiftFn;
@@ -1162,13 +1172,15 @@ impl AsyncStreamIntrinsic {
                             if (!args.payloadLowerFn) {{ throw new TypeError("missing payload lower fn"); }}
                             this.#payloadLowerFn = args.payloadLowerFn;
 
-                            if (args.streamEndIdx === undefined) {{ throw new Error("missing stream idx"); }}
+                            if (args.streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx"); }}
                             if (args.streamTableIdx === undefined) {{ throw new Error("missing stream table idx"); }}
-                            this.#streamEndIdx = args.streamEndIdx;
+                            this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
                             this.#streamTableIdx = args.streamTableIdx;
 
                             this.#isUnitStream = args.isUnitStream;
                         }}
+
+                        setRep(rep) {{ this.#rep = rep; }}
 
                         createUserStream(args) {{
                            if (this.#userStream) {{ return this.#userStream; }}
@@ -1177,9 +1189,9 @@ impl AsyncStreamIntrinsic {
                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
-                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndIdx: this.#streamEndIdx }});
+                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndWaitableIdx: this.#streamEndWaitableIdx }});
                            if (!streamEnd) {{
-                               throw new Error(`missing stream [${{this.#streamEndIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
+                               throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
 
                             return new {external_stream_class}({{
@@ -1366,7 +1378,7 @@ impl AsyncStreamIntrinsic {
                         {debug_log_fn}('[{stream_new_from_lift_fn}()] args', {{ ctx }});
                         const {{
                             componentIdx,
-                            streamEndIdx,
+                            streamEndWaitableIdx,
                             streamTableIdx,
                             payloadLiftFn,
                             payloadTypeSize32,
@@ -1376,7 +1388,7 @@ impl AsyncStreamIntrinsic {
 
                         const stream = new {host_stream_class}({{
                             componentIdx,
-                            streamEndIdx,
+                            streamEndWaitableIdx,
                             streamTableIdx,
                             payloadLiftFn: payloadLiftFn,
                             payloadLowerFn: payloadLowerFn,
@@ -1625,7 +1637,7 @@ impl AsyncStreamIntrinsic {
                         if (!streamEnd.isReadable()) {{
                             throw new Error("writable stream ends cannot be moved");
                         }}
-                        if (streamEnd.isDone()) {{
+                        if (streamEnd.isDoneState()) {{
                             throw new Error('readable ends cannot be moved once writable ends are dropped');
                         }}
 

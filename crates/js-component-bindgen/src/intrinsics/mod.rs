@@ -1347,6 +1347,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         args.intrinsics.extend([
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamEndClass),
+            &Intrinsic::AsyncEventCodeEnum,
         ]);
     }
 
