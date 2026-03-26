@@ -447,7 +447,8 @@ impl AsyncTaskIntrinsic {
                             memoryIdx,
                             callbackFnIdx,
                             liftFns,
-                            lowerFns
+                            lowerFns,
+                            stringEncoding,
                         }} = ctx;
                         const params = [...arguments].slice(1);
                         const memory = getMemoryFn();
@@ -496,7 +497,7 @@ impl AsyncTaskIntrinsic {
                             throw new Error('memory must be present if more than max async flat lifts are performed');
                         }}
 
-                        let liftCtx = {{ memory, useDirectParams, params, componentIdx }};
+                        let liftCtx = {{ memory, useDirectParams, params, componentIdx, stringEncoding }};
                         if (!useDirectParams) {{
                             liftCtx.storagePtr = params[0];
                             liftCtx.storageLen = params[1];
@@ -1680,6 +1681,7 @@ impl AsyncTaskIntrinsic {
                                         realloc,
                                         vals: [subtaskValue],
                                         storagePtr: resultPtr,
+                                        stringEncoding: callMetadata.stringEncoding,
                                     }});
                                 }}
                             }}
@@ -2030,6 +2032,7 @@ impl AsyncTaskIntrinsic {
                             memoryIdx,
                             getMemoryFn,
                             getReallocFn,
+                            stringEncoding,
                             importFn,
                         }} = args;
 
@@ -2068,6 +2071,7 @@ impl AsyncTaskIntrinsic {
                                realloc: getReallocFn(),
                                resultPtr: params[0],
                                lowers: resultLowerFns,
+                               stringEncoding,
                            }}
                         }});
                         task.setReturnMemoryIdx(memoryIdx);
@@ -2213,6 +2217,7 @@ impl AsyncTaskIntrinsic {
                             getMemoryFn,
                             getReallocFn,
                             importFn,
+                            stringEncoding,
                         }} = args;
 
                         let meta = {get_global_current_task_meta_fn}(componentIdx);
@@ -2292,6 +2297,7 @@ impl AsyncTaskIntrinsic {
                                realloc: getReallocFn(),
                                resultPtr: params[0],
                                lowers: resultLowerFns,
+                               stringEncoding,
                            }}
                         }});
                         task.setReturnMemoryIdx(memoryIdx);

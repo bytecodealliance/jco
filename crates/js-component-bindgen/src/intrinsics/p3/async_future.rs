@@ -375,6 +375,7 @@ impl AsyncFutureIntrinsic {
                             writable,
                             readable,
                             target: `future read/write`,
+                            stringEncoding,
                         }});
 
                         const processFn = (result) => {{

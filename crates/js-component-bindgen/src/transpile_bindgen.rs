@@ -1322,17 +1322,8 @@ impl<'a> Instantiator<'a, '_> {
                             .flat_count
                             .map(|v| v.to_string())
                             .unwrap_or_else(|| "null".into()),
-                        gen_flat_lift_fn_js_expr(
-                            self,
-                            &ty,
-                            &wasmtime_environ::component::StringEncoding::Utf8,
-                        ),
-                        gen_flat_lower_fn_js_expr(
-                            self,
-                            self.types,
-                            &ty,
-                            &wasmtime_environ::component::StringEncoding::Utf8,
-                        ),
+                        gen_flat_lift_fn_js_expr(self, &ty),
+                        gen_flat_lower_fn_js_expr(self, &ty),
                         "false",
                         format!(
                             "{}",
@@ -2024,16 +2015,12 @@ impl<'a> Instantiator<'a, '_> {
                 // Build list of lift functions for the params of the lowered import
                 let param_types = &self.types.index(func_ty.params).types;
                 let param_lift_fns_js =
-                    gen_flat_lift_fn_list_js_expr(self, param_types.iter().as_slice(), canon_opts);
+                    gen_flat_lift_fn_list_js_expr(self, param_types.iter().as_slice());
 
                 // Build list of lower functions for the results of the lowered import
                 let result_types = &self.types.index(func_ty.results).types;
-                let result_lower_fns_js = gen_flat_lower_fn_list_js_expr(
-                    self,
-                    self.types,
-                    result_types.iter().as_slice(),
-                    &canon_opts.string_encoding,
-                );
+                let result_lower_fns_js =
+                    gen_flat_lower_fn_list_js_expr(self, result_types.iter().as_slice());
 
                 let get_callback_fn_js = canon_opts
                     .callback
@@ -2066,6 +2053,7 @@ impl<'a> Instantiator<'a, '_> {
                 let (memory_idx_js, memory_expr_js) =
                     memory_exprs.unwrap_or_else(|| ("null".into(), "() => null".into()));
                 let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "() => null".into());
+                let string_encoding_js = string_encoding_js_literal(&canon_opts.string_encoding);
 
                 // Build the lower import call that will wrap the actual trampoline
                 let func_ty_async = func_ty.async_;
@@ -2084,6 +2072,7 @@ impl<'a> Instantiator<'a, '_> {
                             getPostReturnFn: {get_post_return_fn_js},
                             isCancellable: {cancellable},
                             memoryIdx: {memory_idx_js},
+                            stringEncoding: {string_encoding_js},
                             getMemoryFn: {memory_expr_js},
                             getReallocFn: {realloc_expr_js},
                             importFn: _trampoline{i},
@@ -2397,6 +2386,7 @@ impl<'a> Instantiator<'a, '_> {
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     callback,
                     post_return,
+                    string_encoding,
                     ..
                 } = canon_opts
                 else {
@@ -2445,11 +2435,7 @@ impl<'a> Instantiator<'a, '_> {
                 // that are actually being passed through task.return
                 let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
-                    lift_fns.push(gen_flat_lift_fn_js_expr(
-                        self,
-                        result_ty,
-                        &canon_opts.string_encoding,
-                    ));
+                    lift_fns.push(gen_flat_lift_fn_js_expr(self, result_ty));
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
@@ -2460,12 +2446,7 @@ impl<'a> Instantiator<'a, '_> {
                 // (i.e. via prepare & async start call)
                 let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
-                    lower_fns.push(gen_flat_lower_fn_js_expr(
-                        self.bindgen,
-                        self.types,
-                        result_ty,
-                        &canon_opts.string_encoding,
-                    ));
+                    lower_fns.push(gen_flat_lower_fn_js_expr(self, result_ty));
                 }
                 let lower_fns_js = format!("[{}]", lower_fns.join(","));
 
@@ -2482,6 +2463,7 @@ impl<'a> Instantiator<'a, '_> {
                 let callback_fn_idx = callback
                     .map(|v| v.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
+                let string_encoding_js = string_encoding_js_literal(string_encoding);
 
                 uwriteln!(
                     self.src.js,
@@ -2495,6 +2477,7 @@ impl<'a> Instantiator<'a, '_> {
                              callbackFnIdx: {callback_fn_idx},
                              liftFns: {lift_fns_js},
                              lowerFns: {lower_fns_js},
+                             stringEncoding: {string_encoding_js},
                          }},
                      );",
                 );
@@ -3239,7 +3222,20 @@ impl<'a> Instantiator<'a, '_> {
                     prefix: Some(format!("${}", table_idx.as_u32())),
                     extra: Some(ResourceExtraData::Future {
                         table_idx: *table_idx,
-                        elem_ty: *maybe_elem_ty,
+                        elem_ty: maybe_elem_ty.map(|ty| {
+                            let table_ty = &self.types[*table_idx];
+                            let future_ty_idx = table_ty.ty;
+                            let future_ty = &self.types[future_ty_idx];
+                            let future_elem_ty = future_ty
+                                .payload
+                                .expect("missing future payload despite elem type being present");
+                            (
+                                ty,
+                                future_elem_ty,
+                                gen_flat_lift_fn_js_expr(self, &future_elem_ty),
+                                gen_flat_lower_fn_js_expr(self, &future_elem_ty),
+                            )
+                        }),
                     }),
                 },
             },
@@ -3250,7 +3246,23 @@ impl<'a> Instantiator<'a, '_> {
                     prefix: Some(format!("${}", table_idx.as_u32())),
                     extra: Some(ResourceExtraData::Stream {
                         table_idx: *table_idx,
-                        elem_ty: *maybe_elem_ty,
+                        elem_ty: maybe_elem_ty.map(|ty| {
+                            let table_ty = &self.types[*table_idx];
+                            let stream_ty_idx = table_ty.ty;
+                            let stream_ty = &self.types[stream_ty_idx];
+                            let stream_elem_ty = stream_ty
+                                .payload
+                                .expect("missing stream payload despite elem type being present");
+                            // TODO: we need the string encoding!
+                            (
+                                ty,
+                                stream_ty
+                                    .payload
+                                    .expect("missing payload despite elem type being present"),
+                                gen_flat_lift_fn_js_expr(self, &stream_elem_ty),
+                                gen_flat_lower_fn_js_expr(self, &stream_elem_ty),
+                            )
+                        }),
                     }),
                 },
             },
@@ -4475,15 +4487,10 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 pub fn gen_flat_lift_fn_list_js_expr(
     intrinsic_mgr: &mut Instantiator,
     types: &[InterfaceType],
-    canon_opts: &CanonicalOptions,
 ) -> String {
     let mut lift_fns: Vec<String> = Vec::with_capacity(types.len());
     for ty in types.iter() {
-        lift_fns.push(gen_flat_lift_fn_js_expr(
-            intrinsic_mgr,
-            ty,
-            &canon_opts.string_encoding,
-        ));
+        lift_fns.push(gen_flat_lift_fn_js_expr(intrinsic_mgr, ty));
     }
     format!("[{}]", lift_fns.join(","))
 }
@@ -4502,11 +4509,7 @@ pub fn gen_flat_lift_fn_list_js_expr(
 ///
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
-pub fn gen_flat_lift_fn_js_expr(
-    intrinsic_mgr: &mut Instantiator,
-    ty: &InterfaceType,
-    string_encoding: &wasmtime_environ::component::StringEncoding,
-) -> String {
+pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &InterfaceType) -> String {
     let component_types = intrinsic_mgr.types;
 
     match ty {
@@ -4574,23 +4577,12 @@ pub fn gen_flat_lift_fn_js_expr(
             Intrinsic::Lift(LiftIntrinsic::LiftFlatChar).name().into()
         }
 
-        InterfaceType::String => match string_encoding {
-            wasmtime_environ::component::StringEncoding::Utf8 => {
-                intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8));
-                Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8)
-                    .name()
-                    .into()
-            }
-            wasmtime_environ::component::StringEncoding::Utf16 => {
-                intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16));
-                Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16)
-                    .name()
-                    .into()
-            }
-            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
-                todo!("latin1+utf8 not supported")
-            }
-        },
+        InterfaceType::String => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny)
+                .name()
+                .into()
+        }
 
         InterfaceType::Record(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
@@ -4604,7 +4596,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}, {}],",
                     f.name.to_lower_camel_case(),
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &f.ty, string_encoding),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &f.ty),
                     component_types.canonical_abi(ty).size32,
                     component_types.canonical_abi(ty).align32,
                 ));
@@ -4624,7 +4616,7 @@ pub fn gen_flat_lift_fn_js_expr(
                     Some(ty) => {
                         format!(
                             "['{name}', {}, {}, {}, {}],",
-                            gen_flat_lift_fn_js_expr(intrinsic_mgr, ty, string_encoding),
+                            gen_flat_lift_fn_js_expr(intrinsic_mgr, ty),
                             variant_ty.abi.size32,
                             variant_ty.abi.align32,
                             variant_ty.info.payload_offset32,
@@ -4641,8 +4633,7 @@ pub fn gen_flat_lift_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let lift_fn_expr =
-                gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element, string_encoding);
+            let lift_fn_expr = gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let align_32 = elem_cabi.align32;
             let size_32 = elem_cabi.size32;
@@ -4653,8 +4644,7 @@ pub fn gen_flat_lift_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let lift_fn_expr =
-                gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element, string_encoding);
+            let lift_fn_expr = gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let list_len = list_ty.size;
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let align_32 = elem_cabi.align32;
@@ -4673,7 +4663,7 @@ pub fn gen_flat_lift_fn_js_expr(
 
             let mut elem_lifts_expr = String::from("[");
             for ty in &tuple_ty.types {
-                let lift_fn_js = gen_flat_lift_fn_js_expr(intrinsic_mgr, ty, string_encoding);
+                let lift_fn_js = gen_flat_lift_fn_js_expr(intrinsic_mgr, ty);
                 elem_lifts_expr.push_str(&format!("[{lift_fn_js}, {size_u32}, {align_u32}],"));
             }
             elem_lifts_expr.push(']');
@@ -4735,8 +4725,7 @@ pub fn gen_flat_lift_fn_js_expr(
             let payload_offset_32 = option_ty.info.payload_offset32;
             let align_32 = option_ty.abi.align32;
             let size_32 = option_ty.abi.size32;
-            let lift_fn_js =
-                gen_flat_lift_fn_js_expr(intrinsic_mgr, &option_ty.ty, string_encoding);
+            let lift_fn_js = gen_flat_lift_fn_js_expr(intrinsic_mgr, &option_ty.ty);
             // NOTE: options are treated as variants
             format!(
                 "{f}([
@@ -4755,7 +4744,7 @@ pub fn gen_flat_lift_fn_js_expr(
             if let Some(ok_ty) = result_ty.ok {
                 cases_and_lifts_expr.push_str(&format!(
                     "['ok', {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &ok_ty, string_encoding),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &ok_ty),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
@@ -4767,7 +4756,7 @@ pub fn gen_flat_lift_fn_js_expr(
             if let Some(err_ty) = &result_ty.err {
                 cases_and_lifts_expr.push_str(&format!(
                     "['err', {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, err_ty, string_encoding),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, err_ty),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
@@ -4945,19 +4934,12 @@ pub fn gen_flat_lift_fn_js_expr(
 
 /// Generate the javascript that corresponds to a list of lowering functions for a given list of types
 pub fn gen_flat_lower_fn_list_js_expr(
-    intrinsic_mgr: &mut impl ManagesIntrinsics,
-    component_types: &ComponentTypes,
+    intrinsic_mgr: &mut Instantiator,
     types: &[InterfaceType],
-    string_encoding: &wasmtime_environ::component::StringEncoding,
 ) -> String {
     let mut lower_fns: Vec<String> = Vec::with_capacity(types.len());
     for ty in types.iter() {
-        lower_fns.push(gen_flat_lower_fn_js_expr(
-            intrinsic_mgr,
-            component_types,
-            ty,
-            string_encoding,
-        ));
+        lower_fns.push(gen_flat_lower_fn_js_expr(intrinsic_mgr, ty));
     }
     format!("[{}]", lower_fns.join(","))
 }
@@ -4976,12 +4958,8 @@ pub fn gen_flat_lower_fn_list_js_expr(
 ///
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
-pub fn gen_flat_lower_fn_js_expr(
-    intrinsic_mgr: &mut impl ManagesIntrinsics,
-    component_types: &ComponentTypes,
-    ty: &InterfaceType,
-    string_encoding: &wasmtime_environ::component::StringEncoding,
-) -> String {
+pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &InterfaceType) -> String {
+    let component_types = intrinsic_mgr.types;
     match ty {
         InterfaceType::Bool => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
@@ -5051,23 +5029,12 @@ pub fn gen_flat_lower_fn_js_expr(
                 .into()
         }
 
-        InterfaceType::String => match string_encoding {
-            wasmtime_environ::component::StringEncoding::Utf8 => {
-                intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8));
-                Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8)
-                    .name()
-                    .into()
-            }
-            wasmtime_environ::component::StringEncoding::Utf16 => {
-                intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16));
-                Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16)
-                    .name()
-                    .into()
-            }
-            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
-                todo!("latin1+utf8 not supported")
-            }
-        },
+        InterfaceType::String => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny)
+                .name()
+                .into()
+        }
 
         InterfaceType::Record(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
@@ -5081,12 +5048,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 keys_and_lowers_expr.push_str(&format!(
                     "['{}', {}, {}, {} ],",
                     f.name.to_lower_camel_case(),
-                    gen_flat_lower_fn_js_expr(
-                        intrinsic_mgr,
-                        component_types,
-                        &f.ty,
-                        string_encoding
-                    ),
+                    gen_flat_lower_fn_js_expr(intrinsic_mgr, &f.ty),
                     component_types.canonical_abi(ty).size32,
                     component_types.canonical_abi(ty).align32,
                 ));
@@ -5108,12 +5070,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 lower_metas_expr.push_str(&format!(
                     "[ '{name}', {}, {size32}, {align32}, {payload_offset32} ],",
                     maybe_ty
-                        .map(|ty| gen_flat_lower_fn_js_expr(
-                            intrinsic_mgr,
-                            component_types,
-                            &ty,
-                            string_encoding,
-                        ))
+                        .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
                         .unwrap_or_else(|| "null".into()),
                 ));
             }
@@ -5125,12 +5082,7 @@ pub fn gen_flat_lower_fn_js_expr(
         InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let list_ty = &component_types[*ty_idx];
-            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(
-                intrinsic_mgr,
-                component_types,
-                &list_ty.element,
-                string_encoding,
-            );
+            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
             let ty_idx = ty_idx.as_u32();
             format!("{f}({{ elemLowerFn: {elem_ty_lower_expr}, typeIdx: {ty_idx} }})")
@@ -5140,12 +5092,7 @@ pub fn gen_flat_lower_fn_js_expr(
             // TODO(fix): add more robust handling for fixed length lists
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let list_ty = &component_types[*ty_idx];
-            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(
-                intrinsic_mgr,
-                component_types,
-                &list_ty.element,
-                string_encoding,
-            );
+            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
             let ty_idx = ty_idx.as_u32();
             format!("{f}({{ elemLowerFn: {elem_ty_lower_expr}, typeIdx: {ty_idx} }})")
@@ -5184,12 +5131,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let mut cases_and_lowers_expr = String::from("[");
             cases_and_lowers_expr.push_str(&format!(
                 "[ 'some', {}, {size32}, {align32}, {payload_offset32} ],",
-                gen_flat_lower_fn_js_expr(
-                    intrinsic_mgr,
-                    component_types,
-                    &option_ty.ty,
-                    string_encoding,
-                )
+                gen_flat_lower_fn_js_expr(intrinsic_mgr, &option_ty.ty)
             ));
             cases_and_lowers_expr.push_str(&format!(
                 "[ 'none', null, {size32}, {align32}, {payload_offset32} ],",
@@ -5212,24 +5154,14 @@ pub fn gen_flat_lower_fn_js_expr(
                 "[ 'ok', {}, {size32}, {align32}, {payload_offset32} ],",
                 result_ty
                     .ok
-                    .map(|ty| gen_flat_lower_fn_js_expr(
-                        intrinsic_mgr,
-                        component_types,
-                        &ty,
-                        string_encoding,
-                    ))
+                    .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
                     .unwrap_or_else(|| "null".into())
             ));
             cases_and_lowers_expr.push_str(&format!(
                 "[ 'err', {}, {size32}, {align32}, {payload_offset32} ],",
                 result_ty
                     .err
-                    .map(|ty| gen_flat_lower_fn_js_expr(
-                        intrinsic_mgr,
-                        component_types,
-                        &ty,
-                        string_encoding,
-                    ))
+                    .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
                     .unwrap_or_else(|| "null".into())
             ));
             cases_and_lowers_expr.push(']');
