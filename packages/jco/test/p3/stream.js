@@ -367,18 +367,5 @@ async function checkStreamValues(args) {
         eq(await stream.next(), expected, `${typeName} [${idx}] read is incorrect`);
     }
 
-    // If we get this far, the fourth read will do one of the following:
-    //  - time out (hung during wait for writer that will never come)
-    //  - report write end was dropped during the read (guest finished writing)
-    //  - read end is fully closed after write
-    //
-    await expect(
-        vi.waitUntil(
-            async () => {
-                await stream.next();
-                return true; // we should never get here, as we s error should occur
-            },
-            { timeout: 500, interval: 0 },
-        ),
-    ).rejects.toThrowError(/timed out|read end is closed|write end dropped during read/i);
+    assert.isUndefined(await stream.next());
 }
