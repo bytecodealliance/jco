@@ -4,7 +4,7 @@ use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
-    CanonicalOptions, ResourceIndex, TypeComponentLocalErrorContextTableIndex,
+    CanonicalOptions, InterfaceType, ResourceIndex, TypeComponentLocalErrorContextTableIndex,
     TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
@@ -64,16 +64,22 @@ pub enum ResourceData {
     },
 }
 
+/// JS expression that serves as a function that lifts a given type
+type LiftJsExpr = String;
+
+/// JS expression that serves as a function that lowers a given type
+type LowerJsExpr = String;
+
 /// Supplemental data kept along with [`ResourceData`]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceExtraData {
     Stream {
         table_idx: TypeStreamTableIndex,
-        elem_ty: Option<Type>,
+        elem_ty: Option<(Type, InterfaceType, LiftJsExpr, LowerJsExpr)>,
     },
     Future {
         table_idx: TypeFutureTableIndex,
-        elem_ty: Option<Type>,
+        elem_ty: Option<(Type, InterfaceType, LiftJsExpr, LowerJsExpr)>,
     },
     ErrorContext {
         table_idx: TypeComponentLocalErrorContextTableIndex,
@@ -2421,81 +2427,42 @@ impl Bindgen for FunctionBindgen<'_> {
                     unreachable!("invalid resource table observed during stream lift");
                 };
 
-                assert_eq!(
-                    *stream_element_ty, **payload,
-                    "stream element type mismatch"
-                );
+                // if a stream element is present, it should match the payload we're getting
+                let (lift_fn_js, lower_fn_js) = match stream_element_ty {
+                    Some((stream_element_ty, _, lift_fn_js, lower_fn_js)) => {
+                        assert_eq!(
+                            Some(*stream_element_ty),
+                            **payload,
+                            "stream element type mismatch"
+                        );
+                        (lift_fn_js.to_string(), lower_fn_js.to_string())
+                    }
+                    None => (
+                        "() => {{ throw new Error('no lift fn'); }}".into(),
+                        "() => {{ throw new Error('no lower fn'); }}".into(),
+                    ),
+                };
+                if let Some((stream_element_ty, _, _, _)) = stream_element_ty {
+                    assert_eq!(
+                        Some(*stream_element_ty),
+                        **payload,
+                        "stream element type mismatch"
+                    );
+                }
 
                 let arg_stream_end_idx = operands
                     .first()
                     .expect("unexpectedly missing stream table idx arg in StreamLift");
 
-                let (payload_lift_fn, payload_lower_fn) = match payload {
-                    None => ("null".into(), "null".into()),
-                    Some(payload_ty) => {
-                        match payload_ty {
-                            // TODO: reuse existing lifts
-                            Type::Bool
-                            | Type::U8
-                            | Type::U16
-                            | Type::U32
-                            | Type::U64
-                            | Type::S8
-                            | Type::S16
-                            | Type::S32
-                            | Type::S64
-                            | Type::F32
-                            | Type::F64
-                            | Type::Char
-                            | Type::String
-                            | Type::ErrorContext => (
-                                format!(
-                                    "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }};"
-                                ),
-                                format!(
-                                    "const payloadLowerFn = () => {{ throw new Error('lower for {payload_ty:?}'); }};"
-                                ),
-                            ),
-
-                            Type::Id(payload_ty_id) => {
-                                if let Some(ResourceTable { data, .. }) =
-                                    &self.resource_map.get(payload_ty_id)
-                                {
-                                    let identifier = match data {
-                                        ResourceData::Host { local_name, .. } => local_name,
-                                        ResourceData::Guest { resource_name, .. } => resource_name,
-                                    };
-
-                                    (
-                                        format!(
-                                            "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {identifier})'); }};",
-                                            payload_ty_id.index(),
-                                        ),
-                                        format!(
-                                            "const payloadLowerFn = () => {{ throw new Error('lower for {} (identifier {identifier})'); }};",
-                                            payload_ty_id.index(),
-                                        ),
-                                    )
-                                } else {
-                                    (
-                                        format!(
-                                            "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }};",
-                                        ),
-                                        format!(
-                                            "const payloadLowerFn = () => {{ throw new Error('lower for missing type with type idx {payload_ty:?}'); }};",
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                };
-
-                let payload_ty_size_js = if let Some(payload_ty) = payload {
-                    self.sizes.size(payload_ty).size_wasm32().to_string()
-                } else {
-                    "null".into()
-                };
+                let (payload_ty_size32_js, payload_ty_align32_js) =
+                    if let Some(payload_ty) = payload {
+                        (
+                            self.sizes.size(payload_ty).size_wasm32().to_string(),
+                            self.sizes.align(payload_ty).align_wasm32().to_string(),
+                        )
+                    } else {
+                        ("null".into(), "null".into())
+                    };
 
                 let stream_table_idx = stream_table_idx_ty.as_u32();
                 let is_unit_stream = payload.is_none();
@@ -2505,15 +2472,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "
-                    {payload_lift_fn}
-                    {payload_lower_fn}
                     const {result_var} = {stream_new_from_lift_fn}({{
                         componentIdx: {component_idx},
                         streamTableIdx: {stream_table_idx},
                         streamEndWaitableIdx: {arg_stream_end_idx},
-                        payloadLiftFn,
-                        payloadTypeSize32: {payload_ty_size_js},
-                        payloadLowerFn,
+                        payloadLiftFn: {lift_fn_js},
+                        payloadLowerFn: {lower_fn_js},
+                        payloadTypeSize32: {payload_ty_size32_js},
+                        payloadTypeAlign32: {payload_ty_align32_js},
                         isUnitStream: {is_unit_stream},
                     }});",
                 );

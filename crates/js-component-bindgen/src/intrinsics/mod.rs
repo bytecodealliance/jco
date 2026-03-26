@@ -563,10 +563,14 @@ impl Intrinsic {
                                 }} else {{
                                     let currentCount = count;
                                     let startPtr = this.#ptr;
+                                    if (this.#elemMeta.stringEncoding === undefined) {{
+                                        throw new Error('string encoding unknown during read');
+                                    }}
                                     let liftCtx = {{
                                         storagePtr: startPtr,
                                         memory: this.#memory,
                                         componentIdx: this.#componentIdx,
+                                        stringEncoding: this.#elemMeta.stringEncoding,
                                     }};
                                     if (currentCount < 0) {{ throw new Error('unexpectedly invalid count'); }}
                                     while (currentCount > 0) {{
@@ -600,11 +604,15 @@ impl Intrinsic {
                                     this.#hostOnlyData.push(...values);
                                 }} else {{
                                     let startPtr = this.#ptr;
+                                    if (this.#elemMeta.stringEncoding === undefined) {{
+                                        throw new Error('string encoding unknown during write');
+                                    }}
                                     for (const v of values) {{
                                         startPtr += this.#elemMeta.lowerFn({{
                                             memory: this.#memory,
                                             storagePtr: startPtr,
                                             componentIdx: this.#componentIdx,
+                                            stringEncoding: this.#elemMeta.stringEncoding,
                                             vals: [v],
                                         }});
                                     }}
@@ -673,6 +681,7 @@ impl Intrinsic {
                                 elemMeta: args.elemMeta,
                                 data: args.data,
                                 target: args.target,
+                                stringEncoding: args.stringEncoding,
                             }});
 
                             if (instanceBuffers.has(nextBufID)) {{
@@ -1300,10 +1309,30 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8),
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16),
+        ]);
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
     {
         args.intrinsics
             .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16),
+        ]);
     }
 
     if args

@@ -151,6 +151,9 @@ pub enum LiftIntrinsic {
     /// Lift a char into provided storage given core type(s) that represent utf8
     LiftFlatChar,
 
+    /// Lift a string from provided storage given core type(s), using encoding in lfit ctx
+    LiftFlatStringAny,
+
     /// Lift a UTF8 string into provided storage given core type(s)
     LiftFlatStringUtf8,
 
@@ -223,6 +226,7 @@ impl LiftIntrinsic {
             Self::LiftFlatFloat32 => "_liftFlatFloat32",
             Self::LiftFlatFloat64 => "_liftFlatFloat64",
             Self::LiftFlatChar => "_liftFlatChar",
+            Self::LiftFlatStringAny => "_liftFlatStringAny",
             Self::LiftFlatStringUtf8 => "_liftFlatStringUTF8",
             Self::LiftFlatStringUtf16 => "_liftFlatStringUTF16",
             Self::LiftFlatRecord => "_liftFlatRecord",
@@ -578,6 +582,24 @@ impl LiftIntrinsic {
                         return [val, ctx];
                     }}
                 "));
+            }
+
+            Self::LiftFlatStringAny => {
+                let lift_flat_string_any_fn = self.name();
+                let lift_flat_string_utf8_fn = Self::LiftFlatStringUtf8.name();
+                let lift_flat_string_utf16_fn = Self::LiftFlatStringUtf16.name();
+                output.push_str(&format!(r#"
+                    function {lift_flat_string_any_fn}(ctx) {{
+                        switch (ctx.stringEncoding) {{
+                            case 'utf8':
+                                return {lift_flat_string_utf8_fn}(ctx);
+                            case 'utf16':
+                                return {lift_flat_string_utf16_fn}(ctx);
+                            default:
+                                throw new Error(`missing/unrecognized/unsupported string encoding [${{ctx.stringEncoding}}]`);
+                        }}
+                    }}
+                "#));
             }
 
             Self::LiftFlatStringUtf8 => {

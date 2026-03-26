@@ -150,6 +150,9 @@ pub enum LowerIntrinsic {
     /// Lower a char into provided storage given core type(s)
     LowerFlatChar,
 
+    /// Lower a string into provided storage given core type(s), using encoding in lower ctx
+    LowerFlatStringAny,
+
     /// Lower a UTF8 string into provided storage given core type(s)
     LowerFlatStringUtf8,
 
@@ -222,6 +225,7 @@ impl LowerIntrinsic {
             Self::LowerFlatFloat32 => "_lowerFlatFloat32",
             Self::LowerFlatFloat64 => "_lowerFlatFloat64",
             Self::LowerFlatChar => "_lowerFlatChar",
+            Self::LowerFlatStringAny => "_lowerFlatStringAny",
             Self::LowerFlatStringUtf8 => "_lowerFlatStringUTF8",
             Self::LowerFlatStringUtf16 => "_lowerFlatStringUTF16",
             Self::LowerFlatRecord => "_lowerFlatRecord",
@@ -435,6 +439,24 @@ impl LowerIntrinsic {
                 "));
             }
 
+            Self::LowerFlatStringAny => {
+                let lower_flat_string_any_fn = self.name();
+                let lower_flat_string_utf8_fn = Self::LowerFlatStringUtf8.name();
+                let lower_flat_string_utf16_fn = Self::LowerFlatStringUtf16.name();
+                output.push_str(&format!("
+                    function {lower_flat_string_any_fn}(ctx) {{
+                        switch (ctx.stringEncoding) {{
+                            case 'utf8':
+                                return {lower_flat_string_utf8_fn}(ctx);
+                            case 'utf16':
+                                return {lower_flat_string_utf16_fn}(ctx);
+                            default:
+                                throw new Error(`missing/unrecognized/unsupported string encoding [${{ctx.stringEncoding}}]`);
+                        }}
+                    }}
+                "));
+            }
+
             Self::LowerFlatStringUtf16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -516,7 +538,7 @@ impl LowerIntrinsic {
                         return function {lower_flat_variant_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_variant_fn}()] args', ctx);
 
-                            const {{ memory, realloc, vals, storageLen, componentIdx }} = ctx;
+                            const {{ memory, realloc, vals, storageLen, componentIdx, stringEncoding }} = ctx;
                             let storagePtr = ctx.storagePtr;
 
                             const {{ tag, val }} = vals[0];
@@ -551,8 +573,10 @@ impl LowerIntrinsic {
                                     storagePtr,
                                     storageLen,
                                     componentIdx,
+                                    stringEncoding,
                                 }});
                             }}
+
                             let bytesWritten = payloadOffset + payloadBytesWritten;
 
                             const rem = ctx.storagePtr % align32;
@@ -588,7 +612,11 @@ impl LowerIntrinsic {
                                 const list = ctx.vals[0];
                                 if (!list) {{ throw new Error("missing direct param value"); }}
 
-                                const elemLowerCtx = {{ storagePtr, memory: ctx.memory }};
+                                const elemLowerCtx = {{
+                                    storagePtr,
+                                    memory: ctx.memory,
+                                    stringEncoding: ctx.stringEncoding,
+                                }};
                                 for (let idx = 0; idx < list.length; idx++) {{
                                     elemLowerCtx.vals = list.slice(idx, idx+1);
                                     elemLowerCtx.storagePtr += elemLowerFn(elemLowerCtx);

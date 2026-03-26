@@ -224,6 +224,7 @@ impl HostIntrinsic {
                               resultPtr,
                               returnFn,
                               startFn,
+                              stringEncoding,
                            }}
                         }});
 
@@ -423,7 +424,8 @@ impl HostIntrinsic {
                                 memory: callerMemory,
                                 vals: [res],
                                 storagePtr: subtaskCallMeta.resultPtr,
-                                componentIdx: callerComponentIdx
+                                componentIdx: callerComponentIdx,
+                                stringEncoding: subtaskCallMeta.stringEncoding,
                             }});
 
                         }});

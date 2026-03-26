@@ -418,7 +418,14 @@ impl AsyncStreamIntrinsic {
                 let copy_setup_impl = format!(
                     r#"
                     setupCopy(args) {{
-                        const {{ memory, ptr, count, eventCode, componentIdx, skipStateCheck }} = args;
+                        const {{
+                            memory,
+                            ptr,
+                            count,
+                            eventCode,
+                            componentIdx,
+                            skipStateCheck,
+                        }} = args;
                         if (eventCode === undefined) {{ throw new Error("missing/invalid event code"); }}
 
                         let buffer = args.buffer;
@@ -503,7 +510,7 @@ impl AsyncStreamIntrinsic {
                 let (rw_fn_name, inner_rw_impl) = match self {
                     // Internal implementation for writing to internal buffer after reading from a provided managed buffers
                     //
-                    // This _write() function is primarily called by guests.
+                    // This is called by both the host and the guest
                     Self::StreamWritableEndClass => (
                         "write",
                         format!(
@@ -567,7 +574,7 @@ impl AsyncStreamIntrinsic {
 
                     // Internal implementation for reading from an internal buffer and writing to a provided managed buffer
                     //
-                    // This _read() function is primarily called by guests.
+                    // This is called by both the host and the guest
                     Self::StreamReadableEndClass => (
                         "read",
                         format!(
@@ -593,6 +600,16 @@ impl AsyncStreamIntrinsic {
                                 const newBufferElemMeta = buffer.getElemMeta();
                                 if (pendingElemMeta.typeIdx !== newBufferElemMeta.typeIdx) {{
                                     throw new Error("trap: stream end type does not match internal buffer");
+                                }}
+
+                                // Since we do not know the string encoding until a write is performed, it is possible that
+                                // one end (i.e. the read end) does not yet know the appropriate string encoding to use when
+                                // lifting/lowering.
+                                if (newBufferElemMeta.stringEncoding === undefined || pendingElemMeta.stringEncoding === undefined) {{
+                                    const encoding = pendingElemMeta.stringEncoding ?? newBufferElemMeta.stringEncoding;
+                                    if (encoding === undefined) {{ throw new Error('both writer & reader missing string encoding'); }}
+                                    newBufferElemMeta.stringEncoding = encoding;
+                                    pendingElemMeta.stringEncoding = encoding;
                                 }}
 
                                 // If the buffer came from the same component that is currently doing the operation
@@ -647,8 +664,16 @@ impl AsyncStreamIntrinsic {
                                  eventCode,
                                  initial,
                                  skipStateCheck,
+                                 stringEncoding,
                              }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
+
+                             if (this.#elemMeta.stringEncoding === undefined && stringEncoding) {{
+                                this.#elemMeta.stringEncoding = stringEncoding;
+                             }}
+                             if (this.#elemMeta.stringEncoding && stringEncoding && this.#elemMeta.stringEncoding !== stringEncoding) {{
+                                 throw new Error(`inconsistent string encoding (previously [${{this.#elemMeta.stringEncoding}}], now [${{stringEncoding}}])`);
+                             }}
 
                              if (this.isDropped()) {{
                                  if (this.#pendingBufferMeta?.onCopyDoneFn) {{
@@ -782,6 +807,10 @@ impl AsyncStreamIntrinsic {
                             const {{ promise, resolve, reject }} = newResult;
 
                             const count = 1;
+                            if (this.#elemMeta.stringEncoding === undefined) {{
+                                this.#elemMeta.string = 'utf8';
+                            }}
+
                             try {{
                                 const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
                                     componentIdx: -1,
@@ -792,6 +821,7 @@ impl AsyncStreamIntrinsic {
                                     data: v,
                                 }});
                                 buffer.setTarget(`host stream write buffer (id [${{bufferID}}], count [${{count}}], data len [${{v.length}}])`);
+
 
                                 let packedResult;
                                 packedResult = await this.copy({{
@@ -883,6 +913,9 @@ impl AsyncStreamIntrinsic {
                                 this.#result = newResult;
                             }}
                             const {{ promise, resolve, reject }} = newResult;
+
+                            // TODO(fix): when we do a read, we need to GET the string encoding from the
+                            // other side, via the lift/lower fn?
 
                             const count = 1;
                             try {{
@@ -1413,6 +1446,7 @@ impl AsyncStreamIntrinsic {
                 let stream_op_fn = self.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let may_block = AsyncTaskIntrinsic::CurrentTaskMayBlock.name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
                 let (event_code, stream_end_class) = match self {
@@ -1456,7 +1490,9 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        // TODO(fix): check for may block & async
+                        if (!{may_block} && !isAsync) {{
+                            throw new Error('trap: only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
+                        }}
 
                         const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
@@ -1476,6 +1512,7 @@ impl AsyncStreamIntrinsic {
                             count,
                             eventCode: {event_code},
                             componentIdx,
+                            stringEncoding,
                         }});
 
                         return result;
