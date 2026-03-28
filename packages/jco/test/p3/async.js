@@ -1,11 +1,11 @@
 import { join } from "node:path";
 
-import { suite, test, assert, expect } from "vitest";
+import { suite, test, assert, expect, afterEach } from "vitest";
 
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, P3_COMPONENT_FIXTURES_DIR } from "../common.js";
 
 suite("Async (WASI P3)", () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
@@ -87,5 +87,38 @@ suite("Async (WASI P3)", () => {
         assert.strictEqual(hostU32, await instance.getU32());
 
         await cleanup();
+    });
+
+    test("GC + WASI P3 hello world via stream write hook", async () => {
+        const chunks = [];
+        const origHook = globalThis._jcoStreamWriteHook;
+        globalThis._jcoStreamWriteHook = (_writableEndIdx, data) => {
+            chunks.push(new TextDecoder().decode(data));
+            return true;
+        };
+
+        try {
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    path: join(P3_COMPONENT_FIXTURES_DIR, "gc/hello-gc-p3.wasm"),
+                    imports: {
+                        "wasi:cli/stdout": {
+                            writeViaStream: () => ({ tag: "ok" }),
+                        },
+                    },
+                },
+            });
+
+            await instance.run();
+            assert.strictEqual(chunks.join(""), "Hello, world!\n");
+
+            await cleanup();
+        } finally {
+            if (origHook) {
+                globalThis._jcoStreamWriteHook = origHook;
+            } else {
+                delete globalThis._jcoStreamWriteHook;
+            }
+        }
     });
 });

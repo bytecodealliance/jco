@@ -1475,9 +1475,23 @@ impl AsyncStreamIntrinsic {
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
                         }}
 
+                        const memory = getMemoryFn();
+
+                        // Host stream write hook: if a global hook is registered, deliver
+                        // stream data directly from linear memory, bypassing the rendezvous.
+                        // This enables WASI shims to receive bulk data from stream.write.
+                        if (typeof globalThis._jcoStreamWriteHook === 'function' && streamEnd.isWritable()) {{
+                            const actualCount = count >>> 0;
+                            const data = new Uint8Array(memory.buffer, ptr, actualCount);
+                            const handled = globalThis._jcoStreamWriteHook(streamEndWaitableIdx, new Uint8Array(data));
+                            if (handled) {{
+                                return (actualCount << 4) | 0;
+                            }}
+                        }}
+
                         const result = await streamEnd.copy({{
                             isAsync,
-                            memory: getMemoryFn(),
+                            memory,
                             ptr,
                             count,
                             eventCode: {event_code},
