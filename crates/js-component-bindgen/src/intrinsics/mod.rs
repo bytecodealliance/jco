@@ -89,9 +89,16 @@ pub enum Intrinsic {
     SymbolResourceHandle,
     SymbolResourceRep,
     SymbolDispose,
+    SymbolAsyncIterator,
+    SymbolIterator,
     ScopeId,
     DefinedResourceTables,
     HandleTables,
+
+    /// Class that conforms to a `ReadableStreams`-like interface and is usable externally
+    ///
+    /// This is normally the `ReadableStream` class provided by the platform itself.
+    PlatformReadableStreamClass,
 
     // Global Initializers
     FinalizationRegistryCreate,
@@ -384,11 +391,23 @@ impl Intrinsic {
             ",
             ),
 
-            Intrinsic::SymbolDispose => output.push_str(
-                "
-                const symbolDispose = Symbol.dispose || Symbol.for('dispose');
-            ",
-            ),
+            Intrinsic::SymbolDispose => {
+                let var_name = self.name();
+                uwriteln!(
+                    output,
+                    "const {var_name} = Symbol.dispose || Symbol.for('dispose');"
+                );
+            }
+
+            Intrinsic::SymbolAsyncIterator => {
+                let var_name = self.name();
+                uwriteln!(output, "const {var_name} = Symbol.asyncIterator;");
+            }
+
+            Intrinsic::SymbolIterator => {
+                let var_name = self.name();
+                uwriteln!(output, "const {var_name} = Symbol.iterator;");
+            }
 
             Intrinsic::ThrowInvalidBool => output.push_str(
                 "
@@ -968,7 +987,7 @@ impl Intrinsic {
                           const {{ taskID, componentIdx }} = args;
 
                           const meta = {global_current_task_meta_obj}[componentIdx];
-                          if (!meta) {{ throw new Error(`missing current task meta for component idx [${{componentIdx}}]`); }}
+                          if (!meta) {{ throw new Error(`missing current task meta for component idx [${{componentIdx}}]n`); }}
 
                           if (meta.taskID !== taskID) {{
                               throw new Error(`task ID [${{meta.taskID}}] != requested ID [${{taskID}}]`);
@@ -981,6 +1000,20 @@ impl Intrinsic {
                       }}
                     "#,
                 ));
+            }
+
+            // TODO(feat): customizable stream classes
+            Intrinsic::PlatformReadableStreamClass => {
+                let name = self.name();
+                uwriteln!(
+                    output,
+                    r#"
+                        if (!ReadableStream) {{
+                            throw new Error('builtin stream class [ReadableStream] is not available');
+                        }}
+                        const {name} = ReadableStream;
+                    "#
+                );
             }
         }
     }
@@ -1024,9 +1057,11 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 32] = [
+const EARLY_INTRINSICS: [Intrinsic; 34] = [
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
+    Intrinsic::SymbolAsyncIterator,
+    Intrinsic::SymbolIterator,
     Intrinsic::DebugLog,
     Intrinsic::GlobalAsyncDeterminism,
     Intrinsic::GlobalComponentMemoryMap,
@@ -1481,6 +1516,8 @@ impl Intrinsic {
                 "symbolCabiDispose",
                 "symbolCabiLower",
                 "symbolDispose",
+                "symbolAsyncIterator",
+                "symbolIterator",
                 "symbolRscHandle",
                 "symbolRscRep",
                 "T_FLAG",
@@ -1542,11 +1579,15 @@ impl Intrinsic {
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
             Intrinsic::ScopeId => "SCOPE_ID",
+
             Intrinsic::SymbolCabiDispose => "symbolCabiDispose",
             Intrinsic::SymbolCabiLower => "symbolCabiLower",
             Intrinsic::SymbolDispose => "symbolDispose",
+            Intrinsic::SymbolAsyncIterator => "symbolAsyncIterator",
+            Intrinsic::SymbolIterator => "symbolIterator",
             Intrinsic::SymbolResourceHandle => "symbolRscHandle",
             Intrinsic::SymbolResourceRep => "symbolRscRep",
+
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
 
@@ -1561,6 +1602,9 @@ impl Intrinsic {
             Intrinsic::IsBorrowedType => "_isBorrowedType",
             Intrinsic::TypeCheckAsyncFn => "_typeCheckAsyncFn",
             Intrinsic::AsyncFunctionCtor => "ASYNC_FN_CTOR",
+
+            // Streams
+            Intrinsic::PlatformReadableStreamClass => "_PlatformReadableStream",
 
             // Async
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",

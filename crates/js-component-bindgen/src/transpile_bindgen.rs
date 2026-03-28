@@ -31,7 +31,8 @@ use wit_parser::{
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
-    ErrHandling, FunctionBindgen, ResourceData, ResourceExtraData, ResourceMap, ResourceTable,
+    ErrHandling, FunctionBindgen, PayloadTypeMetadata, ResourceData, ResourceExtraData,
+    ResourceMap, ResourceTable,
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
@@ -1286,8 +1287,16 @@ impl<'a> Instantiator<'a, '_> {
                 // Get to the payload type for the given stream table idx
                 let table_ty = &self.types[*ty];
                 let stream_ty_idx = table_ty.ty;
-                let stream_ty_idx_js = stream_ty_idx.as_u32();
                 let stream_ty = &self.types[stream_ty_idx];
+
+                // TODO(???): do we have no way to go from interface type to in-component type idx?
+                // TODO(???): does this work under type aliases?? we need the type def?
+                // TODO(???): can the stream type be treated as a unique indicator of the payload type? maybe not?
+                // need a way to go from iface type + stream type -> payload type idx?
+                let payload_ty_name_js = stream_ty
+                    .payload
+                    .map(|iface_ty| format!("'{iface_ty:?}'"))
+                    .unwrap_or_else(|| "null".into());
 
                 // Gather type metadata
                 let (
@@ -1357,7 +1366,7 @@ impl<'a> Instantiator<'a, '_> {
                         elemMeta: {{
                             liftFn: {lift_fn_js},
                             lowerFn: {lower_fn_js},
-                            typeIdx: {stream_ty_idx_js},
+                            payloadTypeName: {payload_ty_name_js},
                             isNone: {is_none_js},
                             isNumeric: {is_numeric_type_js},
                             isBorrowed: {is_borrow_js},
@@ -3226,15 +3235,19 @@ impl<'a> Instantiator<'a, '_> {
                             let table_ty = &self.types[*table_idx];
                             let future_ty_idx = table_ty.ty;
                             let future_ty = &self.types[future_ty_idx];
-                            let future_elem_ty = future_ty
+                            let iface_ty = future_ty
                                 .payload
                                 .expect("missing future payload despite elem type being present");
-                            (
+                            let abi = self.types.canonical_abi(&iface_ty);
+                            PayloadTypeMetadata {
                                 ty,
-                                future_elem_ty,
-                                gen_flat_lift_fn_js_expr(self, &future_elem_ty),
-                                gen_flat_lower_fn_js_expr(self, &future_elem_ty),
-                            )
+                                iface_ty,
+                                lift_js_expr: gen_flat_lift_fn_js_expr(self, &iface_ty),
+                                lower_js_expr: gen_flat_lower_fn_js_expr(self, &iface_ty),
+                                size32: abi.size32,
+                                align32: abi.align32,
+                                flat_count: abi.flat_count,
+                            }
                         }),
                     }),
                 },
@@ -3250,18 +3263,19 @@ impl<'a> Instantiator<'a, '_> {
                             let table_ty = &self.types[*table_idx];
                             let stream_ty_idx = table_ty.ty;
                             let stream_ty = &self.types[stream_ty_idx];
-                            let stream_elem_ty = stream_ty
+                            let iface_ty = stream_ty
                                 .payload
-                                .expect("missing stream payload despite elem type being present");
-                            // TODO: we need the string encoding!
-                            (
+                                .expect("missing payload despite elem type being present");
+                            let abi = self.types.canonical_abi(&iface_ty);
+                            PayloadTypeMetadata {
                                 ty,
-                                stream_ty
-                                    .payload
-                                    .expect("missing payload despite elem type being present"),
-                                gen_flat_lift_fn_js_expr(self, &stream_elem_ty),
-                                gen_flat_lower_fn_js_expr(self, &stream_elem_ty),
-                            )
+                                iface_ty,
+                                lift_js_expr: gen_flat_lift_fn_js_expr(self, &iface_ty),
+                                lower_js_expr: gen_flat_lower_fn_js_expr(self, &iface_ty),
+                                size32: abi.size32,
+                                align32: abi.align32,
+                                flat_count: abi.flat_count,
+                            }
                         }),
                     }),
                 },

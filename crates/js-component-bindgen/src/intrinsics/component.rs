@@ -130,6 +130,8 @@ impl ComponentIntrinsic {
                 let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                let stream_readable_end_class =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass).name();
 
                 output.push_str(&format!(
                     r#"
@@ -464,6 +466,45 @@ impl ComponentIntrinsic {
 
                         createWaitable(args) {{
                             return new {waitable_class}({{ target: args?.target, }});
+                        }}
+
+                        createReadableStreamEnd(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#createStreamEnd()] args', args);
+                            const {{ tableIdx, elemMeta, hostReadFn }} = args;
+
+                            const {{ table: localStreamTable, componentIdx }} = {global_stream_table_map}[tableIdx];
+                            if (!localStreamTable) {{
+                                throw new Error(`missing global stream table lookup for table [${{tableIdx}}] while creating stream`);
+                            }}
+                            if (componentIdx !== this.#componentIdx) {{
+                                throw new Error('component idx mismatch while creating stream');
+                            }}
+
+                            const waitable = this.createWaitable();
+                            const streamEnd = new {stream_readable_end_class}({{
+                                tableIdx,
+                                elemMeta,
+                                hostReadFn,
+                                pendingBufferMeta: {{}},
+                                target: `stream read end (lowered, @init)`,
+                                waitable,
+                            }});
+
+                            streamEnd.setWaitableIdx(this.handles.insert(streamEnd));
+                            streamEnd.setHandle(localStreamTable.insert(streamEnd));
+                            if (streamEnd.streamTableIdx() !== tableIdx) {{
+                                throw new Error("unexpectedly mismatched stream table");
+                            }}
+                            const streamEndWaitableIdx = streamEnd.waitableIdx();
+                            const streamEndHandle = streamEnd.handle();
+                            waitable.setTarget(`waitable for stream read end (lowered, waitable [${{streamEndWaitableIdx}}])`);
+                            streamEnd.setTarget(`stream read end (lowered, waitable [${{streamEndWaitableIdx}}])`);
+
+                            return {{
+                                waitableIdx: streamEndWaitableIdx,
+                                handle: streamEndHandle,
+                                streamEnd,
+                            }};
                         }}
 
                         createStream(args) {{

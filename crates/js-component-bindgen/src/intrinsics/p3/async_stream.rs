@@ -284,6 +284,7 @@ impl AsyncStreamIntrinsic {
 
                         #copyState = {stream_end_class}.CopyState.IDLE;
 
+                        #dropped;
                         #setDroppedFn;
                         #isDroppedFn;
 
@@ -301,8 +302,16 @@ impl AsyncStreamIntrinsic {
 
                             this.#tableIdx = args.tableIdx;
                             this.#waitable = args.waitable;
-                            this.#setDroppedFn = args.setDroppedFn;
-                            this.#isDroppedFn = args.isDroppedFn;
+
+                            if (args.setDroppedFn && args.isDroppedFn) {{
+                                this.#setDroppedFn = args.setDroppedFn;
+                                this.#isDroppedFn = args.isDroppedFn;
+                            }} else if (args.setDroppedFn === undefined && args.isDroppedFn === undefined) {{
+                                this.#setDroppedFn = (v) => {{ this.#dropped = v; }};
+                                this.#isDroppedFn = () => {{ return this.#dropped; }};
+                            }} else {{
+                                throw new TypeError('setDroppedFn and isDroppedFn must both be specified or neither');
+                            }}
 
                             this.target = args.target;
                         }}
@@ -528,7 +537,7 @@ impl AsyncStreamIntrinsic {
 
                                 const pendingElemMeta = this.#pendingBufferMeta.buffer.getElemMeta();
                                 const newBufferElemMeta = buffer.getElemMeta();
-                                if (pendingElemMeta.typeIdx !== newBufferElemMeta.typeIdx) {{
+                                if (pendingElemMeta.payloadTypeName !== newBufferElemMeta.payloadTypeName) {{
                                     throw new Error("trap: stream end type does not match internal buffer");
                                 }}
 
@@ -598,7 +607,7 @@ impl AsyncStreamIntrinsic {
 
                                 const pendingElemMeta = this.#pendingBufferMeta.buffer.getElemMeta();
                                 const newBufferElemMeta = buffer.getElemMeta();
-                                if (pendingElemMeta.typeIdx !== newBufferElemMeta.typeIdx) {{
+                                if (pendingElemMeta.payloadTypeName !== newBufferElemMeta.payloadTypeName) {{
                                     throw new Error("trap: stream end type does not match internal buffer");
                                 }}
 
@@ -695,6 +704,18 @@ impl AsyncStreamIntrinsic {
                                  initial,
                                  skipStateCheck,
                              }});
+
+                             // If the stream is readable and was lowered, must do more work!
+                             // component is calling copy duing a `stream.read`, but
+                             // the writer is outside and may have already written.
+                             //
+                             // We effectively do a just-in-time "write" of the external value,
+                             // if one is present, because what we got from the outside world
+                             // was a reader
+                             //
+                             if (this.isReadable() && this.#hostReadFn) {{
+                                 await this.#hostReadFn({{ buffer, count }});
+                             }}
 
                              // Perform the read/write
                              this._{rw_fn_name}({{
@@ -997,12 +1018,19 @@ impl AsyncStreamIntrinsic {
                         #done = false;
 
                         #elemMeta = null;
-                        #pendingBufferMeta = null; // held by both write and read ends
+                        // held by both write and read ends
+                        #pendingBufferMeta = null;
 
-                        #streamTableIdx; // table index that the stream is in (can change after a stream transfer)
-                        #handle; // handle (index) inside the given table (can change after a stream transfer)
+                        // table index that the stream is in (can change after a stream transfer)
+                        #streamTableIdx;
+                        // handle (index) inside the given table (can change after a stream transfer)
+                        #handle;
 
-                        #globalStreamMapRep; // internal stream (which has both ends) rep
+                        // internal stream (which has both ends) rep
+                        #globalStreamMapRep;
+
+                        // only populated for lowered (read) stream ends
+                        #hostReadFn;
 
                         #result = null;
 
@@ -1018,6 +1046,8 @@ impl AsyncStreamIntrinsic {
 
                             if (args.tableIdx === undefined) {{ throw new Error('missing index for stream table idx'); }}
                             this.#streamTableIdx = args.tableIdx;
+
+                            this.#hostReadFn = args.hostReadFn;
                         }}
 
                         streamTableIdx() {{ return this.#streamTableIdx; }}
@@ -1259,6 +1289,7 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let external_stream_class_name = self.name();
                 let symbol_dispose = Intrinsic::SymbolDispose.name();
+                let symbol_async_iterator = Intrinsic::SymbolAsyncIterator.name();
 
                 output.push_str(&format!(
                     r#"
@@ -1291,6 +1322,8 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         globalRep() {{ return this.#globalRep; }}
+
+                        [{symbol_async_iterator}]() {{ return this; }}
 
                         async next() {{
                             {debug_log_fn}('[{external_stream_class_name}#next()]');

@@ -64,22 +64,29 @@ pub enum ResourceData {
     },
 }
 
-/// JS expression that serves as a function that lifts a given type
-type LiftJsExpr = String;
-
-/// JS expression that serves as a function that lowers a given type
-type LowerJsExpr = String;
+#[derive(Clone, Debug, PartialEq)]
+pub struct PayloadTypeMetadata {
+    pub(crate) ty: Type,
+    pub(crate) iface_ty: InterfaceType,
+    /// JS expression that serves as a function that lifts a given type
+    pub(crate) lift_js_expr: String,
+    /// JS expression that serves as a function that lowers a given type
+    pub(crate) lower_js_expr: String,
+    pub(crate) size32: u32,
+    pub(crate) align32: u32,
+    pub(crate) flat_count: Option<u8>,
+}
 
 /// Supplemental data kept along with [`ResourceData`]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceExtraData {
     Stream {
         table_idx: TypeStreamTableIndex,
-        elem_ty: Option<(Type, InterfaceType, LiftJsExpr, LowerJsExpr)>,
+        elem_ty: Option<PayloadTypeMetadata>,
     },
     Future {
         table_idx: TypeFutureTableIndex,
-        elem_ty: Option<(Type, InterfaceType, LiftJsExpr, LowerJsExpr)>,
+        elem_ty: Option<PayloadTypeMetadata>,
     },
     ErrorContext {
         table_idx: TypeComponentLocalErrorContextTableIndex,
@@ -2386,18 +2393,159 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::StreamLower { .. } => {
-                // TODO: convert this return of the lifted Future:
-                // ```
-                //     return BigInt(writeEndWaitableIdx) << 32n | BigInt(readEndWaitableIdx);
-                // ```
-                //
-                // Into a component-local Future instance
-                //
+            Instruction::StreamLower { ty, .. } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let stream_arg = operands
                     .first()
                     .expect("unexpectedly missing StreamLower arg");
-                results.push(stream_arg.clone());
+                let async_iterator_symbol = self.intrinsic(Intrinsic::SymbolAsyncIterator);
+                let iterator_symbol = self.intrinsic(Intrinsic::SymbolIterator);
+                let external_readable_stream_class =
+                    self.intrinsic(Intrinsic::PlatformReadableStreamClass);
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+
+                // Build the lowering function for the type produced by the stream
+                let type_id = &crate::dealias(self.resolve, *ty);
+                let ResourceTable {
+                    imported: true,
+                    data:
+                        ResourceData::Guest {
+                            extra:
+                                Some(ResourceExtraData::Stream {
+                                    table_idx: stream_table_idx_ty,
+                                    elem_ty,
+                                }),
+                            ..
+                        },
+                } = self
+                    .resource_map
+                    .get(type_id)
+                    .expect("missing resource mapping for stream lower")
+                else {
+                    unreachable!("invalid resource table observed during stream lower");
+                };
+
+                let component_idx = self.canon_opts.instance.as_u32();
+                let stream_table_idx = stream_table_idx_ty.as_u32();
+
+                let (
+                    payload_type_name_js,
+                    lift_fn_js,
+                    lower_fn_js,
+                    payload_is_none,
+                    payload_is_numeric,
+                    payload_is_borrow,
+                    payload_is_async_value,
+                    payload_size32_js,
+                    payload_align32_js,
+                    payload_flat_count_js,
+                ) = match elem_ty {
+                    Some(PayloadTypeMetadata {
+                        ty: _,
+                        iface_ty,
+                        lift_js_expr,
+                        lower_js_expr,
+                        size32,
+                        align32,
+                        flat_count,
+                    }) => (
+                        format!("'{iface_ty:?}'"),
+                        lift_js_expr.as_str(),
+                        lower_js_expr.as_str(),
+                        "false",
+                        format!(
+                            "{}",
+                            matches!(
+                                iface_ty,
+                                InterfaceType::U8
+                                    | InterfaceType::U16
+                                    | InterfaceType::U32
+                                    | InterfaceType::U64
+                                    | InterfaceType::S8
+                                    | InterfaceType::S16
+                                    | InterfaceType::S32
+                                    | InterfaceType::S64
+                                    | InterfaceType::Float32
+                                    | InterfaceType::Float64
+                            )
+                        ),
+                        format!("{}", matches!(iface_ty, InterfaceType::Borrow(_))),
+                        format!(
+                            "{}",
+                            matches!(
+                                iface_ty,
+                                InterfaceType::Stream(_) | InterfaceType::Future(_)
+                            )
+                        ),
+                        size32.to_string(),
+                        align32.to_string(),
+                        flat_count.unwrap_or(0).to_string(),
+                    ),
+                    None => (
+                        "null".into(),
+                        "() => {{ throw new Error('no lift fn'); }}",
+                        "() => {{ throw new Error('no lower fn'); }}",
+                        "true".into(),
+                        "false".into(),
+                        "false".into(),
+                        "false".into(),
+                        "null".into(),
+                        "null".into(),
+                        "0".into(),
+                    ),
+                };
+
+                let tmp = self.tmp();
+                let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
+                uwriteln!(
+                    self.src,
+                    r#"
+                        let hostReadFn;
+                        if ({async_iterator_symbol} in {stream_arg}) {{
+                            hostReadFn = () => {{
+                                throw new Error('lowering of async iterators not supported yet');
+                            }};
+                        }} else if ({iterator_symbol} in {stream_arg}) {{
+                            hostReadFn = () => {{
+                                throw new Error('lowering of iterators not supported yet');
+                            }};
+                        }} else if ({iterator_symbol} instanceof {external_readable_stream_class}) {{
+                            hostReadFn = () => {{
+                                throw new Error('lowering of readable streams not supported yet');
+                            }};
+                        }} else {{
+                            {debug_log_fn}('[Instruction::StreamLower] unrecognized object', {{ {stream_arg} }});
+                            throw new Error('unrecognized stream object');
+                        }}
+
+                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx});
+                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [${{component_idx}}]`); }}
+
+                        const createdStreamEnd{tmp} = cstate{tmp}.createReadableStreamEnd({{
+                            tableIdx: {stream_table_idx},
+                            hostReadFn,
+                            elemMeta: {{
+                                liftFn: {lift_fn_js},
+                                lowerFn: {lower_fn_js},
+                                payloadTypeName: {payload_type_name_js},
+                                isNone: {payload_is_none},
+                                isNumeric: {payload_is_numeric},
+                                isBorrowed: {payload_is_borrow},
+                                isAsyncValue: {payload_is_async_value},
+                                flatCount: {payload_flat_count_js},
+                                align32: {payload_align32_js},
+                                size32: {payload_size32_js},
+                                // TODO: facilitate non utf8 string encoding for lowered streams
+                                stringEncoding: 'utf8',
+                            }},
+                        }});
+
+                        const {lowered_stream_waitable_idx} = createdStreamEnd{tmp}.waitableIdx;
+                    "#
+                );
+                results.push(lowered_stream_waitable_idx);
             }
 
             Instruction::StreamLift { payload, ty } => {
@@ -2429,25 +2577,22 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // if a stream element is present, it should match the payload we're getting
                 let (lift_fn_js, lower_fn_js) = match stream_element_ty {
-                    Some((stream_element_ty, _, lift_fn_js, lower_fn_js)) => {
-                        assert_eq!(
-                            Some(*stream_element_ty),
-                            **payload,
-                            "stream element type mismatch"
-                        );
-                        (lift_fn_js.to_string(), lower_fn_js.to_string())
+                    Some(PayloadTypeMetadata {
+                        ty,
+                        lift_js_expr,
+                        lower_js_expr,
+                        ..
+                    }) => {
+                        assert_eq!(Some(*ty), **payload, "stream element type mismatch");
+                        (lift_js_expr.to_string(), lower_js_expr.to_string())
                     }
                     None => (
                         "() => {{ throw new Error('no lift fn'); }}".into(),
                         "() => {{ throw new Error('no lower fn'); }}".into(),
                     ),
                 };
-                if let Some((stream_element_ty, _, _, _)) = stream_element_ty {
-                    assert_eq!(
-                        Some(*stream_element_ty),
-                        **payload,
-                        "stream element type mismatch"
-                    );
+                if let Some(PayloadTypeMetadata { ty, .. }) = stream_element_ty {
+                    assert_eq!(Some(*ty), **payload, "stream element type mismatch");
                 }
 
                 let arg_stream_end_idx = operands
