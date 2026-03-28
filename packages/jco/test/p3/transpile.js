@@ -97,6 +97,8 @@ const P3_FIXTURE_COMPONENTS = [
     "error-context/async-error-context.wasm",
     "error-context/async-error-context-callee.wasm",
     "error-context/async-error-context-caller.wasm",
+
+    "gc/hello-gc-p3.wasm",
 ];
 
 suite("Transpile (WASI P3)", () => {

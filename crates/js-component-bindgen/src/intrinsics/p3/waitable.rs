@@ -392,8 +392,9 @@ impl WaitableIntrinsic {
                             throw Error(`task component [${{task.componentIdx}}] !== executing component [${{componentIdx}}]`);
                         }}
 
-                        const event = await task.waitForEvent({{ waitableSetRep, isAsync }});
-                        return {store_event_in_component_memory_fn}(memory, task, event, resultPtr);
+                        const memory = getMemoryFn();
+                        const event = await task.waitUntil({{ waitableSetRep, readyFn: () => true, cancellable: false }});
+                        return {store_event_in_component_memory_fn}({{ memory, ptr: resultPtr, event }});
                     }}
                 "#));
             }

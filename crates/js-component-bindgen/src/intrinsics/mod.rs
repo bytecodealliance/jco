@@ -1213,6 +1213,9 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     if args
         .intrinsics
         .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait))
     {
         args.intrinsics
             .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
@@ -1266,6 +1269,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
             &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
         ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatResult))
+    {
+        args.intrinsics
+            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatOption))
+    {
+        args.intrinsics
+            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
     }
 
     if args
@@ -1364,10 +1383,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     if args
         .intrinsics
         .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead))
     {
         args.intrinsics.extend([
             &Intrinsic::GlobalBufferManager,
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
+            &Intrinsic::AsyncEventCodeEnum,
         ]);
     }
 

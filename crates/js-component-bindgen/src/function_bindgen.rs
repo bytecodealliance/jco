@@ -1491,11 +1491,24 @@ impl Bindgen for FunctionBindgen<'_> {
                               taskID: task.id(),
                               componentIdx: task.componentIdx(),
                               fn: () => {callee}({args}),
-                          }});
-                          "#,
+                          }});"#,
                     callee = self.callee,
                     args = operands.join(", "),
                 );
+                // For async exports using task.return, the JSPI Promising wrapper
+                // returns undefined (void core wasm function). The task's completion
+                // promise (resolved by task.return) provides the already-lifted result.
+                if self.is_async && sig_results_length > 0 {
+                    uwriteln!(
+                        self.src,
+                        r#"
+                          if (ret === undefined) {{
+                              const taskResult = await task.completionPromise();
+                              if (taskResult !== undefined) {{ return taskResult; }}
+                          }}
+                          "#,
+                    );
+                }
 
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;

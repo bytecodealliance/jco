@@ -98,7 +98,7 @@ impl<'a> Translation<'a> {
         }
 
         // Set up wasm features to use
-        let mut features = WasmFeatures::default();
+        let mut features = WasmFeatures::WASM3 | WasmFeatures::WIDE_ARITHMETIC;
         features.set(WasmFeatures::MULTI_MEMORY, false);
 
         match Validator::new_with_features(features).validate_all(translation.wasm) {
