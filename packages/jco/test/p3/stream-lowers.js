@@ -1,7 +1,7 @@
 import { join } from "node:path";
+import { ReadableStream } from "node:stream/web";
 
 import { suite, test, assert, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
-import { ReadableStream } from "node:util";
 
 import { setupAsyncTest } from "../helpers.js";
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
@@ -55,12 +55,12 @@ suite("stream<T> lowers", () => {
 
         const returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(stream);
 
-        const reader = returnedStream.getReader();
+        // NOTE: Returned streams conform to the async iterator protocol -- they *do not* confirm to
+        // any other interface, though an object that is a ReadableStream may have been passed in.
+        //
         let returnedVals = [];
-        let readRes = {};
-        while (!readRes.done) {
-            readRes = await reader.read();
-            returnedVals.push(readRes.value);
+        for await (const v of returnedStream) {
+            returnedVals.push(v);
         }
 
         assert.deepEqual(vals, returnedVals);
@@ -75,7 +75,7 @@ suite("stream<T> lowers", () => {
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU32, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS32, AsyncFunction);
 
-        // TODO: same as async pass through test except we get the list back and can compare directly 
+        // TODO: same as async pass through test except we get the list back and can compare directly
 
         // TODO:
         // let vals = [11, 22, 33];
