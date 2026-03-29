@@ -705,16 +705,17 @@ impl AsyncStreamIntrinsic {
                                  skipStateCheck,
                              }});
 
-                             // If the stream is readable and was lowered, must do more work!
-                             // component is calling copy duing a `stream.read`, but
-                             // the writer is outside and may have already written.
+                             // If the stream is readable and was lowered from the host,
+                             // when the component is doing a read (i.e. `stream.read`),
+                             // the writer is host-side and may have already written.
                              //
                              // We effectively do a just-in-time "write" of the external value,
                              // if one is present, because what we got from the outside world
                              // was a reader
                              //
-                             if (this.isReadable() && this.#hostReadFn) {{
-                                 await this.#hostReadFn({{ buffer, count }});
+                             let onReadFinishFn;
+                             if (this.isReadable() && this.#hostInjectFn) {{
+                                 onReadFinishFn = await this.#hostInjectFn({{ count }});
                              }}
 
                              // Perform the read/write
@@ -727,6 +728,10 @@ impl AsyncStreamIntrinsic {
 
                              // If sync, wait forever but allow task to do other things
                              if (!this.hasPendingEvent()) {{
+                               if (this.isReadable() && this.#hostInjectFn) {{
+                                   throw new Error('reader unexpectedly blocked after injected write');
+                               }}
+
                                if (isAsync) {{
                                    this.setCopyState({stream_end_class}.CopyState.ASYNC_COPYING);
                                    {debug_log_fn}('[{stream_end_class}#copy()] blocked', {{ componentIdx, eventCode, self: this }});
@@ -745,6 +750,14 @@ impl AsyncStreamIntrinsic {
                                        readyFn: () => streamEnd.hasPendingEvent(),
                                    }});
                                }}
+                             }}
+
+                             // If we injected a write and the read has completed, we should reset
+                             // we can skip the rest of the async machinery since there the host controlled
+                             // write end does not need to use the pending event machinery
+                             if (this.isReadable() && this.#hostInjectFn) {{
+                                 if (!onReadFinishFn) {{ throw new Error('missing read finish fn'); }}
+                                 onReadFinishFn();
                              }}
 
                              const event = this.getPendingEvent();
@@ -843,7 +856,6 @@ impl AsyncStreamIntrinsic {
                                 }});
                                 buffer.setTarget(`host stream write buffer (id [${{bufferID}}], count [${{count}}], data len [${{v.length}}])`);
 
-
                                 let packedResult;
                                 packedResult = await this.copy({{
                                     isAsync: true,
@@ -854,7 +866,19 @@ impl AsyncStreamIntrinsic {
                                     componentIdx: -1,
                                 }});
 
-                                if (packedResult === {async_blocked_const}) {{
+                                // If we are dealing with a blocked component write operation, we do an immedaite wait
+                                // on the host side to pause the host until the write can be completed.
+                                //
+                                // We do not do this if we're dealing with a host injection,
+                                // (i.e. a lowered read end into a component does a read() and forces
+                                // data to be read from the host side), we must signal the write is completed
+                                // and we are waiting for the read.
+                                //
+                                //  In the host injection case, it is OK that the write is blocked, because we
+                                //  know the read is about to occur (we control the writes to the stream to be
+                                // just-before reads, no matter what the user does on the other end).
+                                //
+                                if (packedResult === {async_blocked_const} && !this.#isHostOwned) {{
                                     // If the write was blocked, we can only make progress when
                                     // the read side notifies us of a read, then we must attempt the copy again
 
@@ -888,6 +912,18 @@ impl AsyncStreamIntrinsic {
                                         throw new Error("unexpected double block during write");
                                     }}
                                 }}
+
+
+                                // Host owned writes were not necessarily unblocked, but are always blocked
+                                // because they happen just-before a component read (via a lowered end).
+                                //
+                                // In this case, we cant to declare the copy state back to idle
+                                // for the next write that is performed, assuming there may be more writes
+                                // to do.
+                                //
+                                // if (this.#hostOwned) {{
+                                //    this.setCopyState({stream_end_class}.CopyState.IDLE);
+                                // }}
 
                                 // If the write was not blocked, we can resolve right away
                                 this.#result = null;
@@ -1005,7 +1041,8 @@ impl AsyncStreamIntrinsic {
                                 reject(err);
                             }}
 
-                            return await promise;
+                            const res = await promise;
+                            return {{ value: res, done: this.isDoneState() }};
                          }}
                         "#
                     ),
@@ -1030,7 +1067,9 @@ impl AsyncStreamIntrinsic {
                         #globalStreamMapRep;
 
                         // only populated for lowered (read) stream ends
-                        #hostReadFn;
+                        #hostInjectFn;
+                        // only populated for the write side of a lowered read stream end
+                        #isHostOwned;
 
                         #result = null;
 
@@ -1047,7 +1086,8 @@ impl AsyncStreamIntrinsic {
                             if (args.tableIdx === undefined) {{ throw new Error('missing index for stream table idx'); }}
                             this.#streamTableIdx = args.tableIdx;
 
-                            this.#hostReadFn = args.hostReadFn;
+                            this.#hostInjectFn = args.hostInjectFn;
+                            this.#isHostOwned = args.hostOwned;
                         }}
 
                         streamTableIdx() {{ return this.#streamTableIdx; }}
@@ -1066,11 +1106,17 @@ impl AsyncStreamIntrinsic {
                             w.setTarget(`waitable for {rw_fn_name} end (waitable [${{idx}}])`);
                         }}
 
+                        setHostInjectFn(f) {{
+                            if (this.#hostInjectFn) {{ throw new Error('host injection fn is already set'); }}
+                            this.#hostInjectFn = f;
+                        }}
+
                         getElemMeta() {{ return {{...this.#elemMeta}}; }}
 
                         {type_getter_impl}
 
                         isDoneState() {{ return this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
+                        isCancelledState() {{ return this.getCopyState() === {stream_end_class}.CopyState.CANCELLED; }}
                         isIdleState() {{ return this.getCopyState() === {stream_end_class}.CopyState.IDLE; }}
 
                         {action_impl}
@@ -1160,6 +1206,10 @@ impl AsyncStreamIntrinsic {
                                 pendingBufferMeta: this.#pendingBufferMeta,
                                 target: "stream read end (@ init)",
                                 waitable: readWaitable,
+                                // Only in-component read-ends need the host inject fn if provided,
+                                // as that function will *inject* a write when a read is performed
+                                // from inside the guest.
+                                hostInjectFn: args.hostInjectFn,
                                 setDroppedFn,
                                 isDroppedFn,
                             }});
@@ -1170,6 +1220,7 @@ impl AsyncStreamIntrinsic {
                                 pendingBufferMeta: this.#pendingBufferMeta,
                                 target: "stream write end (@ init)",
                                 waitable: writeWaitable,
+                                hostOwned: true,
                                 setDroppedFn,
                                 isDroppedFn,
                             }});

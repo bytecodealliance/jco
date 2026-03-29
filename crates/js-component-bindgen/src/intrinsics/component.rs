@@ -470,7 +470,7 @@ impl ComponentIntrinsic {
 
                         createReadableStreamEnd(args) {{
                             {debug_log_fn}('[{component_async_state_class}#createStreamEnd()] args', args);
-                            const {{ tableIdx, elemMeta, hostReadFn }} = args;
+                            const {{ tableIdx, elemMeta, hostInjectFn }} = args;
 
                             const {{ table: localStreamTable, componentIdx }} = {global_stream_table_map}[tableIdx];
                             if (!localStreamTable) {{
@@ -484,7 +484,7 @@ impl ComponentIntrinsic {
                             const streamEnd = new {stream_readable_end_class}({{
                                 tableIdx,
                                 elemMeta,
-                                hostReadFn,
+                                hostInjectFn,
                                 pendingBufferMeta: {{}},
                                 target: `stream read end (lowered, @init)`,
                                 waitable,
@@ -509,7 +509,7 @@ impl ComponentIntrinsic {
 
                         createStream(args) {{
                             {debug_log_fn}('[{component_async_state_class}#createStream()] args', args);
-                            const {{ tableIdx, elemMeta }} = args;
+                            const {{ tableIdx, elemMeta, hostInjectFn }} = args;
                             if (tableIdx === undefined) {{ throw new Error("missing table idx while adding stream"); }}
                             if (elemMeta === undefined) {{ throw new Error("missing element metadata while adding stream"); }}
 
@@ -526,10 +526,10 @@ impl ComponentIntrinsic {
 
                             const stream = new {internal_stream_class}({{
                                 tableIdx,
-                                componentIdx: this.#componentIdx,
                                 elemMeta,
                                 readWaitable,
                                 writeWaitable,
+                                hostInjectFn,
                             }});
                             stream.setGlobalStreamMapRep({global_stream_map}.insert(stream));
 
@@ -554,17 +554,21 @@ impl ComponentIntrinsic {
                             readEnd.setTarget(`stream read end (waitable [${{readEndWaitableIdx}}])`);
 
                             return {{
+                                writeEnd,
                                 writeEndWaitableIdx,
                                 writeEndHandle,
                                 readEndWaitableIdx,
                                 readEndHandle,
+                                readEnd,
                             }};
                         }}
 
                         getStreamEnd(args) {{
                             {debug_log_fn}('[{component_async_state_class}#getStreamEnd()] args', args);
                             const {{ tableIdx, streamEndHandle, streamEndWaitableIdx }} = args;
-                            if (tableIdx === undefined) {{ throw new Error('missing table idx while getting stream end'); }}
+                            if (tableIdx === undefined) {{
+                                throw new Error('missing table idx while getting stream end');
+                            }}
 
                             const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
                             const cstate = {get_or_create_async_state_fn}(componentIdx);

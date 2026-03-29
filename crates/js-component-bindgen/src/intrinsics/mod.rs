@@ -544,7 +544,10 @@ impl Intrinsic {
                             this.#ptr = this.#start;
                             this.capacity = args.capacity;
                             this.#elemMeta = args.elemMeta;
+
+                            if (!Array.isArray(args.data)) {{ throw new Error('host-only data must be an array'); }}
                             this.#hostOnlyData = args.data;
+
                             this.target = args.target;
                         }}
 
