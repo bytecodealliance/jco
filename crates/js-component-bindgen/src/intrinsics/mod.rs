@@ -545,7 +545,9 @@ impl Intrinsic {
                             this.capacity = args.capacity;
                             this.#elemMeta = args.elemMeta;
 
-                            if (!Array.isArray(args.data)) {{ throw new Error('host-only data must be an array'); }}
+                            if (args.data !== undefined && !Array.isArray(args.data)) {{
+                                throw new TypeError('host-only data must be an array');
+                            }}
                             this.#hostOnlyData = args.data;
 
                             this.target = args.target;
