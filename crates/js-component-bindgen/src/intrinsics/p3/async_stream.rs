@@ -1042,7 +1042,7 @@ impl AsyncStreamIntrinsic {
                             }}
 
                             const res = await promise;
-                            return {{ value: res, done: this.isDoneState() }};
+                            return {{ value: res, done: res === undefined }};
                          }}
                         "#
                     ),
