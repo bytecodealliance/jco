@@ -46,14 +46,14 @@ suite("stream<T> lowers", () => {
         assert.notInstanceOf(instance["jco:test-components/use-stream-sync"].streamPassthrough, AsyncFunction);
 
         let vals = [0, 5, 10];
-        const stream = new ReadableStream({
+        const readerStream = new ReadableStream({
             start(ctrl) {
                 vals.forEach(v => ctrl.enqueue(v));
                 ctrl.close();
             }
         });
 
-        const returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(stream);
+        let returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(readerStream);
 
         // NOTE: Returned streams conform to the async iterator protocol -- they *do not* confirm to
         // any other interface, though an object that is a ReadableStream may have been passed in.
@@ -62,8 +62,30 @@ suite("stream<T> lowers", () => {
         for await (const v of returnedStream) {
             returnedVals.push(v);
         }
-
         assert.deepEqual(vals, returnedVals);
+
+        // Test late writer -- component should block until a value is written,
+        // and we should handle a final value + done from an iterator properly
+        const lateStream = {
+            [Symbol.asyncIterator]() {
+                let returned = 0;
+                return {
+                    async next() {
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        if (returned === 2) { return { value: 42, done: true }; }
+                        returned += 1;
+                        return { value: 42, done: false };
+                    }
+                };
+            },
+        };
+        returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(lateStream);
+
+        returnedVals = [];
+        for await (const v of returnedStream) {
+            returnedVals.push(v);
+        }
+        assert.deepEqual([42,42,42], returnedVals);
     });
 
     test.concurrent("async passthrough", async () => {
