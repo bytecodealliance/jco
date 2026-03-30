@@ -3,6 +3,8 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
+import { assert } from "vitest";
+
 /** Path to a linter as installed by npm-compatible tooling */
 export const LINTER_PATH = fileURLToPath(new URL("../../../node_modules/oxlint/bin/oxlint", import.meta.url));
 
@@ -47,4 +49,30 @@ export async function getDefaultComponentFixtures() {
         : (await readdir("test/fixtures/components", { withFileTypes: true }))
               .filter((f) => f.isFile() && f.name !== "dummy_reactor.component.wasm")
               .map((f) => f.name);
+}
+
+/** Check the values of a given stream (normally returned from a component) */
+export async function checkStreamValues(args) {
+    const { stream, vals, typeName, assertEqFn, partial } = args ?? {};
+    const expectedValues = args.expectedValues ?? [];
+
+    // Ensure the values produced match expected
+    const eq = assertEqFn ?? assert.equal;
+    let iteratorRes;
+    for (const [idx, v] of vals.entries()) {
+        const expected = expectedValues[idx] ?? v;
+        iteratorRes = await stream.next();
+        assert.isFalse(iteratorRes.done);
+        eq(iteratorRes.value, expected, `${typeName} [${idx}] read is incorrect`);
+    }
+
+    // If dealing with a partial list of values from the stream, do not attempt to read the last value
+    if (partial) {
+        return;
+    }
+
+    // Ensure the next value is undefined (and the iterator is done)
+    iteratorRes = await stream.next();
+    assert.isUndefined(iteratorRes.value);
+    assert.isTrue(iteratorRes.done);
 }

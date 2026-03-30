@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { suite, test, assert, beforeAll, beforeEach, afterAll, expect } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, checkStreamValues } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("stream<T> lifts", () => {
@@ -124,9 +124,9 @@ suite("stream<T> lifts", () => {
 
         let invalidVals = [-1, 256];
         for (const invalid of invalidVals) {
-            await expect(() =>
-                instance["jco:test-components/get-stream-async"].getStreamU8([invalid]),
-            ).rejects.toThrow(/invalid u8 value/);
+            await expect(() => instance["jco:test-components/get-stream-async"].getStreamU8([invalid])).rejects.toThrow(
+                /invalid u8 value/,
+            );
         }
 
         vals = [-11, -22, -33, -128, 127];
@@ -135,9 +135,9 @@ suite("stream<T> lifts", () => {
 
         invalidVals = [-129, 128];
         for (const invalid of invalidVals) {
-            await expect(() =>
-                instance["jco:test-components/get-stream-async"].getStreamS8([invalid]),
-            ).rejects.toThrow(/invalid s8 value/);
+            await expect(() => instance["jco:test-components/get-stream-async"].getStreamS8([invalid])).rejects.toThrow(
+                /invalid s8 value/,
+            );
         }
     });
 
@@ -291,6 +291,7 @@ suite("stream<T> lifts", () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListU8, AsyncFunction);
         let vals = [[0x01, 0x02, 0x03, 0x04, 0x05], new Uint8Array([0x05, 0x04, 0x03, 0x02, 0x01]), []];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamListU8(vals);
+
         await checkStreamValues({
             stream,
             vals,
@@ -304,6 +305,8 @@ suite("stream<T> lifts", () => {
             ],
         });
     });
+
+    // TODO(fix): add tests for optimized UintXArrays (js_array_ty)
 
     test.concurrent("list<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListString, AsyncFunction);
@@ -429,28 +432,3 @@ suite("stream<T> lifts", () => {
         assert.isUndefined(value);
     });
 });
-
-async function checkStreamValues(args) {
-    const { stream, vals, typeName, assertEqFn, partial } = args ?? {};
-    const expectedValues = args.expectedValues ?? [];
-
-    // Ensure the values produced match expected
-    const eq = assertEqFn ?? assert.equal;
-    let iteratorRes;
-    for (const [idx, v] of vals.entries()) {
-        const expected = expectedValues[idx] ?? v;
-        iteratorRes = await stream.next();
-        assert.isFalse(iteratorRes.done);
-        eq(iteratorRes.value, expected, `${typeName} [${idx}] read is incorrect`);
-    }
-
-    // If dealing with a partial list of values from the stream, do not attempt to read the last value
-    if (partial) {
-        return;
-    }
-
-    // Ensure the next value is undefined (and the iterator is done)
-    iteratorRes = await stream.next();
-    assert.isUndefined(iteratorRes.value);
-    assert.isTrue(iteratorRes.done);
-}

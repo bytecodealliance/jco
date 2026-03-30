@@ -24,11 +24,51 @@ impl use_stream_async::Guest for Component {
         rx
     }
 
+    async fn read_stream_values_bool(rx: StreamReader<bool>) -> Vec<bool> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_u8(rx: StreamReader<u8>) -> Vec<u8> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_s8(rx: StreamReader<i8>) -> Vec<i8> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_u16(rx: StreamReader<u16>) -> Vec<u16> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_s16(rx: StreamReader<i16>) -> Vec<i16> {
+        read_async_values(rx).await
+    }
+
     async fn read_stream_values_u32(rx: StreamReader<u32>) -> Vec<u32> {
         read_async_values(rx).await
     }
 
     async fn read_stream_values_s32(rx: StreamReader<i32>) -> Vec<i32> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_u64(rx: StreamReader<u64>) -> Vec<u64> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_s64(rx: StreamReader<i64>) -> Vec<i64> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_f32(rx: StreamReader<f32>) -> Vec<f32> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_f64(rx: StreamReader<f64>) -> Vec<f64> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_string(rx: StreamReader<String>) -> Vec<String> {
         read_async_values(rx).await
     }
 }

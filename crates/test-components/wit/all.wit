@@ -23,15 +23,7 @@ interface resources {
     }
 }
 
-interface get-stream-async {
-    use resources.{example-resource};
-
-    resource example-guest-resource {
-        constructor(id: u32);
-        get-id: func() -> u32;
-        get-id-async: async func() -> u32;
-    }
-
+interface example-types {
     variant example-variant {
         num(u32),
         str(string),
@@ -54,6 +46,17 @@ interface get-stream-async {
         first,
         second,
         third,
+    }
+}
+
+interface get-stream-async {
+    use resources.{example-resource};
+    use example-types.{example-variant, example-enum, example-record, example-flags};
+
+    resource example-guest-resource {
+        constructor(id: u32);
+        get-id: func() -> u32;
+        get-id-async: async func() -> u32;
     }
 
     get-stream-u32: async func(vals: list<u32>) -> result<stream<u32>, string>;
@@ -179,17 +182,68 @@ world basic-run-string {
 //////////////////
 
 interface use-stream-sync {
+          // TODO(fix): optimize host-only stream usage -- detect when the read & write are held by the host
     stream-passthrough: func(s: stream<u32>) -> stream<u32>;
 }
 
 interface use-stream-async {
+    // use resources.{example-resource};
+    use example-types.{example-variant, example-enum, example-record, example-flags};
+
     stream-passthrough: async func(s: stream<u32>) -> stream<u32>;
 
     read-stream-values-u32: async func(s: stream<u32>) -> list<u32>;
     read-stream-values-s32: async func(s: stream<s32>) -> list<s32>;
+
+    read-stream-values-u8: async func(s: stream<u8>) -> list<u8>;
+    read-stream-values-s8: async func(s: stream<s8>) -> list<s8>;
+
+    read-stream-values-u16: async func(s: stream<u16>) -> list<u16>;
+    read-stream-values-s16: async func(s: stream<s16>) -> list<s16>;
+
+    read-stream-values-u64: async func(s: stream<u64>) -> list<u64>;
+    read-stream-values-s64: async func(s: stream<s64>) -> list<s64>;
+
+    read-stream-values-f32: async func(s: stream<f32>) -> list<f32>;
+
+    read-stream-values-f64: async func(s: stream<f64>) -> list<f64>;
+
+    read-stream-values-bool: async func(s: stream<bool>) -> list<bool>;
+
+    read-stream-values-string: async func(s: stream<string>) -> list<string>;
+
+    // read-stream-values-record: async func(s: stream<example-record>) -> list<example-record>;
+
+    // read-stream-values-variant: async func(s: stream<example-variant>) -> list<example-variant>;
+
+    // read-stream-values-list-u8: async func(s: stream<list<u8>>) -> list<list<u8>>;
+    // read-stream-values-list-string: async func(s: stream<list<string>>) -> list<list<string>>;
+    // read-stream-values-list-record: async func(s: stream<list<example-record>>) -> list<list<example-record>>;
+    // read-stream-values-fixed-list-u32: async func(s: stream<list<list<u32, 5>>>) -> list<list<list<u32, 5>>>;
+
+    // read-stream-values-tuple: async func(s: stream<tuple<u32, s32, string>>) -> list<tuple<u32, s32, string>>;
+
+    // read-stream-values-flags: async func(s: stream<example-flags>) -> list<example-flags>;
+
+    // read-stream-values-enum: async func(s: stream<example-enum>) -> list<example-enum>;
+
+    // read-stream-values-option-string: async func(s: stream<option<string>>) -> list<option<string>>;
+
+    // read-stream-values-result-string: async func(s: stream<result<string, string>>) -> list<result<string, string>>;
+
+    // // NOTE: the check here will be whether the resources are disposed inside the component properly
+    // read-stream-values-example-resource-own: async func(s: stream<example-resource>);
+
+    // read-stream-values-example-resource-own-attr: async func(s: stream<example-resource>) -> list<u32>;
+
+    // read-stream-values-stream-string: async func(s: stream<stream<string>>) -> list<list<string>>;
+
+    //read-stream-values-future-string: async func(vals: list<future<string>>) -> result<stream<future<string>>, string>;
 }
 
 world stream-rx {
+    // import resources;
+ 
     export use-stream-sync;
     export use-stream-async;
 }

@@ -4,7 +4,7 @@ import { ReadableStream } from "node:stream/web";
 import { suite, test, assert, beforeAll, beforeEach, afterAll } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, checkStreamValues } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("stream<T> lowers", () => {
@@ -109,14 +109,39 @@ suite("stream<T> lowers", () => {
         assert.deepEqual(vals, returnedVals);
     });
 
-    test.skip("u32/s32", async () => {
+    test.concurrent("u32/s32", async () => {
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU32, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS32, AsyncFunction);
 
-        // TODO: same as async pass through test except we get the list back and can compare directly
+        let vals = [10, 5, 0];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesU32(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
 
-        // TODO:
-        // let vals = [11, 22, 33];
-        // let stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
+        vals = [-32, 90001, 3200000];
+        returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesS32(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
+    test.only("bool", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesBool, AsyncFunction);
+
+        let vals = [true, false];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesBool(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
     });
 });
+
+function createReadableStreamFromValues(vals) {
+    return new ReadableStream({
+        start(ctrl) {
+            vals.forEach((v) => ctrl.enqueue(v));
+            ctrl.close();
+        },
+    });
+}
