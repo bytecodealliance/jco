@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { suite, test, assert, beforeAll, beforeEach, afterAll } from "vitest";
+import { suite, test, assert, beforeAll, beforeEach, afterAll, expect } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
@@ -95,9 +95,23 @@ suite("stream<T> lifts", () => {
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU64(vals);
         await checkStreamValues({ stream, vals, typeName: "u64" });
 
+        let invalidVals = [-1n, 18446744073709551616n];
+        for (const invalid of invalidVals) {
+            await expect(() =>
+                instance["jco:test-components/get-stream-async"].getStreamU64([invalid]),
+            ).rejects.toThrow(/invalid u64 value/);
+        }
+
         vals = [-32_768n, 0n, 32_767n];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS64(vals);
         await checkStreamValues({ stream, vals, typeName: "s64" });
+
+        invalidVals = [-9223372036854775809n, 9223372036854775808n];
+        for (const invalid of invalidVals) {
+            await expect(() =>
+                instance["jco:test-components/get-stream-async"].getStreamS64([invalid]),
+            ).rejects.toThrow(/invalid s64 value/);
+        }
     });
 
     test.concurrent("u8/s8", async () => {
@@ -108,9 +122,23 @@ suite("stream<T> lifts", () => {
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU8(vals);
         await checkStreamValues({ stream, vals, typeName: "u8" });
 
-        vals = [-11, -22, -33, -128, 127, 128];
+        let invalidVals = [-1, 256];
+        for (const invalid of invalidVals) {
+            await expect(() =>
+                instance["jco:test-components/get-stream-async"].getStreamU8([invalid]),
+            ).rejects.toThrow(/invalid u8 value/);
+        }
+
+        vals = [-11, -22, -33, -128, 127];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS8(vals);
         await checkStreamValues({ stream, vals, typeName: "s8" });
+
+        invalidVals = [-129, 128];
+        for (const invalid of invalidVals) {
+            await expect(() =>
+                instance["jco:test-components/get-stream-async"].getStreamS8([invalid]),
+            ).rejects.toThrow(/invalid s8 value/);
+        }
     });
 
     test.concurrent("f32/f64", async () => {
@@ -324,7 +352,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, vals, typeName: "result<string>", assertEqFn: assert.deepEqual });
     });
 
-    test("example-resource", async () => {
+    test.concurrent("example-resource", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn, AsyncFunction);
         const disposeSymbol = Symbol.dispose || Symbol.for("dispose");
 
@@ -364,7 +392,7 @@ suite("stream<T> lifts", () => {
         }
     });
 
-    test("example-resource#get-id", async () => {
+    test.concurrent("example-resource#get-id", async () => {
         assert.instanceOf(
             instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwnAttr,
             AsyncFunction,
@@ -380,7 +408,7 @@ suite("stream<T> lifts", () => {
         });
     });
 
-    test("stream<string>", async () => {
+    test.concurrent("stream<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamStreamString, AsyncFunction);
         let vals = ["first", "third", "second"];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamStreamString(vals);
