@@ -1,6 +1,6 @@
 {
     "name": "@bytecodealliance/jco",
-    "version": "1.17.5",
+    "version": "1.17.6",
     "description": "JavaScript tooling for working with WebAssembly Components",
     "keywords": [
         "Component",

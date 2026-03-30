@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.17.6] - 2026-03-30
+
+### 🧪 Testing
+
+- _(jco)_ enable nested stream test by @vados-cosmonic in #1340
+
+- _(jco)_ use drop in resoruce lift by @vados-cosmonic in #1339
+
+- _(jco)_ avoid recursive re-entrancy by @vados-cosmonic
+
+- _(jco)_ enable resource test, start fixing owned stream lift test by @vados-cosmonic
+
 ## [1.17.5] - 2026-03-24
 
 ### 🧪 Testing
