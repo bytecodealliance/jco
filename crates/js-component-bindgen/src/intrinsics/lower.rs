@@ -542,14 +542,17 @@ impl LowerIntrinsic {
 
                             ctx.resultPtr = originalPtr + payloadOffset32;
 
-                            const payloadBytesWritten = lowerFn({{
-                                memory,
-                                realloc,
-                                vals: [val],
-                                storagePtr,
-                                storageLen,
-                                componentIdx,
-                            }});
+                            let payloadBytesWritten = 0;
+                            if (lowerFn) {{
+                                lowerFn({{
+                                    memory,
+                                    realloc,
+                                    vals: [val],
+                                    storagePtr,
+                                    storageLen,
+                                    componentIdx,
+                                }});
+                            }}
                             let bytesWritten = payloadOffset + payloadBytesWritten;
 
                             const rem = ctx.storagePtr % align32;

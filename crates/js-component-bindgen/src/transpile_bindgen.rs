@@ -1202,12 +1202,12 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     r#"
-                    const trampoline{i} = {waitable_set_wait_fn}.bind(null, {{
+                    const trampoline{i} = new WebAssembly.Suspending({waitable_set_wait_fn}.bind(null, {{
                         componentIdx: {instance_idx},
                         isAsync: {async_},
                         memoryIdx: {memory_idx},
                         getMemoryFn: () => memory{memory_idx},
-                    }});
+                    }}));
                     "#,
                 );
             }

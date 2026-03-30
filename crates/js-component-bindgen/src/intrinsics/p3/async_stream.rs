@@ -1140,7 +1140,7 @@ impl AsyncStreamIntrinsic {
                     r#"
                     class {host_stream_class_name} {{
                         #componentIdx;
-                        #streamEndIdx;
+                        #streamEndWaitableIdx;
                         #streamTableIdx;
 
                         #payloadLiftFn;
@@ -1162,13 +1162,15 @@ impl AsyncStreamIntrinsic {
                             if (!args.payloadLowerFn) {{ throw new TypeError("missing payload lower fn"); }}
                             this.#payloadLowerFn = args.payloadLowerFn;
 
-                            if (args.streamEndIdx === undefined) {{ throw new Error("missing stream idx"); }}
+                            if (args.streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx"); }}
                             if (args.streamTableIdx === undefined) {{ throw new Error("missing stream table idx"); }}
-                            this.#streamEndIdx = args.streamEndIdx;
+                            this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
                             this.#streamTableIdx = args.streamTableIdx;
 
                             this.#isUnitStream = args.isUnitStream;
                         }}
+
+                        setRep(r) {{ this.#rep = r; }}
 
                         createUserStream(args) {{
                            if (this.#userStream) {{ return this.#userStream; }}
@@ -1177,9 +1179,9 @@ impl AsyncStreamIntrinsic {
                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
-                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndIdx: this.#streamEndIdx }});
+                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndWaitableIdx: this.#streamEndWaitableIdx }});
                            if (!streamEnd) {{
-                               throw new Error(`missing stream [${{this.#streamEndIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
+                               throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
 
                             return new {external_stream_class}({{
@@ -1366,7 +1368,7 @@ impl AsyncStreamIntrinsic {
                         {debug_log_fn}('[{stream_new_from_lift_fn}()] args', {{ ctx }});
                         const {{
                             componentIdx,
-                            streamEndIdx,
+                            streamEndWaitableIdx,
                             streamTableIdx,
                             payloadLiftFn,
                             payloadTypeSize32,
@@ -1376,7 +1378,7 @@ impl AsyncStreamIntrinsic {
 
                         const stream = new {host_stream_class}({{
                             componentIdx,
-                            streamEndIdx,
+                            streamEndWaitableIdx,
                             streamTableIdx,
                             payloadLiftFn: payloadLiftFn,
                             payloadLowerFn: payloadLowerFn,
