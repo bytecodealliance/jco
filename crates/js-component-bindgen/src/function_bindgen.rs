@@ -2489,7 +2489,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         "null".into(),
                         "() => {{ throw new Error('no lift fn'); }}",
                         "() => {{ throw new Error('no lower fn'); }}",
-                        "true".into(),
+                        "true",
                         "false".into(),
                         "false".into(),
                         "false".into(),
