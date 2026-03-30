@@ -344,8 +344,6 @@ impl LowerIntrinsic {
                             throw new Error('invalid value for core value representing s32');
                         }}
 
-                        console.log("DOING FLAT LOWER", {{ ctx }});
-
                         // TODO(refactor): fail loudly on misaligned flat lowers?
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
@@ -757,6 +755,7 @@ impl LowerIntrinsic {
 
             Self::LowerFlatStream => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_flat_stream_fn = self.name();
                 let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
                 let external_stream_class = AsyncStreamIntrinsic::ExternalStreamClass.name();
                 let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
@@ -768,8 +767,9 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(
                     r#"
-                    function _lowerFlatStream(streamTableIdx, ctx) {{
-                        {debug_log_fn}('[_lowerFlatStream()] args', {{ streamTableIdx, ctx }});
+                    function {lower_flat_stream_fn}(streamTableIdx, ctx) {{
+                        {debug_log_fn}('[{lower_flat_stream_fn}()] args', {{ streamTableIdx, ctx }});
+
                         const {{
                             memory,
                             realloc,

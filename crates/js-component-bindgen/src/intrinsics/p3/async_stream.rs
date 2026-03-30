@@ -1296,14 +1296,17 @@ impl AsyncStreamIntrinsic {
 
                         setRep(rep) {{ this.#rep = rep; }}
 
-                        createUserStream(args) {{
+                        createUserStream() {{
                            if (this.#userStream) {{ return this.#userStream; }}
                            if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host stream"); }}
 
                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
-                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamEndWaitableIdx: this.#streamEndWaitableIdx }});
+                           const streamEnd = cstate.getStreamEnd({{
+                               tableIdx: this.#streamTableIdx,
+                               streamEndWaitableIdx: this.#streamEndWaitableIdx
+                           }});
                            if (!streamEnd) {{
                                throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}

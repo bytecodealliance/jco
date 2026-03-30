@@ -2634,39 +2634,48 @@ impl Bindgen for FunctionBindgen<'_> {
                     assert_eq!(Some(*ty), **payload, "stream element type mismatch");
                 }
 
-                let arg_stream_end_idx = operands
-                    .first()
-                    .expect("unexpectedly missing stream table idx arg in StreamLift");
-
-                let (payload_ty_size32_js, payload_ty_align32_js) =
-                    if let Some(payload_ty) = payload {
-                        (
-                            self.sizes.size(payload_ty).size_wasm32().to_string(),
-                            self.sizes.align(payload_ty).align_wasm32().to_string(),
-                        )
-                    } else {
-                        ("null".into(), "null".into())
-                    };
-
-                let stream_table_idx = stream_table_idx_ty.as_u32();
-                let is_unit_stream = payload.is_none();
-
                 let tmp = self.tmp();
                 let result_var = format!("streamResult{tmp}");
-                uwriteln!(
-                    self.src,
-                    "
-                    const {result_var} = {stream_new_from_lift_fn}({{
-                        componentIdx: {component_idx},
-                        streamTableIdx: {stream_table_idx},
-                        streamEndWaitableIdx: {arg_stream_end_idx},
-                        payloadLiftFn: {lift_fn_js},
-                        payloadLowerFn: {lower_fn_js},
-                        payloadTypeSize32: {payload_ty_size32_js},
-                        payloadTypeAlign32: {payload_ty_align32_js},
-                        isUnitStream: {is_unit_stream},
-                    }});",
-                );
+
+                // We only need to attempt to do an immediate lift in non-async cases,
+                // as the return of the function execution ('above' in the code)
+                // will be the stream idx
+                if !self.is_async {
+                    // If we're dealing with a sync function, we can use the return directly
+                    let arg_stream_end_idx = operands
+                        .first()
+                        .expect("unexpectedly missing stream end return arg in StreamLift");
+
+                    let (payload_ty_size32_js, payload_ty_align32_js) =
+                        if let Some(payload_ty) = payload {
+                            (
+                                self.sizes.size(payload_ty).size_wasm32().to_string(),
+                                self.sizes.align(payload_ty).align_wasm32().to_string(),
+                            )
+                        } else {
+                            ("null".into(), "null".into())
+                        };
+
+                    let stream_table_idx = stream_table_idx_ty.as_u32();
+                    let is_unit_stream = payload.is_none();
+
+                    uwriteln!(
+                        self.src,
+                        "
+                        const {result_var} = {stream_new_from_lift_fn}({{
+                            componentIdx: {component_idx},
+                            streamTableIdx: {stream_table_idx},
+                            streamEndWaitableIdx: {arg_stream_end_idx},
+                            payloadLiftFn: {lift_fn_js},
+                            payloadLowerFn: {lower_fn_js},
+                            payloadTypeSize32: {payload_ty_size32_js},
+                            payloadTypeAlign32: {payload_ty_align32_js},
+                            isUnitStream: {is_unit_stream},
+                        }});",
+                    );
+                }
+
+                // TODO(fix): in the async case we return an uninitialized var, which should not be necessary
                 results.push(result_var.clone());
             }
 
