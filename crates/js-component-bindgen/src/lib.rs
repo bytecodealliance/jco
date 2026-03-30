@@ -128,17 +128,14 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
     // This does not require the correct execution of the related features post-transpilation,
     // but without the right features specified, components won't load at all.
     let mut validator = wasmtime_environ::wasmparser::Validator::new_with_features(
-        WasmFeatures::WASM2
+        WasmFeatures::WASM3
+            | WasmFeatures::WIDE_ARITHMETIC
             | WasmFeatures::COMPONENT_MODEL
             | WasmFeatures::CM_ASYNC
             | WasmFeatures::CM_ASYNC_BUILTINS
             | WasmFeatures::CM_ASYNC_STACKFUL
             | WasmFeatures::CM_ERROR_CONTEXT
-            | WasmFeatures::CM_FIXED_SIZE_LIST
-            | WasmFeatures::EXCEPTIONS
-            | WasmFeatures::EXTENDED_CONST
-            | WasmFeatures::MEMORY64
-            | WasmFeatures::MULTI_MEMORY,
+            | WasmFeatures::CM_FIXED_SIZE_LIST,
     );
 
     let mut types = ComponentTypesBuilder::new(&validator);
