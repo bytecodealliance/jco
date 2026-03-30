@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.16.5] - 2026-03-30
+
+### 🚀 Features
+
+- _(bindgen)_ configure wasmparser for wasm 3.0 support by @vados-cosmonic in #1348
+
+- _(bindgen)_ add drop for external stream class by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ generate ancillary type generation for functions by @vados-cosmonic
+
+- _(bindgen)_ bindgen runtime bugs by @vados-cosmonic in #1347
+
+- _(bindgen)_ flat stream lift for nested streams by @vados-cosmonic
+
+- _(bindgen)_ allow for imported resources to be lifted out by @vados-cosmonic
+
+- _(bindgen)_ more gracefully handle missing type data by @vados-cosmonic
+
+- _(bindgen)_ add remaining stream lift tests by @vados-cosmonic
+
+
+
+
 ## [1.16.4] - 2026-03-24
 
 ### 🐛 Bug Fixes
