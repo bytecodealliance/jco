@@ -179,14 +179,14 @@ world basic-run-string {
 //////////////////
 
 interface use-stream-sync {
-    stream-passthrough: func(s:stream<u32>) -> stream<u32>;
+    stream-passthrough: func(s: stream<u32>) -> stream<u32>;
 }
 
 interface use-stream-async {
-    stream-passthrough: async func(s:stream<u32>) -> stream<u32>;
+    stream-passthrough: async func(s: stream<u32>) -> stream<u32>;
 
-    read-stream-values-u32: async func(s:stream<u32>) -> list<u32>;
-    read-stream-values-s32: async func(s:stream<s32>) -> list<s32>;
+    read-stream-values-u32: async func(s: stream<u32>) -> list<u32>;
+    read-stream-values-s32: async func(s: stream<s32>) -> list<s32>;
 }
 
 world stream-rx {
