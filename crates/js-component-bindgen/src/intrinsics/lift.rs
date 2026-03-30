@@ -263,8 +263,8 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 1) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (bool requires 1 byte)`);
                         }}
 
                         val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true) === 1;
@@ -292,9 +292,10 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 1) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (s8 requires 1 byte)`);
                         }}
+
                         val = new DataView(ctx.memory.buffer).getInt8(ctx.storagePtr, true);
                         ctx.storagePtr += 1;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 1; }}
@@ -319,8 +320,8 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 1) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (u8 requires 1 byte)`);
                         }}
 
                         val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true);
@@ -345,14 +346,16 @@ impl LiftIntrinsic {
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 2) {{
-                                throw new Error('not enough storage remaining for lift');
-                            }}
-                            val = new DataView(ctx.memory.buffer).getInt16(ctx.storagePtr, true);
-                            ctx.storagePtr += 2;
-                            if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 2; }}
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 2) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (s16 requires 2 bytes)`);
+                        }}
+
+                        val = new DataView(ctx.memory.buffer).getInt16(ctx.storagePtr, true);
+                        ctx.storagePtr += 2;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 2; }}
 
                         return [val, ctx];
                     }}
@@ -374,8 +377,8 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 2) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 2) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (u16 requires 2 bytes)`);
                         }}
 
                         val = new DataView(ctx.memory.buffer).getUint16(ctx.storagePtr, true);
@@ -406,9 +409,10 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 4) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (s32 requires 4 bytes)`);
                         }}
+
                         val = new DataView(ctx.memory.buffer).getInt32(ctx.storagePtr, true);
                         ctx.storagePtr += 4;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
@@ -433,8 +437,8 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 4) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (u32 requires 4 bytes)`);
                         }}
                         val = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
                         ctx.storagePtr += 4;
@@ -461,9 +465,11 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
-                            throw new Error('not enough storage remaining for lift');
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 8) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (s64 requires 8 bytes)`);
                         }}
+
                         val = new DataView(ctx.memory.buffer).getBigInt64(ctx.storagePtr, true);
                         ctx.storagePtr += 8;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
@@ -489,9 +495,10 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 8) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (u64 requires 8 bytes)`);
                         }}
+
                         val = new DataView(ctx.memory.buffer).getBigUint64(ctx.storagePtr, true);
                         ctx.storagePtr += 8;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
@@ -516,9 +523,10 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 4) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (f32 requires 4 bytes)`);
                         }}
+
                         val = new DataView(ctx.memory.buffer).getFloat32(ctx.storagePtr, true);
 
                         ctx.storagePtr += 4;
@@ -544,9 +552,10 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 8) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (f64 requires 8 bytes)`);
                         }}
+
                         val = new DataView(ctx.memory.buffer).getFloat64(ctx.storagePtr, true);
                         ctx.storagePtr += 8;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
@@ -572,9 +581,10 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
-                            throw new Error('not enough storage remaining for lift');
+                        if (ctx.storageLen !== undefined && ctx.storageLen < 4) {{
+                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (char requires 4 bytes)`);
                         }}
+
                         val = {i32_to_char_fn}(new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true));
                         ctx.storagePtr += 4;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
@@ -769,7 +779,7 @@ impl LiftIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {lift_flat_list_fn}(meta) {{
-                        const {{ elemLiftFn, align32, knownLen }} = meta;
+                        const {{ elemLiftFn, size32, align32, knownLen }} = meta;
 
                         const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {{
                             ctx.storagePtr = dataPtr;
@@ -790,20 +800,20 @@ impl LiftIntrinsic {
                             {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
 
                             let liftResults;
-                            if (knownLen) {{ // list with known length
+                            if (knownLen !== undefined) {{ // list with known length
 
                                 if (ctx.useDirectParams) {{
                                     // list with known length w/ direct params
                                     const dataPtr = ctx.params[0];
                                     ctx.params = ctx.params.slice(1);
 
-                                    // TODO: is it possible for all values to come in from params?
+                                    // TODO(???): is it possible for all values to come in from params?
 
                                     ctx.useDirectParams = false;
                                     const originalPtr = ctx.storagePtr;
-                                    ctx.storageLen = 8;
+                                    ctx.storageLen = knownLen * size32;
 
-                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, knownLen);
 
                                     ctx.useDirectParams = true;
                                     ctx.storagePtr = null;
@@ -823,7 +833,7 @@ impl LiftIntrinsic {
 
                                     ctx.useDirectParams = false;
                                     const originalPtr = ctx.storagePtr;
-                                    ctx.storageLen = 8;
+                                    ctx.storageLen = len * size32;
 
                                     liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
 

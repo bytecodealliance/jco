@@ -631,16 +631,17 @@ impl Intrinsic {
                                     if (this.#elemMeta.stringEncoding === undefined) {{
                                         throw new Error('string encoding unknown during write');
                                     }}
-                                    for (const v of values) {{
-                                        startPtr += this.#elemMeta.lowerFn({{
-                                            memory: this.#memory,
-                                            storagePtr: startPtr,
-                                            componentIdx: this.#componentIdx,
-                                            stringEncoding: this.#elemMeta.stringEncoding,
-                                            vals: [v],
-                                        }});
+
+                                    const lowerCtx = {{
+                                        memory: this.#memory,
+                                        storagePtr: startPtr,
+                                        componentIdx: this.#componentIdx,
+                                        stringEncoding: this.#elemMeta.stringEncoding,
+                                        vals: [v],
                                     }}
-                                    this.#ptr = startPtr;
+                                    for (const v of values) {{ this.#elemMeta.lowerFn(lowerCtx); }}
+
+                                    this.#ptr = lowerCtx.storagePtr;
                                 }}
                             }}
 

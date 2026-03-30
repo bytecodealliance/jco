@@ -4905,6 +4905,9 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
             let stream_ty_idx = table_ty.ty;
             let stream_ty = &component_types[stream_ty_idx];
             let payload = stream_ty.payload;
+
+            // TODO(fix): payload u8 should be special cased here
+
             let (is_borrowed, is_none_type_js, is_numeric_type_js) = match payload {
                 None => (false, true, false),
                 Some(t) => (
