@@ -570,7 +570,7 @@ jobs:
 
       - name: Install wac
         if: ${{ matrix.project.is-composed }}
-        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        uses: jaxxstorm/action-install-gh-release@25e24d2d23ae098373794ef1d6faecb48ee52da8 # v3.0.0
         with:
           repo: bytecodealliance/wac
           tag: v${{ matrix.wac.version }}
