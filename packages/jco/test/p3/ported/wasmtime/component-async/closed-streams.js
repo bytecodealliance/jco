@@ -34,8 +34,8 @@ suite.skip("closed streams scenario", () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
-                    }
-                }
+                    },
+                },
             });
             cleanup = rest.cleanup;
 
@@ -45,9 +45,10 @@ suite.skip("closed streams scenario", () => {
             //     - send all values down the stream
             //     - call the read_stream guest export (local:local/closed#read-stream), w/ values
             // TODO: Wait for both to complete
-
         } finally {
-            if (cleanup) { await cleanup(); }
+            if (cleanup) {
+                await cleanup();
+            }
         }
     });
 });

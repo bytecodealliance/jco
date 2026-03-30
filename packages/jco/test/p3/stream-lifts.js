@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { suite, test, assert, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
+import { suite, test, assert, beforeAll, beforeEach, afterAll } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
@@ -178,8 +178,8 @@ suite("stream<T> lifts", () => {
             vals: [
                 // TODO: wit type representation smoothing mismatch,
                 // non-nullable option<t> values are *not* wrapped as objects
-                { tag: "maybe-bool", val: { tag: "some", val: 123 }},
-                { tag: "maybe-bool", val: { tag: "none"}},
+                { tag: "maybe-bool", val: { tag: "some", val: 123 } },
+                { tag: "maybe-bool", val: { tag: "none" } },
             ],
             partial: true,
             typeName: "variant<maybe-bool>",
@@ -192,10 +192,12 @@ suite("stream<T> lifts", () => {
             vals: vals.slice(2, 3),
             typeName: "variant<float>",
             partial: true,
-            assertEqFn: (value, expected) => {{
-                assert.equal(value.tag, expected.tag);
-                assert.closeTo(value.val, expected.val, 0.00001);
-            }},
+            assertEqFn: (value, expected) => {
+                {
+                    assert.equal(value.tag, expected.tag);
+                    assert.closeTo(value.val, expected.val, 0.00001);
+                }
+            },
         });
 
         // Check rest of values
@@ -410,7 +412,9 @@ async function checkStreamValues(args) {
     }
 
     // If dealing with a partial list of values from the stream, do not attempt to read the last value
-    if (partial)  { return; }
+    if (partial) {
+        return;
+    }
 
     // Ensure the next value is undefined (and the iterator is done)
     iteratorRes = await stream.next();

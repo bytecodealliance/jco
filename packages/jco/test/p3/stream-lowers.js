@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { ReadableStream } from "node:stream/web";
 
-import { suite, test, assert, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
+import { suite, test, assert, beforeAll, beforeEach, afterAll } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
@@ -48,9 +48,9 @@ suite("stream<T> lowers", () => {
         let vals = [0, 5, 10];
         const readerStream = new ReadableStream({
             start(ctrl) {
-                vals.forEach(v => ctrl.enqueue(v));
+                vals.forEach((v) => ctrl.enqueue(v));
                 ctrl.close();
-            }
+            },
         });
 
         let returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(readerStream);
@@ -71,11 +71,13 @@ suite("stream<T> lowers", () => {
                 let returned = 0;
                 return {
                     async next() {
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                        if (returned === 2) { return { value: 42, done: true }; }
+                        await new Promise((resolve) => setTimeout(resolve, 300));
+                        if (returned === 2) {
+                            return { value: 42, done: true };
+                        }
                         returned += 1;
                         return { value: 42, done: false };
-                    }
+                    },
                 };
             },
         };
@@ -85,7 +87,7 @@ suite("stream<T> lowers", () => {
         for await (const v of returnedStream) {
             returnedVals.push(v);
         }
-        assert.deepEqual([42,42,42], returnedVals);
+        assert.deepEqual([42, 42, 42], returnedVals);
     });
 
     test.concurrent("async passthrough", async () => {
@@ -102,6 +104,5 @@ suite("stream<T> lowers", () => {
         // TODO:
         // let vals = [11, 22, 33];
         // let stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
-
     });
 });

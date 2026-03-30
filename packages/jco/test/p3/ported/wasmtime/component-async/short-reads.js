@@ -1,9 +1,8 @@
 import { join } from "node:path";
 
-import { assert, suite, test, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { suite, test } from "vitest";
 
 import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from "./common.js";
-import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
@@ -20,10 +19,10 @@ suite.skip("short reads scenario", () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
-                    }
-                }
+                    },
+                },
             });
-            const instance = res.instance;
+            // const instance = res.instance;
             cleanup = res.cleanup;
 
             // TODO: get Thing class from instance
@@ -37,7 +36,6 @@ suite.skip("short reads scenario", () => {
             // TODO: Get all values out of the things
 
             // TODO: compare with the strings array (order matters)
-
         } finally {
             if (cleanup) {
                 await cleanup();

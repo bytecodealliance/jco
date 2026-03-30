@@ -29,7 +29,6 @@ suite.skip("inter-task communications scenario", () => {
 
             await instance["local:local/run"].run();
             await instance["local:local/run"].run();
-
         } finally {
             if (cleanup) {
                 await cleanup();

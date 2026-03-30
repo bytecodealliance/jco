@@ -19,8 +19,8 @@ suite("closed stream scenario", () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
-                    }
-                }
+                    },
+                },
             });
             const instance = res.instance;
             cleanup = res.cleanup;
@@ -28,7 +28,6 @@ suite("closed stream scenario", () => {
             const stream = instance["local:local/closed-stream"].get();
             const v = await stream.next();
             assert.strictEqual(v, undefined);
-
         } finally {
             if (cleanup) {
                 await cleanup();

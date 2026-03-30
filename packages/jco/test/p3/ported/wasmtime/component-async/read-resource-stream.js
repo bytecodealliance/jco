@@ -16,7 +16,7 @@ suite("read resource stream", () => {
             foo() {}
         }
 
-        const name = 'async-read-resource-stream';
+        const name = "async-read-resource-stream";
         const { esModule, cleanup } = await setupAsyncTest({
             asyncMode: "jspi",
             component: {
