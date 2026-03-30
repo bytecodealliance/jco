@@ -34,6 +34,12 @@ pub enum ConversionIntrinsic {
     ToUint8,
 
     ToResultString,
+
+    /// Function that requires validity of various numeric primitive types (or throws a `TypeError`)
+    RequireValidNumericPrimitive,
+
+    /// Function that checks validity of various numeric primitive types
+    IsValidNumericPrimitive,
 }
 
 impl ConversionIntrinsic {
@@ -61,6 +67,8 @@ impl ConversionIntrinsic {
             "toUint64",
             "toUint64",
             "toUint8",
+            Self::RequireValidNumericPrimitive.name(),
+            Self::IsValidNumericPrimitive.name(),
         ]
     }
 
@@ -82,6 +90,8 @@ impl ConversionIntrinsic {
             Self::I64ToF64 => "i64ToF64",
             Self::F32ToI32 => "f32ToI32",
             Self::F64ToI64 => "f64ToI64",
+            Self::RequireValidNumericPrimitive => "_requireValidNumericPrimitive",
+            Self::IsValidNumericPrimitive => "_isValidNumericPrimitive",
         }
     }
 
@@ -197,6 +207,60 @@ impl ConversionIntrinsic {
                         return String.fromCharCode(n);
                     }
                 ");
+            }
+
+            Self::RequireValidNumericPrimitive => {
+                let name = self.name();
+                let is_valid_numeric_primitive_fn = Self::IsValidNumericPrimitive.name();
+
+                output.push_str(&format!(r#"
+                    function {name}(ty, v) {{
+                        if (v === undefined  || v === null || !{is_valid_numeric_primitive_fn}(ty, v)) {{
+                            throw new TypeError(`invalid ${{ty}} value [${{v}}]`);
+                        }}
+                        return true;
+                    }}
+                "#))
+            }
+
+            Self::IsValidNumericPrimitive => {
+                let name = self.name();
+                output.push_str(&format!(r#"
+                    function {name}(ty, v) {{
+                        if (v === undefined || v === null) {{ return false; }}
+                        switch (ty) {{
+                            case 'bool':
+                                return v === 0 || v === 1;
+                                break;
+                            case 'u8':
+                                return v >= 0 && v <= 255;
+                                break;
+                            case 's8':
+                                return v >= -128 && v <= 127;
+                                break;
+                            case 'u16':
+                                return v >= 0 && v <= 65535;
+                                break;
+                            case 's16':
+                                return v >= -32768 && v <= 32767;
+                            case 'u32':
+                                return v >= 0 && v <= 4_294_967_295;
+                            case 's32':
+                                return v >= -2_147_483_648 && v <= 2_147_483_647;
+                            case 'u64':
+                                return typeof v === 'bigint' && v >= 0 && v <= 18_446_744_073_709_551_615n;
+                            case 's64':
+                                return typeof v === 'bigint' && v >= -9223372036854775808n && v <= 9223372036854775807n;
+                                break;
+                            case 'f32':
+                            case 'f64': return typeof v === 'number';
+                            default:
+                                return false;
+                        }}
+                        return true;
+                    }}
+               "#
+                ));
             }
 
         }

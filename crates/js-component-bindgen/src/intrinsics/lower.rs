@@ -331,7 +331,8 @@ impl LowerIntrinsic {
             Self::LowerFlatS32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_s32_fn = self.name();
-                output.push_str(&format!("
+
+                output.push_str(&format!(r#"
                     function {lower_flat_s32_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_s32_fn}()] args', {{ ctx }});
                         const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
@@ -339,7 +340,11 @@ impl LowerIntrinsic {
                         if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
-                        if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{ throw new Error('invalid value for core value representing s32'); }}
+                        if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{
+                            throw new Error('invalid value for core value representing s32');
+                        }}
+
+                        console.log("DOING FLAT LOWER", {{ ctx }});
 
                         // TODO(refactor): fail loudly on misaligned flat lowers?
                         const rem = ctx.storagePtr % 4;
@@ -347,10 +352,8 @@ impl LowerIntrinsic {
 
                         new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
                         return 4;
-
-
                     }}
-                "));
+                "#));
             }
 
             // TODO(fix) can u32s be lowered indirectly? maybe never?

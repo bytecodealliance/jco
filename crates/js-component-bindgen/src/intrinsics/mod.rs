@@ -1062,7 +1062,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 34] = [
+const EARLY_INTRINSICS: [Intrinsic; 36] = [
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
     Intrinsic::SymbolAsyncIterator,
@@ -1081,10 +1081,14 @@ const EARLY_INTRINSICS: [Intrinsic; 34] = [
     Intrinsic::RepTableClass,
     Intrinsic::CoinFlip,
     Intrinsic::ScopeId,
+    // Type checking helpers
     Intrinsic::ConstantI32Min,
     Intrinsic::ConstantI32Max,
+    Intrinsic::Conversion(ConversionIntrinsic::IsValidNumericPrimitive),
+    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
     Intrinsic::TypeCheckValidI32,
     Intrinsic::TypeCheckAsyncFn,
+    // Async helpers
     Intrinsic::AsyncFunctionCtor,
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
@@ -1092,10 +1096,13 @@ const EARLY_INTRINSICS: [Intrinsic; 34] = [
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
+    // Host helpers
     Intrinsic::Host(HostIntrinsic::PrepareCall),
     Intrinsic::Host(HostIntrinsic::AsyncStartCall),
     Intrinsic::Host(HostIntrinsic::SyncStartCall),
+    // Waitable helpers
     Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
+    // Error context helpers
     Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap),
 ];
 
