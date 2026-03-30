@@ -384,9 +384,9 @@ suite("stream<T> lifts", () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamStreamString, AsyncFunction);
         let vals = ["first", "third", "second"];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamStreamString(vals);
-        for (const [idx, v] of vals.entries()) {
+        for (const v of vals) {
             const { value: nestedStream, done } = await stream.next();
-            assert.strictEqual(done, idx === vals.length - 1);
+            assert.isFalse(done);
             let nestedRes = await nestedStream.next();
             assert.isFalse(nestedRes.done);
             assert.strictEqual(nestedRes.value, v);
@@ -394,6 +394,11 @@ suite("stream<T> lifts", () => {
             assert.isTrue(nestedRes.done);
             assert.isUndefined(nestedRes.value);
         }
+
+        // The stream should be done after expected streams are produced
+        const { value, done } = await stream.next();
+        assert.isTrue(done);
+        assert.isUndefined(value);
     });
 });
 
