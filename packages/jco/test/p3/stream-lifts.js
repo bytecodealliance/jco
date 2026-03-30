@@ -110,11 +110,7 @@ suite("stream<T> lifts", () => {
 
         vals = [-11, -22, -33, -128, 127, 128];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS8(vals);
-        assert.equal(vals[0], await stream.next());
-        assert.equal(vals[1], await stream.next());
-        assert.equal(vals[2], await stream.next());
-        assert.equal(vals[3], await stream.next());
-        assert.equal(vals[4], await stream.next());
+        await checkStreamValues({ stream, vals, typeName: "s8" });
     });
 
     test.concurrent("f32/f64", async () => {
@@ -123,21 +119,25 @@ suite("stream<T> lifts", () => {
 
         let vals = [-300.01235, -1.5, -0.0, 0.0, 1.5, 300.01235];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamF32(vals);
-        assert.closeTo(vals[0], await stream.next(), 0.00001);
-        assert.closeTo(vals[1], await stream.next(), 0.00001);
-        assert.closeTo(vals[2], await stream.next(), 0.00001);
-        assert.closeTo(vals[3], await stream.next(), 0.00001);
-        assert.closeTo(vals[4], await stream.next(), 0.00001);
-        assert.closeTo(vals[5], await stream.next(), 0.00001);
+        await checkStreamValues({
+            stream,
+            vals,
+            typeName: "f32",
+            assertEqFn: (value, expected) => {
+                assert.closeTo(value, expected, 0.00001);
+            },
+        });
 
         vals = [-300.01235, -1.5, -0.0, 0.0, 1.5, -300.01235];
         stream = await instance["jco:test-components/get-stream-async"].getStreamF64(vals);
-        assert.closeTo(vals[0], await stream.next(), 0.00001);
-        assert.closeTo(vals[1], await stream.next(), 0.00001);
-        assert.closeTo(vals[2], await stream.next(), 0.00001);
-        assert.closeTo(vals[3], await stream.next(), 0.00001);
-        assert.closeTo(vals[4], await stream.next(), 0.00001);
-        assert.closeTo(vals[5], await stream.next(), 0.00001);
+        await checkStreamValues({
+            stream,
+            vals,
+            typeName: "f64",
+            assertEqFn: (value, expected) => {
+                assert.closeTo(value, expected, 0.00001);
+            },
+        });
     });
 
     test.concurrent("string", async () => {
@@ -164,20 +164,47 @@ suite("stream<T> lifts", () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariant, AsyncFunction);
 
         const vals = [
-            { tag: "maybe-bool", val: 123 }, // NOTE: non-nullable option<t> values are *not* wrapped as objects
+            { tag: "maybe-bool", val: 123 },
             { tag: "maybe-bool", val: null },
             { tag: "float", val: 123.1 },
             { tag: "str", val: "string-value" },
             { tag: "num", val: 1 },
         ];
         const stream = await instance["jco:test-components/get-stream-async"].getStreamVariant(vals);
-        assert.deepEqual(await stream.next(), { tag: "maybe-bool", val: { tag: "some", val: 123 } });
-        assert.deepEqual(await stream.next(), { tag: "maybe-bool", val: { tag: "none" } });
-        const floatMember = await stream.next();
-        assert.equal(floatMember.tag, "float");
-        assert.closeTo(floatMember.val, 123.1, 0.00001);
-        assert.deepEqual(await stream.next(), vals[3]);
-        assert.deepEqual(await stream.next(), vals[4]);
+
+        // Ensure first two values match
+        await checkStreamValues({
+            stream,
+            vals: [
+                // TODO: wit type representation smoothing mismatch,
+                // non-nullable option<t> values are *not* wrapped as objects
+                { tag: "maybe-bool", val: { tag: "some", val: 123 }},
+                { tag: "maybe-bool", val: { tag: "none"}},
+            ],
+            partial: true,
+            typeName: "variant<maybe-bool>",
+            assertEqFn: assert.deepEqual,
+        });
+
+        // Check float member
+        await checkStreamValues({
+            stream,
+            vals: vals.slice(2, 3),
+            typeName: "variant<float>",
+            partial: true,
+            assertEqFn: (value, expected) => {{
+                assert.equal(value.tag, expected.tag);
+                assert.closeTo(value.val, expected.val, 0.00001);
+            }},
+        });
+
+        // Check rest of values
+        await checkStreamValues({
+            stream,
+            vals: vals.slice(3),
+            typeName: "variant<rest>",
+            assertEqFn: assert.deepEqual,
+        });
     });
 
     test.concurrent("tuple", async () => {
@@ -303,12 +330,17 @@ suite("stream<T> lifts", () => {
         let stream = await instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn(vals);
         const resources = [];
         for (const expectedResourceId of vals) {
-            const resource = await stream.next();
+            const { value: resource, done } = await stream.next();
+            assert.isFalse(done);
             assert.isNotNull(resource);
             assert.instanceOf(resource, instance["jco:test-components/get-stream-async"].ExampleGuestResource);
             assert.strictEqual(resource.getId(), expectedResourceId);
             resources.push(resource);
         }
+
+        const finished = await stream.next();
+        assert.isTrue(finished.done);
+        assert.isUndefined(finished.value);
 
         // NOTE: we have to pull all objects out of the stream and drop the stream,
         // *before* attempting to call async functions on the resources, to avoid
@@ -350,22 +382,38 @@ suite("stream<T> lifts", () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamStreamString, AsyncFunction);
         let vals = ["first", "third", "second"];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamStreamString(vals);
-        for (const v of vals) {
-            const nestedStream = await stream.next();
-            assert.strictEqual(v, await nestedStream.next());
+        for (const [idx, v] of vals.entries()) {
+            const { value: nestedStream, done } = await stream.next();
+            assert.strictEqual(done, idx === vals.length - 1);
+            let nestedRes = await nestedStream.next();
+            assert.isFalse(nestedRes.done);
+            assert.strictEqual(nestedRes.value, v);
+            nestedRes = await nestedStream.next();
+            assert.isTrue(nestedRes.done);
+            assert.isUndefined(nestedRes.value);
         }
     });
 });
 
 async function checkStreamValues(args) {
-    const { stream, vals, typeName, assertEqFn } = args ?? {};
+    const { stream, vals, typeName, assertEqFn, partial } = args ?? {};
     const expectedValues = args.expectedValues ?? [];
 
+    // Ensure the values produced match expected
     const eq = assertEqFn ?? assert.equal;
+    let iteratorRes;
     for (const [idx, v] of vals.entries()) {
         const expected = expectedValues[idx] ?? v;
-        eq(await stream.next(), expected, `${typeName} [${idx}] read is incorrect`);
+        iteratorRes = await stream.next();
+        assert.isFalse(iteratorRes.done);
+        eq(iteratorRes.value, expected, `${typeName} [${idx}] read is incorrect`);
     }
 
-    assert.isUndefined(await stream.next());
+    // If dealing with a partial list of values from the stream, do not attempt to read the last value
+    if (partial)  { return; }
+
+    // Ensure the next value is undefined (and the iterator is done)
+    iteratorRes = await stream.next();
+    assert.isUndefined(iteratorRes.value);
+    assert.isTrue(iteratorRes.done);
 }
