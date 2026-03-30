@@ -179,6 +179,7 @@ pub fn ts_bindgen(
                                 opts.instantiation.is_some(),
                             );
                         }
+
                         // namespaced ns:pkg/iface
                         // TODO: map support
                         WorldKey::Interface(id) => {
@@ -196,6 +197,7 @@ pub fn ts_bindgen(
                         }
                     }
                 }
+
                 WorldItem::Type { id, .. } => {
                     let ty = &resolve.types[*id];
                     let name = ty.name.as_ref().unwrap();
@@ -211,6 +213,7 @@ pub fn ts_bindgen(
 
                     let mut generator = TsInterface::new(resolve, true, opts.guest);
                     generator.docs(&ty.docs);
+
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
                             generator.type_record(*id, name, record, &ty.docs)
@@ -275,6 +278,7 @@ pub fn ts_bindgen(
                         unreachable!("unexpected interface export during export processing")
                     }
                 };
+
                 if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
                     .context("failed to check feature gate for export")?
                 {
@@ -283,8 +287,10 @@ pub fn ts_bindgen(
                     );
                     continue;
                 }
+
                 funcs.push((export_name.to_lower_camel_case(), f));
             }
+
             WorldItem::Interface { id, stability, .. } => {
                 let iface_id: String;
                 let (export_name, iface_name): (&str, &str) = match name {
@@ -437,6 +443,7 @@ pub fn ts_bindgen(
         generate_references(&bindgen.references).as_bytes(),
     );
     files.push(&filename, bindgen.src.as_bytes());
+
     Ok(())
 }
 
@@ -603,6 +610,27 @@ impl TsBindgen {
                 id_name,
                 &self.async_exports,
             );
+
+            // Figure out whether we need ancillary types
+            for ty in func.parameter_and_result_types() {
+                if let Type::Id(typedef_id) = ty {
+                    let typedef_id = dealias(resolve, typedef_id);
+                    // For all complex func/param types that are used in this function, output
+                    // the relevant type definitions
+                    let result_ty_def = &resolve.types[typedef_id];
+                    match &result_ty_def.kind {
+                        TypeDefKind::Option(_) => {
+                            generator.needs_ty_option = true;
+                        }
+                        TypeDefKind::Result(_) => {
+                            generator.needs_ty_result = true;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // Generate the function type definition
             generator.ts_func(
                 func,
                 false,
@@ -611,6 +639,8 @@ impl TsBindgen {
                 &GeneratedTypeMeta { is_export: true },
             );
         }
+
+        generator.post_types();
 
         let (src, references) = generator.finish();
         self.export_object.push_str(&src);
