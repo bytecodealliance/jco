@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-03-30
+
+### 🧪 Testing
+
+- _(transpile)_ add test for bare export ancillary types by @vados-cosmonic in #1349
+
 ## [0.1.2] - 2026-02-13
 
 ### ⚙️ Miscellaneous Tasks
