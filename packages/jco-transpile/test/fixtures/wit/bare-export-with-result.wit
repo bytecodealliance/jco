@@ -1,0 +1,5 @@
+package fixtures:bare-export-with-result;
+
+world component {
+  export foo: func(res: result<string, string>);
+}

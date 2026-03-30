@@ -71,4 +71,21 @@ suite('Type Generation', () => {
         assert(interfaceDeclarationContent.includes('export { _delete as delete };'));
         assert(interfaceDeclarationContent.includes('function _delete'));
     });
+
+    // https://github.com/bytecodealliance/jco/issues/627
+    test('bare exports with ancillary types', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/bare-export-with-result.wit`, {
+            worldName: 'fixtures:bare-export-with-result/component',
+            guest: true,
+        });
+
+        assert.strictEqual(Object.keys(files).length, 1);
+        assert.strictEqual(Object.keys(files)[0], 'component.d.ts');
+
+        const [worldDeclaration] = Object.values(files);
+        const worldDeclarationContent = new TextDecoder().decode(worldDeclaration);
+
+        assert.include(worldDeclarationContent, 'export type Result<T, E>');
+        assert.include(worldDeclarationContent, 'declare module');
+    });
 });
