@@ -5071,7 +5071,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                 ));
             }
             keys_and_lowers_expr.push(']');
-            format!("{lower_fn}.bind(null, {keys_and_lowers_expr})")
+            format!("{lower_fn}({keys_and_lowers_expr})")
         }
 
         InterfaceType::Variant(ty_idx) => {

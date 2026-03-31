@@ -633,8 +633,9 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
-                        const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
-                        const codeUnits = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr + 4, true);
+                        const dv = new DataView(ctx.memory.buffer);
+                        const start = dv.getUint32(ctx.storagePtr, true);
+                        const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
                         val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
 
                         ctx.storagePtr += 8;
@@ -690,16 +691,14 @@ impl LiftIntrinsic {
 
                             if (ctx.useDirectParams) {{
                                 ctx.storagePtr = ctx.params[0];
+                                ctx.params = ctx.params.slice(1);
                             }}
 
                             const res = {{}};
-                            for (const [key, liftFn, _size32, align32] of keysAndLiftFns) {{
+                            for (const [key, liftFn, _size32, _align32] of keysAndLiftFns) {{
                                 let [val, newCtx] = liftFn(ctx);
                                 res[key] = val;
                                 ctx = newCtx;
-
-                                const rem = ctx.storagePtr % align32;
-                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                             }}
 
                             return [res, ctx];

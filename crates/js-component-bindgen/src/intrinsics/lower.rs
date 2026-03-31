@@ -328,13 +328,13 @@ impl LowerIntrinsic {
                             throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
                         }}
 
+                        const rem = ctx.storagePtr % 2;
+                        if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('s16', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setInt16(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 2;
-
-                        const rem = ctx.storagePtr % 2;
-                        if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
                     }}
                 "#));
             }
@@ -354,13 +354,13 @@ impl LowerIntrinsic {
                             throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
                         }}
 
+                        const rem = ctx.storagePtr % 2;
+                        if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('u16', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setUint16(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 2;
-
-                        const rem = ctx.storagePtr % 2;
-                        if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
                     }}
                 "#));
             }
@@ -378,14 +378,14 @@ impl LowerIntrinsic {
                         if (ctx.vals.length !== 1) {{
                             throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
                         }}
-                        {require_valid_numeric_primitive_fn}.bind('s32', ctx.vals[0]);
-
-                        new DataView(ctx.memory.buffer).setInt32(ctx.storagePtr, ctx.vals[0], true);
-
-                        ctx.storagePtr += 4;
 
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
+                        {require_valid_numeric_primitive_fn}.bind('s32', ctx.vals[0]);
+                        new DataView(ctx.memory.buffer).setInt32(ctx.storagePtr, ctx.vals[0], true);
+
+                        ctx.storagePtr += 4;
                     }}
                 "#));
             }
@@ -407,13 +407,13 @@ impl LowerIntrinsic {
                             throw new Error(`expected single value to lower, got [${{ctx.vals.length}}]`);
                         }}
 
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('u32', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 4;
-
-                        const rem = ctx.storagePtr % 4;
-                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
                     }}
                 "#));
             }
@@ -430,13 +430,14 @@ impl LowerIntrinsic {
 
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
 
+                        const rem = ctx.storagePtr % 8;
+                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('s64', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setBigInt64(ctx.storagePtr, ctx.vals[0], true);
 
-                        ctx.storagePtr += 8;
 
-                        const rem = ctx.storagePtr % 8;
-                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
+                        ctx.storagePtr += 8;
                     }}
                 "));
             }
@@ -453,13 +454,13 @@ impl LowerIntrinsic {
 
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
 
+                        const rem = ctx.storagePtr % 8;
+                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('u64', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setBigUint64(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 8;
-
-                        const rem = ctx.storagePtr % 8;
-                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
                     }}
                 "));
             }
@@ -476,13 +477,13 @@ impl LowerIntrinsic {
 
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
 
+                        const rem = ctx.storagePtr % 8;
+                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('f32', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setFloat32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 8;
-
-                        const rem = ctx.storagePtr % 8;
-                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
                     }}
                 "));
             }
@@ -499,13 +500,13 @@ impl LowerIntrinsic {
 
                         if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
 
+                        const rem = ctx.storagePtr % 8;
+                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
+
                         {require_valid_numeric_primitive_fn}.bind('f64', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setFloat64(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 8;
-
-                        const rem = ctx.storagePtr % 8;
-                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
                     }}
                 "));
             }
@@ -517,13 +518,13 @@ impl LowerIntrinsic {
                     function _lowerFlatChar(ctx) {{
                         {debug_log_fn}('[_lowerFlatChar()] args', {{ ctx }});
 
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, {i32_to_char_fn}(ctx.vals[0]), true);
 
                         ctx.storagePtr += 4;
-
-                        const rem = ctx.storagePtr % 4;
-                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
                     }}
                 "));
             }
@@ -603,23 +604,19 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_record_fn = self.name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lower_flat_record_fn}(fieldMetas) {{
                         return function {lower_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_record_fn}()] args', {{ ctx }});
 
-                            const [start] = vals;
-                            if (ctx.storageLen !== undefined && size !== undefined && size > ctx.storageLen) {{
-                                throw new Error('not enough storage remaining for record flat lower');
+                            const r = ctx.vals[0];
+                            for (const [tag, lowerFn, size32, align32 ] of fieldMetas) {{
+                                ctx.vals = [r[tag]];
+                                lowerFn(ctx);
                             }}
-
-                            const data = new Uint8Array(ctx.memory.buffer, start, size);
-                            new Uint8Array(ctx.memory.buffer, ctx.storagePtr, size).set(data);
-
-                            ctx.storagePtr += data.byteLength;
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatVariant => {
@@ -637,7 +634,7 @@ impl LowerIntrinsic {
                             const {{ tag, val }} = ctx.vals[0];
                             const disc = lowerMetas.findIndex(m => m[0] === tag);
                             if (disc === -1) {{
-                                throw new Error(`invalid variant tag/discriminant [${{tag}}] (valid tags: ${{variantMetas.map(m => m[0])}})`);
+                                throw new Error(`invalid variant tag/discriminant [${{tag}}] (valid tags: ${{lowerMetas.map(m => m[0])}})`);
                             }}
 
                             const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = lowerMetas[disc];
@@ -763,13 +760,13 @@ impl LowerIntrinsic {
                     function {lower_flat_flags_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_flags_fn}()] args', {{ ctx }});
 
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(ctx.memory.buffer).setInt32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 4;
-
-                        const rem = ctx.storagePtr % 4;
-                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
                     }}
                 "));
             }
