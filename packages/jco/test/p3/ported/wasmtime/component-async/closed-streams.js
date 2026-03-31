@@ -25,7 +25,7 @@ suite.skip("closed streams scenario", () => {
         const componentPath = join(COMPONENT_FIXTURES_DIR, "p3/streams/async-closed-streams.wasm");
         let cleanup;
         try {
-            const { instance, ...rest } = await buildAndTranspile({
+            const res = await buildAndTranspile({
                 componentPath,
                 component: {
                     path: componentPath,
@@ -37,7 +37,7 @@ suite.skip("closed streams scenario", () => {
                     },
                 },
             });
-            cleanup = rest.cleanup;
+            cleanup = res.cleanup;
 
             // TODO: create single element stream on host side (tx, rx)
             // TODO: create listof values (3 u32s is fine)

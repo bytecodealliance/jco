@@ -41,9 +41,7 @@ suite("read resource stream", () => {
             "local:local/resource-stream": {
                 X,
                 foo: (count) => {
-                    return createReadableStreamFromValues(
-                        [...new Array(count)].map(() => new X())
-                    );
+                    return createReadableStreamFromValues([...new Array(count)].map(() => new X()));
                 },
             },
         });
