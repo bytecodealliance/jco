@@ -192,8 +192,7 @@ interface use-stream-async {
 
     stream-passthrough: async func(s: stream<u32>) -> stream<u32>;
 
-    read-stream-values-u32: async func(s: stream<u32>) -> list<u32>;
-    read-stream-values-s32: async func(s: stream<s32>) -> list<s32>;
+    read-stream-values-bool: async func(s: stream<bool>) -> list<bool>;
 
     read-stream-values-u8: async func(s: stream<u8>) -> list<u8>;
     read-stream-values-s8: async func(s: stream<s8>) -> list<s8>;
@@ -201,14 +200,15 @@ interface use-stream-async {
     read-stream-values-u16: async func(s: stream<u16>) -> list<u16>;
     read-stream-values-s16: async func(s: stream<s16>) -> list<s16>;
 
+    read-stream-values-u32: async func(s: stream<u32>) -> list<u32>;
+    read-stream-values-s32: async func(s: stream<s32>) -> list<s32>;
+
     read-stream-values-u64: async func(s: stream<u64>) -> list<u64>;
     read-stream-values-s64: async func(s: stream<s64>) -> list<s64>;
 
     read-stream-values-f32: async func(s: stream<f32>) -> list<f32>;
 
     read-stream-values-f64: async func(s: stream<f64>) -> list<f64>;
-
-    read-stream-values-bool: async func(s: stream<bool>) -> list<bool>;
 
     read-stream-values-string: async func(s: stream<string>) -> list<string>;
 

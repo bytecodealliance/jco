@@ -54,64 +54,11 @@ suite("stream<T> lifts", () => {
         });
     });
 
-    test.concurrent("u32/s32", async () => {
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU32, AsyncFunction);
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS32, AsyncFunction);
-
-        let vals = [11, 22, 33];
-        let stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
-        await checkStreamValues({ stream, vals, typeName: "u32" });
-
-        vals = [-11, -22, -33];
-        stream = await instance["jco:test-components/get-stream-async"].getStreamS32(vals);
-        await checkStreamValues({ stream, vals, typeName: "s32" });
-    });
-
     test.concurrent("bool", async () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamBool, AsyncFunction);
         const vals = [true, false];
         const stream = await instance["jco:test-components/get-stream-async"].getStreamBool(vals);
         await checkStreamValues({ stream, vals, typeName: "bool" });
-    });
-
-    test.concurrent("u16/s16", async () => {
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU16, AsyncFunction);
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS16, AsyncFunction);
-
-        let vals = [0, 100, 65535];
-        let stream = await instance["jco:test-components/get-stream-async"].getStreamU16(vals);
-        await checkStreamValues({ stream, vals, typeName: "u16" });
-
-        vals = [-32_768, 0, 32_767];
-        stream = await instance["jco:test-components/get-stream-async"].getStreamS16(vals);
-        await checkStreamValues({ stream, vals, typeName: "u16" });
-    });
-
-    test.concurrent("u64/s64", async () => {
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU64, AsyncFunction);
-        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS64, AsyncFunction);
-
-        let vals = [0n, 100n, 65535n];
-        let stream = await instance["jco:test-components/get-stream-async"].getStreamU64(vals);
-        await checkStreamValues({ stream, vals, typeName: "u64" });
-
-        let invalidVals = [-1n, 18446744073709551616n];
-        for (const invalid of invalidVals) {
-            await expect(() =>
-                instance["jco:test-components/get-stream-async"].getStreamU64([invalid]),
-            ).rejects.toThrow(/invalid u64 value/);
-        }
-
-        vals = [-32_768n, 0n, 32_767n];
-        stream = await instance["jco:test-components/get-stream-async"].getStreamS64(vals);
-        await checkStreamValues({ stream, vals, typeName: "s64" });
-
-        invalidVals = [-9223372036854775809n, 9223372036854775808n];
-        for (const invalid of invalidVals) {
-            await expect(() =>
-                instance["jco:test-components/get-stream-async"].getStreamS64([invalid]),
-            ).rejects.toThrow(/invalid s64 value/);
-        }
     });
 
     test.concurrent("u8/s8", async () => {
@@ -138,6 +85,59 @@ suite("stream<T> lifts", () => {
             await expect(() => instance["jco:test-components/get-stream-async"].getStreamS8([invalid])).rejects.toThrow(
                 /invalid s8 value/,
             );
+        }
+    });
+
+    test.concurrent("u16/s16", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU16, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS16, AsyncFunction);
+
+        let vals = [0, 100, 65535];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamU16(vals);
+        await checkStreamValues({ stream, vals, typeName: "u16" });
+
+        vals = [-32_768, 0, 32_767];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamS16(vals);
+        await checkStreamValues({ stream, vals, typeName: "u16" });
+    });
+
+    test.concurrent("u32/s32", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU32, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS32, AsyncFunction);
+
+        let vals = [11, 22, 33];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
+        await checkStreamValues({ stream, vals, typeName: "u32" });
+
+        vals = [-11, -22, -33];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamS32(vals);
+        await checkStreamValues({ stream, vals, typeName: "s32" });
+    });
+
+    test.concurrent("u64/s64", async () => {
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU64, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS64, AsyncFunction);
+
+        let vals = [0n, 100n, 65535n];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamU64(vals);
+        await checkStreamValues({ stream, vals, typeName: "u64" });
+
+        let invalidVals = [-1n, 18446744073709551616n];
+        for (const invalid of invalidVals) {
+            await expect(() =>
+                instance["jco:test-components/get-stream-async"].getStreamU64([invalid]),
+            ).rejects.toThrow(/invalid u64 value/);
+        }
+
+        vals = [-32_768n, 0n, 32_767n];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamS64(vals);
+        await checkStreamValues({ stream, vals, typeName: "s64" });
+
+        invalidVals = [-9223372036854775809n, 9223372036854775808n];
+        for (const invalid of invalidVals) {
+            await expect(() =>
+                instance["jco:test-components/get-stream-async"].getStreamS64([invalid]),
+            ).rejects.toThrow(/invalid s64 value/);
         }
     });
 
