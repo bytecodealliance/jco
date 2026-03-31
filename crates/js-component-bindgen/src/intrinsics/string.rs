@@ -115,7 +115,7 @@ impl StringIntrinsic {
                           let ptr = {realloc_call}(0, 0, 1, bytes.byteLength);
                           new Uint8Array(memory.buffer).set(bytes, ptr);
 
-                          const res = {{ ptr, len: buf.length, codepoints: [...s].length }};
+                          const res = {{ ptr, len: bytes.length, codepoints: [...s].length }};
                           return res;
                       }}
                     "#
