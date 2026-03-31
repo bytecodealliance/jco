@@ -2,6 +2,7 @@ import { env } from "node:process";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
+import { ReadableStream } from "node:stream/web";
 
 import { assert } from "vitest";
 
@@ -75,4 +76,13 @@ export async function checkStreamValues(args) {
     iteratorRes = await stream.next();
     assert.isUndefined(iteratorRes.value);
     assert.isTrue(iteratorRes.done);
+}
+
+export function createReadableStreamFromValues(vals) {
+    return new ReadableStream({
+        start(ctrl) {
+            vals.forEach((v) => ctrl.enqueue(v));
+            ctrl.close();
+        },
+    });
 }

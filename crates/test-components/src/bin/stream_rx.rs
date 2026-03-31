@@ -11,7 +11,7 @@ use wit_bindgen::StreamReader;
 use bindings::exports::jco::test_components::use_stream_async;
 use bindings::exports::jco::test_components::use_stream_sync;
 
-use bindings::exports::jco::test_components::use_stream_async::{ExampleVariant, ExampleRecord};
+use bindings::exports::jco::test_components::use_stream_async::{ExampleRecord, ExampleVariant};
 
 struct Component;
 

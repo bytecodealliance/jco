@@ -4,7 +4,7 @@ import { ReadableStream } from "node:stream/web";
 import { suite, test, assert, beforeAll, beforeEach, afterAll } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, checkStreamValues } from "../common.js";
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("stream<T> lowers", () => {
@@ -243,14 +243,4 @@ suite("stream<T> lowers", () => {
         );
         assert.deepEqual(returnedVals, vals);
     });
-
 });
-
-function createReadableStreamFromValues(vals) {
-    return new ReadableStream({
-        start(ctrl) {
-            vals.forEach((v) => ctrl.enqueue(v));
-            ctrl.close();
-        },
-    });
-}
