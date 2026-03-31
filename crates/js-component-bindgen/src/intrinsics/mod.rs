@@ -1195,11 +1195,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .intrinsics
             .contains(&Intrinsic::String(StringIntrinsic::Utf16EncodeAsync))
     {
-        args.intrinsics.extend([
-            &Intrinsic::IsLE,
-            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf16),
-            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf16LittleEndian),
-        ]);
+        args.intrinsics.extend([&Intrinsic::IsLE]);
     }
 
     // Attempting to perform a debug message hoist will require string encoding to memory
