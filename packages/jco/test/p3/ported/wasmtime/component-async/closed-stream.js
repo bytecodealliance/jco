@@ -26,8 +26,9 @@ suite("closed stream scenario", () => {
             cleanup = res.cleanup;
 
             const stream = instance["local:local/closed-stream"].get();
-            const v = await stream.next();
-            assert.strictEqual(v, undefined);
+            const { value, done } = await stream.next();
+            assert.strictEqual(value, undefined);
+            assert.isTrue(done, undefined);
         } finally {
             if (cleanup) {
                 await cleanup();
