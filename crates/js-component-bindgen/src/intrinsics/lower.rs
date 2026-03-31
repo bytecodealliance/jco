@@ -808,14 +808,16 @@ impl LowerIntrinsic {
                 let lower_flat_enum_fn = self.name();
                 let lower_variant_fn = Self::LowerFlatVariant.name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     function {lower_flat_enum_fn}(lowerMetas) {{
                         return function {lower_flat_enum_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_enum_fn}()] args', {{ ctx }});
                             {lower_variant_fn}(lowerMetas)(ctx);
                         }}
                     }}
-                "));
+                "
+                ));
             }
 
             Self::LowerFlatOption => {

@@ -396,9 +396,6 @@ impl EsmBindgen {
                             maybe_quote_member(specifier)
                         );
                         for (external_name, local_name) in bound_external_names {
-                            // For imports that are functions, ensure that they are noted as host provided
-                            uwriteln!(output, "{local_name}._isHostProvided = true;");
-
                             uwriteln!(
                                 output,
                                 r#"
@@ -409,6 +406,9 @@ impl EsmBindgen {
                                 }}
                                 "#,
                             );
+
+                            // For imports that are functions, ensure that they are noted as host provided
+                            uwriteln!(output, "{local_name}._isHostProvided = true;");
                         }
                     } else if let Some(idl_binding) = idl_binding {
                         uwrite!(
@@ -480,9 +480,6 @@ impl EsmBindgen {
 
             // Process all external host-provided imports
             for (member_name, local_name) in generated_member_names {
-                // For imports that are functions, ensure that they are noted as host provided
-                uwriteln!(output, "{local_name}._isHostProvided = true;");
-
                 // Ensure that the imports we destructured were defined
                 // (if they were not, the user is likely missing an import @ instantiation time)
                 uwriteln!(
@@ -495,6 +492,8 @@ impl EsmBindgen {
                     }}
                     "#,
                 );
+                // For imports that are functions, ensure that they are noted as host provided
+                uwriteln!(output, "{local_name}._isHostProvided = true;");
             }
         }
     }
