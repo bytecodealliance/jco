@@ -714,7 +714,8 @@ impl AsyncStreamIntrinsic {
                              // was a reader
                              //
                              let onReadFinishFn;
-                             if (this.isReadable() && this.#hostInjectFn) {{
+                             const injectHostWrite = this.isReadable() && !!this.#hostInjectFn;
+                             if (injectHostWrite) {{
                                  onReadFinishFn = await this.#hostInjectFn({{ count }});
                              }}
 
@@ -728,34 +729,34 @@ impl AsyncStreamIntrinsic {
 
                              // If sync, wait forever but allow task to do other things
                              if (!this.hasPendingEvent()) {{
-                               if (this.isReadable() && this.#hostInjectFn) {{
-                                   throw new Error('reader unexpectedly blocked after injected write');
-                               }}
+                                 if (injectHostWrite) {{
+                                     throw new Error('reader unexpectedly blocked after injected write');
+                                 }}
 
-                               if (isAsync) {{
-                                   this.setCopyState({stream_end_class}.CopyState.ASYNC_COPYING);
-                                   {debug_log_fn}('[{stream_end_class}#copy()] blocked', {{ componentIdx, eventCode, self: this }});
-                                   return {async_blocked_const};
-                               }} else {{
-                                   this.setCopyState({stream_end_class}.CopyState.SYNC_COPYING);
+                                 if (isAsync) {{
+                                     this.setCopyState({stream_end_class}.CopyState.ASYNC_COPYING);
+                                     {debug_log_fn}('[{stream_end_class}#copy()] blocked', {{ componentIdx, eventCode, self: this }});
+                                     return {async_blocked_const};
+                                 }} else {{
+                                     this.setCopyState({stream_end_class}.CopyState.SYNC_COPYING);
 
-                                   const taskMeta = {current_task_get_fn}(componentIdx);
-                                   if (!taskMeta) {{ throw new Error(`missing task meta for component idx [${{componentIdx}}]`); }}
+                                     const taskMeta = {current_task_get_fn}(componentIdx);
+                                     if (!taskMeta) {{ throw new Error(`missing task meta for component idx [${{componentIdx}}]`); }}
 
-                                   const task = taskMeta.task;
-                                   if (!task) {{ throw new Error('missing task task from task meta'); }}
+                                     const task = taskMeta.task;
+                                     if (!task) {{ throw new Error('missing task task from task meta'); }}
 
-                                   const streamEnd = this;
-                                   await task.suspendUntil({{
-                                       readyFn: () => streamEnd.hasPendingEvent(),
-                                   }});
-                               }}
+                                     const streamEnd = this;
+                                     await task.suspendUntil({{
+                                         readyFn: () => streamEnd.hasPendingEvent(),
+                                     }});
+                                 }}
                              }}
 
                              // If we injected a write and the read has completed, we should reset
                              // we can skip the rest of the async machinery since there the host controlled
                              // write end does not need to use the pending event machinery
-                             if (this.isReadable() && this.#hostInjectFn) {{
+                             if (injectHostWrite) {{
                                  if (!onReadFinishFn) {{ throw new Error('missing read finish fn'); }}
                                  onReadFinishFn();
                              }}

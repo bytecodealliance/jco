@@ -637,9 +637,11 @@ impl Intrinsic {
                                         storagePtr: startPtr,
                                         componentIdx: this.#componentIdx,
                                         stringEncoding: this.#elemMeta.stringEncoding,
-                                        vals: [v],
                                     }}
-                                    for (const v of values) {{ this.#elemMeta.lowerFn(lowerCtx); }}
+                                    for (const v of values) {{
+                                        lowerCtx.vals = [v];
+                                        this.#elemMeta.lowerFn(lowerCtx);
+                                    }}
 
                                     this.#ptr = lowerCtx.storagePtr;
                                 }}

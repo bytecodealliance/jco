@@ -2392,8 +2392,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                let stream_end_class =
-                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamEndClass));
 
                 // Build the lowering function for the type produced by the stream
                 let type_id = &crate::dealias(self.resolve, *ty);
@@ -2520,8 +2518,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         }});
 
                         const resetWriteEndToIdle{tmp} = () => {{
-                            // After the write is finished, we can reset the state as idle
-                            hostWriteEnd{tmp}.setCopyState({stream_end_class}.CopyState.IDLE);
+                            // After the write is finished, we consume the event that was generated
+                            // by the just-in-time write (and the subsequent read), if one was generated
+                            if (hostWriteEnd{tmp}.hasPendingEvent()) {{ hostWriteEnd{tmp}.getPendingEvent(); }}
                         }};
                         let genHostInjectFn = (readFn) => {{
                             let done = false;
@@ -2561,6 +2560,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 }}
 
                                 await hostWriteEnd{tmp}.write(values);
+
                                 return resetWriteEndToIdle{tmp};
                             }};
                         }};
