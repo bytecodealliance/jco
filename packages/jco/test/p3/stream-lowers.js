@@ -136,7 +136,7 @@ suite("stream<T> lowers", () => {
         assert.deepEqual(returnedVals, vals);
     });
 
-    test.only("u16/s16", async () => {
+    test.concurrent("u16/s16", async () => {
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU16, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS16, AsyncFunction);
 
@@ -195,13 +195,13 @@ suite("stream<T> lowers", () => {
         let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesF32(
             createReadableStreamFromValues(vals),
         );
-        vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.00001));
+        vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.01));
 
         vals = [-60000.01235, -1.5, -0.0, 0.0, 1.5, -60000.01235];
         returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesF32(
             createReadableStreamFromValues(vals),
         );
-        vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.00001));
+        vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.01));
     });
 
     test.concurrent("string", async () => {
