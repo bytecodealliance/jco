@@ -228,6 +228,22 @@ suite("stream<T> lowers", () => {
         assert.deepEqual(returnedVals, vals);
     });
 
+    test.skip("variant", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesVariant, AsyncFunction);
+
+        let vals = [
+            { tag: "maybe-u32", val: 123 },
+            { tag: "maybe-u32", val: null },
+            { tag: "float", val: 123.1 },
+            { tag: "str", val: "string-value" },
+            { tag: "num", val: 1 },
+        ];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesVariant(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
 });
 
 function createReadableStreamFromValues(vals) {

@@ -28,7 +28,7 @@ interface example-types {
         num(u32),
         str(string),
         float(f32),
-        maybe-bool(option<u32>),
+        maybe-u32(option<u32>),
     }
 
     enum example-enum {
@@ -214,7 +214,7 @@ interface use-stream-async {
 
     read-stream-values-record: async func(s: stream<example-record>) -> list<example-record>;
 
-    // read-stream-values-variant: async func(s: stream<example-variant>) -> list<example-variant>;
+    read-stream-values-variant: async func(s: stream<example-variant>) -> list<example-variant>;
 
     // read-stream-values-list-u8: async func(s: stream<list<u8>>) -> list<list<u8>>;
     // read-stream-values-list-string: async func(s: stream<list<string>>) -> list<list<string>>;

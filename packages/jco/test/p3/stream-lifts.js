@@ -192,8 +192,8 @@ suite("stream<T> lifts", () => {
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariant, AsyncFunction);
 
         const vals = [
-            { tag: "maybe-bool", val: 123 },
-            { tag: "maybe-bool", val: null },
+            { tag: "maybe-u32", val: 123 },
+            { tag: "maybe-u32", val: null },
             { tag: "float", val: 123.1 },
             { tag: "str", val: "string-value" },
             { tag: "num", val: 1 },
@@ -206,11 +206,11 @@ suite("stream<T> lifts", () => {
             vals: [
                 // TODO: wit type representation smoothing mismatch,
                 // non-nullable option<t> values are *not* wrapped as objects
-                { tag: "maybe-bool", val: { tag: "some", val: 123 } },
-                { tag: "maybe-bool", val: { tag: "none" } },
+                { tag: "maybe-u32", val: { tag: "some", val: 123 } },
+                { tag: "maybe-u32", val: { tag: "none" } },
             ],
             partial: true,
-            typeName: "variant<maybe-bool>",
+            typeName: "variant<maybe-u32>",
             assertEqFn: assert.deepEqual,
         });
 
