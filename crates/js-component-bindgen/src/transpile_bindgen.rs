@@ -356,8 +356,6 @@ impl JsBindgen<'_> {
                     "{local_name} = WebAssembly.promising({core_export_fn});",
                 );
             } else {
-                // TODO: run may be sync lifted, but it COULD call an async lowered function!
-
                 uwriteln!(core_exported_funcs, "{local_name} = {core_export_fn};",);
             }
         }
@@ -4708,8 +4706,9 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
             } else {
                 4
             };
+
             format!(
-                "{f}({{ names: {names_expr}, size32: {size_u32}, align32: {align_u32}, intSize: {elem_size} }})"
+                "{f}({{ names: {names_expr}, size32: {size_u32}, align32: {align_u32}, intSizeBytes: {elem_size} }})"
             )
         }
 
@@ -5106,56 +5105,106 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::FixedLengthList(ty_idx) => {
-            // TODO(fix): add more robust handling for fixed length lists
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
             let list_ty = &component_types[*ty_idx];
             let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
-            let ty_idx = ty_idx.as_u32();
-            format!("{f}({{ elemLowerFn: {elem_ty_lower_expr}, typeIdx: {ty_idx} }})")
+            let list_len = list_ty.size;
+            let elem_cabi = component_types.canonical_abi(&list_ty.element);
+            let align_32 = elem_cabi.align32;
+            let size_32 = elem_cabi.size32;
+
+            format!(
+                r#"{f}({{
+                       elemLowerFn: {elem_ty_lower_expr},
+                       align32: {align_32},
+                       size32: {size_32},
+                       knownLen: {list_len},
+                   }})"#
+            )
         }
 
         InterfaceType::Tuple(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let tuple_ty = &component_types[*ty_idx];
+            let size_u32 = tuple_ty.abi.size32;
+            let align_u32 = tuple_ty.abi.align32;
+
+            let mut elem_lowers_expr = String::from("[");
+            for ty in &tuple_ty.types {
+                let lower_fn_js = gen_flat_lower_fn_js_expr(intrinsic_mgr, ty);
+                elem_lowers_expr.push_str(&format!("[{lower_fn_js}, {size_u32}, {align_u32}],"));
+            }
+            elem_lowers_expr.push(']');
+
+            format!("{f}({elem_lowers_expr})")
         }
 
         InterfaceType::Flags(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let flags_ty = &component_types[*ty_idx];
+            let size32 = flags_ty.abi.size32;
+            let align32 = flags_ty.abi.align32;
+            let names_list_js = format!(
+                "[{}]",
+                flags_ty
+                    .names
+                    .iter()
+                    .map(|s| format!("'{s}'"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            let num_flags = flags_ty.names.len();
+            let elem_size = if num_flags <= 8 {
+                1
+            } else if num_flags <= 16 {
+                2
+            } else {
+                4
+            };
+
+            format!(
+                "{f}({{ names: {names_list_js}, size32: {size32}, align32: {align32}, intSizeBytes: {elem_size} }})"
+            )
         }
 
         InterfaceType::Enum(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let enum_ty = &component_types[*ty_idx];
+            let size32 = enum_ty.abi.size32;
+            let align32 = enum_ty.abi.align32;
+            let payload_offset32 = enum_ty.info.payload_offset32;
+
+            let mut elem_lowers_expr = String::from("[");
+            for name in &enum_ty.names {
+                elem_lowers_expr.push_str(&format!(
+                    "['{name}', null, {size32}, {align32}, {payload_offset32}],"
+                ));
+            }
+            elem_lowers_expr.push(']');
+
+            format!("{f}({elem_lowers_expr})")
         }
 
         InterfaceType::Option(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
             let option_ty = &component_types[*ty_idx];
             let size32 = option_ty.abi.size32;
             let align32 = option_ty.abi.align32;
             let payload_offset32 = option_ty.info.payload_offset32;
+            let lower_fn_js = gen_flat_lower_fn_js_expr(intrinsic_mgr, &option_ty.ty);
 
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
-
-            let mut cases_and_lowers_expr = String::from("[");
-            cases_and_lowers_expr.push_str(&format!(
-                "[ 'some', {}, {size32}, {align32}, {payload_offset32} ],",
-                gen_flat_lower_fn_js_expr(intrinsic_mgr, &option_ty.ty)
-            ));
-            cases_and_lowers_expr.push_str(&format!(
-                "[ 'none', null, {size32}, {align32}, {payload_offset32} ],",
-            ));
-            cases_and_lowers_expr.push(']');
-
-            format!("{f}({cases_and_lowers_expr})")
+            format!(
+                r#"{f}([
+                       [ 'none', null, {size32}, {align32}, {payload_offset32} ],
+                       [ 'some', {lower_fn_js}, {size32}, {align32}, {payload_offset32} ],
+                   ])
+                "#
+            )
         }
 
         InterfaceType::Result(ty_idx) => {
@@ -5165,24 +5214,22 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
             let size32 = result_ty.abi.size32;
             let align32 = result_ty.abi.align32;
             let payload_offset32 = result_ty.info.payload_offset32;
+            let ok_lower_fn_js = result_ty
+                .ok
+                .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
+                .unwrap_or_else(|| "null".into());
+            let err_lower_fn_js = result_ty
+                .err
+                .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
+                .unwrap_or_else(|| "null".into());
 
-            let mut cases_and_lowers_expr = String::from("[");
-            cases_and_lowers_expr.push_str(&format!(
-                "[ 'ok', {}, {size32}, {align32}, {payload_offset32} ],",
-                result_ty
-                    .ok
-                    .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
-                    .unwrap_or_else(|| "null".into())
-            ));
-            cases_and_lowers_expr.push_str(&format!(
-                "[ 'err', {}, {size32}, {align32}, {payload_offset32} ],",
-                result_ty
-                    .err
-                    .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
-                    .unwrap_or_else(|| "null".into())
-            ));
-            cases_and_lowers_expr.push(']');
-            format!("{lower_fn}({cases_and_lowers_expr})")
+            format!(
+                r#"{lower_fn}([
+                       [ 'ok', {ok_lower_fn_js}, {size32}, {align32}, {payload_offset32} ],
+                       [ 'err', {err_lower_fn_js}, {size32}, {align32}, {payload_offset32} ],
+                   ])
+                "#
+            )
         }
 
         InterfaceType::Own(ty_idx) => {
@@ -5210,8 +5257,46 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         InterfaceType::Stream(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
             let table_idx = ty_idx.as_u32();
-            let lower_flat_stream_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatStream).name();
-            format!("{lower_flat_stream_fn}.bind(null, {table_idx})")
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatStream).name();
+            let table_ty = &component_types[*ty_idx];
+            let component_idx = table_ty.instance.as_u32();
+            let stream_ty_idx = table_ty.ty;
+            let stream_ty = &component_types[stream_ty_idx];
+            let payload = stream_ty.payload;
+
+            // TODO(fix): payload u8 should be special cased here
+
+            let (is_borrowed, is_none_type_js, is_numeric_type_js) = match payload {
+                None => (false, true, false),
+                Some(t) => (
+                    matches!(t, InterfaceType::Borrow(_)),
+                    false,
+                    matches!(
+                        ty,
+                        InterfaceType::U8
+                            | InterfaceType::U16
+                            | InterfaceType::U32
+                            | InterfaceType::U64
+                            | InterfaceType::S8
+                            | InterfaceType::S16
+                            | InterfaceType::S32
+                            | InterfaceType::S64
+                            | InterfaceType::Float32
+                            | InterfaceType::Float64
+                    ),
+                ),
+            };
+
+            format!(
+                r#"{f}({{
+                       streamTableIdx: {table_idx},
+                       componentIdx: {component_idx},
+                       isBorrowedType: {is_borrowed},
+                       isNoneType: {is_none_type_js},
+                       isNumericTypeJs: {is_numeric_type_js},
+                   }})
+                "#
+            )
         }
 
         InterfaceType::ErrorContext(ty_idx) => {

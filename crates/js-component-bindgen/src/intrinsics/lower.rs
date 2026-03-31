@@ -257,7 +257,7 @@ impl LowerIntrinsic {
 
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
                         if (ctx.vals.length !== 1) {{
-                            throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
+                            throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
                         {require_valid_numeric_primitive_fn}.bind('bool', ctx.vals[0]);
@@ -277,7 +277,7 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[_lowerFlatS8()] args', {{ ctx }});
 
                         if (ctx.vals.length !== 1) {{
-                            throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
+                            throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
 
@@ -300,7 +300,7 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[{lower_flat_u8_fn}()] args', ctx);
 
                         if (ctx.vals.length !== 1) {{
-                            throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
+                            throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
                         {require_valid_numeric_primitive_fn}.bind('u8', ctx.vals[0]);
@@ -325,7 +325,7 @@ impl LowerIntrinsic {
 
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
                         if (ctx.vals.length !== 1) {{
-                            throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
+                            throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
                         const rem = ctx.storagePtr % 2;
@@ -351,7 +351,7 @@ impl LowerIntrinsic {
 
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
                         if (ctx.vals.length !== 1) {{
-                            throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
+                            throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
                         const rem = ctx.storagePtr % 2;
@@ -376,7 +376,7 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[{lower_flat_s32_fn}()] args', {{ ctx }});
 
                         if (ctx.vals.length !== 1) {{
-                            throw new Error(`unexpected number [${{ctx.vals.length}}] of core vals (expected 1)`);
+                            throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
                         const rem = ctx.storagePtr % 4;
@@ -428,7 +428,7 @@ impl LowerIntrinsic {
                     function {lower_flat_s64_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_s64_fn}()] args', {{ ctx }});
 
-                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
@@ -452,7 +452,7 @@ impl LowerIntrinsic {
                     function {lower_flat_u64_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_u64_fn}()] args', {{ ctx }});
 
-                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
@@ -475,7 +475,7 @@ impl LowerIntrinsic {
                     function {lower_flat_f32_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_f32_fn}()] args', {{ ctx }});
 
-                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
@@ -498,7 +498,7 @@ impl LowerIntrinsic {
                     function {lower_flat_f64_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_f64_fn}()] args', {{ ctx }});
 
-                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
@@ -521,7 +521,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
-                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
                         new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, {i32_to_char_fn}(ctx.vals[0]), true);
 
                         ctx.storagePtr += 4;
@@ -604,7 +604,8 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_record_fn = self.name();
 
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     function {lower_flat_record_fn}(fieldMetas) {{
                         return function {lower_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_record_fn}()] args', {{ ctx }});
@@ -616,7 +617,8 @@ impl LowerIntrinsic {
                             }}
                         }}
                     }}
-                "#));
+                "#
+                ));
             }
 
             Self::LowerFlatVariant => {
@@ -628,19 +630,23 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {lower_flat_variant_fn}(lowerMetas) {{
+                        const caseLookup = Object.fromEntries(
+                            lowerMetas.entries().map(([idx, meta]) => [meta[0], {{ discriminant: idx, meta }}])
+                        );
+
                         return function {lower_flat_variant_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_variant_fn}()] args', {{ ctx }});
 
                             const {{ tag, val }} = ctx.vals[0];
-                            const disc = lowerMetas.findIndex(m => m[0] === tag);
-                            if (disc === -1) {{
-                                throw new Error(`invalid variant tag/discriminant [${{tag}}] (valid tags: ${{lowerMetas.map(m => m[0])}})`);
+                            const variantCase = caseLookup[tag];
+                            if (!variantCase) {{
+                                throw new Error(`missing tag [${{tag}}] (valid tags: ${{Object.keys(caseLookup)}})`);
                             }}
 
-                            const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = lowerMetas[disc];
+                            const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = variantCase.meta;
 
-                            const originalPtr = ctx.resultPtr;
-                            ctx.vals = [disc];
+                            const originalPtr = ctx.storagePtr;
+                            ctx.vals = [variantCase.discriminant];
                             let discLowerRes;
                             if (lowerMetas.length < 256) {{
                                 discLowerRes = {lower_u8_fn}(ctx);
@@ -652,12 +658,20 @@ impl LowerIntrinsic {
                                 throw new Error(`unsupported number of cases [${{lowerMetas.length}}]`);
                             }}
 
-                            ctx.resultPtr = originalPtr + payloadOffset32;
+                            const payloadOffsetPtr = originalPtr + payloadOffset32;
+                            console.log("ABOUT TO LOWER?", {{
+                                payloadOffsetPtr,
+                                originalPtr,
+                                afterDiscrimStoragePtr: ctx.storagePtr,
+                                lowerFn,
+                                val,
+                                payloadMem: new Uint8Array(ctx.memory.buffer, payloadOffsetPtr, size32),
+                            }});
+                            ctx.storagePtr = payloadOffsetPtr;
+                            ctx.vals = [val];
+                            if (lowerFn) {{ lowerFn(ctx); }}
 
-                            let payloadBytesWritten = 0;
-                            if (lowerFn) {{ lowerFn({{ ...ctx, vals: [val] }}); }}
-
-                            let bytesWritten = payloadOffset + payloadBytesWritten;
+                            const bytesWritten = ctx.storagePtr - payloadOffsetPtr;
 
                             const rem = ctx.storagePtr % align32;
                             if (rem !== 0) {{
@@ -678,11 +692,13 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {lower_flat_list_fn}(args) {{
-                        const {{ elemLowerFn }} = args;
+                        const {{ elemLowerFn, knownLen, size32, align32 }} = args;
                         if (!elemLowerFn) {{ throw new TypeError("missing/invalid element lower fn for list"); }}
 
                         return function {lower_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_list_fn}()] args', {{ ctx }});
+
+                            // TODO: fix known-length processing
 
                             if (ctx.useDirectParams) {{
                                 if (ctx.params.length < 2) {{ throw new Error('insufficient params left to lower list'); }}
@@ -728,27 +744,23 @@ impl LowerIntrinsic {
                 "#));
             }
 
-            // TODO: broken? tuple needs align/size?
             Self::LowerFlatTuple => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_tuple_fn = self.name();
 
                 output.push_str(&format!(
-                    "
-                    function {lower_flat_tuple_fn}(ctx) {{
-                        {debug_log_fn}('[{lower_flat_tuple_fn}()] args', {{ ctx }});
-
-                        let [start, len] = ctx.vals;
-                        if (ctx.storageLen !== undefined && len > ctx.storageLen) {{
-                            throw new Error('not enough storage remaining for tuple flat lower');
+                    r#"
+                    function {lower_flat_tuple_fn}(elemLowerMetas) {{
+                        return function {lower_flat_tuple_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_tuple_fn}()] args', {{ ctx }});
+                            const tuple = ctx.vals[0];
+                            for (const [idx, [ lowerFn, size32, align32 ]]  of elemLowerMetas.entries()) {{
+                                ctx.vals = [tuple[idx]];
+                                lowerFn(ctx);
+                            }}
                         }}
-
-                        const data = new Uint8Array(ctx.memory.buffer, start, len);
-                        new Uint8Array(ctx.memory.buffer, ctx.storagePtr, len).set(data);
-
-                        ctx.storagePtr += data.byteLength;
                     }}
-                "
+                "#
                 ));
             }
 
@@ -757,16 +769,36 @@ impl LowerIntrinsic {
                 let lower_flat_flags_fn = self.name();
 
                 output.push_str(&format!("
-                    function {lower_flat_flags_fn}(ctx) {{
-                        {debug_log_fn}('[{lower_flat_flags_fn}()] args', {{ ctx }});
+                    function {lower_flat_flags_fn}(meta) {{
+                        const {{ names, size32, align32, intSizeBytes }} = meta;
+                        const nameLookup = Object.fromEntries(
+                            names.entries().map(([idx, n]) => [n, idx])
+                        );
 
-                        const rem = ctx.storagePtr % 4;
-                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+                        return function {lower_flat_flags_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_flags_fn}()] args', {{ ctx }});
+                            if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
-                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
-                        new DataView(ctx.memory.buffer).setInt32(ctx.storagePtr, ctx.vals[0], true);
+                            const {{ tag }} = ctx.vals[0];
+                            const nameIdx = nameLookup[tag];
+                            const flagValue = 1 << nameIdx;
 
-                        ctx.storagePtr += 4;
+                            const rem = ctx.storagePtr % align32;
+                            if (rem !== 0) {{ ctx.storagePtr += (align32 - rem); }}
+
+                            const dv = new DataView(ctx.memory.buffer);
+                            if (intSizeBytes === 1) {{
+                                dv.setUint8(ctx.storagePtr, flagValue);
+                            }} else if (intSizeBytes === 2) {{
+                                dv.setUint16(ctx.storagePtr, flagValue);
+                            }} else if (intSizeBytes === 4) {{
+                                dv.setUint32(ctx.storagePtr, flagValue);
+                            }} else {{
+                                throw new Error(`unrecognized flag size [${{intSizeBytes}} bytes]`);
+                            }}
+
+                            ctx.storagePtr += intSizeBytes;
+                        }}
                     }}
                 "));
             }
@@ -774,20 +806,14 @@ impl LowerIntrinsic {
             Self::LowerFlatEnum => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_enum_fn = self.name();
+                let lower_variant_fn = Self::LowerFlatVariant.name();
 
                 output.push_str(&format!("
-                    function {lower_flat_enum_fn}(ctx) {{
-                        {debug_log_fn}('[{lower_flat_enum_fn}()] args', {{ ctx }});
-
-                        let [start] = vals;
-                        if (ctx.storageLen !== undefined && size !== undefined && size > ctx.storageLen) {{
-                            throw new Error('not enough storage remaining for enum flat lower');
+                    function {lower_flat_enum_fn}(lowerMetas) {{
+                        return function {lower_flat_enum_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_enum_fn}()] args', {{ ctx }});
+                            {lower_variant_fn}(lowerMetas)(ctx);
                         }}
-
-                        const data = new Uint8Array(ctx.memory.buffer, start, size);
-                        new Uint8Array(ctx.memory.buffer, ctx.storagePtr, size).set(data);
-
-                        ctx.storagePtr += data.byteLength;
                     }}
                 "));
             }
@@ -796,12 +822,13 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_option_fn = self.name();
                 let lower_variant_fn = Self::LowerFlatVariant.name();
+
                 output.push_str(&format!(
                     "
                     function {lower_flat_option_fn}(lowerMetas) {{
                         function {lower_flat_option_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_option_fn}()] args', {{ ctx }});
-                            return {lower_variant_fn}(lowerMetas)(ctx);
+                            {lower_variant_fn}(lowerMetas)(ctx);
                         }}
                     }}
                 "
@@ -817,7 +844,7 @@ impl LowerIntrinsic {
                     function {lower_flat_result_fn}(lowerMetas) {{
                        return function {lower_flat_result_fn}Inner(ctx) {{
                            {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ lowerMetas }});
-                           return {lower_variant_fn}(lowerMetas)(ctx);
+                           {lower_variant_fn}(lowerMetas)(ctx);
                        }};
                     }}
                     "#
@@ -871,47 +898,49 @@ impl LowerIntrinsic {
                 let external_stream_class = AsyncStreamIntrinsic::ExternalStreamClass.name();
                 let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
 
-                // TODO: fix writable is getting dropped before it can be read!!
-                // We need to do some waiting?
-                // Last write should have been triggering the reader to progress...
-                // Then the last reads return all the data???
-
                 output.push_str(&format!(
                     r#"
-                    function {lower_flat_stream_fn}(streamTableIdx, ctx) {{
-                        {debug_log_fn}('[{lower_flat_stream_fn}()] args', {{ streamTableIdx, ctx }});
-
+                    function {lower_flat_stream_fn}(meta) {{
                         const {{
-                            memory,
-                            realloc,
-                            vals,
-                            storagePtr: resultPtr,
-                        }} = ctx;
+                            streamTableIdx,
+                            componentIdx,
+                            isBorrowedType,
+                            isNoneType,
+                            isNumericTypeJs,
+                        }} = meta;
 
-                        const externalStream = vals[0];
-                        if (!externalStream || !(externalStream instanceof {external_stream_class})) {{
-                            throw new Error("invalid external stream value");
+                        return function {lower_flat_stream_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_stream_fn}()] args', {{ ctx }});
+
+                            // TODO(fix): This stream could be a stream from the host, which is
+                            // any async-iterator capable thing (see Instruction::StreamLower),
+                            // not only an ExternalStream which is used by the guest???
+
+                            const externalStream = ctx.vals[0];
+                            if (!externalStream || !(externalStream instanceof {external_stream_class})) {{
+                                throw new Error("invalid external stream value");
+                            }}
+
+                            const globalRep = externalStream.globalRep();
+                            const internalStream = {global_stream_map}.get(globalRep);
+                            if (!internalStream || !(internalStream instanceof {internal_stream_class})) {{
+                                throw new Error(`failed to find internal stream with rep [${{globalRep}}]`);
+                            }}
+
+                            const readEnd = internalStream.readEnd();
+                            const waitableIdx = readEnd.waitableIdx();
+
+                            // Write the idx of the waitable to memory (a waiting async task or caller)
+                            if (ctx.storagePtr) {{
+                                new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, waitableIdx, true);
+                            }}
+
+                            // TODO: if we flat lower another way (host -> guest async) we need to actually
+                            // modify the guests table's afresh, we can't just use the global rep!
+                            // (can detect this by whether the external stream has a rep or not)
+
+                            return waitableIdx;
                         }}
-
-                        const globalRep = externalStream.globalRep();
-                        const internalStream = {global_stream_map}.get(globalRep);
-                        if (!internalStream || !(internalStream instanceof {internal_stream_class})) {{
-                            throw new Error(`failed to find internal stream with rep [${{globalRep}}]`);
-                        }}
-
-                        const readEnd = internalStream.readEnd();
-                        const waitableIdx = readEnd.waitableIdx();
-
-                        // Write the idx of the waitable to memory (a waiting async task or caller)
-                        if (resultPtr) {{
-                            new DataView(ctx.memory.buffer).setUint32(resultPtr, waitableIdx, true);
-                        }}
-
-                        // TODO: if we flat lower another way (host -> guest async) we need to actually
-                        // modify the guests table's afresh, we can't just use the global rep!
-                        // (can detect this by whether the external stream has a rep or not)
-
-                        return waitableIdx
                     }}
                 "#
                 ));

@@ -951,7 +951,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!(
                     r#"
                     function {lift_flat_flags_fn}(meta) {{
-                        const {{ names, size32, align32, intSize }} = meta;
+                        const {{ names, size32, align32, intSizeBytes }} = meta;
 
                         return function {lift_flat_flags_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_flags_fn}()] args', {{ ctx }});
@@ -960,7 +960,7 @@ impl LiftIntrinsic {
 
                             let liftRes;
                             let align;
-                            switch (intSize) {{
+                            switch (intSizeBytes) {{
                                 case 1:
                                     liftRes = {lift_u8}(ctx);
                                     break;
