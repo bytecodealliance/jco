@@ -549,16 +549,19 @@ impl LowerIntrinsic {
             Self::LowerFlatStringUtf16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_string_utf16_fn = self.name();
+                let utf16_encode_fn = Intrinsic::String(StringIntrinsic::Utf16Encode).name();
 
                 output.push_str(&format!("
                     function {lower_flat_string_utf16_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_string_utf16_fn}()] args', {{ ctx }});
+                        if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
-                        // TODO: this is broken? vals[0] is the string...?
+                        const s = ctx.vals[0];
+                        const {{ ptr, len, codepoints }} = {utf16_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
 
-                        const dv = new DataView(ctx.memory.buffer);
-                        const start = dv.getUint32(ctx.storagePtr, ctx.vals[0], true);
-                        const codeUnits = dv.getUint32(ctx.storagePtr, ctx.vals[0] + 4, true);
+                        const view = new DataView(ctx.memory.buffer);
+                        view.setUint32(ctx.storagePtr, ptr, true);
+                        view.setUint32(ctx.storagePtr + 4, codepoints, true);
 
                         const bytes = new Uint16Array(ctx.memory.buffer, start, codeUnits);
                         if (ctx.memory.buffer.byteLength < start + bytes.byteLength) {{
@@ -569,7 +572,7 @@ impl LowerIntrinsic {
                         }}
                         new Uint16Array(ctx.memory.buffer, ctx.storagePtr).set(bytes);
 
-                        ctx.storagePtr += bytes.byteLength;
+                        ctx.storagePtr += len;
                     }}
                 "));
             }
@@ -582,6 +585,7 @@ impl LowerIntrinsic {
                 output.push_str(&format!("
                     function {lower_flat_string_utf8_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_string_utf8_fn}()] args', ctx);
+                        if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
                         const s = ctx.vals[0];
                         const {{ ptr, len, codepoints }} = {utf8_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);

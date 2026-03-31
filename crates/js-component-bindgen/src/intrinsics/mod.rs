@@ -637,6 +637,7 @@ impl Intrinsic {
                                         storagePtr: startPtr,
                                         componentIdx: this.#componentIdx,
                                         stringEncoding: this.#elemMeta.stringEncoding,
+                                        realloc: this.#elemMeta.reallocFn,
                                     }}
                                     for (const v of values) {{
                                         lowerCtx.vals = [v];
@@ -1177,9 +1178,28 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     if args
         .intrinsics
         .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::String(StringIntrinsic::Utf8EncodeAsync))
     {
-        args.intrinsics
-            .extend([&Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8)]);
+        args.intrinsics.extend([
+            &Intrinsic::IsLE,
+            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::String(StringIntrinsic::Utf16EncodeAsync))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::IsLE,
+            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf16),
+            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf16LittleEndian),
+        ]);
     }
 
     // Attempting to perform a debug message hoist will require string encoding to memory

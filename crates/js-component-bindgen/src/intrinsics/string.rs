@@ -9,6 +9,9 @@ use crate::{intrinsics::Intrinsic, source::Source};
 pub enum StringIntrinsic {
     Utf16Decoder,
 
+    GlobalTextEncoderUtf16,
+    GlobalTextEncoderUtf16LittleEndian,
+
     Utf16Encode,
 
     Utf16EncodeAsync,
@@ -47,6 +50,8 @@ impl StringIntrinsic {
             Self::Utf8EncodeAsync.name(),
             Self::ValidateGuestChar.name(),
             Self::ValidateHostChar.name(),
+            Self::GlobalTextEncoderUtf16.name(),
+            Self::GlobalTextEncoderUtf16LittleEndian.name(),
         ]
     }
 
@@ -62,6 +67,8 @@ impl StringIntrinsic {
             Self::Utf8EncodeAsync => "_utf8AllocateAndEncodeAsync",
             Self::ValidateGuestChar => "validateGuestChar",
             Self::ValidateHostChar => "validateHostChar",
+            Self::GlobalTextEncoderUtf16 => "TEXT_DECODER_UTF16",
+            Self::GlobalTextEncoderUtf16LittleEndian => "TEXT_DECODER_UTF16_LE",
         }
     }
 
@@ -71,8 +78,18 @@ impl StringIntrinsic {
         match self {
             Self::Utf16Decoder => uwriteln!(output, "const {name} = new TextDecoder('utf-16');"),
 
+            Self::GlobalTextEncoderUtf16LittleEndian => {
+                uwriteln!(output, "const {name} = new TextEncoder('utf-16le');")
+            }
+            Self::GlobalTextEncoderUtf16 => {
+                uwriteln!(output, "const {name} = new TextEncoder('utf-16');")
+            }
+
             Self::Utf16Encode | Self::Utf16EncodeAsync => {
                 let is_le = Intrinsic::IsLE.name();
+                let utf16_encoder_le = Self::GlobalTextEncoderUtf16LittleEndian.name();
+                let utf16_encoder = Self::GlobalTextEncoderUtf16.name();
+
                 let (fn_preamble, realloc_call) = match self {
                     Self::Utf16Encode => ("", "realloc"),
                     Self::Utf16EncodeAsync => ("async ", "await realloc"),
@@ -81,20 +98,25 @@ impl StringIntrinsic {
                 uwriteln!(
                     output,
                     r#"
-                      {fn_preamble}function {name}(str, realloc, memory) {{
-                          const len = str.length;
-                          const ptr = {realloc_call}(0, 0, 2, len * 2);
-                          const out = new Uint16Array(memory.buffer, ptr, len);
-                          let i = 0;
-                          if ({is_le}) {{
-                              while (i < len) {{ out[i] = str.charCodeAt(i++); }}
-                          }} else {{
-                              while (i < len) {{
-                                  const ch = str.charCodeAt(i);
-                                  out[i++] = (ch & 0xff) << 8 | ch >>> 8;
-                              }}
+                      {fn_preamble}function {name}(s, realloc, memory) {{
+                          if (typeof s !== 'string') {{
+                              throw new TypeError('expected a string, received [' + typeof s + ']');
                           }}
-                          return {{ ptr, len, codepoints: [...str].length }};
+                          if (s.length === 0) {{ return {{ ptr: 1, len: 0 }}; }}
+
+                          let encoder;
+                          if ({is_le}) {{
+                              encoder = {utf16_encoder_le};
+                          }} else {{
+                              encoder = {utf16_encoder};
+                          }}
+
+                          const bytes = encoder.encode(s);
+                          let ptr = {realloc_call}(0, 0, 1, bytes.byteLength);
+                          new Uint8Array(memory.buffer).set(bytes, ptr);
+
+                          const res = {{ ptr, len: buf.length, codepoints: [...s].length }};
+                          return res;
                       }}
                     "#
                 );

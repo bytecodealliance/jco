@@ -674,6 +674,7 @@ impl AsyncStreamIntrinsic {
                                  initial,
                                  skipStateCheck,
                                  stringEncoding,
+                                 reallocFn,
                              }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
 
@@ -682,6 +683,10 @@ impl AsyncStreamIntrinsic {
                              }}
                              if (this.#elemMeta.stringEncoding && stringEncoding && this.#elemMeta.stringEncoding !== stringEncoding) {{
                                  throw new Error(`inconsistent string encoding (previously [${{this.#elemMeta.stringEncoding}}], now [${{stringEncoding}}])`);
+                             }}
+
+                             if (this.#elemMeta.reallocFn === undefined && reallocFn) {{
+                                this.#elemMeta.reallocFn = reallocFn;
                              }}
 
                              if (this.isDropped()) {{
@@ -1601,6 +1606,7 @@ impl AsyncStreamIntrinsic {
                             eventCode: {event_code},
                             componentIdx,
                             stringEncoding,
+                            reallocFn: getReallocFn(),
                         }});
 
                         return result;

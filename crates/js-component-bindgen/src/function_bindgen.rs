@@ -2497,7 +2497,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         }}
 
                         const cstate{tmp} = {get_or_create_async_state_fn}({component_idx});
-                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [${{component_idx}}]`); }}
+                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx}]`); }}
 
                         const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = cstate{tmp}.createStream({{
                             tableIdx: {stream_table_idx},
@@ -2512,11 +2512,12 @@ impl Bindgen for FunctionBindgen<'_> {
                                 flatCount: {payload_flat_count_js},
                                 align32: {payload_align32_js},
                                 size32: {payload_size32_js},
-                                // TODO: facilitate non utf8 string encoding for lowered streams
+                                // TODO(feat): facilitate non utf8 string encoding for lowered streams
                                 stringEncoding: 'utf8',
                             }},
                         }});
 
+                        const doNothing{tmp} = () => {{}};
                         const resetWriteEndToIdle{tmp} = () => {{
                             // After the write is finished, we consume the event that was generated
                             // by the just-in-time write (and the subsequent read), if one was generated
@@ -2528,7 +2529,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             return async (args) => {{
                                 let {{ count }} = args;
                                 if (count < 0) {{ throw new Error('invalid count'); }}
-                                if (count === 0) {{ return; }}
+                                if (count === 0) {{ return doNothing{tmp}; }}
 
                                 // If we get another read when done is already set, that was
                                 // the case of a iterator that returned a final value
@@ -2536,11 +2537,11 @@ impl Bindgen for FunctionBindgen<'_> {
                                 if (done) {{
                                     hostWriteEnd{tmp}.getPendingEvent();
                                     hostWriteEnd{tmp}.drop();
-                                    return () => {{}};
+                                    return doNothing{tmp};
                                 }}
 
                                 if (hostWriteEnd{tmp}.isDoneState()) {{
-                                    return () => {{}};
+                                    return doNothing{tmp};
                                 }}
 
                                 const values = [];
@@ -2556,7 +2557,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 if (done && values.length === 0) {{
                                     hostWriteEnd{tmp}.getPendingEvent();
                                     hostWriteEnd{tmp}.drop();
-                                    return () => {{}};
+                                    return doNothing{tmp};
                                 }}
 
                                 await hostWriteEnd{tmp}.write(values);

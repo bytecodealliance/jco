@@ -1412,7 +1412,7 @@ impl<'a> Instantiator<'a, '_> {
                         let v = v.as_u32().to_string();
                         (v.to_string(), format!("() => realloc{v}"))
                     }
-                    None => ("null".into(), "null".into()),
+                    None => ("null".into(), "() => null".into()),
                 };
 
                 let component_instance_id = instance.as_u32();
