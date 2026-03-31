@@ -11,6 +11,8 @@ use wit_bindgen::StreamReader;
 use bindings::exports::jco::test_components::use_stream_async;
 use bindings::exports::jco::test_components::use_stream_sync;
 
+use bindings::exports::jco::test_components::use_stream_async::ExampleRecord;
+
 struct Component;
 
 impl use_stream_sync::Guest for Component {
@@ -69,6 +71,10 @@ impl use_stream_async::Guest for Component {
     }
 
     async fn read_stream_values_string(rx: StreamReader<String>) -> Vec<String> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_record(rx: StreamReader<ExampleRecord>) -> Vec<ExampleRecord> {
         read_async_values(rx).await
     }
 }

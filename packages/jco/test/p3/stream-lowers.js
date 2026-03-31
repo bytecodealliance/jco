@@ -214,6 +214,20 @@ suite("stream<T> lowers", () => {
         assert.deepEqual(returnedVals, vals);
     });
 
+    test.concurrent("record", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesRecord, AsyncFunction);
+
+        let vals = [
+            { id: 3, idStr: "three" },
+            { id: 2, idStr: "two" },
+            { id: 1, idStr: "one" },
+        ];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesRecord(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
 });
 
 function createReadableStreamFromValues(vals) {

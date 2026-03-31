@@ -212,7 +212,7 @@ interface use-stream-async {
 
     read-stream-values-string: async func(s: stream<string>) -> list<string>;
 
-    // read-stream-values-record: async func(s: stream<example-record>) -> list<example-record>;
+    read-stream-values-record: async func(s: stream<example-record>) -> list<example-record>;
 
     // read-stream-values-variant: async func(s: stream<example-variant>) -> list<example-variant>;
 
