@@ -306,7 +306,7 @@ impl LowerIntrinsic {
                         {require_valid_numeric_primitive_fn}.bind('u8', ctx.vals[0]);
 
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
-                        new DataView(memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
+                        new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 1;
                     }}
@@ -903,7 +903,7 @@ impl LowerIntrinsic {
 
                         // Write the idx of the waitable to memory (a waiting async task or caller)
                         if (resultPtr) {{
-                            new DataView(memory.buffer).setUint32(resultPtr, waitableIdx, true);
+                            new DataView(ctx.memory.buffer).setUint32(resultPtr, waitableIdx, true);
                         }}
 
                         // TODO: if we flat lower another way (host -> guest async) we need to actually
