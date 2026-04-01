@@ -471,21 +471,21 @@ impl LowerIntrinsic {
                 let require_valid_numeric_primitive_fn =
                     Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lower_flat_f32_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_f32_fn}()] args', {{ ctx }});
 
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
-                        const rem = ctx.storagePtr % 8;
-                        if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
                         {require_valid_numeric_primitive_fn}.bind('f32', ctx.vals[0]);
                         new DataView(ctx.memory.buffer).setFloat32(ctx.storagePtr, ctx.vals[0], true);
 
-                        ctx.storagePtr += 8;
+                        ctx.storagePtr += 4;
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatFloat64 => {
@@ -659,14 +659,6 @@ impl LowerIntrinsic {
                             }}
 
                             const payloadOffsetPtr = originalPtr + payloadOffset32;
-                            console.log("ABOUT TO LOWER?", {{
-                                payloadOffsetPtr,
-                                originalPtr,
-                                afterDiscrimStoragePtr: ctx.storagePtr,
-                                lowerFn,
-                                val,
-                                payloadMem: new Uint8Array(ctx.memory.buffer, payloadOffsetPtr, size32),
-                            }});
                             ctx.storagePtr = payloadOffsetPtr;
                             ctx.vals = [val];
                             if (lowerFn) {{ lowerFn(ctx); }}
@@ -828,8 +820,22 @@ impl LowerIntrinsic {
                 output.push_str(&format!(
                     "
                     function {lower_flat_option_fn}(lowerMetas) {{
-                        function {lower_flat_option_fn}Inner(ctx) {{
+                        return function {lower_flat_option_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_option_fn}()] args', {{ ctx }});
+
+                            const v = ctx.vals[0];
+                            if (v === null) {{
+                                ctx.vals[0] = {{ tag: 'none' }};
+                            }} else {{
+                                const isNotOptionObject = typeof v !== 'object'
+                                                          || Object.keys(v).length !== 2
+                                                          || !('tag' in v)
+                                                          || !('value' in v);
+                                if (isNotOptionObject) {{
+                                    ctx.vals[0] = {{ tag: v === null ? 'none' : 'some', val: v }};
+                                }}
+                            }}
+
                             {lower_variant_fn}(lowerMetas)(ctx);
                         }}
                     }}
@@ -846,6 +852,16 @@ impl LowerIntrinsic {
                     function {lower_flat_result_fn}(lowerMetas) {{
                        return function {lower_flat_result_fn}Inner(ctx) {{
                            {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ lowerMetas }});
+
+                            const v = ctx.vals[0];
+                            const isNotResultObject = typeof v !== 'object'
+                                                      || Object.keys(v).length !== 2
+                                                      || !('ok' in v || 'err' in v)
+                                                      || !('value' in v);
+                            if (isNotResultObject) {{
+                                ctx.vals[0] = {{ tag: 'ok', val: v }};
+                            }}
+
                            {lower_variant_fn}(lowerMetas)(ctx);
                        }};
                     }}
