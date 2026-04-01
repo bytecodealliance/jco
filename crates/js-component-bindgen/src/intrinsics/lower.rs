@@ -583,7 +583,7 @@ impl LowerIntrinsic {
                 let lower_flat_string_utf8_fn = self.name();
                 let utf8_encode_fn = Intrinsic::String(StringIntrinsic::Utf8Encode).name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lower_flat_string_utf8_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_string_utf8_fn}()] args', ctx);
                         if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
@@ -597,7 +597,7 @@ impl LowerIntrinsic {
 
                         ctx.storagePtr += len;
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatRecord => {
@@ -663,7 +663,7 @@ impl LowerIntrinsic {
                             ctx.vals = [val];
                             if (lowerFn) {{ lowerFn(ctx); }}
 
-                            const bytesWritten = ctx.storagePtr - payloadOffsetPtr;
+                            let bytesWritten = ctx.storagePtr - payloadOffsetPtr;
 
                             const rem = ctx.storagePtr % align32;
                             if (rem !== 0) {{
@@ -760,20 +760,21 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_flags_fn = self.name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lower_flat_flags_fn}(meta) {{
                         const {{ names, size32, align32, intSizeBytes }} = meta;
-                        const nameLookup = Object.fromEntries(
-                            names.entries().map(([idx, n]) => [n, idx])
-                        );
 
                         return function {lower_flat_flags_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_flags_fn}()] args', {{ ctx }});
                             if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
-                            const {{ tag }} = ctx.vals[0];
-                            const nameIdx = nameLookup[tag];
-                            const flagValue = 1 << nameIdx;
+                            let flagObj = ctx.vals[0];
+                            let flagValue = 0;
+                            for (const [idx, name] of names.entries()) {{
+                                if (flagObj[name] === true) {{
+                                    flagValue |= 1 << idx;
+                                }}
+                            }}
 
                             const rem = ctx.storagePtr % align32;
                             if (rem !== 0) {{ ctx.storagePtr += (align32 - rem); }}
@@ -792,7 +793,7 @@ impl LowerIntrinsic {
                             ctx.storagePtr += intSizeBytes;
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatEnum => {
@@ -801,14 +802,23 @@ impl LowerIntrinsic {
                 let lower_variant_fn = Self::LowerFlatVariant.name();
 
                 output.push_str(&format!(
-                    "
+                    r#"
                     function {lower_flat_enum_fn}(lowerMetas) {{
                         return function {lower_flat_enum_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_enum_fn}()] args', {{ ctx }});
+
+                            const v = ctx.vals[0];
+                            const isNotEnumObject = typeof v !== 'object'
+                                                      || Object.keys(v).length !== 2
+                                                      || !('tag' in v);
+                            if (isNotEnumObject) {{
+                                ctx.vals[0] = {{ tag: v }};
+                            }}
+
                             {lower_variant_fn}(lowerMetas)(ctx);
                         }}
                     }}
-                "
+                "#
                 ));
             }
 
@@ -830,9 +840,10 @@ impl LowerIntrinsic {
                                 const isNotOptionObject = typeof v !== 'object'
                                                           || Object.keys(v).length !== 2
                                                           || !('tag' in v)
-                                                          || !('value' in v);
+                                                          || !(v.tag === 'some' || v.tag === 'none')
+                                                          || !('val' in v);
                                 if (isNotOptionObject) {{
-                                    ctx.vals[0] = {{ tag: v === null ? 'none' : 'some', val: v }};
+                                    ctx.vals[0] = {{ tag: 'some', val: v }};
                                 }}
                             }}
 
@@ -853,14 +864,15 @@ impl LowerIntrinsic {
                        return function {lower_flat_result_fn}Inner(ctx) {{
                            {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ lowerMetas }});
 
-                            const v = ctx.vals[0];
-                            const isNotResultObject = typeof v !== 'object'
-                                                      || Object.keys(v).length !== 2
-                                                      || !('ok' in v || 'err' in v)
-                                                      || !('value' in v);
-                            if (isNotResultObject) {{
-                                ctx.vals[0] = {{ tag: 'ok', val: v }};
-                            }}
+                           const v = ctx.vals[0];
+                           const isNotResultObject = typeof v !== 'object'
+                                                     || Object.keys(v).length !== 2
+                                                     || !('tag' in v)
+                                                     || !('ok' === v.tag || 'err' === v.tag)
+                                                     || !('val' in v);
+                           if (isNotResultObject) {{
+                               ctx.vals[0] = {{ tag: 'ok', val: v }};
+                           }}
 
                            {lower_variant_fn}(lowerMetas)(ctx);
                        }};
