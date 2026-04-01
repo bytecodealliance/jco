@@ -216,20 +216,20 @@ interface use-stream-async {
 
     read-stream-values-variant: async func(s: stream<example-variant>) -> list<example-variant>;
 
-    // read-stream-values-list-u8: async func(s: stream<list<u8>>) -> list<list<u8>>;
-    // read-stream-values-list-string: async func(s: stream<list<string>>) -> list<list<string>>;
+    read-stream-values-tuple: async func(s: stream<tuple<u32, s32, string>>) -> list<tuple<u32, s32, string>>;
+
+    read-stream-values-flags: async func(s: stream<example-flags>) -> list<example-flags>;
+
+    read-stream-values-enum: async func(s: stream<example-enum>) -> list<example-enum>;
+
+    read-stream-values-option-string: async func(s: stream<option<string>>) -> list<option<string>>;
+
+    read-stream-values-result-string: async func(s: stream<result<string, string>>) -> list<result<string, string>>;
+
+    read-stream-values-list-u8: async func(s: stream<list<u8>>) -> list<list<u8>>;
+    read-stream-values-list-string: async func(s: stream<list<string>>) -> list<list<string>>;
+    read-stream-values-fixed-list-u32: async func(s: stream<list<list<u32, 5>>>) -> list<list<list<u32, 5>>>;
     // read-stream-values-list-record: async func(s: stream<list<example-record>>) -> list<list<example-record>>;
-    // read-stream-values-fixed-list-u32: async func(s: stream<list<list<u32, 5>>>) -> list<list<list<u32, 5>>>;
-
-    // read-stream-values-tuple: async func(s: stream<tuple<u32, s32, string>>) -> list<tuple<u32, s32, string>>;
-
-    // read-stream-values-flags: async func(s: stream<example-flags>) -> list<example-flags>;
-
-    // read-stream-values-enum: async func(s: stream<example-enum>) -> list<example-enum>;
-
-    // read-stream-values-option-string: async func(s: stream<option<string>>) -> list<option<string>>;
-
-    // read-stream-values-result-string: async func(s: stream<result<string, string>>) -> list<result<string, string>>;
 
     // // NOTE: the check here will be whether the resources are disposed inside the component properly
     // read-stream-values-example-resource-own: async func(s: stream<example-resource>);
@@ -243,7 +243,7 @@ interface use-stream-async {
 
 world stream-rx {
     // import resources;
- 
+
     export use-stream-sync;
     export use-stream-async;
 }

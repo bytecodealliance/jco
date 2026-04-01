@@ -11,7 +11,9 @@ use wit_bindgen::StreamReader;
 use bindings::exports::jco::test_components::use_stream_async;
 use bindings::exports::jco::test_components::use_stream_sync;
 
-use bindings::exports::jco::test_components::use_stream_async::{ExampleRecord, ExampleVariant};
+use bindings::exports::jco::test_components::use_stream_async::{
+    ExampleEnum, ExampleFlags, ExampleRecord, ExampleVariant,
+};
 
 struct Component;
 
@@ -79,6 +81,46 @@ impl use_stream_async::Guest for Component {
     }
 
     async fn read_stream_values_variant(rx: StreamReader<ExampleVariant>) -> Vec<ExampleVariant> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_option_string(
+        rx: StreamReader<Option<String>>,
+    ) -> Vec<Option<String>> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_result_string(
+        rx: StreamReader<Result<String, String>>,
+    ) -> Vec<Result<String, String>> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_tuple(
+        rx: StreamReader<(u32, i32, String)>,
+    ) -> Vec<(u32, i32, String)> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_flags(rx: StreamReader<ExampleFlags>) -> Vec<ExampleFlags> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_enum(rx: StreamReader<ExampleEnum>) -> Vec<ExampleEnum> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_list_u8(rx: StreamReader<Vec<u8>>) -> Vec<Vec<u8>> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_list_string(rx: StreamReader<Vec<String>>) -> Vec<Vec<String>> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_fixed_list_u32(
+        rx: StreamReader<Vec<[u32; 5]>>,
+    ) -> Vec<Vec<[u32; 5]>> {
         read_async_values(rx).await
     }
 }

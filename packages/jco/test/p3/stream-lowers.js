@@ -242,19 +242,134 @@ suite("stream<T> lowers", () => {
         );
         assert.deepEqual(returnedVals, [
             // TODO: wit type representation smoothing mismatch
-            { tag: "maybe-u32", val: { tag: 'some', val: 123 }},
-            { tag: "maybe-u32", val: { tag: 'none' }},
+            { tag: "maybe-u32", val: { tag: "some", val: 123 } },
+            { tag: "maybe-u32", val: { tag: "none" } },
             { tag: "str", val: "string-value" },
             { tag: "num", val: 1 },
         ]);
 
-        vals = [
-            { tag: "float", val: 123.1 },
-        ];
+        vals = [{ tag: "float", val: 123.1 }];
         returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesVariant(
             createReadableStreamFromValues(vals),
         );
         assert.closeTo(returnedVals[0].val, 123.1, 0.01);
+    });
 
+    test.concurrent("tuple", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesTuple, AsyncFunction);
+
+        let vals = [
+            [1, -1, "one"],
+            [2, -2, "two"],
+            [3, -3, "two"],
+        ];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesTuple(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
+    test.concurrent("flags", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesFlags, AsyncFunction);
+
+        let vals = [
+            { first: true, second: false, third: false },
+            { first: false, second: true, third: false },
+            { first: false, second: false, third: true },
+        ];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesFlags(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
+    test.concurrent("enum", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesEnum, AsyncFunction);
+
+        let vals = ["first", "second", "third"];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesEnum(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, ["first", "second", "third"]);
+    });
+
+    test.concurrent("option<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesOptionString, AsyncFunction);
+
+        let vals = ["present string", null];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesOptionString(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, [
+            // TODO: wit type representation smoothing mismatch
+            { tag: "some", val: "present string" },
+            { tag: "none" },
+        ]);
+    });
+
+    test.concurrent("result<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesResultString, AsyncFunction);
+
+        let vals = [{ tag: "ok", val: "present string" }, { tag: "err", val: "nope" }, "bare string (ok)"];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesResultString(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, [
+            // TODO: wit type representation smoothing mismatch
+            { tag: "ok", val: "present string" },
+            { tag: "err", val: "nope" },
+            { tag: "ok", val: "bare string (ok)" },
+        ]);
+    });
+
+    test.concurrent("list<u8>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesListU8, AsyncFunction);
+
+        let vals = [[0x01, 0x02, 0x03, 0x04, 0x05], new Uint8Array([0x05, 0x04, 0x03, 0x02, 0x01]), []];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesListU8(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, [
+            // TODO: wit type representation smoothing mismatch
+            vals[0],
+            [...vals[1]],
+            [],
+        ]);
+    });
+
+    test.concurrent("list<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesListString, AsyncFunction);
+
+        let vals = [["first", "second", "third"], []];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesListString(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
+    test.concurrent("list<list<u32, 5>>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesFixedListU32, AsyncFunction);
+
+        let vals = [
+            [
+                [1, 2, 3, 4, 5],
+                [0, 0, 0, 0, 0],
+            ],
+            [[0, 0, 0, 0, 0], new Uint32Array([0x05, 0x04, 0x03, 0x02, 0x01])],
+        ];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesFixedListU32(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, [
+            // TODO(fix): wit type representation smoothing mismatch
+            [
+                [1, 2, 3, 4, 5],
+                [0, 0, 0, 0, 0],
+            ],
+            [
+                [0, 0, 0, 0, 0],
+                [0x05, 0x04, 0x03, 0x02, 0x01],
+            ],
+        ]);
     });
 });
