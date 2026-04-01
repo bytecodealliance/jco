@@ -630,9 +630,11 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {lower_flat_variant_fn}(lowerMetas) {{
-                        const caseLookup = Object.fromEntries(
-                            lowerMetas.entries().map(([idx, meta]) => [meta[0], {{ discriminant: idx, meta }}])
-                        );
+                        let caseLookup = {{}};
+                        for (const [idx, meta] of lowerMetas.entries()) {{
+                            let tag = meta[0];
+                            caseLookup[tag] = {{ discriminant: idx, meta }};
+                        }}
 
                         return function {lower_flat_variant_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_variant_fn}()] args', {{ ctx }});
