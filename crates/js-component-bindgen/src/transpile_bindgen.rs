@@ -4647,22 +4647,37 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
             let list_ty = &component_types[*ty_idx];
             let lift_fn_expr = gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
-            let align_32 = elem_cabi.align32;
-            let size_32 = elem_cabi.size32;
-            format!("{f}({{ elemLiftFn: {lift_fn_expr}, align32: {align_32}, size32: {size_32} }})")
+            let elem_align32 = elem_cabi.align32;
+            let elem_size32 = elem_cabi.size32;
+            format!(
+                "{f}({{
+                     elemLiftFn: {lift_fn_expr},
+                     elemAlign32: {elem_align32},
+                     elemSize32: {elem_size32},
+                 }})"
+            )
         }
 
         InterfaceType::FixedLengthList(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
+            let list_size32 = list_ty.abi.size32;
+            let list_align32 = list_ty.abi.align32;
             let lift_fn_expr = gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let list_len = list_ty.size;
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
-            let align_32 = elem_cabi.align32;
-            let size_32 = elem_cabi.size32;
+            let elem_align32 = elem_cabi.align32;
+            let elem_size32 = elem_cabi.size32;
             format!(
-                "{f}({{ elemLiftFn: {lift_fn_expr}, align32: {align_32}, size32: {size_32}, knownLen: {list_len} }})"
+                "{f}({{
+                     elemLiftFn: {lift_fn_expr},
+                     elemAlign32: {elem_align32},
+                     elemSize32: {elem_size32},
+                     listSize32: {list_size32},
+                     listAlign32: {list_align32},
+                     knownLen: {list_len},
+                 }})"
             )
         }
 
@@ -5097,11 +5112,20 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
 
         InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
             let list_ty = &component_types[*ty_idx];
             let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
-            let ty_idx = ty_idx.as_u32();
-            format!("{f}({{ elemLowerFn: {elem_ty_lower_expr}, typeIdx: {ty_idx} }})")
+            let elem_cabi = component_types.canonical_abi(&list_ty.element);
+            let elem_align32 = elem_cabi.align32;
+            let elem_size32 = elem_cabi.size32;
+
+            format!(
+                "{f}({{
+                elemLowerFn: {elem_ty_lower_expr},
+                elemSize32: {elem_size32},
+                elemAlign32: {elem_align32},
+            }})"
+            )
         }
 
         InterfaceType::FixedLengthList(ty_idx) => {
@@ -5110,15 +5134,19 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
             let list_ty = &component_types[*ty_idx];
             let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
             let list_len = list_ty.size;
+            let list_align32 = list_ty.abi.size32;
+            let list_size32 = list_ty.abi.size32;
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
-            let align_32 = elem_cabi.align32;
-            let size_32 = elem_cabi.size32;
+            let elem_align32 = elem_cabi.align32;
+            let elem_size32 = elem_cabi.size32;
 
             format!(
                 r#"{f}({{
                        elemLowerFn: {elem_ty_lower_expr},
-                       align32: {align_32},
-                       size32: {size_32},
+                       elemAlign32: {elem_align32},
+                       elemSize32: {elem_size32},
+                       align32: {list_align32},
+                       size32: {list_size32},
                        knownLen: {list_len},
                    }})"#
             )

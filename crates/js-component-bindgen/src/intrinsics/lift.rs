@@ -308,7 +308,7 @@ impl LiftIntrinsic {
             Self::LiftFlatU8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_u8_fn = self.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {lift_flat_u8_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_u8_fn}()] args', {{ ctx }});
                         let val;
@@ -331,7 +331,7 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatS16 => {
@@ -633,15 +633,17 @@ impl LiftIntrinsic {
                             return [val, ctx];
                         }}
 
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         const dv = new DataView(ctx.memory.buffer);
                         const start = dv.getUint32(ctx.storagePtr, true);
                         const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
+
                         val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
 
                         ctx.storagePtr += 8;
-
-                        const rem = ctx.storagePtr % 4;
-                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+                        if (ctx.storageLen !== undefined) {{ ctx.storagelen -= 8; }}
 
                         return [val, ctx];
                     }}
@@ -778,7 +780,7 @@ impl LiftIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {lift_flat_list_fn}(meta) {{
-                        const {{ elemLiftFn, size32, align32, knownLen }} = meta;
+                        const {{ elemLiftFn, elemSize32, elemAlign32, knownLen }} = meta;
 
                         const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {{
                             ctx.storagePtr = dataPtr;
@@ -788,12 +790,14 @@ impl LiftIntrinsic {
                                 val.push(res);
                                 ctx = nextCtx;
 
-                                const rem = ctx.storagePtr % align32;
-                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                                const rem = ctx.storagePtr % elemAlign32;
+                                if (rem !== 0) {{ ctx.storagePtr += elemAlign32 - rem; }}
                             }}
                             if (originalPtr !== null) {{ ctx.storagePtr = originalPtr; }}
                             return [val, ctx];
                         }};
+
+                        // TODO(fix): special case for u8/u16/etc into appropriate type
 
                         return function {lift_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
@@ -810,7 +814,7 @@ impl LiftIntrinsic {
 
                                     ctx.useDirectParams = false;
                                     const originalPtr = ctx.storagePtr;
-                                    ctx.storageLen = knownLen * size32;
+                                    ctx.storageLen = knownLen * elemSize32;
 
                                     liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, knownLen);
 
@@ -819,6 +823,7 @@ impl LiftIntrinsic {
                                     ctx.storageLen = null;
 
                                 }} else {{
+                                    ctx.storageLen = knownLen * elemSize32;
                                     liftResults = readValuesAndReset(ctx, null, ctx.storagePtr, knownLen);
                                 }}
 
@@ -832,7 +837,7 @@ impl LiftIntrinsic {
 
                                     ctx.useDirectParams = false;
                                     const originalPtr = ctx.storagePtr;
-                                    ctx.storageLen = len * size32;
+                                    ctx.storageLen = len * elemSize32;
 
                                     liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
 
@@ -842,6 +847,8 @@ impl LiftIntrinsic {
 
                                 }} else {{
                                     // unknown length list ptr w/ in-memory params
+                                    ctx.storageLen = 8;
+
                                     const dataPtrLiftRes = {lift_u32}(ctx);
                                     const dataPtr = dataPtrLiftRes[0];
                                     ctx = dataPtrLiftRes[1];
@@ -853,6 +860,7 @@ impl LiftIntrinsic {
                                     const originalPtr = ctx.storagePtr;
                                     ctx.storagePtr = dataPtr;
 
+                                    ctx.storageLen = len * elemSize32;
                                     liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
                                 }}
                             }}

@@ -589,13 +589,13 @@ impl LowerIntrinsic {
                         if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
                         const s = ctx.vals[0];
-                        const {{ ptr, len, codepoints }} = {utf8_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
+                        const {{ ptr, codepoints }} = {utf8_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
 
                         const view = new DataView(ctx.memory.buffer);
                         view.setUint32(ctx.storagePtr, ptr, true);
                         view.setUint32(ctx.storagePtr + 4, codepoints, true);
 
-                        ctx.storagePtr += len;
+                        ctx.storagePtr += 8;
                     }}
                 "#));
             }
@@ -681,16 +681,23 @@ impl LowerIntrinsic {
             Self::LowerFlatList => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_list_fn = self.name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
 
                 output.push_str(&format!(r#"
-                    function {lower_flat_list_fn}(args) {{
-                        const {{ elemLowerFn, knownLen, size32, align32 }} = args;
+                    function {lower_flat_list_fn}(meta) {{
+                        const {{
+                            elemLowerFn,
+                            knownLen,
+                            size32,
+                            align32,
+                            elemSize32,
+                            elemAlign32,
+                        }} = meta;
+
                         if (!elemLowerFn) {{ throw new TypeError("missing/invalid element lower fn for list"); }}
 
                         return function {lower_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_list_fn}()] args', {{ ctx }});
-
-                            // TODO: fix known-length processing
 
                             if (ctx.useDirectParams) {{
                                 if (ctx.params.length < 2) {{ throw new Error('insufficient params left to lower list'); }}
@@ -714,23 +721,57 @@ impl LowerIntrinsic {
                                 const bytesLowered = lowerCtx.storagePtr - ctx.storagePtr;
                                 ctx.storagePtr = lowerCtx.storagePtr;
 
+                                // TODO: implement parma-only known-length processing
+
                                 ctx.storagePtr += bytesLowered;
                                 return;
                             }}
 
-                            if (ctx.vals.length !== 2) {{
-                                throw new Error('indirect parameter loading must have a pointer and length as vals');
+                            // TODO(fix): is it possible to get a vals that are a addr and length here from
+                            // a component lower?
+
+                            const elems = ctx.vals[0];
+                            if (knownLen === undefined) {{
+                                // unknown length
+                                if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
+                                const dataPtr = ctx.realloc(0, 0, elemAlign32, elemSize32 * elems.length);
+
+                                ctx.vals[0] = dataPtr;
+                                {lower_u32_fn}(ctx);
+
+                                ctx.vals[0] = elems.length;
+                                {lower_u32_fn}(ctx);
+
+                                const origPtr = ctx.storagePtr;
+                                ctx.storagePtr = dataPtr;
+
+                                ctx.storagePtr = dataPtr;
+                                for (const elem of elems) {{
+                                    ctx.vals = [elem];
+                                    elemLowerFn(ctx);
+                                }}
+
+                                ctx.storagePtr = origPtr;
+
+                            }} else {{
+                                // known length
+
+                                if (elems.length !== knownLen) {{
+                                    throw new TypeError(`invalid list input of length [${{elems.length}}], must be length [${{knownLen}}]`);
+                                }}
+
+                                for (const elem of elems) {{
+                                    ctx.vals = [elem];
+                                    elemLowerFn(ctx);
+                                }}
                             }}
-                            let [valStartPtr, valLen] = ctx.vals;
-                            const totalSizeBytes = valLen * size;
+
+                            // TODO(fix): special case for u8/u16/etc, we can do a direct copy
+
+                            const totalSizeBytes = elems.length * size32;
                             if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {{
                                 throw new Error('not enough storage remaining for list flat lower');
                             }}
-
-                            const data = new Uint8Array(ctx.memory.buffer, valStartPtr, totalSizeBytes);
-                            new Uint8Array(ctx.memory.buffer, ctx.storagePtr, totalSizeBytes).set(data);
-
-                            ctx.storagePtr += totalSizeBytes;
                         }}
                     }}
                 "#));
