@@ -58,3 +58,6 @@ wit-component = { version = "0.246.1", features = ["dummy-module"] }
 wit-parser = { version = "0.246.1", default-features = false }
 
 js-component-bindgen = { version = "1.16.5", path = "./crates/js-component-bindgen" }
+
+[patch.crates-io]
+weedle = { git = "https://github.com/wasm-bindgen/weedle", ref = "v0.13.0" }
