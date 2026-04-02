@@ -201,13 +201,18 @@ impl<'a> Translation<'a> {
 
     /// Returns the exports of this module, which are not modified by
     /// augmentation.
-    pub fn exports(
-        &self,
-    ) -> &wasmtime_environ::wasmparser::collections::IndexMap<String, EntityIndex> {
-        match self {
-            Translation::Normal(translation) => &translation.module.exports,
-            Translation::Augmented { original, .. } => &original.module.exports,
-        }
+    pub fn exports(&self) -> HashMap<String, EntityIndex> {
+        let (translation, exports) = match self {
+            Translation::Normal(translation) => (translation, &translation.module.exports),
+            Translation::Augmented { original, .. } => (original, &original.module.exports),
+        };
+
+        exports
+            .iter()
+            .map(|(atom, entity_idx)| {
+                (String::from(&translation.module.strings[atom]), *entity_idx)
+            })
+            .collect()
     }
 }
 

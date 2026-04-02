@@ -2316,36 +2316,38 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
 
-            Trampoline::ResourceEnterCall => {
-                let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
-                uwrite!(self.src.js, "function trampoline{i}() {{ {scope_id}++; }}");
-            }
+            // TODO: we need to do this? does this mean we need to start keeping track of when we
+            // enter a call on a resource explicitly?
 
-            Trampoline::ResourceExitCall => {
-                let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
-                let resource_borrows = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows));
-                let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
-                // To verify that borrows are dropped, it is enough to verify that the handle
-                // either no longer exists (part of free list) or belongs to another scope, since
-                // the enter call closed off the ability to create new handles in the parent scope
-                uwrite!(
-                    self.src.js,
-                    r#"function trampoline{i}() {{
-                        {scope_id}--;
-                        for (const {{ rid, handle }} of {resource_borrows}) {{
-                            const storedScopeId = {handle_tables}[rid][handle << 1]
-                            if (storedScopeId === {scope_id}) {{
-                                throw new TypeError('borrows not dropped for resource call');
-                            }}
-                        }}
-                        {resource_borrows} = [];
-                    }}
-                    "#,
-                );
-            }
+            // Trampoline::ResourceEnterCall => {
+            //     let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
+            //     uwrite!(self.src.js, "function trampoline{i}() {{ {scope_id}++; }}");
+            // }
 
+            // Trampoline::ResourceExitCall => {
+            //     let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
+            //     let resource_borrows = self
+            //         .bindgen
+            //         .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows));
+            //     let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
+            //     // To verify that borrows are dropped, it is enough to verify that the handle
+            //     // either no longer exists (part of free list) or belongs to another scope, since
+            //     // the enter call closed off the ability to create new handles in the parent scope
+            //     uwrite!(
+            //         self.src.js,
+            //         r#"function trampoline{i}() {{
+            //             {scope_id}--;
+            //             for (const {{ rid, handle }} of {resource_borrows}) {{
+            //                 const storedScopeId = {handle_tables}[rid][handle << 1]
+            //                 if (storedScopeId === {scope_id}) {{
+            //                     throw new TypeError('borrows not dropped for resource call');
+            //                 }}
+            //             }}
+            //             {resource_borrows} = [];
+            //         }}
+            //         "#,
+            //     );
+            // }
             Trampoline::ContextSet { instance, slot, .. } => {
                 let context_set_fn = self
                     .bindgen
@@ -2532,10 +2534,15 @@ impl<'a> Instantiator<'a, '_> {
             }
             Trampoline::ThreadIndex => todo!("Trampoline::ThreadIndex"),
             Trampoline::ThreadNewIndirect { .. } => todo!("Trampoline::ThreadNewIndirect"),
-            Trampoline::ThreadSwitchTo { .. } => todo!("Trampoline::ThreadSwitchTo"),
             Trampoline::ThreadSuspend { .. } => todo!("Trampoline::ThreadSuspend"),
-            Trampoline::ThreadResumeLater { .. } => todo!("Trampoline::ThreadResumeLater"),
-            Trampoline::ThreadYieldTo { .. } => todo!("Trampoline::ThreadYieldTo"),
+            Trampoline::ThreadSuspendTo { .. } => todo!("Trampoline::ThreadSuspendTo"),
+            Trampoline::ThreadUnsuspend { .. } => todo!("Trampoline::ThreadUnsuspend"),
+            Trampoline::ThreadYieldToSuspended { .. } => {
+                todo!("Trampoline::ThreadYieldToSuspended")
+            }
+            Trampoline::ThreadSuspendToSuspended { .. } => {
+                todo!("Trampoline::ThreadYieldToSuspended")
+            }
 
             Trampoline::Trap => {
                 uwriteln!(
@@ -3947,11 +3954,12 @@ impl<'a> Instantiator<'a, '_> {
                     .iter()
                     .find_map(|(name, i)| if *i == idx { Some(name) } else { None })
                     .unwrap()
+                    .to_string()
             }
-            ExportItem::Name(s) => s,
+            ExportItem::Name(s) => s.to_string(),
         };
         let i = export.instance.as_u32() as usize;
-        let quoted = maybe_quote_member(name);
+        let quoted = maybe_quote_member(&name);
         format!("exports{i}{quoted}")
     }
 
