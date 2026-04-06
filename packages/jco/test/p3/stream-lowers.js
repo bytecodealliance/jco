@@ -10,6 +10,24 @@ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 suite("stream<T> lowers", () => {
     let esModule, cleanup, instance;
 
+    class ExampleResource {
+        #id;
+
+        dropped = false;
+
+        constructor(id) {
+            this.#id = id;
+        }
+
+        getId() {
+            return this.#id;
+        }
+
+        [Symbol.for('dispose')]() {
+            this.dropped = true;
+        }
+    }
+
     beforeAll(async () => {
         const name = "stream-rx";
         const setupRes = await setupAsyncTest({
@@ -39,6 +57,9 @@ suite("stream<T> lowers", () => {
     beforeEach(async () => {
         instance = await esModule.instantiate(undefined, {
             ...new WASIShim().getImportObject(),
+            "jco:test-components/resources": {
+                ExampleResource,
+            },
         });
     });
 
@@ -388,6 +409,52 @@ suite("stream<T> lowers", () => {
             createReadableStreamFromValues(vals),
         );
         assert.deepEqual(returnedVals, vals);
+    });
+
+    test.only("example-resource", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwn, AsyncFunction);
+
+        let vals = [
+            new ExampleResource(0),
+            new ExampleResource(1),
+            new ExampleResource(2),
+        ];
+        await instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwn(
+            createReadableStreamFromValues(vals),
+        );
+        assert(vals.every(r => r.dropped === true));
+    });
+
+    test.skip("example-resource#get-id", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwn, AsyncFunction);
+
+        let vals = [
+            new ExampleResource(2),
+            new ExampleResource(1),
+            new ExampleResource(0),
+        ];
+        const returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwn(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, [2, 1, 0]);
+    });
+
+    test.skip("stream<string>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesStreamString, AsyncFunction);
+
+        let vals = [
+            createReadableStreamFromValues(["first", "stream", "values"]),
+            createReadableStreamFromValues(["second", "stream", "here"]),
+            createReadableStreamFromValues(["third", "values", "in stream"]),
+        ];
+        const returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesStreamString(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, [
+            ["first", "stream", "values"],
+            ["second", "stream", "here"],
+            ["third", "values", "in stream"],
+        ]);
     });
 
 });

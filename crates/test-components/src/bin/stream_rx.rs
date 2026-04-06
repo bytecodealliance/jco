@@ -10,6 +10,7 @@ use wit_bindgen::StreamReader;
 
 use bindings::exports::jco::test_components::use_stream_async;
 use bindings::exports::jco::test_components::use_stream_sync;
+use bindings::jco::test_components::resources;
 
 use bindings::exports::jco::test_components::use_stream_async::{
     ExampleEnum, ExampleFlags, ExampleRecord, ExampleVariant,
@@ -128,6 +129,29 @@ impl use_stream_async::Guest for Component {
         rx: StreamReader<Vec<ExampleRecord>>,
     ) -> Vec<Vec<ExampleRecord>> {
         read_async_values(rx).await
+    }
+
+    async fn read_stream_values_example_resource_own(rx: StreamReader<resources::ExampleResource>) {
+        let _ = read_async_values(rx).await;
+        // All vals dropped at the end of this function
+    }
+
+    async fn read_stream_values_example_resource_own_attr(
+        rx: StreamReader<resources::ExampleResource>,
+    ) -> Vec<u32> {
+        let vals = read_async_values::<resources::ExampleResource>(rx).await;
+        vals.into_iter().map(|r| r.get_id()).collect()
+    }
+
+    async fn read_stream_values_stream_string(
+        mut rx: StreamReader<StreamReader<String>>,
+    ) -> Vec<Vec<String>> {
+        let mut vals = Vec::new();
+        while let Some(inner_rx) = rx.next().await {
+            let inner_vals = read_async_values(inner_rx).await;
+            vals.push(inner_vals);
+        }
+        vals
     }
 }
 

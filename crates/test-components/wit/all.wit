@@ -187,7 +187,7 @@ interface use-stream-sync {
 }
 
 interface use-stream-async {
-    // use resources.{example-resource};
+    use resources.{example-resource};
     use example-types.{example-variant, example-enum, example-record, example-flags};
 
     stream-passthrough: async func(s: stream<u32>) -> stream<u32>;
@@ -231,18 +231,18 @@ interface use-stream-async {
     read-stream-values-fixed-list-u32: async func(s: stream<list<list<u32, 5>>>) -> list<list<list<u32, 5>>>;
     read-stream-values-list-record: async func(s: stream<list<example-record>>) -> list<list<example-record>>;
 
-    // // NOTE: the check here will be whether the resources are disposed inside the component properly
-    // read-stream-values-example-resource-own: async func(s: stream<example-resource>);
+    // NOTE: the check here will be whether the resources are disposed inside the component properly
+    read-stream-values-example-resource-own: async func(s: stream<example-resource>);
 
-    // read-stream-values-example-resource-own-attr: async func(s: stream<example-resource>) -> list<u32>;
+    read-stream-values-example-resource-own-attr: async func(s: stream<example-resource>) -> list<u32>;
 
-    // read-stream-values-stream-string: async func(s: stream<stream<string>>) -> list<list<string>>;
+    read-stream-values-stream-string: async func(s: stream<stream<string>>) -> list<list<string>>;
 
     //read-stream-values-future-string: async func(vals: list<future<string>>) -> result<stream<future<string>>, string>;
 }
 
 world stream-rx {
-    // import resources;
+    import resources;
 
     export use-stream-sync;
     export use-stream-async;
