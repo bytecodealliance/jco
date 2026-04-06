@@ -924,17 +924,31 @@ impl LowerIntrinsic {
                 ));
             }
 
-            // TODO: implement lower flat own
             Self::LowerFlatOwn => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_own_fn = self.name();
+
                 output.push_str(&format!(
-                    "
-                    function {lower_flat_own_fn}(ctx) {{
-                        {debug_log_fn}('[{lower_flat_own_fn}()] args', {{ ctx }});
-                        throw new Error('flat lower for owned resources not yet implemented!');
-                    }}
-                "
+                    r#"
+                      function {lower_flat_own_fn}(meta) {{
+                          const {{ lowerFn, componentIdx }} = meta;
+
+                          return function {lower_flat_own_fn}Inner(ctx) {{
+                              {debug_log_fn}('[{lower_flat_own_fn}()] args', {{ ctx }});
+                              const {{ createFn }} = ctx;
+
+                              if (ctx.componentIdx !== componentIdx) {{
+                                  throw new Error(`component index mismatch (expected [${{componentIdx}}], lift called from [${{ctx.componentIdx}}])`);
+                              }}
+
+                              console.log("PARAMS?", [...arguments]);
+
+                              const obj = ctx.vals[0];
+                              if (obj === undefined || obj === null) {{ throw new Error('missing resource'); }}
+                              lowerFn(obj);
+                          }};
+                      }}
+                    "#
                 ));
             }
 

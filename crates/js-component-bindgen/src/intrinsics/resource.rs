@@ -61,6 +61,9 @@ pub enum ResourceIntrinsic {
     ResourceTransferBorrowValidLifting,
     ResourceTransferOwn,
     CurResourceBorrows,
+
+    /// Monotonically increasing ID that is used for lowered resource reps
+    LoweredResourceRepId,
 }
 
 impl ResourceIntrinsic {
@@ -83,6 +86,7 @@ impl ResourceIntrinsic {
             Self::ResourceTransferBorrowValidLifting.name(),
             Self::ResourceTransferOwn.name(),
             Self::CurResourceBorrows.name(),
+            Self::LoweredResourceRepId.name(),
         ]
     }
 
@@ -100,6 +104,7 @@ impl ResourceIntrinsic {
             Self::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",
             Self::ResourceTransferOwn => "resourceTransferOwn",
             Self::CurResourceBorrows => "curResourceBorrows",
+            Self::LoweredResourceRepId => "LOWERED_RESOURCE_REP",
         }
     }
 
@@ -251,6 +256,11 @@ impl ResourceIntrinsic {
             Self::ResourceCallBorrows => {
                 let name = self.name();
                 output.push_str(&format!("let {name} = [];"));
+            }
+
+            Self::LoweredResourceRepId => {
+                let name = self.name();
+                output.push_str(&format!("const {name} = 1;"));
             }
         }
     }

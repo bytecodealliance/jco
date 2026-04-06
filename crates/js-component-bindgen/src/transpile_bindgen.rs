@@ -16,8 +16,7 @@ use wasmtime_environ::component::{
     TypeDef, TypeFuncIndex, TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wasmtime_environ::component::{
-    ExportIndex, ExtractCallback, NameMap, NameMapNoIntern, Transcode,
-    TypeComponentLocalErrorContextTableIndex,
+    ExtractCallback, NameMapNoIntern, Transcode, TypeComponentLocalErrorContextTableIndex,
 };
 use wasmtime_environ::{EntityIndex, PrimaryMap};
 use wit_bindgen_core::abi::{self, LiftLower};
@@ -848,11 +847,11 @@ impl<'a> Instantiator<'a, '_> {
             self.instantiation_global_initializer(init);
         }
 
+        // Process imports and build mappings
+        self.process_imports();
+
         // Process exports and build mappings
-        //
-        // NOTE: generating exports fills out export resource map information
-        // that is needed for some trampolines.
-        self.exports(&self.component.exports);
+        self.process_exports();
 
         // Some trampolines that correspond to host-provided imports need to be defined before the
         // instantiation bits since they are referred to.
@@ -2711,6 +2710,15 @@ impl<'a> Instantiator<'a, '_> {
         ty_func_idx: TypeFuncIndex,
         resource_map: &mut ResourceMap,
     ) {
+        // for ty in func.parameter_and_result_types() {
+        //     if let Type::Id(id) = ty {
+        //         let ty_id = crate::dealias(self.resolve, id);
+        //         if let Some(TypeDef::Interface(iface_ty)) = self.resolve.types.get(id) {
+        //             self.connect_resource_types(ty_id, &iface_ty, resource_map);
+        //         }
+        //     }
+        // }
+
         // Connect resources used in parameters
         let params_ty = &self.types[self.types[ty_func_idx].params];
         for (p, iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
@@ -3040,7 +3048,7 @@ impl<'a> Instantiator<'a, '_> {
             self.resource_imports.extend(import_resource_map.clone());
 
             let resource_tables = {
-                let mut resource_tables: Vec<TypeResourceTableIndex> = Vec::new();
+                let mut resource_table_ids: Vec<TypeResourceTableIndex> = Vec::new();
 
                 for (_, data) in import_resource_map {
                     let ResourceTable {
@@ -3050,15 +3058,15 @@ impl<'a> Instantiator<'a, '_> {
                     else {
                         unreachable!("unexpected non-host resource table");
                     };
-                    resource_tables.push(*tid);
+                    resource_table_ids.push(*tid);
                 }
 
-                if resource_tables.is_empty() {
+                if resource_table_ids.is_empty() {
                     "".to_string()
                 } else {
                     format!(
                         " resourceTables: [{}],",
-                        resource_tables
+                        resource_table_ids
                             .iter()
                             .map(|x| format!("handleTable{}", x.as_u32()))
                             .collect::<Vec<String>>()
@@ -3931,8 +3939,89 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{quoted}")
     }
 
-    fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
-        for (export_name, export_idx) in exports.raw_iter() {
+    /// Process the component imports and build mappings
+    fn process_imports(&mut self) {
+        let mut import_resource_map = ResourceMap::new();
+        for (_import_name, (import_idx, _import_path)) in self.component.imports.iter() {
+            let (import_name, import_type_def) = &self.component.import_types[*import_idx];
+            let import_world_key = &self
+                .imports
+                .get(import_name)
+                .expect("missing import mapping");
+            let import_world_item = &self
+                .resolve
+                .worlds
+                .get(self.world)
+                .expect("missing world")
+                .imports
+                .get(*import_world_key)
+                .expect("missing import in world for import");
+
+            // Generate type information for types used in functions
+            match import_world_item {
+                WorldItem::Interface { id: iface_id, .. } => {
+                    let iface = &self.resolve.interfaces[*iface_id];
+
+                    // Process functions imported by the iface, which will use (as arg or param)
+                    // relevant resources
+                    for (fn_name, iface_fn) in iface.functions.iter() {
+                        // Find the type for the function in the import
+                        let fn_ty_idx = match import_type_def {
+                            // If the import is from another component instance, we need to find the function
+                            // type within manually
+                            TypeDef::ComponentInstance(instance_ty) => {
+                                let component_instance = &self.types[*instance_ty];
+                                if let Some(f) = &component_instance.exports.get(fn_name)
+                                    && let TypeDef::ComponentFunc(type_func_idx) = f
+                                {
+                                    type_func_idx
+                                } else {
+                                    unreachable!(
+                                        "missing imported function in imported component instance's exports"
+                                    )
+                                }
+                            }
+                            TypeDef::Resource(_)
+                            | TypeDef::ComponentFunc(_)
+                            | TypeDef::Component(_)
+                            | TypeDef::Module(_)
+                            | TypeDef::Interface(_)
+                            | TypeDef::CoreFunc(_) => {
+                                unreachable!("unexpected import type definition for interface")
+                            }
+                        };
+
+                        self.create_resource_fn_map(
+                            &iface_fn,
+                            *fn_ty_idx,
+                            &mut import_resource_map,
+                        );
+                    }
+                }
+
+                // Process imported functions directly to build resource maps
+                WorldItem::Function(func) => {
+                    // TODO: get func type index
+                    let TypeDef::ComponentFunc(func_ty_idx) = import_type_def else {
+                        unreachable!("invalid fn export");
+                    };
+                    self.create_resource_fn_map(func, *func_ty_idx, &mut import_resource_map);
+                }
+                // Simply informational at this point
+                WorldItem::Type { .. } => {}
+            }
+        }
+
+        self.resource_imports.extend(import_resource_map);
+    }
+
+    /// Process component exports and build mappings
+    fn process_exports(&mut self) {
+        // Since imports may be referred to by exports, we include all imports in the exports array
+        self.resource_exports.extend(self.resource_imports.clone());
+
+        // Process individual component exports
+        for (export_name, export_idx) in self.component.exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
@@ -5238,9 +5327,192 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
 
         InterfaceType::Own(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
-            let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
-            format!("{f}.bind(null, {table_idx})")
+            let resource_table_ty = &component_types[*ty_idx];
+            let component_idx = resource_table_ty.unwrap_concrete_instance().as_u32();
+            let resource_idx = resource_table_ty.unwrap_concrete_ty();
+
+            // Retrieve resource information for the given resource
+            let (_, ResourceTable { imported, data }) = match (
+                intrinsic_mgr
+                    .imports_resource_index_types
+                    .get(&resource_idx),
+                intrinsic_mgr
+                    .exports_resource_index_types
+                    .get(&resource_idx),
+            ) {
+                (Some(import_ty), _) => {
+                    let ty = crate::dealias(intrinsic_mgr.resolve, *import_ty);
+                    (
+                        ty,
+                        intrinsic_mgr
+                            .resource_imports
+                            .get(&ty)
+                            .expect("missing imported resource table information"),
+                    )
+                }
+
+                // TODO: Exports could also come from imports...
+                (_, Some(export_ty)) => {
+                    let ty = crate::dealias(intrinsic_mgr.resolve, *export_ty);
+                    let actual_ty = &intrinsic_mgr.resolve.types[ty];
+                    // TODO: example-resource itself is missing...
+                    if let None = intrinsic_mgr.resource_exports.get(&ty) {
+                        eprintln!("MISSING {export_ty:?} | {ty:?}, actual type: {actual_ty:#?}");
+                        eprintln!("WHOLE MAP {:#?}", intrinsic_mgr.resource_exports);
+                    }
+                    (
+                        ty,
+                        intrinsic_mgr
+                            .resource_exports
+                            .get(&ty)
+                            .expect("missing exported resource table information"),
+                    )
+                }
+                (None, None) => {
+                    return format!(
+                        "{f}({{
+                             componentIdx: {component_idx},
+                             lowerFn: () => {{ throw new Error('missing/invalid resource metadata'); }}
+                         }})"
+                    );
+                }
+            };
+
+            // Build the function to create the resource, depending on how it was provided
+            let lower_fn_js = match data {
+                // If the resource was provided by the host, build the function to create it.
+                ResourceData::Host {
+                    tid,
+                    rid,
+                    local_name,
+                    ..
+                } => {
+                    let tid = tid.as_u32();
+                    let rid = rid.as_u32();
+                    let symbol_resource_rep = intrinsic_mgr
+                        .bindgen
+                        .intrinsic(Intrinsic::SymbolResourceRep);
+                    let symbol_resource_handle = intrinsic_mgr
+                        .bindgen
+                        .intrinsic(Intrinsic::SymbolResourceHandle);
+                    let symbol_dispose = intrinsic_mgr.bindgen.intrinsic(Intrinsic::SymbolDispose);
+
+                    if *imported {
+                        // If imported (and from the host), we must ensure that the incoming object is of the right
+                        // instance, then add it to the capture table w/ the right resource ID,
+                        let create_own_fn = intrinsic_mgr.bindgen.intrinsic(Intrinsic::Resource(
+                            ResourceIntrinsic::ResourceTableCreateOwn,
+                        ));
+                        format!(
+                            r#"
+                              function lowerImportedOwnedHost_{local_name}(obj) {{
+                                  if (!(obj instanceof {local_name})) {{
+                                      throw new TypeError('Resource error: Not a valid \"{local_name}\" resource.');
+                                  }}
+                                  console.log("LOWERING IMPORTED HOST [{local_name}]", {{ obj, handle: obj[{symbol_resource_handle}] }});
+                                  let handle = obj[{symbol_resource_handle}];
+                                  handle = {create_own_fn}(handleTable{tid}, rep);
+                                  if (!handle) {{
+                                    const rep = obj[{symbol_resource_rep}] || ++captureCnt{rid};
+                                    captureTable{rid}.set(rep, obj);
+                                    handle = {create_own_fn}(handleTable{tid}, rep);
+                                  }}
+                              }}
+                            "#
+                        )
+                    } else {
+                        // If the resource was not imported (and came from the host), it comes from the component receiving it,
+                        // and the object should already have a handle associated inside of it (the component must have created it).
+                        //
+                        // We disconnect the external conenctions for dispose and remove the external
+                        // facing resource handle that was added when lifted out.
+                        let empty_func = intrinsic_mgr
+                            .bindgen
+                            .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
+                        format!(
+                            r#"
+                               function lowerExportedOwnedHost_{local_name}(obj) {{
+                                   let handle = obj[{symbol_resource_handle}];
+                                   if (!handle) {{
+                                       throw new TypeError('Resource error: Not a valid \"{local_name}\" resource.');
+                                   }}
+                                   finalizationRegistry{tid}.unregister(obj);
+                                   obj[{symbol_dispose}] = {empty_func};
+                                   obj[{symbol_resource_handle}] = undefined;
+                               }}
+                        "#
+                        )
+                    }
+                }
+
+                // If the resource was provided by the guest, build the function to create it.
+                ResourceData::Guest {
+                    resource_name,
+                    prefix,
+                    extra,
+                } => {
+                    assert!(
+                        extra.is_none(),
+                        "plain resource handles do not carry extra data"
+                    );
+
+                    let upper_camel = resource_name.to_upper_camel_case();
+                    let lower_camel = resource_name.to_lower_camel_case();
+                    let prefix = prefix.as_deref().unwrap_or("");
+
+                    if *imported {
+                        // If we get a resource that is provided by the host, then
+                        // it should already have an external-facing resource handle on it.
+                        let symbol_resource_handle = intrinsic_mgr
+                            .bindgen
+                            .intrinsic(Intrinsic::SymbolResourceHandle);
+                        format!(
+                            r#"
+                              function lowerImportedOwnedGuest_{upper_camel}(obj) {{
+                                  const handle = obj[{symbol_resource_handle}];
+                                  finalizationRegistry_import${prefix}{lower_camel}.unregister(obj);
+                              }}
+                            "#
+                        )
+                    } else {
+                        // If we get a resource that was exported by the guest and is being lowered in,
+                        // we can check that the object is of the right kidn of instance, and
+                        // create rep for it if one does not already exist.
+                        let symbol_resource_handle = intrinsic_mgr
+                            .bindgen
+                            .intrinsic(Intrinsic::SymbolResourceHandle);
+                        let lowered_resource_rep_id = intrinsic_mgr.bindgen.intrinsic(
+                            Intrinsic::Resource(ResourceIntrinsic::LoweredResourceRepId),
+                        );
+                        format!(
+                            r#"
+                              function lowerExportedOwnedGuest_{upper_camel}(obj) {{
+                                  if (!(obj instanceof {upper_camel})) {{
+                                    throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
+                                  }}
+                                  let handle = obj[{symbol_resource_handle}];
+
+                                  if (handle === undefined) {{
+                                      const localRep = ++{lowered_resource_rep_id};
+                                      repTable.set(localRep, {{ rep: obj, own: true }});
+                                      handle = $resource_{prefix}new${lower_camel}(localRep);
+                                      obj[{symbol_resource_handle}] = handle;
+                                      finalizationRegistry_export${prefix}{lower_camel}.register(obj, handle, obj);
+                                  }}
+                              }}
+                            "#
+                        )
+                    }
+                }
+            };
+
+            format!(
+                "{f}({{
+                     componentIdx: {component_idx},
+                     lowerFn: {lower_fn_js},
+                 }})"
+            )
         }
 
         InterfaceType::Borrow(ty_idx) => {
