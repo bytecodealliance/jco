@@ -8,6 +8,7 @@
     "packages/preview3-shim",
     "examples/components/add",
     "examples/components/adder",
+    "examples/components/fs-write-file",
     "examples/components/host-logging",
     "examples/components/http-hello-world",
     "examples/components/http-server-fetch-handler",
