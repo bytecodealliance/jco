@@ -1,0 +1,12 @@
+package jco:test;
+
+interface test {
+    run: func() -> string;
+}
+
+world component {
+    import wasi:filesystem/types@0.2.8;
+    import wasi:filesystem/preopens@0.2.8;
+
+    export test;
+}

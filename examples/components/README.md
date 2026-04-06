@@ -9,6 +9,7 @@ A brief description of the examples contained in this folder:
 |------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
 | [`add`](./add)                                             | `export`s basic functionality with simple types with a bare function export (deprectaed)         |
 | [`adder`](./adder)                                         | `export`s basic functionality with simple types with an interface (recommended)                  |
+| [`fs-write-file`](./fs-write-file)                         | Example of using `wasi:filesystem` (p2) to write a file to disk                                  |
 | [`host-logging`](./host-logging)                           | Showcases the use of the `wasi:logging` interface with a custom embedder ("host") function       |
 | [`http-hello-world`](./http-hello-world)                   | HTTP server using the [`wasi:http/incoming-handler`][wasi-http], the hard way.                   |
 | [`http-server-fetch-handler`](./http-server-fetch-handler) | HTTP server using standards-forward `fetch()` event handling built into [StarlingMonkey][sm]     |
@@ -24,7 +25,8 @@ A brief description of the examples contained in this folder:
 [hono]: https://hono.dev
 [nodejs]: https://nodejs.org
 [sm]: https://github.com/bytecodealliance/StarlingMonkey
-[wasi-http]: https://github.com/WebAssembly/wasi-http
+[wasi-http]: https://github.com/WebAssembly/WASI/tree/main/proposals/http
 [wasi-logging]: https://github.com/WebAssembly/wasi-logging
+[wasi-fs]: https://github.com/WebAssembly/WASI/tree/main/proposals/filesystem
 [webidl2wit]: https://github.com/wasi-gfx/webidl2wit
 [webidl]: https://developer.mozilla.org/en-US/docs/Glossary/WebIDL

@@ -1,0 +1,5 @@
+node_modules
+dist
+*.wasm
+pnpm-lock.yaml
+output.txt

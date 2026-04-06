@@ -1,0 +1,17 @@
+{
+    "name": "fs-write-file",
+    "description": "Codebase showcasing a simple use of wasi:filesystem (p2)",
+    "type": "module",
+    "scripts": {
+        "build": "jco componentize component.js --wit wit --world-name component --out dist/component.wasm",
+        "transpile": "jco transpile dist/component.wasm --instantiation=async -o dist/transpiled",
+        "transpiled-js": "node run-transpiled.js",
+        "all": "npm run build; npm run transpile; npm run transpiled-js"
+    },
+    "devDependencies": {
+        "@bytecodealliance/jco": "^1.17.6"
+    },
+    "dependencies": {
+        "@bytecodealliance/preview2-shim": "^0.17.8"
+    }
+}
