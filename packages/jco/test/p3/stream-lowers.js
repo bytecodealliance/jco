@@ -372,4 +372,22 @@ suite("stream<T> lowers", () => {
             ],
         ]);
     });
+
+    test.concurrent("list<example-record>", async () => {
+        assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesListRecord, AsyncFunction);
+
+        let vals = [
+            [ { id: 3, idStr: "three" },
+              { id: 2, idStr: "two" },
+              { id: 1, idStr: "one" }, ],
+            [ { id: 1, idStr: "one-one" },
+              { id: 2, idStr: "two-two" },
+              { id: 3, idStr: "three-three" }, ],
+        ];
+        let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesListRecord(
+            createReadableStreamFromValues(vals),
+        );
+        assert.deepEqual(returnedVals, vals);
+    });
+
 });

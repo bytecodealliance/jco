@@ -123,6 +123,12 @@ impl use_stream_async::Guest for Component {
     ) -> Vec<Vec<[u32; 5]>> {
         read_async_values(rx).await
     }
+
+    async fn read_stream_values_list_record(
+        rx: StreamReader<Vec<ExampleRecord>>,
+    ) -> Vec<Vec<ExampleRecord>> {
+        read_async_values(rx).await
+    }
 }
 
 async fn read_async_values<T>(mut rx: StreamReader<T>) -> Vec<T> {
