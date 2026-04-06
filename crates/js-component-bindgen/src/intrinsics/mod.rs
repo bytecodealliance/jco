@@ -1066,7 +1066,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 36] = [
+const EARLY_INTRINSICS: [Intrinsic; 37] = [
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
     Intrinsic::SymbolAsyncIterator,
@@ -1092,6 +1092,8 @@ const EARLY_INTRINSICS: [Intrinsic; 36] = [
     Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
     Intrinsic::TypeCheckValidI32,
     Intrinsic::TypeCheckAsyncFn,
+    // Resources
+    Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows),
     // Async helpers
     Intrinsic::AsyncFunctionCtor,
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask),

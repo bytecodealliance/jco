@@ -72,23 +72,24 @@ impl ResourceIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
-            "resourceCallBorrows",
-            "resourceTransferBorrow",
-            "resourceTransferBorrowValidLifting",
-            "resourceTransferOwn",
-            "rscTableCreateBorrow",
-            "rscTableCreateOwn",
-            "rscTableGet",
-            "rscTableRemove",
-            "rscTableTryGet",
-            "curResourceBorrows",
+            Self::ResourceCallBorrows.name(),
+            Self::ResourceTableFlag.name(),
+            Self::ResourceTableCreateBorrow.name(),
+            Self::ResourceTableCreateOwn.name(),
+            Self::ResourceTableGet.name(),
+            Self::ResourceTableEnsureBorrowDrop.name(),
+            Self::ResourceTableRemove.name(),
+            Self::ResourceTransferBorrow.name(),
+            Self::ResourceTransferBorrowValidLifting.name(),
+            Self::ResourceTransferOwn.name(),
+            Self::CurResourceBorrows.name(),
         ]
     }
 
     /// Get the name for the intrinsic
     pub fn name(&self) -> &'static str {
         match self {
-            Self::ResourceCallBorrows => "resourceCallBorrows",
+            Self::ResourceCallBorrows => "RESOURCE_CALL_BORROWS",
             Self::ResourceTableFlag => "T_FLAG",
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
@@ -247,7 +248,10 @@ impl ResourceIntrinsic {
                 "));
             }
 
-            Self::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
+            Self::ResourceCallBorrows => {
+                let name = self.name();
+                output.push_str(&format!("let {name} = [];"));
+            }
         }
     }
 }

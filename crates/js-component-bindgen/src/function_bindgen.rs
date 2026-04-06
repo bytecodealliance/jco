@@ -1467,6 +1467,33 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "const started = task.enterSync();",);
                 }
 
+                // Set up resource scope tracking, if we're in a resource call
+                if self.callee_resource_dynamic {
+                    let resource_borrows =
+                        self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows));
+                    let handle_tables = self.intrinsic(Intrinsic::HandleTables);
+                    let scope_id = self.intrinsic(Intrinsic::ScopeId);
+                    uwriteln!(
+                        self.src,
+                        r#"
+                          {scope_id}++;
+                          task.registerOnResolveHandler(() => {{
+                              {scope_id}--;
+                              for (const {{ rid, handle }} of {resource_borrows}) {{
+                                  const storedScopeId = {handle_tables}[rid][handle << 1]
+                                  if (storedScopeId === {scope_id}) {{
+                                      throw new TypeError('borrows not dropped for resource call');
+                                  }}
+                              }}
+                              {resource_borrows} = [];
+                          }}
+
+                          }});
+                        "#
+                    );
+                    uwriteln!(self.src, "{scope_id}++;");
+                }
+
                 // Save the memory for this task,
                 // which will be used for any subtasks that might be spawned
                 if let Some(mem_idx) = self.canon_opts.memory() {

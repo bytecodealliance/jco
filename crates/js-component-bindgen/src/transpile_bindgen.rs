@@ -2316,38 +2316,6 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
 
-            // TODO: we need to do this? does this mean we need to start keeping track of when we
-            // enter a call on a resource explicitly?
-
-            // Trampoline::ResourceEnterCall => {
-            //     let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
-            //     uwrite!(self.src.js, "function trampoline{i}() {{ {scope_id}++; }}");
-            // }
-
-            // Trampoline::ResourceExitCall => {
-            //     let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
-            //     let resource_borrows = self
-            //         .bindgen
-            //         .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows));
-            //     let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
-            //     // To verify that borrows are dropped, it is enough to verify that the handle
-            //     // either no longer exists (part of free list) or belongs to another scope, since
-            //     // the enter call closed off the ability to create new handles in the parent scope
-            //     uwrite!(
-            //         self.src.js,
-            //         r#"function trampoline{i}() {{
-            //             {scope_id}--;
-            //             for (const {{ rid, handle }} of {resource_borrows}) {{
-            //                 const storedScopeId = {handle_tables}[rid][handle << 1]
-            //                 if (storedScopeId === {scope_id}) {{
-            //                     throw new TypeError('borrows not dropped for resource call');
-            //                 }}
-            //             }}
-            //             {resource_borrows} = [];
-            //         }}
-            //         "#,
-            //     );
-            // }
             Trampoline::ContextSet { instance, slot, .. } => {
                 let context_set_fn = self
                     .bindgen
