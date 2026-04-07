@@ -217,7 +217,7 @@ impl AsyncFutureIntrinsic {
                             if (!args?.elementTypeRep || typeof args.elementTypeRep !== 'number') {{
                                 throw new TypeError('missing elementTypeRep [' + args.elementTypeRep + ']');
                             }}
-                            if (args.elementTypeRep <= 0 || args.elementTypeRep > 2_147_483_647 ))  {{
+                            if (args.elementTypeRep <= 0 || args.elementTypeRep > 2_147_483_647)  {{
                                 throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
                             }}
                             this.#elementTypeRep = args.elementTypeRep;
@@ -256,14 +256,14 @@ impl AsyncFutureIntrinsic {
                         isCopying() {{ return this.#copying; }}
 
                         drop() {{
-                            if (self.#dropped) {{ throw new Error('already dropped'); }}
-                            if (self.#copying) {{ throw new Error('cannot drop while copying'); }}
+                            if (this.#dropped) {{ throw new Error('already dropped'); }}
+                            if (this.#copying) {{ throw new Error('cannot drop while copying'); }}
 
-                            if (!self.#{future_var_name}) {{ throw new Error('missing/invalid {future_var_name}'); }}
+                            if (!this.#{future_var_name}) {{ throw new Error('missing/invalid {future_var_name}'); }}
                             this.#{future_var_name}.close();
 
                             super.drop();
-                            self.#dropped = true;
+                            this.#dropped = true;
                         }}
                     }}
                 "));
@@ -308,7 +308,7 @@ impl AsyncFutureIntrinsic {
             // TODO: fix return from processFn
             Self::FutureWrite | Self::FutureRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let future_write_fn = Self::FutureWrite.name();
+                let future_write_fn = self.name();
                 let global_future_map = Self::GlobalFutureMap.name();
                 let global_buffer_mgr = Intrinsic::GlobalBufferManager.name();
                 let is_write = matches!(self, Self::FutureWrite);
@@ -331,7 +331,7 @@ impl AsyncFutureIntrinsic {
                         isAsync,
                         futureIdx,
                         typeIdx,
-                        futureIdx,
+                        futureEndIdx,
                         ptr,
                         count,
                     ) {{
@@ -343,7 +343,7 @@ impl AsyncFutureIntrinsic {
                             isAsync,
                             futureIdx,
                             typeIdx,
-                            futureIdx,
+                            futureEndIdx,
                             ptr,
                             count,
                         }});
@@ -356,7 +356,7 @@ impl AsyncFutureIntrinsic {
 
                         const futureEnd = {global_future_map}.get(futureEndIdx);
                         if (!futureEnd) {{ throw new Error('missing future end'); }}
-                        if (!(futureEnd instanceof {future_end_class})) {{ new Error('invalid future end, expected [{future_end_class}]'); }}
+                        if (!(futureEnd instanceof {future_end_class})) {{ throw new Error('invalid future end, expected [{future_end_class}]'); }}
 
                         if (future.elementTypeRep() !== futureEnd.elementTypeRep()) {{
                           throw new Error('future type rep [' + future.elementTypeRep() + '] does not match future end [' + futureEnd.elementTypeRep() + ']');
@@ -379,7 +379,6 @@ impl AsyncFutureIntrinsic {
                         }});
 
                         const processFn = (result) => {{
-                          if (.remaining(bufferID) !== 0) {{
                           if ({global_buffer_mgr}.remaining(bufferID) === 0 && result != CopyResult.COMPLETED) {{
                             throw new Error('incomplete copy with future data remanining');
                           }}
@@ -433,7 +432,7 @@ impl AsyncFutureIntrinsic {
                 } else {
                     Self::FutureReadableEndClass.name()
                 };
-                let future_cancel_fn = Self::FutureCancelRead.name();
+                let future_cancel_fn = self.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let global_future_map = Self::GlobalFutureMap.name();
@@ -442,11 +441,13 @@ impl AsyncFutureIntrinsic {
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 output.push_str(&format!("
                     async function {future_cancel_fn}(
+                        componentIdx,
                         futureIdx,
                         isAsync,
                         futureEndIdx,
                     ) {{
                         {debug_log_fn}('[{future_cancel_fn}()] args', {{
+                            componentIdx,
                             futureIdx,
                             isAsync,
                             futureEndIdx,
@@ -458,6 +459,9 @@ impl AsyncFutureIntrinsic {
                         const futureEnd = {global_future_map}.get(futureEndIdx);
                         if (!futureEnd) {{ throw new Error('missing future end with idx [' + futureEndIdx + ']'); }}
                         if (!(futureEnd instanceof {future_end_class})) {{ throw new Error('invalid future end, expected value of type [{future_end_class}]'); }}
+
+                        const future = {global_future_map}.get(futureIdx);
+                        if (!future) {{ throw new Error('missing future with idx [' + futureIdx + ']'); }}
 
                         if (futureEnd.elementTypeRep() !== future.elementTypeRep()) {{
                           throw new Error('future type [' + future.elementTypeRep() + '], does not match future end type [' + futureEnd.elementTypeRep() + ']');
@@ -481,7 +485,7 @@ impl AsyncFutureIntrinsic {
                         const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
                         if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
                         if (code !== {async_event_code_enum}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {async_event_code_enum} + ']'); }}
-                        if (index !== streamEndIdx) {{ throw new Error('index does not match stream end'); }}
+                        if (index !== futureEndIdx) {{ throw new Error('index does not match future end'); }}
 
                         return payload;
                     }}
@@ -517,7 +521,7 @@ impl AsyncFutureIntrinsic {
                         const future = {global_future_map}.remove(futureIdx);
 
                         const futureEnd = {global_future_map}.remove(futureEndIdx);
-                        if (!(futureEnd instanceof {future_end_class}) {{ throw new Error('invalid future end, expected [{future_end_class}]'); }}
+                        if (!(futureEnd instanceof {future_end_class})) {{ throw new Error('invalid future end, expected [{future_end_class}]'); }}
 
                         if (futureEnd.elementTypeRep() !== future.elementTypeRep()) {{
                           throw new Error('future type [' + future.elementTypeRep() + '], does not match future end type [' + futureEnd.elementTypeRep() + ']');
