@@ -439,7 +439,7 @@ suite("stream<T> lowers", () => {
         assert.deepEqual(returnedVals, [2, 1, 0]);
     });
 
-    test.only("stream<string>", async () => {
+    test.concurrent("stream<string>", async () => {
         assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesStreamString, AsyncFunction);
 
         let vals = [

@@ -231,7 +231,6 @@ interface use-stream-async {
     read-stream-values-fixed-list-u32: async func(s: stream<list<list<u32, 5>>>) -> list<list<list<u32, 5>>>;
     read-stream-values-list-record: async func(s: stream<list<example-record>>) -> list<list<example-record>>;
 
-    // NOTE: the check here will be whether the resources are disposed inside the component properly
     read-stream-values-example-resource-own: async func(s: stream<example-resource>);
 
     read-stream-values-example-resource-own-attr: async func(s: stream<example-resource>) -> list<u32>;
