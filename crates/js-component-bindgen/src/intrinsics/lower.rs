@@ -986,47 +986,78 @@ impl LowerIntrinsic {
                 let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
                 let external_stream_class = AsyncStreamIntrinsic::ExternalStreamClass.name();
                 let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
+                let is_stream_lowerable_object =
+                    AsyncStreamIntrinsic::IsStreamLowerableObject.name();
+                let symbol_cabi_rep = Intrinsic::SymbolResourceRep.name();
+                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let gen_read_fn_from_lowerable_stream_fn =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream)
+                        .name();
+                let gen_host_inject_fn =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenHostInjectFn).name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
 
                 output.push_str(&format!(
                     r#"
                     function {lower_flat_stream_fn}(meta) {{
                         const {{
-                            streamTableIdx,
                             componentIdx,
-                            isBorrowedType,
-                            isNoneType,
-                            isNumericTypeJs,
+                            streamTableIdx,
+                            elemMeta,
                         }} = meta;
 
                         return function {lower_flat_stream_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_stream_fn}()] args', {{ ctx }});
 
-                            // TODO(fix): This stream could be a stream from the host, which is
-                            // any async-iterator capable thing (see Instruction::StreamLower),
-                            // not only an ExternalStream which is used by the guest???
+                            const stream = ctx.vals[0];
+                            if (!stream) {{ throw new Error("missing external stream value"); }}
 
-                            const externalStream = ctx.vals[0];
-                            if (!externalStream || !(externalStream instanceof {external_stream_class})) {{
-                                throw new Error("invalid external stream value");
+                            let globalRep;
+                            let waitableIdx;
+                            if (stream instanceof {external_stream_class}) {{
+                                globalRep = stream[{symbol_cabi_rep}];
+                                const internalStream = {global_stream_map}.get(globalRep);
+                                if (!internalStream || !(internalStream instanceof {internal_stream_class})) {{
+                                    throw new Error(`failed to find internal stream with rep [${{globalRep}}]`);
+                                }}
+                                waitableIdx = internalStream.readEnd().waitableIdx();
+                            }} else if ({is_stream_lowerable_object}(stream)) {{
+                                globalRep = stream[{symbol_cabi_rep}];
+
+                                if (globalRep) {{
+                                    const hostStream = {global_stream_map}.get(globalRep);
+                                    if (!hostStream) {{
+                                        throw new Error(`missing host stream with global rep [${{globalRep}}]`);
+                                    }}
+                                    waitableIdx = hostStream.getStreamEndWaitableIdx();
+                                }} else {{
+                                    const cstate = {get_or_create_async_state_fn}(componentIdx);
+                                    if (!cstate) {{
+                                        throw new Error(`missing async state for component [${{componentIdx}}]`);
+                                    }}
+
+                                    const {{ writeEnd, readEnd }} = cstate.createStream({{
+                                        tableIdx: streamTableIdx,
+                                        elemMeta,
+                                    }});
+
+                                    const hostInjectFn = {gen_host_inject_fn}({{
+                                        readFn: {gen_read_fn_from_lowerable_stream_fn}(stream),
+                                        hostWriteEnd: writeEnd,
+                                    }});
+                                    readEnd.setHostInjectFn(hostInjectFn);
+
+                                    waitableIdx = readEnd.waitableIdx();
+                                }}
+                            }} else {{
+                                throw new Error('object does not conform to supported stream interfaces');
                             }}
-
-                            const globalRep = externalStream.globalRep();
-                            const internalStream = {global_stream_map}.get(globalRep);
-                            if (!internalStream || !(internalStream instanceof {internal_stream_class})) {{
-                                throw new Error(`failed to find internal stream with rep [${{globalRep}}]`);
-                            }}
-
-                            const readEnd = internalStream.readEnd();
-                            const waitableIdx = readEnd.waitableIdx();
 
                             // Write the idx of the waitable to memory (a waiting async task or caller)
                             if (ctx.storagePtr) {{
-                                new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, waitableIdx, true);
+                                ctx.vals[0] = waitableIdx;
+                                {lower_u32_fn}(ctx);
                             }}
-
-                            // TODO: if we flat lower another way (host -> guest async) we need to actually
-                            // modify the guests table's afresh, we can't just use the global rep!
-                            // (can detect this by whether the external stream has a rep or not)
 
                             return waitableIdx;
                         }}

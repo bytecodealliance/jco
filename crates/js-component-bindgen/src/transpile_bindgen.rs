@@ -3991,11 +3991,7 @@ impl<'a> Instantiator<'a, '_> {
                             }
                         };
 
-                        self.create_resource_fn_map(
-                            &iface_fn,
-                            *fn_ty_idx,
-                            &mut import_resource_map,
-                        );
+                        self.create_resource_fn_map(iface_fn, *fn_ty_idx, &mut import_resource_map);
                     }
                 }
 
@@ -5529,37 +5525,85 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
             let stream_ty_idx = table_ty.ty;
             let stream_ty = &component_types[stream_ty_idx];
             let payload = stream_ty.payload;
+            let payload_ty_name_js = stream_ty
+                .payload
+                .map(|iface_ty| format!("'{iface_ty:?}'"))
+                .unwrap_or_else(|| "null".into());
 
             // TODO(fix): payload u8 should be special cased here
 
-            let (is_borrowed, is_none_type_js, is_numeric_type_js) = match payload {
-                None => (false, true, false),
-                Some(t) => (
-                    matches!(t, InterfaceType::Borrow(_)),
+            let (
+                payload_size32,
+                payload_align32,
+                payload_flat_count_js,
+                payload_lift_fn_js,
+                payload_lower_fn_js,
+                is_borrowed,
+                is_none_type,
+                is_numeric_type,
+                is_async_value,
+            ) = match payload {
+                None => (
+                    0,
+                    0,
+                    "0".into(),
+                    "() => {{ throw new Error('empty stream payload'); }}".into(),
+                    "() => {{ throw new Error('empty stream payload'); }}".into(),
                     false,
-                    matches!(
-                        ty,
-                        InterfaceType::U8
-                            | InterfaceType::U16
-                            | InterfaceType::U32
-                            | InterfaceType::U64
-                            | InterfaceType::S8
-                            | InterfaceType::S16
-                            | InterfaceType::S32
-                            | InterfaceType::S64
-                            | InterfaceType::Float32
-                            | InterfaceType::Float64
-                    ),
+                    true,
+                    false,
+                    false,
                 ),
+                Some(payload_ty) => {
+                    let cabi = intrinsic_mgr.types.canonical_abi(&payload_ty);
+                    (
+                        cabi.size32,
+                        cabi.align32,
+                        cabi.flat_count
+                            .map(|v| format!("{v}"))
+                            .unwrap_or_else(|| "null".into()),
+                        gen_flat_lift_fn_js_expr(intrinsic_mgr, &payload_ty),
+                        gen_flat_lower_fn_js_expr(intrinsic_mgr, &payload_ty),
+                        matches!(payload_ty, InterfaceType::Borrow(_)),
+                        false,
+                        matches!(
+                            payload_ty,
+                            InterfaceType::U8
+                                | InterfaceType::U16
+                                | InterfaceType::U32
+                                | InterfaceType::U64
+                                | InterfaceType::S8
+                                | InterfaceType::S16
+                                | InterfaceType::S32
+                                | InterfaceType::S64
+                                | InterfaceType::Float32
+                                | InterfaceType::Float64
+                        ),
+                        matches!(
+                            payload_ty,
+                            InterfaceType::Stream(_) | InterfaceType::Future(_)
+                        ),
+                    )
+                }
             };
 
             format!(
                 r#"{f}({{
                        streamTableIdx: {table_idx},
                        componentIdx: {component_idx},
-                       isBorrowedType: {is_borrowed},
-                       isNoneType: {is_none_type_js},
-                       isNumericTypeJs: {is_numeric_type_js},
+                       elemMeta: {{
+                           liftFn: {payload_lift_fn_js},
+                           lowerFn: {payload_lower_fn_js},
+                           payloadTypeName: {payload_ty_name_js},
+                           isNone: {is_none_type},
+                           isNumeric: {is_numeric_type},
+                           isBorrowed: {is_borrowed},
+                           isAsyncValue: {is_async_value},
+                           flatCount: {payload_flat_count_js},
+                           align32: {payload_align32},
+                           size32: {payload_size32},
+                       }},
+
                    }})
                 "#
             )

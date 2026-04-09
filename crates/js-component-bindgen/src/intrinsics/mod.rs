@@ -1377,6 +1377,23 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStream))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::IsStreamLowerableObject),
+            &Intrinsic::SymbolResourceRep,
+            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenHostInjectFn),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+        ])
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny))
     {
         args.intrinsics.extend([

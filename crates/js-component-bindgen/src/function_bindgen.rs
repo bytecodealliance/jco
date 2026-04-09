@@ -2337,7 +2337,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         let tmp = self.tmp();
                         match (imported, is_own) {
                             // imported owned/borrowed guest resource
-                            (_imported @ true, _owned @ _) => {
+                            (_imported @ true, _owned) => {
                                 uwrite!(
                                     self.src,
                                     r#"
@@ -2525,6 +2525,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
+                let gen_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::GenHostInjectFn,
+                ));
 
                 // Build the lowering function for the type produced by the stream
                 let type_id = &crate::dealias(self.resolve, *ty);
@@ -2650,70 +2653,25 @@ impl Bindgen for FunctionBindgen<'_> {
                             }},
                         }});
 
-                        const doNothing{tmp} = () => {{}};
-                        const resetWriteEndToIdle{tmp} = () => {{
-                            // After the write is finished, we consume the event that was generated
-                            // by the just-in-time write (and the subsequent read), if one was generated
-                            if (hostWriteEnd{tmp}.hasPendingEvent()) {{ hostWriteEnd{tmp}.getPendingEvent(); }}
-                        }};
-                        let genHostInjectFn = (readFn) => {{
-                            let done = false;
-
-                            return async (args) => {{
-                                let {{ count }} = args;
-                                if (count < 0) {{ throw new Error('invalid count'); }}
-                                if (count === 0) {{ return doNothing{tmp}; }}
-
-                                // If we get another read when done is already set, that was
-                                // the case of a iterator that returned a final value
-                                // along with `done: true`
-                                if (done) {{
-                                    hostWriteEnd{tmp}.getPendingEvent();
-                                    hostWriteEnd{tmp}.drop();
-                                    return doNothing{tmp};
-                                }}
-
-                                if (hostWriteEnd{tmp}.isDoneState()) {{
-                                    return doNothing{tmp};
-                                }}
-
-                                const values = [];
-                                while (count > 0 && !done) {{
-                                    const res = await readFn();
-                                    if (res.value !== undefined) {{ values.push(res.value); }}
-                                    done = res.done;
-                                    if (done) {{ break; }}
-                                    count -= 1;
-                                }}
-
-                                // Iterator provided `done: true` with no final value
-                                if (done && values.length === 0) {{
-                                    hostWriteEnd{tmp}.getPendingEvent();
-                                    hostWriteEnd{tmp}.drop();
-                                    return doNothing{tmp};
-                                }}
-
-                                await hostWriteEnd{tmp}.write(values);
-
-                                return resetWriteEndToIdle{tmp};
-                            }};
-                        }};
-
-                        let readFn;
+                        let readFn{tmp};
                         if ({async_iterator_symbol} in {stream_arg}) {{
                             let asyncIterator = {stream_arg}[{async_iterator_symbol}]();
-                            readFn = () => asyncIterator.next();
+                            readFn{tmp} = () => asyncIterator.next();
                         }} else if ({iterator_symbol} in {stream_arg}) {{
                             let iterator = {stream_arg}[{iterator_symbol}]();
-                            readFn = async () => iterator.next();
+                            readFn{tmp} = async () => iterator.next();
                         }} else if ({stream_arg} instanceof {external_readable_stream_class}) {{
                             // At this point we're dealing with a readable stream that *somehow *does not*
                             // implement the async iterator protocol.
                             const lockedReader = {stream_arg}.getReader();
-                            readFn = () => lockedReader.read();
+                            readFn{tmp} = () => lockedReader.read();
                         }}
 
-                        readEnd{tmp}.setHostInjectFn(genHostInjectFn(readFn));
+                        const hostInjectFn = {gen_host_inject_fn}({{
+                            readFn: readFn{tmp},
+                            hostWriteEnd: hostWriteEnd{tmp},
+                        }});
+                        readEnd{tmp}.setHostInjectFn(hostInjectFn);
 
                         const {lowered_stream_waitable_idx} = readEnd{tmp}.waitableIdx();
                     "#

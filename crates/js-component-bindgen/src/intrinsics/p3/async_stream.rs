@@ -216,6 +216,19 @@ pub enum AsyncStreamIntrinsic {
     /// function streamTransfer(srcComponentIdx: u32, srcTableIdx: u32, destTableIdx: u32): bool;
     /// ```
     StreamTransfer,
+
+    /// Function to check whether a JS object can be used as a stream
+    IsStreamLowerableObject,
+
+    /// Function that generates a host injection function for external streams
+    ///
+    /// This is usually used when lowering external streams' readable ends into a component,
+    /// and the generated function is generally called right when a component attempts to read
+    /// (in doing so, "injecting" a write before the component read).
+    GenHostInjectFn,
+
+    /// Function that generates a function (the "read function") lowerable stream object
+    GenReadFnFromLowerableStream,
 }
 
 impl AsyncStreamIntrinsic {
@@ -249,6 +262,9 @@ impl AsyncStreamIntrinsic {
             Self::StreamTransfer => "streamTransfer",
             Self::StreamCancelRead => "streamCancelRead",
             Self::StreamCancelWrite => "streamCancelWrite",
+            Self::IsStreamLowerableObject => "_isStreamLowerableObject",
+            Self::GenHostInjectFn => "_genHostInjectFn",
+            Self::GenReadFnFromLowerableStream => "_genReadFnFromLowerableStream",
         }
     }
 
@@ -1301,6 +1317,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         setRep(rep) {{ this.#rep = rep; }}
+                        getStreamEndWaitableIdx() {{ return this.#streamEndWaitableIdx; }}
 
                         createUserStream() {{
                            if (this.#userStream) {{ return this.#userStream; }}
@@ -1350,6 +1367,7 @@ impl AsyncStreamIntrinsic {
                 let external_stream_class_name = self.name();
                 let symbol_dispose = Intrinsic::SymbolDispose.name();
                 let symbol_async_iterator = Intrinsic::SymbolAsyncIterator.name();
+                let symbol_cabi_rep = Intrinsic::SymbolResourceRep.name();
 
                 output.push_str(&format!(
                     r#"
@@ -1363,8 +1381,9 @@ impl AsyncStreamIntrinsic {
 
                         constructor(args) {{
                             {debug_log_fn}('[{external_stream_class_name}#constructor()] args', args);
+
                             if (args.globalRep === undefined) {{ throw new TypeError("missing host stream rep"); }}
-                            this.#globalRep = args.globalRep;
+                            this[{symbol_cabi_rep}] = args.globalRep;
 
                             if (args.isReadable === undefined) {{ throw new TypeError("missing readable setting"); }}
                             this.#isReadable = args.isReadable;
@@ -1381,7 +1400,6 @@ impl AsyncStreamIntrinsic {
                             this.#dropFn = args.dropFn;
                         }}
 
-                        globalRep() {{ return this.#globalRep; }}
 
                         [{symbol_async_iterator}]() {{ return this; }}
 
@@ -1498,6 +1516,7 @@ impl AsyncStreamIntrinsic {
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap).name();
                 let host_stream_class =
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass).name();
+
                 output.push_str(&format!(
                     r#"
                     function {stream_new_from_lift_fn}(ctx) {{
@@ -1792,6 +1811,121 @@ impl AsyncStreamIntrinsic {
 
                       }}
                 "#
+                ));
+            }
+
+            Self::IsStreamLowerableObject => {
+                let is_stream_lowerable_object = self.name();
+                let external_stream_class = Self::ExternalStreamClass.name();
+                let async_iterator_symbol = Intrinsic::SymbolAsyncIterator.name();
+                let iterator_symbol = Intrinsic::SymbolIterator.name();
+                let external_readable_stream_class = Intrinsic::PlatformReadableStreamClass.name();
+
+                output.push_str(&format!(
+                    r#"
+                      function {is_stream_lowerable_object}(obj) {{
+                          if (typeof obj !== 'object') {{ return false; }}
+                          return obj instanceof {external_stream_class}
+                               || {async_iterator_symbol} in obj
+                               || {iterator_symbol} in obj
+                               || obj instanceof {external_readable_stream_class};
+                      }}
+                    "#
+                ));
+            }
+
+            Self::GenReadFnFromLowerableStream => {
+                let gen_read_fn_from_lowerable_stream = self.name();
+                let is_stream_lowerable_object = Self::IsStreamLowerableObject.name();
+                let async_iterator_symbol = Intrinsic::SymbolAsyncIterator.name();
+                let iterator_symbol = Intrinsic::SymbolIterator.name();
+                let external_readable_stream_class = Intrinsic::PlatformReadableStreamClass.name();
+
+                output.push_str(&format!(
+                    r#"
+                      function {gen_read_fn_from_lowerable_stream}(stream) {{
+                          if (!{is_stream_lowerable_object}(stream)) {{
+                              throw new Error("cannot generate read fn: object is not a stream lowerable object");
+                          }}
+
+                          let readFn;
+                          if ({async_iterator_symbol} in stream) {{
+                              let asyncIterator = stream[{async_iterator_symbol}]();
+                              readFn = () => asyncIterator.next();
+                          }} else if ({iterator_symbol} in stream) {{
+                              let iterator = stream[{iterator_symbol}]();
+                              readFn = async () => iterator.next();
+                          }} else if (stream instanceof {external_readable_stream_class}) {{
+                              // At this point we're dealing with a readable stream that *somehow *does not*
+                              // implement the async iterator protocol.
+                              const lockedReader = stream.getReader();
+                              readFn = () => lockedReader.read();
+                          }} else {{
+                              throw new Error("invalid stream object, cannot generate read fn");
+                          }}
+
+                          return readFn;
+                      }}
+                    "#
+                ));
+            }
+
+            Self::GenHostInjectFn => {
+                let gen_host_inject_fn = self.name();
+
+                output.push_str(&format!(
+                    r#"
+                      function {gen_host_inject_fn}(genArgs) {{
+                          const {{ readFn, hostWriteEnd }} = genArgs;
+                          const doNothingFn = () => {{}};
+                          const resetWriteEndToIdleFn = () => {{
+                              // After the write is finished, we consume the event that was generated
+                              // by the just-in-time write (and the subsequent read), if one was generated
+                              if (hostWriteEnd.hasPendingEvent()) {{ hostWriteEnd.getPendingEvent(); }}
+                          }};
+
+                          let done = false;
+
+                          return async (args) => {{
+                              let {{ count }} = args;
+                              if (count < 0) {{ throw new Error('invalid count'); }}
+                              if (count === 0) {{ return doNothingFn; }}
+
+                              // If we get another read when done is already set, that was
+                              // the case of a iterator that returned a final value
+                              // along with `done: true`
+                              if (done) {{
+                                  hostWriteEnd.getPendingEvent();
+                                  hostWriteEnd.drop();
+                                  return doNothingFn;
+                              }}
+
+                              if (hostWriteEnd.isDoneState()) {{
+                                  return doNothingFn;
+                              }}
+
+                              const values = [];
+                              while (count > 0 && !done) {{
+                                  const res = await readFn();
+                                  if (res.value !== undefined) {{ values.push(res.value); }}
+                                  done = res.done;
+                                  if (done) {{ break; }}
+                                  count -= 1;
+                              }}
+
+                              // Iterator provided `done: true` with no final value
+                              if (done && values.length === 0) {{
+                                  hostWriteEnd.getPendingEvent();
+                                  hostWriteEnd.drop();
+                                  return doNothingFn;
+                              }}
+
+                              await hostWriteEnd.write(values);
+
+                              return resetWriteEndToIdleFn;
+                          }};
+                      }}
+                    "#
                 ));
             }
         }
