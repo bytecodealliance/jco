@@ -5351,16 +5351,8 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                             .expect("missing imported resource table information"),
                     )
                 }
-
-                // TODO: Exports could also come from imports...
                 (_, Some(export_ty)) => {
                     let ty = crate::dealias(intrinsic_mgr.resolve, *export_ty);
-                    let actual_ty = &intrinsic_mgr.resolve.types[ty];
-                    // TODO: example-resource itself is missing...
-                    if let None = intrinsic_mgr.resource_exports.get(&ty) {
-                        eprintln!("MISSING {export_ty:?} | {ty:?}, actual type: {actual_ty:#?}");
-                        eprintln!("WHOLE MAP {:#?}", intrinsic_mgr.resource_exports);
-                    }
                     (
                         ty,
                         intrinsic_mgr
@@ -5410,14 +5402,13 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                                   if (!(obj instanceof {local_name})) {{
                                       throw new TypeError('Resource error: Not a valid \"{local_name}\" resource.');
                                   }}
-                                  console.log("LOWERING IMPORTED HOST [{local_name}]", {{ obj, handle: obj[{symbol_resource_handle}] }});
                                   let handle = obj[{symbol_resource_handle}];
-                                  handle = {create_own_fn}(handleTable{tid}, rep);
                                   if (!handle) {{
                                     const rep = obj[{symbol_resource_rep}] || ++captureCnt{rid};
                                     captureTable{rid}.set(rep, obj);
                                     handle = {create_own_fn}(handleTable{tid}, rep);
                                   }}
+                                  return handle;
                               }}
                             "#
                         )
@@ -5440,6 +5431,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                                    finalizationRegistry{tid}.unregister(obj);
                                    obj[{symbol_dispose}] = {empty_func};
                                    obj[{symbol_resource_handle}] = undefined;
+                                   return handle;
                                }}
                         "#
                         )
@@ -5472,6 +5464,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                               function lowerImportedOwnedGuest_{upper_camel}(obj) {{
                                   const handle = obj[{symbol_resource_handle}];
                                   finalizationRegistry_import${prefix}{lower_camel}.unregister(obj);
+                                  return handle;
                               }}
                             "#
                         )
@@ -5482,9 +5475,6 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                         let symbol_resource_handle = intrinsic_mgr
                             .bindgen
                             .intrinsic(Intrinsic::SymbolResourceHandle);
-                        let lowered_resource_rep_id = intrinsic_mgr.bindgen.intrinsic(
-                            Intrinsic::Resource(ResourceIntrinsic::LoweredResourceRepId),
-                        );
                         format!(
                             r#"
                               function lowerExportedOwnedGuest_{upper_camel}(obj) {{
@@ -5492,14 +5482,14 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                                     throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
                                   }}
                                   let handle = obj[{symbol_resource_handle}];
-
                                   if (handle === undefined) {{
-                                      const localRep = ++{lowered_resource_rep_id};
+                                      const localRep = repCnt++;
                                       repTable.set(localRep, {{ rep: obj, own: true }});
                                       handle = $resource_{prefix}new${lower_camel}(localRep);
                                       obj[{symbol_resource_handle}] = handle;
                                       finalizationRegistry_export${prefix}{lower_camel}.register(obj, handle, obj);
                                   }}
+                                  return handle;
                               }}
                             "#
                         )

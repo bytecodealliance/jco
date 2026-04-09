@@ -925,8 +925,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatOwn => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_own_fn = self.name();
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
 
                 output.push_str(&format!(
                     r#"
@@ -941,11 +942,12 @@ impl LowerIntrinsic {
                                   throw new Error(`component index mismatch (expected [${{componentIdx}}], lift called from [${{ctx.componentIdx}}])`);
                               }}
 
-                              console.log("PARAMS?", [...arguments]);
-
                               const obj = ctx.vals[0];
                               if (obj === undefined || obj === null) {{ throw new Error('missing resource'); }}
-                              lowerFn(obj);
+                              const handle = lowerFn(obj);
+
+                              ctx.vals[0] = handle;
+                              {lower_u32_fn}(ctx);
                           }};
                       }}
                     "#

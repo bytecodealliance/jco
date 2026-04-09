@@ -2203,21 +2203,28 @@ impl Bindgen for FunctionBindgen<'_> {
                     } => {
                         let tid = tid.as_u32();
                         let rid = rid.as_u32();
-                        if !imported {
-                            if is_own {
+
+                        match (imported, is_own) {
+                            // Imported, owned host-provided resource
+                            (_imported @ false, _owned @ true) => {
                                 let empty_func = self
                                     .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
                                 uwriteln!(
-                                            self.src,
-                                            "var {handle} = {op}[{symbol_resource_handle}];
-                                    if (!{handle}) {{
-                                        throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
-                                    }}
-                                    finalizationRegistry{tid}.unregister({op});
-                                    {op}[{symbol_dispose}] = {empty_func};
-                                    {op}[{symbol_resource_handle}] = undefined;",
-                                        );
-                            } else {
+                                    self.src,
+                                    r#"
+                                      var {handle} = {op}[{symbol_resource_handle}];
+                                      if (!{handle}) {{
+                                          throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
+                                      }}
+                                      finalizationRegistry{tid}.unregister({op});
+                                      {op}[{symbol_dispose}] = {empty_func};
+                                      {op}[{symbol_resource_handle}] = undefined;
+                                    "#,
+                                );
+                            }
+
+                            // Imported, borrowed host-provdied resource
+                            (_imported @ false, _owned @ false) => {
                                 // When expecting a borrow, the JS resource provided will always be an own
                                 // handle. This is because it is not possible for borrow handles to be passed
                                 // back reentrantly.
@@ -2226,54 +2233,87 @@ impl Bindgen for FunctionBindgen<'_> {
                                     ResourceIntrinsic::ResourceTableFlag,
                                 ));
                                 let own_handle = format!("handle{}", self.tmp());
-                                uwriteln!(self.src,
-                                            "var {own_handle} = {op}[{symbol_resource_handle}];
-                                    if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
-                                        throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
-                                    }}
-                                    var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};",
-                                        );
+                                uwriteln!(
+                                    self.src,
+                                    r#"
+                                      var {own_handle} = {op}[{symbol_resource_handle}];
+                                      if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
+                                          throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
+                                      }}
+                                      var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};
+                                    "#,
+                                );
                             }
-                        } else {
-                            // Imported resources may already have a handle if they were constructed
-                            // by a component and then passed out.
-                            uwriteln!(
-                                        self.src,
-                                        "if (!({op} instanceof {local_name})) {{
-                                     throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
-                                 }}
-                                 var {handle} = {op}[{symbol_resource_handle}];",
-                                    );
-                            // Otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
-                            // to get the resource rep.
-                            // Fall back to assign a new rep in the capture table, when the imported
-                            // resource was constructed externally.
-                            let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
 
-                            // Build the code to initialize the owned/borrowed resource handle
-                            let handle_init_js = if is_own {
+                            // Imported, owned guest-provided resource
+                            (_imported @ true, _owned @ true) => {
+                                // Imported resources may already have a handle if they were constructed
+                                // by a component and then passed out.
+                                //
+                                // If the handle is not present, in hybrid bindgen we check for a Symbol.for('cabiRep')
+                                // to get the resource rep.
+                                //
+                                // Fall back to assign a new rep in the capture table, when the imported
+                                // resource was constructed externally.
+                                let symbol_resource_rep =
+                                    self.intrinsic(Intrinsic::SymbolResourceRep);
                                 let create_own_fn = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::ResourceTableCreateOwn,
                                 ));
-                                format!("{handle} = {create_own_fn}(handleTable{tid}, rep);")
-                            } else {
+
+                                uwriteln!(
+                                    self.src,
+                                    r#"
+                                      if (!({op} instanceof {local_name})) {{
+                                          throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
+                                      }}
+                                      var {handle} = {op}[{symbol_resource_handle}];
+                                      if (!{handle}) {{
+                                          const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                          captureTable{rid}.set(rep, {op});
+                                          {create_own_fn}(handleTable{tid}, rep);
+                                      }}
+                                    "#
+                                );
+                            }
+
+                            // Imported, borrowed guest-provided resource
+                            (_imported @ true, _owned @ false) => {
+                                // Imported resources may already have a handle if they were constructed
+                                // by a component and then passed out.
+                                uwriteln!(
+                                    self.src,
+                                    r#"
+                                      if (!({op} instanceof {local_name})) {{
+                                          throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
+                                      }}
+                                      var {handle} = {op}[{symbol_resource_handle}];
+                                    "#,
+                                );
+                                // Otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
+                                // to get the resource rep.
+                                // Fall back to assign a new rep in the capture table, when the imported
+                                // resource was constructed externally.
+                                let symbol_resource_rep =
+                                    self.intrinsic(Intrinsic::SymbolResourceRep);
+
                                 let scope_id = self.intrinsic(Intrinsic::ScopeId);
                                 let create_borrow_fn = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::ResourceTableCreateBorrow,
                                 ));
-                                format!(
+                                let handle_init_js = format!(
                                     "{handle} = {create_borrow_fn}(handleTable{tid}, rep, {scope_id});"
-                                )
-                            };
+                                );
 
-                            uwriteln!(
-                                self.src,
-                                "if (!{handle}) {{
+                                uwriteln!(
+                                    self.src,
+                                    "if (!{handle}) {{
                                     const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
                                     captureTable{rid}.set(rep, {op});
                                     {handle_init_js}
                                 }}"
-                            );
+                                );
+                            }
                         }
                     }
 
@@ -2291,48 +2331,61 @@ impl Bindgen for FunctionBindgen<'_> {
                         let lower_camel = resource_name.to_lower_camel_case();
                         let prefix = prefix.as_deref().unwrap_or("");
 
-                        if !imported {
-                            let local_rep = format!("localRep{}", self.tmp());
-                            uwriteln!(
-                                        self.src,
-                                        "if (!({op} instanceof {upper_camel})) {{
-                                    throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
-                                }}
-                                let {handle} = {op}[{symbol_resource_handle}];",
-                                    );
+                        let symbol_resource_handle =
+                            self.intrinsic(Intrinsic::SymbolResourceHandle);
 
-                            if is_own {
-                                uwriteln!(
-                                            self.src,
-                                            "if ({handle} === undefined) {{
-                                        var {local_rep} = repCnt++;
-                                        repTable.set({local_rep}, {{ rep: {op}, own: true }});
-                                        {handle} = $resource_{prefix}new${lower_camel}({local_rep});
-                                        {op}[{symbol_resource_handle}] = {handle};
-                                        finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
-                                    }}
-                                    "
-                                        );
-                            } else {
-                                uwriteln!(
+                        let tmp = self.tmp();
+                        match (imported, is_own) {
+                            // imported owned/borrowed guest resource
+                            (_imported @ true, _owned @ _) => {
+                                uwrite!(
                                     self.src,
-                                    "if ({handle} === undefined) {{
-                                        var {local_rep} = repCnt++;
-                                        repTable.set({local_rep}, {{ rep: {op}, own: false }});
-                                        {op}[{symbol_resource_handle}] = {local_rep};
-                                    }}
-                                    "
+                                    r#"
+                                      var {handle} = {op}[{symbol_resource_handle}];
+                                      finalizationRegistry_import${prefix}{lower_camel}.unregister({op});
+                                    "#
                                 );
                             }
-                        } else {
-                            let symbol_resource_handle =
-                                self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            uwrite!(
-                                self.src,
-                                "var {handle} = {op}[{symbol_resource_handle}];
-                                 finalizationRegistry_import${prefix}{lower_camel}.unregister({op});
-                                "
-                            );
+
+                            // Not-imported, borrowed guest resource
+                            (_imported @ false, _owned @ false) => {
+                                let local_rep = format!("localRep{tmp}");
+                                uwriteln!(
+                                    self.src,
+                                    r#"
+                                      if (!({op} instanceof {upper_camel})) {{
+                                          throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
+                                      }}
+                                      let {handle} = {op}[{symbol_resource_handle}];
+                                      if ({handle} === undefined) {{
+                                          var {local_rep} = repCnt++;
+                                          repTable.set({local_rep}, {{ rep: {op}, own: false }});
+                                          {op}[{symbol_resource_handle}] = {local_rep};
+                                      }}
+                                    "#
+                                );
+                            }
+
+                            // Not-imported, owned guest resource
+                            (_imported @ false, _owned @ true) => {
+                                let local_rep = format!("localRep{tmp}");
+                                uwriteln!(
+                                    self.src,
+                                    r#"
+                                      if (!({op} instanceof {upper_camel})) {{
+                                          throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
+                                      }}
+                                      let {handle} = {op}[{symbol_resource_handle}];
+                                      if ({handle} === undefined) {{
+                                          var {local_rep} = repCnt++;
+                                          repTable.set({local_rep}, {{ rep: {op}, own: true }});
+                                          {handle} = $resource_{prefix}new${lower_camel}({local_rep});
+                                          {op}[{symbol_resource_handle}] = {handle};
+                                          finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
+                                      }}
+                                    "#
+                                );
+                            }
                         }
                     }
                 }
