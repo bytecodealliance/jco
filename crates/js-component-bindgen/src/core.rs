@@ -38,6 +38,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use indexmap::IndexMap;
+
 use anyhow::{Result, bail};
 use wasm_encoder::{
     CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
@@ -201,7 +203,7 @@ impl<'a> Translation<'a> {
 
     /// Returns the exports of this module, which are not modified by
     /// augmentation.
-    pub fn exports(&self) -> HashMap<String, EntityIndex> {
+    pub fn exports(&self) -> IndexMap<String, EntityIndex> {
         let (translation, exports) = match self {
             Translation::Normal(translation) => (translation, &translation.module.exports),
             Translation::Augmented { original, .. } => (original, &original.module.exports),
