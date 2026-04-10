@@ -17,7 +17,7 @@ import {
     readComponentBytes,
     tsGenerationPromise,
 } from "./helpers.js";
-import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR } from "./common.js";
+import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR, LOCAL_TEST_COMPONENTS_DIR } from "./common.js";
 
 suite(`Transpiler codegen`, async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -209,5 +209,22 @@ suite("Directive Prologue", () => {
         const { files } = await transpile(component, { name: "adder" });
         const bindingsSource = new TextDecoder().decode(files["adder.js"]);
         assert.isOk(bindingsSource.includes('"use jco";'));
+    });
+});
+
+suite("codegen determinism", () => {
+    // see: https://github.com/bytecodealliance/jco/pull/1373
+    test("consistent output", async () => {
+        // NOTE: we need to use a significant enough component here to expose indeterminism
+        const [streamTx, streamRx] = await Promise.all([
+            readFile(join(LOCAL_TEST_COMPONENTS_DIR, `stream-tx.wasm`)).then((bytes) => {
+                return Promise.all([transpile(bytes), transpile(bytes)]);
+            }),
+            readFile(join(LOCAL_TEST_COMPONENTS_DIR, `stream-rx.wasm`)).then((bytes) => {
+                return Promise.all([transpile(bytes), transpile(bytes)]);
+            }),
+        ]);
+        assert.deepEqual(streamTx[0].files, streamTx[1].files);
+        assert.deepEqual(streamRx[0].files, streamRx[1].files);
     });
 });
