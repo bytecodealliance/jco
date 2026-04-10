@@ -4007,35 +4007,27 @@ impl<'a> Instantiator<'a, '_> {
                     // Process functions imported by the iface, which will use (as arg or param)
                     // relevant resources
                     for (fn_name, iface_fn) in iface.functions.iter() {
-                        // Find the type for the function in the import
-                        let fn_ty_idx = match import_type_def {
-                            // If the import is from another component instance, we need to find the function
-                            // type within manually
+                        match import_type_def {
                             TypeDef::ComponentInstance(instance_ty) => {
-                                let component_instance = &self.types[*instance_ty];
-                                if let Some(f) = &component_instance.exports.get(fn_name)
-                                    && let TypeDef::ComponentFunc(type_func_idx) = f
+                                if let Some(TypeDef::ComponentFunc(type_func_index)) =
+                                    &self.types[*instance_ty].exports.get(fn_name)
                                 {
-                                    type_func_idx
-                                } else {
-                                    unreachable!(
-                                        "missing imported function in imported component instance's exports"
-                                    )
+                                    self.create_resource_fn_map(
+                                        iface_fn,
+                                        *type_func_index,
+                                        &mut import_resource_map,
+                                    );
                                 }
                             }
-
-                            TypeDef::ComponentFunc(type_func_idx) => type_func_idx,
-
-                            TypeDef::Resource(_)
-                            | TypeDef::Component(_)
-                            | TypeDef::Module(_)
-                            | TypeDef::Interface(_)
-                            | TypeDef::CoreFunc(_) => {
-                                unreachable!("unexpected import type definition for interface")
+                            TypeDef::ComponentFunc(type_func_idx) => {
+                                self.create_resource_fn_map(
+                                    iface_fn,
+                                    *type_func_idx,
+                                    &mut import_resource_map,
+                                );
                             }
-                        };
-
-                        self.create_resource_fn_map(iface_fn, *fn_ty_idx, &mut import_resource_map);
+                            _ => {}
+                        }
                     }
                 }
 

@@ -2366,7 +2366,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
             //     results.push(rsc);
             // }
-
             Instruction::HandleLower { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let is_own = matches!(handle, Handle::Own(_));
