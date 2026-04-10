@@ -1328,8 +1328,8 @@ impl<'a> Instantiator<'a, '_> {
                             .flat_count
                             .map(|v| v.to_string())
                             .unwrap_or_else(|| "null".into()),
-                        gen_flat_lift_fn_js_expr(self, &ty),
-                        gen_flat_lower_fn_js_expr(self, &ty),
+                        gen_flat_lift_fn_js_expr(self, &ty, &None),
+                        gen_flat_lower_fn_js_expr(self, &ty, &None),
                         "false",
                         format!(
                             "{}",
@@ -2021,12 +2021,12 @@ impl<'a> Instantiator<'a, '_> {
                 // Build list of lift functions for the params of the lowered import
                 let param_types = &self.types.index(func_ty.params).types;
                 let param_lift_fns_js =
-                    gen_flat_lift_fn_list_js_expr(self, param_types.iter().as_slice());
+                    gen_flat_lift_fn_list_js_expr(self, param_types.iter().as_slice(), &None);
 
                 // Build list of lower functions for the results of the lowered import
                 let result_types = &self.types.index(func_ty.results).types;
                 let result_lower_fns_js =
-                    gen_flat_lower_fn_list_js_expr(self, result_types.iter().as_slice());
+                    gen_flat_lower_fn_list_js_expr(self, result_types.iter().as_slice(), &None);
 
                 let get_callback_fn_js = canon_opts
                     .callback
@@ -2411,7 +2411,7 @@ impl<'a> Instantiator<'a, '_> {
                 // that are actually being passed through task.return
                 let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
-                    lift_fns.push(gen_flat_lift_fn_js_expr(self, result_ty));
+                    lift_fns.push(gen_flat_lift_fn_js_expr(self, result_ty, &None));
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
@@ -2422,7 +2422,7 @@ impl<'a> Instantiator<'a, '_> {
                 // (i.e. via prepare & async start call)
                 let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
-                    lower_fns.push(gen_flat_lower_fn_js_expr(self, result_ty));
+                    lower_fns.push(gen_flat_lower_fn_js_expr(self, result_ty, &None));
                 }
                 let lower_fns_js = format!("[{}]", lower_fns.join(","));
 
@@ -2710,15 +2710,6 @@ impl<'a> Instantiator<'a, '_> {
         ty_func_idx: TypeFuncIndex,
         resource_map: &mut ResourceMap,
     ) {
-        // for ty in func.parameter_and_result_types() {
-        //     if let Type::Id(id) = ty {
-        //         let ty_id = crate::dealias(self.resolve, id);
-        //         if let Some(TypeDef::Interface(iface_ty)) = self.resolve.types.get(id) {
-        //             self.connect_resource_types(ty_id, &iface_ty, resource_map);
-        //         }
-        //     }
-        // }
-
         // Connect resources used in parameters
         let params_ty = &self.types[self.types[ty_func_idx].params];
         for (p, iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
@@ -3223,8 +3214,23 @@ impl<'a> Instantiator<'a, '_> {
                             PayloadTypeMetadata {
                                 ty,
                                 iface_ty,
-                                lift_js_expr: gen_flat_lift_fn_js_expr(self, &iface_ty),
-                                lower_js_expr: gen_flat_lower_fn_js_expr(self, &iface_ty),
+
+                                // TODO: we need to use the currently-being-built resource map here,
+                                // because it may contain *just inserted* information (could be either imports or exports)
+                                // that should be used
+                                //
+                                // We need to *augment* the normal built in
+                                // `instantiator.resource_{exports,imports}` with things that we're resolving now.
+                                lift_js_expr: gen_flat_lift_fn_js_expr(
+                                    self,
+                                    &iface_ty,
+                                    &Some(resource_map),
+                                ),
+                                lower_js_expr: gen_flat_lower_fn_js_expr(
+                                    self,
+                                    &iface_ty,
+                                    &Some(resource_map),
+                                ),
                                 size32: abi.size32,
                                 align32: abi.align32,
                                 flat_count: abi.flat_count,
@@ -3251,8 +3257,16 @@ impl<'a> Instantiator<'a, '_> {
                             PayloadTypeMetadata {
                                 ty,
                                 iface_ty,
-                                lift_js_expr: gen_flat_lift_fn_js_expr(self, &iface_ty),
-                                lower_js_expr: gen_flat_lower_fn_js_expr(self, &iface_ty),
+                                lift_js_expr: gen_flat_lift_fn_js_expr(
+                                    self,
+                                    &iface_ty,
+                                    &Some(resource_map),
+                                ),
+                                lower_js_expr: gen_flat_lower_fn_js_expr(
+                                    self,
+                                    &iface_ty,
+                                    &Some(resource_map),
+                                ),
                                 size32: abi.size32,
                                 align32: abi.align32,
                                 flat_count: abi.flat_count,
@@ -3522,8 +3536,8 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             // Connect futures & stream types
-            (TypeDefKind::Future(maybe_elem_ty), _iface_ty)
-            | (TypeDefKind::Stream(maybe_elem_ty), _iface_ty) => {
+            (TypeDefKind::Future(maybe_elem_ty), container_iface_ty)
+            | (TypeDefKind::Stream(maybe_elem_ty), container_iface_ty) => {
                 match maybe_elem_ty {
                     // The case of an empty future is the propagation of a `null`-like value, usually a simple signal
                     // which we'll connect with the *normally invalid* type value 0 as an indicator
@@ -3531,7 +3545,28 @@ impl<'a> Instantiator<'a, '_> {
                         self.connect_p3_resources(&id, maybe_elem_ty, iface_ty, resource_map);
                     }
                     // For custom types we must recur to properly connect the inner type
-                    Some(elem_ty @ Type::Id(_t)) => {
+                    Some(elem_ty @ Type::Id(elem_ty_id)) => {
+                        // As the internal type could be a resource, and connecting p3 resources
+                        // may generate lifting/lowering fns, we must connect the payload of the
+                        // future/stream first, if necessary
+                        //
+                        let maybe_elem_iface_ty = match container_iface_ty {
+                            InterfaceType::Future(future_table_ty_idx) => {
+                                let future_table_ty = &self.types[*future_table_ty_idx];
+                                let future = &self.types[future_table_ty.ty];
+                                future.payload
+                            }
+                            InterfaceType::Stream(stream_table_ty_idx) => {
+                                let stream_table_ty = &self.types[*stream_table_ty_idx];
+                                let stream = &self.types[stream_table_ty.ty];
+                                stream.payload
+                            }
+                            _ => unreachable!("unexpected iface type"),
+                        };
+                        if let Some(elem_iface_ty) = maybe_elem_iface_ty {
+                            self.connect_resource_types(*elem_ty_id, &elem_iface_ty, resource_map);
+                        }
+
                         self.connect_p3_resources(&id, &Some(*elem_ty), iface_ty, resource_map);
                     }
                     // For basic types that are connected (non inner types) we can do a generic connect
@@ -3981,8 +4016,10 @@ impl<'a> Instantiator<'a, '_> {
                                     )
                                 }
                             }
+
+                            TypeDef::ComponentFunc(type_func_idx) => type_func_idx,
+
                             TypeDef::Resource(_)
-                            | TypeDef::ComponentFunc(_)
                             | TypeDef::Component(_)
                             | TypeDef::Module(_)
                             | TypeDef::Interface(_)
@@ -4035,6 +4072,7 @@ impl<'a> Instantiator<'a, '_> {
                             unreachable!("unexpectedly non-function lifted function export")
                         }
                     };
+
                     self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                     let local_name = String::from(match func.kind {
@@ -4557,13 +4595,25 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 }
 
 /// Generate the javascript that corresponds to a list of lifting functions for a given list of types
+///
+/// # Arguments
+///
+/// * `instantiator`
+/// * `types` - Types for which to generate lift functions
+/// * `extra_resource_map` - Extra resource mapping that do not exist on the `instantiatior` that should be used ad-hoc
+///
 pub fn gen_flat_lift_fn_list_js_expr(
-    intrinsic_mgr: &mut Instantiator,
+    instantiator: &mut Instantiator,
     types: &[InterfaceType],
+    extra_resource_map: &Option<&mut ResourceMap>,
 ) -> String {
     let mut lift_fns: Vec<String> = Vec::with_capacity(types.len());
     for ty in types.iter() {
-        lift_fns.push(gen_flat_lift_fn_js_expr(intrinsic_mgr, ty));
+        lift_fns.push(gen_flat_lift_fn_js_expr(
+            instantiator,
+            ty,
+            extra_resource_map,
+        ));
     }
     format!("[{}]", lift_fns.join(","))
 }
@@ -4582,83 +4632,93 @@ pub fn gen_flat_lift_fn_list_js_expr(
 ///
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
-pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &InterfaceType) -> String {
-    let component_types = intrinsic_mgr.types;
+/// # Arguments
+///
+/// * `instantiator`
+/// * `ty` - The type for which to generate a lift function
+/// * `extra_resource_map` - Extra resource mapping that do not exist on the `instantiatior` that should be used ad-hoc
+///
+pub fn gen_flat_lift_fn_js_expr(
+    instantiator: &mut Instantiator,
+    ty: &InterfaceType,
+    extra_resource_map: &Option<&mut ResourceMap>,
+) -> String {
+    let component_types = instantiator.types;
 
     match ty {
         InterfaceType::Bool => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatBool).name().into()
         }
 
         InterfaceType::S8 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS8).name().into()
         }
 
         InterfaceType::U8 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU8).name().into()
         }
 
         InterfaceType::S16 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS16).name().into()
         }
 
         InterfaceType::U16 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU16).name().into()
         }
 
         InterfaceType::S32 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS32).name().into()
         }
 
         InterfaceType::U32 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU32).name().into()
         }
 
         InterfaceType::S64 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS64).name().into()
         }
 
         InterfaceType::U64 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU64).name().into()
         }
 
         InterfaceType::Float32 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)
                 .name()
                 .into()
         }
 
         InterfaceType::Float64 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)
                 .name()
                 .into()
         }
 
         InterfaceType::Char => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatChar).name().into()
         }
 
         InterfaceType::String => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny)
                 .name()
                 .into()
         }
 
         InterfaceType::Record(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
             let mut keys_and_lifts_expr = String::from("[");
@@ -4669,7 +4729,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}, {}],",
                     f.name.to_lower_camel_case(),
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &f.ty),
+                    gen_flat_lift_fn_js_expr(instantiator, &f.ty, extra_resource_map),
                     component_types.canonical_abi(ty).size32,
                     component_types.canonical_abi(ty).align32,
                 ));
@@ -4679,7 +4739,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Variant(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
@@ -4689,7 +4749,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
                     Some(ty) => {
                         format!(
                             "['{name}', {}, {}, {}, {}],",
-                            gen_flat_lift_fn_js_expr(intrinsic_mgr, ty),
+                            gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
                             variant_ty.abi.size32,
                             variant_ty.abi.align32,
                             variant_ty.info.payload_offset32,
@@ -4703,10 +4763,11 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::List(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let lift_fn_expr = gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element);
+            let lift_fn_expr =
+                gen_flat_lift_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let elem_align32 = elem_cabi.align32;
             let elem_size32 = elem_cabi.size32;
@@ -4720,12 +4781,13 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::FixedLengthList(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             let list_ty = &component_types[*ty_idx];
             let list_size32 = list_ty.abi.size32;
             let list_align32 = list_ty.abi.align32;
-            let lift_fn_expr = gen_flat_lift_fn_js_expr(intrinsic_mgr, &list_ty.element);
+            let lift_fn_expr =
+                gen_flat_lift_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
             let list_len = list_ty.size;
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let elem_align32 = elem_cabi.align32;
@@ -4743,7 +4805,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Tuple(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
             let tuple_ty = &component_types[*ty_idx];
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name();
             let size_u32 = tuple_ty.abi.size32;
@@ -4751,7 +4813,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
 
             let mut elem_lifts_expr = String::from("[");
             for ty in &tuple_ty.types {
-                let lift_fn_js = gen_flat_lift_fn_js_expr(intrinsic_mgr, ty);
+                let lift_fn_js = gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map);
                 elem_lifts_expr.push_str(&format!("[{lift_fn_js}, {size_u32}, {align_u32}],"));
             }
             elem_lifts_expr.push(']');
@@ -4760,7 +4822,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Flags(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name();
             let flags_ty = &component_types[*ty_idx];
             let size_u32 = flags_ty.abi.size32;
@@ -4789,7 +4851,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Enum(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name();
             let enum_ty = &component_types[*ty_idx];
             let size_32 = enum_ty.abi.size32;
@@ -4808,13 +4870,14 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Option(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name();
             let option_ty = &component_types[*ty_idx];
             let payload_offset_32 = option_ty.info.payload_offset32;
             let align_32 = option_ty.abi.align32;
             let size_32 = option_ty.abi.size32;
-            let lift_fn_js = gen_flat_lift_fn_js_expr(intrinsic_mgr, &option_ty.ty);
+            let lift_fn_js =
+                gen_flat_lift_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
             // NOTE: options are treated as variants
             format!(
                 "{f}([
@@ -4825,7 +4888,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Result(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
             let result_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
@@ -4833,7 +4896,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
             if let Some(ok_ty) = result_ty.ok {
                 cases_and_lifts_expr.push_str(&format!(
                     "['ok', {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, &ok_ty),
+                    gen_flat_lift_fn_js_expr(instantiator, &ok_ty, extra_resource_map),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
@@ -4845,7 +4908,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
             if let Some(err_ty) = &result_ty.err {
                 cases_and_lifts_expr.push_str(&format!(
                     "['err', {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, err_ty),
+                    gen_flat_lift_fn_js_expr(instantiator, err_ty, extra_resource_map),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
@@ -4859,66 +4922,92 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::Own(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-            intrinsic_mgr.add_intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
-            intrinsic_mgr.add_intrinsic(Intrinsic::SymbolResourceHandle);
-            intrinsic_mgr.add_intrinsic(Intrinsic::SymbolDispose);
-            intrinsic_mgr
-                .add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-            intrinsic_mgr.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            instantiator.add_intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
+            instantiator.add_intrinsic(Intrinsic::SymbolResourceHandle);
+            instantiator.add_intrinsic(Intrinsic::SymbolDispose);
+            instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+            instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
             let table_ty = &component_types[*ty_idx];
             let component_idx = table_ty.unwrap_concrete_instance().as_u32();
             let resource_idx = table_ty.unwrap_concrete_ty();
 
-            if let Some(resource_typedef) = intrinsic_mgr
-                .exports_resource_index_types
-                .get(&resource_idx)
-                && let Some(ResourceTable { data, .. }) =
-                    intrinsic_mgr.resource_exports.get(resource_typedef)
-            {
-                let (resource_class_name, create_resource_fn_js) = match data {
-                    ResourceData::Guest { .. } => {
-                        unimplemented!(
-                            "owned resources created by guests should must have host-side data"
-                        )
-                    }
-                    ResourceData::Host {
-                        tid,
-                        local_name,
-                        dtor_name,
-                        ..
-                    } => {
-                        let empty_func = JsHelperIntrinsic::EmptyFunc.name();
-                        let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
-                        let symbol_dispose = Intrinsic::SymbolDispose.name();
-                        let rsc_table_remove = ResourceIntrinsic::ResourceTableRemove.name();
-                        let tid = tid.as_u32();
-                        let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
+            // Attempt to find information about the owned resource
+            match instantiator.exports_resource_index_types.get(&resource_idx) {
+                // Type information not found for this resource index
+                None => format!(
+                    r#"{f}({{
+                       componentIdx: {component_idx},
+                       className: null,
+                       createResourceFn: () => {{ throw new Error('invalid/missing resource type data'); }},
+                    }})
+                "#,
+                ),
 
-                        let dtor_setup_js = dtor_name.as_ref().map(|dtor|
-                                format!(
-                                    r#"
-                                      Object.defineProperty(
-                                          resourceObj,
-                                          {symbol_dispose},
-                                          {{
-                                              writable: true,
-                                              value: function() {{
-                                                  finalizationRegistry{tid}.unregister(resourceObj);
-                                                  {rsc_table_remove}(handleTable{tid}, handle);
-                                                  resourceObj[{symbol_dispose}] = {empty_func};
-                                                  resourceObj[{symbol_resource_handle}] = undefined;
-                                                  {dtor}(handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag});
-                                              }}
-                                         }}
-                                     );
-                                    "#
+                // If we have a resource type def, find more information about it to generate
+                // the resource creation function
+                Some(resource_typedef) => {
+                    // Look in both the resource exports and the provided extra resource map for the resource
+                    let (resource_class_name, create_resource_fn_js) = match (
+                        instantiator.resource_exports.get(resource_typedef),
+                        extra_resource_map
+                            .as_ref()
+                            .and_then(|v| v.get(resource_typedef)),
+                    ) {
+                        // Resource type information wasn't found
+                        (None, None) => (
+                            "null".into(),
+                            "() => {{ throw new Error('missing resource information'); }}".into(),
+                        ),
+
+                        // Resource type was found in either resource_exports or extra provided resource map
+                        (Some(ResourceTable { data, .. }), _)
+                        | (_, Some(ResourceTable { data, .. })) => match data {
+                            ResourceData::Guest { .. } => {
+                                unimplemented!(
+                                    "owned resources created by guests should must have host-side data"
                                 )
-                            ).unwrap_or_default();
+                            }
+                            ResourceData::Host {
+                                tid,
+                                local_name,
+                                dtor_name,
+                                ..
+                            } => {
+                                let empty_func = JsHelperIntrinsic::EmptyFunc.name();
+                                let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
+                                let symbol_dispose = Intrinsic::SymbolDispose.name();
+                                let rsc_table_remove =
+                                    ResourceIntrinsic::ResourceTableRemove.name();
+                                let tid = tid.as_u32();
+                                let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
 
-                        let create_resource_fn_js = format!(
-                            r#"
+                                let dtor_setup_js = dtor_name
+                                .as_ref()
+                                .map(|dtor|
+                                     format!(
+                                         r#"
+                                           Object.defineProperty(
+                                               resourceObj,
+                                               {symbol_dispose},
+                                               {{
+                                                   writable: true,
+                                                   value: function() {{
+                                                       finalizationRegistry{tid}.unregister(resourceObj);
+                                                       {rsc_table_remove}(handleTable{tid}, handle);
+                                                       resourceObj[{symbol_dispose}] = {empty_func};
+                                                       resourceObj[{symbol_resource_handle}] = undefined;
+                                                       {dtor}(handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag});
+                                                   }}
+                                              }}
+                                          );
+                                    "#
+                                     )
+                                ).unwrap_or_default();
+
+                                let create_resource_fn_js = format!(
+                                    r#"
                                   (handle) => {{
                                       const resourceObj = Object.create({local_name}.prototype);
                                       Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
@@ -4930,49 +5019,41 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
                                       return resourceObj;
                                   }}
                                  "#
-                        );
+                                );
 
-                        (local_name.to_string(), create_resource_fn_js)
-                    }
-                };
+                                (local_name.to_string(), create_resource_fn_js)
+                            }
+                        },
+                    };
 
-                format!(
-                    r#"{f}({{
+                    format!(
+                        r#"{f}({{
                        componentIdx: {component_idx},
                        className: {resource_class_name},
                        createResourceFn: {create_resource_fn_js},
                     }})
                 "#,
-                )
-            } else {
-                // In this case we couldn't find required type information
-                format!(
-                    r#"{f}({{
-                       componentIdx: {component_idx},
-                       className: null,
-                       createResourceFn: () => {{ throw new Error('invalid/missing resource type data'); }},
-                    }})
-                "#,
-                )
+                    )
+                }
             }
         }
 
         InterfaceType::Borrow(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow).name();
             format!("{f}.bind(null, {table_idx})")
         }
 
         InterfaceType::Future(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name();
             format!("{f}.bind(null, {table_idx})")
         }
 
         InterfaceType::Stream(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name();
             let table_ty = &component_types[*ty_idx];
@@ -5016,7 +5097,7 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
         }
 
         InterfaceType::ErrorContext(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext).name();
             format!("{f}.bind(null, {table_idx})")
@@ -5025,13 +5106,25 @@ pub fn gen_flat_lift_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interface
 }
 
 /// Generate the javascript that corresponds to a list of lowering functions for a given list of types
+///
+/// # Arguments
+///
+/// * `instantiator`
+/// * `types` - Types for which to generate lift functions
+/// * `extra_resource_map` - Extra resource mapping that do not exist on the `instantiatior` that should be used ad-hoc
+///
 pub fn gen_flat_lower_fn_list_js_expr(
-    intrinsic_mgr: &mut Instantiator,
+    instantiator: &mut Instantiator,
     types: &[InterfaceType],
+    extra_import_map: &Option<&mut ResourceMap>,
 ) -> String {
     let mut lower_fns: Vec<String> = Vec::with_capacity(types.len());
     for ty in types.iter() {
-        lower_fns.push(gen_flat_lower_fn_js_expr(intrinsic_mgr, ty));
+        lower_fns.push(gen_flat_lower_fn_js_expr(
+            instantiator,
+            ty,
+            extra_import_map,
+        ));
     }
     format!("[{}]", lower_fns.join(","))
 }
@@ -5050,86 +5143,96 @@ pub fn gen_flat_lower_fn_list_js_expr(
 ///
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
-pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &InterfaceType) -> String {
-    let component_types = intrinsic_mgr.types;
+/// # Arguments
+///
+/// * `instantiator`
+/// * `ty` - type for which to generate a lower function
+/// * `extra_resource_map` - Extra resource mapping that do not exist on the `instantiatior` that should be used ad-hoc
+///
+pub fn gen_flat_lower_fn_js_expr(
+    instantiator: &mut Instantiator,
+    ty: &InterfaceType,
+    extra_resource_map: &Option<&mut ResourceMap>,
+) -> String {
+    let component_types = instantiator.types;
     match ty {
         InterfaceType::Bool => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatBool)
                 .name()
                 .into()
         }
 
         InterfaceType::S8 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS8).name().into()
         }
 
         InterfaceType::U8 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU8).name().into()
         }
 
         InterfaceType::S16 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS16).name().into()
         }
 
         InterfaceType::U16 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU16).name().into()
         }
 
         InterfaceType::S32 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS32).name().into()
         }
 
         InterfaceType::U32 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU32).name().into()
         }
 
         InterfaceType::S64 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS64).name().into()
         }
 
         InterfaceType::U64 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU64).name().into()
         }
 
         InterfaceType::Float32 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32)
                 .name()
                 .into()
         }
 
         InterfaceType::Float64 => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64)
                 .name()
                 .into()
         }
 
         InterfaceType::Char => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatChar)
                 .name()
                 .into()
         }
 
         InterfaceType::String => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny)
                 .name()
                 .into()
         }
 
         InterfaceType::Record(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
             let mut keys_and_lowers_expr = String::from("[");
@@ -5140,7 +5243,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                 keys_and_lowers_expr.push_str(&format!(
                     "['{}', {}, {}, {} ],",
                     f.name.to_lower_camel_case(),
-                    gen_flat_lower_fn_js_expr(intrinsic_mgr, &f.ty),
+                    gen_flat_lower_fn_js_expr(instantiator, &f.ty, &None),
                     component_types.canonical_abi(ty).size32,
                     component_types.canonical_abi(ty).align32,
                 ));
@@ -5150,7 +5253,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Variant(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
             let size32 = variant_ty.abi.size32;
@@ -5162,7 +5265,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                 lower_metas_expr.push_str(&format!(
                     "[ '{name}', {}, {size32}, {align32}, {payload_offset32} ],",
                     maybe_ty
-                        .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
+                        .map(|ty| gen_flat_lower_fn_js_expr(instantiator, &ty, &None))
                         .unwrap_or_else(|| "null".into()),
                 ));
             }
@@ -5172,10 +5275,11 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::List(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
+            let elem_ty_lower_expr =
+                gen_flat_lower_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let elem_align32 = elem_cabi.align32;
             let elem_size32 = elem_cabi.size32;
@@ -5190,10 +5294,11 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::FixedLengthList(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
             let list_ty = &component_types[*ty_idx];
-            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(intrinsic_mgr, &list_ty.element);
+            let elem_ty_lower_expr =
+                gen_flat_lower_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
             let list_len = list_ty.size;
             let list_align32 = list_ty.abi.size32;
             let list_size32 = list_ty.abi.size32;
@@ -5214,7 +5319,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Tuple(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple).name();
             let tuple_ty = &component_types[*ty_idx];
             let size_u32 = tuple_ty.abi.size32;
@@ -5222,7 +5327,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
 
             let mut elem_lowers_expr = String::from("[");
             for ty in &tuple_ty.types {
-                let lower_fn_js = gen_flat_lower_fn_js_expr(intrinsic_mgr, ty);
+                let lower_fn_js = gen_flat_lower_fn_js_expr(instantiator, ty, extra_resource_map);
                 elem_lowers_expr.push_str(&format!("[{lower_fn_js}, {size_u32}, {align_u32}],"));
             }
             elem_lowers_expr.push(']');
@@ -5231,7 +5336,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Flags(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags).name();
             let flags_ty = &component_types[*ty_idx];
             let size32 = flags_ty.abi.size32;
@@ -5260,7 +5365,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Enum(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum).name();
             let enum_ty = &component_types[*ty_idx];
             let size32 = enum_ty.abi.size32;
@@ -5279,13 +5384,14 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Option(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
             let option_ty = &component_types[*ty_idx];
             let size32 = option_ty.abi.size32;
             let align32 = option_ty.abi.align32;
             let payload_offset32 = option_ty.info.payload_offset32;
-            let lower_fn_js = gen_flat_lower_fn_js_expr(intrinsic_mgr, &option_ty.ty);
+            let lower_fn_js =
+                gen_flat_lower_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
 
             format!(
                 r#"{f}([
@@ -5297,7 +5403,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Result(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
             let result_ty = &component_types[*ty_idx];
             let size32 = result_ty.abi.size32;
@@ -5305,11 +5411,11 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
             let payload_offset32 = result_ty.info.payload_offset32;
             let ok_lower_fn_js = result_ty
                 .ok
-                .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
+                .map(|ty| gen_flat_lower_fn_js_expr(instantiator, &ty, extra_resource_map))
                 .unwrap_or_else(|| "null".into());
             let err_lower_fn_js = result_ty
                 .err
-                .map(|ty| gen_flat_lower_fn_js_expr(intrinsic_mgr, &ty))
+                .map(|ty| gen_flat_lower_fn_js_expr(instantiator, &ty, extra_resource_map))
                 .unwrap_or_else(|| "null".into());
 
             format!(
@@ -5322,41 +5428,43 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Own(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
             let resource_table_ty = &component_types[*ty_idx];
             let component_idx = resource_table_ty.unwrap_concrete_instance().as_u32();
             let resource_idx = resource_table_ty.unwrap_concrete_ty();
 
-            // Retrieve resource information for the given resource
+            // Retrieve resource information for the given resource, looking
+            // in both the extra resource map and the instantiator's dedicated resource-to-imports/
+            // exports maps.
             let (_, ResourceTable { imported, data }) = match (
-                intrinsic_mgr
-                    .imports_resource_index_types
-                    .get(&resource_idx),
-                intrinsic_mgr
-                    .exports_resource_index_types
-                    .get(&resource_idx),
+                instantiator.imports_resource_index_types.get(&resource_idx),
+                instantiator.exports_resource_index_types.get(&resource_idx),
             ) {
-                (Some(import_ty), _) => {
-                    let ty = crate::dealias(intrinsic_mgr.resolve, *import_ty);
+                (Some(import_ty_id), _) => {
+                    let ty = crate::dealias(instantiator.resolve, *import_ty_id);
+                    let maybe_resource_table =
+                        instantiator.resource_imports.get(&ty).or(extra_resource_map
+                            .as_ref()
+                            .and_then(|m| m.get(import_ty_id)));
                     (
                         ty,
-                        intrinsic_mgr
-                            .resource_imports
-                            .get(&ty)
-                            .expect("missing imported resource table information"),
+                        maybe_resource_table.expect("missing imported resource table information"),
                     )
                 }
-                (_, Some(export_ty)) => {
-                    let ty = crate::dealias(intrinsic_mgr.resolve, *export_ty);
+                (_, Some(export_ty_id)) => {
+                    let ty = crate::dealias(instantiator.resolve, *export_ty_id);
+                    let maybe_resource_table =
+                        instantiator.resource_exports.get(&ty).or(extra_resource_map
+                            .as_ref()
+                            .and_then(|m| m.get(export_ty_id)));
                     (
                         ty,
-                        intrinsic_mgr
-                            .resource_exports
-                            .get(&ty)
-                            .expect("missing exported resource table information"),
+                        maybe_resource_table.expect("missing exported resource table information"),
                     )
                 }
+
+                // If resource was not found in the index type map at all, we're missing resource metadata.
                 (None, None) => {
                     return format!(
                         "{f}({{
@@ -5378,18 +5486,17 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                 } => {
                     let tid = tid.as_u32();
                     let rid = rid.as_u32();
-                    let symbol_resource_rep = intrinsic_mgr
-                        .bindgen
-                        .intrinsic(Intrinsic::SymbolResourceRep);
-                    let symbol_resource_handle = intrinsic_mgr
+                    let symbol_resource_rep =
+                        instantiator.bindgen.intrinsic(Intrinsic::SymbolResourceRep);
+                    let symbol_resource_handle = instantiator
                         .bindgen
                         .intrinsic(Intrinsic::SymbolResourceHandle);
-                    let symbol_dispose = intrinsic_mgr.bindgen.intrinsic(Intrinsic::SymbolDispose);
+                    let symbol_dispose = instantiator.bindgen.intrinsic(Intrinsic::SymbolDispose);
 
                     if *imported {
                         // If imported (and from the host), we must ensure that the incoming object is of the right
                         // instance, then add it to the capture table w/ the right resource ID,
-                        let create_own_fn = intrinsic_mgr.bindgen.intrinsic(Intrinsic::Resource(
+                        let create_own_fn = instantiator.bindgen.intrinsic(Intrinsic::Resource(
                             ResourceIntrinsic::ResourceTableCreateOwn,
                         ));
                         format!(
@@ -5414,7 +5521,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                         //
                         // We disconnect the external conenctions for dispose and remove the external
                         // facing resource handle that was added when lifted out.
-                        let empty_func = intrinsic_mgr
+                        let empty_func = instantiator
                             .bindgen
                             .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
                         format!(
@@ -5452,7 +5559,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                     if *imported {
                         // If we get a resource that is provided by the host, then
                         // it should already have an external-facing resource handle on it.
-                        let symbol_resource_handle = intrinsic_mgr
+                        let symbol_resource_handle = instantiator
                             .bindgen
                             .intrinsic(Intrinsic::SymbolResourceHandle);
                         format!(
@@ -5468,7 +5575,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                         // If we get a resource that was exported by the guest and is being lowered in,
                         // we can check that the object is of the right kidn of instance, and
                         // create rep for it if one does not already exist.
-                        let symbol_resource_handle = intrinsic_mgr
+                        let symbol_resource_handle = instantiator
                             .bindgen
                             .intrinsic(Intrinsic::SymbolResourceHandle);
                         format!(
@@ -5502,14 +5609,14 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Borrow(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow).name();
             format!("{f}.bind(null, {table_idx})")
         }
 
         InterfaceType::Future(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture).name();
 
@@ -5517,7 +5624,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::Stream(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
             let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatStream).name();
             let table_ty = &component_types[*ty_idx];
@@ -5555,15 +5662,15 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
                     false,
                 ),
                 Some(payload_ty) => {
-                    let cabi = intrinsic_mgr.types.canonical_abi(&payload_ty);
+                    let cabi = instantiator.types.canonical_abi(&payload_ty);
                     (
                         cabi.size32,
                         cabi.align32,
                         cabi.flat_count
                             .map(|v| format!("{v}"))
                             .unwrap_or_else(|| "null".into()),
-                        gen_flat_lift_fn_js_expr(intrinsic_mgr, &payload_ty),
-                        gen_flat_lower_fn_js_expr(intrinsic_mgr, &payload_ty),
+                        gen_flat_lift_fn_js_expr(instantiator, &payload_ty, extra_resource_map),
+                        gen_flat_lower_fn_js_expr(instantiator, &payload_ty, extra_resource_map),
                         matches!(payload_ty, InterfaceType::Borrow(_)),
                         false,
                         matches!(
@@ -5610,7 +5717,7 @@ pub fn gen_flat_lower_fn_js_expr(intrinsic_mgr: &mut Instantiator, ty: &Interfac
         }
 
         InterfaceType::ErrorContext(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext));
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext));
             let table_idx = ty_idx.as_u32();
             let lower_flat_err_ctx_fn =
                 Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext).name();
