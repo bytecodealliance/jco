@@ -3564,6 +3564,13 @@ impl<'a> Instantiator<'a, '_> {
                             _ => unreachable!("unexpected iface type"),
                         };
                         if let Some(elem_iface_ty) = maybe_elem_iface_ty {
+                            // TODO(refactor): the last arg of `connect_resource_types()` (`extra_resource_map`) is
+                            // necessary because we are not building the imports/exports array directly.
+                            //
+                            // It's a hack that *should* be removable if we do more explicit and intentional
+                            // building of import/export resource mappings (i.e. not building a partial map that we
+                            // later `.extend()` onto the instantiator's maps, depending on whether we were working on
+                            // imports or exports).
                             self.connect_resource_types(*elem_ty_id, &elem_iface_ty, resource_map);
                         }
 
@@ -5519,7 +5526,7 @@ pub fn gen_flat_lower_fn_js_expr(
                         // If the resource was not imported (and came from the host), it comes from the component receiving it,
                         // and the object should already have a handle associated inside of it (the component must have created it).
                         //
-                        // We disconnect the external conenctions for dispose and remove the external
+                        // We disconnect the external connections for dispose and remove the external
                         // facing resource handle that was added when lifted out.
                         let empty_func = instantiator
                             .bindgen
