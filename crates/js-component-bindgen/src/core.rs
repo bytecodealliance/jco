@@ -38,13 +38,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use indexmap::IndexMap;
-
 use anyhow::{Result, bail};
 use wasm_encoder::{
     CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
     Module, TypeSection,
 };
+use wasmparser::collections::IndexMap;
 use wasmparser::types::TypeIdentifier as _;
 use wasmparser::{
     Export, ExternalKind, FunctionBody, Import, Parser, Payload, TypeRef, Validator, VisitOperator,

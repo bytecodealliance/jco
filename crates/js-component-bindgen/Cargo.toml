@@ -28,7 +28,6 @@ all-features = true
 anyhow = { workspace = true }
 base64 = { workspace = true, features = [ "alloc" ] }
 heck = { workspace = true }
-indexmap = "2"
 log = { workspace = true }
 semver = { workspace = true }
 wasm-encoder = { workspace = true }
