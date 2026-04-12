@@ -884,7 +884,7 @@ impl Intrinsic {
                     r#"
                       function {get_current_global_task_meta_fn}(componentIdx) {{
                           const v = {global_current_task_meta_obj}[componentIdx];
-                          if (v === undefined) {{ return v; }}
+                          if (v === undefined || v === null) {{ return undefined; }}
                           return {{ ...v }};
                       }}
                     "#,
