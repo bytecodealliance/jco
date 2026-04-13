@@ -74,14 +74,11 @@ pub enum AsyncStreamIntrinsic {
     /// particularly the relevant types to teh stream and lift/lower fns for the stream.
     ///
     /// ```ts
-    /// type params = {
+    /// type Ctx = {
     ///     componentIdx: number,
-    ///     streamTypeRep: number,
-    ///     payloadLiftFn: Array<Function>,
-    ///     payloadLowerFn: Array<Function>,
-    ///     isUnitStream: boolean,
+    ///     elemMeta: object,
     /// }
-    /// function streamNewFromLift(p: params);
+    /// function streamNewFromLift(ctx: Ctx);
     /// ```
     ///
     StreamNewFromLift,
@@ -560,8 +557,8 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component write, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && !pendingElemIsNoneOrNumeric) {{
-                                    throw new Error("trap: cannot stream non-numeric types within the same component (send)");
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                    throw new Error(`trap: cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}], send)`);
                                 }}
 
                                 // If original capacities were zero, we're dealing with a unit stream,
@@ -640,8 +637,8 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component read, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && !pendingElemIsNoneOrNumeric) {{
-                                    throw new Error("trap: cannot stream non-numeric types within the same component (read)");
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                    throw new Error(`trap: cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}] read)`);
                                 }}
 
                                 const pendingRemaining = this.#pendingBufferMeta.buffer.remaining();
@@ -1192,21 +1189,13 @@ impl AsyncStreamIntrinsic {
                 output.push_str(&format!(
                     r#"
                     class {internal_stream_class_name} {{
-                        #readEnd;
-                        #readEndWaitableIdx;
-                        #readEndDropped;
-
-                        #writeEnd;
-                        #writeEndWaitableIdx;
-                        #writeEndDropped;
-
                         #pendingBufferMeta = {{}}; // shared between read/write ends
                         #elemMeta;
 
                         #globalStreamMapRep;
 
-                        #readWaitPromise = null;
-                        #writeWaitPromise = null;
+                        #readEnd;
+                        #writeEnd;
 
                         constructor(args) {{
                             {debug_log_fn}('[{internal_stream_class_name}#constructor()] args', args);
@@ -1291,7 +1280,6 @@ impl AsyncStreamIntrinsic {
 
                         #payloadLiftFn;
                         #payloadLowerFn;
-                        #isUnitStream;
 
                         #userStream;
 
@@ -1312,8 +1300,6 @@ impl AsyncStreamIntrinsic {
                             if (args.streamTableIdx === undefined) {{ throw new Error("missing stream table idx"); }}
                             this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
                             this.#streamTableIdx = args.streamTableIdx;
-
-                            this.#isUnitStream = args.isUnitStream;
                         }}
 
                         setRep(rep) {{ this.#rep = rep; }}
@@ -1399,7 +1385,6 @@ impl AsyncStreamIntrinsic {
 
                             this.#dropFn = args.dropFn;
                         }}
-
 
                         [{symbol_async_iterator}]() {{ return this; }}
 
@@ -1528,7 +1513,6 @@ impl AsyncStreamIntrinsic {
                             payloadLiftFn,
                             payloadTypeSize32,
                             payloadLowerFn,
-                            isUnitStream,
                         }} = ctx;
 
                         const stream = new {host_stream_class}({{
@@ -1537,7 +1521,6 @@ impl AsyncStreamIntrinsic {
                             streamTableIdx,
                             payloadLiftFn: payloadLiftFn,
                             payloadLowerFn: payloadLowerFn,
-                            isUnitStream,
                         }});
 
                         const rep = {global_stream_map}.insert(stream);

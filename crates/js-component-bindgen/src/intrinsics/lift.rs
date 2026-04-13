@@ -1,11 +1,14 @@
 //! Intrinsics that represent helpers that enable Lift integration
+use std::fmt::Write;
 
 use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::source::Source;
+use crate::uwriteln;
 
 use super::conversion::ConversionIntrinsic;
 
@@ -251,7 +254,10 @@ impl LiftIntrinsic {
             Self::LiftFlatBool => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_bool_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_bool_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_bool_fn}()] args', {{ ctx }});
                         let val;
@@ -274,13 +280,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatS8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_s8_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_s8_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_s8_fn}()] args', {{ ctx }});
                         let val;
@@ -302,13 +312,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatU8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_u8_fn = self.name();
-                output.push_str(&format!(r#"
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_u8_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_u8_fn}()] args', {{ ctx }});
                         let val;
@@ -331,13 +345,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "#));
+                "#
+                );
             }
 
             Self::LiftFlatS16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_s16_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_s16_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_s16_fn}()] args', {{ ctx }});
                         let val;
@@ -359,13 +377,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatU16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_u16_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_u16_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_u16_fn}()] args', {{ ctx }});
                         let val;
@@ -391,13 +413,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatS32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_s32_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_s32_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_s32_fn}()] args', {{ ctx }});
                         let val;
@@ -419,13 +445,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatU32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_u32_fn = self.name();
-                output.push_str(&format!(r#"
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_u32_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_u32_fn}()] args', {{ ctx }});
                         let val;
@@ -446,13 +476,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "#));
+                "#
+                );
             }
 
             Self::LiftFlatS64 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_s64_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_s64_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_s64_fn}()] args', {{ ctx }});
                         let val;
@@ -476,13 +510,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatU64 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_u64_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_u64_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_u64_fn}()] args', {{ ctx }});
                         let val;
@@ -505,13 +543,17 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatFloat32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_f32_fn = self.name();
-                output.push_str(&format!("
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_f32_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_f32_fn}()] args', {{ ctx }});
                         let val;
@@ -534,7 +576,8 @@ impl LiftIntrinsic {
 
                         return [val, ctx];
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatFloat64 => {
@@ -1029,23 +1072,75 @@ impl LiftIntrinsic {
             Self::LiftFlatBorrow => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_borrow_fn = self.name();
-                output.push_str(&format!("
+                uwriteln!(
+                    output,
+                    r#"
                     function {lift_flat_borrow_fn}(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[{lift_flat_borrow_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for borrowed resources is not supported!');
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatFuture => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_future_fn = self.name();
-                output.push_str(&format!("
-                    function {lift_flat_future_fn}(componentTableIdx, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[{lift_flat_future_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lift for futures not yet implemented!');
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let global_future_table_map = AsyncFutureIntrinsic::GlobalFutureTableMap.name();
+                let lift_u32 = Self::LiftFlatU32.name();
+
+                uwriteln!(
+                    output,
+                    r#"
+                    function {lift_flat_future_fn}(meta) {{
+                        const {{
+                            futureTableIdx,
+                            componentIdx,
+                        }} = meta;
+
+                        return function {lift_flat_future_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_future_fn}()] args', {{ ctx }});
+
+                            const futureMeta = {global_future_table_map}[futureTableIdx];
+                            if (futureMeta.componentIdx !== componentIdx) {{
+                                throw new Error('unexpectedly mismatched component idx');
+                            }}
+                            const {{ table }} = futureMeta;
+                            if (componentIdx === undefined || !table) {{
+                                throw new Error(`invalid global future table state for table [${{tableIdx}}]`);
+                            }}
+
+                            let futureEndWaitableIdx;
+                            if (ctx.useDirectParams) {{
+                                futureEndWaitableIdx = ctx.params[0];
+                                ctx.params = ctx.params.slice(1);
+                            }} else {{
+                                const [waitableIdx, newCtx] = {lift_u32}(ctx);
+                                ctx = newCtx;
+                                futureEndWaitableIdx = waitableIdx;
+                            }}
+
+                            if (futureEndWaitableIdx === undefined) {{ throw new Error('missing future idx'); }}
+
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
+
+                            const futureEnd = cstate.getFutureEnd({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
+                            if (!futureEnd) {{
+                                throw new Error(`missing future end [${{futureEndWaitableIdx}}] (table [${{futureTableIdx}}]) in component [${{componentIdx}}] during lift`);
+                            }}
+
+                            if (ctx.isBorrowed) {{ throw new Error('cannot lift flat future of borrowed type'); }}
+                            if (futureEnd.isWritable()) {{ throw new Error('only readable futures can be lifted'); }}
+                            if (!futureEnd.isIdleState()) {{ throw new Error('futures must be in idle state'); }}
+
+                            return [ futureEnd.promise(), ctx ];
+                        }};
                     }}
-                "));
+                "#
+                );
             }
 
             Self::LiftFlatStream => {
@@ -1063,9 +1158,6 @@ impl LiftIntrinsic {
                         const {{
                             streamTableIdx,
                             componentIdx,
-                            isBorrowedType,
-                            isNoneType,
-                            isNumericTypeJs,
                         }} = meta;
 
                         return function {lift_flat_stream_fn}Inner(ctx) {{

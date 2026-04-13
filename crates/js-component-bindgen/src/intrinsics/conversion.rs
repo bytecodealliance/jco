@@ -1,6 +1,10 @@
 //! Intrinsics that represent helpers perform conversions
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use std::fmt::Write;
+
+use crate::intrinsics::Intrinsic;
+use crate::source::Source;
+use crate::uwriteln;
 
 /// This enum contains intrinsics that help perform type conversions
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -115,41 +119,102 @@ impl ConversionIntrinsic {
                 const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
             ",
             ),
-            Self::ToBigInt64 => output.push_str("
-                const toInt64 = val => BigInt.asIntN(64, BigInt(val));
+
+            Self::F64ToI64 => output.push_str("
+                const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
             "),
 
-            Self::ToBigUint64 => output.push_str("
-                const toUint64 = val => BigInt.asUintN(64, BigInt(val));
-            "),
+            Self::ToBigInt64 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toInt64(val) {{
+                          const converted = BigInt(val)
+                          {ensure_valid_numeric_primitive_fn}('s64', converted);
+                          return BigInt.asIntN(64, converted);
+                      }}
+                    "#
+                )
+            },
 
-            Self::ToInt16 => output.push_str("
-                function toInt16(val) {
-                    val >>>= 0;
-                    val %= 2 ** 16;
-                    if (val >= 2 ** 15) {
-                        val -= 2 ** 16;
-                    }
-                    return val;
-                }
-            "),
+            Self::ToBigUint64 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toUint64(val) {{
+                          const converted = BigInt(val)
+                          {ensure_valid_numeric_primitive_fn}('u64', converted);
+                          return BigInt.asUintN(64, converted);
+                      }}
+                    "#
+                );
+            },
 
-            Self::ToInt32 => output.push_str("
-                function toInt32(val) {
-                    return val >> 0;
-                }
-            "),
+            Self::ToInt16 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toInt16(val) {{
+                          {ensure_valid_numeric_primitive_fn}('s16', val);
+                          val >>>= 0;
+                          val %= 2 ** 16;
+                          if (val >= 2 ** 15) {{
+                              val -= 2 ** 16;
+                          }}
+                          return val;
+                      }}
+                    "#
+                );
+            },
 
-            Self::ToInt8 => output.push_str("
-                function toInt8(val) {
-                    val >>>= 0;
-                    val %= 2 ** 8;
-                    if (val >= 2 ** 7) {
-                        val -= 2 ** 8;
-                    }
-                    return val;
-                }
-            "),
+            Self::ToUint16 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toUint16(val) {{
+                          {ensure_valid_numeric_primitive_fn}('u16', val);
+                          val >>>= 0;
+                          val %= 2 ** 16;
+                          return val;
+                      }}
+                    "#
+                )
+            },
+
+            Self::ToInt32 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toInt32(val) {{
+                          {ensure_valid_numeric_primitive_fn}('s32', val);
+                          return val >> 0;
+                      }}
+                    "#
+                );
+            },
+
+            Self::ToInt8 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toInt8(val) {{
+                          {ensure_valid_numeric_primitive_fn}('s8', val);
+                          val >>>= 0;
+                          val %= 2 ** 8;
+                          if (val >= 2 ** 7) {{
+                              val -= 2 ** 8;
+                          }}
+                          return val;
+                      }}
+                   "#
+                );
+            },
 
             Self::ToResultString => output.push_str("
                 function toResultString(obj) {
@@ -171,31 +236,34 @@ impl ConversionIntrinsic {
                 }
             "),
 
-            Self::ToUint16 => output.push_str("
-                function toUint16(val) {
-                    val >>>= 0;
-                    val %= 2 ** 16;
-                    return val;
-                }
-            "),
 
-            Self::ToUint32 => output.push_str("
-                function toUint32(val) {
-                    return val >>> 0;
-                }
-            "),
+            Self::ToUint32 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toUint32(val) {{
+                          {ensure_valid_numeric_primitive_fn}('u32', val);
+                          return val >>> 0;
+                      }}
+                    "#
+                )
+            },
 
-            Self::ToUint8 => output.push_str("
-                function toUint8(val) {
-                    val >>>= 0;
-                    val %= 2 ** 8;
-                    return val;
-                }
-            "),
-
-            Self::F64ToI64 => output.push_str("
-                const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
-            "),
+            Self::ToUint8 => {
+                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function toUint8(val) {{
+                          {ensure_valid_numeric_primitive_fn}('u8', val);
+                          val >>>= 0;
+                          val %= 2 ** 8;
+                          return val;
+                      }}
+                    "#
+                );
+            },
 
             Self::I32ToChar => {
                 output.push_str("

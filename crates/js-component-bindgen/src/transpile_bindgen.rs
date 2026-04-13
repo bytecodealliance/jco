@@ -13,7 +13,7 @@ use wasmtime_environ::component::{
     CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule,
     InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex, RuntimeComponentInstanceIndex,
     RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
-    TypeDef, TypeFuncIndex, TypeResourceTableIndex, TypeStreamTableIndex,
+    TypeDef, TypeFuncIndex, TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wasmtime_environ::component::{
     ExtractCallback, NameMapNoIntern, Transcode, TypeComponentLocalErrorContextTableIndex,
@@ -243,6 +243,14 @@ pub fn transpile_bindgen(
         stream_tables.insert(stream_table_idx, stream_table_ty.instance);
     }
 
+    // Generate mapping of future tables to components that are related
+    let mut future_tables = BTreeMap::new();
+    for idx in 0..component.component.num_future_tables {
+        let future_table_idx = TypeFutureTableIndex::from_u32(idx as u32);
+        let future_table_ty = &types[future_table_idx];
+        future_tables.insert(future_table_idx, future_table_ty.instance);
+    }
+
     // Generate mapping of err_ctx tables to components that are related
     let mut err_ctx_tables = BTreeMap::new();
     for idx in 0..component.component.num_error_context_tables {
@@ -290,6 +298,7 @@ pub fn transpile_bindgen(
         resources_initialized: BTreeMap::new(),
         resource_tables_initialized: BTreeMap::new(),
         stream_tables,
+        future_tables,
         err_ctx_tables,
     };
     instantiator.sizes.fill(resolve);
@@ -620,6 +629,9 @@ pub(crate) struct Instantiator<'a, 'b> {
     /// Mapping of stream table indices to component indices
     stream_tables: BTreeMap<TypeStreamTableIndex, RuntimeComponentInstanceIndex>,
 
+    /// Mapping of future table indices to component indices
+    future_tables: BTreeMap<TypeFutureTableIndex, RuntimeComponentInstanceIndex>,
+
     /// Mapping of err ctx indices to component indices
     err_ctx_tables:
         BTreeMap<TypeComponentLocalErrorContextTableIndex, RuntimeComponentInstanceIndex>,
@@ -793,6 +805,18 @@ impl<'a> Instantiator<'a, '_> {
         for (table_idx, component_idx) in self.stream_tables.iter() {
             self.src.js.push_str(&format!(
                 "{global_stream_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
+                table_idx.as_u32(),
+                component_idx.as_u32(),
+            ));
+        }
+
+        // Set up global future map, which is used by intrinsics like future.transfer
+        let global_future_table_map =
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap).name();
+        let rep_table_class = Intrinsic::RepTableClass.name();
+        for (table_idx, component_idx) in self.future_tables.iter() {
+            self.src.js.push_str(&format!(
+                "{global_future_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
                 table_idx.as_u32(),
                 component_idx.as_u32(),
             ));
@@ -1088,6 +1112,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::FutureDropWritable { .. }
                 | Trampoline::FutureRead { .. }
                 | Trampoline::FutureWrite { .. }
+                | Trampoline::FutureNew { .. }
                 | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop { .. }
@@ -1595,164 +1620,259 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {stream_transfer_fn};\n",);
             }
 
-            Trampoline::FutureNew { ty, .. } => {
+            Trampoline::FutureNew { instance, ty } => {
                 let future_new_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
+                let future_table_idx = ty.as_u32();
+                let component_idx = instance.as_u32();
+
+                // Build element metadata
+                let future_table_ty = &self.types[*ty];
+                let future_ty = &self.types[future_table_ty.ty];
+                let (
+                    payload_size32,
+                    payload_align32,
+                    payload_flat_count_js,
+                    payload_lift_fn_js,
+                    payload_lower_fn_js,
+                    is_borrowed,
+                    is_none_type,
+                    is_numeric_type,
+                    is_async_value,
+                ) = match future_ty.payload {
+                    None => (
+                        0,
+                        0,
+                        "0".into(),
+                        "() => {{ throw new Error('empty future payload'); }}".into(),
+                        "() => {{ throw new Error('empty future payload'); }}".into(),
+                        false,
+                        true,
+                        false,
+                        false,
+                    ),
+                    Some(payload_ty) => {
+                        let cabi = self.types.canonical_abi(&payload_ty);
+                        (
+                            cabi.size32,
+                            cabi.align32,
+                            cabi.flat_count
+                                .map(|v| format!("{v}"))
+                                .unwrap_or_else(|| "null".into()),
+                            gen_flat_lift_fn_js_expr(self, &payload_ty, &None),
+                            gen_flat_lower_fn_js_expr(self, &payload_ty, &None),
+                            matches!(payload_ty, InterfaceType::Borrow(_)),
+                            false,
+                            matches!(
+                                payload_ty,
+                                InterfaceType::U8
+                                    | InterfaceType::U16
+                                    | InterfaceType::U32
+                                    | InterfaceType::U64
+                                    | InterfaceType::S8
+                                    | InterfaceType::S16
+                                    | InterfaceType::S32
+                                    | InterfaceType::S64
+                                    | InterfaceType::Float32
+                                    | InterfaceType::Float64
+                            ),
+                            matches!(
+                                payload_ty,
+                                InterfaceType::Stream(_) | InterfaceType::Future(_)
+                            ),
+                        )
+                    }
+                };
+                let payload_ty_name_js = future_ty
+                    .payload
+                    .map(|iface_ty| format!("'{iface_ty:?}'"))
+                    .unwrap_or_else(|| "null".into());
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {future_new_fn}.bind(null, {});\n",
-                    ty.as_u32(),
+                    r#"
+                      const trampoline{i} = {future_new_fn}.bind(null, {{
+                          componentIdx: {component_idx},
+                          futureTableIdx: {future_table_idx},
+                          elemMeta: {{
+                              liftFn: {payload_lift_fn_js},
+                              lowerFn: {payload_lower_fn_js},
+                              payloadTypeName: {payload_ty_name_js},
+                              isNone: {is_none_type},
+                              isNumeric: {is_numeric_type},
+                              isBorrowed: {is_borrowed},
+                              isAsyncValue: {is_async_value},
+                              flatCount: {payload_flat_count_js},
+                              align32: {payload_align32},
+                              size32: {payload_size32},
+                          }},
+                      }});
+                    "#,
                 );
             }
 
-            Trampoline::FutureRead { ty, options, .. } => {
+            Trampoline::FutureWrite {
+                instance,
+                ty,
+                options,
+            }
+            | Trampoline::FutureRead {
+                instance,
+                ty,
+                options,
+            } => {
+                let intrinsic_fn = match trampoline {
+                    Trampoline::FutureRead { .. } => self
+                        .bindgen
+                        .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead)),
+                    Trampoline::FutureWrite { .. } => self
+                        .bindgen
+                        .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite)),
+                    _ => unreachable!("invalid trampoline"),
+                };
+
                 let options = self
                     .component
                     .options
                     .get(*options)
                     .expect("failed to find options");
-
-                let future_idx = ty.as_u32();
-
                 let CanonicalOptions {
-                    instance,
+                    async_,
                     string_encoding,
                     callback,
                     post_return,
-                    async_,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     ..
                 } = options
                 else {
-                    unreachable!("unexpected memory data model during future.read");
+                    unreachable!("unexpected memory data model during future intrinsic");
                 };
-                let component_instance_id = instance.as_u32();
-                let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
-                let realloc_idx = realloc
-                    .map(|v| v.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
-                let string_encoding = string_encoding_js_literal(string_encoding);
 
+                assert_eq!(
+                    *instance, options.instance,
+                    "component instances should match"
+                );
                 assert!(
                     callback.is_none(),
-                    "callback should not be present for future read"
+                    "callback should not be present for future intrinsic"
                 );
                 assert!(
                     post_return.is_none(),
-                    "post_return should not be present for future read"
+                    "post_return should not be present for future intrinsic"
                 );
 
-                let future_read_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead));
-                uwriteln!(
-                    self.src.js,
-                    r#"const trampoline{i} = {future_read_fn}.bind(
-                         null,
-                         {component_instance_id},
-                         {memory_idx},
-                         {realloc_idx},
-                         {string_encoding},
-                         {async_},
-                         {future_idx},
-                     );
-                    "#,
-                );
-            }
-
-            Trampoline::FutureWrite { ty, options, .. } => {
-                let options = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-
-                let future_idx = ty.as_u32();
-                let CanonicalOptions {
-                    instance,
-                    string_encoding,
-                    async_,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    ..
-                } = options
-                else {
-                    unreachable!("unexpected memory data model during future.write");
-                };
-                let component_instance_id = instance.as_u32();
+                let future_table_idx = ty.as_u32();
+                let component_idx = instance.as_u32();
                 let memory_idx = memory
-                    .expect("missing memory idx for future.write")
+                    .expect("missing memory idx for future intrinsic")
                     .as_u32();
-                let realloc_idx = realloc
-                    .map(|v| v.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
+                let (realloc_idx, get_realloc_fn_js) = match realloc {
+                    Some(idx) => (
+                        idx.as_u32().to_string(),
+                        format!("() => realloc{}", idx.as_u32()),
+                    ),
+                    None => ("null".into(), "() => null".to_string()),
+                };
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
-                let future_write_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite));
                 uwriteln!(
                     self.src.js,
-                    r#"const trampoline{i} = {future_write_fn}.bind(
-                         null,
-                         {component_instance_id},
-                         {memory_idx},
-                         {realloc_idx},
-                         {string_encoding},
-                         {async_},
-                         {future_idx},
-                     );
+                    r#"
+                      const trampoline{i} = new WebAssembly.Suspending({intrinsic_fn}.bind(
+                          null,
+                          {{
+                              componentIdx: {component_idx},
+                              memoryIdx: {memory_idx},
+                              getMemoryFn: () => memory{memory_idx},
+                              reallocIdx: {realloc_idx},
+                              getReallocFn: {get_realloc_fn_js},
+                              stringEncoding: {string_encoding},
+                              futureTableIdx: {future_table_idx},
+                              isAsync: {async_},
+                          }},
+                      ));
                     "#,
                 );
             }
 
-            Trampoline::FutureCancelRead { ty, async_, .. } => {
-                let future_cancel_read_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
-                    AsyncFutureIntrinsic::FutureCancelRead,
-                ));
+            Trampoline::FutureCancelRead {
+                instance,
+                ty,
+                async_,
+            }
+            | Trampoline::FutureCancelWrite {
+                instance,
+                ty,
+                async_,
+            } => {
+                let future_cancel_op_fn = match trampoline {
+                    Trampoline::FutureCancelRead { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelRead),
+                    ),
+                    Trampoline::FutureCancelWrite { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelWrite),
+                    ),
+                    _ => unreachable!(),
+                };
+
+                let component_idx = instance.as_u32();
+                let future_table_idx = ty.as_u32();
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {future_cancel_read_fn}.bind(null, {future_idx}, {async_});\n",
-                    future_idx = ty.as_u32(),
+                    r#"
+                      const trampoline{i} = new WebAssembly.Suspending({future_cancel_op_fn}.bind(
+                          null,
+                          {{
+                              futureTableIdx: {future_table_idx},
+                              componentIdx: {component_idx},
+                              isAsync: {async_},
+                          }},
+                      ));
+                    "#,
                 );
             }
 
-            Trampoline::FutureCancelWrite { ty, async_, .. } => {
-                let future_cancel_write_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
-                    AsyncFutureIntrinsic::FutureCancelWrite,
-                ));
+            Trampoline::FutureDropReadable { instance, ty }
+            | Trampoline::FutureDropWritable { instance, ty } => {
+                let future_drop_op_fn = match trampoline {
+                    Trampoline::FutureDropReadable { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropReadable),
+                    ),
+                    Trampoline::FutureDropWritable { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropWritable),
+                    ),
+                    _ => unreachable!(),
+                };
+
+                let component_idx = instance.as_u32();
+                let future_table_idx = ty.as_u32();
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {future_cancel_write_fn}.bind(null, {future_idx}, {async_});\n",
-                    future_idx = ty.as_u32(),
+                    r#"
+                      const trampoline{i} = new WebAssembly.Suspending({future_drop_op_fn}.bind(
+                          null,
+                          {{
+                              futureTableIdx: {future_table_idx},
+                              componentIdx: {component_idx},
+                          }},
+                      ));
+                "#
                 );
             }
 
-            Trampoline::FutureDropReadable { ty, .. } => {
-                let future_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
-                    AsyncFutureIntrinsic::FutureDropReadable,
-                ));
+            Trampoline::FutureTransfer => {
+                let future_drop_writable_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureTransfer));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {future_drop_readable_fn}.bind(null, {future_idx});\n",
-                    future_idx = ty.as_u32(),
+                    "const trampoline{i} = {future_drop_writable_fn};"
                 );
             }
-
-            Trampoline::FutureDropWritable { ty, .. } => {
-                let future_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
-                    AsyncFutureIntrinsic::FutureDropWritable,
-                ));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {future_drop_writable_fn}.bind(null, {future_idx});\n",
-                    future_idx = ty.as_u32(),
-                );
-            }
-
-            Trampoline::FutureTransfer => todo!("Trampoline::FutureTransfer"),
 
             Trampoline::ErrorContextNew { ty, options, .. } => {
                 let CanonicalOptions {
@@ -5046,53 +5166,20 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Future(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
-            let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name();
-            format!("{f}.bind(null, {table_idx})")
+            let table_idx = ty_idx.as_u32();
+            let table_ty = &component_types[*ty_idx];
+            let component_idx = table_ty.instance.as_u32();
+            format!("{f}({{ futureTableIdx: {table_idx}, componentIdx: {component_idx} }})")
         }
 
         InterfaceType::Stream(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
-            let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name();
+            let table_idx = ty_idx.as_u32();
             let table_ty = &component_types[*ty_idx];
             let component_idx = table_ty.instance.as_u32();
-            let stream_ty_idx = table_ty.ty;
-            let stream_ty = &component_types[stream_ty_idx];
-            let payload = stream_ty.payload;
-
-            // TODO(fix): payload u8 should be special cased here
-
-            let (is_borrowed, is_none_type_js, is_numeric_type_js) = match payload {
-                None => (false, true, false),
-                Some(t) => (
-                    matches!(t, InterfaceType::Borrow(_)),
-                    false,
-                    matches!(
-                        ty,
-                        InterfaceType::U8
-                            | InterfaceType::U16
-                            | InterfaceType::U32
-                            | InterfaceType::U64
-                            | InterfaceType::S8
-                            | InterfaceType::S16
-                            | InterfaceType::S32
-                            | InterfaceType::S64
-                            | InterfaceType::Float32
-                            | InterfaceType::Float64
-                    ),
-                ),
-            };
-
-            format!(
-                r#"{f}({{
-                 streamTableIdx: {table_idx},
-                 componentIdx: {component_idx},
-                 isBorrowedType: {is_borrowed},
-                 isNoneType: {is_none_type_js},
-                 isNumericTypeJs: {is_numeric_type_js},
-             }})"#
-            )
+            format!("{f}({{ streamTableIdx: {table_idx}, componentIdx: {component_idx} }})")
         }
 
         InterfaceType::ErrorContext(ty_idx) => {
@@ -5616,10 +5703,93 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::Future(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
-            let table_idx = ty_idx.as_u32();
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture).name();
+            let table_idx = ty_idx.as_u32();
+            let table_ty = &component_types[*ty_idx];
+            let component_idx = table_ty.instance.as_u32();
+            let future_ty_idx = table_ty.ty;
+            let future_ty = &component_types[future_ty_idx];
+            let payload = future_ty.payload;
+            let payload_ty_name_js = future_ty
+                .payload
+                .map(|iface_ty| format!("'{iface_ty:?}'"))
+                .unwrap_or_else(|| "null".into());
 
-            format!("{f}.bind(null, {table_idx})")
+            // Gather element metadata
+            let (
+                payload_size32,
+                payload_align32,
+                payload_flat_count_js,
+                payload_lift_fn_js,
+                payload_lower_fn_js,
+                is_borrowed,
+                is_none_type,
+                is_numeric_type,
+                is_async_value,
+            ) = match payload {
+                None => (
+                    0,
+                    0,
+                    "0".into(),
+                    "() => {{ throw new Error('empty future payload'); }}".into(),
+                    "() => {{ throw new Error('empty future payload'); }}".into(),
+                    false,
+                    true,
+                    false,
+                    false,
+                ),
+                Some(payload_ty) => {
+                    let cabi = instantiator.types.canonical_abi(&payload_ty);
+                    (
+                        cabi.size32,
+                        cabi.align32,
+                        cabi.flat_count
+                            .map(|v| format!("{v}"))
+                            .unwrap_or_else(|| "null".into()),
+                        gen_flat_lift_fn_js_expr(instantiator, &payload_ty, extra_resource_map),
+                        gen_flat_lower_fn_js_expr(instantiator, &payload_ty, extra_resource_map),
+                        matches!(payload_ty, InterfaceType::Borrow(_)),
+                        false,
+                        matches!(
+                            payload_ty,
+                            InterfaceType::U8
+                                | InterfaceType::U16
+                                | InterfaceType::U32
+                                | InterfaceType::U64
+                                | InterfaceType::S8
+                                | InterfaceType::S16
+                                | InterfaceType::S32
+                                | InterfaceType::S64
+                                | InterfaceType::Float32
+                                | InterfaceType::Float64
+                        ),
+                        matches!(
+                            payload_ty,
+                            InterfaceType::Stream(_) | InterfaceType::Future(_)
+                        ),
+                    )
+                }
+            };
+
+            format!(
+                r#"{f}.bind(null, {{
+                       futureTableIdx: {table_idx},
+                       componentIdx: {component_idx},
+                       elemMeta: {{
+                           liftFn: {payload_lift_fn_js},
+                           lowerFn: {payload_lower_fn_js},
+                           payloadTypeName: {payload_ty_name_js},
+                           isNone: {is_none_type},
+                           isNumeric: {is_numeric_type},
+                           isBorrowed: {is_borrowed},
+                           isAsyncValue: {is_async_value},
+                           flatCount: {payload_flat_count_js},
+                           align32: {payload_align32},
+                           size32: {payload_size32},
+                       }},
+                   }})
+                "#
+            )
         }
 
         InterfaceType::Stream(ty_idx) => {
@@ -5709,7 +5879,6 @@ pub fn gen_flat_lower_fn_js_expr(
                            align32: {payload_align32},
                            size32: {payload_size32},
                        }},
-
                    }})
                 "#
             )

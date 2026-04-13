@@ -134,12 +134,6 @@ pub enum Intrinsic {
     HasOwnProperty,
     InstantiateCore,
 
-    /// JS helper function for check whether a given type is borrowed
-    ///
-    /// Generally the only kind of type that can be borrowed is a resource
-    /// handle, so this helper checks for that.
-    IsBorrowedType,
-
     /// Tracking of component memories
     GlobalComponentMemoryMap,
 
@@ -475,23 +469,6 @@ impl Intrinsic {
                 ));
             }
 
-            Intrinsic::IsBorrowedType => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let is_borrowed_type_fn = Intrinsic::IsBorrowedType.name();
-                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
-                output.push_str(&format!("
-                    function {is_borrowed_type_fn}(componentIdx, typeIdx) {{
-                        {debug_log_fn}('[{is_borrowed_type_fn}()] args', {{ componentIdx, typeIdx }});
-                        const table = {defined_resource_tables}[componentIdx];
-                        if (!table) {{ return false; }}
-                        const handle = table[(typeIdx << 1) + 1];
-                        if (!handle) {{ return false; }}
-                        const isOwned = (handle & T_FLAG) !== 0;
-                        return !isOwned;
-                    }}
-                "));
-            }
-
             Intrinsic::ManagedBufferClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
@@ -660,6 +637,7 @@ impl Intrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let buffer_manager_class = Intrinsic::BufferManagerClass.name();
                 let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+
                 output.push_str(&format!(r#"
                     class {buffer_manager_class} {{
                         #buffers = new Map();
@@ -1509,6 +1487,30 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ]);
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWritableEndClass),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureReadableEndClass),
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncFuture(
+        AsyncFutureIntrinsic::FutureWritableEndClass,
+    )) || args.intrinsics.contains(&Intrinsic::AsyncFuture(
+        AsyncFutureIntrinsic::FutureReadableEndClass,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass),
+            &Intrinsic::AsyncEventCodeEnum,
+        ]);
+    }
+
     if args.intrinsics.contains(&Intrinsic::GlobalBufferManager) {
         args.intrinsics.extend([&Intrinsic::BufferManagerClass]);
     }
@@ -1649,7 +1651,6 @@ impl Intrinsic {
             Intrinsic::ConstantI32Min => "I32_MIN",
             Intrinsic::ConstantI32Max => "I32_MAX",
             Intrinsic::TypeCheckValidI32 => "_typeCheckValidI32",
-            Intrinsic::IsBorrowedType => "_isBorrowedType",
             Intrinsic::TypeCheckAsyncFn => "_typeCheckAsyncFn",
             Intrinsic::AsyncFunctionCtor => "ASYNC_FN_CTOR",
 

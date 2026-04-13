@@ -1456,7 +1456,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         const started = await task.enter();
                         if (!started) {{
                             {debug_log_fn}('[Instruction::AsyncTaskReturn] failed to enter task', {{
-                                taskID: preparedTask.id(),
+                                taskID: task.id(),
                                 subtaskID: currentSubtask?.id(),
                             }});
                             throw new Error("failed to enter task");
@@ -1646,7 +1646,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         const started = await task.enter({{ isHost: hostProvided }});
                         if (!started) {{
                             {debug_log_fn}('[Instruction::CallInterface] failed to enter task', {{
-                                taskID: preparedTask.id(),
+                                taskID: task.id(),
                                 subtaskID: currentSubtask?.id(),
                             }});
                             throw new Error("failed to enter task");
@@ -2612,84 +2612,92 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::FutureLift { payload, ty } => {
-                let future_ty = &crate::dealias(self.resolve, *ty);
+                let future_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureNewFromLift,
+                ));
 
-                // TODO: we must generate the lifting function *before* function bindgen happens
-                // (see commented async param lift code generation), because inside here
-                // we do not have access to the interface types required to generate
-                //
-                // Alternatively, we can implement gen_flat_{lift,lower}_fn_js_expr for
-                // TypeDefs with a resolve as well (and make sure the code works with either)
-                //
-                // TODO(breaking): consider adding more information to bindgen (pointer to component types?)
-                match payload {
-                    Some(payload_ty) => {
-                        match payload_ty {
-                            // TODO: reuse existing lifts
-                            Type::Bool
-                            | Type::U8
-                            | Type::U16
-                            | Type::U32
-                            | Type::U64
-                            | Type::S8
-                            | Type::S16
-                            | Type::S32
-                            | Type::S64
-                            | Type::F32
-                            | Type::F64
-                            | Type::Char
-                            | Type::String
-                            | Type::ErrorContext => uwriteln!(
-                                self.src,
-                                "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
-                            ),
-                            Type::Id(payload_ty_id) => {
-                                if self.resource_map.contains_key(payload_ty_id) {
-                                    let ResourceTable { data, .. } =
-                                        &self.resource_map[payload_ty_id];
-                                    uwriteln!(
-                                        self.src,
-                                        "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
-                                        payload_ty_id.index(),
-                                        match data {
-                                            ResourceData::Host { local_name, .. } => local_name,
-                                            ResourceData::Guest { resource_name, .. } =>
-                                                resource_name,
-                                        }
-                                    );
-                                } else {
-                                    // TODO: generate lift fns (see TODO above)
-                                    // NOTE: the missing type here is normally a result with nested types...
-                                    // the resource_map may not be indexing these properly
-                                    //
-                                    // eprintln!("warning: missing resource map def {:#?}", self.resolve.types[*payload_ty_id]);
-                                }
-                            }
+                // We must look up the type idx to find the future
+                let type_id = &crate::dealias(self.resolve, *ty);
+                let ResourceTable {
+                    imported: true,
+                    data:
+                        ResourceData::Guest {
+                            extra:
+                                Some(ResourceExtraData::Future {
+                                    table_idx: future_table_idx_ty,
+                                    elem_ty: future_element_ty,
+                                }),
+                            ..
+                        },
+                } = self
+                    .resource_map
+                    .get(type_id)
+                    .expect("missing resource mapping for future lift")
+                else {
+                    unreachable!("invalid resource table observed during future lift");
+                };
+
+                // if a future element is present, it should match the payload we're getting
+                let (lift_fn_js, lower_fn_js) = match future_element_ty {
+                    Some(PayloadTypeMetadata {
+                        ty,
+                        lift_js_expr,
+                        lower_js_expr,
+                        ..
+                    }) => {
+                        assert_eq!(Some(*ty), **payload, "future element type mismatch");
+                        (lift_js_expr.to_string(), lower_js_expr.to_string())
+                    }
+                    None => (
+                        "() => {{ throw new Error('no lift fn'); }}".into(),
+                        "() => {{ throw new Error('no lower fn'); }}".into(),
+                    ),
+                };
+                if let Some(PayloadTypeMetadata { ty, .. }) = future_element_ty {
+                    assert_eq!(Some(*ty), **payload, "future element type mismatch");
+                }
+
+                let tmp = self.tmp();
+                let result_var = format!("futureResult{tmp}");
+
+                // We only need to attempt to do an immediate lift in non-async cases,
+                // as the return of the function execution ('above' in the code)
+                // will be the future idx
+                if !self.is_async {
+                    // If we're dealing with a sync function, we can use the return directly
+                    let arg_future_end_idx = operands
+                        .first()
+                        .expect("unexpectedly missing future end return arg in FutureLift");
+
+                    let (payload_ty_size32_js, payload_ty_align32_js) =
+                        if let Some(payload_ty) = payload {
+                            (
+                                self.sizes.size(payload_ty).size_wasm32().to_string(),
+                                self.sizes.align(payload_ty).align_wasm32().to_string(),
+                            )
+                        } else {
+                            ("null".into(), "null".into())
                         };
 
-                        // // TODO: save payload type size below and more information about the type w/ the future?
-                        // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+                    let future_table_idx = future_table_idx_ty.as_u32();
+                    let component_idx = self.canon_opts.instance.as_u32();
 
-                        // NOTE: here, rather than create a new `Future` "resource" using the saved
-                        // ResourceData, we use the future.new intrinsic directly.
-                        //
-                        // TODO: differentiate "locally" created futures and futures that are lifted in?
-                        //
-                        let tmp = self.tmp();
-                        let result_var = format!("futureResult{tmp}");
-                        let component_idx = self.canon_opts.instance.as_u32();
-                        let future_new_fn =
-                            self.intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
-                        uwriteln!(
-                            self.src,
-                            "const {result_var} = {future_new_fn}({{ componentIdx: {component_idx}, futureTypeRep: {} }});",
-                            future_ty.index(),
-                        );
-                        results.push(result_var.clone());
-                    }
-
-                    None => unreachable!("future with no payload unsupported"),
+                    uwriteln!(
+                        self.src,
+                        "
+                        const {result_var} = {future_new_from_lift_fn}({{
+                            componentIdx: {component_idx},
+                            futureTableIdx: {future_table_idx},
+                            futureEndWaitableIdx: {arg_future_end_idx},
+                            payloadLiftFn: {lift_fn_js},
+                            payloadLowerFn: {lower_fn_js},
+                            payloadTypeSize32: {payload_ty_size32_js},
+                            payloadTypeAlign32: {payload_ty_align32_js},
+                        }});",
+                    );
                 }
+
+                results.push(result_var.clone());
             }
 
             Instruction::StreamLower { ty, .. } => {
@@ -2928,7 +2936,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         };
 
                     let stream_table_idx = stream_table_idx_ty.as_u32();
-                    let is_unit_stream = payload.is_none();
 
                     uwriteln!(
                         self.src,
@@ -2941,7 +2948,6 @@ impl Bindgen for FunctionBindgen<'_> {
                             payloadLowerFn: {lower_fn_js},
                             payloadTypeSize32: {payload_ty_size32_js},
                             payloadTypeAlign32: {payload_ty_align32_js},
-                            isUnitStream: {is_unit_stream},
                         }});",
                     );
                 }

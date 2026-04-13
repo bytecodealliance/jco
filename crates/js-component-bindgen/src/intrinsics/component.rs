@@ -1,12 +1,13 @@
 //! Intrinsics that represent helpers that manage per-component state
 
-use crate::{
-    intrinsics::{
-        Intrinsic,
-        p3::{async_stream::AsyncStreamIntrinsic, waitable::WaitableIntrinsic},
-    },
-    source::Source,
-};
+use std::fmt::Write as _;
+
+use crate::intrinsics::Intrinsic;
+use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
+use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::source::Source;
+use crate::uwriteln;
 
 /// This enum contains intrinsics that manage per-component state
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -84,7 +85,7 @@ impl ComponentIntrinsic {
         match self {
             Self::GlobalAsyncStateMap => {
                 let var_name = Self::GlobalAsyncStateMap.name();
-                output.push_str(&format!("const {var_name} = new Map();\n"));
+                uwriteln!(output, r#"const {var_name} = new Map();"#);
             }
 
             Self::BackpressureInc => {
@@ -127,6 +128,9 @@ impl ComponentIntrinsic {
                 let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
                 let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
                 let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
+                let internal_future_class = AsyncFutureIntrinsic::InternalFutureClass.name();
+                let global_future_map = AsyncFutureIntrinsic::GlobalFutureMap.name();
+                let global_future_table_map = AsyncFutureIntrinsic::GlobalFutureTableMap.name();
                 let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
@@ -655,6 +659,128 @@ impl ComponentIntrinsic {
 
                             return streamEnd;
                         }}
+
+                        createFuture(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#createFuture()] args', args);
+                            const {{ tableIdx, elemMeta, hostInjectFn }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while adding future"); }}
+                            if (elemMeta === undefined) {{ throw new Error("missing element metadata while adding future"); }}
+
+                            const {{ table: futureTable, componentIdx }} = {global_future_table_map}[tableIdx];
+                            if (!futureTable) {{
+                                throw new Error(`missing global future table lookup for table [${{tableIdx}}] while creating future`);
+                            }}
+                            if (componentIdx !== this.#componentIdx) {{
+                                throw new Error('component idx mismatch while creating future');
+                            }}
+
+                            const readWaitable = this.createWaitable();
+                            const writeWaitable = this.createWaitable();
+
+                            const future = new {internal_future_class}({{
+                                tableIdx,
+                                componentIdx: this.#componentIdx,
+                                elemMeta,
+                                readWaitable,
+                                writeWaitable,
+                                hostInjectFn,
+                            }});
+                            future.setGlobalFutureMapRep({global_future_map}.insert(future));
+
+                            const writeEnd = future.writeEnd();
+                            writeEnd.setWaitableIdx(this.handles.insert(writeEnd));
+                            writeEnd.setHandle(futureTable.insert(writeEnd));
+                            if (writeEnd.futureTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched future table"); }}
+
+                            const writeEndWaitableIdx = writeEnd.waitableIdx();
+                            const writeEndHandle = writeEnd.handle();
+                            writeWaitable.setTarget(`waitable for future write end (waitable [${{writeEndWaitableIdx}}])`);
+                            writeEnd.setTarget(`future write end (waitable [${{writeEndWaitableIdx}}])`);
+
+                            const readEnd = future.readEnd();
+                            readEnd.setWaitableIdx(this.handles.insert(readEnd));
+                            readEnd.setHandle(futureTable.insert(readEnd));
+                            if (readEnd.futureTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched future table"); }}
+
+                            const readEndWaitableIdx = readEnd.waitableIdx();
+                            const readEndHandle = readEnd.handle();
+                            readWaitable.setTarget(`waitable for read end (waitable [${{readEndWaitableIdx}}])`);
+                            readEnd.setTarget(`future read end (waitable [${{readEndWaitableIdx}}])`);
+
+                            return {{
+                                writeEnd,
+                                writeEndWaitableIdx,
+                                writeEndHandle,
+                                readEndWaitableIdx,
+                                readEndHandle,
+                                readEnd,
+                            }};
+                        }}
+
+                        getFutureEnd(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#getFutureEnd()] args', args);
+                            const {{ tableIdx, futureEndHandle, futureEndWaitableIdx }} = args;
+                            if (tableIdx === undefined) {{
+                                throw new Error('missing table idx while getting future end');
+                            }}
+
+                            const {{ table, componentIdx }} = {global_future_table_map}[tableIdx];
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                            let futureEnd;
+                            if (futureEndWaitableIdx !== undefined) {{
+                                futureEnd = cstate.handles.get(futureEndWaitableIdx);
+                            }} else if (futureEndHandle !== undefined) {{
+                                if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while getting future end`); }}
+                                futureEnd = table.get(futureEndHandle);
+                            }} else {{
+                                console.log("args?", args);
+                                throw new TypeError("must specify either waitable idx or handle to retrieve future");
+                            }}
+
+                            if (!futureEnd) {{
+                                throw new Error(`missing future end (tableIdx [${{tableIdx}}], handle [${{futureEndHandle}}], waitableIdx [${{futureEndWaitableIdx}}])`);
+                            }}
+                            if (tableIdx && futureEnd.futureTableIdx() !== tableIdx) {{
+                                throw new Error(`future end table idx [${{futureEnd.futureTableIdx()}}] does not match [${{tableIdx}}]`);
+                            }}
+
+                            return futureEnd;
+                        }}
+
+                        removeFutureEndFromTable(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#removeFutureEndFromTable()] args', args);
+
+                            const {{ tableIdx, futureWaitableIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing future end"); }}
+                            if (futureWaitableIdx === undefined) {{
+                                throw new Error("missing future end waitable idx while removing future end");
+                            }}
+
+                            const {{ table, componentIdx }} = {global_future_table_map}[tableIdx];
+                            if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while removing future end`); }}
+
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                            const futureEnd = cstate.handles.get(futureWaitableIdx);
+                            if (!futureEnd) {{
+                                throw new Error(`missing future end (handle [${{futureWaitableIdx}}], table [${{tableIdx}}])`);
+                            }}
+                            const handle = futureEnd.handle();
+
+                            let removed = cstate.handles.remove(futureWaitableIdx);
+                            if (!removed) {{
+                                throw new Error(`failed to remove futureEnd from handles (waitable idx [${{futureWaitableIdx}}]), component [${{componentIdx}}])`);
+                            }}
+
+                            removed = table.remove(handle);
+                            if (!removed) {{
+                                throw new Error(`failed to remove futureEnd from table (handle [${{handle}}]), table [${{tableIdx}}], component [${{componentIdx}}])`);
+                            }}
+
+                            return futureEnd;
+                        }}
+
                     }}
                     "#,
                 ));
