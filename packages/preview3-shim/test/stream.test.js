@@ -25,6 +25,24 @@ describe("Node.js Preview3 canon stream reader", () => {
     expect(done).toBeNull();
   });
 
+  test("read() works with a plain async iterable", async () => {
+    async function* generate() {
+      yield new Uint8Array([10]);
+      yield new Uint8Array([20]);
+    }
+    const reader = new StreamReader(generate());
+
+    const first = await reader.read();
+    expect(first).toBeInstanceOf(Uint8Array);
+    expect(first[0]).toBe(10);
+
+    const second = await reader.read();
+    expect(second[0]).toBe(20);
+
+    const done = await reader.read();
+    expect(done).toBeNull();
+  });
+
   test("readAll() concatenates multiple chunks", async () => {
     const rs = new ReadableStream({
       start(ctrl) {
@@ -36,6 +54,143 @@ describe("Node.js Preview3 canon stream reader", () => {
     const reader = new StreamReader(rs);
     const all = await reader.readAll();
     expect(all.toString()).toBe("foobar");
+  });
+
+  test("readAll() works with a plain async iterable", async () => {
+    async function* generate() {
+      yield Buffer.from("hello");
+      yield Buffer.from("world");
+    }
+    const reader = new StreamReader(generate());
+    const all = await reader.readAll();
+    expect(all.toString()).toBe("helloworld");
+  });
+
+  test("intoAsyncIterator() returns an async iterator", async () => {
+    const rs = new ReadableStream({
+      start(ctrl) {
+        ctrl.enqueue(Buffer.from("abc"));
+        ctrl.enqueue(Buffer.from("def"));
+        ctrl.close();
+      },
+    });
+    const reader = new StreamReader(rs);
+    const iter = reader.intoAsyncIterator();
+
+    const first = await iter.next();
+    expect(first.done).toBe(false);
+    expect(Buffer.from(first.value).toString()).toBe("abc");
+
+    const second = await iter.next();
+    expect(second.done).toBe(false);
+    expect(Buffer.from(second.value).toString()).toBe("def");
+
+    const third = await iter.next();
+    expect(third.done).toBe(true);
+  });
+
+  test("intoAsyncIterator() works with a plain async iterable", async () => {
+    async function* generate() {
+      yield Buffer.from("hello");
+      yield Buffer.from("world");
+    }
+    const reader = new StreamReader(generate());
+    const iter = reader.intoAsyncIterator();
+
+    const chunks = [];
+    for await (const chunk of { [Symbol.asyncIterator]: () => iter }) {
+      chunks.push(chunk);
+    }
+    expect(Buffer.concat(chunks).toString()).toBe("helloworld");
+  });
+
+  test("read() works with a sync iterable", async () => {
+    const source = [new Uint8Array([1]), new Uint8Array([2])];
+    const reader = new StreamReader(source);
+
+    const first = await reader.read();
+    expect(first).toBeInstanceOf(Uint8Array);
+    expect(first[0]).toBe(1);
+
+    const second = await reader.read();
+    expect(second[0]).toBe(2);
+
+    const done = await reader.read();
+    expect(done).toBeNull();
+  });
+
+  test("readAll() works with a sync iterable", async () => {
+    const source = [Buffer.from("sync"), Buffer.from("iter")];
+    const reader = new StreamReader(source);
+    const all = await reader.readAll();
+    expect(all.toString()).toBe("synciter");
+  });
+
+  test("read() returns terminal value when done with value", async () => {
+    async function* generate() {
+      yield Buffer.from("chunk");
+      return Buffer.from("final");
+    }
+    const reader = new StreamReader(generate());
+
+    const first = await reader.read();
+    expect(first.toString()).toBe("chunk");
+
+    const terminal = await reader.read();
+    expect(terminal.toString()).toBe("final");
+
+    const done = await reader.read();
+    expect(done).toBeNull();
+  });
+
+  test("close() does not call return() after done completion", async () => {
+    let returnCalled = false;
+    const source = {
+      [Symbol.asyncIterator]() {
+        return {
+          _calls: 0,
+          async next() {
+            this._calls++;
+            if (this._calls <= 2) {
+              return { done: false, value: this._calls };
+            } else {
+              return { done: true, value: undefined };
+            }
+          },
+          async return() {
+            returnCalled = true;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+    const reader = new StreamReader(source);
+    await reader.read();
+    await reader.read();
+    await reader.read(); // done: true
+    reader.close();
+    expect(returnCalled).toBe(false);
+  });
+
+  test("close() calls return() on premature exit", async () => {
+    let returnCalled = false;
+    const source = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: false, value: 1 };
+          },
+          async return() {
+            returnCalled = true;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+    const reader = new StreamReader(source);
+    await reader.read();
+    reader.close();
+    expect(returnCalled).toBe(true);
   });
 });
 
@@ -85,7 +240,7 @@ describe("Node.js Preview3 canon stream writer", () => {
     await expect(writer.write(Buffer.from("x"))).rejects.toThrow("StreamWriter is closed");
   });
 
-  test("intoReadableStream() returns original after close", async () => {
+  test("intoWritableStream() returns original after close", async () => {
     const ws = new WritableStream({ write() {} });
     const writer = new StreamWriter(ws);
     await writer.close();

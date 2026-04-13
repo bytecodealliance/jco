@@ -1,4 +1,4 @@
-import { StreamReader } from "../stream.js";
+import { StreamReader, readableStreamFromIterator } from "../stream.js";
 import { FutureReader } from "../future.js";
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { SocketError } from "./error.js";
@@ -253,7 +253,7 @@ export class TcpSocket {
       throw new SocketError("invalid-argument");
     }
 
-    const stream = data.intoReadableStream();
+    const stream = readableStreamFromIterator(data.intoAsyncIterator());
 
     try {
       // Transfer the stream to the worker

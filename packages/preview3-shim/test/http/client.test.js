@@ -12,7 +12,7 @@ import {
 } from "@bytecodealliance/preview3-shim/http";
 
 import { future } from "@bytecodealliance/preview3-shim/future";
-import { stream } from "@bytecodealliance/preview3-shim/stream";
+import { stream, readableStreamFromIterator } from "@bytecodealliance/preview3-shim/stream";
 
 const ENCODER = new TextEncoder();
 
@@ -93,7 +93,7 @@ describe("HttpClient Integration", () => {
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
-    const stream = body.intoReadableStream();
+    const stream = readableStreamFromIterator(body.intoAsyncIterator());
     const reader = stream.getReader();
     let result = "";
 
@@ -138,7 +138,7 @@ describe("HttpClient Integration", () => {
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
-    const reader = body.intoReadableStream().getReader();
+    const reader = readableStreamFromIterator(body.intoAsyncIterator()).getReader();
     let result = "";
 
     while (true) {
@@ -171,7 +171,7 @@ describe("HttpClient Integration", () => {
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
-    const stream = body.intoReadableStream();
+    const stream = readableStreamFromIterator(body.intoAsyncIterator());
     const reader = stream.getReader();
     let result = "";
 

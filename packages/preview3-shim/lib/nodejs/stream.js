@@ -1,4 +1,29 @@
 /**
+ * Creates a transferable ReadableStream from an async iterator.
+ *
+ * Use this when a StreamReader's contents need to be sent to a worker thread,
+ * since async iterators are not transferable.
+ *
+ * @param {AsyncIterator} iterator - The async iterator to wrap.
+ * @returns {ReadableStream} A transferable ReadableStream that pulls from the iterator.
+ */
+export function readableStreamFromIterator(iterator) {
+  return new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await iterator.next();
+      if (done) {
+        controller.close();
+      } else {
+        controller.enqueue(value);
+      }
+    },
+    cancel() {
+      return iterator.return?.();
+    },
+  });
+}
+
+/**
  * Creates a bidirectional stream with separate reader and writer interfaces.
  *
  * Uses a TransformStream internally.
@@ -42,25 +67,50 @@ export function stream(opts = {}) {
 }
 
 export class StreamReader {
-  /** Reference to the original stream object that implements getReader */
-  #stream = null;
-  /** Active reader obtained from the stream */
-  #reader = null;
+  /** Original source ReadableStream or AsyncIterable */
+  #source = null;
+  /** Active async iterator obtained from the source */
+  #iterator = null;
+  /** Whether the iterator completed on next() call */
+  #done = false;
 
   /**
    * Constructs a StreamReader.
    *
-   * @param {ReadableStream} readable - The readable stream to consume.
-   * @throws {Error} If the provided stream does not implement `getReader`.
+   * @param {AsyncIterable|Iterable} source - An async or sync iterable to consume e.g. ReadableStream, async generator, array.
+   * @throws {Error} If the provided source does not implement `[Symbol.asyncIterator]` or `[Symbol.iterator]`.
    */
-  constructor(readable) {
-    if (!readable || typeof readable.getReader !== "function") {
+  constructor(source) {
+    if (
+      !source ||
+      (typeof source[Symbol.asyncIterator] !== "function" &&
+        typeof source[Symbol.iterator] !== "function")
+    ) {
       throw new Error(
-        "Failed to create StreamReader: provided readable must implement getReader()",
+        "Failed to create StreamReader: provided source must implement [Symbol.asyncIterator]() or [Symbol.iterator]()",
       );
     }
-    this.#stream = readable;
-    this.#reader = readable.getReader();
+    this.#source = source;
+    // For ReadableStream, use values() with preventCancel so the underlying
+    // stream is not cancelled when the iterator is released.
+    if (source instanceof ReadableStream) {
+      this.#iterator = source.values({ preventCancel: true });
+    } else if (typeof source[Symbol.asyncIterator] === "function") {
+      this.#iterator = source[Symbol.asyncIterator]();
+    } else {
+      // Wrap a sync iterator as an async one
+      const syncIterator = source[Symbol.iterator]();
+      this.#iterator = {
+        next() {
+          return Promise.resolve(syncIterator.next());
+        },
+        return(val) {
+          return Promise.resolve(
+            syncIterator.return ? syncIterator.return(val) : { done: true, value: val },
+          );
+        },
+      };
+    }
   }
 
   /**
@@ -69,12 +119,16 @@ export class StreamReader {
    * @returns {Promise<any>} Resolves with the next chunk or null if the stream is done.
    */
   async read() {
-    this.#ensureReader();
-
-    const { done, value } = await this.#reader.read();
-    if (done) {
-      this.close();
+    if (this.#done) {
       return null;
+    }
+    this.#ensureIterator();
+
+    const { done, value } = await this.#iterator.next();
+    if (done) {
+      this.#done = true;
+      this.#iterator = null;
+      return value !== undefined ? value : null;
     }
     return value;
   }
@@ -85,7 +139,7 @@ export class StreamReader {
    * @returns {Promise<Buffer>} Resolves with the concatenated buffer.
    */
   async readAll() {
-    this.#ensureReader();
+    this.#ensureIterator();
 
     const chunks = [];
     let c;
@@ -101,43 +155,54 @@ export class StreamReader {
   }
 
   /**
-   * Cancels the stream with the given reason.
+   * Cancels the stream, signalling a premature exit to the iterator.
    *
-   * @param {*} reason - The reason for canceling the stream.
-   * @returns {Promise<undefined>}
+   * @returns {Promise<void>}
    */
-  async cancel(reason) {
-    this.#ensureReader();
-    return this.#reader.cancel(reason);
+  async cancel(_reason) {
+    this.#ensureIterator();
+    if (typeof this.#iterator.return === "function") {
+      await this.#iterator.return();
+    }
+    this.#iterator = null;
   }
 
   /**
-   * Closes the reader and releases the lock on the stream.
+   * Closes the reader and releases the iterator.
+   * Only calls return() if the iterator hasn't completed naturally,
+   * since return() is meant for premature exits only.
    */
   close() {
-    if (!this.#reader) {
+    if (!this.#iterator) {
       return;
     }
-    if (typeof this.#reader.releaseLock === "function") {
-      this.#reader.releaseLock();
+    if (!this.#done && typeof this.#iterator.return === "function") {
+      this.#iterator.return();
     }
-    this.#reader = null;
+    this.#iterator = null;
   }
 
   /**
-   * Converts the reader back into a readable stream.
+   * Consumes the reader and returns the underlying async iterator.
    *
-   * @returns {ReadableStream} The original readable stream that implements `getReader()`.
+   * After calling this method the StreamReader is closed and must not be used.
+   *
+   * @returns {AsyncIterator} The remaining async iterator.
    */
-  intoReadableStream() {
-    this.close();
-    const stream = this.#stream;
-    this.#stream = null;
-    return stream;
+  intoAsyncIterator() {
+    const iterator = this.#iterator;
+    this.#iterator = null;
+    this.#source = null;
+
+    if (!iterator) {
+      throw new Error("StreamReader is closed");
+    }
+
+    return iterator;
   }
 
-  #ensureReader() {
-    if (this.#reader === null) {
+  #ensureIterator() {
+    if (this.#iterator === null) {
       throw new Error("StreamReader is closed");
     }
   }
