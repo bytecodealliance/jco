@@ -57,7 +57,7 @@
     "test": "vitest run -c test/vitest.ts"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/componentize-js": "0.20.0",
     "@bytecodealliance/jco": "1.15.2",
     "mime": "^4.0.7",
     "puppeteer": "^24.16.2"
