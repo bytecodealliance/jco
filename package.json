@@ -33,7 +33,8 @@
     "fmt": "npm run fmt --ws --if-present",
     "fmt:check": "npm run fmt:check --ws --if-present",
     "lint": "npm run lint --ws --if-present",
-    "lint:fix": "npm run lint:fix --ws --if-present"
+    "lint:fix": "npm run lint:fix --ws --if-present",
+    "test:examples": "npm run all --ws --if-present"
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
