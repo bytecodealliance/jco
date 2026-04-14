@@ -86,3 +86,18 @@ export function createReadableStreamFromValues(vals) {
         },
     });
 }
+
+/** Check the value of a given future (normally returned from a component) */
+export async function checkFutureValues(args) {
+    const { vals, func, typeName, assertEqFn } = args ?? {};
+    const expectedValues = args.expectedValues ?? [];
+    const eq = assertEqFn ?? assert.equal;
+
+    let future;
+    let res;
+    for (const [idx, v] of vals.entries()) {
+        future = await func(v);
+        res = await future;
+        await eq(res, expectedValues[idx] ?? v, `${typeName} future read is incorrect`);
+    }
+}
