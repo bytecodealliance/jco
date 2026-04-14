@@ -11,6 +11,6 @@
     "all": "npm run build:dep ; npm run build ; npm run compose ; npm run transpile ; npm run transpiled-js"
   },
   "dependencies": {
-    "@bytecodealliance/jco": "^1.15.0"
+    "@bytecodealliance/jco": "^1.17.6"
   }
 }
