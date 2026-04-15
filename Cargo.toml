@@ -42,7 +42,7 @@ log = { version = "0.4.29", default-features = false }
 semver = { version = "1.0.27", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 tokio = { version = "1.50.0", default-features = false }
-webidl2wit = { version = "0.1.0", default-features = false }
+webidl2wit = { version = "0.1.1", default-features = false }
 xshell = { version = "0.2.7", default-features = false }
 
 wasmtime = { version = "43.0.0", default-features = false }
@@ -58,8 +58,3 @@ wit-component = { version = "0.245.1", features = ["dummy-module"] }
 wit-parser = { version = "0.245.1", default-features = false }
 
 js-component-bindgen = { version = "1.16.5", path = "./crates/js-component-bindgen" }
-
-[patch.crates-io]
-# NOTE: weedle added a breaking change which gets pulled in by webidl2wit
-# see: https://github.com/wasi-gfx/webidl2wit/pull/56
-weedle = { git = "https://github.com/wasm-bindgen/weedle", rev = "33f52628f699502c8c9ec49a18adc53af6c4a846" }
