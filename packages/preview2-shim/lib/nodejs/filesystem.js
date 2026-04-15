@@ -39,7 +39,7 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 const isWindows = platform === "win32";
 const isMac = platform === "darwin";
 
-const nsMagnitude = 1_000_000_000_000n;
+const nsMagnitude = 1_000_000_000n;
 function nsToDateTime(ns) {
   const seconds = ns / nsMagnitude;
   const nanoseconds = Number(ns % nsMagnitude);
@@ -328,8 +328,10 @@ class Descriptor {
     if (!pathFlags.symlinkFollow && !lutimesSync) {
       throw new Error("Changing the timestamps of symlinks isn't supported");
     }
+
+    let metadataSetFn = pathFlags.symlinkFollow ? lutimesSync : utimesSync;
     try {
-      (pathFlags.symlinkFollow ? utimesSync : lutimesSync)(fullPath, atime, mtime);
+      metadataSetFn(fullPath, atime / 1000, mtime / 1000);
     } catch (e) {
       throw convertFsError(e);
     }
@@ -814,5 +816,14 @@ function convertFsError(e) {
 }
 
 function timestampToMs(timestamp) {
-  return Number(timestamp.seconds) * 1000 + timestamp.nanoseconds / 1e9;
+  let secondsInMillis = timestamp.seconds * 1000n;
+  if (secondsInMillis > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`cannot represent millisecond amount as Number [${{ nanosInMillis }}]`);
+  }
+  if (timestamp.nanoseconds > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`cannot represent millisecond amount as Number [${{ nanosInMillis }}]`);
+  }
+  let remainderFractionalMillis = timestamp.nanoseconds / 1_000_000;
+  const res = Number(secondsInMillis) + remainderFractionalMillis;
+  return res;
 }
