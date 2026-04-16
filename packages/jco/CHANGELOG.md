@@ -1,5 +1,73 @@
 # Changelog
 
+## [1.17.7] - 2026-04-16
+
+### 🧪 Testing
+
+- _(jco)_ add async future lift tests future tx component by @vados-cosmonic
+
+- _(jco)_ add test for generation determinism by @vados-cosmonic in #1373
+
+- _(jco)_ enable test for lowered stream<string> by @vados-cosmonic
+
+- _(jco)_ update tests for lowered resources by @vados-cosmonic
+
+- _(jco)_ add test stubs by @vados-cosmonic
+
+- _(jco)_ add test for stream of list<record> by @vados-cosmonic
+
+- _(jco)_ impove fixed length list test by @vados-cosmonic in #1366
+
+- _(jco)_ add more stream lower tests by @vados-cosmonic
+
+- _(jco)_ add async stream lower variant test by @vados-cosmonic
+
+- _(jco)_ move readable stream creating helper, fix test by @vados-cosmonic
+
+- _(jco)_ adapt closed stream test to async iterator semantics by @vados-cosmonic
+
+- _(jco)_ add async stream lower variant test by @vados-cosmonic
+
+- _(jco)_ add async record lower test by @vados-cosmonic
+
+- _(jco)_ fix & re-enable tests for primitives and string by @vados-cosmonic
+
+- _(jco)_ add more lower tests by @vados-cosmonic
+
+- _(jco)_ implement tests for stream lower values by @vados-cosmonic
+
+- _(jco)_ async passthrough stream lower test by @vados-cosmonic
+
+- _(jco)_ update stream lift tests by @vados-cosmonic
+
+- _(jco)_ fix stream test by @vados-cosmonic
+
+- _(jco)_ update tests with async itereator adoption by @vados-cosmonic
+
+- _(jco)_ finish test for sync stream passthrough by @vados-cosmonic
+
+- _(jco)_ add test for stream lower impl by @vados-cosmonic
+
+- _(jco)_ add component for stream-rx tests by @vados-cosmonic
+
+- _(jco)_ add read resource stream test by @vados-cosmonic
+
+- _(jco)_ add inter-task comms test by @vados-cosmonic
+
+- _(jco)_ add short reads test by @vados-cosmonic
+
+- _(jco)_ add test for host->host, host->guest closed streams by @vados-cosmonic
+
+- _(jco)_ ensure that last read is undefined by @vados-cosmonic
+
+- _(jco)_ add test for sync closed stream by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ lint by @vados-cosmonic
+
+- _(jco)_ lint by @vados-cosmonic
+
 ## [1.17.6] - 2026-03-30
 
 ### 🧪 Testing
