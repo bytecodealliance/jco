@@ -1,5 +1,92 @@
 # Changelog
 
+## [1.16.6] - 2026-04-16
+
+### 🚀 Features
+
+- _(bindgen)_ add support for p3 futures by @vados-cosmonic
+
+- _(bindgen)_ add explicit checks for lowered numeric primitives by @vados-cosmonic
+
+- _(bindgen)_ host side stream writes from any async iterator by @vados-cosmonic
+
+- _(bindgen)_ implement Instruction::StreamLower by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ use IndexMap for deterministic export iteration order by @wondenge
+
+- _(bindgen)_ resource hookup for imports by @vados-cosmonic in #1371
+
+- _(bindgen)_ use adhoc mapping while generating lift/lower fns by @vados-cosmonic
+
+- _(bindgen)_ impl async stream lower owned resources by @vados-cosmonic
+
+- _(bindgen)_ implementation of flat lower own by @vados-cosmonic
+
+- _(bindgen)_ fix async future JS codegen producing invalid output by @wondenge in #1367
+
+- _(bindgen)_ async stream list lower impl by @vados-cosmonic
+
+- _(bindgen)_ option, result, flag lowers by @vados-cosmonic
+
+- _(bindgen)_ async stream option & result lowering by @vados-cosmonic
+
+- _(bindgen)_ revert utf16 encoding changes by @vados-cosmonic
+
+- _(bindgen)_ utf16 decode logic by @vados-cosmonic
+
+- _(bindgen)_ fill in missing lower impls by @vados-cosmonic
+
+- _(bindgen)_ async stream record lowering impl by @vados-cosmonic
+
+- _(bindgen)_ async string flat lowering missing realloc by @vados-cosmonic
+
+- _(bindgen)_ missing ctx in memory usage by @vados-cosmonic
+
+- _(bindgen)_ host-side write post-read event clearing by @vados-cosmonic
+
+- _(bindgen)_ fix Instruction::StreamLift in async contexts by @vados-cosmonic
+
+- _(bindgen)_ done check during read by @vados-cosmonic
+
+- _(bindgen)_ check for host data in host-controlled streams by @vados-cosmonic
+
+- _(bindgen)_ stream drop logic by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ use upstream indexmap dep by @vados-cosmonic
+
+- _(bindgen)_ factor out strewam write injection, use w/ lower by @vados-cosmonic
+
+- _(bindgen)_ resource lift handling by @vados-cosmonic
+
+- _(bindgen)_ move resouce scope tracking by @vados-cosmonic in #1358
+
+- _(bindgen)_ use older iteration pattern for node 18/20 by @vados-cosmonic in #1343
+
+- _(bindgen)_ rework lowering code by @vados-cosmonic
+
+- _(bindgen)_ late handling of string encoding by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ update wasm/wit deps to 0.245.1 by @vados-cosmonic
+
+- _(bindgen)_ fmt by @vados-cosmonic
+
+- _(bindgen)_ clippy by @vados-cosmonic
+
+
+
+## New Contributors
+* @wondenge made their first contribution
+
+
 ## [1.16.5] - 2026-03-30
 
 ### 🚀 Features
