@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.9] - 2026-04-17
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ incorrect ns magnitude by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ oxfmt by @vados-cosmonic
+
+- _(p2-shim)_ swap eslint for oxlint by @vados-cosmonic
+
 ## [0.17.8] - 2026-02-08
 
 ### 🚀 Features

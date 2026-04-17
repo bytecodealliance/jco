@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/preview2-shim",
-  "version": "0.17.8",
+  "version": "0.17.9",
   "description": "WASI Preview2 shim for JS environments",
   "homepage": "https://github.com/bytecodealliance/jco#readme",
   "bugs": {
