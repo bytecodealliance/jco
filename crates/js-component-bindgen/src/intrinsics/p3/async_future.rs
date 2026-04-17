@@ -1312,10 +1312,6 @@ impl AsyncFutureIntrinsic {
                             ctx,
                             params,
                         }});
-                        console.log('[{future_transfer_fn}()] args', {{
-                            ctx,
-                            params,
-                        }});
                     }}
                     "#
                 ));

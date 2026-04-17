@@ -734,7 +734,6 @@ impl ComponentIntrinsic {
                                 if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while getting future end`); }}
                                 futureEnd = table.get(futureEndHandle);
                             }} else {{
-                                console.log("args?", args);
                                 throw new TypeError("must specify either waitable idx or handle to retrieve future");
                             }}
 
