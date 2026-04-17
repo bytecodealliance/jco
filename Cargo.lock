@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen"
-version = "1.16.6"
+version = "1.16.7"
 dependencies = [
  "anyhow",
  "base64",

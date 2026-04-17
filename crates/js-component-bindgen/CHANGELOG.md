@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.16.7] - 2026-04-17
+
+### 🚀 Features
+
+- _(bindgen)_ add --strict option for enabling type checks by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ remove leftover debug code by @vados-cosmonic
+
+
+
+
 ## [1.16.6] - 2026-04-16
 
 ### 🚀 Features
