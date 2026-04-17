@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.9] - 2026-04-17
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update bundled preview2-shim version to v1.17.9 by @vados-cosmonic in #1408
+
 ## [1.17.9-rc.0] - 2026-04-17
 
 ## [1.17.8] - 2026-04-17
