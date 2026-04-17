@@ -232,6 +232,7 @@ export async function setupAsyncTest(args) {
         instantiation: "async",
         asyncMode,
         wasiShim: true,
+        strict: true,
         outDir: moduleOutputDir,
         ...(jco?.transpile?.extraArgs || {}),
     };

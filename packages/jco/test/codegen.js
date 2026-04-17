@@ -3,7 +3,8 @@ import { createServer } from "node:http";
 import { resolve, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { componentNew, componentEmbed, transpile, preview1AdapterCommandPath } from "@bytecodealliance/jco";
+import { componentNew, componentEmbed, preview1AdapterCommandPath } from "@bytecodealliance/jco";
+import { transpile } from "../src/api.js";
 import { HTTPServer } from "@bytecodealliance/preview2-shim/http";
 
 import { suite, test, assert, describe } from "vitest";
@@ -226,5 +227,31 @@ suite("codegen determinism", () => {
         ]);
         assert.deepEqual(streamTx[0].files, streamTx[1].files);
         assert.deepEqual(streamRx[0].files, streamRx[1].files);
+    });
+});
+
+// see: https://github.com/bytecodealliance/jco/issues/1400
+suite("--strict", () => {
+    test("does not add checks when disabled", async () => {
+        const component = await readFile(join(COMPONENT_FIXTURES_DIR, "adder.component.wasm"));
+        const { files } = await transpile(component, { name: "adder" });
+        const bindingsSource = new TextDecoder().decode(files["adder.js"]);
+        assert.isFalse(
+            bindingsSource.includes("_requireValidNumericPrimitive('u32', val)"),
+            "numeric primitive check shoudl not be included",
+        );
+    });
+
+    test("adds checks when enabled", async () => {
+        const component = await readFile(join(COMPONENT_FIXTURES_DIR, "adder.component.wasm"));
+        const { files } = await transpile(component, { name: "adder", strict: true });
+        const bindingsSource = new TextDecoder().decode(files["adder.js"]);
+        // Somewhat brittle, but we're looking for a *specific* call in the body of `toUint32(val)` below:
+        assert.isOk(
+            bindingsSource.includes(
+                "_requireValidNumericPrimitive('u32', val)",
+                "numeric primitive check should be included",
+            ),
+        );
     });
 });
