@@ -3,7 +3,7 @@ import { resolve, basename } from "node:path";
 
 import * as wasmToolsComponent from "../../obj/wasm-tools.js";
 
-import { styleText } from "../common.js";
+import { styleText, isWindows } from "../common.js";
 
 /** All features that can be enabled/disabled */
 const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
@@ -21,6 +21,7 @@ const DEBUG_FEATURES = ["stdio"];
 async function usesOlderWasiHTTP(witPath, worldName) {
     await wasmToolsComponent.$init;
 
+    witPath = (isWindows ? "//?/" : "") + resolve(witPath);
     const worldMetadata = wasmToolsComponent.tools.componentWitMetadataForWorld(
         { tag: "path", val: witPath },
         worldName ?? null,
