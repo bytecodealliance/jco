@@ -19,6 +19,35 @@ interface tools {
   /// Extract a *.wit interface from a component, optionally providing a document name to extract
   component-wit: func(binary: list<u8>) -> result<string, string>;
 
+  /// Simple representation of semantic versions
+  // see: https://docs.rs/semver/1.0.28/semver/struct.Version.html
+  record semver-version {
+     major: u64,
+     minor: u64,
+     patch: u64,
+     pre: option<string>,
+     build: option<string>,
+  }
+
+  /// Metadata that can be returned related to an interface
+  record interface-metadata {
+      namespace: string,
+      %package: string,
+      %interface: string,
+      version: option<semver-version>,
+  }
+
+  /// Information about a given WIT interface
+  record wit-metadata {
+      imports: list<interface-metadata>,
+      exports: list<interface-metadata>,
+  }
+
+  /// Extract metadata from a WIT interface for a component for a given world
+  ///
+  /// If no world is specified, the root world is used
+  component-wit-metadata-for-world: func(wit-bytes: list<u8>, world-name: option<string>) -> result<wit-metadata, string>;
+
   type producers-fields = list<tuple<string, list<tuple<string, string>>>>;
 
   /// Enumerate enabled features

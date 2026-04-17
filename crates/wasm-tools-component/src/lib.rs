@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
-use wit_parser::Resolve;
+use wit_parser::{Resolve, WorldItem};
 
 mod bindings {
     use super::WasmToolsJs;
@@ -16,8 +16,8 @@ mod bindings {
 }
 
 use bindings::exports::local::wasm_tools::tools::{
-    EmbedOpts, EnabledFeatureSet, Guest, ModuleMetaType, ModuleMetadata, ProducersFields,
-    StringEncoding,
+    EmbedOpts, EnabledFeatureSet, Guest, InterfaceMetadata, ModuleMetaType, ModuleMetadata,
+    ProducersFields, SemverVersion, StringEncoding, WitMetadata,
 };
 
 struct WasmToolsJs;
@@ -59,8 +59,6 @@ impl Guest for WasmToolsJs {
         let decoded = wit_component::decode(&binary)
             .map_err(|e| format!("Failed to decode wit component\n{e:?}"))?;
 
-        // let world = decode_world("component", &binary);
-
         let doc = match &decoded {
             DecodedWasm::WitPackage(_, _) => panic!("Unexpected wit package"),
             DecodedWasm::Component(resolve, world) => resolve.worlds[*world].package.unwrap(),
@@ -72,6 +70,118 @@ impl Guest for WasmToolsJs {
             .map_err(|e| format!("Unable to print wit\n${e:?}"))?;
 
         Ok(printer.output.to_string())
+    }
+
+    fn component_wit_metadata_for_world(
+        binary: Vec<u8>,
+        maybe_world_name: Option<String>,
+    ) -> Result<WitMetadata, String> {
+        let decoded = wit_component::decode(&binary)
+            .map_err(|e| format!("Failed to decode wit component\n{e:?}"))?;
+
+        let (resolve, world_id) = match &decoded {
+            DecodedWasm::WitPackage(_, _) => panic!("Unexpected wit package"),
+            DecodedWasm::Component(resolve, world) => (resolve, world),
+        };
+
+        let world = match maybe_world_name {
+            Some(world_name) => {
+                resolve
+                    .worlds
+                    .iter()
+                    .find(|w| w.1.name == world_name)
+                    .ok_or_else(|| String::from("failed to find wold with given name"))?
+                    .1
+            }
+            None => resolve
+                .worlds
+                .get(*world_id)
+                .ok_or_else(|| String::from("failed to find package id"))?,
+        };
+
+        let mut imports = Vec::new();
+        for (import_key, import_item) in world.imports.iter() {
+            let WorldItem::Interface { id, .. } = import_item else {
+                continue;
+            };
+            let iface = resolve
+                .interfaces
+                .get(*id)
+                .ok_or_else(|| format!("failed to find interface with id [{id:?}]"))?;
+            let iface_name = iface
+                .name
+                .clone()
+                .ok_or_else(|| format!("missing iface name for world key [{import_key:?}]"))?;
+            let pkg_id = iface
+                .package
+                .ok_or_else(|| format!("no package for interface [{:?}]", iface.name))?;
+            let pkg = resolve
+                .packages
+                .get(pkg_id)
+                .ok_or_else(|| format!("no package with ID [{pkg_id:?}]"))?;
+
+            imports.push(InterfaceMetadata {
+                namespace: pkg.name.namespace.clone(),
+                package: pkg.name.name.clone(),
+                interface: iface_name.clone(),
+                version: pkg.name.version.as_ref().map(|v| SemverVersion {
+                    major: v.major,
+                    minor: v.minor,
+                    patch: v.patch,
+                    pre: match v.pre.as_str() {
+                        "" => None,
+                        v => Some(v.into()),
+                    },
+                    build: match v.build.as_str() {
+                        "" => None,
+                        v => Some(v.into()),
+                    },
+                }),
+            });
+        }
+
+        let mut exports = Vec::new();
+        for (export_key, export_item) in world.exports.iter() {
+            let WorldItem::Interface { id, .. } = export_item else {
+                continue;
+            };
+            let iface = resolve
+                .interfaces
+                .get(*id)
+                .ok_or_else(|| format!("failed to find interface with id [{id:?}]"))?;
+            let iface_name = iface
+                .name
+                .clone()
+                .ok_or_else(|| format!("missing iface name for world key [{export_key:?}]"))?;
+            let pkg_id = iface
+                .package
+                .ok_or_else(|| format!("no package for interface [{:?}]", iface.name))?;
+            let pkg = resolve
+                .packages
+                .get(pkg_id)
+                .ok_or_else(|| format!("no package with ID [{pkg_id:?}]"))?;
+
+            exports.push(InterfaceMetadata {
+                namespace: pkg.name.namespace.clone(),
+                package: pkg.name.name.clone(),
+                interface: iface_name.clone(),
+                version: pkg.name.version.as_ref().map(|v| SemverVersion {
+                    major: v.major,
+                    minor: v.minor,
+                    patch: v.patch,
+                    pre: match v.pre.as_str() {
+                        "" => None,
+                        v => Some(v.into()),
+                    },
+                    build: match v.build.as_str() {
+                        "" => None,
+                        v => Some(v.into()),
+                    },
+                }),
+            });
+        }
+
+        Ok(WitMetadata { imports, exports })
     }
 
     fn component_embed(embed_opts: EmbedOpts) -> Result<Vec<u8>, String> {
