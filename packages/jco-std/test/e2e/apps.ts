@@ -7,7 +7,9 @@ import { debuglog } from "node:util";
 
 import { suite, test, assert } from "vitest";
 import { default as which } from "which";
-import { componentize } from "@bytecodealliance/componentize-js";
+// NOTE: we must use the older version of componentize-js for components with
+// `wasi:http` < v0.2.10
+import { componentize } from "@bytecodealliance/componentize-js-0-19-3";
 
 import { rolldown } from "rolldown";
 
