@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.17.8] - 2026-04-17
+
+### 🚀 Features
+
+- _(jco)_ add --strict option for enabling bindgen type checks by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ version number by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ add codegen test for --strict by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ remove debug code in test by @vados-cosmonic in #1403
+
 ## [1.17.7] - 2026-04-16
 
 ### 🧪 Testing
