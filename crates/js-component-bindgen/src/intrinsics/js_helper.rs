@@ -1,6 +1,9 @@
 //! Intrinsics that represent helpers that should be used from JS code
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::{
+    intrinsics::{Intrinsic, RenderIntrinsicsArgs},
+    source::Source,
+};
 
 /// This enum contains intrinsics that function as JS helpers
 ///
@@ -35,7 +38,7 @@ impl JsHelperIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _args: &RenderIntrinsicsArgs) {
         match self {
             Self::EmptyFunc => output.push_str("
                 const emptyFunc = () => {};

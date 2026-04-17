@@ -100,6 +100,8 @@ pub struct TranspileOpts {
     /// Configure whether to use `async` imports or exports with
     /// JavaScript Promise Integration (JSPI).
     pub async_mode: Option<AsyncMode>,
+    /// Configure whether to generate code that includes strict type checks
+    pub strict: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -421,6 +423,7 @@ impl JsBindgen<'_> {
             no_nodejs_compat: self.opts.no_nodejs_compat,
             instantiation: self.opts.instantiation.is_some(),
             determinism: AsyncDeterminismProfile::default(),
+            transpile_opts: opts,
         });
 
         if let Some(instantiation) = &self.opts.instantiation {

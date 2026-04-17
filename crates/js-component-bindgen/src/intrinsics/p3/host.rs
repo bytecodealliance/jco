@@ -1,8 +1,8 @@
 //! Intrinsics that represent helpers that implement async calls
 
-use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async calls
@@ -102,7 +102,7 @@ impl HostIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             // PrepareCall is called before an async-lowered import (from the host or another component)
             // is called from inside a component.

@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that enable Stream integration
 
 use crate::{
-    intrinsics::{Intrinsic, component::ComponentIntrinsic},
+    intrinsics::{Intrinsic, RenderIntrinsicsArgs, component::ComponentIntrinsic},
     source::Source,
 };
 
@@ -266,7 +266,7 @@ impl AsyncStreamIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::StreamEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();

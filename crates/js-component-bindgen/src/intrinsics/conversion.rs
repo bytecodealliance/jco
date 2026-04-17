@@ -2,7 +2,7 @@
 
 use std::fmt::Write;
 
-use crate::intrinsics::Intrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
@@ -100,7 +100,7 @@ impl ConversionIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs) {
         match self {
             Self::I32ToF32 => output.push_str(
                 "
@@ -125,13 +125,19 @@ impl ConversionIntrinsic {
             "),
 
             Self::ToBigInt64 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('s64', converted);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toInt64(val) {{
                           const converted = BigInt(val)
-                          {ensure_valid_numeric_primitive_fn}('s64', converted);
+                          {strict_checks}
                           return BigInt.asIntN(64, converted);
                       }}
                     "#
@@ -139,13 +145,19 @@ impl ConversionIntrinsic {
             },
 
             Self::ToBigUint64 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('u64', converted);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toUint64(val) {{
                           const converted = BigInt(val)
-                          {ensure_valid_numeric_primitive_fn}('u64', converted);
+                          {strict_checks}
                           return BigInt.asUintN(64, converted);
                       }}
                     "#
@@ -153,12 +165,18 @@ impl ConversionIntrinsic {
             },
 
             Self::ToInt16 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('s16', val);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toInt16(val) {{
-                          {ensure_valid_numeric_primitive_fn}('s16', val);
+                          {strict_checks}
                           val >>>= 0;
                           val %= 2 ** 16;
                           if (val >= 2 ** 15) {{
@@ -171,12 +189,18 @@ impl ConversionIntrinsic {
             },
 
             Self::ToUint16 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('u16', val);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toUint16(val) {{
-                          {ensure_valid_numeric_primitive_fn}('u16', val);
+                          {strict_checks}
                           val >>>= 0;
                           val %= 2 ** 16;
                           return val;
@@ -186,12 +210,18 @@ impl ConversionIntrinsic {
             },
 
             Self::ToInt32 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('s32', val);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toInt32(val) {{
-                          {ensure_valid_numeric_primitive_fn}('s32', val);
+                          {strict_checks}
                           return val >> 0;
                       }}
                     "#
@@ -199,12 +229,18 @@ impl ConversionIntrinsic {
             },
 
             Self::ToInt8 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('s8', val);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toInt8(val) {{
-                          {ensure_valid_numeric_primitive_fn}('s8', val);
+                          {strict_checks}
                           val >>>= 0;
                           val %= 2 ** 8;
                           if (val >= 2 ** 7) {{
@@ -238,12 +274,18 @@ impl ConversionIntrinsic {
 
 
             Self::ToUint32 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('u32', val);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toUint32(val) {{
-                          {ensure_valid_numeric_primitive_fn}('u32', val);
+                          {strict_checks}
                           return val >>> 0;
                       }}
                     "#
@@ -251,12 +293,18 @@ impl ConversionIntrinsic {
             },
 
             Self::ToUint8 => {
-                let ensure_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                let strict_checks = if render_args.transpile_opts.strict {
+                    let require_valid_numeric_primitive_fn = Self::RequireValidNumericPrimitive.name();
+                    format!("{require_valid_numeric_primitive_fn}('u8', val);")
+                } else {
+                    "".into()
+                };
+
                 uwriteln!(
                     output,
                     r#"
                       function toUint8(val) {{
-                          {ensure_valid_numeric_primitive_fn}('u8', val);
+                          {strict_checks}
                           val >>>= 0;
                           val %= 2 ** 8;
                           return val;

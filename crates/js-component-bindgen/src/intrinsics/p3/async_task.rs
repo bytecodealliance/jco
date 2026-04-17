@@ -1,9 +1,9 @@
 //! Intrinsics that represent helpers that implement async tasks
 
-use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async tasks
@@ -326,7 +326,7 @@ impl AsyncTaskIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::CurrentTaskMayBlock => {
                 output.push_str(&format!(

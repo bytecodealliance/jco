@@ -2,8 +2,8 @@
 
 use std::fmt::Write;
 
-use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
@@ -252,7 +252,7 @@ impl AsyncFutureIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::GlobalFutureMap => {
                 let global_future_map = Self::GlobalFutureMap.name();

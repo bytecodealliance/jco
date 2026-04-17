@@ -69,6 +69,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             import_bindings: options.import_bindings.map(Into::into),
             guest: options.guest.unwrap_or(false),
             async_mode: options.async_mode.map(Into::into),
+            strict: options.strict.unwrap_or(false),
         };
 
         let js_component_bindgen::Transpiled {
@@ -163,6 +164,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             import_bindings: None,
             guest: opts.guest.unwrap_or(false),
             async_mode: opts.async_mode.map(Into::into),
+            strict: opts.strict.unwrap_or(false),
         };
 
         let files = js_component_bindgen::generate_types(&name, resolve, world, opts)

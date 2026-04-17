@@ -1,9 +1,9 @@
 //! Intrinsics that represent helpers that enable Lower integration
 
-use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::{async_stream::AsyncStreamIntrinsic, error_context::ErrCtxIntrinsic};
 use crate::intrinsics::string::StringIntrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 use super::conversion::ConversionIntrinsic;
@@ -245,7 +245,7 @@ impl LowerIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::LowerFlatBool => {
                 let debug_log_fn = Intrinsic::DebugLog.name();

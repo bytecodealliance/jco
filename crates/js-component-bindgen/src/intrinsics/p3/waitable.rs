@@ -146,7 +146,7 @@ impl WaitableIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::WaitableSetClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();

@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that implement error contexts
 
-use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement error contexts
@@ -212,7 +212,7 @@ impl ErrCtxIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::ComponentGlobalTable => {
                 let name = Self::ComponentGlobalTable.name();

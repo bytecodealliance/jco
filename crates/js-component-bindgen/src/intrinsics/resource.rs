@@ -1,6 +1,6 @@
 //! Intrinsics that represent helpers that deal with Component Model resources
 
-use crate::intrinsics::Intrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics for supporting Component Model resources
@@ -104,7 +104,7 @@ impl ResourceIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::CurResourceBorrows => output.push_str(
                 "

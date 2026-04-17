@@ -1,6 +1,7 @@
 //! Intrinsics that represent helpers that manipulate strings
 use std::fmt::Write;
 
+use crate::intrinsics::RenderIntrinsicsArgs;
 use crate::uwriteln;
 use crate::{intrinsics::Intrinsic, source::Source};
 
@@ -66,7 +67,7 @@ impl StringIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         let name = self.name();
         match self {
             Self::Utf16Decoder => uwriteln!(output, "const {name} = new TextDecoder('utf-16');"),

@@ -2,10 +2,10 @@
 
 use std::fmt::Write as _;
 
-use crate::intrinsics::Intrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
@@ -81,7 +81,7 @@ impl ComponentIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source) {
+    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::GlobalAsyncStateMap => {
                 let var_name = Self::GlobalAsyncStateMap.name();

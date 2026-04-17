@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
 use crate::source::Source;
-use crate::{uwrite, uwriteln};
+use crate::{TranspileOpts, uwrite, uwriteln};
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -165,19 +165,19 @@ pub enum Intrinsic {
 impl Intrinsic {
     pub fn render(&self, output: &mut Source, args: &RenderIntrinsicsArgs) {
         match self {
-            Intrinsic::JsHelper(i) => i.render(output),
-            Intrinsic::Conversion(i) => i.render(output),
-            Intrinsic::String(i) => i.render(output),
-            Intrinsic::ErrCtx(i) => i.render(output),
-            Intrinsic::Resource(i) => i.render(output),
-            Intrinsic::AsyncTask(i) => i.render(output),
+            Intrinsic::JsHelper(i) => i.render(output, args),
+            Intrinsic::Conversion(i) => i.render(output, args),
+            Intrinsic::String(i) => i.render(output, args),
+            Intrinsic::ErrCtx(i) => i.render(output, args),
+            Intrinsic::Resource(i) => i.render(output, args),
+            Intrinsic::AsyncTask(i) => i.render(output, args),
             Intrinsic::Waitable(i) => i.render(output, args),
-            Intrinsic::Lift(i) => i.render(output),
-            Intrinsic::Lower(i) => i.render(output),
-            Intrinsic::AsyncStream(i) => i.render(output),
-            Intrinsic::AsyncFuture(i) => i.render(output),
-            Intrinsic::Component(i) => i.render(output),
-            Intrinsic::Host(i) => i.render(output),
+            Intrinsic::Lift(i) => i.render(output, args),
+            Intrinsic::Lower(i) => i.render(output, args),
+            Intrinsic::AsyncStream(i) => i.render(output, args),
+            Intrinsic::AsyncFuture(i) => i.render(output, args),
+            Intrinsic::Component(i) => i.render(output, args),
+            Intrinsic::Host(i) => i.render(output, args),
 
             Intrinsic::GlobalAsyncDeterminism => {
                 output.push_str(&format!(
@@ -1041,6 +1041,8 @@ pub struct RenderIntrinsicsArgs<'a> {
     pub(crate) instantiation: bool,
     /// The kind of determinism to use
     pub(crate) determinism: AsyncDeterminismProfile,
+    /// Options provided when performing transpilation
+    pub(crate) transpile_opts: &'a TranspileOpts,
 }
 
 /// Intrinsics that should be rendered as early as possible

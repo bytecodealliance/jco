@@ -1,0 +1,9 @@
+package example:math@0.1.0;
+
+interface calculator {
+  add: func(a: s32, b: s32) -> s32;
+}
+
+world math {
+  export calculator;
+}
