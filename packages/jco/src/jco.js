@@ -128,6 +128,7 @@ program
     .option("-q, --quiet", "disable output summary")
     .option("--no-namespaced-exports", "disable namespaced exports for typescript compatibility")
     .option("--multi-memory", "optimized output for Wasm multi-memory")
+    .option("--strict", "generate bindings with strict type checking")
     .allowExcessArguments(true)
     .action(asyncAction(transpile));
 
@@ -164,6 +165,7 @@ program
     .option("--feature <feature>", "enable one specific WIT feature (repeatable)", collectOptions, [])
     .option("--all-features", "enable all features")
     .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')")
+    .option("--strict", "generate bindings with strict type checking")
     .action(asyncAction(types));
 
 program
@@ -186,6 +188,7 @@ program
             .choices(["sync", "jspi"])
             .preset("sync"),
     )
+    .option("--strict", "generate bindings with strict type checking")
     .action(asyncAction(guestTypes));
 
 program

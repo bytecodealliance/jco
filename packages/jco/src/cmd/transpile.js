@@ -153,9 +153,8 @@ export async function transpileComponent(component, opts = {}) {
     // Let's define `instantiation` from `--instantiation` if it's present.
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
-    }
-    // Otherwise, if `--js` is present, an `instantiate` function is required.
-    else if (opts.js) {
+    } else if (opts.js) {
+        // Otherwise, if `--js` is present, an `instantiate` function is required.
         instantiation = { tag: "async" };
     }
 
@@ -200,6 +199,7 @@ export async function transpileComponent(component, opts = {}) {
         noNamespacedExports: opts.namespacedExports === false,
         multiMemory: opts.multiMemory === true,
         idlImports: opts.experimentalIdlImports === true,
+        strict: opts.strict === true,
     });
 
     let outDir = (opts.outDir ?? "").replace(/\\/g, "/");

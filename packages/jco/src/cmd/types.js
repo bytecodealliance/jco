@@ -140,6 +140,7 @@ export async function typesComponent(witPath, opts) {
             world: opts.worldName,
             features,
             guest: opts.guest ?? false,
+            strict: opts.strict === true,
             asyncMode: asyncModeObj,
         }).map(([name, file]) => [`${outDir}${name}`, file]);
     } catch (err) {

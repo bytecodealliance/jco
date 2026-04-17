@@ -13,6 +13,7 @@ export function guestTypes(witPath: any, opts: any): Promise<void>;
  *   outDir?: string,
  *   features?: string[] | 'all',
  *   guest?: bool,
+ *   strict?: bool,
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
@@ -29,6 +30,7 @@ export function typesComponent(
         outDir?: string;
         features?: string[] | "all";
         guest?: boolean;
+        strict?: boolean;
     },
 ): Promise<{
     [filename: string]: Uint8Array;
