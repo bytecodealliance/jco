@@ -209,7 +209,7 @@ suite("Directive Prologue", () => {
         const component = await readFile(join(COMPONENT_FIXTURES_DIR, "adder.component.wasm"));
         const { files } = await transpile(component, { name: "adder" });
         const bindingsSource = new TextDecoder().decode(files["adder.js"]);
-        assert.isOk(bindingsSource.includes('"use jco";'));
+        assert.isOk(bindingsSource.includes('"use components";'));
     });
 });
 
