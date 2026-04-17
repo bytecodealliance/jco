@@ -40,7 +40,19 @@ async function usesOlderWasiHTTP(witPath, worldName) {
         );
     });
 
-    return exportsOldIncomingHandler;
+    const importsOldFetch = worldMetadata.imports.some((iface) => {
+        return (
+            iface.namespace === "wasi" &&
+            iface.package === "http" &&
+            iface.interface === "outgoing-handler" &&
+            iface.version !== null &&
+            iface.version.major === 0n &&
+            iface.version.minor < 3n &&
+            iface.version.patch < 10n
+        );
+    });
+
+    return exportsOldIncomingHandler || importsOldFetch;
 }
 export async function componentize(jsSource, opts) {
     const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
