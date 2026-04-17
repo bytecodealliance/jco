@@ -197,7 +197,8 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         import_bindings: Some(BindingsMode::Js),
         guest: false,
         async_mode: None,
-        strict: true,
+        // TODO(breaking): strict by default
+        strict: false,
     };
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
