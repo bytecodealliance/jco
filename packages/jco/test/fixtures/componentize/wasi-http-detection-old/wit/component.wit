@@ -1,0 +1,7 @@
+package jco-fixtures:wasi-http-detection;
+
+world use-old {
+    // NOTE: due to the fetch implementation here which is baked into
+    // StarlingMonkey, we must use an *older* version of componentize-js
+    export wasi:http/incoming-handler@0.2.3;
+}

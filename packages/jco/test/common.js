@@ -22,6 +22,9 @@ export const JCO_JS_PATH = fileURLToPath(new URL("../src/jco.js", import.meta.ur
 /** Path to fixture components */
 export const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL("./fixtures/components", import.meta.url));
 
+/** Path to JS for fixture components */
+export const COMPONENT_JS_FIXTURES_DIR = fileURLToPath(new URL("./fixtures/componentize", import.meta.url));
+
 /** Path to p3 related fixture components */
 export const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, "p3");
 

@@ -1,0 +1,5 @@
+package jco-fixtures:wasi-http-detection;
+
+world use-new {
+    export wasi:http/incoming-handler@0.2.10;
+}

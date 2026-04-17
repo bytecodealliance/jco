@@ -92,7 +92,7 @@ export async function exec(cmd, ...args) {
  * The new directory is created using `fsPromises.mkdtemp()`.
  */
 export async function getTmpDir() {
-    return await mkdtemp(normalize(tmpdir() + sep));
+    return mkdtemp(normalize(tmpdir() + sep));
 }
 
 /**

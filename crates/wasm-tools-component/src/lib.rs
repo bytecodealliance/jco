@@ -17,7 +17,7 @@ mod bindings {
 
 use bindings::exports::local::wasm_tools::tools::{
     EmbedOpts, EnabledFeatureSet, Guest, InterfaceMetadata, ModuleMetaType, ModuleMetadata,
-    ProducersFields, SemverVersion, StringEncoding, WitMetadata,
+    ProducersFields, SemverVersion, StringEncoding, WitMetadata, WitSpecifier,
 };
 
 struct WasmToolsJs;
@@ -73,32 +73,39 @@ impl Guest for WasmToolsJs {
     }
 
     fn component_wit_metadata_for_world(
-        binary: Vec<u8>,
+        wit: WitSpecifier,
         maybe_world_name: Option<String>,
     ) -> Result<WitMetadata, String> {
-        let decoded = wit_component::decode(&binary)
-            .map_err(|e| format!("Failed to decode wit component\n{e:?}"))?;
+        let mut resolve = Resolve::default();
 
-        let (resolve, world_id) = match &decoded {
-            DecodedWasm::WitPackage(_, _) => panic!("Unexpected wit package"),
-            DecodedWasm::Component(resolve, world) => (resolve, world),
-        };
-
-        let world = match maybe_world_name {
-            Some(world_name) => {
+        // Resolve package IDs & build Resolve for WIT
+        let package_ids = match wit {
+            WitSpecifier::Source(source) => {
+                let path = PathBuf::from("component.wit");
                 resolve
-                    .worlds
-                    .iter()
-                    .find(|w| w.1.name == world_name)
-                    .ok_or_else(|| String::from("failed to find wold with given name"))?
-                    .1
+                    .push_str(&path, &source)
+                    .map_err(|e| e.to_string())?
             }
-            None => resolve
-                .worlds
-                .get(*world_id)
-                .ok_or_else(|| String::from("failed to find package id"))?,
+            WitSpecifier::Path(path) => {
+                let wit_path_meta =
+                    metadata(&path).map_err(|e| format!("failed to get path metadata: {e}"))?;
+                if wit_path_meta.is_file() {
+                    resolve.push_file(path).map_err(|e| e.to_string())?
+                } else {
+                    resolve.push_dir(path).map_err(|e| e.to_string())?.0
+                }
+            }
         };
 
+        let world_id = resolve
+            .select_world(&[package_ids], maybe_world_name.as_deref())
+            .map_err(|e| e.to_string())?;
+        let world = resolve
+            .worlds
+            .get(world_id)
+            .ok_or_else(|| String::from("failed to find package id"))?;
+
+        // Gather imports
         let mut imports = Vec::new();
         for (import_key, import_item) in world.imports.iter() {
             let WorldItem::Interface { id, .. } = import_item else {
@@ -140,6 +147,7 @@ impl Guest for WasmToolsJs {
             });
         }
 
+        // Gather exports
         let mut exports = Vec::new();
         for (export_key, export_item) in world.exports.iter() {
             let WorldItem::Interface { id, .. } = export_item else {

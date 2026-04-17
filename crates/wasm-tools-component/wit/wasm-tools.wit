@@ -43,10 +43,21 @@ interface tools {
       exports: list<interface-metadata>,
   }
 
+  /// Way to specify WIT
+  variant wit-specifier {
+      /// WIT raw source
+      source(string),
+      /// Path to wit file or directory
+      path(string),
+  }
+
   /// Extract metadata from a WIT interface for a component for a given world
   ///
   /// If no world is specified, the root world is used
-  component-wit-metadata-for-world: func(wit-bytes: list<u8>, world-name: option<string>) -> result<wit-metadata, string>;
+  component-wit-metadata-for-world: func(
+    wit: wit-specifier,
+    world-name: option<string>
+  ) -> result<wit-metadata, string>;
 
   type producers-fields = list<tuple<string, list<tuple<string, string>>>>;
 
