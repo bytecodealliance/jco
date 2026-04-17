@@ -488,7 +488,6 @@ suite("future<T> lifts", () => {
             vals,
             func: instance["jco:test-components/get-future-async"].getFutureStreamStringSpool,
             assertEqFn: async (nestedStream, expected) => {
-                console.log("nestedStream?", nestedStream);
                 let idx = 0;
                 for await (const value of nestedStream) {
                     assert.strictEqual(value, expected[idx]);
