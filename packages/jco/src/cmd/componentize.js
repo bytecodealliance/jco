@@ -31,8 +31,6 @@ async function usesOlderWasiHTTP(witPath, worldName) {
     const exportsOldIncomingHandler = worldMetadata.exports.some((iface) => {
         return (
             iface.namespace === "wasi" &&
-            iface.package === "http" &&
-            iface.interface === "incoming-handler" &&
             iface.version !== null &&
             iface.version.major === 0n &&
             iface.version.minor < 3n &&
@@ -43,8 +41,6 @@ async function usesOlderWasiHTTP(witPath, worldName) {
     const importsOldFetch = worldMetadata.imports.some((iface) => {
         return (
             iface.namespace === "wasi" &&
-            iface.package === "http" &&
-            iface.interface === "outgoing-handler" &&
             iface.version !== null &&
             iface.version.major === 0n &&
             iface.version.minor < 3n &&
