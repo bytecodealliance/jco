@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.16.8] - 2026-04-18
+
+### 🚜 Refactor
+
+- _(bindgen)_ update 'use jco' directive to 'use components' by @vados-cosmonic
+
+
+
+
 ## [1.16.7] - 2026-04-17
 
 ### 🚀 Features
