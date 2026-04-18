@@ -30,6 +30,16 @@ async function main() {
         // NOTE: While we can implement the shim once, we have to
         // merge different versions of it to create a complete import object
         // that the transpiled component can use.
+        //
+        // The lines below use the shim above *as* 0.2.7
+        // inject the same shim as various versions of 0.2.x
+        // which are required by the component and/or the build of
+        // StarlingMonkey underneath
+        //
+        // To figure out which versions are required,
+        // use `jco wit <component path>` and observe the versions of
+        // various wasi dependencies that are in use via imports/exports
+        //
         ...shim.getImportObject<'0.2.7'>({ asVersion: '0.2.7' }),
         ...shim.getImportObject<'0.2.3'>({ asVersion: '0.2.3' }),
         ...shim.getImportObject(),
