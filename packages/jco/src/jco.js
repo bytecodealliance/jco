@@ -25,7 +25,7 @@ program
     )
     .usage("<command> [options]")
     .enablePositionalOptions()
-    .version("1.17.9");
+    .version("1.18.0");
 
 function myParseInt(value) {
     return parseInt(value, 10);

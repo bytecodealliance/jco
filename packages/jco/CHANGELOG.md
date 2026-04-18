@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.18.0] - 2026-04-18
+
+### 🚀 Features
+
+- _(jco)_ detect older `wasi:http` version for older componentizejs by @vados-cosmonic
+
+- _(jco)_ add import/export metadata getter fn to wasm-tools by @vados-cosmonic
+
+- _(jco)_ add componentize-js v0.19.3 as dep by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ look for all old wasi versions by @vados-cosmonic
+
+- _(jco)_ add old componentize-js checking for fetch import by @vados-cosmonic
+
+- _(jco)_ fix older wasi test on windows by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ update directive test to check for 'use components' by @vados-cosmonic in #1410
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update componentize-js to 0.20.0 by @vados-cosmonic
+
 ## [1.17.9] - 2026-04-17
 
 ### ⚙️ Miscellaneous Tasks
