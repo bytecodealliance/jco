@@ -117,7 +117,14 @@ suite(`Transpiler codegen`, async () => {
                     "-o",
                     outFile,
                 );
-                assert.strictEqual(stderr, "");
+                assert.match(
+                    stderr,
+                    /Falling back to componentize-js 0\.19\.3 because this component requests Preview 2 WASI packages older than 0\.2\.10\./,
+                );
+                assert.match(
+                    stderr,
+                    /https:\/\/bytecodealliance\.github\.io\/jco\/troubleshooting\/common-issues\.html#componentize-js-0193-fallback/,
+                );
                 const outDir = fileURLToPath(new URL(`./output/${runtimeName}`, import.meta.url));
                 {
                     const { stderr } = await exec(jcoPath, "transpile", outFile, "--name", runtimeName, "-o", outDir);

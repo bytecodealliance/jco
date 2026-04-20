@@ -18,7 +18,14 @@ suite("componentize", () => {
         const outputDir = await getTmpDir();
         const outputPath = join(outputDir, "component.wasm");
         const { stderr } = await exec(jcoPath, "componentize", jsPath, "-w", witPath, "-o", outputPath);
-        assert.strictEqual(stderr, "");
+        assert.match(
+            stderr,
+            /Falling back to componentize-js 0\.19\.3 because this component requests Preview 2 WASI packages older than 0\.2\.10\./,
+        );
+        assert.match(
+            stderr,
+            /https:\/\/bytecodealliance\.github\.io\/jco\/troubleshooting\/common-issues\.html#componentize-js-0193-fallback/,
+        );
     });
 
     test.concurrent("detect newer wasi:http", async () => {

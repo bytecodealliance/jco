@@ -66,6 +66,9 @@ export async function componentize(jsSource, opts) {
         // NOTE: if we were to use a version of componentize-js 0.20.0 or newer here,
         // the build would fail, as newer versions do not support wasi:http < 0.2.10
         // for fetch.
+        console.error(
+            `${styleText(["yellow", "bold"], "warning")} Falling back to componentize-js 0.19.3 because this component requests Preview 2 WASI packages older than 0.2.10. See https://bytecodealliance.github.io/jco/troubleshooting/common-issues.html#componentize-js-0193-fallback for details and upgrade steps.`,
+        );
         componentizeJSModule = await eval('import("@bytecodealliance/componentize-js-0-19-3")');
     } else {
         componentizeJSModule = await eval('import("@bytecodealliance/componentize-js")');
