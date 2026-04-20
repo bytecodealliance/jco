@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5bfb50bc.js";
+            window.path_to_searchindex_js = "searchindex-643cd533.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-69241bbd.js"></script>
@@ -1182,6 +1182,25 @@ const component = await wasmESModule.instantiate(
 </div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
+<h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
+<h3 id="symptom"><a class="header" href="#symptom">Symptom</a></h3>
+<p>While running <code>jco componentize</code>, you may see a warning like this:</p>
+<pre><code class="language-text">warning Falling back to componentize-js 0.19.3 because this component requests Preview 2 WASI packages older than 0.2.10.
+</code></pre>
+<p>If that component is then run on newer Wasmtime releases, especially Wasmtime 42 or newer, you may hit the same isolate crash that was fixed upstream in <code>componentize-js</code> 0.20.0.</p>
+<h3 id="root-cause"><a class="header" href="#root-cause">Root cause</a></h3>
+<p><code>jco</code> normally uses <code>componentize-js</code> 0.20.0 or newer, which includes the upstream fix for <a href="https://github.com/bytecodealliance/ComponentizeJS/issues/224">ComponentizeJS issue #224</a>.</p>
+<p>When the component’s WIT still depends on Preview 2 WASI packages older than <code>0.2.10</code>, <code>jco</code> must fall back to <code>componentize-js</code> <code>0.19.3</code> for compatibility. In practice this usually shows up as <code>wasi:http</code> older than <code>0.2.10</code>, but related dependencies such as <code>wasi:clocks</code>, <code>wasi:random</code>, and <code>wasi:io</code> can force the same fallback. The older <code>componentize-js</code> version does not include the upstream fix, so the crash can reappear.</p>
+<p>For background, see <a href="https://github.com/bytecodealliance/jco/issues/1415">jco issue #1415</a>.</p>
+<h3 id="solution"><a class="header" href="#solution">Solution</a></h3>
+<p>Update <code>wasi:http</code> and any related Preview 2 WASI dependencies to <code>0.2.10</code> or newer, then re-run <code>jco componentize</code>.</p>
+<p>If you manage your WIT dependencies with <a href="https://github.com/bytecodealliance/wasm-pkg-tools"><code>wkg</code></a>, fetching the updated packages can look like this:</p>
+<pre><code class="language-bash">wkg get --format wit wasi:http@0.2.10
+wkg get --format wit wasi:clocks@0.2.10
+wkg get --format wit wasi:random@0.2.10
+wkg get --format wit wasi:io@0.2.10
+</code></pre>
+<p>After updating the packages, make sure your entry WIT file and any vendored dependency files reference the newer versions before componentizing again.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="contributing-to-the-codebase"><a class="header" href="#contributing-to-the-codebase">Contributing to the Codebase</a></h1>
 <p>Development is based on a standard NodeJS workflow, i.e.:</p>
