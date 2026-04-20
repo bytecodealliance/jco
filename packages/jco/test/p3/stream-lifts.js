@@ -50,7 +50,7 @@ suite("stream<T> lifts", () => {
         });
         getInstance = () => Promise.resolve(instance);
 
-        // NOTE: To use an explicitly new instance per-test (more stable), uncomment the lines below
+        // NOTE: To use an explicitly new instance per-test, uncomment the lines below
         //
         // getInstance = async () => esModule.instantiate(undefined, {
         //     ...new WASIShim().getImportObject(),

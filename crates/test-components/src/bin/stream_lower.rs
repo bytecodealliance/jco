@@ -1,30 +1,30 @@
 mod bindings {
     use super::Component;
     wit_bindgen::generate!({
-        world: "stream-rx",
+        world: "stream-lower",
     });
     export!(Component);
 }
 
-use wit_bindgen::StreamReader;
+use wit_bindgen::{FutureReader, StreamReader};
 
-use bindings::exports::jco::test_components::use_stream_async;
-use bindings::exports::jco::test_components::use_stream_sync;
+use bindings::exports::jco::test_components::stream_lower_async;
+use bindings::exports::jco::test_components::stream_lower_sync;
 use bindings::jco::test_components::resources;
 
-use bindings::exports::jco::test_components::use_stream_async::{
+use bindings::exports::jco::test_components::stream_lower_async::{
     ExampleEnum, ExampleFlags, ExampleRecord, ExampleVariant,
 };
 
 struct Component;
 
-impl use_stream_sync::Guest for Component {
+impl stream_lower_sync::Guest for Component {
     fn stream_passthrough(rx: StreamReader<u32>) -> StreamReader<u32> {
         rx
     }
 }
 
-impl use_stream_async::Guest for Component {
+impl stream_lower_async::Guest for Component {
     async fn stream_passthrough(rx: StreamReader<u32>) -> StreamReader<u32> {
         rx
     }
@@ -150,6 +150,16 @@ impl use_stream_async::Guest for Component {
         while let Some(inner_rx) = rx.next().await {
             let inner_vals = read_async_values(inner_rx).await;
             vals.push(inner_vals);
+        }
+        vals
+    }
+
+    async fn read_stream_values_future_string(
+       mut stream_rx: StreamReader<FutureReader<String>>,
+    ) -> Vec<String> {
+        let mut vals = Vec::new();
+        while let Some(fut_rx) = stream_rx.next().await {
+            vals.push(fut_rx.await);
         }
         vals
     }

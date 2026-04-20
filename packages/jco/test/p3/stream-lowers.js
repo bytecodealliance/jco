@@ -25,7 +25,7 @@ suite("stream<T> lowers", () => {
     }
 
     beforeAll(async () => {
-        const name = "stream-rx";
+        const name = "stream-lower";
         const setupRes = await setupAsyncTest({
             asyncMode: "jspi",
             component: {
@@ -55,7 +55,7 @@ suite("stream<T> lowers", () => {
         });
         getInstance = () => Promise.resolve(instance);
 
-        // NOTE: To use an explicitly new instance per-test (more stable), uncomment the lines below
+        // NOTE: To use an explicitly new instance per-test, uncomment the lines below
         //
         // getInstance = async () => esModule.instantiate(undefined, {
         //     ...new WASIShim().getImportObject(),
@@ -72,7 +72,7 @@ suite("stream<T> lowers", () => {
     describe("sync", () => {
         test("sync passthrough", async () => {
             const instance = await getInstance();
-            assert.notInstanceOf(instance["jco:test-components/use-stream-sync"].streamPassthrough, AsyncFunction);
+            assert.notInstanceOf(instance["jco:test-components/stream-lower-sync"].streamPassthrough, AsyncFunction);
 
             let vals = [0, 5, 10];
             const readerStream = new ReadableStream({
@@ -82,7 +82,7 @@ suite("stream<T> lowers", () => {
                 },
             });
 
-            let returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(readerStream);
+            let returnedStream = instance["jco:test-components/stream-lower-sync"].streamPassthrough(readerStream);
 
             // NOTE: Returned streams conform to the async iterator protocol -- they *do not* confirm to
             // any other interface, though an object that is a ReadableStream may have been passed in.
@@ -110,7 +110,7 @@ suite("stream<T> lowers", () => {
                     };
                 },
             };
-            returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(lateStream);
+            returnedStream = instance["jco:test-components/stream-lower-sync"].streamPassthrough(lateStream);
 
             returnedVals = [];
             for await (const v of returnedStream) {
@@ -122,8 +122,20 @@ suite("stream<T> lowers", () => {
 
     describe("async", () => {
         test.concurrent("async passthrough", async () => {
+
+
+            // test.concurrent("async passthrough", async () => {
+            //     assert.instanceOf(instance["jco:test-components/stream-lower-async"].streamPassthrough, AsyncFunction);
+            //     let stream = await instance["jco:test-components/stream-lower-async"].streamPassthrough(readerStream);
+            //     let returnedVals = [];
+            //     for await (const v of stream) {
+            //         returnedVals.push(v);
+            //     }
+            //     assert.deepEqual(vals, returnedVals);
+            // });
+
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].streamPassthrough, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].streamPassthrough, AsyncFunction);
 
             let vals = [10, 5, 0];
             const readerStream = new ReadableStream({
@@ -133,7 +145,7 @@ suite("stream<T> lowers", () => {
                 },
             });
 
-            let stream = await instance["jco:test-components/use-stream-async"].streamPassthrough(readerStream);
+            let stream = await instance["jco:test-components/stream-lower-async"].streamPassthrough(readerStream);
             let returnedVals = [];
             for await (const v of stream) {
                 returnedVals.push(v);
@@ -143,10 +155,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("bool", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesBool, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesBool, AsyncFunction);
 
             let vals = [true, false];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesBool(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesBool(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -154,17 +166,17 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("u8/s8", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU8, AsyncFunction);
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS8, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesU8, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesS8, AsyncFunction);
 
             let vals = [0, 1, 255];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesU8(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU8(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
 
             vals = [-128, 0, 1, 127];
-            returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesS8(
+            returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS8(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -172,17 +184,17 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("u16/s16", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU16, AsyncFunction);
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS16, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesU16, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesS16, AsyncFunction);
 
             let vals = [0, 100, 65535];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesU16(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU16(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
 
             vals = [-32_768, 0, 32_767];
-            returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesS16(
+            returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS16(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -190,17 +202,17 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("u32/s32", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU32, AsyncFunction);
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS32, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesU32, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesS32, AsyncFunction);
 
             let vals = [10, 5, 0];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesU32(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU32(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
 
             vals = [-32, 90001, 3200000];
-            returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesS32(
+            returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS32(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -208,17 +220,17 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("u64/s64", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesU64, AsyncFunction);
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesS64, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesU64, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesS64, AsyncFunction);
 
             let vals = [0n, 100n, 65535n];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesU64(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU64(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
 
             vals = [-32_768n, 0n, 32_767n];
-            returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesS64(
+            returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS64(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -226,17 +238,17 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("f32/f64", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesF32, AsyncFunction);
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesF64, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesF32, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesF64, AsyncFunction);
 
             let vals = [-300.01235, -1.5, -0.0, 0.0, 1.5, 300.01235];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesF32(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesF32(
                 createReadableStreamFromValues(vals),
             );
             vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.01));
 
             vals = [-60000.01235, -1.5, -0.0, 0.0, 1.5, -60000.01235];
-            returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesF32(
+            returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesF32(
                 createReadableStreamFromValues(vals),
             );
             vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.01));
@@ -244,10 +256,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("string", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesString, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesString, AsyncFunction);
 
             let vals = ["hello", "world", "!"];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesString(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesString(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -255,14 +267,14 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("record", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesRecord, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesRecord, AsyncFunction);
 
             let vals = [
                 { id: 3, idStr: "three" },
                 { id: 2, idStr: "two" },
                 { id: 1, idStr: "one" },
             ];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesRecord(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesRecord(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -270,7 +282,7 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("variant", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesVariant, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesVariant, AsyncFunction);
 
             let vals = [
                 { tag: "maybe-u32", val: 123 },
@@ -278,7 +290,7 @@ suite("stream<T> lowers", () => {
                 { tag: "str", val: "string-value" },
                 { tag: "num", val: 1 },
             ];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesVariant(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesVariant(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
@@ -290,7 +302,7 @@ suite("stream<T> lowers", () => {
             ]);
 
             vals = [{ tag: "float", val: 123.1 }];
-            returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesVariant(
+            returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesVariant(
                 createReadableStreamFromValues(vals),
             );
             assert.closeTo(returnedVals[0].val, 123.1, 0.01);
@@ -298,14 +310,14 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("tuple", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesTuple, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesTuple, AsyncFunction);
 
             let vals = [
                 [1, -1, "one"],
                 [2, -2, "two"],
                 [3, -3, "two"],
             ];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesTuple(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesTuple(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -313,14 +325,14 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("flags", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesFlags, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesFlags, AsyncFunction);
 
             let vals = [
                 { first: true, second: false, third: false },
                 { first: false, second: true, third: false },
                 { first: false, second: false, third: true },
             ];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesFlags(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesFlags(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -328,10 +340,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("enum", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesEnum, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesEnum, AsyncFunction);
 
             let vals = ["first", "second", "third"];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesEnum(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesEnum(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, ["first", "second", "third"]);
@@ -339,13 +351,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("option<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesOptionString,
-                AsyncFunction,
-            );
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesOptionString, AsyncFunction);
 
             let vals = ["present string", null];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesOptionString(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesOptionString(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
@@ -357,13 +366,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("result<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesResultString,
-                AsyncFunction,
-            );
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesResultString, AsyncFunction);
 
             let vals = [{ tag: "ok", val: "present string" }, { tag: "err", val: "nope" }, "bare string (ok)"];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesResultString(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesResultString(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
@@ -376,10 +382,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<u8>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/use-stream-async"].readStreamValuesListU8, AsyncFunction);
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesListU8, AsyncFunction);
 
             let vals = [[0x01, 0x02, 0x03, 0x04, 0x05], new Uint8Array([0x05, 0x04, 0x03, 0x02, 0x01]), []];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesListU8(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesListU8(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
@@ -392,13 +398,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesListString,
-                AsyncFunction,
-            );
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesListString, AsyncFunction);
 
             let vals = [["first", "second", "third"], []];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesListString(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesListString(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -406,10 +409,7 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<list<u32, 5>>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesFixedListU32,
-                AsyncFunction,
-            );
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesFixedListU32, AsyncFunction);
 
             let vals = [
                 [
@@ -418,7 +418,7 @@ suite("stream<T> lowers", () => {
                 ],
                 [[0, 0, 0, 0, 0], new Uint32Array([0x05, 0x04, 0x03, 0x02, 0x01])],
             ];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesFixedListU32(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesFixedListU32(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
@@ -436,10 +436,7 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<example-record>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesListRecord,
-                AsyncFunction,
-            );
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesListRecord, AsyncFunction);
 
             let vals = [
                 [
@@ -453,7 +450,7 @@ suite("stream<T> lowers", () => {
                     { id: 3, idStr: "three-three" },
                 ],
             ];
-            let returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesListRecord(
+            let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesListRecord(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -462,12 +459,12 @@ suite("stream<T> lowers", () => {
         test.concurrent("example-resource", async () => {
             const instance = await getInstance();
             assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwn,
+                instance["jco:test-components/stream-lower-async"].readStreamValuesExampleResourceOwn,
                 AsyncFunction,
             );
 
             let vals = [new ExampleResource(0), new ExampleResource(1), new ExampleResource(2)];
-            await instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwn(
+            await instance["jco:test-components/stream-lower-async"].readStreamValuesExampleResourceOwn(
                 createReadableStreamFromValues(vals),
             );
             // TODO(fix): we shoudl be able to ensure destructor call
@@ -478,30 +475,27 @@ suite("stream<T> lowers", () => {
         test.concurrent("example-resource#get-id", async () => {
             const instance = await getInstance();
             assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesExampleResourceOwnAttr,
+                instance["jco:test-components/stream-lower-async"].readStreamValuesExampleResourceOwnAttr,
                 AsyncFunction,
             );
 
             let vals = [new ExampleResource(2), new ExampleResource(1), new ExampleResource(0)];
             const returnedVals = await instance[
-                "jco:test-components/use-stream-async"
+                "jco:test-components/stream-lower-async"
             ].readStreamValuesExampleResourceOwnAttr(createReadableStreamFromValues(vals));
             assert.deepEqual(returnedVals, [2, 1, 0]);
         });
 
         test.concurrent("stream<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(
-                instance["jco:test-components/use-stream-async"].readStreamValuesStreamString,
-                AsyncFunction,
-            );
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesStreamString, AsyncFunction);
 
             let vals = [
                 createReadableStreamFromValues(["first", "stream", "values"]),
                 createReadableStreamFromValues(["second", "stream", "here"]),
                 createReadableStreamFromValues(["third", "values", "in stream"]),
             ];
-            const returnedVals = await instance["jco:test-components/use-stream-async"].readStreamValuesStreamString(
+            const returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesStreamString(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
@@ -510,106 +504,10 @@ suite("stream<T> lowers", () => {
                 ["third", "values", "in stream"],
             ]);
         });
+
+        test.concurrent("stream<future<string>>", async () => {
+            const instance = await getInstance();
+            throw new Error("NOT YET IMPLEMENTED");
+        });
     });
 });
-
-// // NOTE: this suite of tests should *not* be run concurrently, as they performs sync operations
-// // which cannot be mediated/scheduled in the same way as async functions (avoiding
-// // which does *not* get mediated in the same way
-// suite("stream<T> lowers (sync)", () => {
-//     let esModule, cleanup, getInstance, instance;
-
-//     beforeAll(async () => {
-//         const name = "stream-rx";
-//         const setupRes = await setupAsyncTest({
-//             asyncMode: "jspi",
-//             component: {
-//                 name,
-//                 path: join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`),
-//                 skipInstantiation: true,
-//             },
-//             jco: {
-//                 transpile: {
-//                     extraArgs: {
-//                         minify: false,
-//                     },
-//                 },
-//             },
-//         });
-
-//         esModule = setupRes.esModule;
-//         cleanup = setupRes.cleanup;
-
-//         // We use a completely shared instance because sibling re-entrance
-//         // is mediated by code in task.enter()
-//         instance = await esModule.instantiate(undefined, {
-//             ...new WASIShim().getImportObject(),
-//             "jco:test-components/resources": {
-//                 ExampleResource,
-//             },
-//         });
-//         getInstance = () => Promise.resolve(instance);
-
-//         // NOTE: To use an explicitly new instance per-test (more stable), uncomment the lines below
-//         //
-//         // getInstance = async () => esModule.instantiate(undefined, {
-//         //     ...new WASIShim().getImportObject(),
-//         //     "jco:test-components/resources": {
-//         //         ExampleResource,
-//         //     },
-//         // });
-//     });
-
-//     afterAll(async () => {
-//         await cleanup();
-//     });
-
-//     test("sync passthrough", async () => {
-//         const instance = await getInstance();
-//         assert.notInstanceOf(instance["jco:test-components/use-stream-sync"].streamPassthrough, AsyncFunction);
-
-//         let vals = [0, 5, 10];
-//         const readerStream = new ReadableStream({
-//             start(ctrl) {
-//                 vals.forEach((v) => ctrl.enqueue(v));
-//                 ctrl.close();
-//             },
-//         });
-
-//         let returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(readerStream);
-
-//         // NOTE: Returned streams conform to the async iterator protocol -- they *do not* confirm to
-//         // any other interface, though an object that is a ReadableStream may have been passed in.
-//         //
-//         let returnedVals = [];
-//         for await (const v of returnedStream) {
-//             returnedVals.push(v);
-//         }
-//         assert.deepEqual(vals, returnedVals);
-
-//         // Test late writer -- component should block until a value is written,
-//         // and we should handle a final value + done from an iterator properly
-//         const lateStream = {
-//             [Symbol.asyncIterator]() {
-//                 let returned = 0;
-//                 return {
-//                     async next() {
-//                         await new Promise((resolve) => setTimeout(resolve, 300));
-//                         if (returned === 2) {
-//                             return { value: 42, done: true };
-//                         }
-//                         returned += 1;
-//                         return { value: 42, done: false };
-//                     },
-//                 };
-//             },
-//         };
-//         returnedStream = instance["jco:test-components/use-stream-sync"].streamPassthrough(lateStream);
-
-//         returnedVals = [];
-//         for await (const v of returnedStream) {
-//             returnedVals.push(v);
-//         }
-//         assert.deepEqual([42, 42, 42], returnedVals);
-//     });
-// });
