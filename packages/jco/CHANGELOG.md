@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.18.1] - 2026-04-20
+
+### 🚀 Features
+
+- _(jco)_ added warning when using fallback ComponentizeJS by @EngoDev in #1416
+
+## New Contributors
+
+- @EngoDev made their first contribution in [#1416](https://github.com/bytecodealliance/jco/pull/1416)
+
 ## [1.18.0] - 2026-04-18
 
 ### 🚀 Features
