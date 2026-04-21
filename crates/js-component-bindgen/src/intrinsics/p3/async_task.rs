@@ -857,6 +857,8 @@ impl AsyncTaskIntrinsic {
                         storage = [0, 0];
                         borrowedHandles = {{}};
 
+                        tmpRetI64HighBits = 0|0;
+
                         constructor(opts) {{
                            this.#id = ++{task_class}._ID;
 

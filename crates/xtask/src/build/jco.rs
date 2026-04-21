@@ -199,6 +199,7 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         async_mode: None,
         // TODO(breaking): strict by default
         strict: false,
+        asmjs: false,
     };
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;

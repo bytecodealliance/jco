@@ -72,6 +72,9 @@ world js-component-bindgen {
 
     /// Configure whether to generate code that includes strict type checks
     strict: option<bool>,
+
+    /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
+    asmjs: option<bool>,
   }
 
   record async-imports-exports {

@@ -102,6 +102,8 @@ pub struct TranspileOpts {
     pub async_mode: Option<AsyncMode>,
     /// Configure whether to generate code that includes strict type checks
     pub strict: bool,
+    /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
+    pub asmjs: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -2696,9 +2698,9 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            GlobalInitializer::InstantiateModule(m, _) => match m {
+            GlobalInitializer::InstantiateModule(m, instance) => match m {
                 InstantiateModule::Static(idx, args) => {
-                    self.instantiate_static_module(*idx, args);
+                    self.instantiate_static_module(*idx, args, *instance);
                 }
                 // This is only needed when instantiating an imported core wasm
                 // module which while easy to implement here is not possible to
@@ -2763,7 +2765,12 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn instantiate_static_module(&mut self, module_idx: StaticModuleIndex, args: &[CoreDef]) {
+    fn instantiate_static_module(
+        &mut self,
+        module_idx: StaticModuleIndex,
+        args: &[CoreDef],
+        instance: Option<RuntimeComponentInstanceIndex>,
+    ) {
         // Build a JS "import object" which represents `args`. The `args` is a
         // flat representation which needs to be zip'd with the list of names to
         // correspond to the JS wasm embedding API. This is one of the major
@@ -2776,6 +2783,41 @@ impl<'a> Instantiator<'a, '_> {
             assert!(
                 prev.is_none(),
                 "unsupported duplicate import of `{module}::{name}`"
+            );
+            assert!(prev.is_none());
+        }
+
+        if self.bindgen.opts.asmjs {
+            let component_instance_idx = instance
+                .expect("missing runtime component index during static module instantiation")
+                .as_u32();
+
+            self.add_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+            self.add_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+            let current_task_get_fn =
+                Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+            let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
+            let dst = import_obj.entry("env").or_insert(BTreeMap::new());
+            let prev = dst.insert(
+                "setTempRet0",
+                format!(
+                    "(x) => {{
+                const {{ taskID }} = {get_global_current_task_meta_fn}({component_instance_idx});
+
+                const taskMeta = {current_task_get_fn}({component_instance_idx}, taskID);
+                if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+
+                const task = taskMeta.task;
+                if (!task) {{ throw new Error('invalid/missing async task'); }}
+
+                task.tmpRetI64HighBits = x|0;
+            }}"
+                ),
+            );
+            assert!(
+                prev.is_none(),
+                "unsupported duplicate import of `env::setTempRet0`"
             );
             assert!(prev.is_none());
         }
@@ -3937,6 +3979,7 @@ impl<'a> Instantiator<'a, '_> {
             is_async,
             canon_opts: opts,
             iface_name,
+            asmjs: self.bindgen.opts.asmjs,
         };
 
         // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of

@@ -44,6 +44,9 @@ pub enum ConversionIntrinsic {
 
     /// Function that checks validity of various numeric primitive types
     IsValidNumericPrimitive,
+
+    MergeBigInt64,
+    SplitBigInt64,
 }
 
 impl ConversionIntrinsic {
@@ -71,6 +74,8 @@ impl ConversionIntrinsic {
             "toUint64",
             "toUint64",
             "toUint8",
+            Self::SplitBigInt64.name(),
+            Self::MergeBigInt64.name(),
             Self::RequireValidNumericPrimitive.name(),
             Self::IsValidNumericPrimitive.name(),
         ]
@@ -94,6 +99,8 @@ impl ConversionIntrinsic {
             Self::I64ToF64 => "i64ToF64",
             Self::F32ToI32 => "f32ToI32",
             Self::F64ToI64 => "f64ToI64",
+            Self::MergeBigInt64 => "mergeInt64",
+            Self::SplitBigInt64 => "splitInt64",
             Self::RequireValidNumericPrimitive => "_requireValidNumericPrimitive",
             Self::IsValidNumericPrimitive => "_isValidNumericPrimitive",
         }
@@ -379,6 +386,19 @@ impl ConversionIntrinsic {
                 ));
             }
 
+            Self::SplitBigInt64 => {
+                let name = self.name();
+                uwriteln!(output, "
+                const {name} = i => [Number(i & 0xFFFFFFFFn)|0, Number((i >> 32n) & 0xFFFFFFFFn)|0];
+                ")
+            },
+
+            Self::MergeBigInt64 => {
+                let name = self.name();
+                uwriteln!(output, "
+                const {name} = (l, h) => (BigInt(l|0) | (BigInt(h|0) << 32n));
+                ");
+            },
         }
     }
 }

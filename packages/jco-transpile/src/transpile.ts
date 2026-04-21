@@ -277,6 +277,7 @@ export async function transpileBytes(
         base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
         noNamespacedExports: opts.namespacedExports === false,
         multiMemory: opts.multiMemory === true,
+        asmjs: opts.js === true,
     };
 
     // Generate the component

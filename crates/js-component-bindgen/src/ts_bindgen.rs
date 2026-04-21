@@ -360,48 +360,75 @@ pub fn ts_bindgen(
 
     // Generate the TypeScript definition of the `instantiate` function
     // which is the main workhorse of the generated bindings.
-    match opts.instantiation {
-        Some(InstantiationMode::Async) => {
+    if opts.asmjs {
+        if let Some(mode) = &opts.instantiation {
             uwriteln!(
                 bindgen.src,
                 "
-                    /**
-                     * Instantiates this component with the provided imports and
-                     * returns a map of all the exports of the component.
-                     *
-                     * This function is intended to be similar to the
-                     * `WebAssembly.instantiate` function. The second `imports`
-                     * argument is the \"import object\" for wasm, except here it
-                     * uses component-model-layer types instead of core wasm
-                     * integers/numbers/etc.
-                     *
-                     * The first argument to this function, `getCoreModule`, is
-                     * used to compile core wasm modules within the component.
-                     * Components are composed of core wasm modules and this callback
-                     * will be invoked per core wasm module. The caller of this
-                     * function is responsible for reading the core wasm module
-                     * identified by `path` and returning its compiled
-                     * `WebAssembly.Module` object. This would use `compileStreaming`
-                     * on the web, for example.
-                     */
-                    export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,
-                        imports: ImportObject,
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
-                    ): {camel};
-                    export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
-                        imports: ImportObject,
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
-                    ): {camel} | Promise<{camel}>;
+                /**
+                 * Instantiates this component with the provided imports and
+                 * returns a map of all the exports of the component.
+                 *
+                 * This function is intended to be similar to the
+                 * `WebAssembly.instantiate` function, but simplified
+                 * for `wasm2js` (asm.js) output. The `imports` argument
+                 * is the \"import object\" for transpiled core wasm,
+                 * except here it uses component-model-layer types instead of
+                 * core wasm integers/numbers/etc.
+                 */
+                export function instantiate(
+                    imports: ImportObject,
+                ): {};
                 ",
-            )
+                match mode {
+                    InstantiationMode::Async => format!("Promise<{camel}>"),
+                    InstantiationMode::Sync => camel,
+                }
+            );
         }
-
-        Some(InstantiationMode::Sync) => {
-            uwriteln!(
+    } else {
+        match opts.instantiation {
+            Some(InstantiationMode::Async) => {
+                uwriteln!(
                 bindgen.src,
                 "
+                /**
+                 * Instantiates this component with the provided imports and
+                 * returns a map of all the exports of the component.
+                 *
+                 * This function is intended to be similar to the
+                 * `WebAssembly.Instantiate` constructor. The second `imports`
+                 * argument is the \"import object\" for wasm, except here it
+                 * uses component-model-layer types instead of core wasm
+                 * integers/numbers/etc.
+                 *
+                 * The first argument to this function, `getCoreModule`, is
+                 * used to compile core wasm modules within the component.
+                 * Components are composed of core wasm modules and this callback
+                 * will be invoked per core wasm module. The caller of this
+                 * function is responsible for reading the core wasm module
+                 * identified by `path` and returning its compiled
+                 * `WebAssembly.Module` object. This would use the
+                 * `WebAssembly.Module` constructor on the web, for example.
+                 */
+                export function instantiate(
+                    getCoreModule: (path: string) => WebAssembly.Module,
+                    imports: ImportObject,
+                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+                ): {camel};
+                export function instantiate(
+                    getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
+                    imports: ImportObject,
+                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
+                ): {camel} | Promise<{camel}>;
+                ",
+                );
+            }
+
+            Some(InstantiationMode::Sync) => {
+                uwriteln!(
+                    bindgen.src,
+                    "
                     /**
                      * Instantiates this component with the provided imports and
                      * returns a map of all the exports of the component.
@@ -426,11 +453,12 @@ pub fn ts_bindgen(
                         imports: ImportObject,
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
                     ): {camel};
-                ",
-            )
-        }
+                    ",
+                )
+            }
 
-        None => {}
+            None => {}
+        }
     }
 
     if bindgen.is_guest {

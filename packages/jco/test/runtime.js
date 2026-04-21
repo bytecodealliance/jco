@@ -32,6 +32,7 @@ const CODEGEN_TRANSPILE_DEPS = {
     strings: ["strings/strings.js"],
     variants: ["variants/variants.js", "helpers.js"],
     resource_borrow_simple: ["resource_borrow_simple/resource_borrow_simple.js"],
+    asmjs_bigint: ["asmjs_bigint/asmjs_bigint.js"],
 };
 
 // NOTE: if you find this test failing despite code changes, you may need to clear the test/output folder

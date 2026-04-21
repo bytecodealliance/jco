@@ -206,6 +206,9 @@ pub struct FunctionBindgen<'a> {
 
     /// Interface name
     pub iface_name: Option<&'a str>,
+
+    /// Whether the callee was transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
+    pub asmjs: bool,
 }
 
 impl FunctionBindgen<'_> {
@@ -1512,16 +1515,56 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     ("", Intrinsic::WithGlobalCurrentTaskMetaFn.name())
                 };
+
+                let args = if self.asmjs {
+                    let split_i64 =
+                        self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::SplitBigInt64));
+
+                    let mut args = Vec::new();
+                    for (i, op) in operands
+                        .drain(operands.len() - sig.params.len()..)
+                        .enumerate()
+                    {
+                        if matches!(sig.params[i], WasmType::I64) {
+                            args.push(format!("...({split_i64}({op}))"));
+                        } else {
+                            args.push(op);
+                        }
+                    }
+                    args
+                } else {
+                    mem::take(operands)
+                };
+
+                let mut callee_invoke = format!(
+                    "{callee}({args})",
+                    callee = self.callee,
+                    args = args.join(", ")
+                );
+
+                if self.asmjs {
+                    // wasm2js does not support multivalue return
+                    // if/when it does, this will need changing.
+                    assert!(sig.results.len() <= 1);
+                    // same with async(?)
+                    assert!(!self.requires_async_porcelain && !self.is_async);
+
+                    if sig.results.len() == 1 && matches!(sig.results[0], WasmType::I64) {
+                        let merge_i64 = self
+                            .intrinsic(Intrinsic::Conversion(ConversionIntrinsic::MergeBigInt64));
+                        callee_invoke =
+                            format!("{merge_i64}({callee_invoke}, task.tmpRetI64HighBits)");
+                    }
+                }
+
                 uwriteln!(
                     self.src,
                     r#"{s} {call_prefix} {call_wrapper}({{
                               taskID: task.id(),
                               componentIdx: task.componentIdx(),
-                              fn: () => {callee}({args}),
+                              fn: () => {callee_invoke},
                           }});
                           "#,
-                    callee = self.callee,
-                    args = operands.join(", "),
                 );
 
                 if self.tracing_enabled {
