@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.0] - 2026-04-22
+
+
+## New Contributors
+* @QuantumSegfault made their first contribution in [#1421](https://github.com/bytecodealliance/jco/pull/1421)
+
+
 ## [1.16.8] - 2026-04-18
 
 ### 🚜 Refactor
