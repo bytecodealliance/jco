@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.19.0] - 2026-04-22
+
+### 🐛 Bug Fixes
+
+- _(jco)_ `u64/s64` parameters and returns in `--js` mode by @QuantumSegfault in #1421
+
+## New Contributors
+
+- @QuantumSegfault made their first contribution in [#1421](https://github.com/bytecodealliance/jco/pull/1421)
+
 ## [1.18.1] - 2026-04-20
 
 ### 🚀 Features
