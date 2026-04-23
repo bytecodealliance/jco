@@ -180,32 +180,48 @@ impl Intrinsic {
             Intrinsic::Host(i) => i.render(output, args),
 
             Intrinsic::GlobalAsyncDeterminism => {
-                output.push_str(&format!(
-                    "const {var_name} = '{determinism}';\n",
+                uwriteln!(
+                    output,
+                    "const {var_name} = '{determinism}';",
                     var_name = self.name(),
                     determinism = args.determinism,
-                ));
+                );
             }
 
             Intrinsic::CoinFlip => {
-                output.push_str(&format!(
-                    "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
+                uwriteln!(
+                    output,
+                    "const {var_name} = () => {{ return Math.random() > 0.5; }};",
                     var_name = self.name(),
-                ));
+                );
             }
 
             Intrinsic::ConstantI32Min => output.push_str(&format!(
                 "const {const_name} = -2_147_483_648;\n",
                 const_name = self.name()
             )),
-            Intrinsic::ConstantI32Max => output.push_str(&format!(
-                "const {const_name} = 2_147_483_647;\n",
-                const_name = self.name()
-            )),
+
+            Intrinsic::ConstantI32Max => {
+                uwriteln!(
+                    output,
+                    r#"
+                      const {const_name} = 2_147_483_647;
+                    "#,
+                    const_name = self.name()
+                )
+            }
+
             Intrinsic::TypeCheckValidI32 => {
                 let i32_const_min = Intrinsic::ConstantI32Min.name();
                 let i32_const_max = Intrinsic::ConstantI32Max.name();
-                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = self.name()))
+
+                uwriteln!(
+                    output,
+                    r#"
+                      const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};
+                    "#,
+                    fn_name = self.name()
+                );
             }
 
             Intrinsic::AsyncFunctionCtor => {
@@ -231,25 +247,39 @@ impl Intrinsic {
 
             Intrinsic::Base64Compile => {
                 if !args.no_nodejs_compat {
-                    output.push_str("
-                    const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
-                ")
+                    uwriteln!(
+                        output,
+                        r#"
+                          const base64Compile = str => WebAssembly.compile(
+                              typeof Buffer !== 'undefined'
+                                  ? Buffer.from(str, 'base64')
+                                  : Uint8Array.from(atob(str), b => b.charCodeAt(0))
+                          );
+                        "#
+                    );
                 } else {
-                    output.push_str("
-                    const base64Compile = str => WebAssembly.compile(Uint8Array.from(atob(str), b => b.charCodeAt(0)));
-                ")
+                    uwriteln!(
+                        output,
+                        r#"
+                          const base64Compile = str => WebAssembly.compile(Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+                        "#
+                    );
                 }
             }
 
-            Intrinsic::ClampGuest => output.push_str(
-                "
-                function clampGuest(i, min, max) {
-                    if (i < min || i > max) \
-                    throw new TypeError(`must be between ${min} and ${max}`);
-                    return i;
-                }
-            ",
-            ),
+            Intrinsic::ClampGuest => {
+                uwriteln!(
+                    output,
+                    r#"
+                      function clampGuest(i, min, max) {{
+                          if (i < min || i > max) {{
+                              throw new TypeError(`must be between ${{min}} and ${{max}}`);
+                          }}
+                          return i;
+                      }}
+                    "#
+                );
+            }
 
             Intrinsic::ComponentError => output.push_str(
                 "
@@ -847,7 +877,9 @@ impl Intrinsic {
             Self::GetGlobalCurrentTaskMetaFn => {
                 let get_current_global_task_meta_fn = Self::GetGlobalCurrentTaskMetaFn.name();
                 let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
-                output.push_str(&format!(
+
+                uwriteln!(
+                    output,
                     r#"
                       function {get_current_global_task_meta_fn}(componentIdx) {{
                           const v = {global_current_task_meta_obj}[componentIdx];
@@ -855,13 +887,15 @@ impl Intrinsic {
                           return {{ ...v }};
                       }}
                     "#,
-                ));
+                );
             }
 
             Self::SetGlobalCurrentTaskMetaFn => {
-                let set_global_current_task_meta_fn = Self::SetGlobalCurrentTaskMetaFn.name();
+                let set_global_current_task_meta_fn = self.name();
                 let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
-                output.push_str(&format!(
+
+                uwriteln!(
+                    output,
                     r#"
                       function {set_global_current_task_meta_fn}(args) {{
                           if (!args) {{ throw new TypeError('args missing'); }}
@@ -871,7 +905,7 @@ impl Intrinsic {
                           return {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
                       }}
                     "#,
-                ));
+                );
             }
 
             Self::WithGlobalCurrentTaskMetaFn => {

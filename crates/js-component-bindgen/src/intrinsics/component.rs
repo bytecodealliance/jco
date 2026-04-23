@@ -303,8 +303,6 @@ impl ComponentIntrinsic {
                             this.#locked = locked;
                         }}
 
-                        // TODO(fix): we might want to check for pre-locked status here, we should be deterministically
-                        // going from locked -> unlocked and vice versa
                         exclusiveLock() {{
                             {debug_log_fn}('[{component_async_state_class}#exclusiveLock()]', {{
                                 locked: this.#locked,
@@ -335,6 +333,54 @@ impl ComponentIntrinsic {
                         onNextExclusiveRelease(fn) {{
                             {debug_log_fn}('[{component_async_state_class}#()onNextExclusiveRelease] registering');
                             this.#onExclusiveReleaseHandlers.push(fn);
+                        }}
+
+                        // nextTaskPromise & nextTaskQueue are used to await current task completion and queues
+                        // any tasks attempting to enter() and complete.
+                        //
+                        // see: nextTaskExecutionSlot()
+                        //
+                        // TODO(threads): this should be unnecessary once threads are properly implemented,
+                        // as the task.enter() logic should suffice (it should be guaranteed that we cannot re-enter
+                        // unless the task in question is the current task in the thread execution, and only one can
+                        // run at a time)
+                        #nextTaskPromise = Promise.resolve(true);
+                        #nextTaskQueue = [];
+
+                        async nextTaskExecutionSlot(args) {{
+                            const {{ task }} = args;
+
+                            const placeholder = {{
+                                completed: false,
+                                task,
+                                promise: task.exitPromise().then(() => {{
+                                    placeholder.completed = true;
+                                }}),
+                            }};
+                            this.#nextTaskQueue.push(placeholder);
+
+                            let next;
+                            while (true) {{
+                                await this.#nextTaskPromise;
+
+                                next = this.#nextTaskQueue.find(placeholder => !placeholder.completed);
+
+                                // This task is next in the queue, we can continue
+                                if (next === undefined || next === placeholder) {{
+                                    this.#nextTaskPromise = next.promise;
+                                    if (this.#nextTaskQueue.length > 1000) {{
+                                        this.#nextTaskQueue = this.#nextTaskQueue.filter(p => !p.completed);
+                                        if (this.#nextTaskQueue.length > 1000) {{
+                                            {debug_log_fn}('[{component_async_state_class}#()nextTaskExecutionSlot] next task queue length > 1000 even after cleanup, tasks may be leaking');
+                                        }}
+                                    }}
+                                    break;
+                                }}
+
+                                // If we get here, this task was *not* next in the queue, continue waiting
+                                // (at this point the task that *is* next will likely have already set itself
+                                // as this.#nextTaskPromise)
+                            }}
                         }}
 
                         #getSuspendedTaskMeta(taskID) {{

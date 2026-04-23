@@ -1,10 +1,13 @@
 //! Intrinsics that represent helpers that implement async tasks
 
+use std::fmt::Write;
+
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
+use crate::uwriteln;
 
 /// This enum contains intrinsics that implement async tasks
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -329,10 +332,13 @@ impl AsyncTaskIntrinsic {
     pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::CurrentTaskMayBlock => {
-                output.push_str(&format!(
-                    "const {var_name} = new WebAssembly.Global({{ value: 'i32', mutable: true }}, 0);\n",
-                    var_name = self.name()
-                ));
+                let var_name = self.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      const {var_name} = new WebAssembly.Global({{ value: 'i32', mutable: true }}, 0);
+                    "#
+                );
             }
 
             Self::GlobalAsyncCurrentTaskMap => {
@@ -360,37 +366,40 @@ impl AsyncTaskIntrinsic {
                 let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
 
-                output.push_str(&format!(r#"
-                    function {context_set_fn}(ctx, value) {{
-                        const {{ componentIdx, slot }} = ctx;
-                        if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
-                        if (slot === undefined) {{ throw new TypeError("missing slot"); }}
-                        if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
+                uwriteln!(
+                    output,
+                    r#"
+                      function {context_set_fn}(ctx, value) {{
+                          const {{ componentIdx, slot }} = ctx;
+                          if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                          if (slot === undefined) {{ throw new TypeError("missing slot"); }}
+                          if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
 
-                        const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
-                        if (!currentTaskMeta) {{
-                            throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
-                        }}
-                        const taskID = currentTaskMeta.taskID;
+                          const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                          if (!currentTaskMeta) {{
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                          }}
+                          const taskID = currentTaskMeta.taskID;
 
-                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                        if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+                          const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                          if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
 
-                        let task = taskMeta.task;
-                        if (!task) {{ throw new Error('invalid/missing current task in metadata while setting context'); }}
+                          let task = taskMeta.task;
+                          if (!task) {{ throw new Error('invalid/missing current task in metadata while setting context'); }}
 
-                        {debug_log_fn}('[{context_set_fn}()] args', {{
-                            slot,
-                            value,
-                            storage: task.storage,
-                            taskID: task.id(),
-                            componentIdx: task.componentIdx(),
-                        }});
+                          {debug_log_fn}('[{context_set_fn}()] args', {{
+                              slot,
+                              value,
+                              storage: task.storage,
+                              taskID: task.id(),
+                              componentIdx: task.componentIdx(),
+                          }});
 
-                        if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
-                        task.storage[slot] = value;
-                    }}
-                "#));
+                          if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
+                          task.storage[slot] = value;
+                      }}
+                    "#
+                );
             }
 
             Self::ContextGet => {
@@ -399,36 +408,39 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
 
-                output.push_str(&format!(r#"
-                    function {context_get_fn}(ctx) {{
-                        const {{ componentIdx, slot }} = ctx;
-                        if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
-                        if (slot === undefined) {{ throw new TypeError("missing slot"); }}
+                uwriteln!(
+                    output,
+                    r#"
+                      function {context_get_fn}(ctx) {{
+                          const {{ componentIdx, slot }} = ctx;
+                          if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                          if (slot === undefined) {{ throw new TypeError("missing slot"); }}
 
-                        const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
-                        if (!currentTaskMeta) {{
-                            throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
-                        }}
-                        const taskID = currentTaskMeta.taskID;
+                          const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                          if (!currentTaskMeta) {{
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                          }}
+                          const taskID = currentTaskMeta.taskID;
 
-                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                        if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+                          const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                          if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
 
-                        let task = taskMeta.task;
-                        if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
+                          let task = taskMeta.task;
+                          if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
 
-                        {debug_log_fn}('[{context_get_fn}()] args', {{
-                            slot,
-                            storage: task.storage,
-                            taskID: task.id(),
-                            componentIdx: task.componentIdx(),
-                        }});
+                          {debug_log_fn}('[{context_get_fn}()] args', {{
+                              slot,
+                              storage: task.storage,
+                              taskID: task.id(),
+                              componentIdx: task.componentIdx(),
+                          }});
 
-                        if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
+                          if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
 
-                        return task.storage[slot];
-                    }}
-                    "#));
+                          return task.storage[slot];
+                      }}
+                    "#
+                );
             }
 
             // Equivalent of `task.return`
@@ -782,12 +794,13 @@ impl AsyncTaskIntrinsic {
                 let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let task_class = Self::AsyncTaskClass.name();
                 let subtask_class = Self::AsyncSubtaskClass.name();
-
                 let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
                 let coin_flip_fn = Intrinsic::CoinFlip.name();
                 let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
                 let clear_current_task_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask).name();
+                let with_global_current_task_meta_async_fn =
+                    Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -833,8 +846,6 @@ impl AsyncTaskIntrinsic {
                         #stringEncoding = null;
 
                         #parentSubtask = null;
-
-                        #needsExclusiveLock = false;
 
                         #errHandling;
 
@@ -910,7 +921,6 @@ impl AsyncTaskIntrinsic {
 
                            if (opts.parentSubtask) {{ this.#parentSubtask = opts.parentSubtask; }}
 
-                           this.#needsExclusiveLock = this.isSync() || !this.hasCallback();
 
                            if (opts.errHandling) {{ this.#errHandling = opts.errHandling; }}
                         }}
@@ -985,7 +995,11 @@ impl AsyncTaskIntrinsic {
 
                         async runCallbackFn(...args) {{
                             if (!this.#callbackFn) {{ throw new Error('on callback function has been set for task'); }}
-                            return await this.#callbackFn.apply(null, args);
+                            return {with_global_current_task_meta_async_fn}({{
+                                taskID: this.#id,
+                                componentIdx: this.#componentIdx,
+                                fn: () => {{ return this.#callbackFn.apply(null, args); }}
+                            }});
                         }}
 
                         getCalleeParams() {{
@@ -1016,6 +1030,11 @@ impl AsyncTaskIntrinsic {
                         enterSync() {{
                             if (this.needsExclusiveLock()) {{
                                 const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                                // TODO(???): it is *very possible* for a the line below to fail if
+                                // an async function is already running (and holding the exclusive lock)
+                                //
+                                // It's not really possible to fix this unless we turn every sync export into
+                                // an async export that will use the regular async enabled `enter()`.
                                 cstate.exclusiveLock();
                             }}
                             return true;
@@ -1026,6 +1045,7 @@ impl AsyncTaskIntrinsic {
                                 taskID: this.#id,
                                 componentIdx: this.#componentIdx,
                                 subtaskID: this.getParentSubtask()?.id(),
+                                entryFnName: this.#entryFnName,
                             }});
 
                             if (this.#entered) {{
@@ -1034,12 +1054,14 @@ impl AsyncTaskIntrinsic {
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
+                            await cstate.nextTaskExecutionSlot({{ task: this }});
+
                             // If a task is either synchronous or host-provided (e.g. a host import, whether sync or async)
                             // then we can avoid component-relevant tracking and immediately enter
                             if (this.isSync() || opts?.isHost) {{
                                 this.#entered = true;
 
-                                // TODO(breaking): remove once manually-spccifying async fns is removed
+                                // TODO(breaking): remove once manually-specifying async fns is removed
                                 // It is currently possible for an actually sync export to be specified
                                 // as async via JSPI
                                 if (this.#isManualAsync) {{
@@ -1049,11 +1071,15 @@ impl AsyncTaskIntrinsic {
                                 return this.#entered;
                             }}
 
-                            if (cstate.hasBackpressure()) {{
+                            // Perform intial backpressure check
+                            if (cstate.hasBackpressure() || this.needsExclusiveLock() && cstate.isExclusivelyLocked()) {{
                                 cstate.addBackpressureWaiter();
 
                                 const result = await this.waitUntil({{
-                                    readyFn: () => !cstate.hasBackpressure(),
+                                    readyFn: () => {{
+                                        return !(cstate.hasBackpressure()
+                                                 || this.needsExclusiveLock() && cstate.isExclusivelyLocked());
+                                    }},
                                     cancellable: true,
                                 }});
 
@@ -1065,7 +1091,32 @@ impl AsyncTaskIntrinsic {
                                 }}
                             }}
 
-                            if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
+                            // Lock the component state or keep trying until we can/do
+                            try {{
+                                if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
+                            }} catch {{
+                                // Continuously attempt to lock until we can
+                                while (cstate.hasBackpressure() || this.needsExclusiveLock() && cstate.isExclusivelyLocked()) {{
+                                    try {{
+                                        if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
+                                        break;
+                                    }} catch(err) {{
+                                        cstate.addBackpressureWaiter();
+                                        const result = await this.waitUntil({{
+                                            readyFn: () => {{
+                                                return !(cstate.hasBackpressure()
+                                                         || this.needsExclusiveLock() && cstate.isExclusivelyLocked());
+                                            }},
+                                            cancellable: true,
+                                        }});
+                                        cstate.removeBackpressureWaiter();
+                                        if (result === {task_class}.BlockResult.CANCELLED) {{
+                                            this.cancel();
+                                            return false;
+                                        }}
+                                    }}
+                                }}
+                            }}
 
                             this.#entered = true;
                             return this.#entered;
@@ -1076,38 +1127,19 @@ impl AsyncTaskIntrinsic {
                         isResolved() {{ return this.#state === {task_class}.State.RESOLVED; }}
 
                         async waitUntil(opts) {{
-                            const {{ readyFn, waitableSetRep, cancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#waitUntil()] args', {{ taskID: this.#id, waitableSetRep, cancellable }});
+                            const {{ readyFn, cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#waitUntil()] args', {{ taskID: this.#id, cancellable }});
 
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            const wset = state.handles.get(waitableSetRep);
-
-                            let event;
-
-                            wset.incrementNumWaiting();
+                            // TODO(fix): check for cancel
+                            // TODO(fix): determinism
+                            // TODO(threads): add this thread to waiting list
 
                             const keepGoing = await this.suspendUntil({{
-                                readyFn: () => {{
-                                    const hasPendingEvent = wset.hasPendingEvent();
-                                    const ready = readyFn();
-                                    return ready && hasPendingEvent;
-                                }},
+                                readyFn,
                                 cancellable,
                             }});
 
-                            if (keepGoing) {{
-                                event = wset.getPendingEvent();
-                            }} else {{
-                                event = {{
-                                    code: {event_code_enum}.TASK_CANCELLED,
-                                    payload0: 0,
-                                    payload1: 0,
-                                }};
-                            }}
-
-                            wset.decrementNumWaiting();
-
-                            return event;
+                            return keepGoing;
                         }}
 
                         async yieldUntil(opts) {{
@@ -1148,9 +1180,8 @@ impl AsyncTaskIntrinsic {
 
                             const ready = readyFn();
                             if (ready && {global_async_determinism} === 'random') {{
-                                // const coinFlip = {coin_flip_fn}();
-                                // if (coinFlip) {{ return true }}
-                                return true;
+                                const coinFlip = {coin_flip_fn}();
+                                if (coinFlip) {{ return true }}
                             }}
 
                             const keepGoing = await this.immediateSuspend({{ cancellable, readyFn }});
@@ -1813,6 +1844,8 @@ impl AsyncTaskIntrinsic {
                 let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let waitable_set_class =
+                    Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass).name();
 
                 output.push_str(&format!(r#"
                     async function {driver_loop_fn}(args) {{
@@ -1856,10 +1889,13 @@ impl AsyncTaskIntrinsic {
                             throw new Error('invalid async return value, outside callback code range');
                         }}
 
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
                         let eventCode;
                         let index;
                         let result;
                         let asyncRes;
+                        let wset;
                         try {{
                             while (true) {{
                                 if (callbackCode !== 0) {{ componentState.exclusiveRelease(); }}
@@ -1872,6 +1908,7 @@ impl AsyncTaskIntrinsic {
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
+                                        // NOTE: if we've exited
                                         task.exit();
                                         return;
 
@@ -1896,7 +1933,6 @@ impl AsyncTaskIntrinsic {
                                         break;
 
                                     case 2: // WAIT for a given waitable set
-                                        const cstate = {get_or_create_async_state_fn}(componentIdx);
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
                                             componentIdx,
@@ -1905,11 +1941,18 @@ impl AsyncTaskIntrinsic {
                                             waitableSetRep,
                                             waitableSetTargets: cstate.handles.get(waitableSetRep).targets(),
                                         }});
-                                        asyncRes = await task.waitUntil({{
+
+                                        wset = cstate.handles.get(waitableSetRep);
+                                        if (!(wset instanceof {waitable_set_class})) {{
+                                            throw new Error(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
+                                        }}
+
+                                        asyncRes = await wset.waitUntil({{
                                             readyFn: () => !componentState.isExclusivelyLocked(),
-                                            waitableSetRep,
+                                            task,
                                             cancellable: true,
                                         }});
+
                                         {debug_log_fn}('[{driver_loop_fn}()] finished waiting for event', {{
                                             fnName,
                                             componentIdx,
@@ -1918,6 +1961,7 @@ impl AsyncTaskIntrinsic {
                                             waitableSetRep,
                                             asyncRes,
                                         }});
+
                                         break;
 
                                     default:

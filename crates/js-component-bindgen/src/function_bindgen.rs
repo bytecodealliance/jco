@@ -394,30 +394,7 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentTask,
         ));
-        let global_task_map = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
-        ));
         let component_instance_idx = self.canon_opts.instance.as_u32();
-
-        // If we're within an async function, wait for all top level previous tasks to finish before running
-        // to ensure that guests do not try to run two tasks at the same time.
-        if is_async && self.requires_async_porcelain {
-            uwriteln!(
-                self.src,
-                r#"
-                // All other tasks must finish before we can start this one
-                const taskMetas = {global_task_map}.get({component_instance_idx});
-                if (taskMetas) {{
-                    const taskPromises = taskMetas
-                        .filter(mt => mt.componentIdx === {component_instance_idx})
-                        .map(mt => mt.task)
-                        .filter(t => !t.getParentSubtask())
-                        .map(t => t.exitPromise());
-                    await Promise.allSettled(taskPromises);
-                }}
-                "#,
-            );
-        }
 
         uwriteln!(
             self.src,
@@ -1593,6 +1570,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let component_instance_idx = self.canon_opts.instance.as_u32();
 
+                // At first, use the global current task metadata, in case we are executing from
+                // inside a with-global-current-task wrapper
+                let get_global_current_task_meta_fn =
+                    self.intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_}, @ enter)');",
@@ -1647,7 +1629,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     }};
 
                     taskCreation: {{
-                        parentTask = {current_task_get_fn}({component_instance_idx})?.task;
+                        parentTask = {current_task_get_fn}(
+                            {component_instance_idx},
+                            {get_global_current_task_meta_fn}({component_instance_idx})?.taskID,
+                        )?.task;
+
                         if (!parentTask) {{
                             createTask();
                             break taskCreation;
