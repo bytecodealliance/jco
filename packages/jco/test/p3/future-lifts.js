@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { suite, test, assert, beforeAll, beforeEach, afterAll, expect } from "vitest";
+import { suite, test, assert, beforeAll, afterAll, expect } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
 import {
@@ -44,20 +44,17 @@ suite("future<T> lifts", () => {
 
         esModule = setupRes.esModule;
         cleanup = setupRes.cleanup;
-        //console.log("OUTPUT DIR", setupRes.outputDir);
-    });
 
-    afterAll(async () => {
-        await cleanup();
-    });
-
-    beforeEach(async () => {
         instance = await esModule.instantiate(undefined, {
             ...new WASIShim().getImportObject(),
             "jco:test-components/resources": {
                 ExampleResource,
             },
         });
+    });
+
+    afterAll(async () => {
+        await cleanup();
     });
 
     test.concurrent("bool", async () => {
@@ -435,7 +432,10 @@ suite("future<T> lifts", () => {
 
         let numDisposed = 0;
         for (const resource of resources) {
-            assert.strictEqual(resource.getId(), await resource.getIdAsync());
+            // sync functions can fail to lock the component state if run too soon after
+            // async functions
+            let expectedID = resource.getId();
+            assert.strictEqual(expectedID, await resource.getIdAsync());
             assert.doesNotThrow(() => resource[disposeSymbol]());
             numDisposed += 1;
             assert.strictEqual(

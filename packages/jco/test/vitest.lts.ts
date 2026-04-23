@@ -2,7 +2,7 @@ import { availableParallelism } from "node:os";
 
 import { defineConfig } from "vitest/config";
 
-const DEFAULT_TIMEOUT_MS = 1000 * 60 * 1; // 1m
+const DEFAULT_TIMEOUT_MS = 1000 * 60 * 1; // 60s
 const CI_DEFAULT_TIMEOUT_MS = 1000 * 60 * 3; // 1m
 
 const REPORTERS = process.env.GITHUB_ACTIONS ? ["verbose", "github-actions"] : ["verbose"];

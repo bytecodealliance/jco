@@ -1,13 +1,13 @@
 import { join } from "node:path";
 
-import { suite, test, assert, beforeAll, beforeEach, afterAll, expect } from "vitest";
+import { suite, test, assert, beforeAll, afterAll, expect } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, checkStreamValues } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("stream<T> lifts", () => {
-    let esModule, cleanup, instance;
+    let esModule, cleanup, getInstance, instance;
 
     class ExampleResource {
         #id;
@@ -39,22 +39,33 @@ suite("stream<T> lifts", () => {
 
         esModule = setupRes.esModule;
         cleanup = setupRes.cleanup;
-    });
 
-    afterAll(async () => {
-        await cleanup();
-    });
-
-    beforeEach(async () => {
+        // We use a completely shared instance because sibling re-entrance
+        // is mediated by code in task.enter()
         instance = await esModule.instantiate(undefined, {
             ...new WASIShim().getImportObject(),
             "jco:test-components/resources": {
                 ExampleResource,
             },
         });
+        getInstance = () => Promise.resolve(instance);
+
+        // NOTE: To use an explicitly new instance per-test (more stable), uncomment the lines below
+        //
+        // getInstance = async () => esModule.instantiate(undefined, {
+        //     ...new WASIShim().getImportObject(),
+        //     "jco:test-components/resources": {
+        //         ExampleResource,
+        //     },
+        // });
+    });
+
+    afterAll(async () => {
+        await cleanup();
     });
 
     test.concurrent("bool", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamBool, AsyncFunction);
         const vals = [true, false];
         const stream = await instance["jco:test-components/get-stream-async"].getStreamBool(vals);
@@ -62,6 +73,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("u8/s8", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU8, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS8, AsyncFunction);
 
@@ -89,6 +101,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("u16/s16", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU16, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS16, AsyncFunction);
 
@@ -102,6 +115,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("u32/s32", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU32, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS32, AsyncFunction);
 
@@ -115,6 +129,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("u64/s64", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU64, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS64, AsyncFunction);
 
@@ -142,6 +157,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("f32/f64", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamF64, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamF32, AsyncFunction);
 
@@ -169,6 +185,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("string", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamString, AsyncFunction);
 
         let vals = ["hello", "world", "!"];
@@ -177,6 +194,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("record", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamRecord, AsyncFunction);
 
         let vals = [
@@ -189,6 +207,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("variant", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariant, AsyncFunction);
 
         const vals = [
@@ -238,6 +257,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("tuple", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamTuple, AsyncFunction);
 
         let vals = [
@@ -250,6 +270,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("flags", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamFlags, AsyncFunction);
 
         let vals = [
@@ -262,6 +283,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("enum", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamEnum, AsyncFunction);
 
         let vals = ["first", "second", "third"];
@@ -270,6 +292,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("option<string>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamOptionString, AsyncFunction);
 
         let vals = ["present string", null];
@@ -288,6 +311,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("list<u8>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListU8, AsyncFunction);
         let vals = [[0x01, 0x02, 0x03, 0x04, 0x05], new Uint8Array([0x05, 0x04, 0x03, 0x02, 0x01]), []];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamListU8(vals);
@@ -309,6 +333,7 @@ suite("stream<T> lifts", () => {
     // TODO(fix): add tests for optimized UintXArrays (js_array_ty)
 
     test.concurrent("list<string>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListString, AsyncFunction);
         let vals = [["first", "second", "third"], []];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamListString(vals);
@@ -316,6 +341,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("list<u32, 5>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamFixedListU32, AsyncFunction);
         let vals = [
             [1, 2, 3, 4, 5],
@@ -327,6 +353,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("list<record>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListRecord, AsyncFunction);
         let vals = [
             [{ id: 1, idStr: "one" }],
@@ -346,6 +373,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("result<string>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamResultString, AsyncFunction);
         let vals = [
             { tag: "ok", val: "present string" },
@@ -356,20 +384,21 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("example-resource", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn, AsyncFunction);
         const disposeSymbol = Symbol.dispose || Symbol.for("dispose");
 
         let vals = [2, 1, 0];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwn(vals);
         const resources = [];
-        for (const expectedResourceId of vals) {
-            const { value: resource, done } = await stream.next();
-            assert.isFalse(done);
+        const retrievedIds = [];
+        for await (const resource of stream) {
             assert.isNotNull(resource);
             assert.instanceOf(resource, instance["jco:test-components/get-stream-async"].ExampleGuestResource);
-            assert.strictEqual(resource.getId(), expectedResourceId);
+            retrievedIds.push(resource.getId());
             resources.push(resource);
         }
+        assert.deepEqual(retrievedIds, vals);
 
         const finished = await stream.next();
         assert.isTrue(finished.done);
@@ -385,7 +414,10 @@ suite("stream<T> lifts", () => {
 
         let numDisposed = 0;
         for (const resource of resources) {
-            assert.strictEqual(resource.getId(), await resource.getIdAsync());
+            // NOTE: if runing async operations and sync operations too quickly, the sync operation *can*
+            // fail to lock the component async state.
+            let expectedID = resource.getId();
+            assert.strictEqual(expectedID, await resource.getIdAsync());
             assert.doesNotThrow(() => resource[disposeSymbol]());
             numDisposed += 1;
             assert.strictEqual(
@@ -396,6 +428,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("example-resource#get-id", async () => {
+        const instance = await getInstance();
         assert.instanceOf(
             instance["jco:test-components/get-stream-async"].getStreamExampleResourceOwnAttr,
             AsyncFunction,
@@ -412,6 +445,7 @@ suite("stream<T> lifts", () => {
     });
 
     test.concurrent("stream<string>", async () => {
+        const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamStreamString, AsyncFunction);
         let vals = ["first", "third", "second"];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamStreamString(vals);
