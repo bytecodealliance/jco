@@ -1306,8 +1306,7 @@ impl AsyncTaskIntrinsic {
                             this.#state = {task_class}.State.PENDING_CANCEL;
                             const cancelled = this.deliverPendingCancel({{ cancellable: true }});
 
-// TODO: do cleanup here to reset the machinery so we can run again?
-
+                            // TODO: do cleanup here to reset the machinery so we can run again?
 
                             this.cancel({{ error: taskErr }});
                         }}
