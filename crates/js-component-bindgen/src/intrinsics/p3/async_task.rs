@@ -994,7 +994,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async runCallbackFn(...args) {{
-                            if (!this.#callbackFn) {{ throw new Error('on callback function has been set for task'); }}
+                            if (!this.#callbackFn) {{ throw new Error('no callback function has been set for task'); }}
                             return {with_global_current_task_meta_async_fn}({{
                                 taskID: this.#id,
                                 componentIdx: this.#componentIdx,
@@ -1350,7 +1350,7 @@ impl AsyncTaskIntrinsic {
                             }}
                         }}
 
-                        exit() {{
+                        exit(args) {{
                             {debug_log_fn}('[{task_class}#exit()]', {{
                                 componentIdx: this.#componentIdx,
                                 taskID: this.#id,
@@ -1385,8 +1385,10 @@ impl AsyncTaskIntrinsic {
                             if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
 
                             // Exempt the host from exclusive lock check
-                            if (this.#componentIdx !== -1 && this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
-                               throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked`);
+                            if (this.#componentIdx !== -1 && !args?.skipExclusiveLockCheck) {{
+                                if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
+                                    throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked`);
+                                }}
                             }}
 
                             state.exclusiveRelease();
@@ -1908,8 +1910,7 @@ impl AsyncTaskIntrinsic {
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
-                                        // NOTE: if we've exited
-                                        task.exit();
+                                        task.exit({{ skipExclusiveLockCheck: true }});
                                         return;
 
                                     case 1: // YIELD

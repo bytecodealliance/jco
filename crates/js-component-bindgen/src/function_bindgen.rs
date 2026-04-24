@@ -280,6 +280,9 @@ impl FunctionBindgen<'_> {
     /// let ret;
     /// ```
     ///
+    /// This function returns as a first tuple parameter a list of
+    /// variables that should be created via let statements beforehand.
+    ///
     /// # Arguments
     ///
     /// * `amt` - number of results
@@ -290,35 +293,37 @@ impl FunctionBindgen<'_> {
         amt: usize,
         results: &mut Vec<String>,
         is_async: bool,
-    ) -> String {
+    ) -> (String, String) {
         let mut s = String::new();
+        let mut vars_init = String::new();
         match amt {
             0 => {
                 // Async functions with no returns still return async code,
                 // which will be used as the initial callback result going into the async driver
                 if is_async {
-                    uwrite!(s, "let ret = ")
-                } else {
-                    uwrite!(s, "let ret;")
+                    uwrite!(s, "ret = ")
                 }
+                uwriteln!(vars_init, "let ret;");
             }
             1 => {
-                uwrite!(s, "let ret = ");
+                uwrite!(s, "ret = ");
                 results.push("ret".to_string());
+                uwriteln!(vars_init, "let ret;");
             }
             n => {
-                uwrite!(s, "var [");
+                uwrite!(s, "[");
                 for i in 0..n {
                     if i > 0 {
                         uwrite!(s, ", ");
                     }
-                    uwrite!(s, "ret{}", i);
+                    uwrite!(s, "ret{i}");
                     results.push(format!("ret{i}"));
+                    uwriteln!(vars_init, "let ret;");
                 }
                 uwrite!(s, "] = ");
             }
         }
-        s
+        (vars_init, s)
     }
 
     fn bitcast(&mut self, cast: &Bitcast, op: &str) -> String {
@@ -1485,13 +1490,31 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 // along with the code to perofrm the call
                 let sig_results_length = sig.results.len();
-                let s = self.generate_result_assignment_lhs(sig_results_length, results, is_async);
+                let (vars_init, assignment_lhs) =
+                    self.generate_result_assignment_lhs(sig_results_length, results, is_async);
 
-                let (call_prefix, call_wrapper) = if self.requires_async_porcelain | self.is_async {
-                    ("await ", Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name())
-                } else {
-                    ("", Intrinsic::WithGlobalCurrentTaskMetaFn.name())
-                };
+                let (call_prefix, call_wrapper, call_err_cleanup) =
+                    if self.requires_async_porcelain | self.is_async {
+                        (
+                            "await ",
+                            Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
+                            r#"
+                              task.reject(err);
+                              task.exit();
+                              return task.completionPromise();
+                            "#,
+                        )
+                    } else {
+                        (
+                            "",
+                            Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
+                            r#"
+                              task.reject(err);
+                              task.exit();
+                              throw err;
+                            "#,
+                        )
+                    };
 
                 let args = if self.asmjs {
                     let split_i64 =
@@ -1536,12 +1559,18 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(
                     self.src,
-                    r#"{s} {call_prefix} {call_wrapper}({{
-                              taskID: task.id(),
-                              componentIdx: task.componentIdx(),
-                              fn: () => {callee_invoke},
-                          }});
-                          "#,
+                    r#"
+                      {vars_init}
+                      try {{
+                           {assignment_lhs} {call_prefix} {call_wrapper}({{
+                               taskID: task.id(),
+                               componentIdx: task.componentIdx(),
+                               fn: () => {callee_invoke},
+                            }});
+                      }} catch (err) {{
+                          {call_err_cleanup}
+                      }}
+                    "#,
                 );
 
                 if self.tracing_enabled {
@@ -1687,17 +1716,34 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // Build the JS expression that calls the callee
-                let (call_prefix, call_wrapper) = if is_async || self.requires_async_porcelain {
-                    ("await ", Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name())
-                } else {
-                    ("", Intrinsic::WithGlobalCurrentTaskMetaFn.name())
-                };
+                let (call_prefix, call_wrapper, call_err_cleanup) =
+                    if is_async || self.requires_async_porcelain {
+                        (
+                            "await ",
+                            Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
+                            r#"
+                              task.reject(err);
+                              task.exit();
+                              return task.completionPromise();
+                            "#,
+                        )
+                    } else {
+                        (
+                            "",
+                            Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
+                            r#"
+                              task.reject(err);
+                              task.exit();
+                              throw err;
+                            "#,
+                        )
+                    };
                 let call = format!(
                     r#"{call_prefix} {call_wrapper}({{
-                             componentIdx: task.componentIdx(),
-                             taskID: task.id(),
-                             fn: () => {callee_fn_js}({callee_args_js})
-                         }})
+                              componentIdx: task.componentIdx(),
+                              taskID: task.id(),
+                              fn: () => {callee_fn_js}({callee_args_js}),
+                          }})
                         "#,
                 );
 
@@ -1705,12 +1751,22 @@ impl Bindgen for FunctionBindgen<'_> {
                     // If configured to do *no* error handling at all or throw
                     // error objects directly, we can simply perform the call
                     ErrHandling::None | ErrHandling::ThrowResultErr => {
-                        let s = self.generate_result_assignment_lhs(
+                        let (vars_init, assignment_lhs) = self.generate_result_assignment_lhs(
                             fn_wasm_result_count,
                             results,
                             is_async,
                         );
-                        uwriteln!(self.src, "{s}{call};");
+                        uwriteln!(
+                            self.src,
+                            r#"
+                              {vars_init}
+                              try {{
+                                 {assignment_lhs}{call};
+                              }} catch (err) {{
+                                  {call_err_cleanup}
+                              }}
+                            "#
+                        );
                     }
                     // If configured to force all thrown errors into result objects,
                     // then we add a try/catch around the call
