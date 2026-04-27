@@ -644,7 +644,8 @@ impl Intrinsic {
                                         storagePtr: startPtr,
                                         componentIdx: this.#componentIdx,
                                         stringEncoding: this.#elemMeta.stringEncoding,
-                                        realloc: this.#elemMeta.reallocFn,
+                                        realloc: this.#elemMeta.getReallocFn?.(),
+                                        getReallocFn: this.#elemMeta.getReallocFn,
                                     }}
                                     for (const v of values) {{
                                         lowerCtx.vals = [v];
@@ -1401,7 +1402,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::SymbolResourceRep,
             &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenHostInjectFn),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+        ])
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::IsFutureLowerableObject),
+            &Intrinsic::SymbolResourceRep,
+            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
             &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
         ])
     }
@@ -1532,6 +1548,15 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWritableEndClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureReadableEndClass),
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncFuture(
+        AsyncFutureIntrinsic::FutureNewFromLift,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
         ]);
     }
 

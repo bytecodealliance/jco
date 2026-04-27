@@ -2114,7 +2114,8 @@ impl AsyncTaskIntrinsic {
                            callMetadata: {{
                                memoryIdx,
                                memory,
-                               realloc: getReallocFn(),
+                               realloc: getReallocFn?.(),
+                               getReallocFn,
                                resultPtr: params[0],
                                lowers: resultLowerFns,
                                stringEncoding,
@@ -2340,7 +2341,8 @@ impl AsyncTaskIntrinsic {
                            callMetadata: {{
                                memoryIdx,
                                memory,
-                               realloc: getReallocFn(),
+                               realloc: getReallocFn?.(),
+                               getReallocFn,
                                resultPtr: params[0],
                                lowers: resultLowerFns,
                                stringEncoding,

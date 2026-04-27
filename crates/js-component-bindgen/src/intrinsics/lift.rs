@@ -393,7 +393,7 @@ impl LiftIntrinsic {
                         let val;
 
                         if (ctx.useDirectParams) {{
-                            if (params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
+                            if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
                             return [val, ctx];
@@ -733,11 +733,6 @@ impl LiftIntrinsic {
                     function {lift_flat_record_fn}(keysAndLiftFns) {{
                         return function {lift_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_record_fn}()] args', {{ ctx }});
-
-                            if (ctx.useDirectParams) {{
-                                ctx.storagePtr = ctx.params[0];
-                                ctx.params = ctx.params.slice(1);
-                            }}
 
                             const res = {{}};
                             for (const [key, liftFn, _size32, _align32] of keysAndLiftFns) {{
@@ -1233,28 +1228,27 @@ impl LiftIntrinsic {
                 output.push_str(&format!(r#"
                     function {lift_flat_error_fn}(errCtxTableIdx, ctx) {{
                         {debug_log_fn}('[{lift_flat_error_fn}()] ctx', ctx);
-                        const {{ useDirectParams, params, componentIdx }} = ctx;
 
                         let val;
                         let table;
-                        if (useDirectParams) {{
-                            if (params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
+                        if (ctx.useDirectParams) {{
+                            if (ctx.params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                            table = {get_err_ctx_local_table_fn}(componentIdx, errCtxTableIdx);
+                            table = {get_err_ctx_local_table_fn}(ctx.componentIdx, errCtxTableIdx);
                         }} else {{
                             throw new Error('indirect flat lift for error-contexts not yet implemented!');
                         }}
 
                         let handle = table.get(val);
                         if (handle === undefined) {{
-                            throw new Error(`missing  error ctx (handle [${{val}}], component [${{componentIdx}}], error context table [${{errCtxTableIdx}}])`);
+                            throw new Error(`missing  error ctx (handle [${{val}}], component [${{ctx.componentIdx}}], error context table [${{errCtxTableIdx}}])`);
                         }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}(ctx.componentIdx);
                         const errCtx = cstate.handles.get(handle);
                         if (!errCtx || errCtx.globalRep === undefined || errCtx.refCount === undefined) {{
-                            throw new Error(`malformed error context (handle [${{handle}}], component [${{componentIdx}}])`);
+                            throw new Error(`malformed error context (handle [${{handle}}], component [${{ctx.componentIdx}}])`);
                         }}
 
                         errCtx.refCount -= 1;

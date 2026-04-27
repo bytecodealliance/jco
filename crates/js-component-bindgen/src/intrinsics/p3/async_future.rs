@@ -200,6 +200,18 @@ pub enum AsyncFutureIntrinsic {
     ///
     /// See [`Trampoline::FutureTransfer`]
     FutureTransfer,
+
+    /// Function that generates a host injection function for external futures
+    ///
+    /// This is usually used when lowering external `Promise<T>`s into components, creating
+    /// readable ends as necessary.
+    ///
+    /// The generated host injection function is generally called right when a component
+    /// attempts to read (in doing so, "injecting" a write before the component read).
+    GenFutureHostInjectFn,
+
+    /// Function to check whether a JS object can be used as a stream
+    IsFutureLowerableObject,
 }
 
 impl AsyncFutureIntrinsic {
@@ -226,6 +238,8 @@ impl AsyncFutureIntrinsic {
             Self::GlobalFutureMap.name(),
             Self::GlobalFutureTableMap.name(),
             Self::InternalFutureClass.name(),
+            Self::GenFutureHostInjectFn.name(),
+            Self::IsFutureLowerableObject.name(),
         ]
     }
 
@@ -248,6 +262,8 @@ impl AsyncFutureIntrinsic {
             Self::GlobalFutureTableMap => "FUTURE_TABLES",
             Self::HostFutureClass => "HostFuture",
             Self::InternalFutureClass => "InternalFuture",
+            Self::GenFutureHostInjectFn => "_genFutureHostInjectFn",
+            Self::IsFutureLowerableObject => "_isFutureLowerableObject",
         }
     }
 
@@ -289,7 +305,6 @@ impl AsyncFutureIntrinsic {
                 let host_future_class_name = self.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(
                     r#"
@@ -340,11 +355,7 @@ impl AsyncFutureIntrinsic {
                                throw new Error(`missing future [${{this.#futureEndWaitableIdx}}] (table [${{this.#futureTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
 
-                            this.#userFuture = {promise_with_resolvers_fn}();
-
-                            this.#userFuture.reject(new Error("TODO"));
-
-                            return this.#userFuture.promise;
+                            return futureEnd.promise();
                         }}
                     }}
                     "#
@@ -519,7 +530,7 @@ impl AsyncFutureIntrinsic {
                                   return;
                               }}
 
-                              if (componentIdx === meta.componentIdx && !this.#elemMeta.isNoneOrNumberType) {{
+                              if (componentIdx === meta.componentIdx && componentIdx !== -1 && !this.#elemMeta.isNoneOrNumberType) {{
                                   throw new Error('same-component future reads not allowed for non-numeric types');
                               }}
 
@@ -558,7 +569,7 @@ impl AsyncFutureIntrinsic {
                                   return;
                               }}
 
-                              if (componentIdx === meta.componentIdx && !this.#elemMeta.isNoneOrNumberType) {{
+                              if (componentIdx === meta.componentIdx && componentIdx !== -1 && !this.#elemMeta.isNoneOrNumberType) {{
                                   throw new Error('same-component future writes not allowed for non-numeric types');
                               }}
 
@@ -592,6 +603,10 @@ impl AsyncFutureIntrinsic {
 
                                   if (this.#elemMeta.stringEncoding === undefined && stringEncoding) {{
                                       this.#elemMeta.stringEncoding = stringEncoding;
+                                  }}
+
+                                  if (args.getReallocFn && this.#elemMeta.getReallocFn === undefined) {{
+                                     this.#elemMeta.getReallocFn = args.getReallocFn;
                                   }}
 
                                   const elemMeta = this.#elemMeta;
@@ -643,11 +658,25 @@ impl AsyncFutureIntrinsic {
                                       this.setPendingEvent(() => futureEvent(res));
                                   }};
 
+
+                                  // TODO: before performing this read, if we're dealing with a host-controlled
+                                  // future, then we should inject a write, but we can't wait for it to complete
+                                  // as we must do the rendesvous read below for the write to complete.
+                                  let injectedWritePromise;
+                                  if (this.#hostInjectFn) {{
+                                      injectedWritePromise = this.#hostInjectFn({{ count: 1 }});
+                                  }}
+
                                   await this._read({{
                                       buffer,
                                       onCopyDoneFn,
                                       componentIdx,
                                   }});
+
+                                  if (injectedWritePromise) {{
+                                      const cleanupFn = await injectedWritePromise;
+                                      cleanupFn();
+                                  }}
 
                                   return {{ buffer }};
                               }}
@@ -663,6 +692,7 @@ impl AsyncFutureIntrinsic {
                                   const {{
                                       componentIdx,
                                       stringEncoding,
+                                      getReallocFn,
                                       isAsync,
                                       memory,
                                       realloc,
@@ -672,6 +702,10 @@ impl AsyncFutureIntrinsic {
 
                                   if (this.#elemMeta.stringEncoding === undefined && stringEncoding) {{
                                       this.#elemMeta.stringEncoding = stringEncoding;
+                                  }}
+
+                                  if (args.getReallocFn && this.#elemMeta.getReallocFn === undefined) {{
+                                      this.#elemMeta.getReallocFn = getReallocFn;
                                   }}
 
                                   const elemMeta = this.#elemMeta;
@@ -792,17 +826,19 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               async hostWrite(args) {{
-                                  const {{ stringEncoding, value }} = args;
+                                  const {{ stringEncoding, value, getReallocFn }} = args;
 
                                   const {{ buffer }} = await this.guestWrite({{
                                       stringEncoding,
+                                      getReallocFn,
+                                      // TODO: support sync host writes
                                       isAsync: true,
                                       data: [value],
+                                      componentIdx: -1,
                                       componentIdx: -1,
                                   }});
 
                                   if (!this.hasPendingEvent()) {{
-                                      if (!isAsync) {{ throw new Error("all host writes are async"); }}
                                       this.setCopyState({future_end_class}.CopyState.ASYNC_COPYING);
 
                                        // Wait for the write to complete
@@ -874,6 +910,7 @@ impl AsyncFutureIntrinsic {
                         #hostInjectFn;
                         #elemMeta;
                         #handle;
+                        #promise;
 
                         target;
 
@@ -889,8 +926,6 @@ impl AsyncFutureIntrinsic {
 
                             this.#hostInjectFn = args.hostInjectFn;
                             this.#isHostOwned = args.hostOwned;
-
-                            this.#hostInjectFn = args.hostInjectFn;
                         }}
 
                         {type_getters}
@@ -919,13 +954,22 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         promise() {{
+                            if (this.#promise) {{ return this.#promise; }}
                             // NOTE: we return a "thenable" here to ensure that simply lifting the future does
                             // not trigger a host read.
-                            return {{
+
+                            let readPromise = null;
+                            this.#promise = {{
                                 then: (resolve, reject) => {{
-                                    this.hostRead({{ stringEncoding: 'utf8' }}).then(resolve, reject);
+                                    if (readPromise) {{
+                                        readPromise.then(resolve, reject);
+                                        return;
+                                    }}
+                                    readPromise = this.hostRead({{ stringEncoding: 'utf8' }});
+                                    readPromise.then(resolve, reject);
                                  }}
                              }};
+                            return this.#promise;
                         }}
 
                         cancel() {{
@@ -1174,7 +1218,8 @@ impl AsyncFutureIntrinsic {
                             componentIdx,
                             stringEncoding,
                             memory: getMemoryFn(),
-                            realloc: getReallocFn(),
+                            realloc: getReallocFn?.(),
+                            getReallocFn,
                             ptr,
                         }});
 
@@ -1268,7 +1313,6 @@ impl AsyncFutureIntrinsic {
                 "#));
             }
 
-            // TODO: fill in future class impl (check for matching element types)
             Self::FutureDropReadable | Self::FutureDropWritable => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_drop_fn = self.name();
@@ -1313,6 +1357,67 @@ impl AsyncFutureIntrinsic {
                             params,
                         }});
                     }}
+                    "#
+                ));
+            }
+
+            Self::GenFutureHostInjectFn => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let gen_host_inject_fn = self.name();
+
+                uwriteln!(
+                    output,
+                    r#"
+                      function {gen_host_inject_fn}(genArgs) {{
+                          const {{ promise, hostWriteEnd, stringEncoding, getReallocFn }} = genArgs;
+
+                          let done;
+
+                          return async function generateFutureHostInject(args) {{
+                              let {{ count }} = args;
+                              if (count !== 1) {{ throw new Error('invalid count'); }}
+
+                              // Futures should only be completed once
+                              if (done) {{
+                                  return () => {{ throw new Error('cannot inject write: future already completed'); }}
+                              }}
+
+                              // The host *must* write something to this channel before closing it
+                              if (hostWriteEnd.isDoneState()) {{
+                                  return () => {{ throw new Error('cannot inject write: host must write to future before closing'); }}
+                              }}
+
+                              try {{
+                                  const value = await promise;
+                                  await hostWriteEnd.hostWrite({{ stringEncoding, value, getReallocFn }});
+                              }} catch (err) {{
+                                  {debug_log_fn}("failed to inject host write", err);
+                                  throw new Error("cannot inject write: promise failed");
+                              }}
+
+                              hostWriteEnd.getPendingEvent();
+                              hostWriteEnd.drop();
+
+                              return () => {{
+                                  // After the write is finished, we consume the event that was generated
+                                  // by the just-in-time write (and the subsequent read), if one was generated
+                                  if (hostWriteEnd.hasPendingEvent()) {{ hostWriteEnd.getPendingEvent(); }}
+                              }};
+                          }};
+                      }}
+                    "#
+                );
+            }
+
+            Self::IsFutureLowerableObject => {
+                let is_future_lowerable_object = self.name();
+                output.push_str(&format!(
+                    r#"
+                      function {is_future_lowerable_object}(obj) {{
+                          if (typeof obj !== 'object') {{ return false; }}
+                          return obj instanceof Promise
+                               || 'then' in obj && typeof obj.then === 'function';
+                      }}
                     "#
                 ));
             }

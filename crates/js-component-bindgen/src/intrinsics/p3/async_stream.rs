@@ -222,7 +222,7 @@ pub enum AsyncStreamIntrinsic {
     /// This is usually used when lowering external streams' readable ends into a component,
     /// and the generated function is generally called right when a component attempts to read
     /// (in doing so, "injecting" a write before the component read).
-    GenHostInjectFn,
+    GenStreamHostInjectFn,
 
     /// Function that generates a function (the "read function") lowerable stream object
     GenReadFnFromLowerableStream,
@@ -260,7 +260,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamCancelRead => "streamCancelRead",
             Self::StreamCancelWrite => "streamCancelWrite",
             Self::IsStreamLowerableObject => "_isStreamLowerableObject",
-            Self::GenHostInjectFn => "_genHostInjectFn",
+            Self::GenStreamHostInjectFn => "_genStreamHostInjectFn",
             Self::GenReadFnFromLowerableStream => "_genReadFnFromLowerableStream",
         }
     }
@@ -698,8 +698,8 @@ impl AsyncStreamIntrinsic {
                                  throw new Error(`inconsistent string encoding (previously [${{this.#elemMeta.stringEncoding}}], now [${{stringEncoding}}])`);
                              }}
 
-                             if (this.#elemMeta.reallocFn === undefined && reallocFn) {{
-                                this.#elemMeta.reallocFn = reallocFn;
+                             if (args.getReallocFn && this.#elemMeta.getReallocFn === undefined) {{
+                                 this.#elemMeta.getReallocFn = args.getReallocFn;
                              }}
 
                              if (this.isDropped()) {{
@@ -1608,7 +1608,8 @@ impl AsyncStreamIntrinsic {
                             eventCode: {event_code},
                             componentIdx,
                             stringEncoding,
-                            reallocFn: getReallocFn(),
+                            realloc: getReallocFn?.(),
+                            getReallocFn,
                         }});
 
                         return result;
@@ -1853,7 +1854,7 @@ impl AsyncStreamIntrinsic {
                 ));
             }
 
-            Self::GenHostInjectFn => {
+            Self::GenStreamHostInjectFn => {
                 let gen_host_inject_fn = self.name();
 
                 output.push_str(&format!(
@@ -1869,7 +1870,7 @@ impl AsyncStreamIntrinsic {
 
                           let done = false;
 
-                          return async (args) => {{
+                          return async function generatedStreamHostInject(args) {{
                               let {{ count }} = args;
                               if (count < 0) {{ throw new Error('invalid count'); }}
                               if (count === 0) {{ return doNothingFn; }}

@@ -498,7 +498,7 @@ impl LowerIntrinsic {
                     function {lower_flat_f64_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_f64_fn}()] args', {{ ctx }});
 
-                        if (vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
+                        if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
@@ -994,7 +994,7 @@ impl LowerIntrinsic {
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream)
                         .name();
                 let gen_host_inject_fn =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenHostInjectFn).name();
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn).name();
                 let lower_u32_fn = Self::LowerFlatU32.name();
 
                 output.push_str(&format!(

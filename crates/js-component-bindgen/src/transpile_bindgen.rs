@@ -1439,7 +1439,7 @@ impl<'a> Instantiator<'a, '_> {
                         let v = v.as_u32().to_string();
                         (v.to_string(), format!("() => realloc{v}"))
                     }
-                    None => ("null".into(), "() => null".into()),
+                    None => ("undefined".into(), "undefined".into()),
                 };
 
                 let component_instance_id = instance.as_u32();
@@ -1519,7 +1519,7 @@ impl<'a> Instantiator<'a, '_> {
                         let v = v.as_u32().to_string();
                         (v.to_string(), format!("() => realloc{v}"))
                     }
-                    None => ("null".into(), "() => null".into()),
+                    None => ("undefined".into(), "undefined".into()),
                 };
 
                 let string_encoding = string_encoding_js_literal(string_encoding);
@@ -1778,7 +1778,7 @@ impl<'a> Instantiator<'a, '_> {
                         idx.as_u32().to_string(),
                         format!("() => realloc{}", idx.as_u32()),
                     ),
-                    None => ("null".into(), "() => null".to_string()),
+                    None => ("undefined".into(), "undefined".to_string()),
                 };
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
@@ -2183,7 +2183,7 @@ impl<'a> Instantiator<'a, '_> {
                     };
                 let (memory_idx_js, memory_expr_js) =
                     memory_exprs.unwrap_or_else(|| ("null".into(), "() => null".into()));
-                let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "() => null".into());
+                let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "undefined".into());
                 let string_encoding_js = string_encoding_js_literal(&canon_opts.string_encoding);
 
                 // Build the lower import call that will wrap the actual trampoline

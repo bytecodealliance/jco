@@ -4,8 +4,9 @@ use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
-    CanonicalOptions, InterfaceType, ResourceIndex, TypeComponentLocalErrorContextTableIndex,
-    TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
+    CanonicalOptions, CanonicalOptionsDataModel, InterfaceType, LinearMemoryOptions, ResourceIndex,
+    TypeComponentLocalErrorContextTableIndex, TypeFutureTableIndex, TypeResourceTableIndex,
+    TypeStreamTableIndex,
 };
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
@@ -2685,19 +2686,172 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(item.clone());
             }
 
-            Instruction::FutureLower { .. } => {
-                // TODO: convert this return of the lifted Future:
-                //
-                // ```
-                //     return BigInt(writeEndWaitableIdx) << 32n | BigInt(readEndWaitableIdx);
-                // ```
-                //
-                // Into a component-local Future instance
-                //
+            Instruction::FutureLower { ty, .. } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let gen_future_host_inject_fn = self.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::GenFutureHostInjectFn,
+                ));
+                let is_future_lowerable_object_fn = self.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::IsFutureLowerableObject,
+                ));
+
+                let component_idx = self.canon_opts.instance.as_u32();
+
                 let future_arg = operands
                     .first()
                     .expect("unexpectedly missing ErrorContextLower arg");
-                results.push(future_arg.clone());
+
+                // Build the lowering function for the type produced by the future
+                let type_id = &crate::dealias(self.resolve, *ty);
+                let ResourceTable {
+                    imported: true,
+                    data:
+                        ResourceData::Guest {
+                            extra:
+                                Some(ResourceExtraData::Future {
+                                    table_idx: future_table_idx_ty,
+                                    elem_ty,
+                                }),
+                            ..
+                        },
+                } = self
+                    .resource_map
+                    .get(type_id)
+                    .expect("missing resource mapping for future lower")
+                else {
+                    unreachable!("invalid resource table observed during future lower");
+                };
+                let future_table_idx = future_table_idx_ty.as_u32();
+
+                // Generate payload metadata ('elemMeta')
+                let (
+                    payload_type_name_js,
+                    lift_fn_js,
+                    lower_fn_js,
+                    payload_is_none,
+                    payload_is_numeric,
+                    payload_is_borrow,
+                    payload_is_async_value,
+                    payload_size32_js,
+                    payload_align32_js,
+                    payload_flat_count_js,
+                ) = match elem_ty {
+                    Some(PayloadTypeMetadata {
+                        ty: _,
+                        iface_ty,
+                        lift_js_expr,
+                        lower_js_expr,
+                        size32,
+                        align32,
+                        flat_count,
+                    }) => (
+                        format!("'{iface_ty:?}'"),
+                        lift_js_expr.as_str(),
+                        lower_js_expr.as_str(),
+                        "false",
+                        format!(
+                            "{}",
+                            matches!(
+                                iface_ty,
+                                InterfaceType::U8
+                                    | InterfaceType::U16
+                                    | InterfaceType::U32
+                                    | InterfaceType::U64
+                                    | InterfaceType::S8
+                                    | InterfaceType::S16
+                                    | InterfaceType::S32
+                                    | InterfaceType::S64
+                                    | InterfaceType::Float32
+                                    | InterfaceType::Float64
+                            )
+                        ),
+                        format!("{}", matches!(iface_ty, InterfaceType::Borrow(_))),
+                        format!(
+                            "{}",
+                            matches!(
+                                iface_ty,
+                                InterfaceType::Stream(_) | InterfaceType::Future(_)
+                            )
+                        ),
+                        size32.to_string(),
+                        align32.to_string(),
+                        flat_count.unwrap_or(0).to_string(),
+                    ),
+                    None => (
+                        "null".into(),
+                        "() => {{ throw new Error('no lift fn'); }}",
+                        "() => {{ throw new Error('no lower fn'); }}",
+                        "true",
+                        "false".into(),
+                        "false".into(),
+                        "false".into(),
+                        "null".into(),
+                        "null".into(),
+                        "0".into(),
+                    ),
+                };
+
+                // Retrieve the realloc fn if present, in case lowering fns need to allocate
+                //
+                // The realloc fn is saved on the element metadata which is passed through to
+                // stream end and underlying buffer
+                let get_realloc_fn_js = match self.canon_opts.data_model {
+                    CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                        realloc: Some(realloc_idx),
+                        ..
+                    }) => format!("() => realloc{}", realloc_idx.as_u32()),
+                    _ => "undefined".into(),
+                };
+
+                let tmp = self.tmp();
+                let lowered_future_waitable_idx = format!("futureWaitableIdx{tmp}");
+                uwriteln!(
+                    self.src,
+                    r#"
+                        if (!{is_future_lowerable_object_fn}({future_arg})) {{
+                            {debug_log_fn}('[Instruction::FutureLower] object is not a Promise/Thenable', {{ {future_arg} }});
+                            throw new Error('unrecognized future object (not Promise/Thenable)');
+                        }}
+
+                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx});
+                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx}]`); }}
+
+                        // TODO(feat): facilitate non utf8 string encoding for lowered futures
+                        const stringEncoding = 'utf8';
+
+                        const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = cstate{tmp}.createFuture({{
+                            tableIdx: {future_table_idx},
+                            elemMeta: {{
+                                liftFn: {lift_fn_js},
+                                lowerFn: {lower_fn_js},
+                                payloadTypeName: {payload_type_name_js},
+                                isNone: {payload_is_none},
+                                isNumeric: {payload_is_numeric},
+                                isBorrowed: {payload_is_borrow},
+                                isAsyncValue: {payload_is_async_value},
+                                flatCount: {payload_flat_count_js},
+                                align32: {payload_align32_js},
+                                size32: {payload_size32_js},
+                                stringEncoding,
+                                getReallocFn: {get_realloc_fn_js},
+                            }},
+                        }});
+
+                        const hostInjectFn = {gen_future_host_inject_fn}({{
+                            promise: {future_arg},
+                            stringEncoding,
+                            hostWriteEnd: hostWriteEnd{tmp},
+                        }});
+                        readEnd{tmp}.setHostInjectFn(hostInjectFn);
+
+                        const {lowered_future_waitable_idx} = readEnd{tmp}.waitableIdx();
+                    "#
+                );
+
+                results.push(lowered_future_waitable_idx);
             }
 
             Instruction::FutureLift { payload, ty } => {
@@ -2802,8 +2956,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
                 let gen_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
-                    AsyncStreamIntrinsic::GenHostInjectFn,
+                    AsyncStreamIntrinsic::GenStreamHostInjectFn,
                 ));
+
+                // TODO(???): A component could end up receiving a stream that it outputted,
+                // and the below would fail (imported: false)?
 
                 // Build the lowering function for the type produced by the stream
                 let type_id = &crate::dealias(self.resolve, *ty);
@@ -2896,6 +3053,18 @@ impl Bindgen for FunctionBindgen<'_> {
                     ),
                 };
 
+                // Retrieve the realloc fn if present, in case lowering fns need to allocate
+                //
+                // The realloc fn is saved on the element metadata which is passed through to
+                // stream end and underlying buffer
+                let get_realloc_fn_js = match self.canon_opts.data_model {
+                    CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                        realloc: Some(realloc_idx),
+                        ..
+                    }) => format!("() => realloc{}", realloc_idx.as_u32()),
+                    _ => "undefined".into(),
+                };
+
                 let tmp = self.tmp();
                 let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
                 uwriteln!(
@@ -2926,6 +3095,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 size32: {payload_size32_js},
                                 // TODO(feat): facilitate non utf8 string encoding for lowered streams
                                 stringEncoding: 'utf8',
+                                geReallocFn: {get_realloc_fn_js},
                             }},
                         }});
 
@@ -2952,6 +3122,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         const {lowered_stream_waitable_idx} = readEnd{tmp}.waitableIdx();
                     "#
                 );
+
                 results.push(lowered_stream_waitable_idx);
             }
 
