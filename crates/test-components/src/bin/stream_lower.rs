@@ -155,7 +155,7 @@ impl stream_lower_async::Guest for Component {
     }
 
     async fn read_stream_values_future_string(
-       mut stream_rx: StreamReader<FutureReader<String>>,
+        mut stream_rx: StreamReader<FutureReader<String>>,
     ) -> Vec<String> {
         let mut vals = Vec::new();
         while let Some(fut_rx) = stream_rx.next().await {

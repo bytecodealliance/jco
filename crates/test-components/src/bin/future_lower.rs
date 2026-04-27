@@ -126,8 +126,8 @@ impl future_lower_async::Guest for Component {
     }
 
     async fn read_future_value_example_resource_own(rx: FutureReader<resources::ExampleResource>) {
-        let _ = rx.await;
-        // All vals dropped at the end of this function
+        let v = rx.await;
+        drop(v); // we do an explicit drop to ensure the drop happens *before* this function returns 
     }
 
     async fn read_future_value_example_resource_own_attr(

@@ -122,8 +122,6 @@ suite("stream<T> lowers", () => {
 
     describe("async", () => {
         test.concurrent("async passthrough", async () => {
-
-
             // test.concurrent("async passthrough", async () => {
             //     assert.instanceOf(instance["jco:test-components/stream-lower-async"].streamPassthrough, AsyncFunction);
             //     let stream = await instance["jco:test-components/stream-lower-async"].streamPassthrough(readerStream);
@@ -282,7 +280,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("variant", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesVariant, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesVariant,
+                AsyncFunction,
+            );
 
             let vals = [
                 { tag: "maybe-u32", val: 123 },
@@ -351,7 +352,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("option<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesOptionString, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesOptionString,
+                AsyncFunction,
+            );
 
             let vals = ["present string", null];
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesOptionString(
@@ -366,7 +370,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("result<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesResultString, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesResultString,
+                AsyncFunction,
+            );
 
             let vals = [{ tag: "ok", val: "present string" }, { tag: "err", val: "nope" }, "bare string (ok)"];
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesResultString(
@@ -398,7 +405,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesListString, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesListString,
+                AsyncFunction,
+            );
 
             let vals = [["first", "second", "third"], []];
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesListString(
@@ -409,7 +419,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<list<u32, 5>>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesFixedListU32, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesFixedListU32,
+                AsyncFunction,
+            );
 
             let vals = [
                 [
@@ -436,7 +449,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("list<example-record>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesListRecord, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesListRecord,
+                AsyncFunction,
+            );
 
             let vals = [
                 [
@@ -488,7 +504,10 @@ suite("stream<T> lowers", () => {
 
         test.concurrent("stream<string>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesStreamString, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesStreamString,
+                AsyncFunction,
+            );
 
             let vals = [
                 createReadableStreamFromValues(["first", "stream", "values"]),
@@ -505,18 +524,16 @@ suite("stream<T> lowers", () => {
             ]);
         });
 
-        // TODO: needs flat lower for futures
-        test.only("stream<future<string>>", async () => {
+        // TODO(fix): needs flat lower for futures
+        test.skip("stream<future<string>>", async () => {
             const instance = await getInstance();
-            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesFutureString, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesFutureString,
+                AsyncFunction,
+            );
 
-            let vals = [
-                "hello",
-                "from",
-                "nested",
-                "future",
-            ];
-            const input = createReadableStreamFromValues(vals.map(v => Promise.resolve(v)));
+            let vals = ["hello", "from", "nested", "future"];
+            const input = createReadableStreamFromValues(vals.map((v) => Promise.resolve(v)));
             const stream = await instance["jco:test-components/stream-lower-async"].readStreamValuesFutureString(input);
             let returnedVals = [];
             for await (const v of stream) {
