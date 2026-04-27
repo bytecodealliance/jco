@@ -1499,6 +1499,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             "await ",
                             Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
                             r#"
+                              task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               return task.completionPromise();
@@ -1509,6 +1510,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             "",
                             Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
                             r#"
+                              task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               throw err;
@@ -1722,6 +1724,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             "await ",
                             Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
                             r#"
+                              task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               return task.completionPromise();
@@ -1732,6 +1735,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             "",
                             Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
                             r#"
+                              task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               throw err;
