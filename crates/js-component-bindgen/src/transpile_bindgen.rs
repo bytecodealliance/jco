@@ -55,11 +55,9 @@ use crate::{
     requires_async_porcelain, source, uwrite, uwriteln,
 };
 
-/// Number of flat parameters allowed before spilling over to memory
-/// for an async function
-///
-/// See [`wit-bindgen-core`] and the Component Model spec
-const MAX_ASYNC_FLAT_PARAMS: usize = 4;
+/// Size of flat parameters that can be sent, for example via the `task.return`
+/// intrinsic, when returning from an async func
+const MAX_FLAT_PARAMS: usize = 16;
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -2530,7 +2528,7 @@ impl<'a> Instantiator<'a, '_> {
                             .unwrap_or(0)
                     })
                     .sum();
-                let use_direct_params = result_flat_param_total < MAX_ASYNC_FLAT_PARAMS;
+                let use_direct_params = result_flat_param_total < MAX_FLAT_PARAMS;
 
                 // Build up a list of all the lifting functions that will be needed for the types
                 // that are actually being passed through task.return

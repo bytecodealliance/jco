@@ -1,10 +1,12 @@
 //! Intrinsics that represent helpers that enable Lower integration
+use std::fmt::Write;
 
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::{async_stream::AsyncStreamIntrinsic, error_context::ErrCtxIntrinsic};
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
+use crate::uwriteln;
 
 use super::conversion::ConversionIntrinsic;
 
@@ -967,17 +969,32 @@ impl LowerIntrinsic {
                 ));
             }
 
+            // NOTE: Promise<Promise<T>> is collapsed to Promise<T> by JS runtimes automagically
             Self::LowerFlatFuture => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_future_fn = self.name();
-                output.push_str(&format!(
-                    "
+
+                uwriteln!(
+                    output,
+                    r#"
                     function {lower_flat_future_fn}(futureTableIdx, ctx) {{
-                        {debug_log_fn}('[{lower_flat_future_fn}()] args', {{ ctx }});
-                        throw new Error('flat lower for futures not yet implemented!');
+                        const {{
+                            componentIdx,
+                            futureTableIdx,
+                            elemMeta,
+                        }} = meta;
+
+                        return function {lower_flat_future_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_future_fn}()] args', {{ ctx }});
+
+                            const future = ctx.vals[0];
+                            if (!future) {{ throw new Error("missing external future value"); }}
+
+                            throw new Error('flat lower for futures not yet implemented!');
+                        }}
                     }}
-                "
-                ));
+                "#
+                );
             }
 
             Self::LowerFlatStream => {

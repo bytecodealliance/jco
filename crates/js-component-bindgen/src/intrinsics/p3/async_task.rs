@@ -454,7 +454,6 @@ impl AsyncTaskIntrinsic {
                     function {task_return_fn}(ctx) {{
                         const {{
                             componentIdx,
-                            useDirectParams,
                             getMemoryFn,
                             memoryIdx,
                             callbackFnIdx,
@@ -464,6 +463,7 @@ impl AsyncTaskIntrinsic {
                         }} = ctx;
                         const params = [...arguments].slice(1);
                         const memory = getMemoryFn();
+                        let useDirectParams = ctx.useDirectParams;
 
                         const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
 
@@ -511,6 +511,10 @@ impl AsyncTaskIntrinsic {
 
                         let liftCtx = {{ memory, useDirectParams, params, componentIdx, stringEncoding }};
                         if (!useDirectParams) {{
+                            if (!ctx.memory) {{
+                                {debug_log_fn}('missing memory despite indirect param usage', {{ useDirectParams, liftCtx, ctx }});
+                                throw new Error('missing memory despite indirect param usage');
+                            }}
                             liftCtx.storagePtr = params[0];
                             liftCtx.storageLen = params[1];
                         }}
@@ -519,7 +523,7 @@ impl AsyncTaskIntrinsic {
                         {debug_log_fn}('[{task_return_fn}()] lifting results out of memory', {{ liftCtx }});
                         for (const liftFn of liftFns) {{
                             if (liftCtx.storageLen !== undefined && liftCtx.storageLen <= 0) {{
-                                {debug_log_fn}("[{task_return_fn}()] ran out of range while writing");
+                                {debug_log_fn}(`[{task_return_fn}()] ran out of range while writing storageLen = [${{liftCtx.storageLen}}]`);
                                 throw new Error('ran out of storage while writing');
                             }}
                             const [ val, newLiftCtx ] = liftFn(liftCtx);
