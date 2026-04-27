@@ -279,7 +279,7 @@ suite("future<T> lowers", () => {
             }
         });
 
-        // TODO(FIX): FAILING, BAD
+        // TODO(FIX): https://github.com/bytecodealliance/jco/issues/1428
         test.skip("variant", async () => {
             assert.instanceOf(instance["jco:test-components/future-lower-async"].readFutureValueVariant, AsyncFunction);
 
@@ -313,7 +313,7 @@ suite("future<T> lowers", () => {
             }
         });
 
-        // TODO(FIX): FAILING, BAD
+        // TODO(FIX): https://github.com/bytecodealliance/jco/issues/1428
         test.skip("tuple", async () => {
             assert.instanceOf(instance["jco:test-components/future-lower-async"].readFutureValueTuple, AsyncFunction);
 
