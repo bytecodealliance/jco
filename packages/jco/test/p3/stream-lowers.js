@@ -505,9 +505,24 @@ suite("stream<T> lowers", () => {
             ]);
         });
 
-        test.concurrent("stream<future<string>>", async () => {
+        // TODO: needs flat lower for futures
+        test.only("stream<future<string>>", async () => {
             const instance = await getInstance();
-            throw new Error("NOT YET IMPLEMENTED");
+            assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesFutureString, AsyncFunction);
+
+            let vals = [
+                "hello",
+                "from",
+                "nested",
+                "future",
+            ];
+            const input = createReadableStreamFromValues(vals.map(v => Promise.resolve(v)));
+            const stream = await instance["jco:test-components/stream-lower-async"].readStreamValuesFutureString(input);
+            let returnedVals = [];
+            for await (const v of stream) {
+                returnedVals.push(v);
+            }
+            assert.deepEqual(returnedVals, vals);
         });
     });
 });
