@@ -2823,20 +2823,27 @@ impl Bindgen for FunctionBindgen<'_> {
                         }}
 
                         const cstate{tmp} = {get_or_create_async_state_fn}({component_idx});
-                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx}]`); }}
+                        if (!cstate{tmp}) {{
+                            throw new Error(`missing component state for component [{component_idx}]`);
+                        }}
 
                         // TODO(feat): facilitate non utf8 string encoding for lowered futures
                         const stringEncoding = 'utf8';
 
                         let outermostReadEnd{tmp};
-                        let futuresList{tmp};
+                        let futuresList{tmp} = [];
                         let future{tmp} = {future_arg};
+                        let nextFuture{tmp};
+                        let openedCount = -1;
                         let futureNestingLevel{tmp} = {nesting_level};
-                        console.log("NESTING LEVEL?", futureNestingLevel{tmp});
-                        while (futureNestingLevel > 0) {{
-                            futuresList.push(future);
 
-                            const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = cstate.createFuture({{
+                        while (futureNestingLevel{tmp} >= 0) {{
+                            const {{
+                                writeEnd,
+                                writeEndWaitableIdx,
+                                readEnd,
+                                readEndWaitableIdx
+                            }} = cstate{tmp}.createFuture({{
                                 tableIdx: {future_table_idx},
                                 elemMeta: {{
                                     liftFn: {lift_fn_js},
@@ -2855,27 +2862,49 @@ impl Bindgen for FunctionBindgen<'_> {
                             }});
 
                             const hostInjectFn = {gen_future_host_inject_fn}({{
-                                promise: future,
+                                promise: future{tmp},
                                 stringEncoding,
                                 hostWriteEnd: writeEnd,
                             }});
                             readEnd.setHostInjectFn(hostInjectFn);
 
-                            outermostReadEnd{tmp} = readEnd;
-
-                            future{tmp} = {{
-                                [{nested_future_symbol}]: true,
-                                readEndWaitableIdx,
-                                writeEndWaitableIdx,
-                                futureTableIdx,
-                                componentIdx,
+                            const meta{tmp} = {{
+                                isInnermost: futureNestingLevel{tmp} === {nesting_level},
+                                level: futureNestingLevel{tmp},
                             }};
 
+                            const innerFuture = future{tmp};
+                            future{tmp} = {{ }};
+                            future{tmp}[{nested_future_symbol}] = meta{tmp};
+                            future{tmp}.readEndWaitableIdx = readEndWaitableIdx;
+                            future{tmp}.writeEndWaitableIdx = writeEndWaitableIdx;
+                            future{tmp}.futureTableIdx = {future_table_idx};
+                            future{tmp}.componentIdx = {component_idx};
+                            future{tmp}.then = async (resolve, reject) => {{
+                                let p;
+                                if (openedCount === {nesting_level}) {{
+                                    p = innerFuture;
+                                }} else {{
+                                    openedCount++;
+                                    p = futuresList{tmp}[futuresList{tmp}.length - (openedCount + 1)];
+                                }}
+
+                                try {{
+                                    resolve(await p);
+                                }} catch (err) {{
+                                    reject(err);
+                                }}
+                            }};
+
+                            outermostReadEnd{tmp} = readEnd;
+
+                            futuresList{tmp}.push(future{tmp});
                             futureNestingLevel{tmp}--;
                         }}
-                        console.log("CREATED FUTURE LOWER CHAIN", futuresList);
 
-                        readEnd{tmp} = outermostFuture.readEnd;
+                        const readEnd{tmp} = outermostReadEnd{tmp};
+
+                        // TODO: need to *lower* the internal future???
 
                         const {lowered_future_waitable_idx} = readEnd{tmp}.waitableIdx();
                     "#

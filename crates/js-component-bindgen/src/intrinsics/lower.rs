@@ -1029,7 +1029,6 @@ impl LowerIntrinsic {
 
                                 let outermostReadEnd;
                                 let futuresList;
-                                console.log("NESTING LEVEL?", futureNestingLevel);
                                 while (futureNestingLevel > 0) {{
                                     futuresList.push(future);
 
@@ -1056,7 +1055,6 @@ impl LowerIntrinsic {
 
                                     futureNestingLevel--;
                                 }}
-                                console.log("CREATED FUTURE CHAIN", futuresList);
 
                                 waitableIdx = outermostReadEnd.waitableIdx();
                             }}
@@ -1067,7 +1065,6 @@ impl LowerIntrinsic {
                                 {lower_u32_fn}(ctx);
                             }}
 
-                            console.log("RETTURNING WAITABLE",  waitableIdx);
                             return waitableIdx;
                         }}
                     }}
