@@ -88,6 +88,7 @@ pub enum ResourceExtraData {
     Future {
         table_idx: TypeFutureTableIndex,
         elem_ty: Option<PayloadTypeMetadata>,
+        nesting_level: u32,
     },
     ErrorContext {
         table_idx: TypeComponentLocalErrorContextTableIndex,
@@ -2697,6 +2698,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let is_future_lowerable_object_fn = self.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::IsFutureLowerableObject,
                 ));
+                let nested_future_symbol = self.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::NestedFutureSymbol,
+                ));
 
                 let component_idx = self.canon_opts.instance.as_u32();
 
@@ -2713,6 +2717,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             extra:
                                 Some(ResourceExtraData::Future {
                                     table_idx: future_table_idx_ty,
+                                    nesting_level,
                                     elem_ty,
                                 }),
                             ..
@@ -2808,6 +2813,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let tmp = self.tmp();
                 let lowered_future_waitable_idx = format!("futureWaitableIdx{tmp}");
+
                 uwriteln!(
                     self.src,
                     r#"
@@ -2822,30 +2828,54 @@ impl Bindgen for FunctionBindgen<'_> {
                         // TODO(feat): facilitate non utf8 string encoding for lowered futures
                         const stringEncoding = 'utf8';
 
-                        const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = cstate{tmp}.createFuture({{
-                            tableIdx: {future_table_idx},
-                            elemMeta: {{
-                                liftFn: {lift_fn_js},
-                                lowerFn: {lower_fn_js},
-                                payloadTypeName: {payload_type_name_js},
-                                isNone: {payload_is_none},
-                                isNumeric: {payload_is_numeric},
-                                isBorrowed: {payload_is_borrow},
-                                isAsyncValue: {payload_is_async_value},
-                                flatCount: {payload_flat_count_js},
-                                align32: {payload_align32_js},
-                                size32: {payload_size32_js},
-                                stringEncoding,
-                                getReallocFn: {get_realloc_fn_js},
-                            }},
-                        }});
+                        let outermostReadEnd{tmp};
+                        let futuresList{tmp};
+                        let future{tmp} = {future_arg};
+                        let futureNestingLevel{tmp} = {nesting_level};
+                        console.log("NESTING LEVEL?", futureNestingLevel{tmp});
+                        while (futureNestingLevel > 0) {{
+                            futuresList.push(future);
 
-                        const hostInjectFn = {gen_future_host_inject_fn}({{
-                            promise: {future_arg},
-                            stringEncoding,
-                            hostWriteEnd: hostWriteEnd{tmp},
-                        }});
-                        readEnd{tmp}.setHostInjectFn(hostInjectFn);
+                            const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = cstate.createFuture({{
+                                tableIdx: {future_table_idx},
+                                elemMeta: {{
+                                    liftFn: {lift_fn_js},
+                                    lowerFn: {lower_fn_js},
+                                    payloadTypeName: {payload_type_name_js},
+                                    isNone: {payload_is_none},
+                                    isNumeric: {payload_is_numeric},
+                                    isBorrowed: {payload_is_borrow},
+                                    isAsyncValue: {payload_is_async_value},
+                                    flatCount: {payload_flat_count_js},
+                                    align32: {payload_align32_js},
+                                    size32: {payload_size32_js},
+                                    stringEncoding,
+                                    getReallocFn: {get_realloc_fn_js},
+                                }}
+                            }});
+
+                            const hostInjectFn = {gen_future_host_inject_fn}({{
+                                promise: future,
+                                stringEncoding,
+                                hostWriteEnd: writeEnd,
+                            }});
+                            readEnd.setHostInjectFn(hostInjectFn);
+
+                            outermostReadEnd{tmp} = readEnd;
+
+                            future{tmp} = {{
+                                [{nested_future_symbol}]: true,
+                                readEndWaitableIdx,
+                                writeEndWaitableIdx,
+                                futureTableIdx,
+                                componentIdx,
+                            }};
+
+                            futureNestingLevel{tmp}--;
+                        }}
+                        console.log("CREATED FUTURE LOWER CHAIN", futuresList);
+
+                        readEnd{tmp} = outermostFuture.readEnd;
 
                         const {lowered_future_waitable_idx} = readEnd{tmp}.waitableIdx();
                     "#
@@ -2869,6 +2899,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 Some(ResourceExtraData::Future {
                                     table_idx: future_table_idx_ty,
                                     elem_ty: future_element_ty,
+                                    ..
                                 }),
                             ..
                         },
@@ -2955,7 +2986,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                let gen_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
+                let gen_stream_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GenStreamHostInjectFn,
                 ));
 
@@ -3113,7 +3144,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             readFn{tmp} = () => lockedReader.read();
                         }}
 
-                        const hostInjectFn = {gen_host_inject_fn}({{
+                        const hostInjectFn = {gen_stream_host_inject_fn}({{
                             readFn: readFn{tmp},
                             hostWriteEnd: hostWriteEnd{tmp},
                         }});

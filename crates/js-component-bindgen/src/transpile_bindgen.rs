@@ -3359,49 +3359,63 @@ impl<'a> Instantiator<'a, '_> {
         resource_map: &mut ResourceMap,
     ) {
         let remote_resource = match iface_ty {
-            InterfaceType::Future(table_idx) => ResourceTable {
-                imported: true,
-                data: ResourceData::Guest {
-                    resource_name: "Future".into(),
-                    prefix: Some(format!("${}", table_idx.as_u32())),
-                    extra: Some(ResourceExtraData::Future {
-                        table_idx: *table_idx,
-                        elem_ty: maybe_elem_ty.map(|ty| {
-                            let table_ty = &self.types[*table_idx];
-                            let future_ty_idx = table_ty.ty;
-                            let future_ty = &self.types[future_ty_idx];
-                            let iface_ty = future_ty
-                                .payload
-                                .expect("missing future payload despite elem type being present");
-                            let abi = self.types.canonical_abi(&iface_ty);
-                            PayloadTypeMetadata {
-                                ty,
-                                iface_ty,
+            InterfaceType::Future(table_idx) => {
+                let future_table_ty = &self.types[*table_idx];
+                let future_ty = &self.types[future_table_ty.ty];
 
-                                // TODO: we need to use the currently-being-built resource map here,
-                                // because it may contain *just inserted* information (could be either imports or exports)
-                                // that should be used
-                                //
-                                // We need to *augment* the normal built in
-                                // `instantiator.resource_{exports,imports}` with things that we're resolving now.
-                                lift_js_expr: gen_flat_lift_fn_js_expr(
-                                    self,
-                                    &iface_ty,
-                                    &Some(resource_map),
-                                ),
-                                lower_js_expr: gen_flat_lower_fn_js_expr(
-                                    self,
-                                    &iface_ty,
-                                    &Some(resource_map),
-                                ),
-                                size32: abi.size32,
-                                align32: abi.align32,
-                                flat_count: abi.flat_count,
-                            }
+                // Determine the level of future nesting
+                let mut future_nesting_level = 0;
+                let mut payload_ty = future_ty.payload.clone();
+                while let Some(InterfaceType::Future(inner_ty)) = payload_ty {
+                    future_nesting_level += 1;
+                    payload_ty = self.types[self.types[inner_ty].ty].payload;
+                }
+
+                ResourceTable {
+                    imported: true,
+                    data: ResourceData::Guest {
+                        resource_name: "Future".into(),
+                        prefix: Some(format!("${}", table_idx.as_u32())),
+                        extra: Some(ResourceExtraData::Future {
+                            table_idx: *table_idx,
+                            nesting_level: future_nesting_level,
+                            elem_ty: maybe_elem_ty.map(|ty| {
+                                let table_ty = &self.types[*table_idx];
+                                let future_ty_idx = table_ty.ty;
+                                let future_ty = &self.types[future_ty_idx];
+                                let iface_ty = future_ty.payload.expect(
+                                    "missing future payload despite elem type being present",
+                                );
+                                let abi = self.types.canonical_abi(&iface_ty);
+                                PayloadTypeMetadata {
+                                    ty,
+                                    iface_ty,
+
+                                    // TODO: we need to use the currently-being-built resource map here,
+                                    // because it may contain *just inserted* information (could be either imports or exports)
+                                    // that should be used
+                                    //
+                                    // We need to *augment* the normal built in
+                                    // `instantiator.resource_{exports,imports}` with things that we're resolving now.
+                                    lift_js_expr: gen_flat_lift_fn_js_expr(
+                                        self,
+                                        &iface_ty,
+                                        &Some(resource_map),
+                                    ),
+                                    lower_js_expr: gen_flat_lower_fn_js_expr(
+                                        self,
+                                        &iface_ty,
+                                        &Some(resource_map),
+                                    ),
+                                    size32: abi.size32,
+                                    align32: abi.align32,
+                                    flat_count: abi.flat_count,
+                                }
+                            }),
                         }),
-                    }),
-                },
-            },
+                    },
+                }
+            }
             InterfaceType::Stream(table_idx) => ResourceTable {
                 imported: true,
                 data: ResourceData::Guest {
@@ -5815,9 +5829,18 @@ pub fn gen_flat_lower_fn_js_expr(
                 }
             };
 
+            // Determine the level of future nesting
+            let mut future_nesting_level = 0;
+            let mut payload_ty = future_ty.payload.clone();
+            while let Some(InterfaceType::Future(inner_ty)) = payload_ty {
+                future_nesting_level += 1;
+                payload_ty = component_types[component_types[inner_ty].ty].payload;
+            }
+
             format!(
                 r#"{f}.bind(null, {{
                        futureTableIdx: {table_idx},
+                       futureNestingLevel: {future_nesting_level},
                        componentIdx: {component_idx},
                        elemMeta: {{
                            liftFn: {payload_lift_fn_js},

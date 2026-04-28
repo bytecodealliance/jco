@@ -21,6 +21,9 @@ pub enum AsyncFutureIntrinsic {
     /// ```
     GlobalFutureMap,
 
+    /// Symbol that is used to delineate futures that are nested
+    NestedFutureSymbol,
+
     /// Map of future tables to component indices
     GlobalFutureTableMap,
 
@@ -240,6 +243,7 @@ impl AsyncFutureIntrinsic {
             Self::InternalFutureClass.name(),
             Self::GenFutureHostInjectFn.name(),
             Self::IsFutureLowerableObject.name(),
+            Self::NestedFutureSymbol.name(),
         ]
     }
 
@@ -259,6 +263,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureWritableEndClass => "FutureWritableEnd",
             Self::FutureWrite => "futureWrite",
             Self::GlobalFutureMap => "FUTURES",
+            Self::NestedFutureSymbol => "NESTED_FUTURE_SYMBOL",
             Self::GlobalFutureTableMap => "FUTURE_TABLES",
             Self::HostFutureClass => "HostFuture",
             Self::InternalFutureClass => "InternalFuture",
@@ -276,6 +281,15 @@ impl AsyncFutureIntrinsic {
                 output.push_str(&format!(
                     r#"
                     const {global_future_map} = new {rep_table_class}({{ target: 'global future map' }});
+                    "#
+                ));
+            }
+
+            Self::NestedFutureSymbol => {
+                let nested_future_symbol = self.name();
+                output.push_str(&format!(
+                    r#"
+                    const {nested_future_symbol} = Symbol.for('nested-future');
                     "#
                 ));
             }
@@ -1364,6 +1378,7 @@ impl AsyncFutureIntrinsic {
             Self::GenFutureHostInjectFn => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let gen_host_inject_fn = self.name();
+                let nested_future_symbol = Self::NestedFutureSymbol.name();
 
                 uwriteln!(
                     output,
@@ -1389,6 +1404,14 @@ impl AsyncFutureIntrinsic {
 
                               try {{
                                   const value = await promise;
+
+                                  // If we've read a nested promise from the outside,
+                                  // we must convert the value that we get back into a future,
+                                  // because we are not at the lowest level yet.
+                                  if (typeof value === 'object' && value[{nested_future_symbol}]) {{
+                                      value = Promise.resolve(value);
+                                  }}
+
                                   await hostWriteEnd.hostWrite({{ stringEncoding, value, getReallocFn }});
                               }} catch (err) {{
                                   {debug_log_fn}("failed to inject host write", err);

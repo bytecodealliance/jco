@@ -1413,6 +1413,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     {
         args.intrinsics.extend([
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::IsFutureLowerableObject),
             &Intrinsic::SymbolResourceRep,
@@ -1545,6 +1546,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     {
         args.intrinsics.extend([
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWritableEndClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureReadableEndClass),
@@ -1555,6 +1557,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         AsyncFutureIntrinsic::FutureNewFromLift,
     )) {
         args.intrinsics.extend([
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
         ]);
@@ -1566,6 +1569,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         AsyncFutureIntrinsic::FutureReadableEndClass,
     )) {
         args.intrinsics.extend([
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass),
             &Intrinsic::AsyncEventCodeEnum,

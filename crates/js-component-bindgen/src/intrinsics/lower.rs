@@ -2,7 +2,9 @@
 use std::fmt::Write;
 
 use crate::intrinsics::component::ComponentIntrinsic;
-use crate::intrinsics::p3::{async_stream::AsyncStreamIntrinsic, error_context::ErrCtxIntrinsic};
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
+use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
+use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
@@ -973,15 +975,26 @@ impl LowerIntrinsic {
             Self::LowerFlatFuture => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_future_fn = self.name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
+                let is_future_lowerable_object =
+                    AsyncFutureIntrinsic::IsFutureLowerableObject.name();
+                let symbol_cabi_rep = Intrinsic::SymbolResourceRep.name();
+                let global_future_map = AsyncFutureIntrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let gen_future_host_inject_fn =
+                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn).name();
+                let nested_future_symbol =
+                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol).name();
 
                 uwriteln!(
                     output,
                     r#"
-                    function {lower_flat_future_fn}(futureTableIdx, ctx) {{
+                    function {lower_flat_future_fn}(meta) {{
                         const {{
                             componentIdx,
                             futureTableIdx,
                             elemMeta,
+                            futureNestingLevel,
                         }} = meta;
 
                         return function {lower_flat_future_fn}Inner(ctx) {{
@@ -990,7 +1003,72 @@ impl LowerIntrinsic {
                             const future = ctx.vals[0];
                             if (!future) {{ throw new Error("missing external future value"); }}
 
-                            throw new Error('flat lower for futures not yet implemented!');
+                            // As NodeJS will collapse `Promise<Promise<T>>` to `Promise<T>`, enable handling of ordinary values
+                            // by converting them NodeJS will collapse futures, enable handling of `future<future<t>>`
+                            let wasRawValue = false;
+                            if (!{is_future_lowerable_object}(future)) {{
+                                wasRawValue = true;
+                                future = Promise.resolve(future);
+                            }}
+
+                            let globalRep = future[{symbol_cabi_rep}];
+                            let waitableIdx;
+                            if (globalRep) {{
+                                const hostFuture = {global_future_map}.get(globalRep);
+                                if (!hostFuture) {{
+                                    throw new Error(`missing host future with global rep [${{globalRep}}]`);
+                                }}
+                                waitableIdx = hostFuture.getFutureEndWaitableIdx();
+                            }} else {{
+                                const cstate = {get_or_create_async_state_fn}(componentIdx);
+                                if (!cstate) {{
+                                    throw new Error(`missing async state for component [${{componentIdx}}]`);
+                                }}
+
+                                elemMeta.stringEncoding = 'utf8';
+
+                                let outermostReadEnd;
+                                let futuresList;
+                                console.log("NESTING LEVEL?", futureNestingLevel);
+                                while (futureNestingLevel > 0) {{
+                                    futuresList.push(future);
+
+                                    const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = cstate.createFuture({{
+                                        tableIdx: futureTableIdx,
+                                        elemMeta,
+                                    }});
+
+                                    const hostInjectFn = {gen_future_host_inject_fn}({{
+                                        promise: future,
+                                        stringEncoding,
+                                        hostWriteEnd: writeEnd,
+                                    }});
+                                    readEnd.setHostInjectFn(hostInjectFn);
+
+                                    outermostReadEnd = readEnd;
+                                    future = {{
+                                        [{nested_future_symbol}]: true,
+                                        readEndWaitableIdx,
+                                        writeEndWaitableIdx,
+                                        futureTableIdx,
+                                        componentIdx,
+                                    }};
+
+                                    futureNestingLevel--;
+                                }}
+                                console.log("CREATED FUTURE CHAIN", futuresList);
+
+                                waitableIdx = outermostReadEnd.waitableIdx();
+                            }}
+
+                            // Write the idx of the waitable to memory (a waiting async task or caller)
+                            if (ctx.storagePtr) {{
+                                ctx.vals[0] = waitableIdx;
+                                {lower_u32_fn}(ctx);
+                            }}
+
+                            console.log("RETTURNING WAITABLE",  waitableIdx);
+                            return waitableIdx;
                         }}
                     }}
                 "#
@@ -1010,7 +1088,7 @@ impl LowerIntrinsic {
                 let gen_read_fn_from_lowerable_stream_fn =
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream)
                         .name();
-                let gen_host_inject_fn =
+                let gen_stream_host_inject_fn =
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn).name();
                 let lower_u32_fn = Self::LowerFlatU32.name();
 
@@ -1058,7 +1136,7 @@ impl LowerIntrinsic {
                                         elemMeta,
                                     }});
 
-                                    const hostInjectFn = {gen_host_inject_fn}({{
+                                    const hostInjectFn = {gen_stream_host_inject_fn}({{
                                         readFn: {gen_read_fn_from_lowerable_stream_fn}(stream),
                                         hostWriteEnd: writeEnd,
                                     }});
