@@ -673,7 +673,7 @@ impl AsyncFutureIntrinsic {
                                   }};
 
 
-                                  // TODO: before performing this read, if we're dealing with a host-controlled
+                                  // Before performing this read, if we're dealing with a host-controlled
                                   // future, then we should inject a write, but we can't wait for it to complete
                                   // as we must do the rendesvous read below for the write to complete.
                                   let injectedWritePromise;
