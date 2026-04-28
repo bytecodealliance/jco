@@ -500,7 +500,7 @@ suite("future<T> lifts", () => {
     // NOTE: when this test runs the host-only read/write optimization should be in place
     // this component is *not* acting like a spool for the values
     test.concurrent("future<stream<string>>", async () => {
-        assert.instanceOf(instance["jco:test-components/get-future-async"].getFutureFutureString, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-future-async"].getFutureStreamString, AsyncFunction);
 
         let vals = [["first", "third", "second"]];
         let resIdx = 0;
