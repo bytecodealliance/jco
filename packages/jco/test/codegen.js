@@ -225,10 +225,10 @@ suite("codegen determinism", () => {
     test("consistent output", async () => {
         // NOTE: we need to use a significant enough component here to expose indeterminism
         const [streamTx, streamRx] = await Promise.all([
-            readFile(join(LOCAL_TEST_COMPONENTS_DIR, `stream-tx.wasm`)).then((bytes) => {
+            readFile(join(LOCAL_TEST_COMPONENTS_DIR, `stream-lower.wasm`)).then((bytes) => {
                 return Promise.all([transpile(bytes), transpile(bytes)]);
             }),
-            readFile(join(LOCAL_TEST_COMPONENTS_DIR, `stream-rx.wasm`)).then((bytes) => {
+            readFile(join(LOCAL_TEST_COMPONENTS_DIR, `stream-lower.wasm`)).then((bytes) => {
                 return Promise.all([transpile(bytes), transpile(bytes)]);
             }),
         ]);
