@@ -3365,7 +3365,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Determine the level of future nesting
                 let mut future_nesting_level = 0;
-                let mut payload_ty = future_ty.payload.clone();
+                let mut payload_ty = future_ty.payload;
                 while let Some(InterfaceType::Future(inner_ty)) = payload_ty {
                     future_nesting_level += 1;
                     payload_ty = self.types[self.types[inner_ty].ty].payload;
@@ -5831,7 +5831,7 @@ pub fn gen_flat_lower_fn_js_expr(
 
             // Determine the level of future nesting
             let mut future_nesting_level = 0;
-            let mut payload_ty = future_ty.payload.clone();
+            let mut payload_ty = future_ty.payload;
             while let Some(InterfaceType::Future(inner_ty)) = payload_ty {
                 future_nesting_level += 1;
                 payload_ty = component_types[component_types[inner_ty].ty].payload;

@@ -2,8 +2,8 @@
 use std::fmt::Write;
 
 use crate::intrinsics::component::ComponentIntrinsic;
-use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};

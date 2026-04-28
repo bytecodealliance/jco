@@ -1408,7 +1408,7 @@ impl AsyncFutureIntrinsic {
                                   // If we've read a nested promise from the outside,
                                   // we must convert the value that we get back into a future,
                                   // because we are not at the lowest level yet.
-                                  if (typeof value === 'object' && value[{nested_future_symbol}]) {{
+                                  if (value && typeof value === 'object' && value[{nested_future_symbol}]) {{
                                       value = Promise.resolve(value);
                                   }}
 
