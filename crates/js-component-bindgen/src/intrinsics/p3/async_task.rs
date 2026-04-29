@@ -2163,11 +2163,6 @@ impl AsyncTaskIntrinsic {
 
                         // NOTE: at this point we know that we are working with an async lowered import
 
-                        const subtaskState = subtask.getStateNumber();
-                        if (subtaskState < 0 || subtaskState > 2**5) {{
-                            throw new Error('invalid subtask state, out of valid range');
-                        }}
-
                         subtask.setOnProgressFn(() => {{
                             subtask.setPendingEvent(() => {{
                                 if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
@@ -2222,6 +2217,24 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         if (requiresManualAsyncResult) {{ return manualAsyncResult.promise; }}
+
+                        const subtaskState = subtask.getStateNumber();
+                        if (subtaskState < 0 || subtaskState >= 2**4) {{
+                            throw new Error('invalid subtask state, out of valid range');
+                        }}
+
+                        // An async-lowered import whose callee resolved synchronously returns
+                        // [Subtask.State.RETURNED] only an no subtask handle is exposed.
+                        if (subtask.isReturned()) {{
+                            if (!subtask.resolveDelivered()) {{
+                                subtask.deliverResolve();
+                            }}
+                            const removed = cstate.handles.remove(subtask.waitableRep());
+                            if (removed !== subtask) {{
+                                throw new Error('subtask handle cleanup removed unexpected entry');
+                            }}
+                            return subtaskState;
+                        }}
 
                         return Number(subtask.waitableRep()) << 4 | subtaskState;
                     }}
@@ -2398,7 +2411,7 @@ impl AsyncTaskIntrinsic {
                         // NOTE: at this point we know that we are working with an async lowered import
 
                         const subtaskState = subtask.getStateNumber();
-                        if (subtaskState < 0 || subtaskState > 2**5) {{
+                        if (subtaskState < 0 || subtaskState >= 2**4) {{
                             throw new Error('invalid subtask state, out of valid range');
                         }}
 
