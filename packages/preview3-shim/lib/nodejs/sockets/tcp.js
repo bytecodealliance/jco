@@ -250,7 +250,7 @@ export class TcpSocket {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
-    if (data == null || typeof data[Symbol.asyncIterator] !== "function") {
+    if (data == null || data == undefined || typeof data[Symbol.asyncIterator] !== "function") {
       throw new SocketError("invalid-argument");
     }
 

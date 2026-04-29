@@ -5,9 +5,18 @@
  * since async iterators are not transferable.
  *
  * @param {AsyncIterator} iterator - The async iterator to wrap.
+ * @param {string} [name="iterator"] - Optional name for error messages.
  * @returns {ReadableStream} A transferable ReadableStream that pulls from the iterator.
  */
-export function readableStreamFromIterator(iterator) {
+export function readableStreamFromIterator(iterator, name = "iterator") {
+  if (
+    iterator == null ||
+    iterator == undefined ||
+    typeof iterator[Symbol.asyncIterator] !== "function"
+  ) {
+    throw new TypeError(`${name} must implement [Symbol.asyncIterator]()`);
+  }
+
   return new ReadableStream({
     async pull(controller) {
       const { done, value } = await iterator.next();
