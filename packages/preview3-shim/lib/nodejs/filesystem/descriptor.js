@@ -125,14 +125,14 @@ class Descriptor {
    * ```
    *
    * @async
-   * @param {object} data A data source implementing `intoAsyncIterator()`.
+   * @param {object} data A data source implementing `[Symbol.asyncIterator]()`.
    * @param {bigint} offset The offset within the file.
    * @returns {Promise<void>}
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async writeViaStream(data, offset) {
     this.#ensureHandle();
-    const stream = readableStreamFromIterator(data.intoAsyncIterator());
+    const stream = readableStreamFromIterator(data[Symbol.asyncIterator]());
 
     try {
       await worker().run({ op: "write", fd: this.#handle.fd, offset, stream }, [stream]);
@@ -149,7 +149,7 @@ class Descriptor {
    * ```
    *
    * @async
-   * @param {object} data A data source implementing `intoAsyncIterator()`.
+   * @param {object} data A data source implementing `[Symbol.asyncIterator]()`.
    * @returns {Promise<void>}
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */

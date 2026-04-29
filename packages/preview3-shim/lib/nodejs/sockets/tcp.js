@@ -239,21 +239,22 @@ export class TcpSocket {
    * ```
    *
    * @async
-   * @param {StreamReader} data - The data stream to send
+   * @param {AsyncIterable<Uint8Array>} data - The data stream to send. Any
+   *   async-iterable yielding byte chunks (e.g. a `StreamReader`) is accepted.
    * @returns {Promise<void>}
    * @throws {SocketError} With payload.tag 'invalid-state' if socket is not CONNECTED
-   * @throws {SocketError} With payload.tag 'invalid-argument' if ~data~ is not a {StreamReader}
+   * @throws {SocketError} With payload.tag 'invalid-argument' if `data` does not implement [Symbol.asyncIterator]
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
   async send(data) {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
-    if (!(data instanceof StreamReader)) {
+    if (data == null || typeof data[Symbol.asyncIterator] !== "function") {
       throw new SocketError("invalid-argument");
     }
 
-    const stream = readableStreamFromIterator(data.intoAsyncIterator());
+    const stream = readableStreamFromIterator(data[Symbol.asyncIterator]());
 
     try {
       // Transfer the stream to the worker

@@ -201,6 +201,18 @@ export class StreamReader {
     return iterator;
   }
 
+  /**
+   * Implements the async-iterable protocol so a StreamReader can be used
+   * directly with `for await…of` and any helper that consumes an
+   * async iterator (e.g. `readableStreamFromIterator`). Like
+   * `intoAsyncIterator()` above, this consumes the reader.
+   *
+   * @returns {AsyncIterator}
+   */
+  [Symbol.asyncIterator]() {
+    return this.intoAsyncIterator();
+  }
+
   #ensureIterator() {
     if (this.#iterator === null) {
       throw new Error("StreamReader is closed");

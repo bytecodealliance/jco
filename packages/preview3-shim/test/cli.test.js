@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 
+import { Buffer } from "node:buffer";
 import process from "node:process";
 import { Readable } from "node:stream";
 
@@ -27,6 +28,40 @@ describe("Node.js Preview3 wasi-cli", () => {
 
     const message = "Hello world!";
     await tx.write(message);
+    await tx.close();
+
+    await finished;
+    const result = await resultPromise;
+
+    process.stdout.write = restore;
+    expect(output).toBe(message);
+    expect(result.tag).toBe("ok");
+  });
+
+  test("writeViaStream writes numeric byte chunks to stdout", async () => {
+    const { cli } = await import("@bytecodealliance/preview3-shim");
+    const { stream } = await import("@bytecodealliance/preview3-shim/stream");
+
+    const restore = process.stdout.write.bind(process.stdout);
+    let output = "";
+
+    const message = "Hello world!";
+    const finished = new Promise((resolve) => {
+      process.stdout.write = (chunk, _enc, cb) => {
+        output += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+        cb?.();
+        if (output === message) {
+          resolve();
+        }
+      };
+    });
+
+    const { tx, rx } = stream();
+    const resultPromise = cli.stdout.writeViaStream(rx);
+
+    for (const byte of Buffer.from(message)) {
+      await tx.write(byte);
+    }
     await tx.close();
 
     await finished;

@@ -93,7 +93,7 @@ describe("HttpClient Integration", () => {
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
-    const stream = readableStreamFromIterator(body.intoAsyncIterator());
+    const stream = readableStreamFromIterator(body[Symbol.asyncIterator]());
     const reader = stream.getReader();
     let result = "";
 
@@ -138,7 +138,7 @@ describe("HttpClient Integration", () => {
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
-    const reader = readableStreamFromIterator(body.intoAsyncIterator()).getReader();
+    const reader = readableStreamFromIterator(body[Symbol.asyncIterator]()).getReader();
     let result = "";
 
     while (true) {
@@ -171,7 +171,7 @@ describe("HttpClient Integration", () => {
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
-    const stream = readableStreamFromIterator(body.intoAsyncIterator());
+    const stream = readableStreamFromIterator(body[Symbol.asyncIterator]());
     const reader = stream.getReader();
     let result = "";
 

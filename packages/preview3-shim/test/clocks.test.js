@@ -32,6 +32,12 @@ describe("monotonic clock tests", () => {
     expect(waitUntilSpy).toHaveResolved();
   });
 
+  test("waitUntil works when destructured from monotonicClock", async () => {
+    vi.spyOn(monotonicClock, "now").mockReturnValue(500n);
+    const { waitUntil } = monotonicClock;
+    await expect(waitUntil(400n)).resolves.toBeUndefined();
+  });
+
   test("waits until target time in waitUntil", async () => {
     const waitUntilSpy = vi.fn(monotonicClock.waitUntil.bind(monotonicClock));
     vi.spyOn(monotonicClock, "now").mockReturnValue(100n);

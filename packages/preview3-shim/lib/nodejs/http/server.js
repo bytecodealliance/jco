@@ -92,7 +92,7 @@ export class HttpServer extends EventEmitter {
           const [body, trailers] = Response.consumeBody(res, resRx);
           const { port1: tx, port2: rx } = new MessageChannel();
 
-          const stream = readableStreamFromIterator(body.intoAsyncIterator());
+          const stream = readableStreamFromIterator(body[Symbol.asyncIterator]());
 
           // Send trailers when ready
           trailers

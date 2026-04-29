@@ -58,7 +58,7 @@ export const monotonicClock = {
    * @throws {TypeError} If targetNs is not a bigint
    */
   async waitUntil(targetNs) {
-    const nowNs = this.now();
+    const nowNs = monotonicClock.now();
     const diffNs = targetNs - nowNs;
 
     if (diffNs <= 0n) {

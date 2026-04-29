@@ -5,6 +5,8 @@ import { ResourceWorker } from "./workers/resource-worker.js";
 import { StreamReader, readableStreamFromIterator } from "./stream.js";
 import { future } from "./future.js";
 
+import { environment as environmentV2 } from "@bytecodealliance/preview2-shim/cli";
+
 export {
   _appendEnv,
   _setEnv,
@@ -13,7 +15,6 @@ export {
   _setTerminalStdin,
   _setTerminalStdout,
   _setTerminalStderr,
-  environment,
   exit,
   terminalInput,
   terminalOutput,
@@ -21,6 +22,15 @@ export {
   terminalStdout,
   terminalStderr,
 } from "@bytecodealliance/preview2-shim/cli";
+
+// `wasi:cli/environment` renamed `initial-cwd` to `get-initial-cwd` between
+// p2 and p3. Adapt the p2-shim shape to the p3 WIT member name while
+// re-exporting the unchanged members.
+export const environment = {
+  getEnvironment: environmentV2.getEnvironment,
+  getArguments: environmentV2.getArguments,
+  getInitialCwd: environmentV2.initialCwd,
+};
 
 let WORKER = null;
 function worker() {
@@ -88,7 +98,7 @@ export const stdout = {
    * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
    */
   async writeViaStream(streamReader) {
-    const readableStream = readableStreamFromIterator(streamReader.intoAsyncIterator());
+    const readableStream = readableStreamFromIterator(streamReader[Symbol.asyncIterator]());
     try {
       await worker().run({ op: "stdout", stream: readableStream }, [readableStream]);
       return { tag: "ok", val: undefined };
@@ -109,7 +119,7 @@ export const stderr = {
    * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
    */
   async writeViaStream(streamReader) {
-    const readableStream = readableStreamFromIterator(streamReader.intoAsyncIterator());
+    const readableStream = readableStreamFromIterator(streamReader[Symbol.asyncIterator]());
     try {
       await worker().run({ op: "stderr", stream: readableStream }, [readableStream]);
       return { tag: "ok", val: undefined };

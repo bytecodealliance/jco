@@ -51,7 +51,7 @@ export const client = {
     const { port1: tx, port2: rx } = new MessageChannel();
 
     const transfer = [rx];
-    const stream = body ? readableStreamFromIterator(body.intoAsyncIterator()) : undefined;
+    const stream = body ? readableStreamFromIterator(body[Symbol.asyncIterator]()) : undefined;
     if (stream) {
       transfer.unshift(stream);
     }

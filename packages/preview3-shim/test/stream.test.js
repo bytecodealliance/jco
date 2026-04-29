@@ -104,6 +104,20 @@ describe("Node.js Preview3 canon stream reader", () => {
     expect(Buffer.concat(chunks).toString()).toBe("helloworld");
   });
 
+  test("[Symbol.asyncIterator]() works in await loop", async () => {
+    async function* generate() {
+      yield Buffer.from("foo");
+      yield Buffer.from("bar");
+    }
+    const reader = new StreamReader(generate());
+
+    const chunks = [];
+    for await (const chunk of reader) {
+      chunks.push(chunk);
+    }
+    expect(Buffer.concat(chunks).toString()).toBe("foobar");
+  });
+
   test("read() works with a sync iterable", async () => {
     const source = [new Uint8Array([1]), new Uint8Array([2])];
     const reader = new StreamReader(source);
