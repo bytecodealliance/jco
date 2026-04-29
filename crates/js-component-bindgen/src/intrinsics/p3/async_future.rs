@@ -687,8 +687,15 @@ impl AsyncFutureIntrinsic {
                                   }});
 
                                   if (injectedWritePromise) {{
-                                      const cleanupFn = await injectedWritePromise;
-                                      cleanupFn();
+                                      if (this.hasPendingEvent()) {{
+                                          const cleanupFn = await injectedWritePromise;
+                                          cleanupFn();
+                                      }} else {{
+                                          injectedWritePromise.then(
+                                              cleanupFn => cleanupFn(),
+                                              err => this.setPendingEvent(() => {{ throw err; }}),
+                                          );
+                                      }}
                                   }}
 
                                   return {{ buffer }};
@@ -807,13 +814,6 @@ impl AsyncFutureIntrinsic {
                                            }});
                                        }});
 
-                                       // Perform another write, reusing the buffer
-                                       const {{ buffer }} = await this.guestRead({{
-                                           buffer,
-                                           stringEncoding,
-                                           isAsync: true,
-                                       }});
-
                                        if (!this.hasPendingEvent()) {{
                                            throw new Error("missing pending event after blocked future read");
                                        }}
@@ -860,13 +860,6 @@ impl AsyncFutureIntrinsic {
                                                clearInterval(waitInterval);
                                                resolve();
                                            }});
-                                       }});
-
-                                       // Perform another write, reusing the buffer
-                                       const {{ buffer }} = await this.guestWrite({{
-                                           buffer,
-                                           stringEncoding,
-                                           isAsync: true,
                                        }});
 
                                        if (!this.hasPendingEvent()) {{

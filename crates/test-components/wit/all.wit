@@ -242,6 +242,28 @@ world sleep-post-return-callee {
   export sleep-post-return;
 }
 
+interface future-concurrency-host {
+  write-via-stream: func(s: stream<u8>) -> future<u32>;
+}
+
+world future-concurrency {
+  import future-concurrency-host;
+  export local-run-async;
+}
+
+interface stream-concurrency-host {
+  signal: func();
+}
+
+interface stream-concurrency-test {
+  read-after-signal: async func(s: stream<u8>) -> list<u8>;
+}
+
+world stream-concurrency {
+  import stream-concurrency-host;
+  export stream-concurrency-test;
+}
+
 interface fixed-length-lists-fn {
   takes-returns-fixed: func(bools: list<bool, 17>) -> result<list<u8, 32>, string>;
 }

@@ -731,10 +731,10 @@ impl AsyncStreamIntrinsic {
                              // if one is present, because what we got from the outside world
                              // was a reader
                              //
-                             let onReadFinishFn;
+                             let injectedWritePromise;
                              const injectHostWrite = this.isReadable() && !!this.#hostInjectFn;
                              if (injectHostWrite) {{
-                                 onReadFinishFn = await this.#hostInjectFn({{ count }});
+                                 injectedWritePromise = this.#hostInjectFn({{ count }});
                              }}
 
                              // Perform the read/write
@@ -747,13 +747,15 @@ impl AsyncStreamIntrinsic {
 
                              // If sync, wait forever but allow task to do other things
                              if (!this.hasPendingEvent()) {{
-                                 if (injectHostWrite) {{
-                                     throw new Error('reader unexpectedly blocked after injected write');
-                                 }}
-
                                  if (isAsync) {{
                                      this.setCopyState({stream_end_class}.CopyState.ASYNC_COPYING);
                                      {debug_log_fn}('[{stream_end_class}#copy()] blocked', {{ componentIdx, eventCode, self: this }});
+                                     if (injectedWritePromise) {{
+                                         injectedWritePromise.then(
+                                             cleanupFn => cleanupFn(),
+                                             err => this.setPendingEvent(() => {{ throw err; }}),
+                                         );
+                                     }}
                                      return {async_blocked_const};
                                  }} else {{
                                      this.setCopyState({stream_end_class}.CopyState.SYNC_COPYING);
@@ -774,9 +776,9 @@ impl AsyncStreamIntrinsic {
                              // If we injected a write and the read has completed, we should reset
                              // we can skip the rest of the async machinery since there the host controlled
                              // write end does not need to use the pending event machinery
-                             if (injectHostWrite) {{
-                                 if (!onReadFinishFn) {{ throw new Error('missing read finish fn'); }}
-                                 onReadFinishFn();
+                             if (injectedWritePromise) {{
+                                 const cleanupFn = await injectedWritePromise;
+                                 cleanupFn();
                              }}
 
                              const event = this.getPendingEvent();

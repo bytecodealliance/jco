@@ -767,6 +767,7 @@ name = "jco-test-components"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "futures",
  "wit-bindgen",
 ]
 
