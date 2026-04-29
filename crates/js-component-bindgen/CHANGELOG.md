@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.18.0] - 2026-04-29
+
+### 🚀 Features
+
+- _(bindgen)_ implement future<future<t>> lower by @vados-cosmonic
+
+- _(bindgen)_ fill out future lower impl by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ return state-only handle when async-lowered import resolves eagerly by @andreiltd in #1434
+
+- _(bindgen)_ use waitable index in p3 future event payload by @andreiltd in #1433
+
+- _(bindgen)_ lint & nested future check by @vados-cosmonic in #1422
+
+- _(bindgen)_ progress towards nested futture read by @vados-cosmonic
+
+- _(bindgen)_ fix task.return param spill check by @vados-cosmonic
+
+- _(bindgen)_ more direct task failure by @vados-cosmonic
+
+- _(bindgen)_ fix error passing for initial export call errors by @vados-cosmonic
+
+- _(bindgen)_ re-enable determinism coinflip by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ update comment by @vados-cosmonic
+
+- _(bindgen)_ set errored on tasks that error early by @vados-cosmonic
+
+
+
+
 ## [1.17.0] - 2026-04-22
 
 
