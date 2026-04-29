@@ -660,8 +660,7 @@ impl AsyncFutureIntrinsic {
                                       }} else {{
                                           this.setCopyState({future_end_class}.CopyState.IDLE);
                                       }}
-                                      // TODO(fix): componentIdx may be -1 for the host here... is that allowed?
-                                      return {{ code: {async_event_code_enum}.FUTURE_READ, payload0: componentIdx, payload1: res }};
+                                      return {{ code: {async_event_code_enum}.FUTURE_READ, payload0: this.waitableIdx(), payload1: res }};
                                   }};
 
                                   const isReadableEnd = this.isReadable();
@@ -759,8 +758,7 @@ impl AsyncFutureIntrinsic {
                                       }} else {{
                                           this.setCopyState({future_end_class}.CopyState.IDLE);
                                       }}
-                                      // TODO: componentIdx *may* be -1 here
-                                      return {{ code: {async_event_code_enum}.FUTURE_WRITE, payload0: componentIdx, payload1: res }};
+                                      return {{ code: {async_event_code_enum}.FUTURE_WRITE, payload0: this.waitableIdx(), payload1: res }};
                                   }};
 
                                   const onCopyDoneFn = (res) => {{
@@ -825,7 +823,7 @@ impl AsyncFutureIntrinsic {
                                   if (code !== {async_event_code_enum}.FUTURE_READ) {{
                                       throw new Error(`mismatched event code [${{code}}] for host future read`);
                                   }}
-                                  if (index !== -1) {{ throw new Error('mismatched component idx'); }}
+                                  if (index !== this.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
 
                                   const vs = buffer.read(1);
                                   if (vs.length !== 1) {{ throw new Error('multiple results from future'); }}
@@ -880,7 +878,7 @@ impl AsyncFutureIntrinsic {
                                   if (code !== {async_event_code_enum}.FUTURE_WRITE) {{
                                       throw new Error(`mismatched event code [${{code}}] for host future write`);
                                   }}
-                                  if (index !== -1) {{ throw new Error('mismatched component idx'); }}
+                                  if (index !== this.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
                               }}
                             "#
                         ),
@@ -1253,7 +1251,7 @@ impl AsyncFutureIntrinsic {
                         if (code !== {event_code}) {{
                              throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
                          }}
-                        if (index !== componentIdx) {{ throw new Error('mismatched component idx'); }}
+                        if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
 
                         return payload;
                     }}
