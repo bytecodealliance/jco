@@ -731,11 +731,7 @@ impl AsyncStreamIntrinsic {
                              // if one is present, because what we got from the outside world
                              // was a reader
                              //
-                             let injectedWritePromise;
                              const injectHostWrite = this.isReadable() && !!this.#hostInjectFn;
-                             if (injectHostWrite) {{
-                                 injectedWritePromise = this.#hostInjectFn({{ count }});
-                             }}
 
                              // Perform the read/write
                              this._{rw_fn_name}({{
@@ -744,6 +740,11 @@ impl AsyncStreamIntrinsic {
                                  onCopyDoneFn,
                                  componentIdx,
                              }});
+
+                             let injectedWritePromise;
+                             if (injectHostWrite && !this.hasPendingEvent()) {{
+                                 injectedWritePromise = this.#hostInjectFn({{ count }});
+                             }}
 
                              // If sync, wait forever but allow task to do other things
                              if (!this.hasPendingEvent()) {{
@@ -900,8 +901,8 @@ impl AsyncStreamIntrinsic {
                                 // just-before reads, no matter what the user does on the other end).
                                 //
                                 if (packedResult === {async_blocked_const} && !this.#isHostOwned) {{
-                                    // If the write was blocked, we can only make progress when
-                                    // the read side notifies us of a read, then we must attempt the copy again
+                                    // If the write was blocked, the pending event produced by the
+                                    // read side represents the completed copy.
 
                                     await new Promise((resolve) => {{
                                         let waitInterval = setInterval(async () => {{
@@ -911,18 +912,21 @@ impl AsyncStreamIntrinsic {
                                         }});
                                     }});
 
-                                    packedResult = await this.copy({{
-                                        isAsync: true,
-                                        count,
-                                        bufferID,
-                                        buffer,
-                                        eventCode: {async_event_code_enum}.STREAM_WRITE,
-                                        // NOTE: we skip state checks only when dealing with a post blocked
-                                        // read/write in the host. This enables the host to quickly pick up the
-                                        // guest operation on the otherside quickly.
-                                        skipStateCheck: true,
-                                        componentIdx: -1,
-                                    }});
+                                    if (!this.hasPendingEvent()) {{
+                                        throw new Error("missing pending event after blocked stream write");
+                                    }}
+
+                                    const event = this.getPendingEvent();
+                                    if (!event) {{ throw new Error("missing pending event after blocked stream write"); }}
+
+                                    const {{ code, payload0: index, payload1: payload }} = event;
+
+                                    if (code !== {async_event_code_enum}.STREAM_WRITE) {{
+                                        throw new Error(`mismatched event code [${{code}}] for host stream write`);
+                                    }}
+
+                                    if (index !== this.waitableIdx()) {{ throw new Error('invalid stream end index'); }}
+                                    packedResult = payload;
 
                                     const copied = packedResult >> 4;
                                     if (copied === 0 && this.isDoneState()) {{
@@ -1018,8 +1022,8 @@ impl AsyncStreamIntrinsic {
                                 }});
 
                                 if (packedResult === {async_blocked_const}) {{
-                                    // If the read was blocked, we can only make progress when
-                                    // the write side notifies us of a write, then we must attempt the copy again
+                                    // If the read was blocked, the pending event produced by the
+                                    // write side represents the completed copy.
 
                                     await new Promise((resolve) => {{
                                         let waitInterval = setInterval(() => {{
@@ -1029,23 +1033,21 @@ impl AsyncStreamIntrinsic {
                                         }});
                                     }});
 
-                                    packedResult = await this.copy({{
-                                        isAsync: true,
-                                        count,
-                                        bufferID,
-                                        buffer,
-                                        eventCode: {async_event_code_enum}.STREAM_READ,
-                                        // NOTE: we skip state checks only when dealing with a post blocked
-                                        // read/write in the host. This enables the host to quickly pick up the
-                                        // guest operation on the otherside quickly.
-                                        skipStateCheck: true,
-                                        componentIdx: -1,
-                                    }});
-
-                                    const copied = packedResult >> 4;
-                                    if (copied === 0 && this.isDoneState()) {{
-                                       reject(new Error("write end dropped during read"));
+                                    if (!this.hasPendingEvent()) {{
+                                        throw new Error("missing pending event after blocked stream read");
                                     }}
+
+                                    const event = this.getPendingEvent();
+                                    if (!event) {{ throw new Error("missing pending event after blocked stream read"); }}
+
+                                    const {{ code, payload0: index, payload1: payload }} = event;
+
+                                    if (code !== {async_event_code_enum}.STREAM_READ) {{
+                                        throw new Error(`mismatched event code [${{code}}] for host stream read`);
+                                    }}
+
+                                    if (index !== this.waitableIdx()) {{ throw new Error('invalid stream end index'); }}
+                                    packedResult = payload;
 
                                     if (packedResult === {async_blocked_const}) {{
                                         throw new Error("unexpected double block during read");
@@ -1907,8 +1909,9 @@ impl AsyncStreamIntrinsic {
                               }}
 
                               await hostWriteEnd.write(values);
+                              resetWriteEndToIdleFn();
 
-                              return resetWriteEndToIdleFn;
+                              return doNothingFn;
                           }};
                       }}
                     "#
