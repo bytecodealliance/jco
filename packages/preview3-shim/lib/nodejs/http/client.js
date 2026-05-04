@@ -1,5 +1,5 @@
 import { ResourceWorker } from "../workers/resource-worker.js";
-import { StreamReader, readableStreamFromIterator } from "../stream.js";
+import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader, future } from "../future.js";
 import { _fieldsFromEntriesChecked } from "./fields.js";
 import { HttpError } from "./error.js";
@@ -51,7 +51,7 @@ export const client = {
     const { port1: tx, port2: rx } = new MessageChannel();
 
     const transfer = [rx];
-    const stream = body ? readableStreamFromIterator(body[Symbol.asyncIterator]()) : undefined;
+    const stream = body ? readableByteStreamFromReader(body, { name: "request body" }) : undefined;
     if (stream) {
       transfer.unshift(stream);
     }

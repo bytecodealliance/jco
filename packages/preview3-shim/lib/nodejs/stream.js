@@ -32,6 +32,108 @@ export function readableStreamFromIterator(iterator, name = "iterator") {
   });
 }
 
+export const DEFAULT_BYTE_STREAM_CHUNK_SIZE = 64 * 1024;
+
+/**
+ * Creates a transferable ReadableStream from a byte-stream reader.
+ *
+ * Generated p3 stream readers expose `read({ count })`, which performs one
+ * bounded Canonical ABI stream read for up to `count` bytes. Prefer that path so
+ * host byte sinks consume practical chunks instead of one byte at a time.
+ *
+ * @param {object} reader - Reader that provides `read()`, or `[Symbol.asyncIterator]()`.
+ * @param {object} [opts={}] - Optional adapter settings.
+ * @param {number} [opts.chunkSize=DEFAULT_BYTE_STREAM_CHUNK_SIZE] - Maximum bytes to request per generated `read()` call.
+ * @param {string} [opts.name="stream reader"] - Reader name used in error messages.
+ * @returns {ReadableStream<Uint8Array>} A transferable stream of byte chunks.
+ */
+export function readableByteStreamFromReader(reader, opts = {}) {
+  const source = byteStreamSource(reader, opts);
+  return new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await source.read();
+      if (done) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(byteChunk(value));
+    },
+    cancel(reason) {
+      return source.cancel?.(reason);
+    },
+  });
+}
+
+function byteStreamSource(reader, opts) {
+  const name = opts.name ?? "stream reader";
+  const chunkSize = opts.chunkSize ?? DEFAULT_BYTE_STREAM_CHUNK_SIZE;
+  if (!Number.isInteger(chunkSize) || chunkSize < 1) {
+    throw new TypeError(`invalid byte stream chunk size [${chunkSize}]`);
+  }
+
+  if (typeof reader?.read === "function") {
+    return {
+      async read() {
+        const result = await reader.read({ count: chunkSize });
+        if (isIteratorResult(result)) {
+          return result;
+        }
+        return { value: result, done: result === null };
+      },
+    };
+  }
+
+  if (typeof reader?.[Symbol.asyncIterator] === "function") {
+    const iterator = reader[Symbol.asyncIterator]();
+    return {
+      read() {
+        return iterator.next();
+      },
+      cancel(reason) {
+        return iterator.return?.(reason);
+      },
+    };
+  }
+
+  throw new TypeError(`${name} must provide read() or [Symbol.asyncIterator]()`);
+}
+
+function isIteratorResult(value) {
+  return value != null && typeof value === "object" && typeof value.done === "boolean";
+}
+
+function byteChunk(value) {
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  if (Array.isArray(value)) {
+    for (const byte of value) {
+      assertByte(byte);
+    }
+    return Uint8Array.from(value);
+  }
+  if (typeof value === "number") {
+    return Uint8Array.of(assertByte(value));
+  }
+  if (typeof value === "string") {
+    return new TextEncoder().encode(value);
+  }
+
+  throw new TypeError(
+    "byte stream chunk must be a byte, byte array, ArrayBuffer, Uint8Array, or string",
+  );
+}
+
+function assertByte(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 255) {
+    throw new RangeError(`Invalid byte stream value: ${value}`);
+  }
+  return value;
+}
+
 /**
  * Creates a bidirectional stream with separate reader and writer interfaces.
  *

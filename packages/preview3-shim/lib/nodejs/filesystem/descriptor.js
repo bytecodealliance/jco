@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import process from "node:process";
 
-import { StreamReader, readableStreamFromIterator } from "../stream.js";
+import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader } from "../future.js";
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { earlyDispose, registerDispose } from "../finalization.js";
@@ -125,14 +125,14 @@ class Descriptor {
    * ```
    *
    * @async
-   * @param {object} data A data source implementing `[Symbol.asyncIterator]()`.
+   * @param {object} data A readable byte stream.
    * @param {bigint} offset The offset within the file.
    * @returns {Promise<void>}
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async writeViaStream(data, offset) {
     this.#ensureHandle();
-    const stream = readableStreamFromIterator(data[Symbol.asyncIterator]());
+    const stream = readableByteStreamFromReader(data, { name: "file write data" });
 
     try {
       await worker().run({ op: "write", fd: this.#handle.fd, offset, stream }, [stream]);
@@ -149,7 +149,7 @@ class Descriptor {
    * ```
    *
    * @async
-   * @param {object} data A data source implementing `[Symbol.asyncIterator]()`.
+   * @param {object} data A readable byte stream.
    * @returns {Promise<void>}
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */

@@ -965,8 +965,12 @@ impl AsyncStreamIntrinsic {
                     // fn (below) via an anonymous function.
                     Self::StreamReadableEndClass => format!(
                         r#"
-                         async read() {{
+                         async read(count = 1) {{
                             {debug_log_fn}('[{end_class_name}#read()]');
+
+                            if (this.#endOfStream) {{
+                                return {{ value: undefined, done: true }};
+                            }}
 
                             // Wait for an existing read operation to end, if present,
                             // otherwise register this read for any future operations.
@@ -995,7 +999,10 @@ impl AsyncStreamIntrinsic {
                             // TODO(fix): when we do a read, we need to GET the string encoding from the
                             // other side, via the lift/lower fn?
 
-                            const count = 1;
+                            if (!Number.isInteger(count) || count < 1) {{
+                                throw new TypeError(`invalid stream read count [${{count}}]`);
+                            }}
+                            count = Math.min(count, {managed_buffer_class}.MAX_LENGTH);
                             try {{
                                 const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
                                     componentIdx: -1, // componentIdx of -1 indicates the host
@@ -1050,11 +1057,23 @@ impl AsyncStreamIntrinsic {
                                     }}
                                 }}
 
-                                const vs = buffer.read(count);
-                                const {{ typedArray }} = this.#elemMeta;
-                                const res = typedArray === undefined || vs.length === 0 ? count === 1 ? vs[0] : vs : new typedArray(vs);
-                                this.#result = null;
-                                resolve(res);
+                                const resultKind = packedResult & 0xF;
+                                const transferred = packedResult >> 4;
+
+                                if (resultKind === {stream_end_class}.CopyResult.DROPPED) {{
+                                    this.#endOfStream = true;
+                                }}
+
+                                if (transferred > 0) {{
+                                    const values = buffer.read(transferred);
+                                    const {{ typedArray }} = this.#elemMeta;
+                                    const value = typedArray === undefined ? count === 1 ? values[0] : values : new typedArray(values);
+                                    this.#result = null;
+                                    resolve(value);
+                                }} else {{
+                                    this.#result = null;
+                                    resolve(undefined);
+                                }}
 
                             }} catch (err) {{
                                 {debug_log_fn}('[{end_class_name}#read()] error', err);
@@ -1092,6 +1111,8 @@ impl AsyncStreamIntrinsic {
                         #isHostOwned;
 
                         #result = null;
+
+                        #endOfStream = false;
 
                         constructor(args) {{
                             {debug_log_fn}('[{end_class_name}#constructor()] args', args);
@@ -1325,8 +1346,8 @@ impl AsyncStreamIntrinsic {
                                 isReadable: streamEnd.isReadable(),
                                 isWritable: streamEnd.isWritable(),
                                 globalRep: this.#rep,
-                                readFn: async () => {{
-                                    return await streamEnd.read();
+                                readFn: async (count) => {{
+                                    return await streamEnd.read(count);
                                 }},
                                 writeFn: async (v) => {{
                                     await streamEnd.write(v);
@@ -1391,8 +1412,19 @@ impl AsyncStreamIntrinsic {
 
                         async next() {{
                             {debug_log_fn}('[{external_stream_class_name}#next()]');
-                            if (!this.#isReadable) {{ throw new Error("stream is not marked as readable and cannot be written from"); }}
-                            return this.#readFn();
+                            return this.read();
+                        }}
+
+                        async read(opts) {{
+                            {debug_log_fn}('[{external_stream_class_name}#read()]', {{ opts }});
+                            if (!this.#isReadable) {{ throw new Error("stream is not marked as readable and cannot be read from"); }}
+                            return this.#readFn(this.#readCount(opts));
+                        }}
+
+                        #readCount(opts) {{
+                            const count = opts === undefined ? 1 : typeof opts === "number" ? opts : opts && typeof opts === "object" ? opts.count ?? 1 : undefined;
+                            if (!Number.isInteger(count) || count < 1) {{ throw new TypeError(`invalid stream read count [${{count}}]`); }}
+                            return count;
                         }}
 
                         async write() {{

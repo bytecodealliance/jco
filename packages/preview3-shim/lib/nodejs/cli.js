@@ -2,7 +2,7 @@ import process from "node:process";
 import { Readable } from "node:stream";
 
 import { ResourceWorker } from "./workers/resource-worker.js";
-import { StreamReader, readableStreamFromIterator } from "./stream.js";
+import { StreamReader, readableByteStreamFromReader } from "./stream.js";
 import { future } from "./future.js";
 
 import { environment as environmentV2 } from "@bytecodealliance/preview2-shim/cli";
@@ -98,7 +98,7 @@ export const stdout = {
    * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
    */
   async writeViaStream(streamReader) {
-    const readableStream = readableStreamFromIterator(streamReader[Symbol.asyncIterator]());
+    const readableStream = readableByteStreamFromReader(streamReader, { name: "stdout stream" });
     try {
       await worker().run({ op: "stdout", stream: readableStream }, [readableStream]);
       return { tag: "ok", val: undefined };
@@ -119,7 +119,7 @@ export const stderr = {
    * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
    */
   async writeViaStream(streamReader) {
-    const readableStream = readableStreamFromIterator(streamReader[Symbol.asyncIterator]());
+    const readableStream = readableByteStreamFromReader(streamReader, { name: "stderr stream" });
     try {
       await worker().run({ op: "stderr", stream: readableStream }, [readableStream]);
       return { tag: "ok", val: undefined };

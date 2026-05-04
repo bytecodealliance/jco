@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 
 import { ResourceWorker } from "../workers/resource-worker.js";
-import { StreamReader, readableStreamFromIterator } from "../stream.js";
+import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader, future } from "../future.js";
 import { Request } from "./request.js";
 import { Response } from "./response.js";
@@ -92,7 +92,7 @@ export class HttpServer extends EventEmitter {
           const [body, trailers] = Response.consumeBody(res, resRx);
           const { port1: tx, port2: rx } = new MessageChannel();
 
-          const stream = readableStreamFromIterator(body[Symbol.asyncIterator]());
+          const stream = readableByteStreamFromReader(body, { name: "response body" });
 
           // Send trailers when ready
           trailers

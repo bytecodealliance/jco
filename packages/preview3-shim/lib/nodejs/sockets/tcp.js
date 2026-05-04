@@ -1,4 +1,4 @@
-import { StreamReader, readableStreamFromIterator } from "../stream.js";
+import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader } from "../future.js";
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { SocketError } from "./error.js";
@@ -257,22 +257,25 @@ export class TcpSocket {
    * ```
    *
    * @async
-   * @param {AsyncIterable<Uint8Array>} data - The data stream to send. Any
-   *   async-iterable yielding byte chunks (e.g. a `StreamReader`) is accepted.
+   * @param {object} data - The byte stream to send.
    * @returns {Promise<void>}
    * @throws {SocketError} With payload.tag 'invalid-state' if socket is not CONNECTED
-   * @throws {SocketError} With payload.tag 'invalid-argument' if `data` does not implement [Symbol.asyncIterator]
+   * @throws {SocketError} With payload.tag 'invalid-argument' if `data` is not a readable byte stream
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
   async send(data) {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
-    if (data == null || data == undefined || typeof data[Symbol.asyncIterator] !== "function") {
-      throw new SocketError("invalid-argument");
+    let stream;
+    try {
+      stream = readableByteStreamFromReader(data, { name: "tcp send data" });
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new SocketError("invalid-argument", error.message, undefined, { cause: error });
+      }
+      throw error;
     }
-
-    const stream = readableStreamFromIterator(data[Symbol.asyncIterator]());
 
     try {
       // Transfer the stream to the worker

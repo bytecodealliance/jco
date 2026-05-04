@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 
-const { StreamReader, StreamWriter, stream } =
+const { StreamReader, StreamWriter, stream, readableByteStreamFromReader } =
   await import("@bytecodealliance/preview3-shim/stream");
 
 describe("Node.js Preview3 canon stream reader", () => {
@@ -276,5 +276,64 @@ describe("stream() helper", () => {
 
     const done = await rx.read();
     expect(done).toBeNull();
+  });
+});
+
+describe("readableByteStreamFromReader()", () => {
+  test("uses read options and normalizes byte arrays", async () => {
+    const calls = [];
+    const source = {
+      async read(options) {
+        calls.push(options);
+        if (calls.length === 1) {
+          return { value: [65, 66, 67], done: false };
+        }
+        return { value: undefined, done: true };
+      },
+      [Symbol.asyncIterator]() {
+        throw new Error("read should be used when available");
+      },
+    };
+
+    const reader = readableByteStreamFromReader(source, { chunkSize: 3 }).getReader();
+    const first = await reader.read();
+    const second = await reader.read();
+
+    expect(calls).toEqual([{ count: 3 }, { count: 3 }]);
+    expect(first.done).toBe(false);
+    expect(first.value).toBeInstanceOf(Uint8Array);
+    expect([...first.value]).toEqual([65, 66, 67]);
+    expect(second.done).toBe(true);
+  });
+
+  test("falls back to read() readers", async () => {
+    const values = [72, 105, null];
+    const source = {
+      async read() {
+        return values.shift();
+      },
+    };
+
+    const reader = readableByteStreamFromReader(source).getReader();
+
+    const first = await reader.read();
+    const second = await reader.read();
+    const done = await reader.read();
+
+    expect([...first.value]).toEqual([72]);
+    expect([...second.value]).toEqual([105]);
+    expect(done.done).toBe(true);
+  });
+
+  test("rejects invalid byte values", async () => {
+    const source = {
+      async read() {
+        return { value: [256], done: false };
+      },
+    };
+
+    const reader = readableByteStreamFromReader(source).getReader();
+
+    await expect(reader.read()).rejects.toThrow("Invalid byte stream value: 256");
   });
 });
