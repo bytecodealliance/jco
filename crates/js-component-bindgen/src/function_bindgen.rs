@@ -3176,6 +3176,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         const hostInjectFn = {gen_stream_host_inject_fn}({{
                             readFn: readFn{tmp},
                             hostWriteEnd: hostWriteEnd{tmp},
+                            readEnd: readEnd{tmp},
                         }});
                         readEnd{tmp}.setHostInjectFn(hostInjectFn);
 

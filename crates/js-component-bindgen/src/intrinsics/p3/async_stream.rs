@@ -724,8 +724,8 @@ impl AsyncStreamIntrinsic {
                              }});
 
                              // If the stream is readable and was lowered from the host, the
-                             // writer is host-side. Register the read first, then do a
-                             // just-in-time host write only if the read blocked.
+                             // writer is host-side. Register the read first; host injection
+                             // will no-op if the read already produced a pending event.
                              const injectHostWrite = this.isReadable() && !!this.#hostInjectFn;
 
                              // Perform the read/write
@@ -737,7 +737,7 @@ impl AsyncStreamIntrinsic {
                              }});
 
                              let injectedWritePromise;
-                             if (injectHostWrite && !this.hasPendingEvent()) {{
+                             if (injectHostWrite) {{
                                  injectedWritePromise = this.#hostInjectFn({{ count }});
                              }}
 
@@ -1860,7 +1860,8 @@ impl AsyncStreamIntrinsic {
                 output.push_str(&format!(
                     r#"
                       function {gen_host_inject_fn}(genArgs) {{
-                          const {{ readFn, hostWriteEnd }} = genArgs;
+                          const {{ readFn, hostWriteEnd, readEnd }} = genArgs;
+                          if (!readEnd) {{ throw new TypeError('missing read end'); }}
                           const doNothingFn = () => {{}};
                           const resetWriteEndToIdleFn = () => {{
                               // After the write is finished, we consume the event that was generated
@@ -1874,6 +1875,7 @@ impl AsyncStreamIntrinsic {
                               let {{ count }} = args;
                               if (count < 0) {{ throw new Error('invalid count'); }}
                               if (count === 0) {{ return doNothingFn; }}
+                              if (readEnd.hasPendingEvent()) {{ return doNothingFn; }}
 
                               // If we get another read when done is already set, that was
                               // the case of a iterator that returned a final value

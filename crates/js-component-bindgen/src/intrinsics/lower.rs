@@ -1136,6 +1136,7 @@ impl LowerIntrinsic {
                                     const hostInjectFn = {gen_stream_host_inject_fn}({{
                                         readFn: {gen_read_fn_from_lowerable_stream_fn}(stream),
                                         hostWriteEnd: writeEnd,
+                                        readEnd,
                                     }});
                                     readEnd.setHostInjectFn(hostInjectFn);
 
