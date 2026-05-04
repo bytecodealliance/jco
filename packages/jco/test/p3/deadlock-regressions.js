@@ -7,15 +7,6 @@ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { setupAsyncTest } from "../helpers.js";
 import { LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
 
-function deferred() {
-    let resolve, reject;
-    const promise = new Promise((res, rej) => {
-        resolve = res;
-        reject = rej;
-    });
-    return { promise, resolve, reject };
-}
-
 suite("async scheduling regressions", () => {
     test("host future can be completed by a guest sibling task", async () => {
         const { instance, cleanup } = await setupAsyncTest({
@@ -36,13 +27,6 @@ suite("async scheduling regressions", () => {
                     },
                 },
             },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        asyncExports: ["jco:test-components/local-run-async#run"],
-                    },
-                },
-            },
         });
 
         try {
@@ -53,7 +37,7 @@ suite("async scheduling regressions", () => {
     });
 
     test("host stream can be unblocked by a guest sibling task", async () => {
-        const signaled = deferred();
+        const signaled = Promise.withResolvers();
         let yielded = false;
 
         const stream = {
@@ -79,13 +63,6 @@ suite("async scheduling regressions", () => {
                     ...new WASIShim().getImportObject(),
                     "jco:test-components/stream-concurrency-host": {
                         signal: () => signaled.resolve(),
-                    },
-                },
-            },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        asyncExports: ["jco:test-components/stream-concurrency-test#read-after-signal"],
                     },
                 },
             },

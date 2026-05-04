@@ -723,14 +723,9 @@ impl AsyncStreamIntrinsic {
                                  skipStateCheck,
                              }});
 
-                             // If the stream is readable and was lowered from the host,
-                             // when the component is doing a read (i.e. `stream.read`),
-                             // the writer is host-side and may have already written.
-                             //
-                             // We effectively do a just-in-time "write" of the external value,
-                             // if one is present, because what we got from the outside world
-                             // was a reader
-                             //
+                             // If the stream is readable and was lowered from the host, the
+                             // writer is host-side. Register the read first, then do a
+                             // just-in-time host write only if the read blocked.
                              const injectHostWrite = this.isReadable() && !!this.#hostInjectFn;
 
                              // Perform the read/write
@@ -752,6 +747,8 @@ impl AsyncStreamIntrinsic {
                                      this.setCopyState({stream_end_class}.CopyState.ASYNC_COPYING);
                                      {debug_log_fn}('[{stream_end_class}#copy()] blocked', {{ componentIdx, eventCode, self: this }});
                                      if (injectedWritePromise) {{
+                                         // Do not await here: the injected write may depend on sibling
+                                         // guest work running, so the canonical read must return BLOCKED.
                                          injectedWritePromise.then(
                                              cleanupFn => cleanupFn(),
                                              err => this.setPendingEvent(() => {{ throw err; }}),
@@ -774,9 +771,8 @@ impl AsyncStreamIntrinsic {
                                  }}
                              }}
 
-                             // If we injected a write and the read has completed, we should reset
-                             // we can skip the rest of the async machinery since there the host controlled
-                             // write end does not need to use the pending event machinery
+                             // If the read completed immediately after injecting a host write,
+                             // it is safe to await injection cleanup before consuming the event.
                              if (injectedWritePromise) {{
                                  const cleanupFn = await injectedWritePromise;
                                  cleanupFn();

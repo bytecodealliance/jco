@@ -673,8 +673,9 @@ impl AsyncFutureIntrinsic {
 
 
                                   // Before performing this read, if we're dealing with a host-controlled
-                                  // future, then we should inject a write, but we can't wait for it to complete
-                                  // as we must do the rendesvous read below for the write to complete.
+                                  // future, start injecting the write. The injection may depend on sibling
+                                  // guest work running, so cleanup is attached without awaiting here; the
+                                  // canonical read must be able to return BLOCKED first.
                                   let injectedWritePromise;
                                   if (this.#hostInjectFn) {{
                                       injectedWritePromise = this.#hostInjectFn({{ count: 1 }});
@@ -687,15 +688,10 @@ impl AsyncFutureIntrinsic {
                                   }});
 
                                   if (injectedWritePromise) {{
-                                      if (this.hasPendingEvent()) {{
-                                          const cleanupFn = await injectedWritePromise;
-                                          cleanupFn();
-                                      }} else {{
-                                          injectedWritePromise.then(
-                                              cleanupFn => cleanupFn(),
-                                              err => this.setPendingEvent(() => {{ throw err; }}),
-                                          );
-                                      }}
+                                      injectedWritePromise.then(
+                                          cleanupFn => cleanupFn(),
+                                          err => this.setPendingEvent(() => {{ throw err; }}),
+                                      );
                                   }}
 
                                   return {{ buffer }};
