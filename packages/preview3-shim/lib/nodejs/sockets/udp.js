@@ -60,6 +60,24 @@ export class UdpSocket {
   };
 
   /**
+   * WIT static constructor for `wasi:sockets/types.udp-socket`.
+   *
+   * WIT:
+   * ```
+   * create: static func(address-family: ip-address-family) -> result<udp-socket, error-code>
+   * ```
+   *
+   * @static
+   * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
+   * @returns {UdpSocket} A new UdpSocket instance
+   * @throws {SocketError} with payload.tag 'invalid-argument' if `addressFamily` is not IPV4 or IPV6
+   * @throws {SocketError} for other socket creation errors
+   */
+  static create(addressFamily) {
+    return createUdpSocket(addressFamily);
+  }
+
+  /**
    * Creates a new UDP socket
    * WIT:
    * ```

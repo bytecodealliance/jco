@@ -960,6 +960,10 @@ export const preopens = {
   getDirectories: () => preopenEntries,
 };
 
+export const types = {
+  Descriptor,
+};
+
 /**
  * Set the preopen table.
  *
