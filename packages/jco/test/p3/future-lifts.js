@@ -8,6 +8,7 @@ import {
     LOCAL_TEST_COMPONENTS_DIR,
     checkFutureValues,
     createReadableStreamFromValues,
+    toTypedArrays,
 } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
@@ -337,17 +338,10 @@ suite("future<T> lifts", () => {
             vals,
             func: instance["jco:test-components/get-future-async"].getFutureListU8,
             typeName: "list<u8>",
-            expectedValues: [
-                // TODO: wit type representation smoothing mismatch
-                vals[0],
-                [...vals[1]],
-                [],
-            ],
+            expectedValues: toTypedArrays(Uint8Array, vals),
             assertEqFn: assert.deepEqual,
         });
     });
-
-    // TODO(fix): add tests for optimized UintXArrays (js_array_ty)
 
     test.concurrent("list<string>", async () => {
         assert.instanceOf(instance["jco:test-components/get-future-async"].getFutureListString, AsyncFunction);

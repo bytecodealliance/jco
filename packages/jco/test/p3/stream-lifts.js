@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { suite, test, assert, beforeAll, afterAll, expect } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, checkStreamValues } from "../common.js";
+import {
+    AsyncFunction,
+    LOCAL_TEST_COMPONENTS_DIR,
+    checkStreamValues,
+    toTypedArrayChunks,
+    toTypedArrays,
+} from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("stream<T> lifts", () => {
@@ -79,7 +85,13 @@ suite("stream<T> lifts", () => {
 
         let vals = [0, 1, 255];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU8(vals);
-        await checkStreamValues({ stream, vals, typeName: "u8" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(Uint8Array, vals),
+            typeName: "u8",
+            assertEqFn: assert.deepEqual,
+        });
 
         let invalidVals = [-1, 256];
         for (const invalid of invalidVals) {
@@ -90,7 +102,13 @@ suite("stream<T> lifts", () => {
 
         vals = [-11, -22, -33, -128, 127];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS8(vals);
-        await checkStreamValues({ stream, vals, typeName: "s8" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(Int8Array, vals),
+            typeName: "s8",
+            assertEqFn: assert.deepEqual,
+        });
 
         invalidVals = [-129, 128];
         for (const invalid of invalidVals) {
@@ -107,11 +125,23 @@ suite("stream<T> lifts", () => {
 
         let vals = [0, 100, 65535];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU16(vals);
-        await checkStreamValues({ stream, vals, typeName: "u16" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(Uint16Array, vals),
+            typeName: "u16",
+            assertEqFn: assert.deepEqual,
+        });
 
         vals = [-32_768, 0, 32_767];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS16(vals);
-        await checkStreamValues({ stream, vals, typeName: "u16" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(Int16Array, vals),
+            typeName: "s16",
+            assertEqFn: assert.deepEqual,
+        });
     });
 
     test.concurrent("u32/s32", async () => {
@@ -121,11 +151,23 @@ suite("stream<T> lifts", () => {
 
         let vals = [11, 22, 33];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
-        await checkStreamValues({ stream, vals, typeName: "u32" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(Uint32Array, vals),
+            typeName: "u32",
+            assertEqFn: assert.deepEqual,
+        });
 
         vals = [-11, -22, -33];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS32(vals);
-        await checkStreamValues({ stream, vals, typeName: "s32" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(Int32Array, vals),
+            typeName: "s32",
+            assertEqFn: assert.deepEqual,
+        });
     });
 
     test.concurrent("u64/s64", async () => {
@@ -135,7 +177,13 @@ suite("stream<T> lifts", () => {
 
         let vals = [0n, 100n, 65535n];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamU64(vals);
-        await checkStreamValues({ stream, vals, typeName: "u64" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(BigUint64Array, vals),
+            typeName: "u64",
+            assertEqFn: assert.deepEqual,
+        });
 
         let invalidVals = [-1n, 18446744073709551616n];
         for (const invalid of invalidVals) {
@@ -146,7 +194,13 @@ suite("stream<T> lifts", () => {
 
         vals = [-32_768n, 0n, 32_767n];
         stream = await instance["jco:test-components/get-stream-async"].getStreamS64(vals);
-        await checkStreamValues({ stream, vals, typeName: "s64" });
+        await checkStreamValues({
+            stream,
+            vals,
+            expectedValues: toTypedArrayChunks(BigInt64Array, vals),
+            typeName: "s64",
+            assertEqFn: assert.deepEqual,
+        });
 
         invalidVals = [-9223372036854775809n, 9223372036854775808n];
         for (const invalid of invalidVals) {
@@ -166,10 +220,9 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({
             stream,
             vals,
+            expectedValues: toTypedArrayChunks(Float32Array, vals),
             typeName: "f32",
-            assertEqFn: (value, expected) => {
-                assert.closeTo(value, expected, 0.00001);
-            },
+            assertEqFn: assert.deepEqual,
         });
 
         vals = [-300.01235, -1.5, -0.0, 0.0, 1.5, -300.01235];
@@ -177,10 +230,9 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({
             stream,
             vals,
+            expectedValues: toTypedArrayChunks(Float64Array, vals),
             typeName: "f64",
-            assertEqFn: (value, expected) => {
-                assert.closeTo(value, expected, 0.00001);
-            },
+            assertEqFn: assert.deepEqual,
         });
     });
 
@@ -321,16 +373,9 @@ suite("stream<T> lifts", () => {
             vals,
             typeName: "list<u8>",
             assertEqFn: assert.deepEqual,
-            expectedValues: [
-                // TODO: wit type representation smoothing mismatch
-                vals[0],
-                [...vals[1]],
-                [],
-            ],
+            expectedValues: toTypedArrays(Uint8Array, vals),
         });
     });
-
-    // TODO(fix): add tests for optimized UintXArrays (js_array_ty)
 
     test.concurrent("list<string>", async () => {
         const instance = await getInstance();

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { suite, test, assert, beforeAll, afterAll, describe, expect } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, toTypedArray } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("future<T> lowers", () => {
@@ -424,12 +424,10 @@ suite("future<T> lowers", () => {
                     await instance["jco:test-components/future-lower-async"].readFutureValueListU8(Promise.resolve(v)),
                 );
             }
-            assert.deepEqual(returnedVals, [
-                // TODO: wit type representation smoothing mismatch
-                vals[0],
-                [...vals[1]],
-                [],
-            ]);
+            assert.deepEqual(
+                returnedVals,
+                vals.map((value) => toTypedArray(Uint8Array, value)),
+            );
         });
 
         test.concurrent("list<string>", async () => {

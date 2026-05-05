@@ -1051,7 +1051,8 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 const vs = buffer.read(count);
-                                const res = count === 1 ? vs[0] : vs;
+                                const {{ typedArray }} = this.#elemMeta;
+                                const res = typedArray === undefined || vs.length === 0 ? count === 1 ? vs[0] : vs : new typedArray(vs);
                                 this.#result = null;
                                 resolve(res);
 

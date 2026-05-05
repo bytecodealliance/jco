@@ -90,6 +90,18 @@ export function createReadableStreamFromValues(vals) {
     });
 }
 
+export function toTypedArray(TypedArray, value) {
+    return value instanceof TypedArray ? value : new TypedArray(value);
+}
+
+export function toTypedArrays(TypedArray, values) {
+    return values.map((value) => toTypedArray(TypedArray, value));
+}
+
+export function toTypedArrayChunks(TypedArray, values) {
+    return values.map((value) => new TypedArray([value]));
+}
+
 /** Check the value of a given future (normally returned from a component) */
 export async function checkFutureValues(args) {
     const { vals, func, typeName, assertEqFn } = args ?? {};

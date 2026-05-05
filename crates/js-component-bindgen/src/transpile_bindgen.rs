@@ -1334,6 +1334,7 @@ impl<'a> Instantiator<'a, '_> {
                     is_numeric_type_js,
                     is_borrow_js,
                     is_async_value_js,
+                    typed_array_js,
                 ) = match stream_ty.payload {
                     // If there is no payload for the stream, we know the values
                     None => (
@@ -1346,6 +1347,7 @@ impl<'a> Instantiator<'a, '_> {
                         "false".into(),
                         "false".into(),
                         "false".into(),
+                        "undefined",
                     ),
                     // If there is a payload, generate relevant lift/lower and other metadata
                     Some(ty) => (
@@ -1380,6 +1382,7 @@ impl<'a> Instantiator<'a, '_> {
                             "{}",
                             matches!(ty, InterfaceType::Stream(_) | InterfaceType::Future(_))
                         ),
+                        js_typed_array_ctor(&ty).unwrap_or("undefined"),
                     ),
                 };
 
@@ -1396,6 +1399,7 @@ impl<'a> Instantiator<'a, '_> {
                             isNumeric: {is_numeric_type_js},
                             isBorrowed: {is_borrow_js},
                             isAsyncValue: {is_async_value_js},
+                            typedArray: {typed_array_js},
                             flatCount: {flat_count_js},
                             align32: {align_32_js},
                             size32: {size_32_js},
@@ -4953,12 +4957,14 @@ pub fn gen_flat_lift_fn_js_expr(
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let elem_align32 = elem_cabi.align32;
             let elem_size32 = elem_cabi.size32;
+            let typed_array = js_typed_array_ctor(&list_ty.element).unwrap_or("undefined");
             format!(
                 "{f}({{
                      elemLiftFn: {lift_fn_expr},
                      elemAlign32: {elem_align32},
                      elemSize32: {elem_size32},
-                 }})"
+                     typedArray: {typed_array},
+                  }})"
             )
         }
 
@@ -5251,6 +5257,22 @@ pub fn gen_flat_lift_fn_js_expr(
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext).name();
             format!("{f}.bind(null, {table_idx})")
         }
+    }
+}
+
+fn js_typed_array_ctor(ty: &InterfaceType) -> Option<&'static str> {
+    match ty {
+        InterfaceType::U8 => Some("Uint8Array"),
+        InterfaceType::S8 => Some("Int8Array"),
+        InterfaceType::U16 => Some("Uint16Array"),
+        InterfaceType::S16 => Some("Int16Array"),
+        InterfaceType::U32 => Some("Uint32Array"),
+        InterfaceType::S32 => Some("Int32Array"),
+        InterfaceType::U64 => Some("BigUint64Array"),
+        InterfaceType::S64 => Some("BigInt64Array"),
+        InterfaceType::Float32 => Some("Float32Array"),
+        InterfaceType::Float64 => Some("Float64Array"),
+        _ => None,
     }
 }
 

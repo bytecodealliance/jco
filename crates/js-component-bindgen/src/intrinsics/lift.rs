@@ -818,7 +818,9 @@ impl LiftIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {lift_flat_list_fn}(meta) {{
-                        const {{ elemLiftFn, elemSize32, elemAlign32, knownLen }} = meta;
+                        const {{ elemLiftFn, elemSize32, elemAlign32, knownLen, typedArray }} = meta;
+
+                        const listValue = values => typedArray === undefined ? values : new typedArray(values);
 
                         const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {{
                             ctx.storagePtr = dataPtr;
@@ -832,10 +834,8 @@ impl LiftIntrinsic {
                                 if (rem !== 0) {{ ctx.storagePtr += elemAlign32 - rem; }}
                             }}
                             if (originalPtr !== null) {{ ctx.storagePtr = originalPtr; }}
-                            return [val, ctx];
+                            return [listValue(val), ctx];
                         }};
-
-                        // TODO(fix): special case for u8/u16/etc into appropriate type
 
                         return function {lift_flat_list_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
@@ -854,7 +854,7 @@ impl LiftIntrinsic {
                                         // via params.
                                         //
                                         {debug_log_fn}('memory unexpectedly missing while lifting unknown length list', {{ ctx }});
-                                        liftResults = [ctx.params.slice(0, knownLen), ctx];
+                                        liftResults = [listValue(ctx.params.slice(0, knownLen)), ctx];
                                         ctx.params = ctx.params.slice(knownLen);
                                     }} else {{
                                         // in-memory list with unknown length w/ direct params

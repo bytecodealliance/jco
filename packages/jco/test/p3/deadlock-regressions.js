@@ -5,7 +5,7 @@ import { suite, test, assert } from "vitest";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 import { setupAsyncTest } from "../helpers.js";
-import { LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
+import { LOCAL_TEST_COMPONENTS_DIR, toTypedArrayChunks } from "../common.js";
 
 suite("async scheduling regressions", () => {
     test("host future can be completed by a guest sibling task", async () => {
@@ -21,7 +21,7 @@ suite("async scheduling regressions", () => {
                             for await (const value of stream) {
                                 values.push(value);
                             }
-                            assert.deepEqual(values, [42]);
+                            assert.deepEqual(values, toTypedArrayChunks(Uint8Array, [42]));
                             return 42;
                         },
                     },
@@ -71,7 +71,7 @@ suite("async scheduling regressions", () => {
         try {
             assert.deepEqual(
                 await instance["jco:test-components/stream-concurrency-test"].readAfterSignal(stream),
-                [42],
+                new Uint8Array([42]),
             );
         } finally {
             await cleanup();

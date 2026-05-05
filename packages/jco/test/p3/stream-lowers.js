@@ -4,7 +4,13 @@ import { ReadableStream } from "node:stream/web";
 import { suite, test, assert, beforeAll, afterAll, describe } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues } from "../common.js";
+import {
+    AsyncFunction,
+    LOCAL_TEST_COMPONENTS_DIR,
+    createReadableStreamFromValues,
+    toTypedArray,
+    toTypedArrays,
+} from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 suite("stream<T> lowers", () => {
@@ -171,13 +177,13 @@ suite("stream<T> lowers", () => {
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU8(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(Uint8Array, vals));
 
             vals = [-128, 0, 1, 127];
             returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS8(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(Int8Array, vals));
         });
 
         test.concurrent("u16/s16", async () => {
@@ -189,13 +195,13 @@ suite("stream<T> lowers", () => {
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU16(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(Uint16Array, vals));
 
             vals = [-32_768, 0, 32_767];
             returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS16(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(Int16Array, vals));
         });
 
         test.concurrent("u32/s32", async () => {
@@ -207,13 +213,13 @@ suite("stream<T> lowers", () => {
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU32(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(Uint32Array, vals));
 
             vals = [-32, 90001, 3200000];
             returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS32(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(Int32Array, vals));
         });
 
         test.concurrent("u64/s64", async () => {
@@ -225,13 +231,13 @@ suite("stream<T> lowers", () => {
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesU64(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(BigUint64Array, vals));
 
             vals = [-32_768n, 0n, 32_767n];
             returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS64(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, vals);
+            assert.deepEqual(returnedVals, toTypedArray(BigInt64Array, vals));
         });
 
         test.concurrent("f32/f64", async () => {
@@ -244,12 +250,14 @@ suite("stream<T> lowers", () => {
                 createReadableStreamFromValues(vals),
             );
             vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.01));
+            assert.instanceOf(returnedVals, Float32Array);
 
             vals = [-60000.01235, -1.5, -0.0, 0.0, 1.5, -60000.01235];
             returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesF32(
                 createReadableStreamFromValues(vals),
             );
             vals.entries().forEach(([idx, v]) => assert.closeTo(v, returnedVals[idx], 0.01));
+            assert.instanceOf(returnedVals, Float32Array);
         });
 
         test.concurrent("string", async () => {
@@ -395,12 +403,7 @@ suite("stream<T> lowers", () => {
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesListU8(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, [
-                // TODO: wit type representation smoothing mismatch
-                vals[0],
-                [...vals[1]],
-                [],
-            ]);
+            assert.deepEqual(returnedVals, toTypedArrays(Uint8Array, vals));
         });
 
         test.concurrent("list<string>", async () => {
@@ -499,7 +502,7 @@ suite("stream<T> lowers", () => {
             const returnedVals = await instance[
                 "jco:test-components/stream-lower-async"
             ].readStreamValuesExampleResourceOwnAttr(createReadableStreamFromValues(vals));
-            assert.deepEqual(returnedVals, [2, 1, 0]);
+            assert.deepEqual(returnedVals, toTypedArray(Uint32Array, [2, 1, 0]));
         });
 
         test.concurrent("stream<string>", async () => {
