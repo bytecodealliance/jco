@@ -85,5 +85,8 @@ export class FSError extends Error {
 }
 
 export function filesystemErrorCode(err) {
-  return getErrorTag(err.payload);
+  if (err?.payload?.tag) {
+    return err.payload;
+  }
+  return { tag: getErrorTag(err) };
 }

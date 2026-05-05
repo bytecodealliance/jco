@@ -176,7 +176,7 @@ class Descriptor {
   async advise(_offset, _length, _advice) {
     // TODO: This not directly suported on Node.js:
     // https://github.com/bytecodealliance/jco/issues/718
-    if (this.getType() === "directory") {
+    if ((await this.getType()).tag === "directory") {
       throw new FSError("bad-descriptor");
     }
   }
@@ -234,7 +234,7 @@ class Descriptor {
    */
   async getType() {
     if (this.#hostPreopen) {
-      return "directory";
+      return { tag: "directory" };
     }
     try {
       const stats = await this.#handle.stat();
@@ -610,7 +610,7 @@ class Descriptor {
     try {
       const handle = await fs.open(target, fsFlags);
       const desc = descriptorCreate(handle, df, fullPath);
-      const isDir = (await desc.getType()) === "directory";
+      const isDir = (await desc.getType()).tag === "directory";
 
       if (fullPath.endsWith("/") && !isDir) {
         desc[symbolDispose]();

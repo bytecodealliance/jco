@@ -1,4 +1,4 @@
-/** @module Interface wasi:http/client@0.3.0-rc-2026-02-09 **/
+/** @module Interface wasi:http/client@0.3.0-rc-2026-03-15 **/
 /**
  * This function may be used to either send an outgoing request over the
  * network or to forward it to another component.

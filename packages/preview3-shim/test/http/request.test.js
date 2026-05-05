@@ -25,20 +25,20 @@ describe("Request", () => {
     const [req, future] = Request.new(headers, contents, trailers, options);
     expect(req).toBeInstanceOf(Request);
     expect(future).toBeInstanceOf(FutureReader);
-    expect(req.method()).toBe("get");
-    expect(req.pathWithQuery()).toBeNull();
-    expect(req.scheme()).toBeNull();
-    expect(req.authority()).toBeNull();
+    expect(req.getMethod()).toEqual({ tag: "get" });
+    expect(req.getPathWithQuery()).toBeUndefined();
+    expect(req.getScheme()).toBeUndefined();
+    expect(req.getAuthority()).toBeUndefined();
   });
 
   test("setMethod accepts standard and custom methods", () => {
     const [req] = Request.new(headers, contents, trailers, options);
 
     req.setMethod("POST");
-    expect(req.method()).toEqual({ tag: "post" });
+    expect(req.getMethod()).toEqual({ tag: "post" });
 
     req.setMethod("X-CUSTOM");
-    expect(req.method()).toEqual({ tag: "other", val: "x-custom" });
+    expect(req.getMethod()).toEqual({ tag: "other", val: "x-custom" });
   });
 
   test("setMethod rejects invalid syntax", () => {
@@ -52,11 +52,11 @@ describe("Request", () => {
   test("setScheme handles valid and invalid schemes", () => {
     const [req] = Request.new(headers, contents, trailers, options);
 
-    req.setScheme("https");
-    expect(req.scheme()).toBe("https");
+    req.setScheme({ tag: "HTTPS" });
+    expect(req.getScheme()).toEqual({ tag: "HTTPS" });
 
-    req.setScheme(null);
-    expect(req.scheme()).toBeNull();
+    req.setScheme(undefined);
+    expect(req.getScheme()).toBeUndefined();
 
     expect(() => req.setScheme("1nvalid")).toThrowError(
       expect.objectContaining({ payload: { tag: "invalid-syntax" } }),
@@ -67,10 +67,10 @@ describe("Request", () => {
     const [req] = Request.new(headers, contents, trailers, options);
 
     req.setAuthority("example.com:8080");
-    expect(req.authority()).toBe("example.com:8080");
+    expect(req.getAuthority()).toBe("example.com:8080");
 
-    req.setAuthority(null);
-    expect(req.authority()).toBeNull();
+    req.setAuthority(undefined);
+    expect(req.getAuthority()).toBeUndefined();
 
     expect(() => req.setAuthority("::invalid::")).toThrowError(
       expect.objectContaining({ payload: { tag: "invalid-syntax" } }),
@@ -80,11 +80,11 @@ describe("Request", () => {
   test("headers() and options() are immutable", () => {
     const [req] = Request.new(headers, contents, trailers, options);
 
-    expect(() => req.headers().append("x", new Uint8Array([0]))).toThrowError(
+    expect(() => req.getHeaders().append("x", new Uint8Array([0]))).toThrowError(
       expect.objectContaining({ payload: { tag: "immutable" } }),
     );
 
-    expect(() => req.options().setConnectTimeout(1000)).toThrowError(
+    expect(() => req.getOptions().setConnectTimeout(1000)).toThrowError(
       expect.objectContaining({ payload: { tag: "immutable" } }),
     );
   });

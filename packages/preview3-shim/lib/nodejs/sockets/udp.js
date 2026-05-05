@@ -297,7 +297,7 @@ export class UdpSocket {
    * @throws {SocketError} with payload.tag 'invalid-state' if the socket hasn't been bound yet
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
-  localAddress() {
+  getLocalAddress() {
     if (this.#state === STATE.UNBOUND) {
       throw new SocketError("invalid-state");
     }
@@ -321,7 +321,7 @@ export class UdpSocket {
    * @returns {Object} The connected peer address
    * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not connected
    */
-  remoteAddress() {
+  getRemoteAddress() {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
@@ -337,7 +337,7 @@ export class UdpSocket {
    *
    * @returns {IP_ADDRESS_FAMILY}
    */
-  addressFamily() {
+  getAddressFamily() {
     return this.#family;
   }
 
@@ -350,7 +350,7 @@ export class UdpSocket {
    *
    * @returns {number}
    */
-  unicastHopLimit() {
+  getUnicastHopLimit() {
     return this.#options.hopLimit;
   }
 
@@ -393,7 +393,7 @@ export class UdpSocket {
    * @returns {bigint}
    * @throws {SocketError} payload.tag maps the system error
    */
-  receiveBufferSize() {
+  getReceiveBufferSize() {
     if (this.#options.receiveBufferSize) {
       return this.#options.receiveBufferSize;
     }
@@ -437,7 +437,7 @@ export class UdpSocket {
    * @returns {bigint}
    * @throws {SocketError} payload.tag maps the system error
    */
-  sendBufferSize() {
+  getSendBufferSize() {
     if (this.#options.sendBufferSize) {
       return this.#options.sendBufferSize;
     }

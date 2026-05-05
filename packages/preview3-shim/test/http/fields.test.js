@@ -42,11 +42,11 @@ describe("Fields tests", () => {
     expect(result).toEqual(["a", "b"]);
   });
 
-  test("preserves insertion order in entries()", () => {
+  test("preserves insertion order in copyAll()", () => {
     const f = new Fields();
     f.append("A", ENCODER.encode("1"));
     f.append("B", ENCODER.encode("2"));
-    const ents = f.entries().map(([n, v]) => [n, DECODER.decode(v)]);
+    const ents = f.copyAll().map(([n, v]) => [n, DECODER.decode(v)]);
     expect(ents).toEqual([
       ["A", "1"],
       ["B", "2"],

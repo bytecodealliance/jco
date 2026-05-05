@@ -79,7 +79,7 @@ export class Response {
    *
    * @returns {number}
    */
-  statusCode() {
+  getStatusCode() {
     return this.#statusCode;
   }
 
@@ -112,7 +112,7 @@ export class Response {
    *
    * @returns {Fields}
    */
-  headers() {
+  getHeaders() {
     return this.#headers;
   }
 

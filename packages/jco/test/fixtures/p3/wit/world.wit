@@ -10,8 +10,8 @@ interface commands {
 }
 
 world command-extended {
-  import wasi:cli/environment@0.3.0-rc-2026-02-09;
-  include wasi:http/service@0.3.0-rc-2026-02-09;
+  import wasi:cli/environment@0.3.0-rc-2026-03-15;
+  include wasi:http/service@0.3.0-rc-2026-03-15;
 
   export commands;
 }

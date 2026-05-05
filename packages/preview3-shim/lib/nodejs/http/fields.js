@@ -198,13 +198,13 @@ export class Fields {
    * Get all entries as a list of name-value pairs
    * WIT:
    * ```
-   * entries: func() -> list<tuple<field-name,field-value>>;
+   * copy-all: func() -> list<tuple<field-name,field-value>>;
    * ```
    *
    * @returns {[string, Uint8Array][]} List of all entries
    */
-  entries() {
-    return this.#entries;
+  copyAll() {
+    return this.#entries.slice();
   }
 
   /**

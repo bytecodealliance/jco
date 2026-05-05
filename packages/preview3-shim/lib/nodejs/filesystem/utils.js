@@ -1,19 +1,19 @@
 /** Map fs.Dirent -> WASI type */
 export function wasiTypeFromDirent(obj) {
   if (obj.isFile()) {
-    return "regular-file";
+    return { tag: "regular-file" };
   } else if (obj.isSocket()) {
-    return "socket";
+    return { tag: "socket" };
   } else if (obj.isSymbolicLink()) {
-    return "symbolic-link";
+    return { tag: "symbolic-link" };
   } else if (obj.isFIFO()) {
-    return "fifo";
+    return { tag: "fifo" };
   } else if (obj.isDirectory()) {
-    return "directory";
+    return { tag: "directory" };
   } else if (obj.isCharacterDevice()) {
-    return "character-device";
+    return { tag: "character-device" };
   } else if (obj.isBlockDevice()) {
-    return "block-device";
+    return { tag: "block-device" };
   }
-  return "unknown";
+  return { tag: "other", val: undefined };
 }

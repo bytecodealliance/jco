@@ -188,7 +188,7 @@ describe("Descriptor with os.tmpdir()", () => {
 
     const stats1 = await rootDescriptor.statAt({ symlinkFollow: false }, fileSub);
 
-    expect(stats1.type).toBe("regular-file");
+    expect(stats1.type).toEqual({ tag: "regular-file" });
     expect(typeof stats1.size).toBe("bigint");
     expect(typeof stats1.dataAccessTimestamp.seconds).toBe("bigint");
     expect(typeof stats1.dataAccessTimestamp.nanoseconds).toBe("number");
@@ -200,10 +200,10 @@ describe("Descriptor with os.tmpdir()", () => {
     await fs.symlink(realPath, linkPath);
 
     const stats2 = await rootDescriptor.statAt({ symlinkFollow: false }, linkSub);
-    expect(stats2.type).toBe("symbolic-link");
+    expect(stats2.type).toEqual({ tag: "symbolic-link" });
 
     const stats3 = await rootDescriptor.statAt({ symlinkFollow: true }, linkSub);
-    expect(stats3.type).toBe("regular-file");
+    expect(stats3.type).toEqual({ tag: "regular-file" });
   });
 });
 

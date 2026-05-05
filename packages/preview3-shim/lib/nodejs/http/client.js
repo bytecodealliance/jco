@@ -3,7 +3,7 @@ import { StreamReader, readableStreamFromIterator } from "../stream.js";
 import { FutureReader, future } from "../future.js";
 import { _fieldsFromEntriesChecked } from "./fields.js";
 import { HttpError } from "./error.js";
-import { Request } from "./request.js";
+import { _schemeToString, Request } from "./request.js";
 import { Response } from "./response.js";
 
 let WORKER = null;
@@ -31,20 +31,20 @@ export const client = {
    * @throws {HttpError}
    */
   async send(req) {
-    const scheme = req.scheme() ?? "http";
-    const authority = req.authority();
+    const scheme = _schemeToString(req.getScheme()) ?? "http";
+    const authority = req.getAuthority();
 
     if (!authority) {
       throw new HttpError("internal-error", "Request.authority must be set for client.send");
     }
 
-    const path = req.pathWithQuery() ?? "/";
+    const path = req.getPathWithQuery() ?? "/";
     const url = `${scheme}://${authority}${path}`;
 
-    const opts = req.options();
-    const connectTimeoutNs = opts?.connectTimeout() ?? null;
-    const firstByteTimeoutNs = opts?.firstByteTimeout() ?? null;
-    const betweenBytesTimeoutNs = opts?.betweenBytesTimeout() ?? null;
+    const opts = req.getOptions();
+    const connectTimeoutNs = opts?.getConnectTimeout() ?? null;
+    const firstByteTimeoutNs = opts?.getFirstByteTimeout() ?? null;
+    const betweenBytesTimeoutNs = opts?.getBetweenBytesTimeout() ?? null;
 
     const { rx: resRx } = future();
     const [body, trailers] = Request.consumeBody(req, resRx);
@@ -63,12 +63,13 @@ export const client = {
       .finally(() => tx.close());
 
     try {
+      const method = req.getMethod();
       const parts = await worker().run(
         {
           op: "client-request",
           url,
-          method: req.method().tag,
-          headers: req.headers().entries(),
+          method: method.tag === "other" ? method.val : method.tag,
+          headers: req.getHeaders().copyAll(),
           timeouts: {
             connectTimeoutNs,
             firstByteTimeoutNs,

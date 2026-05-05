@@ -1,22 +1,30 @@
-/** @module Interface wasi:random/random@0.3.0-rc-2026-02-09 **/
+/** @module Interface wasi:random/random@0.3.0-rc-2026-03-15 **/
 /**
- * Return `len` cryptographically-secure random or pseudo-random bytes.
- * 
+ * Return up to `max-len` cryptographically-secure random or pseudo-random
+ * bytes.
+ *
  * This function must produce data at least as cryptographically secure and
  * fast as an adequately seeded cryptographically-secure pseudo-random
  * number generator (CSPRNG). It must not block, from the perspective of
  * the calling program, under any circumstances, including on the first
  * request and on requests for numbers of bytes. The returned data must
  * always be unpredictable.
- * 
+ *
+ * Implementations MAY return fewer bytes than requested (a short read).
+ * Callers that require exactly `max-len` bytes MUST call this function in
+ * a loop until the desired number of bytes has been accumulated.
+ * Implementations MUST return at least 1 byte when `max-len` is greater
+ * than zero. When `max-len` is zero, implementations MUST return an empty
+ * list without trapping.
+ *
  * This function must always return fresh data. Deterministic environments
  * must omit this function, rather than implementing it with deterministic
  * data.
  */
-export function getRandomBytes(len: bigint): Uint8Array;
+export function getRandomBytes(maxLen: bigint): Uint8Array;
 /**
  * Return a cryptographically-secure random or pseudo-random `u64` value.
- * 
+ *
  * This function returns the same type of data as `get-random-bytes`,
  * represented as a `u64`.
  */

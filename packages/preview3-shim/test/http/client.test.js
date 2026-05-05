@@ -79,11 +79,11 @@ describe("HttpClient Integration", () => {
     trailersTx.write(null);
 
     const response = await client.send(req);
-    expect(response.statusCode()).toBe(200);
+    expect(response.getStatusCode()).toBe(200);
 
-    const responseHeaders = response.headers();
+    const responseHeaders = response.getHeaders();
     const checkHeader = (name, expectedValue) => {
-      const entry = [...responseHeaders.entries()].find(([k]) => k === name);
+      const entry = responseHeaders.copyAll().find(([k]) => k === name);
       const value = entry ? entry[1] : undefined;
       expect(value).toEqual(ENCODER.encode(expectedValue));
     };
@@ -134,7 +134,7 @@ describe("HttpClient Integration", () => {
     await trailersTx.write(null);
 
     const response = await responsePromise;
-    expect(response.statusCode()).toBe(200);
+    expect(response.getStatusCode()).toBe(200);
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);
@@ -167,7 +167,7 @@ describe("HttpClient Integration", () => {
     await trailersTx.write(null);
 
     const response = await client.send(req);
-    expect(response.statusCode()).toBe(500);
+    expect(response.getStatusCode()).toBe(500);
 
     const { rx: resRx2 } = future();
     const [body] = Response.consumeBody(response, resRx2);

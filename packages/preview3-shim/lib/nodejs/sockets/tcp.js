@@ -333,7 +333,7 @@ export class TcpSocket {
    * @throws {SocketError} with payload.tag 'invalid-state' if socket is not BOUND
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
-  localAddress() {
+  getLocalAddress() {
     if (this.#state === STATE.UNBOUND) {
       throw new SocketError("invalid-state");
     }
@@ -359,7 +359,7 @@ export class TcpSocket {
    * @throws {SocketError} with payload.tag 'invalid-state' if socket is not CONNECTED
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
-  remoteAddress() {
+  getRemoteAddress() {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
@@ -383,7 +383,7 @@ export class TcpSocket {
    *
    * @returns {boolean} True if socket is listening, false otherwise
    */
-  isListening() {
+  getIsListening() {
     return this.#state === STATE.LISTENING;
   }
 
@@ -396,7 +396,7 @@ export class TcpSocket {
    *
    * @returns {IP_ADDRESS_FAMILY} The IP address family (IPv4 or IPv6)
    */
-  addressFamily() {
+  getAddressFamily() {
     return this.#family;
   }
 
@@ -448,7 +448,7 @@ export class TcpSocket {
    *
    * @returns {boolean} True if keep-alive is enabled, false otherwise
    */
-  keepAliveEnabled() {
+  getKeepAliveEnabled() {
     return this.#options.keepAliveEnabled;
   }
 
@@ -488,7 +488,7 @@ export class TcpSocket {
    *
    * @returns {bigint} The keep-alive idle time in nanoseconds
    */
-  keepAliveIdleTime() {
+  getKeepAliveIdleTime() {
     return this.#options.keepAliveIdleTime;
   }
 
@@ -541,7 +541,7 @@ export class TcpSocket {
    *
    * @returns {bigint} The keep-alive interval in nanoseconds
    */
-  keepAliveInterval() {
+  getKeepAliveInterval() {
     return this.#options.keepAliveInterval;
   }
 
@@ -572,7 +572,7 @@ export class TcpSocket {
    *
    * @returns {number} The keep-alive count
    */
-  keepAliveCount() {
+  getKeepAliveCount() {
     return this.#options.keepAliveCount;
   }
 
@@ -603,7 +603,7 @@ export class TcpSocket {
    *
    * @returns {number} The hop limit
    */
-  hopLimit() {
+  getHopLimit() {
     return this.#options.hopLimit;
   }
 
@@ -635,7 +635,7 @@ export class TcpSocket {
    * @returns {bigint} The receive buffer size in bytes
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
-  receiveBufferSize() {
+  getReceiveBufferSize() {
     if (this.#options.receiveBufferSize) {
       return this.#options.receiveBufferSize;
     }
@@ -681,7 +681,7 @@ export class TcpSocket {
    * @returns {bigint} The send buffer size in bytes
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
-  sendBufferSize() {
+  getSendBufferSize() {
     if (this.#options.sendBufferSize) {
       return this.#options.sendBufferSize;
     }

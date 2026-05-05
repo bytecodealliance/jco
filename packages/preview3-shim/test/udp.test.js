@@ -18,7 +18,7 @@ describe("UDP Socket Creation", () => {
   test("creates an IPv4 UDP socket", async () => {
     const sock = createUdpSocket(IP_ADDRESS_FAMILY.IPV4);
     expect(sock).toBeInstanceOf(UdpSocket);
-    expect(sock.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
+    expect(sock.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
 
     sock[Symbol.dispose]();
   });
@@ -26,7 +26,7 @@ describe("UDP Socket Creation", () => {
   test("creates an IPv6 UDP socket", async () => {
     const sock = createIpv6Socket();
     expect(sock).toBeInstanceOf(UdpSocket);
-    expect(sock.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV6);
+    expect(sock.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV6);
 
     sock[Symbol.dispose]();
   });
@@ -43,7 +43,7 @@ describe("UDP Socket Bind", () => {
     const sock = createIpv4Socket();
     expect(sock.bind(ipv4LocalAddress)).toBeUndefined();
 
-    const local = sock.localAddress();
+    const local = sock.getLocalAddress();
     expect(local.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
     expect(local.val.address).toStrictEqual([127, 0, 0, 1]);
     expect(local.val.port).toBeGreaterThan(0);

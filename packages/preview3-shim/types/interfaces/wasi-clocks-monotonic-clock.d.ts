@@ -1,10 +1,10 @@
-/** @module Interface wasi:clocks/monotonic-clock@0.3.0-rc-2026-02-09 **/
+/** @module Interface wasi:clocks/monotonic-clock@0.3.0-rc-2026-03-15 **/
 /**
  * Read the current value of the clock.
- * 
+ *
  * The clock is monotonic, therefore calling this function repeatedly will
  * produce a sequence of non-decreasing values.
- * 
+ *
  * For completeness, this function traps if it's not possible to represent
  * the value of the clock in a `mark`. Consequently, implementations
  * should ensure that the starting time is low enough to avoid the

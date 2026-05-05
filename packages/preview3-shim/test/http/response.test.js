@@ -34,7 +34,7 @@ describe("Response", () => {
     const [res, future] = Response.new(headers, contents, trailers);
     expect(res).toBeInstanceOf(Response);
     expect(future).toBeInstanceOf(FutureReader);
-    expect(res.statusCode()).toBe(200); // Default status code
+    expect(res.getStatusCode()).toBe(200); // Default status code
   });
 
   test("new() validates arguments", () => {
@@ -59,18 +59,18 @@ describe("Response", () => {
     expect(res).toBeInstanceOf(Response);
   });
 
-  test("statusCode() returns the current status code", () => {
+  test("getStatusCode() returns the current status code", () => {
     const [res] = Response.new(headers, contents, trailers);
-    expect(res.statusCode()).toBe(200); // Default
+    expect(res.getStatusCode()).toBe(200); // Default
   });
 
   test("setStatusCode() changes the status code", () => {
     const [res] = Response.new(headers, contents, trailers);
     res.setStatusCode(404);
-    expect(res.statusCode()).toBe(404);
+    expect(res.getStatusCode()).toBe(404);
 
     res.setStatusCode(500);
-    expect(res.statusCode()).toBe(500);
+    expect(res.getStatusCode()).toBe(500);
   });
 
   test("setStatusCode() validates the status code", () => {
@@ -82,9 +82,9 @@ describe("Response", () => {
     expect(() => res.setStatusCode(600)).toThrow(HttpError);
   });
 
-  test("headers() returns the immutable headers", () => {
+  test("getHeaders() returns the immutable headers", () => {
     const [res] = Response.new(headers, contents, trailers);
-    const respHeaders = res.headers();
+    const respHeaders = res.getHeaders();
 
     expect(respHeaders).toBe(headers);
     expect(() => respHeaders.append("x-test", ENCODER.encode("value"))).toThrow(

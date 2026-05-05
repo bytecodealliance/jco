@@ -21,14 +21,14 @@ describe("TCP Socket Creation", () => {
     const socket = createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
 
     expect(socket).toBeInstanceOf(TcpSocket);
-    expect(socket.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
+    expect(socket.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
   });
 
   test("should create an IPv6 socket", async () => {
     const socket = await createTcpSocket(IP_ADDRESS_FAMILY.IPV6);
 
     expect(socket).toBeInstanceOf(TcpSocket);
-    expect(socket.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV6);
+    expect(socket.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV6);
   });
 
   test("should throw on invalid address family", async () => {
@@ -67,7 +67,7 @@ describe("TCP Socket Bind", () => {
   test("should return local address after binding", async () => {
     const client = createIpv4Socket();
     client.bind(ipv4LocalAddress);
-    const localAddr = client.localAddress();
+    const localAddr = client.getLocalAddress();
 
     expect(localAddr).toBeDefined();
     expect(localAddr.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
@@ -84,13 +84,13 @@ describe("TCP Socket Listen", () => {
     const stream = client.listen();
 
     expect(stream).toBeInstanceOf(StreamReader);
-    expect(client.isListening()).toBe(true);
+    expect(client.getIsListening()).toBe(true);
   });
 
   test("should allow to listen on unbound socket", async () => {
     const client = createIpv4Socket();
     expect(() => client.listen()).not.toThrow();
-    expect(client.isListening()).toBe(true);
+    expect(client.getIsListening()).toBe(true);
   });
 
   test("should throw when listening on already listening socket", async () => {
@@ -111,7 +111,7 @@ describe("TCP Socket Listen", () => {
     const stream = client.listen();
 
     expect(stream).toBeInstanceOf(StreamReader);
-    expect(client.isListening()).toBe(true);
+    expect(client.getIsListening()).toBe(true);
   });
 
   test("should throw when setting backlog size to 0", async () => {
@@ -135,7 +135,7 @@ describe("TCP Socket Listen", () => {
   test("accepts a preview3 client and exchanges data", async () => {
     const listener = createIpv4Socket();
     listener.bind(makeIpAddress("ipv4", "127.0.0.1", 0));
-    const localAddr = listener.localAddress();
+    const localAddr = listener.getLocalAddress();
     const acceptStream = listener.listen();
 
     // Create and connect client
@@ -144,8 +144,8 @@ describe("TCP Socket Listen", () => {
 
     // Accept the incoming connection
     const conn = await acceptStream.read();
-    expect(conn.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
-    expect(conn.isListening()).toBe(false);
+    expect(conn.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
+    expect(conn.getIsListening()).toBe(false);
 
     // Send message from client to server
     const { tx: tx1, rx: rx1 } = stream();
@@ -171,11 +171,11 @@ describe("Server closure", () => {
   test("disposing listener closes server and ends accept stream", async () => {
     const listener = createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
     listener.bind(makeIpAddress("ipv4", "127.0.0.1", 0));
-    const addr = listener.localAddress();
+    const addr = listener.getLocalAddress();
     const acceptStream = listener.listen();
 
     listener[Symbol.dispose]();
-    expect(listener.isListening()).toBe(false);
+    expect(listener.getIsListening()).toBe(false);
 
     const client = createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
     await expect(client.connect(addr)).rejects.toThrow();

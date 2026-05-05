@@ -24,7 +24,7 @@ function ipAddress(address, family) {
     case 6:
       return { tag: "ipv6", val: ipv6ToTuple(address) };
     default:
-      throw new SocketError("unknown", `Unknown IP address family: ${family}`);
+      throw new SocketError("other", `Unknown IP address family: ${family}`, `${family}`);
   }
 }
 
@@ -84,7 +84,8 @@ export const ipNameLookup = {
       if (error instanceof SocketError) {
         throw error;
       }
-      throw new SocketError(DNS_ERROR_MAP[error?.code] ?? "unknown", error?.message, undefined, {
+      const tag = DNS_ERROR_MAP[error?.code] ?? "other";
+      throw new SocketError(tag, error?.message, tag === "other" ? error?.code : undefined, {
         cause: error,
       });
     }

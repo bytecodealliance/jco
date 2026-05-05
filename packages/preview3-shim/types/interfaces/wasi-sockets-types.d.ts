@@ -1,80 +1,148 @@
-/** @module Interface wasi:sockets/types@0.3.0-rc-2026-02-09 **/
+/** @module Interface wasi:sockets/types@0.3.0-rc-2026-03-15 **/
 export type Duration = import('./wasi-clocks-types.js').Duration;
 /**
  * Error codes.
- * 
+ *
  * In theory, every API can return any error code.
  * In practice, API's typically only return the errors documented per API
  * combined with a couple of errors that are always possible:
- * - `unknown`
+ * - `other`
  * - `access-denied`
  * - `not-supported`
  * - `out-of-memory`
- * 
+ *
  * See each individual API for what the POSIX equivalents are. They sometimes differ per API.
- * # Variants
- * 
- * ## `"unknown"`
- * 
- * Unknown error
- * ## `"access-denied"`
- * 
+ */
+export type ErrorCode = ErrorCodeAccessDenied | ErrorCodeNotSupported | ErrorCodeInvalidArgument | ErrorCodeOutOfMemory | ErrorCodeTimeout | ErrorCodeInvalidState | ErrorCodeAddressNotBindable | ErrorCodeAddressInUse | ErrorCodeRemoteUnreachable | ErrorCodeConnectionRefused | ErrorCodeConnectionBroken | ErrorCodeConnectionReset | ErrorCodeConnectionAborted | ErrorCodeDatagramTooLarge | ErrorCodeOther;
+/**
  * Access denied.
- * 
+ *
  * POSIX equivalent: EACCES, EPERM
- * ## `"not-supported"`
- * 
+ */
+export interface ErrorCodeAccessDenied {
+  tag: 'access-denied',
+}
+/**
  * The operation is not supported.
- * 
- * POSIX equivalent: EOPNOTSUPP
- * ## `"invalid-argument"`
- * 
+ *
+ * POSIX equivalent: EOPNOTSUPP, ENOPROTOOPT, EPFNOSUPPORT, EPROTONOSUPPORT, ESOCKTNOSUPPORT
+ */
+export interface ErrorCodeNotSupported {
+  tag: 'not-supported',
+}
+/**
  * One of the arguments is invalid.
- * 
- * POSIX equivalent: EINVAL
- * ## `"out-of-memory"`
- * 
+ *
+ * POSIX equivalent: EINVAL, EDESTADDRREQ, EAFNOSUPPORT
+ */
+export interface ErrorCodeInvalidArgument {
+  tag: 'invalid-argument',
+}
+/**
  * Not enough memory to complete the operation.
- * 
- * POSIX equivalent: ENOMEM, ENOBUFS, EAI_MEMORY
- * ## `"timeout"`
- * 
+ *
+ * POSIX equivalent: ENOMEM, ENOBUFS
+ */
+export interface ErrorCodeOutOfMemory {
+  tag: 'out-of-memory',
+}
+/**
  * The operation timed out before it could finish completely.
- * ## `"invalid-state"`
- * 
+ *
+ * POSIX equivalent: ETIMEDOUT
+ */
+export interface ErrorCodeTimeout {
+  tag: 'timeout',
+}
+/**
  * The operation is not valid in the socket's current state.
- * ## `"address-not-bindable"`
- * 
- * A bind operation failed because the provided address is not an address that the `network` can bind to.
- * ## `"address-in-use"`
- * 
- * A bind operation failed because the provided address is already in use or because there are no ephemeral ports available.
- * ## `"remote-unreachable"`
- * 
- * The remote address is not reachable
- * ## `"connection-refused"`
- * 
- * The TCP connection was forcefully rejected
- * ## `"connection-reset"`
- * 
- * The TCP connection was reset.
- * ## `"connection-aborted"`
- * 
- * A TCP connection was aborted.
- * ## `"datagram-too-large"`
- * 
+ */
+export interface ErrorCodeInvalidState {
+  tag: 'invalid-state',
+}
+/**
+ * The local address is not available.
+ *
+ * POSIX equivalent: EADDRNOTAVAIL
+ */
+export interface ErrorCodeAddressNotBindable {
+  tag: 'address-not-bindable',
+}
+/**
+ * A bind operation failed because the provided address is already in
+ * use or because there are no ephemeral ports available.
+ *
+ * POSIX equivalent: EADDRINUSE
+ */
+export interface ErrorCodeAddressInUse {
+  tag: 'address-in-use',
+}
+/**
+ * The remote address is not reachable.
+ *
+ * POSIX equivalent: EHOSTUNREACH, EHOSTDOWN, ENETDOWN, ENETUNREACH, ENONET
+ */
+export interface ErrorCodeRemoteUnreachable {
+  tag: 'remote-unreachable',
+}
+/**
+ * The connection was forcefully rejected.
+ *
+ * POSIX equivalent: ECONNREFUSED
+ */
+export interface ErrorCodeConnectionRefused {
+  tag: 'connection-refused',
+}
+/**
+ * A write failed because the connection was broken.
+ *
+ * POSIX equivalent: EPIPE
+ */
+export interface ErrorCodeConnectionBroken {
+  tag: 'connection-broken',
+}
+/**
+ * The connection was reset.
+ *
+ * POSIX equivalent: ECONNRESET
+ */
+export interface ErrorCodeConnectionReset {
+  tag: 'connection-reset',
+}
+/**
+ * The connection was aborted.
+ *
+ * POSIX equivalent: ECONNABORTED
+ */
+export interface ErrorCodeConnectionAborted {
+  tag: 'connection-aborted',
+}
+/**
  * The size of a datagram sent to a UDP socket exceeded the maximum
  * supported size.
+ *
+ * POSIX equivalent: EMSGSIZE
  */
-export type ErrorCode = 'unknown' | 'access-denied' | 'not-supported' | 'invalid-argument' | 'out-of-memory' | 'timeout' | 'invalid-state' | 'address-not-bindable' | 'address-in-use' | 'remote-unreachable' | 'connection-refused' | 'connection-reset' | 'connection-aborted' | 'datagram-too-large';
+export interface ErrorCodeDatagramTooLarge {
+  tag: 'datagram-too-large',
+}
+/**
+ * A catch-all for errors not captured by the existing variants.
+ * Implementations can use this to extend the error type without
+ * breaking existing code.
+ */
+export interface ErrorCodeOther {
+  tag: 'other',
+  val: string | undefined,
+}
 /**
  * # Variants
- * 
+ *
  * ## `"ipv4"`
- * 
+ *
  * Similar to `AF_INET` in POSIX.
  * ## `"ipv6"`
- * 
+ *
  * Similar to `AF_INET6` in POSIX.
  */
 export type IpAddressFamily = 'ipv4' | 'ipv6';
@@ -135,14 +203,18 @@ export class TcpSocket {
   private constructor();
   /**
   * Create a new TCP socket.
-  * 
-  * Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)` in POSIX.
-  * On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
-  * 
+  *
+  * Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)`
+  * in POSIX. On IPv6 sockets, IPV6_V6ONLY is enabled by default and
+  * can't be configured otherwise.
+  *
   * Unlike POSIX, WASI sockets have no notion of a socket-level
   * `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
   * async support.
-  * 
+  *
+  * # Typical errors
+  * - `not-supported`: The `address-family` is not supported. (EAFNOSUPPORT)
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
   * - <https://man7.org/linux/man-pages/man2/socket.2.html>
@@ -152,16 +224,17 @@ export class TcpSocket {
   static create(addressFamily: IpAddressFamily): TcpSocket;
   /**
   * Bind the socket to the provided IP address and port.
-  * 
-  * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
-  * network interface(s) to bind to.
-  * If the TCP/UDP port is zero, the socket will be bound to a random free port.
-  * 
+  *
+  * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is
+  * left to the implementation to decide which network interface(s) to
+  * bind to. If the TCP/UDP port is zero, the socket will be bound to a
+  * random free port.
+  *
   * Bind can be attempted multiple times on the same socket, even with
   * different arguments on each iteration. But never concurrently and
   * only as long as the previous bind failed. Once a bind succeeds, the
   * binding can't be changed anymore.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
   * - `invalid-argument`:          `local-address` is not a unicast address. (EINVAL)
@@ -170,13 +243,14 @@ export class TcpSocket {
   * - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
   * - `address-in-use`:            Address is already in use. (EADDRINUSE)
   * - `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
-  * 
+  *
   * # Implementors note
-  * When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
-  * state of a recently closed socket on the same local address. In practice this means that the SO_REUSEADDR
-  * socket option should be set implicitly on all platforms, except on Windows where this is the default behavior
-  * and SO_REUSEADDR performs something different entirely.
-  * 
+  * The bind operation shouldn't be affected by the TIME_WAIT state of a
+  * recently closed socket on the same local address. In practice this
+  * means that the SO_REUSEADDR socket option should be set implicitly
+  * on all platforms, except on Windows where this is the default
+  * behavior and SO_REUSEADDR performs something different.
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
   * - <https://man7.org/linux/man-pages/man2/bind.2.html>
@@ -186,13 +260,18 @@ export class TcpSocket {
   bind(localAddress: IpSocketAddress): void;
   /**
   * Connect to a remote endpoint.
-  * 
-  * On success, the socket is transitioned into the `connected` state and this function returns a connection resource.
-  * 
+  *
+  * On success, the socket is transitioned into the `connected` state
+  * and the `remote-address` of the socket is updated.
+  * The `local-address` may be updated as well, based on the best network
+  * path to `remote-address`. If the socket was not already explicitly
+  * bound, this function will implicitly bind the socket to a random
+  * free port.
+  *
   * After a failed connection attempt, the socket will be in the `closed`
   * state and the only valid action left is to `drop` the socket. A single
   * socket can not be used to connect more than once.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
   * - `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
@@ -208,7 +287,7 @@ export class TcpSocket {
   * - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
   * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
   * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
   * - <https://man7.org/linux/man-pages/man2/connect.2.html>
@@ -218,20 +297,20 @@ export class TcpSocket {
   connect(remoteAddress: IpSocketAddress): Promise<void>;
   /**
   * Start listening and return a stream of new inbound connections.
-  * 
+  *
   * Transitions the socket into the `listening` state. This can be called
   * at most once per socket.
-  * 
+  *
   * If the socket is not already explicitly bound, this function will
   * implicitly bind the socket to a random free port.
-  * 
+  *
   * Normally, the returned sockets are bound, in the `connected` state
   * and immediately ready for I/O. Though, depending on exact timing and
   * circumstances, a newly accepted connection may already be `closed`
   * by the time the server attempts to perform its first I/O on it. This
   * is true regardless of whether the WASI implementation uses
   * "synthesized" sockets or not (see Implementors Notes below).
-  * 
+  *
   * The following properties are inherited from the listener socket:
   * - `address-family`
   * - `keep-alive-enabled`
@@ -241,18 +320,18 @@ export class TcpSocket {
   * - `hop-limit`
   * - `receive-buffer-size`
   * - `send-buffer-size`
-  * 
+  *
   * # Typical errors
   * - `invalid-state`:             The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
   * - `invalid-state`:             The socket is already in the `listening` state.
   * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
-  * 
+  *
   * # Implementors note
   * This method returns a single perpetual stream that should only close
   * on fatal errors (if any). Yet, the POSIX' `accept` function may also
   * return transient errors (e.g. ECONNABORTED). The exact details differ
   * per operation system. For example, the Linux manual mentions:
-  * 
+  *
   * > Linux accept() passes already-pending network errors on the new
   * > socket as an error code from accept(). This behavior differs from
   * > other BSD socket implementations. For reliable operation the
@@ -261,23 +340,23 @@ export class TcpSocket {
   * > In the case of TCP/IP, these are ENETDOWN, EPROTO, ENOPROTOOPT,
   * > EHOSTDOWN, ENONET, EHOSTUNREACH, EOPNOTSUPP, and ENETUNREACH.
   * Source: https://man7.org/linux/man-pages/man2/accept.2.html
-  * 
+  *
   * WASI implementations have two options to handle this:
   * - Optionally log it and then skip over non-fatal errors returned by
   *   `accept`. Guest code never gets to see these failures. Or:
   * - Synthesize a `tcp-socket` resource that exposes the error when
   *   attempting to send or receive on it. Guest code then sees these
   *   failures as regular I/O errors.
-  * 
+  *
   * In either case, the stream returned by this `listen` method remains
   * operational.
-  * 
+  *
   * WASI requires `listen` to perform an implicit bind if the socket
   * has not already been bound. Not all platforms (notably Windows)
   * exhibit this behavior out of the box. On platforms that require it,
   * the WASI implementation can emulate this behavior by performing
   * the bind itself if the guest hasn't already done so.
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html>
@@ -291,20 +370,22 @@ export class TcpSocket {
   listen(): ReadableStream<TcpSocket>;
   /**
   * Transmit data to peer.
-  * 
+  *
   * The caller should close the stream when it has no more data to send
   * to the peer. Under normal circumstances this will cause a FIN packet
   * to be sent out. Closing the stream is equivalent to calling
   * `shutdown(SHUT_WR)` in POSIX.
-  * 
+  *
   * This function may be called at most once and returns once the full
   * contents of the stream are transmitted or an error is encountered.
-  * 
+  *
   * # Typical errors
   * - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+  * - `invalid-state`:             `send` has already been called on this socket.
+  * - `connection-broken`:         The connection is not writable anymore. (EPIPE, ECONNABORTED on Windows)
   * - `connection-reset`:          The connection was reset. (ECONNRESET)
   * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-  * 
+  *
   *  # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
   * - <https://man7.org/linux/man-pages/man2/send.2.html>
@@ -314,31 +395,27 @@ export class TcpSocket {
   send(data: ReadableStream<number>): Promise<Result<void, ErrorCode>>;
   /**
   * Read data from peer.
-  * 
-  * This function returns a `stream` which provides the data received from the
-  * socket, and a `future` providing additional error information in case the
-  * socket is closed abnormally.
-  * 
-  * If the socket is closed normally, `stream.read` on the `stream` will return
-  * `read-status::closed` with no `error-context` and the future resolves to
-  * the value `ok`. If the socket is closed abnormally, `stream.read` on the
-  * `stream` returns `read-status::closed` with an `error-context` and the future
-  * resolves to `err` with an `error-code`.
-  * 
-  * `receive` is meant to be called only once per socket. If it is called more
-  * than once, the subsequent calls return a new `stream` that fails as if it
-  * were closed abnormally.
-  * 
-  * If the caller is not expecting to receive any data from the peer,
-  * they may drop the stream. Any data still in the receive queue
+  *
+  * Returns a `stream` of data sent by the peer. The implementation
+  * drops the stream once no more data is available. At that point, the
+  * returned `future` resolves to:
+  * - `ok` after a graceful shutdown from the peer (i.e. a FIN packet), or
+  * - `err` if the socket was closed abnormally.
+  *
+  * `receive` may be called only once per socket. Subsequent calls return
+  * a closed stream and a future resolved to `err(invalid-state)`.
+  *
+  * If the caller is not expecting to receive any more data from the peer,
+  * they should drop the stream. Any data still in the receive queue
   * will be discarded. This is equivalent to calling `shutdown(SHUT_RD)`
   * in POSIX.
-  * 
+  *
   * # Typical errors
   * - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+  * - `invalid-state`:             `receive` has already been called on this socket.
   * - `connection-reset`:          The connection was reset. (ECONNRESET)
   * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recv.html>
   * - <https://man7.org/linux/man-pages/man2/recv.2.html>
@@ -348,16 +425,17 @@ export class TcpSocket {
   receive(): [ReadableStream<number>, Promise<Result<void, ErrorCode>>];
   /**
   * Get the bound local address.
-  * 
+  *
   * POSIX mentions:
   * > If the socket has not been bound to a local name, the value
   * > stored in the object pointed to by `address` is unspecified.
-  * 
-  * WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
-  * 
+  *
+  * WASI is stricter and requires `get-local-address` to return
+  * `invalid-state` when the socket hasn't been bound yet.
+  *
   * # Typical errors
   * - `invalid-state`: The socket is not bound to any local address.
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
   * - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
@@ -367,10 +445,10 @@ export class TcpSocket {
   getLocalAddress(): IpSocketAddress;
   /**
   * Get the remote address.
-  * 
+  *
   * # Typical errors
   * - `invalid-state`: The socket is not connected to a remote address. (ENOTCONN)
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
   * - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
@@ -380,24 +458,26 @@ export class TcpSocket {
   getRemoteAddress(): IpSocketAddress;
   /**
   * Whether the socket is in the `listening` state.
-  * 
+  *
   * Equivalent to the SO_ACCEPTCONN socket option.
   */
   getIsListening(): boolean;
   /**
   * Whether this is a IPv4 or IPv6 socket.
-  * 
+  *
   * This is the value passed to the constructor.
-  * 
+  *
   * Equivalent to the SO_DOMAIN socket option.
   */
   getAddressFamily(): IpAddressFamily;
   /**
-  * Hints the desired listen queue size. Implementations are free to ignore this.
-  * 
+  * Hints the desired listen queue size. Implementations are free to
+  * ignore this.
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  * 
+  * Any other value will never cause an error, but it might be silently
+  * clamped and/or rounded.
+  *
   * # Typical errors
   * - `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
   * - `invalid-argument`:     (set) The provided value was 0.
@@ -406,26 +486,29 @@ export class TcpSocket {
   setListenBacklogSize(value: bigint): void;
   /**
   * Enables or disables keepalive.
-  * 
+  *
   * The keepalive behavior can be adjusted using:
   * - `keep-alive-idle-time`
   * - `keep-alive-interval`
   * - `keep-alive-count`
-  * These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
-  * 
+  * These properties can be configured while `keep-alive-enabled` is
+  * false, but only come into effect when `keep-alive-enabled` is true.
+  *
   * Equivalent to the SO_KEEPALIVE socket option.
   */
   getKeepAliveEnabled(): boolean;
   setKeepAliveEnabled(value: boolean): void;
   /**
-  * Amount of time the connection has to be idle before TCP starts sending keepalive packets.
-  * 
+  * Amount of time the connection has to be idle before TCP starts
+  * sending keepalive packets.
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  * I.e. after setting a value, reading the same setting back may return a different value.
-  * 
+  * All other values are accepted without error, but may be
+  * clamped or rounded. As a result, the value read back from
+  * this setting may differ from the value that was set.
+  *
   * Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
@@ -433,27 +516,30 @@ export class TcpSocket {
   setKeepAliveIdleTime(value: Duration): void;
   /**
   * The time between keepalive packets.
-  * 
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  * I.e. after setting a value, reading the same setting back may return a different value.
-  * 
+  * All other values are accepted without error, but may be
+  * clamped or rounded. As a result, the value read back from
+  * this setting may differ from the value that was set.
+  *
   * Equivalent to the TCP_KEEPINTVL socket option.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
   getKeepAliveInterval(): Duration;
   setKeepAliveInterval(value: Duration): void;
   /**
-  * The maximum amount of keepalive packets TCP should send before aborting the connection.
-  * 
+  * The maximum amount of keepalive packets TCP should send before
+  * aborting the connection.
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  * I.e. after setting a value, reading the same setting back may return a different value.
-  * 
+  * All other values are accepted without error, but may be
+  * clamped or rounded. As a result, the value read back from
+  * this setting may differ from the value that was set.
+  *
   * Equivalent to the TCP_KEEPCNT socket option.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
@@ -461,23 +547,34 @@ export class TcpSocket {
   setKeepAliveCount(value: number): void;
   /**
   * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
-  * 
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
   */
   getHopLimit(): number;
   setHopLimit(value: number): void;
   /**
-  * The kernel buffer space reserved for sends/receives on this socket.
-  * 
+  * Kernel buffer space reserved for sending/receiving on this socket.
+  * Implementations usually treat this as a cap the buffer can grow to,
+  * rather than allocating the full amount immediately.
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  * I.e. after setting a value, reading the same setting back may return a different value.
-  * 
+  * All other values are accepted without error, but may be
+  * clamped or rounded. As a result, the value read back from
+  * this setting may differ from the value that was set.
+  *
+  * This is only a performance hint. The implementation may ignore it or
+  * tweak it based on real traffic patterns.
+  * Linux and macOS appear to behave differently depending on whether a
+  * buffer size was explicitly set. When set, they tend to honor it; when
+  * not set, they dynamically adjust the buffer size as the connection
+  * progresses. This is especially noticeable when comparing the values
+  * from before and after connection establishment.
+  *
   * Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
@@ -494,14 +591,15 @@ export class UdpSocket {
   private constructor();
   /**
   * Create a new UDP socket.
-  * 
-  * Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)` in POSIX.
-  * On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
-  * 
+  *
+  * Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)`
+  * in POSIX. On IPv6 sockets, IPV6_V6ONLY is enabled by default and
+  * can't be configured otherwise.
+  *
   * Unlike POSIX, WASI sockets have no notion of a socket-level
   * `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
   * async support.
-  * 
+  *
   * # References:
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
   * - <https://man7.org/linux/man-pages/man2/socket.2.html>
@@ -511,18 +609,19 @@ export class UdpSocket {
   static create(addressFamily: IpAddressFamily): UdpSocket;
   /**
   * Bind the socket to the provided IP address and port.
-  * 
-  * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
-  * network interface(s) to bind to.
-  * If the port is zero, the socket will be bound to a random free port.
-  * 
+  *
+  * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is
+  * left to the implementation to decide which network interface(s) to
+  * bind to. If the port is zero, the socket will be bound to a random
+  * free port.
+  *
   * # Typical errors
   * - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
   * - `invalid-state`:             The socket is already bound. (EINVAL)
   * - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
   * - `address-in-use`:            Address is already in use. (EADDRINUSE)
   * - `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
   * - <https://man7.org/linux/man-pages/man2/bind.2.html>
@@ -532,36 +631,36 @@ export class UdpSocket {
   bind(localAddress: IpSocketAddress): void;
   /**
   * Associate this socket with a specific peer address.
-  * 
+  *
   * On success, the `remote-address` of the socket is updated.
   * The `local-address` may be updated as well, based on the best network
   * path to `remote-address`. If the socket was not already explicitly
   * bound, this function will implicitly bind the socket to a random
   * free port.
-  * 
+  *
   * When a UDP socket is "connected", the `send` and `receive` methods
   * are limited to communicating with that peer only:
   * - `send` can only be used to send to this destination.
   * - `receive` will only return datagrams sent from the provided `remote-address`.
-  * 
+  *
   * The name "connect" was kept to align with the existing POSIX
   * terminology. Other than that, this function only changes the local
   * socket configuration and does not generate any network traffic.
   * The peer is not aware of this "connection".
-  * 
+  *
   * This method may be called multiple times on the same socket to change
   * its association, but only the most recent one will be effective.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
   * - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
   * - `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
   * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
-  * 
+  *
   * # Implementors note
   * If the socket is already connected, some platforms (e.g. Linux)
   * require a disconnect before connecting to a different peer address.
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
   * - <https://man7.org/linux/man-pages/man2/connect.2.html>
@@ -571,15 +670,15 @@ export class UdpSocket {
   connect(remoteAddress: IpSocketAddress): void;
   /**
   * Dissociate this socket from its peer address.
-  * 
+  *
   * After calling this method, `send` & `receive` are free to communicate
-  * with any address again.
-  * 
+  * with any remote address again.
+  *
   * The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
-  * 
+  *
   * # Typical errors
   * - `invalid-state`:           The socket is not connected.
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
   * - <https://man7.org/linux/man-pages/man2/connect.2.html>
@@ -589,17 +688,20 @@ export class UdpSocket {
   disconnect(): void;
   /**
   * Send a message on the socket to a particular peer.
-  * 
+  *
   * If the socket is connected, the peer address may be left empty. In
   * that case this is equivalent to `send` in POSIX. Otherwise it is
   * equivalent to `sendto`.
-  * 
+  *
   * Additionally, if the socket is connected, a `remote-address` argument
   * _may_ be provided but then it must be identical to the address
   * passed to `connect`.
-  * 
+  *
+  * If the socket has not been explicitly bound, it will be
+  * implicitly bound to a random free port.
+  *
   * Implementations may trap if the `data` length exceeds 64 KiB.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
   * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
@@ -609,7 +711,15 @@ export class UdpSocket {
   * - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
   * - `connection-refused`:      The connection was refused. (ECONNREFUSED)
   * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
-  * 
+  * - `address-in-use`:          Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
+  *
+  * # Implementors note
+  * WASI requires `send` to perform an implicit bind if the socket
+  * has not been bound. Not all platforms (notably Windows) exhibit
+  * this behavior natively. On such platforms, the WASI implementation
+  * should emulate it by performing the bind if the guest has not
+  * already done so.
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
@@ -623,20 +733,20 @@ export class UdpSocket {
   send(data: Uint8Array, remoteAddress: IpSocketAddress | undefined): Promise<void>;
   /**
   * Receive a message on the socket.
-  * 
+  *
   * On success, the return value contains a tuple of the received data
   * and the address of the sender. Theoretical maximum length of the
   * data is 64 KiB. Though in practice, it will typically be less than
   * 1500 bytes.
-  * 
+  *
   * If the socket is connected, the sender address is guaranteed to
   * match the remote address passed to `connect`.
-  * 
+  *
   * # Typical errors
   * - `invalid-state`:        The socket has not been bound yet.
   * - `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
   * - `connection-refused`:   The connection was refused. (ECONNREFUSED)
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
@@ -649,16 +759,17 @@ export class UdpSocket {
   receive(): Promise<[Uint8Array, IpSocketAddress]>;
   /**
   * Get the current bound address.
-  * 
+  *
   * POSIX mentions:
   * > If the socket has not been bound to a local name, the value
   * > stored in the object pointed to by `address` is unspecified.
-  * 
-  * WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
-  * 
+  *
+  * WASI is stricter and requires `get-local-address` to return
+  * `invalid-state` when the socket hasn't been bound yet.
+  *
   * # Typical errors
   * - `invalid-state`: The socket is not bound to any local address.
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
   * - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
@@ -668,10 +779,10 @@ export class UdpSocket {
   getLocalAddress(): IpSocketAddress;
   /**
   * Get the address the socket is currently "connected" to.
-  * 
+  *
   * # Typical errors
   * - `invalid-state`: The socket is not "connected" to a specific remote address. (ENOTCONN)
-  * 
+  *
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
   * - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
@@ -681,31 +792,34 @@ export class UdpSocket {
   getRemoteAddress(): IpSocketAddress;
   /**
   * Whether this is a IPv4 or IPv6 socket.
-  * 
+  *
   * This is the value passed to the constructor.
-  * 
+  *
   * Equivalent to the SO_DOMAIN socket option.
   */
   getAddressFamily(): IpAddressFamily;
   /**
   * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
-  * 
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
   */
   getUnicastHopLimit(): number;
   setUnicastHopLimit(value: number): void;
   /**
-  * The kernel buffer space reserved for sends/receives on this socket.
-  * 
+  * Kernel buffer space reserved for sending/receiving on this socket.
+  * Implementations usually treat this as a cap the buffer can grow to,
+  * rather than allocating the full amount immediately.
+  *
   * If the provided value is 0, an `invalid-argument` error is returned.
-  * Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  * I.e. after setting a value, reading the same setting back may return a different value.
-  * 
+  * All other values are accepted without error, but may be
+  * clamped or rounded. As a result, the value read back from
+  * this setting may differ from the value that was set.
+  *
   * Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
-  * 
+  *
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */

@@ -22,9 +22,9 @@ function token() {
 }
 
 export class RequestOptions {
-  #connectTimeoutNs = null;
-  #firstByteTimeoutNs = null;
-  #betweenBytesTimeoutNs = null;
+  #connectTimeoutNs = undefined;
+  #firstByteTimeoutNs = undefined;
+  #betweenBytesTimeoutNs = undefined;
   #immutable = false;
 
   /**
@@ -45,7 +45,7 @@ export class RequestOptions {
    *
    * @returns {?number} Duration in milliseconds, or `null` if not set
    */
-  connectTimeout() {
+  getConnectTimeout() {
     return this.#connectTimeoutNs;
   }
 
@@ -61,7 +61,7 @@ export class RequestOptions {
    */
   setConnectTimeout(duration) {
     this._ensureMutable();
-    this.#connectTimeoutNs = duration;
+    this.#connectTimeoutNs = duration ?? undefined;
   }
 
   /**
@@ -73,7 +73,7 @@ export class RequestOptions {
    *
    * @returns {?bigint} Duration in nanoseconds, or `null` if not set
    */
-  firstByteTimeout() {
+  getFirstByteTimeout() {
     return this.#firstByteTimeoutNs;
   }
 
@@ -89,7 +89,7 @@ export class RequestOptions {
    */
   setFirstByteTimeout(duration) {
     this._ensureMutable();
-    this.#firstByteTimeoutNs = duration;
+    this.#firstByteTimeoutNs = duration ?? undefined;
   }
 
   /**
@@ -101,7 +101,7 @@ export class RequestOptions {
    *
    * @returns {?bigint} Duration in nanoseconds, or `null` if not set
    */
-  betweenBytesTimeout() {
+  getBetweenBytesTimeout() {
     return this.#betweenBytesTimeoutNs;
   }
 
@@ -117,7 +117,7 @@ export class RequestOptions {
    */
   setBetweenBytesTimeout(duration) {
     this._ensureMutable();
-    this.#betweenBytesTimeoutNs = duration;
+    this.#betweenBytesTimeoutNs = duration ?? undefined;
   }
 
   /**
@@ -162,13 +162,13 @@ export function _optionsLock(fields) {
 }
 
 export class Request {
-  #method = "get";
+  #method = { tag: "get" };
   #headers = null;
   #contents = null;
   #options = null;
-  #scheme = null;
-  #authority = null;
-  #pathWithQuery = null;
+  #scheme = undefined;
+  #authority = undefined;
+  #pathWithQuery = undefined;
   #trailersFuture = null;
   #requestFuture = null;
   #bodyOpen = false;
@@ -223,9 +223,9 @@ export class Request {
     request.#contents = contents;
     request.#options = options;
     request.#trailersFuture = trailers;
-    request.#pathWithQuery = null;
-    request.#scheme = null;
-    request.#authority = null;
+    request.#pathWithQuery = undefined;
+    request.#scheme = undefined;
+    request.#authority = undefined;
 
     _fieldsLock(request.#headers);
     _optionsLock(request.#options);
@@ -246,7 +246,7 @@ export class Request {
    *
    * @returns {method}
    */
-  method() {
+  getMethod() {
     return this.#method;
   }
 
@@ -262,18 +262,7 @@ export class Request {
    * @throws {HttpError} with payload.tag 'invalid-syntax' if method is invalid
    */
   setMethod(method) {
-    const VALUE_TOKEN_RE = /^[a-zA-Z-]+$/;
-
-    if (typeof method !== "string" || !VALUE_TOKEN_RE.test(method)) {
-      throw new HttpError("invalid-syntax");
-    }
-
-    const lowercase = method.toLowerCase();
-    if (SUPPORTED_METHODS.includes(lowercase)) {
-      this.#method = { tag: lowercase };
-    } else {
-      this.#method = { tag: "other", val: lowercase };
-    }
+    this.#method = normalizeMethod(method);
   }
 
   /**
@@ -286,7 +275,7 @@ export class Request {
    *
    * @returns {?string}
    */
-  pathWithQuery() {
+  getPathWithQuery() {
     return this.#pathWithQuery;
   }
 
@@ -303,7 +292,7 @@ export class Request {
    */
   setPathWithQuery(pathWithQuery) {
     validateUrlPart(pathWithQuery, UrlPart.PATH_WITH_QUERY);
-    this.#pathWithQuery = pathWithQuery;
+    this.#pathWithQuery = pathWithQuery ?? undefined;
   }
 
   /**
@@ -316,7 +305,7 @@ export class Request {
    *
    * @returns {?scheme}
    */
-  scheme() {
+  getScheme() {
     return this.#scheme;
   }
 
@@ -332,8 +321,7 @@ export class Request {
    * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid scheme
    */
   setScheme(scheme) {
-    validateUrlPart(scheme, UrlPart.SCHEME);
-    this.#scheme = scheme;
+    this.#scheme = normalizeScheme(scheme);
   }
 
   /**
@@ -346,7 +334,7 @@ export class Request {
    *
    * @returns {?string}
    */
-  authority() {
+  getAuthority() {
     return this.#authority;
   }
 
@@ -363,7 +351,7 @@ export class Request {
    */
   setAuthority(authority) {
     validateUrlPart(authority, UrlPart.AUTHORITY);
-    this.#authority = authority;
+    this.#authority = authority ?? undefined;
   }
 
   /**
@@ -376,7 +364,7 @@ export class Request {
    *
    * @returns {?RequestOptions}
    */
-  options() {
+  getOptions() {
     return this.#options;
   }
 
@@ -390,7 +378,7 @@ export class Request {
    *
    * @returns {Fields}
    */
-  headers() {
+  getHeaders() {
     return this.#headers;
   }
 
@@ -460,6 +448,82 @@ const UrlPart = {
   SCHEME: "scheme",
   AUTHORITY: "authority",
 };
+
+function normalizeMethod(method) {
+  const VALUE_TOKEN_RE = /^[a-zA-Z-]+$/;
+
+  if (typeof method === "string") {
+    if (!VALUE_TOKEN_RE.test(method)) {
+      throw new HttpError("invalid-syntax");
+    }
+
+    const lowercase = method.toLowerCase();
+    return SUPPORTED_METHODS.includes(lowercase)
+      ? { tag: lowercase }
+      : { tag: "other", val: lowercase };
+  }
+
+  if (!method || typeof method !== "object" || typeof method.tag !== "string") {
+    throw new HttpError("invalid-syntax");
+  }
+
+  if (SUPPORTED_METHODS.includes(method.tag)) {
+    return { tag: method.tag };
+  }
+
+  if (method.tag === "other" && typeof method.val === "string" && VALUE_TOKEN_RE.test(method.val)) {
+    return { tag: "other", val: method.val.toLowerCase() };
+  }
+
+  throw new HttpError("invalid-syntax");
+}
+
+function normalizeScheme(scheme) {
+  if (scheme == null) {
+    return undefined;
+  }
+
+  if (typeof scheme === "string") {
+    validateUrlPart(scheme, UrlPart.SCHEME);
+    const uppercase = scheme.toUpperCase();
+    if (uppercase === "HTTP" || uppercase === "HTTPS") {
+      return { tag: uppercase };
+    }
+    return { tag: "other", val: scheme.toLowerCase() };
+  }
+
+  if (typeof scheme !== "object" || typeof scheme.tag !== "string") {
+    throw new HttpError("invalid-syntax");
+  }
+
+  if (scheme.tag === "HTTP" || scheme.tag === "HTTPS") {
+    return { tag: scheme.tag };
+  }
+
+  if (scheme.tag === "other" && typeof scheme.val === "string") {
+    validateUrlPart(scheme.val, UrlPart.SCHEME);
+    return { tag: "other", val: scheme.val.toLowerCase() };
+  }
+
+  throw new HttpError("invalid-syntax");
+}
+
+export function _schemeToString(scheme) {
+  if (scheme === undefined) {
+    return undefined;
+  }
+
+  switch (scheme.tag) {
+    case "HTTP":
+      return "http";
+    case "HTTPS":
+      return "https";
+    case "other":
+      return scheme.val;
+    default:
+      throw new HttpError("invalid-syntax", `Invalid scheme: ${scheme.tag}`);
+  }
+}
 
 function validateUrlPart(value, part) {
   if (value == null) {

@@ -1,4 +1,4 @@
-/** @module Interface wasi:http/handler@0.3.0-rc-2026-02-09 **/
+/** @module Interface wasi:http/handler@0.3.0-rc-2026-03-15 **/
 /**
  * This function may be called with either an incoming request read from the
  * network or a request synthesized or forwarded by another component.
