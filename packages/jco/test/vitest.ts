@@ -6,6 +6,7 @@ const DEFAULT_TIMEOUT_MS = 1000 * 60 * 1; // 60s
 const CI_DEFAULT_TIMEOUT_MS = 1000 * 60 * 3; // 1m
 
 const REPORTERS = process.env.GITHUB_ACTIONS ? ["verbose", "github-actions"] : ["verbose"];
+const JSPI_EXEC_ARGV = "Suspending" in WebAssembly ? [] : ["--experimental-wasm-jspi"];
 
 export default defineConfig({
     test: {
@@ -29,7 +30,7 @@ export default defineConfig({
         pool: "forks",
         poolOptions: {
             forks: {
-                execArgv: ["--experimental-wasm-jspi", "--stack-trace-limit=100"],
+                execArgv: [...JSPI_EXEC_ARGV, "--stack-trace-limit=100"],
             },
         },
     },
