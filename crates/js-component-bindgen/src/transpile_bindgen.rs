@@ -3073,11 +3073,13 @@ impl<'a> Instantiator<'a, '_> {
             ),
         };
 
-        let nparams = self
-            .resolve
-            .wasm_signature(AbiVariant::GuestImport, func)
-            .params
-            .len();
+        let abi = if is_async {
+            AbiVariant::GuestImportAsync
+        } else {
+            AbiVariant::GuestImport
+        };
+
+        let nparams = self.resolve.wasm_signature(abi, func).params.len();
 
         // Generate the JS trampoline function for a bound import
         let trampoline_idx = trampoline.as_u32();
@@ -3115,7 +3117,7 @@ impl<'a> Instantiator<'a, '_> {
                     opts: options,
                     func,
                     resource_map: &import_resource_map,
-                    abi: AbiVariant::GuestImport,
+                    abi,
                     requires_async_porcelain,
                     is_async,
                 });
@@ -3970,7 +3972,10 @@ impl<'a> Instantiator<'a, '_> {
             block_storage: Vec::new(),
             blocks: Vec::new(),
             callee,
-            callee_resource_dynamic: matches!(call_type, CallType::CalleeResourceDispatch),
+            callee_resource_dynamic: matches!(
+                call_type,
+                CallType::CalleeResourceDispatch | CallType::AsyncCalleeResourceDispatch
+            ),
             memory: memory.as_ref(),
             realloc: realloc.as_ref(),
             tmp: 0,
