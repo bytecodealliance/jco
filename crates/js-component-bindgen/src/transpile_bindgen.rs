@@ -701,8 +701,9 @@ impl<'a> Instantiator<'a, '_> {
                             Some(TypeDef::Resource(resource_table_idx)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
                                 let resource_table_ty = &self.types[*resource_table_idx];
-                                self.imports_resource_types
-                                    .insert(ty, resource_table_ty.unwrap_concrete_ty());
+                                let concrete_ty = resource_table_ty.unwrap_concrete_ty();
+                                self.imports_resource_types.insert(ty, concrete_ty);
+                                self.imports_resource_index_types.insert(concrete_ty, ty);
                             }
                             Some(TypeDef::Interface(_)) | None => {}
                             Some(_) => unreachable!("unexpected type in interface"),
@@ -714,8 +715,9 @@ impl<'a> Instantiator<'a, '_> {
                     TypeDef::Resource(resource) => {
                         let ty = crate::dealias(self.resolve, *id);
                         let resource_table_ty = &self.types[*resource];
-                        self.imports_resource_types
-                            .insert(ty, resource_table_ty.unwrap_concrete_ty());
+                        let concrete_ty = resource_table_ty.unwrap_concrete_ty();
+                        self.imports_resource_types.insert(ty, concrete_ty);
+                        self.imports_resource_index_types.insert(concrete_ty, ty);
                     }
                     TypeDef::Interface(_) => {}
                     _ => unreachable!("unexpected type in import world item"),
@@ -723,6 +725,7 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
         self.exports_resource_types = self.imports_resource_types.clone();
+        self.exports_resource_index_types = self.imports_resource_index_types.clone();
 
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
