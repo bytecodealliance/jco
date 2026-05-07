@@ -820,7 +820,10 @@ impl LiftIntrinsic {
                     function {lift_flat_list_fn}(meta) {{
                         const {{ elemLiftFn, elemSize32, elemAlign32, knownLen, typedArray }} = meta;
 
-                        const listValue = values => typedArray === undefined ? values : new typedArray(values);
+                        const listValue =
+                          typedArray === undefined
+                            ? values => values
+                            : values => new typedArray(values);
 
                         const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {{
                             ctx.storagePtr = dataPtr;
