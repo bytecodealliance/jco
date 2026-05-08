@@ -1,3 +1,10 @@
+export const DEFAULT_BYTE_STREAM_CHUNK_SIZE = 64 * 1024;
+
+let BYTE_STREAM_ENCODER = null;
+function encoder() {
+  return (BYTE_STREAM_ENCODER ??= new TextEncoder());
+}
+
 /**
  * Creates a transferable ReadableStream from an async iterator.
  *
@@ -31,8 +38,6 @@ export function readableStreamFromIterator(iterator, name = "iterator") {
     },
   });
 }
-
-export const DEFAULT_BYTE_STREAM_CHUNK_SIZE = 64 * 1024;
 
 /**
  * Creates a transferable ReadableStream from a byte-stream reader.
@@ -119,7 +124,7 @@ function byteChunk(value) {
     return Uint8Array.of(assertByte(value));
   }
   if (typeof value === "string") {
-    return new TextEncoder().encode(value);
+    return encoder().encode(value);
   }
 
   throw new TypeError(
