@@ -87,7 +87,7 @@ export function socketResolveAddress(name) {
   return lookup(name, dnsLookupOptions).then(
     (addresses) => {
       return addresses.map(({ address, family }) => {
-        [
+        return [
           {
             tag: "ipv" + family,
             val: (family === 4 ? ipv4ToTuple : ipv6ToTuple)(address),
