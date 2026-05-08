@@ -4795,6 +4795,12 @@ pub fn gen_flat_lift_fn_list_js_expr(
     format!("[{}]", lift_fns.join(","))
 }
 
+fn flat_count_js_expr(flat_count: &Option<u8>) -> String {
+    flat_count
+        .map(|count| count.to_string())
+        .unwrap_or_else(|| "null".into())
+}
+
 /// Generate the javascript lifting function for a given type
 ///
 /// This function will a function object that can be executed with the right
@@ -4898,42 +4904,53 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
+            let size32 = record_ty.abi.size32;
+            let align32 = record_ty.abi.align32;
             let mut keys_and_lifts_expr = String::from("[");
             // For each field we build a list of [name, liftFn, 32bit alignment]
             // so that the record lifting function (which is a higher level function)
             // can properly generate a function that lifts the fields.
             for f in &record_ty.fields {
+                let field_abi = component_types.canonical_abi(&f.ty);
+                let field_size32 = field_abi.size32;
+                let field_align32 = field_abi.align32;
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}, {}],",
                     f.name.to_lower_camel_case(),
                     gen_flat_lift_fn_js_expr(instantiator, &f.ty, extra_resource_map),
-                    component_types.canonical_abi(ty).size32,
-                    component_types.canonical_abi(ty).align32,
+                    field_size32,
+                    field_align32,
                 ));
             }
             keys_and_lifts_expr.push(']');
-            format!("{lift_fn}({keys_and_lifts_expr})")
+            format!(
+                "{lift_fn}({{ fieldMetas: {keys_and_lifts_expr}, size32: {size32}, align32: {align32} }})"
+            )
         }
 
         InterfaceType::Variant(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
+            let variant_flat_count = flat_count_js_expr(&variant_ty.abi.flat_count);
             let mut cases_and_lifts_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
-                let lift_args = match maybe_ty {
-                    None => format!("['{}', null, 0, 0, 0],", name),
-                    Some(ty) => {
-                        format!(
-                            "['{name}', {}, {}, {}, {}],",
-                            gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
-                            variant_ty.abi.size32,
-                            variant_ty.abi.align32,
-                            variant_ty.info.payload_offset32,
-                        )
-                    }
+                let (lift_fn_js, case_flat_count) = match maybe_ty {
+                    Some(ty) => (
+                        gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
+                        flat_count_js_expr(&component_types.canonical_abi(ty).flat_count),
+                    ),
+                    None => ("null".into(), "0".into()),
                 };
-                cases_and_lifts_expr.push_str(&lift_args);
+                cases_and_lifts_expr.push_str(&format!(
+                    "['{name}', {}, {}, {}, {}, {}, {}],",
+                    lift_fn_js,
+                    variant_ty.abi.size32,
+                    variant_ty.abi.align32,
+                    variant_ty.info.payload_offset32,
+                    case_flat_count,
+                    variant_flat_count,
+                ));
             }
             cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})")
@@ -4991,11 +5008,17 @@ pub fn gen_flat_lift_fn_js_expr(
             let mut elem_lifts_expr = String::from("[");
             for ty in &tuple_ty.types {
                 let lift_fn_js = gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map);
-                elem_lifts_expr.push_str(&format!("[{lift_fn_js}, {size_u32}, {align_u32}],"));
+                let elem_abi = component_types.canonical_abi(ty);
+                let elem_size32 = elem_abi.size32;
+                let elem_align32 = elem_abi.align32;
+                elem_lifts_expr
+                    .push_str(&format!("[{lift_fn_js}, {elem_size32}, {elem_align32}],"));
             }
             elem_lifts_expr.push(']');
 
-            format!("{f}({elem_lifts_expr})")
+            format!(
+                "{f}({{ elemLiftFns: {elem_lifts_expr}, size32: {size_u32}, align32: {align_u32} }})"
+            )
         }
 
         InterfaceType::Flags(ty_idx) => {
@@ -5034,11 +5057,12 @@ pub fn gen_flat_lift_fn_js_expr(
             let size_32 = enum_ty.abi.size32;
             let align_32 = enum_ty.abi.align32;
             let payload_offset_32 = enum_ty.info.payload_offset32;
+            let flat_count = flat_count_js_expr(&enum_ty.abi.flat_count);
 
             let mut elem_lifts_expr = String::from("[");
             for name in &enum_ty.names {
                 elem_lifts_expr.push_str(&format!(
-                    "['{name}', null, {size_32}, {align_32}, {payload_offset_32}],"
+                    "['{name}', null, {size_32}, {align_32}, {payload_offset_32}, 0, {flat_count}],"
                 ));
             }
             elem_lifts_expr.push(']');
@@ -5053,13 +5077,16 @@ pub fn gen_flat_lift_fn_js_expr(
             let payload_offset_32 = option_ty.info.payload_offset32;
             let align_32 = option_ty.abi.align32;
             let size_32 = option_ty.abi.size32;
+            let flat_count = flat_count_js_expr(&option_ty.abi.flat_count);
+            let some_flat_count =
+                flat_count_js_expr(&component_types.canonical_abi(&option_ty.ty).flat_count);
             let lift_fn_js =
                 gen_flat_lift_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
             // NOTE: options are treated as variants
             format!(
                 "{f}([
-                     ['none', null, {size_32}, {align_32}, {payload_offset_32} ],
-                     ['some', {lift_fn_js}, {size_32}, {align_32}, {payload_offset_32} ],
+                     ['none', null, {size_32}, {align_32}, {payload_offset_32}, 0, {flat_count} ],
+                     ['some', {lift_fn_js}, {size_32}, {align_32}, {payload_offset_32}, {some_flat_count}, {flat_count} ],
                  ])"
             )
         }
@@ -5068,30 +5095,51 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
             let result_ty = &component_types[*ty_idx];
+            let result_flat_count = flat_count_js_expr(&result_ty.abi.flat_count);
             let mut cases_and_lifts_expr = String::from("[");
 
             if let Some(ok_ty) = result_ty.ok {
+                let ok_flat_count =
+                    flat_count_js_expr(&component_types.canonical_abi(&ok_ty).flat_count);
                 cases_and_lifts_expr.push_str(&format!(
-                    "['ok', {}, {}, {}, {}],",
+                    "['ok', {}, {}, {}, {}, {}, {}],",
                     gen_flat_lift_fn_js_expr(instantiator, &ok_ty, extra_resource_map),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
+                    ok_flat_count,
+                    result_flat_count,
                 ))
             } else {
-                cases_and_lifts_expr.push_str("['ok', null, 0, 0, 0],");
+                cases_and_lifts_expr.push_str(&format!(
+                    "['ok', null, {}, {}, {}, 0, {}],",
+                    result_ty.abi.size32,
+                    result_ty.abi.align32,
+                    result_ty.info.payload_offset32,
+                    result_flat_count,
+                ));
             }
 
             if let Some(err_ty) = &result_ty.err {
+                let err_flat_count =
+                    flat_count_js_expr(&component_types.canonical_abi(err_ty).flat_count);
                 cases_and_lifts_expr.push_str(&format!(
-                    "['err', {}, {}, {}, {}],",
+                    "['err', {}, {}, {}, {}, {}, {}],",
                     gen_flat_lift_fn_js_expr(instantiator, err_ty, extra_resource_map),
                     result_ty.abi.size32,
                     result_ty.abi.align32,
                     result_ty.info.payload_offset32,
+                    err_flat_count,
+                    result_flat_count,
                 ))
             } else {
-                cases_and_lifts_expr.push_str("['err', null, 0, 0, 0],");
+                cases_and_lifts_expr.push_str(&format!(
+                    "['err', null, {}, {}, {}, 0, {}],",
+                    result_ty.abi.size32,
+                    result_ty.abi.align32,
+                    result_ty.info.payload_offset32,
+                    result_flat_count,
+                ));
             }
 
             cases_and_lifts_expr.push(']');
@@ -5379,21 +5427,28 @@ pub fn gen_flat_lower_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
+            let size32 = record_ty.abi.size32;
+            let align32 = record_ty.abi.align32;
             let mut keys_and_lowers_expr = String::from("[");
             for f in &record_ty.fields {
                 // For each field we build a list of [name, lowerFn, 32bit alignment]
                 // so that the record lowering function (which is a higher level function)
                 // can properly generate a function that lowers the fields.
+                let field_abi = component_types.canonical_abi(&f.ty);
+                let field_size32 = field_abi.size32;
+                let field_align32 = field_abi.align32;
                 keys_and_lowers_expr.push_str(&format!(
                     "['{}', {}, {}, {} ],",
                     f.name.to_lower_camel_case(),
                     gen_flat_lower_fn_js_expr(instantiator, &f.ty, &None),
-                    component_types.canonical_abi(ty).size32,
-                    component_types.canonical_abi(ty).align32,
+                    field_size32,
+                    field_align32,
                 ));
             }
             keys_and_lowers_expr.push(']');
-            format!("{lower_fn}({keys_and_lowers_expr})")
+            format!(
+                "{lower_fn}({{ fieldMetas: {keys_and_lowers_expr}, size32: {size32}, align32: {align32} }})"
+            )
         }
 
         InterfaceType::Variant(ty_idx) => {
@@ -5472,11 +5527,17 @@ pub fn gen_flat_lower_fn_js_expr(
             let mut elem_lowers_expr = String::from("[");
             for ty in &tuple_ty.types {
                 let lower_fn_js = gen_flat_lower_fn_js_expr(instantiator, ty, extra_resource_map);
-                elem_lowers_expr.push_str(&format!("[{lower_fn_js}, {size_u32}, {align_u32}],"));
+                let elem_abi = component_types.canonical_abi(ty);
+                let elem_size32 = elem_abi.size32;
+                let elem_align32 = elem_abi.align32;
+                elem_lowers_expr
+                    .push_str(&format!("[{lower_fn_js}, {elem_size32}, {elem_align32}],"));
             }
             elem_lowers_expr.push(']');
 
-            format!("{f}({elem_lowers_expr})")
+            format!(
+                "{f}({{ elemLowerMetas: {elem_lowers_expr}, size32: {size_u32}, align32: {align_u32} }})"
+            )
         }
 
         InterfaceType::Flags(ty_idx) => {

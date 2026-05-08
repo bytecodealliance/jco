@@ -51,6 +51,9 @@ suite("Async (WASI P3)", () => {
         assert.instanceOf(instance.getU32, AsyncFunction);
         assert.strictEqual(42, await instance.getU32());
 
+        assert.instanceOf(instance.getLayoutVariantAndU32, AsyncFunction);
+        assert.deepEqual(await instance.getLayoutVariantAndU32(), [{ tag: "empty" }, 42]);
+
         await cleanup();
     });
 

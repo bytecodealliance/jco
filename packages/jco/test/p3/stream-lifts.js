@@ -256,6 +256,33 @@ suite("stream<T> lifts", () => {
         });
     });
 
+    test.concurrent("variant layout", async () => {
+        const instance = await getInstance();
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamLayoutVariant, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariantStringRecord, AsyncFunction);
+
+        const variants = [{ tag: "empty" }, { tag: "name", val: "payload-name" }];
+        let stream = await instance["jco:test-components/get-stream-async"].getStreamLayoutVariant(variants);
+        await checkStreamValues({
+            stream,
+            vals: variants,
+            typeName: "layout-variant",
+            assertEqFn: assert.deepEqual,
+        });
+
+        const records = [
+            { kind: { tag: "empty" }, name: "empty-name" },
+            { kind: { tag: "name", val: "kind-name" }, name: "record-name" },
+        ];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamVariantStringRecord(records);
+        await checkStreamValues({
+            stream,
+            vals: records,
+            typeName: "variant-string-record",
+            assertEqFn: assert.deepEqual,
+        });
+    });
+
     test.concurrent("tuple", async () => {
         const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamTuple, AsyncFunction);
@@ -267,6 +294,24 @@ suite("stream<T> lifts", () => {
         ];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamTuple(vals);
         await checkStreamValues({ stream, vals, typeName: "tuple", assertEqFn: assert.deepEqual });
+    });
+
+    test.concurrent("tight tuple layout", async () => {
+        const instance = await getInstance();
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamTightTuple, AsyncFunction);
+
+        const vals = [
+            [1, 2, 0x01020304],
+            [3, 4, 0x05060708],
+            [255, 0, 0xffffffff],
+        ];
+        const stream = await instance["jco:test-components/get-stream-async"].getStreamTightTuple(vals);
+        await checkStreamValues({
+            stream,
+            vals,
+            typeName: "tight-tuple",
+            assertEqFn: assert.deepEqual,
+        });
     });
 
     test.concurrent("flags", async () => {
@@ -370,6 +415,29 @@ suite("stream<T> lifts", () => {
         ];
         let stream = await instance["jco:test-components/get-stream-async"].getStreamListRecord(vals);
         await checkStreamValues({ stream, vals, typeName: "list<record>", assertEqFn: assert.deepEqual });
+    });
+
+    test.concurrent("list<padded-record>", async () => {
+        const instance = await getInstance();
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamListPaddedRecord, AsyncFunction);
+
+        const vals = [
+            [
+                { id: 1, byte: 7 },
+                { id: 2, byte: 8 },
+            ],
+            [
+                { id: 0x01020304, byte: 255 },
+                { id: 0x05060708, byte: 0 },
+            ],
+        ];
+        const stream = await instance["jco:test-components/get-stream-async"].getStreamListPaddedRecord(vals);
+        await checkStreamValues({
+            stream,
+            vals,
+            typeName: "list<padded-record>",
+            assertEqFn: assert.deepEqual,
+        });
     });
 
     test.concurrent("result<string>", async () => {

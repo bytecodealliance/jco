@@ -610,14 +610,29 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(
                     r#"
-                    function {lower_flat_record_fn}(fieldMetas) {{
+                    function {lower_flat_record_fn}(meta) {{
+                        const {{ fieldMetas, size32: recordSize32, align32: recordAlign32 }} = meta;
                         return function {lower_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_record_fn}()] args', {{ ctx }});
 
+                            const originalPtr = ctx.storagePtr;
                             const r = ctx.vals[0];
                             for (const [tag, lowerFn, size32, align32 ] of fieldMetas) {{
+                                const rem = ctx.storagePtr % align32;
+                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+
+                                const fieldPtr = ctx.storagePtr;
                                 ctx.vals = [r[tag]];
                                 lowerFn(ctx);
+
+                                ctx.storagePtr = Math.max(ctx.storagePtr, fieldPtr + size32);
+                            }}
+
+                            ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + recordSize32);
+
+                            const rem = ctx.storagePtr % recordAlign32;
+                            if (rem !== 0) {{
+                                ctx.storagePtr += recordAlign32 - rem;
                             }}
                         }}
                     }}
@@ -669,16 +684,10 @@ impl LowerIntrinsic {
                             ctx.vals = [val];
                             if (lowerFn) {{ lowerFn(ctx); }}
 
-                            let bytesWritten = ctx.storagePtr - payloadOffsetPtr;
+                            ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + size32);
 
                             const rem = ctx.storagePtr % align32;
-                            if (rem !== 0) {{
-                                const pad = align32 - rem;
-                                ctx.storagePtr += pad;
-                                bytesWritten += pad;
-                            }}
-
-                            ctx.storagePtr += bytesWritten;
+                            if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                         }}
                     }}
                 "#));
@@ -720,16 +729,16 @@ impl LowerIntrinsic {
                                     stringEncoding: ctx.stringEncoding,
                                 }};
                                 for (let idx = 0; idx < list.length; idx++) {{
+                                    const elemPtr = storagePtr + idx * elemSize32;
+                                    lowerCtx.storagePtr = elemPtr;
                                     lowerCtx.vals = list.slice(idx, idx+1);
                                     elemLowerFn(lowerCtx);
+                                    lowerCtx.storagePtr = Math.max(lowerCtx.storagePtr, elemPtr + elemSize32);
                                 }}
-
-                                const bytesLowered = lowerCtx.storagePtr - ctx.storagePtr;
                                 ctx.storagePtr = lowerCtx.storagePtr;
 
                                 // TODO: implement parma-only known-length processing
 
-                                ctx.storagePtr += bytesLowered;
                                 return;
                             }}
 
@@ -751,10 +760,12 @@ impl LowerIntrinsic {
                                 const origPtr = ctx.storagePtr;
                                 ctx.storagePtr = dataPtr;
 
-                                ctx.storagePtr = dataPtr;
-                                for (const elem of elems) {{
+                                for (const [idx, elem] of elems.entries()) {{
+                                    const elemPtr = dataPtr + idx * elemSize32;
+                                    ctx.storagePtr = elemPtr;
                                     ctx.vals = [elem];
                                     elemLowerFn(ctx);
+                                    ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
                                 }}
 
                                 ctx.storagePtr = origPtr;
@@ -766,9 +777,13 @@ impl LowerIntrinsic {
                                     throw new TypeError(`invalid list input of length [${{elems.length}}], must be length [${{knownLen}}]`);
                                 }}
 
-                                for (const elem of elems) {{
+                                const originalPtr = ctx.storagePtr;
+                                for (const [idx, elem] of elems.entries()) {{
+                                    const elemPtr = originalPtr + idx * elemSize32;
+                                    ctx.storagePtr = elemPtr;
                                     ctx.vals = [elem];
                                     elemLowerFn(ctx);
+                                    ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
                                 }}
                             }}
 
@@ -789,13 +804,27 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(
                     r#"
-                    function {lower_flat_tuple_fn}(elemLowerMetas) {{
+                    function {lower_flat_tuple_fn}(meta) {{
+                        const {{ elemLowerMetas, size32: tupleSize32, align32: tupleAlign32 }} = meta;
                         return function {lower_flat_tuple_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_tuple_fn}()] args', {{ ctx }});
+                            const originalPtr = ctx.storagePtr;
                             const tuple = ctx.vals[0];
                             for (const [idx, [ lowerFn, size32, align32 ]]  of elemLowerMetas.entries()) {{
+                                const rem = ctx.storagePtr % align32;
+                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+
+                                const elemPtr = ctx.storagePtr;
                                 ctx.vals = [tuple[idx]];
                                 lowerFn(ctx);
+                                ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + size32);
+                            }}
+
+                            ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + tupleSize32);
+
+                            const rem = ctx.storagePtr % tupleAlign32;
+                            if (rem !== 0) {{
+                                ctx.storagePtr += tupleAlign32 - rem;
                             }}
                         }}
                     }}

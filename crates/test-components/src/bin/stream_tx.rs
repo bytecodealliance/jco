@@ -117,7 +117,23 @@ impl get_stream_async::Guest for Component {
         stream_values_async(vals)
     }
 
+    async fn get_stream_layout_variant(
+        vals: Vec<get_stream_async::LayoutVariant>,
+    ) -> StreamReader<get_stream_async::LayoutVariant> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_variant_string_record(
+        vals: Vec<get_stream_async::VariantStringRecord>,
+    ) -> StreamReader<get_stream_async::VariantStringRecord> {
+        stream_values_async(vals)
+    }
+
     async fn get_stream_tuple(vals: Vec<(u32, i32, String)>) -> StreamReader<(u32, i32, String)> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_tight_tuple(vals: Vec<(u8, u8, u32)>) -> StreamReader<(u8, u8, u32)> {
         stream_values_async(vals)
     }
 
@@ -154,6 +170,12 @@ impl get_stream_async::Guest for Component {
     async fn get_stream_list_record(
         vals: Vec<Vec<get_stream_async::ExampleRecord>>,
     ) -> StreamReader<Vec<get_stream_async::ExampleRecord>> {
+        stream_values_async(vals)
+    }
+
+    async fn get_stream_list_padded_record(
+        vals: Vec<Vec<get_stream_async::PaddedRecord>>,
+    ) -> StreamReader<Vec<get_stream_async::PaddedRecord>> {
         stream_values_async(vals)
     }
 

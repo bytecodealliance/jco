@@ -309,6 +309,37 @@ suite("stream<T> lowers", () => {
             assert.closeTo(returnedVals[0].val, 123.1, 0.01);
         });
 
+        test.concurrent("variant layout", async () => {
+            const instance = await getInstance();
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesLayoutVariant,
+                AsyncFunction,
+            );
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesVariantStringRecord,
+                AsyncFunction,
+            );
+
+            const variants = [{ tag: "empty" }, { tag: "name", val: "payload-name" }];
+            assert.deepEqual(
+                await instance["jco:test-components/stream-lower-async"].readStreamValuesLayoutVariant(
+                    createReadableStreamFromValues(variants),
+                ),
+                variants,
+            );
+
+            const records = [
+                { kind: { tag: "empty" }, name: "empty-name" },
+                { kind: { tag: "name", val: "kind-name" }, name: "record-name" },
+            ];
+            assert.deepEqual(
+                await instance["jco:test-components/stream-lower-async"].readStreamValuesVariantStringRecord(
+                    createReadableStreamFromValues(records),
+                ),
+                records,
+            );
+        });
+
         test.concurrent("tuple", async () => {
             const instance = await getInstance();
             assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesTuple, AsyncFunction);
@@ -319,6 +350,24 @@ suite("stream<T> lowers", () => {
                 [3, -3, "two"],
             ];
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesTuple(
+                createReadableStreamFromValues(vals),
+            );
+            assert.deepEqual(returnedVals, vals);
+        });
+
+        test.concurrent("tight tuple layout", async () => {
+            const instance = await getInstance();
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesTightTuple,
+                AsyncFunction,
+            );
+
+            const vals = [
+                [1, 2, 0x01020304],
+                [3, 4, 0x05060708],
+                [255, 0, 0xffffffff],
+            ];
+            const returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesTightTuple(
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, vals);
@@ -469,6 +518,29 @@ suite("stream<T> lowers", () => {
             let returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesListRecord(
                 createReadableStreamFromValues(vals),
             );
+            assert.deepEqual(returnedVals, vals);
+        });
+
+        test.concurrent("list<padded-record>", async () => {
+            const instance = await getInstance();
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesListPaddedRecord,
+                AsyncFunction,
+            );
+
+            const vals = [
+                [
+                    { id: 1, byte: 7 },
+                    { id: 2, byte: 8 },
+                ],
+                [
+                    { id: 0x01020304, byte: 255 },
+                    { id: 0x05060708, byte: 0 },
+                ],
+            ];
+            const returnedVals = await instance[
+                "jco:test-components/stream-lower-async"
+            ].readStreamValuesListPaddedRecord(createReadableStreamFromValues(vals));
             assert.deepEqual(returnedVals, vals);
         });
 

@@ -13,7 +13,8 @@ use bindings::exports::jco::test_components::stream_lower_sync;
 use bindings::jco::test_components::resources;
 
 use bindings::exports::jco::test_components::stream_lower_async::{
-    ExampleEnum, ExampleFlags, ExampleRecord, ExampleVariant,
+    ExampleEnum, ExampleFlags, ExampleRecord, ExampleVariant, LayoutVariant, PaddedRecord,
+    VariantStringRecord,
 };
 
 struct Component;
@@ -85,6 +86,18 @@ impl stream_lower_async::Guest for Component {
         read_async_values(rx).await
     }
 
+    async fn read_stream_values_layout_variant(
+        rx: StreamReader<LayoutVariant>,
+    ) -> Vec<LayoutVariant> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_variant_string_record(
+        rx: StreamReader<VariantStringRecord>,
+    ) -> Vec<VariantStringRecord> {
+        read_async_values(rx).await
+    }
+
     async fn read_stream_values_option_string(
         rx: StreamReader<Option<String>>,
     ) -> Vec<Option<String>> {
@@ -100,6 +113,10 @@ impl stream_lower_async::Guest for Component {
     async fn read_stream_values_tuple(
         rx: StreamReader<(u32, i32, String)>,
     ) -> Vec<(u32, i32, String)> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_tight_tuple(rx: StreamReader<(u8, u8, u32)>) -> Vec<(u8, u8, u32)> {
         read_async_values(rx).await
     }
 
@@ -128,6 +145,12 @@ impl stream_lower_async::Guest for Component {
     async fn read_stream_values_list_record(
         rx: StreamReader<Vec<ExampleRecord>>,
     ) -> Vec<Vec<ExampleRecord>> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_list_padded_record(
+        rx: StreamReader<Vec<PaddedRecord>>,
+    ) -> Vec<Vec<PaddedRecord>> {
         read_async_values(rx).await
     }
 

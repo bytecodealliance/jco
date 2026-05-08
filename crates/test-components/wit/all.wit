@@ -31,6 +31,11 @@ interface example-types {
         maybe-u32(option<u32>),
     }
 
+    variant layout-variant {
+        empty,
+        name(string),
+    }
+
     enum example-enum {
         first,
         second,
@@ -42,6 +47,16 @@ interface example-types {
         id-str: string,
     }
 
+    record variant-string-record {
+        kind: layout-variant,
+        name: string,
+    }
+
+    record padded-record {
+        id: u32,
+        byte: u8,
+    }
+
     flags example-flags {
         first,
         second,
@@ -51,7 +66,15 @@ interface example-types {
 
 interface get-stream-async {
     use resources.{example-resource};
-    use example-types.{example-variant, example-enum, example-record, example-flags};
+    use example-types.{
+        example-variant,
+        example-enum,
+        example-record,
+        example-flags,
+        layout-variant,
+        variant-string-record,
+        padded-record,
+    };
 
     resource example-guest-resource {
         constructor(id: u32);
@@ -86,6 +109,9 @@ interface get-stream-async {
     get-stream-record: async func(vals: list<example-record>) -> stream<example-record>;
 
     get-stream-variant: async func(vals: list<example-variant>) -> stream<example-variant>;
+    get-stream-layout-variant: async func(vals: list<layout-variant>) -> stream<layout-variant>;
+    get-stream-variant-string-record: async func(vals: list<variant-string-record>) -> stream<variant-string-record>;
+    get-stream-list-padded-record: async func(vals: list<list<padded-record>>) -> stream<list<padded-record>>;
 
     get-stream-list-u8: async func(vals: list<list<u8>>) -> stream<list<u8>>;
     get-stream-list-string: async func(vals: list<list<string>>) -> stream<list<string>>;
@@ -93,6 +119,7 @@ interface get-stream-async {
     get-stream-fixed-list-u32: async func(vals: list<list<u32, 5>>) -> stream<list<u32, 5>>;
 
     get-stream-tuple: async func(vals: list<tuple<u32, s32, string>>) -> stream<tuple<u32, s32, string>>;
+    get-stream-tight-tuple: async func(vals: list<tuple<u8, u8, u32>>) -> stream<tuple<u8, u8, u32>>;
 
     get-stream-flags: async func(vals: list<example-flags>) -> stream<example-flags>;
 
@@ -209,8 +236,11 @@ world async-flat-param-adder {
 }
 
 world async-simple-return {
+  use example-types.{layout-variant};
+
   export get-u32: async func() -> u32;
   export get-string: async func() -> string;
+  export get-layout-variant-and-u32: async func() -> tuple<layout-variant, u32>;
 }
 
 world stream-tx {
@@ -289,7 +319,15 @@ interface stream-lower-sync {
 
 interface stream-lower-async {
     use resources.{example-resource};
-    use example-types.{example-variant, example-enum, example-record, example-flags};
+    use example-types.{
+        example-variant,
+        example-enum,
+        example-record,
+        example-flags,
+        layout-variant,
+        variant-string-record,
+        padded-record,
+    };
 
     stream-passthrough: async func(s: stream<u32>) -> stream<u32>;
 
@@ -316,8 +354,11 @@ interface stream-lower-async {
     read-stream-values-record: async func(s: stream<example-record>) -> list<example-record>;
 
     read-stream-values-variant: async func(s: stream<example-variant>) -> list<example-variant>;
+    read-stream-values-layout-variant: async func(s: stream<layout-variant>) -> list<layout-variant>;
+    read-stream-values-variant-string-record: async func(s: stream<variant-string-record>) -> list<variant-string-record>;
 
     read-stream-values-tuple: async func(s: stream<tuple<u32, s32, string>>) -> list<tuple<u32, s32, string>>;
+    read-stream-values-tight-tuple: async func(s: stream<tuple<u8, u8, u32>>) -> list<tuple<u8, u8, u32>>;
 
     read-stream-values-flags: async func(s: stream<example-flags>) -> list<example-flags>;
 
@@ -331,6 +372,7 @@ interface stream-lower-async {
     read-stream-values-list-string: async func(s: stream<list<string>>) -> list<list<string>>;
     read-stream-values-fixed-list-u32: async func(s: stream<list<list<u32, 5>>>) -> list<list<list<u32, 5>>>;
     read-stream-values-list-record: async func(s: stream<list<example-record>>) -> list<list<example-record>>;
+    read-stream-values-list-padded-record: async func(s: stream<list<padded-record>>) -> list<list<padded-record>>;
 
     read-stream-values-example-resource-own: async func(s: stream<example-resource>);
 

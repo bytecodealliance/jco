@@ -730,15 +730,37 @@ impl LiftIntrinsic {
                 let lift_flat_record_fn = self.name();
                 output.push_str(&format!(
                     r#"
-                    function {lift_flat_record_fn}(keysAndLiftFns) {{
+                    function {lift_flat_record_fn}(meta) {{
+                        const {{ fieldMetas, size32: recordSize32, align32: recordAlign32 }} = meta;
                         return function {lift_flat_record_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_record_fn}()] args', {{ ctx }});
 
+                            const originalPtr = ctx.storagePtr;
                             const res = {{}};
-                            for (const [key, liftFn, _size32, _align32] of keysAndLiftFns) {{
+                            for (const [key, liftFn, size32, align32] of fieldMetas) {{
+                                let fieldPtr;
+                                if (ctx.storagePtr !== undefined) {{
+                                    const rem = ctx.storagePtr % align32;
+                                    if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                                    fieldPtr = ctx.storagePtr;
+                                }}
+
                                 let [val, newCtx] = liftFn(ctx);
                                 res[key] = val;
                                 ctx = newCtx;
+
+                                if (fieldPtr !== undefined) {{
+                                    ctx.storagePtr = Math.max(ctx.storagePtr, fieldPtr + size32);
+                                }}
+                            }}
+
+                            if (originalPtr !== undefined) {{
+                                ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + recordSize32);
+                            }}
+
+                            if (ctx.storagePtr !== undefined) {{
+                                const rem = ctx.storagePtr % recordAlign32;
+                                if (rem !== 0) {{ ctx.storagePtr += recordAlign32 - rem; }}
                             }}
 
                             return [res, ctx];
@@ -777,7 +799,7 @@ impl LiftIntrinsic {
                             caseIdx = liftRes[0];
                             ctx = liftRes[1];
 
-                            const [ tag, liftFn, size32, align32, payloadOffset32 ] = casesAndLiftFns[caseIdx];
+                            const [ tag, liftFn, size32, align32, payloadOffset32, caseFlatCount, variantFlatCount ] = casesAndLiftFns[caseIdx];
                             if (payloadOffset32 === undefined) {{ throw new Error('unexpectedly missing payload offset'); }}
 
                             if (originalPtr !== undefined) {{
@@ -789,7 +811,9 @@ impl LiftIntrinsic {
                                 val = {{ tag }};
                                 // NOTE: here we need to move past the entire object in memory
                                 // despite moving to the payload which we now know is missing/unnecessary
-                                ctx.storagePtr = originalPtr + size32;
+                                if (originalPtr !== undefined) {{
+                                    ctx.storagePtr = originalPtr + size32;
+                                }}
                             }} else {{
                                 const [newVal, newCtx] = liftFn(ctx);
                                 val = {{ tag, val: newVal }};
@@ -797,13 +821,32 @@ impl LiftIntrinsic {
 
                                 // NOTE: Padding can be left over after doing the lift if it was less than
                                 // space left for the payload normally.
-                                if (ctx.storagePtr < originalPtr + size32) {{
-                                    ctx.storagePtr = originalPtr + size32;
+                                if (originalPtr !== undefined) {{
+                                    ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + size32);
                                 }}
                             }}
 
-                            const rem = ctx.storagePtr % align32;
-                            if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                            if (origUseParams) {{
+                                if (caseFlatCount === undefined || variantFlatCount === undefined) {{
+                                    throw new Error('variant flat count metadata is missing');
+                                }}
+                                if (caseFlatCount === null || variantFlatCount === null) {{
+                                    throw new Error('cannot lift variant with unknown flat count');
+                                }}
+                                const remainingPayloadParams = variantFlatCount - 1 - caseFlatCount;
+                                if (remainingPayloadParams < 0) {{
+                                    throw new Error(`invalid variant flat count metadata`);
+                                }}
+                                if (ctx.params.length < remainingPayloadParams) {{
+                                    throw new Error(`expected at least [${{remainingPayloadParams}}] remaining variant payload params, but got [${{ctx.params.length}}]`);
+                                }}
+                                ctx.params = ctx.params.slice(remainingPayloadParams);
+                            }}
+
+                            if (ctx.storagePtr !== undefined) {{
+                                const rem = ctx.storagePtr % align32;
+                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                            }}
 
                             return [val, ctx];
                         }}
@@ -824,12 +867,13 @@ impl LiftIntrinsic {
                             ctx.storagePtr = dataPtr;
                             const val = [];
                             for (var i = 0; i < len; i++) {{
+                                const elemPtr = dataPtr + i * elemSize32;
+                                ctx.storagePtr = elemPtr;
                                 const [res, nextCtx] = elemLiftFn(ctx);
                                 val.push(res);
                                 ctx = nextCtx;
 
-                                const rem = ctx.storagePtr % elemAlign32;
-                                if (rem !== 0) {{ ctx.storagePtr += elemAlign32 - rem; }}
+                                ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
                             }}
                             if (originalPtr !== null) {{ ctx.storagePtr = originalPtr; }}
                             return [val, ctx];
@@ -930,18 +974,37 @@ impl LiftIntrinsic {
                 let lift_flat_tuple_fn = self.name();
                 output.push_str(&format!(
                     "
-                    function {lift_flat_tuple_fn}(elemLiftFns) {{
+                    function {lift_flat_tuple_fn}(meta) {{
+                        const {{ elemLiftFns, size32: tupleSize32, align32: tupleAlign32 }} = meta;
                         return function {lift_flat_tuple_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_tuple_fn}()] args', {{ ctx }});
 
+                            const originalPtr = ctx.storagePtr;
                             const val = [];
                             for (const [ liftFn, size32, align32 ]  of elemLiftFns) {{
+                                let elemPtr;
+                                if (ctx.storagePtr !== undefined) {{
+                                    const rem = ctx.storagePtr % align32;
+                                    if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                                    elemPtr = ctx.storagePtr;
+                                }}
+
                                 const [newValue, newCtx] = liftFn(ctx);
                                 val.push(newValue);
                                 ctx = newCtx;
 
-                                const rem = ctx.storagePtr % align32;
-                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                                if (elemPtr !== undefined) {{
+                                    ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + size32);
+                                }}
+                            }}
+
+                            if (originalPtr !== undefined) {{
+                                ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + tupleSize32);
+                            }}
+
+                            if (ctx.storagePtr !== undefined) {{
+                                const rem = ctx.storagePtr % tupleAlign32;
+                                if (rem !== 0) {{ ctx.storagePtr += tupleAlign32 - rem; }}
                             }}
 
                             return [val, ctx];
