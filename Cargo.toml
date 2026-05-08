@@ -45,7 +45,7 @@ tokio = { version = "1.50.0", default-features = false }
 webidl2wit = { version = "0.1.1", default-features = false }
 xshell = { version = "0.2.7", default-features = false }
 
-wasmtime = { version = "43.0.0", default-features = false }
+wasmtime = { version = "44.0.1", default-features = false }
 wasm-encoder = { version = "0.245.1", default-features = false }
 wasm-metadata = { version = "0.245.1", default-features = false }
 wasmparser = { version = "0.245.1", default-features = false }
