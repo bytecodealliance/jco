@@ -105,6 +105,23 @@ suite("Transpile (WASI P3)", () => {
             `TEST_P3_FIXTURE_TARGET specified, only running components that match [${env.TEST_P3_FIXTURE_TARGET}]`,
         );
     }
+
+    if (!env.TEST_P3_FIXTURE_TARGET || env.TEST_P3_FIXTURE_TARGET === "p3-random-imports.wasm") {
+        test("maps versioned preview3 WASI imports to preview3-shim", async () => {
+            const componentPath = join(P3_COMPONENT_FIXTURES_DIR, "random/p3-random-imports.wasm");
+            const { files } = await transpile(await readFile(componentPath));
+            const decoder = new TextDecoder();
+            const source = Object.entries(files)
+                .filter(([name]) => name.endsWith(".js"))
+                .map(([, source]) => (typeof source === "string" ? source : decoder.decode(source)))
+                .join("\n");
+
+            assert.include(source, "from '@bytecodealliance/preview3-shim/random'");
+            assert.include(source, "from '@bytecodealliance/preview2-shim/cli'");
+            assert.notInclude(source, "from 'wasi:random/");
+        });
+    }
+
     for (const componentRelPath of P3_FIXTURE_COMPONENTS) {
         const componentPath = join(P3_COMPONENT_FIXTURES_DIR, componentRelPath);
         const componentName = basename(componentPath);

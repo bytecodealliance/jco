@@ -4649,40 +4649,56 @@ fn parse_mapping(mapping: &str) -> (String, Option<String>) {
     (mapping.into(), None)
 }
 
+fn resolve_wildcard_mapping(key: &str, mapping: &str, impt: &str) -> Option<String> {
+    let idx = key.find('*')?;
+    let lhs = &key[..idx];
+    let rhs = &key[idx + 1..];
+
+    if !impt.starts_with(lhs) || !impt.ends_with(rhs) {
+        return None;
+    }
+
+    let matched_len = impt.len() - lhs.len() - rhs.len();
+    let matched = &impt[lhs.len()..lhs.len() + matched_len];
+    Some(mapping.replace('*', matched))
+}
+
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {
     let impt_sans_version = match impt.find('@') {
         Some(version_idx) => &impt[0..version_idx],
         None => impt,
     };
     if let Some(map) = map.as_ref() {
-        // Exact match (including version)
+        // 1. Exact match (including version)
         if let Some(mapping) = map.get(impt) {
             return parse_mapping(mapping);
         }
-        // Match without version
+
+        // 2. Exact match without version
         if let Some(mapping) = map.get(impt_sans_version) {
             return parse_mapping(mapping);
         }
-        // Wildcard matching (version-stripped and full)
+
+        // Prefer versioned wildcards over unversioned fallbacks.
         for (key, mapping) in map {
-            if let Some(wildcard_idx) = key.find('*') {
-                let lhs = &key[0..wildcard_idx];
-                let rhs = &key[wildcard_idx + 1..];
-                if impt_sans_version.starts_with(lhs) && impt_sans_version.ends_with(rhs) {
-                    let matched = &impt_sans_version[wildcard_idx
-                        ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
-                    let mapping = mapping.replace('*', matched);
-                    return parse_mapping(&mapping);
-                }
-                if impt.starts_with(lhs) && impt.ends_with(rhs) {
-                    let matched =
-                        &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
-                    let mapping = mapping.replace('*', matched);
-                    return parse_mapping(&mapping);
-                }
+            if !key.contains('@') {
+                continue;
+            }
+            if let Some(mapping) = resolve_wildcard_mapping(key, mapping, impt) {
+                return parse_mapping(&mapping);
             }
         }
-        // Semver-compatible matching for versioned map entries.
+
+        // Then apply unversioned wildcards to the version-stripped import.
+        for (key, mapping) in map {
+            if key.contains('@') {
+                continue;
+            }
+            if let Some(mapping) = resolve_wildcard_mapping(key, mapping, impt_sans_version) {
+                return parse_mapping(&mapping);
+            }
+        }
+
         // If the import has a parseable version and earlier steps didn't match,
         // try matching against map entries with compatible versions.
         if let Some(at) = impt.find('@') {
@@ -4691,7 +4707,6 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                 let mut best_match: Option<(String, Version)> = None;
 
                 for (key, mapping) in map {
-                    // Only consider map entries that have a version
                     let key_at = match key.find('@') {
                         Some(at) => at,
                         None => continue,
@@ -4699,7 +4714,6 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                     let key_base = &key[..key_at];
                     let key_ver_str = &key[key_at + 1..];
 
-                    // Check version compatibility
                     let (key_compat, key_ver) = match semver_compat_key(key_ver_str) {
                         Some(k) => k,
                         None => continue,
@@ -4708,18 +4722,10 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                         continue;
                     }
 
-                    // Versions are on the same compatibility track.
-                    // Now check if the base (sans version) matches.
-                    let resolved = if let Some(wildcard_idx) = key_base.find('*') {
-                        let lhs = &key_base[..wildcard_idx];
-                        let rhs = &key_base[wildcard_idx + 1..];
-                        if impt_sans_version.starts_with(lhs) && impt_sans_version.ends_with(rhs) {
-                            let matched = &impt_sans_version[wildcard_idx
-                                ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
-                            Some(mapping.replace('*', matched))
-                        } else {
-                            None
-                        }
+                    let resolved = if let Some(mapping) =
+                        resolve_wildcard_mapping(key_base, mapping, impt_sans_version)
+                    {
+                        Some(mapping)
                     } else if key_base == impt_sans_version {
                         Some(mapping.clone())
                     } else {
@@ -4727,7 +4733,6 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                     };
 
                     if let Some(resolved_mapping) = resolved {
-                        // Prefer the highest compatible version
                         match &best_match {
                             Some((_, prev_ver)) if key_ver <= *prev_ver => {}
                             _ => {
@@ -6187,6 +6192,45 @@ mod tests {
         assert_eq!(
             map_import(&map, "wasi:http/types@0.2.0"),
             ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_prerelease_versioned_wildcard_wins_over_unversioned_wildcard() {
+        // p3 imports (pre-release version) must route to the
+        // version-pinned wildcard, not the unversioned p2 fallback.
+        let mut map = HashMap::new();
+        map.insert(
+            "wasi:cli/*".into(),
+            "@bytecodealliance/preview2-shim/cli#*".into(),
+        );
+        map.insert(
+            "wasi:cli/*@0.3.0-rc-2026-03-15".into(),
+            "@bytecodealliance/preview3-shim/cli#*".into(),
+        );
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:cli/stdout@0.3.0-rc-2026-03-15"),
+            (
+                "@bytecodealliance/preview3-shim/cli".into(),
+                Some("stdout".into())
+            )
+        );
+        // Same map, p2 import should still resolve to preview2-shim.
+        assert_eq!(
+            map_import(&map, "wasi:cli/stdout@0.2.6"),
+            (
+                "@bytecodealliance/preview2-shim/cli".into(),
+                Some("stdout".into())
+            )
+        );
+        // Unversioned import should also flow to p2.
+        assert_eq!(
+            map_import(&map, "wasi:cli/stdout"),
+            (
+                "@bytecodealliance/preview2-shim/cli".into(),
+                Some("stdout".into())
+            )
         );
     }
 

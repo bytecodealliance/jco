@@ -134,6 +134,7 @@ export async function transpileComponent(component, opts = {}) {
     }
 
     if (opts.wasiShim !== false) {
+        const p3VersionTag = "0.3.0-rc-2026-03-15";
         opts.map = Object.assign(
             {
                 "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
@@ -143,6 +144,12 @@ export async function transpileComponent(component, opts = {}) {
                 "wasi:io/*": "@bytecodealliance/preview2-shim/io#*",
                 "wasi:random/*": "@bytecodealliance/preview2-shim/random#*",
                 "wasi:sockets/*": "@bytecodealliance/preview2-shim/sockets#*",
+                [`wasi:cli/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/cli#*",
+                [`wasi:clocks/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/clocks#*",
+                [`wasi:filesystem/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/filesystem#*",
+                [`wasi:http/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/http#*",
+                [`wasi:random/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/random#*",
+                [`wasi:sockets/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/sockets#*",
             },
             opts.map || {},
         );
