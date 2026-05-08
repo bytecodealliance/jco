@@ -806,40 +806,55 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
-        // Set up global stream map, which is used by intrinsics like stream.transfer
-        let global_stream_table_map =
-            Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap).name();
-        let rep_table_class = Intrinsic::RepTableClass.name();
-        for (table_idx, component_idx) in self.stream_tables.iter() {
-            self.src.js.push_str(&format!(
-                "{global_stream_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
-                table_idx.as_u32(),
-                component_idx.as_u32(),
+        // Set up global stream map, which is used by intrinsics like stream.transfer.
+        // Register the intrinsic so the `const STREAM_TABLES = {};` declaration
+        // is emitted before these per-table assignments — without that, the
+        // generated module references an undeclared identifier and fails to
+        // load (ReferenceError: STREAM_TABLES is not defined).
+        if !self.stream_tables.is_empty() {
+            let global_stream_table_map = self.bindgen.intrinsic(Intrinsic::AsyncStream(
+                AsyncStreamIntrinsic::GlobalStreamTableMap,
             ));
+            let rep_table_class = Intrinsic::RepTableClass.name();
+            for (table_idx, component_idx) in self.stream_tables.iter() {
+                self.src.js.push_str(&format!(
+                    "{global_stream_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
+                    table_idx.as_u32(),
+                    component_idx.as_u32(),
+                ));
+            }
         }
 
-        // Set up global future map, which is used by intrinsics like future.transfer
-        let global_future_table_map =
-            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap).name();
-        let rep_table_class = Intrinsic::RepTableClass.name();
-        for (table_idx, component_idx) in self.future_tables.iter() {
-            self.src.js.push_str(&format!(
-                "{global_future_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
-                table_idx.as_u32(),
-                component_idx.as_u32(),
+        // Set up global future map, which is used by intrinsics like future.transfer.
+        // Same registration fix as above for FUTURE_TABLES.
+        if !self.future_tables.is_empty() {
+            let global_future_table_map = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
+                AsyncFutureIntrinsic::GlobalFutureTableMap,
             ));
+            let rep_table_class = Intrinsic::RepTableClass.name();
+            for (table_idx, component_idx) in self.future_tables.iter() {
+                self.src.js.push_str(&format!(
+                    "{global_future_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
+                    table_idx.as_u32(),
+                    component_idx.as_u32(),
+                ));
+            }
         }
 
-        // Set up global error context map, which is used by intrinsics like err_ctx.transfer
-        let global_err_ctx_table_map =
-            Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap).name();
-        let rep_table_class = Intrinsic::RepTableClass.name();
-        for (table_idx, component_idx) in self.err_ctx_tables.iter() {
-            self.src.js.push_str(&format!(
-                "{global_err_ctx_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
-                table_idx.as_u32(),
-                component_idx.as_u32(),
-            ));
+        // Set up global error context map, which is used by intrinsics like err_ctx.transfer.
+        // Same registration fix as above for ERR_CTX_TABLES.
+        if !self.err_ctx_tables.is_empty() {
+            let global_err_ctx_table_map = self
+                .bindgen
+                .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap));
+            let rep_table_class = Intrinsic::RepTableClass.name();
+            for (table_idx, component_idx) in self.err_ctx_tables.iter() {
+                self.src.js.push_str(&format!(
+                    "{global_err_ctx_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
+                    table_idx.as_u32(),
+                    component_idx.as_u32(),
+                ));
+            }
         }
 
         // Process global initializers
