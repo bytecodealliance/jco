@@ -178,22 +178,25 @@ jobs:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
+            /Users/runner/.cache/puppeteer
+
+      # NOTE: on macos-latest w/ latest node (26.x), installing puppeteer via npx does not
+      # properly place the framework (dynamic lib) bits, so we perform a manual download of a set version instead.
       - name: Install puppeteer
+        id: puppeteer
+        env:
+          PUPPETEER_VERSION: "148.0.7778.97"
         run: |
-          npx puppeteer browsers install chrome
-      - name: Debug
-        run: |
-          brew install tree
-          echo '=> top level app folder'
-          ls '/Users/runner/.cache/puppeteer/chrome/mac_arm-148.0.7778.97/chrome-mac-arm64/Google Chrome for Testing.app'
-          echo '=> root > contents'
-          ls '/Users/runner/.cache/puppeteer/chrome/mac_arm-148.0.7778.97/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS'
-          echo '=> root > contents > macos'
-          ls '/Users/runner/.cache/puppeteer/chrome/mac_arm-148.0.7778.97/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS'
-          ls '/Users/runner/.cache/puppeteer/chrome/mac_arm-148.0.7778.97/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/../'
-          echo '=> frameworks'
-          tree '/Users/runner/.cache/puppeteer/chrome/mac_arm-148.0.7778.97/chrome-mac-arm64'
-          ls '/Users/runner/.cache/puppeteer/chrome/mac_arm-148.0.7778.97/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/../Frameworks/'
+          if [[ "${{ matrix.os }}" == "macos-latest" && "${{ matrix.node }}" == "latest" ]]; then
+              rm -rf /Users/runner/.cache/puppeteer/chrome
+              wget https://storage.googleapis.com/chrome-for-testing-public/${PUPPETEER_VERSION}/mac-arm64/chrome-mac-arm64.zip
+              mkdir -p /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/
+              unzip chrome-mac-arm64.zip -d /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}
+              npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
+              echo -e "puppeteer-path=/Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" >> $GITHUB_OUTPUT
+          else
+              npx puppeteer browsers install chrome
+          fi
 
       - name: Restore jco build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -213,6 +216,9 @@ jobs:
         if: matrix.node == '18.x' || matrix.node == '20.x' || matrix.ndoe == '22.x'
         working-directory: packages/jco
         run: |
+          if [ "${{ steps.puppeteer.outputs.puppeteer-path }}" != "" ]; then
+              export PUPPETEER_PATH=${{ steps.puppeteer.outputs.puppeteer-path }}
+          fi
           npm run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
       - name: Test Latest Node.js
