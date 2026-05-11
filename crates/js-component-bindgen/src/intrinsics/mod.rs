@@ -1043,7 +1043,7 @@ impl Intrinsic {
 
 /// Profile for determinism to be used by async implementation
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) enum AsyncDeterminismProfile {
+pub enum AsyncDeterminismProfile {
     /// Allow random ordering non-determinism
     #[default]
     Random,
@@ -1069,15 +1069,15 @@ impl std::fmt::Display for AsyncDeterminismProfile {
 /// Arguments to `render_intrinsics`
 pub struct RenderIntrinsicsArgs<'a> {
     /// List of intrinsics being built for use
-    pub(crate) intrinsics: &'a mut BTreeSet<Intrinsic>,
+    pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     /// Whether to use NodeJS compat
-    pub(crate) no_nodejs_compat: bool,
+    pub no_nodejs_compat: bool,
     /// Whether instantiation has occurred
-    pub(crate) instantiation: bool,
+    pub instantiation: bool,
     /// The kind of determinism to use
-    pub(crate) determinism: AsyncDeterminismProfile,
+    pub determinism: AsyncDeterminismProfile,
     /// Options provided when performing transpilation
-    pub(crate) transpile_opts: &'a TranspileOpts,
+    pub transpile_opts: &'a TranspileOpts,
 }
 
 /// Intrinsics that should be rendered as early as possible
