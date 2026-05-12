@@ -7,6 +7,12 @@ const CI_DEFAULT_TIMEOUT_MS = 1000 * 60 * 3; // 1m
 
 const REPORTERS = process.env.GITHUB_ACTIONS ? ["verbose", "github-actions"] : ["verbose"];
 
+const NODE_MAJOR_VERSION = parseInt(process.versions.node);
+const JSPI_EXEC_ARGV =
+    !("Suspending" in WebAssembly) && NODE_MAJOR_VERSION >= 22 && NODE_MAJOR_VERSION < 26
+        ? ["--experimental-wasm-jspi"]
+        : [];
+
 export default defineConfig({
     test: {
         retry: 0,
@@ -27,5 +33,11 @@ export default defineConfig({
         testTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         hookTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         teardownTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
+        pool: "forks",
+        poolOptions: {
+            forks: {
+                execArgv: [...JSPI_EXEC_ARGV, "--stack-trace-limit=100"],
+            },
+        },
     },
 });
