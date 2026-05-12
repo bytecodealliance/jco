@@ -251,7 +251,7 @@ jobs:
             packages/jco/test/output/rust-test-components
 
       - name: Test LTS Node.js
-        if: matrix.node == '18.x' || matrix.node == '20.x' || matrix.node == '22.x' || matrix.node == '24.x'
+        if: matrix.node != 'latest'
         working-directory: packages/jco
         run: |
           if [ "${{ steps.puppeteer.outputs.puppeteer-path }}" != "" ]; then
