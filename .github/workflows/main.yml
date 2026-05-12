@@ -194,10 +194,13 @@ jobs:
         id: puppeteer
         env:
           PUPPETEER_VERSION: "148.0.7778.97"
+          OS_LINUX: ${{ startsWith(matrix.os, 'ubuntu') }}
+          OS_MACOS: ${{ startsWith(matrix.os, 'macos') }}
+          OS_WINDOWS: ${{ startsWith(matrix.os, 'windows') }}
         run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" && "${{ matrix.node }}" == "latest" ]]; then
+          if [ "$OS_MACOS" = "true" && "${{ matrix.node }}" = "latest" ]; then
               export EXPECTED_PATH="/Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
-              if [[ ! -f "$EXPECTED_PATH" ]]; then
+              if [ ! -f "$EXPECTED_PATH" ]; then
                   echo 'installing fresh macos chrome'
                   rm -rf /Users/runner/.cache/puppeteer/chrome
                   wget https://storage.googleapis.com/chrome-for-testing-public/${PUPPETEER_VERSION}/mac-arm64/chrome-mac-arm64.zip
@@ -210,6 +213,22 @@ jobs:
               echo -e "puppeteer-path=$EXPECTED_PATH" >> $GITHUB_OUTPUT
           else
               echo 'installing non-macos chrome'
+              if [ "$OS_LINUX" = "true" ]; then
+                  if [ ! -f "$HOME/.cache/puppeteer/chrome/linux-${PUPPETEER_VERSION}/chrome-linux64/chrome" ]; then
+                      rm -rf $HOME/.cache/puppeteer/chrome;
+                  fi
+              elif [ "$OS_WINDOWS" = "true" ]; then
+                  if [ ! -f "$HOME/.cache/puppeteer/chrome/win64-${PUPPETEER_VERSION}/chrome-win/chrome.exe" ]; then
+                      rm -rf $HOME/.cache/puppeteer/chrome;
+                  fi
+              elif [ "$OS_MACOS" = "true" ]; then
+                  if [ ! -f "$HOME/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" ]; then
+                      rm -rf $HOME/.cache/puppeteer/chrome;
+                  fi
+              else
+                  echo -e "ERROR: unexpected OS";
+                  exit 1;
+              fi
               npx puppeteer browsers install chrome
           fi
 
