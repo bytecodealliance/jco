@@ -189,7 +189,10 @@ jobs:
             /Users/runner/.cache/puppeteer
 
       # NOTE: on macos-latest w/ latest node (26.x), installing puppeteer via npx does not
-      # properly place the framework (dynamic lib) bits, so we perform a manual download of a set version instead.
+      # properly place the framework (dynamic lib) files, so we perform a manual download
+      # of a set version instead.
+      #
+      # TODO: revert to simple `npx puppeteer browsers install chrome` once this problem is fixed upstream
       - name: Install puppeteer
         id: puppeteer
         env:
