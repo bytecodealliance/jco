@@ -127,7 +127,7 @@ the published shims where necessary.
 
 ## Versioned imports with `WASIShim`
 
-You can also use verisons with the import objects produced by `WASIShim`:
+You can also use versions with the import objects produced by `WASIShim`:
 
 ```typescript
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
