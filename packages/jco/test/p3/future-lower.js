@@ -407,10 +407,16 @@ suite("future<T> lowers", () => {
             // and when passed through a Promise, they throw.
             vals = [{ tag: "err", val: "nope" }];
             for (const v of vals) {
-                expect(
+                await expect(
                     instance["jco:test-components/future-lower-async"].readFutureValueResultString(Promise.resolve(v)),
                 ).rejects.toThrow(v.val);
             }
+
+            await expect(
+                instance["jco:test-components/future-lower-async"].readFutureValueResultString(
+                    Promise.reject("rejected result payload"),
+                ),
+            ).rejects.toThrow("rejected result payload");
         });
 
         test.concurrent("list<u8>", async () => {

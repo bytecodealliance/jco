@@ -1366,6 +1366,7 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let gen_host_inject_fn = self.name();
                 let nested_future_symbol = Self::NestedFutureSymbol.name();
+                let get_error_payload = Intrinsic::GetErrorPayload.name();
 
                 uwriteln!(
                     output,
@@ -1389,9 +1390,19 @@ impl AsyncFutureIntrinsic {
                                   return () => {{ throw new Error('cannot inject write: host must write to future before closing'); }}
                               }}
 
+                              let value;
                               try {{
-                                  const value = await promise;
+                                  value = await promise;
+                              }} catch (err) {{
+                                  const elemMeta = hostWriteEnd.getElemMeta();
+                                  if (!elemMeta.payloadTypeName?.startsWith('Result(')) {{
+                                      {debug_log_fn}("failed to inject host write", err);
+                                      throw new Error("cannot inject write: promise failed");
+                                  }}
+                                  value = {{ tag: 'err', val: {get_error_payload}(err) }};
+                              }}
 
+                              try {{
                                   // If we've read a nested promise from the outside,
                                   // we must convert the value that we get back into a future,
                                   // because we are not at the lowest level yet.

@@ -118,6 +118,16 @@ suite("stream<T> lifts", () => {
         }
     });
 
+    test.concurrent("returned stream dispose drops the stream end", async () => {
+        const instance = await getInstance();
+        const dispose = Symbol.dispose || Symbol.for("dispose");
+        const stream = await instance["jco:test-components/get-stream-async"].getStreamU8([1, 2, 3]);
+
+        assert.isFunction(stream[dispose]);
+        assert.doesNotThrow(() => stream[dispose]());
+        assert.deepEqual(await stream.next(), { value: undefined, done: true });
+    });
+
     test.concurrent("u16/s16", async () => {
         const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU16, AsyncFunction);

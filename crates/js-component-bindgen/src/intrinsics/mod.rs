@@ -1482,6 +1482,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::IsFutureLowerableObject),
             &Intrinsic::SymbolResourceRep,
+            &Intrinsic::GetErrorPayload,
             &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
             &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),

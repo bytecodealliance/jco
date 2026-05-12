@@ -3155,7 +3155,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 size32: {payload_size32_js},
                                 // TODO(feat): facilitate non utf8 string encoding for lowered streams
                                 stringEncoding: 'utf8',
-                                geReallocFn: {get_realloc_fn_js},
+                                getReallocFn: {get_realloc_fn_js},
                             }},
                         }});
 

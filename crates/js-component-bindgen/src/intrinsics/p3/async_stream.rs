@@ -542,6 +542,10 @@ impl AsyncStreamIntrinsic {
                                 if (!buffer) {{ throw new TypeError('missing/invalid buffer'); }}
                                 if (!onCopyFn) {{ throw new TypeError("missing/invalid onCopy handler"); }}
                                 if (!onCopyDoneFn) {{ throw new TypeError("missing/invalid onCopyDone handler"); }}
+                                if (this.isDropped()) {{
+                                    onCopyDoneFn({stream_end_class}.CopyResult.DROPPED);
+                                    return;
+                                }}
 
                                 if (!this.#pendingBufferMeta.buffer) {{
                                     this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn }});
@@ -708,7 +712,8 @@ impl AsyncStreamIntrinsic {
                                      this.#pendingBufferMeta.onCopyDoneFn = null;
                                      f({stream_end_class}.CopyResult.DROPPED);
                                  }}
-                                 return;
+                                 this.setCopyState({stream_end_class}.CopyState.DONE);
+                                 return {stream_end_class}.CopyResult.DROPPED;
                              }}
 
                              const {{ buffer, onCopyFn, onCopyDoneFn }} = this.setupCopy({{
@@ -1331,6 +1336,7 @@ impl AsyncStreamIntrinsic {
                                 writeFn: async (v) => {{
                                     await streamEnd.write(v);
                                 }},
+                                dropFn: () => streamEnd.drop(),
                             }});
                         }}
                     }}
@@ -1409,7 +1415,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         [{symbol_dispose}]() {{
-                            this.#dropFn();
+                            this.#dropFn?.();
                         }}
 
                     }}
