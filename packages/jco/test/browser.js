@@ -75,7 +75,9 @@ suite("Browser", () => {
             },
         );
 
-        browser = await puppeteer.launch();
+        browser = await puppeteer.launch({
+            executablePath: env.PUPPETEER_PATH,
+        });
     });
 
     afterAll(async function () {

@@ -214,6 +214,7 @@ export async function startTestServer(args) {
 
   // Launch a puppeteer instance
   const browser = await puppeteer.launch({
+    executablePath: env.PUPPETEER_PATH,
     args: [
       ...(env.TEST_PUPPETEER_LAUNCH_ARGS ?? "").split(","),
       "--enable-experimental-webassembly-jspi",

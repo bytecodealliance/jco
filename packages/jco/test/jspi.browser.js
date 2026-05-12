@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { env } from "node:process";
 import { mkdir, rm, symlink } from "node:fs/promises";
 
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -97,6 +98,7 @@ suite(`Async`, async () => {
 
         // Start a browser to visit the test server
         const browser = await puppeteer.launch({
+            executablePath: env.PUPPETEER_PATH,
             args: [
                 "--enable-experimental-webassembly-jspi",
                 "--flag-switches-begin",
