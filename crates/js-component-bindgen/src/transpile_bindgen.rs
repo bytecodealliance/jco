@@ -418,13 +418,15 @@ impl JsBindgen<'_> {
         // Render the telemery directive
         uwriteln!(output, r#""use components";"#);
 
-        let js_intrinsics = render_intrinsics(RenderIntrinsicsArgs {
-            intrinsics: &mut self.all_intrinsics,
-            no_nodejs_compat: self.opts.no_nodejs_compat,
-            instantiation: self.opts.instantiation.is_some(),
-            determinism: AsyncDeterminismProfile::default(),
-            transpile_opts: opts,
-        });
+        let render_args = RenderIntrinsicsArgs::builder()
+            .intrinsics(&mut self.all_intrinsics)
+            .nodejs_compat_disabled(self.opts.no_nodejs_compat)
+            .instantiation_occurred(self.opts.instantiation.is_some())
+            .determinism_profile(AsyncDeterminismProfile::default())
+            .transpile_options(opts)
+            .build()
+            .expect("failed to build args to render intrinsics");
+        let js_intrinsics = render_intrinsics(render_args);
 
         if let Some(instantiation) = &self.opts.instantiation {
             uwrite!(
