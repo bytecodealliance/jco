@@ -95,7 +95,8 @@ jobs:
           - 18.x
           - 20.x
           - 22.x
-          - latest
+          - 24.x
+          - latest # 26.x
         include:
           - os: windows-2025
             weval-bin-path: .weval-bin/weval.exe
@@ -250,7 +251,7 @@ jobs:
             packages/jco/test/output/rust-test-components
 
       - name: Test LTS Node.js
-        if: matrix.node == '18.x' || matrix.node == '20.x' || matrix.ndoe == '22.x'
+        if: matrix.node == '18.x' || matrix.node == '20.x' || matrix.node == '22.x' || matrix.node == '24.x'
         working-directory: packages/jco
         run: |
           if [ "${{ steps.puppeteer.outputs.puppeteer-path }}" != "" ]; then
