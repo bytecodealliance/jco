@@ -188,12 +188,15 @@ jobs:
           PUPPETEER_VERSION: "148.0.7778.97"
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" && "${{ matrix.node }}" == "latest" ]]; then
-              rm -rf /Users/runner/.cache/puppeteer/chrome
-              wget https://storage.googleapis.com/chrome-for-testing-public/${PUPPETEER_VERSION}/mac-arm64/chrome-mac-arm64.zip
-              mkdir -p /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/
-              unzip chrome-mac-arm64.zip -d /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}
-              npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
-              echo -e "puppeteer-path=/Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" >> $GITHUB_OUTPUT
+              export EXPECTED_PATH="/Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
+              if [[ ! -f "$EXPECTED_PATH" ]]; then
+                  rm -rf /Users/runner/.cache/puppeteer/chrome
+                  wget https://storage.googleapis.com/chrome-for-testing-public/${PUPPETEER_VERSION}/mac-arm64/chrome-mac-arm64.zip
+                  mkdir -p /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/
+                  unzip chrome-mac-arm64.zip -d /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}
+                  npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
+              fi
+              echo -e "puppeteer-path=$EXPECTED_PATH" >> $GITHUB_OUTPUT
           else
               npx puppeteer browsers install chrome
           fi
