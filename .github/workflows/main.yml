@@ -140,17 +140,17 @@ jobs:
           key: weval-bin-${{ steps.weval-meta.outputs.version }}-${{ matrix.os }}
 
       # (no cached weval bin) download weval release
-      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'ubuntu-latest' }}
+      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'ubuntu') }}
         run: |
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
           tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
           mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux/weval .weval-bin
-      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'windows-2025' }}
+      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'windows') }}
         run: |
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
           unzip weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
           mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows .weval-bin
-      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'macos-latest' }}
+      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'macos') }}
         run: |
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
           tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
@@ -198,14 +198,18 @@ jobs:
           if [[ "${{ matrix.os }}" == "macos-latest" && "${{ matrix.node }}" == "latest" ]]; then
               export EXPECTED_PATH="/Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
               if [[ ! -f "$EXPECTED_PATH" ]]; then
+                  echo 'installing fresh macos chrome'
                   rm -rf /Users/runner/.cache/puppeteer/chrome
                   wget https://storage.googleapis.com/chrome-for-testing-public/${PUPPETEER_VERSION}/mac-arm64/chrome-mac-arm64.zip
                   mkdir -p /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/
                   unzip chrome-mac-arm64.zip -d /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}
                   npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
+              else
+                  echo 'using cached macos chrome'
               fi
               echo -e "puppeteer-path=$EXPECTED_PATH" >> $GITHUB_OUTPUT
           else
+              echo 'installing non-macos chrome'
               npx puppeteer browsers install chrome
           fi
 
@@ -238,6 +242,9 @@ jobs:
         env:
           WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
         run: |
+          if [ "${{ steps.puppeteer.outputs.puppeteer-path }}" != "" ]; then
+              export PUPPETEER_PATH=${{ steps.puppeteer.outputs.puppeteer-path }}
+          fi
           npm run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   test-wasi-deno:
