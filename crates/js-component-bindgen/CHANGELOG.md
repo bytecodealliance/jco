@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.19.0-rc.0] - 2026-05-12
+
+### 🚀 Features
+
+- _(bindgen)_ add support for stream reads with count > 1 by @andreiltd
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ register p3 global table-map intrinsics before per-table assignments by @GamePad64 in #1464
+
+- _(bindgen)_ fix result rejection lowering and stream drop propagation by @andreiltd in #1461
+
+- _(bindgen)_ allow external crates to use intrinsic renderer by @vados-cosmonic in #1462
+
+- _(bindgen)_ ensure moving storage pointers by abi size by @andreiltd in #1452
+
+- _(bindgen)_ cache the listValue implementation by @andreiltd in #1445
+
+- _(bindgen)_ lift numeric p3 lists and streams as typed arrays by @andreiltd
+
+- _(bindgen)_ populate imported resource lower metadata by @andreiltd in #1450
+
+- _(bindgen)_ use async ABI for async imports by @andreiltd in #1449
+
+- _(bindgen)_ address code review by @andreiltd
+
+- _(bindgen)_ get blocked copy result from pending event by @andreiltd
+
+- _(bindgen)_ avoid async future and stream host injection deadlocks by @andreiltd
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ move stream host injection readiness check by @andreiltd in #1437
+
+
+
+## New Contributors
+* @GamePad64 made their first contribution in [#1464](https://github.com/bytecodealliance/jco/pull/1464)
+
+
 ## [1.18.0] - 2026-04-29
 
 ### 🚀 Features
