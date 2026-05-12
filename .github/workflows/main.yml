@@ -232,7 +232,7 @@ jobs:
                   echo -e "ERROR: unexpected OS";
                   exit 1;
               fi
-              npx puppeteer browsers install chrome
+              npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
           fi
 
       - name: Restore jco build
