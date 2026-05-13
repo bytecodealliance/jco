@@ -179,6 +179,10 @@ jobs:
             export OPT_TAG_PATTERN=--tag-pattern='^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
           fi
 
+          # NOTE: we use a custom local-only tag here to force git cliff to
+          # use the version we expect rather than built-in bump logic
+          git tag ${{ steps.project-meta.outputs.next-version }}
+
           git cliff \
             --repository=${{ github.workspace }}/.git \
             --config=${{ steps.project-meta.outputs.project-dir }}/cliff.toml \
