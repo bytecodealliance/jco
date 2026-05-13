@@ -181,7 +181,7 @@ jobs:
 
           # NOTE: we use a custom local-only tag here to force git cliff to
           # use the version we expect rather than built-in bump logic
-          git tag ${{ steps.project-meta.outputs.next-version }}
+          git tag ${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
