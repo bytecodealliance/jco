@@ -473,7 +473,7 @@ jobs:
           draft: ${{ github.ref_type != 'tag' }}
           tag_name: ${{ needs.meta.outputs.next-release-tag }}
           generate_release_notes: false
-          body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.newest
+          body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.latest
           make_latest: ${{ needs.meta.outputs.project == 'jco' && github.ref_type == 'tag' && needs.meta.outputs.is-prerelease == 'false' }}
           files: |
             ./artifacts/*
