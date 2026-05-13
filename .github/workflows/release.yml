@@ -461,7 +461,7 @@ jobs:
       - name: extract latest changelog section
         env:
           OUTPUT_PATH: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.latest
-          CHANGELOG_PATH: ${{ needs.meta.outputs.project-dir }}/CHANGELOG
+          CHANGELOG_PATH: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.md
         run: |
           node scripts/extract-latest-changelog-section.mjs
 
