@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.19.0-rc.2] - 2026-05-13
+
+This RC tests new release machinery that allows for augmenting changelog entries
+with custom messages (like this one).
+
+
 ## [1.19.0-rc.1] - 2026-05-13
 
 
