@@ -37,6 +37,16 @@ describe("Node.js Preview3 canon future", () => {
     await expect(rx.read()).rejects.toThrow("aborted");
   });
 
+  test("reader has one shot semantics", async () => {
+    const { future } = await import("@bytecodealliance/preview3-shim/future");
+    const { tx, rx } = future();
+
+    await tx.write("thenable");
+
+    expect(await rx).toBe("thenable");
+    expect(await rx.read()).toBeNull();
+  });
+
   test("writer cannot write twice", async () => {
     const { future } = await import("@bytecodealliance/preview3-shim/future");
     const { tx, rx } = future();

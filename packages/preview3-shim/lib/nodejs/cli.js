@@ -68,22 +68,19 @@ export const stdin = {
     const readable = Readable.toWeb(process.stdin);
     const { tx: futureTx, rx: futureRx } = future();
 
-    const reader = new StreamReader(readable);
-    const originalRead = reader.read.bind(reader);
-    reader.read = async () => {
+    async function* stdinChunks() {
       try {
-        const chunk = await originalRead();
-        if (chunk === null) {
-          await futureTx.write({ tag: "ok", val: undefined });
+        for await (const chunk of readable.values({ preventCancel: true })) {
+          yield chunk;
         }
-        return chunk;
+        await futureTx.write({ tag: "ok", val: undefined });
       } catch (err) {
         await futureTx.write({ tag: "err", val: errorCode(err) });
         throw err;
       }
-    };
+    }
 
-    return [reader, futureRx];
+    return [new StreamReader(stdinChunks()), futureRx];
   },
 };
 

@@ -839,6 +839,22 @@ impl AsyncStreamIntrinsic {
                          async write(v) {{
                             {debug_log_fn}('[{end_class_name}#write()] args', {{ v }});
 
+                            let data;
+                            if (this.#elemMeta.isNumeric) {{
+                                if (v instanceof ArrayBuffer) {{
+                                    v = new Uint8Array(v);
+                                }}
+                                data = Array.isArray(v) || (ArrayBuffer.isView(v) && typeof v.length === 'number') ? Array.from(v) : [v];
+                            }} else {{
+                                data = [v];
+                            }}
+                            return this.writeMany(data);
+                         }}
+
+                         async writeMany(values) {{
+                            {debug_log_fn}('[{end_class_name}#writeMany()] args', {{ values }});
+                            if (!Array.isArray(values)) {{ throw new TypeError("writeMany values must be an array"); }}
+
                             // Wait for an existing write operation to end, if present,
                             // otherwise register this write for any future operations.
                             //
@@ -853,7 +869,7 @@ impl AsyncStreamIntrinsic {
                                     this.#result = newResult;
                                     await p;
                                 }} catch (err) {{
-                                    {debug_log_fn}('[{end_class_name}#write()] error waiting for previous write', err);
+                                    {debug_log_fn}('[{end_class_name}#writeMany()] error waiting for previous write', err);
                                     // If the previous write we were waiting on errors for any reason,
                                     // we can ignore it and attempt to continue with this write
                                     // which may also fail for a similar reason
@@ -863,7 +879,8 @@ impl AsyncStreamIntrinsic {
                             }}
                             const {{ promise, resolve, reject }} = newResult;
 
-                            const count = 1;
+                            const data = values;
+                            const count = data.length;
                             if (this.#elemMeta.stringEncoding === undefined) {{
                                 this.#elemMeta.string = 'utf8';
                             }}
@@ -875,9 +892,9 @@ impl AsyncStreamIntrinsic {
                                     isReadable: true, // we need to read from this buffer later
                                     isWritable: false,
                                     elemMeta: this.#elemMeta,
-                                    data: v,
+                                    data,
                                 }});
-                                buffer.setTarget(`host stream write buffer (id [${{bufferID}}], count [${{count}}], data len [${{v.length}}])`);
+                                buffer.setTarget(`host stream write buffer (id [${{bufferID}}], count [${{count}}], data len [${{data.length}}])`);
 
                                 let packedResult;
                                 packedResult = await this.copy({{
@@ -1909,6 +1926,7 @@ impl AsyncStreamIntrinsic {
                           }};
 
                           let done = false;
+                          const pendingValues = [];
 
                           return async function generatedStreamHostInject(args) {{
                               let {{ count }} = args;
@@ -1916,26 +1934,55 @@ impl AsyncStreamIntrinsic {
                               if (count === 0) {{ return doNothingFn; }}
                               if (readEnd.hasPendingEvent()) {{ return doNothingFn; }}
 
-                              // If we get another read when done is already set, that was
-                              // the case of a iterator that returned a final value
-                              // along with `done: true`
-                              if (done) {{
-                                  hostWriteEnd.getPendingEvent();
-                                  hostWriteEnd.drop();
-                                  return doNothingFn;
-                              }}
-
                               if (hostWriteEnd.isDoneState()) {{
                                   return doNothingFn;
                               }}
 
                               const values = [];
+                              const elemMeta = hostWriteEnd.getElemMeta();
+
+                              const appendValues = (source) => {{
+                                  const transfer = Math.min(count, source.length);
+                                  for (let i = 0; i < transfer; i++) {{
+                                      values.push(source[i]);
+                                  }}
+                                  count -= transfer;
+                                  for (let i = transfer; i < source.length; i++) {{
+                                      pendingValues.push(source[i]);
+                                  }}
+                                  return source.length;
+                              }};
+
+                              const appendReadValue = (value) => {{
+                                  if (value === undefined) {{ return 0; }}
+                                  if (elemMeta.isNumeric) {{
+                                      if (value instanceof ArrayBuffer) {{
+                                          value = new Uint8Array(value);
+                                      }}
+                                      if (Array.isArray(value) || (ArrayBuffer.isView(value) && typeof value.length === 'number')) {{
+                                          return appendValues(value);
+                                      }}
+                                  }}
+                                  return appendValues([value]);
+                              }};
+
+                              const drainPendingValues = () => {{
+                                  const transfer = Math.min(count, pendingValues.length);
+                                  for (let i = 0; i < transfer; i++) {{
+                                      values.push(pendingValues[i]);
+                                  }}
+                                  pendingValues.splice(0, transfer);
+                                  count -= transfer;
+                              }};
+
+                              drainPendingValues();
+
                               while (count > 0 && !done) {{
                                   const res = await readFn();
-                                  if (res.value !== undefined) {{ values.push(res.value); }}
+                                  const appended = appendReadValue(res.value);
                                   done = res.done;
+                                  if (appended === 0 && !done) {{ count -= 1; }}
                                   if (done) {{ break; }}
-                                  count -= 1;
                               }}
 
                               // Iterator provided `done: true` with no final value
@@ -1945,7 +1992,7 @@ impl AsyncStreamIntrinsic {
                                   return doNothingFn;
                               }}
 
-                              await hostWriteEnd.write(values);
+                              await hostWriteEnd.writeMany(values);
                               resetWriteEndToIdleFn();
 
                               return doNothingFn;

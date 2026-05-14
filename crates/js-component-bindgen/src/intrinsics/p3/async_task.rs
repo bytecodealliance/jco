@@ -1673,11 +1673,7 @@ impl AsyncTaskIntrinsic {
 
                             if (this.#onProgressFn) {{ this.#onProgressFn(); }}
 
-                            if (subtaskValue === null) {{
-                                if (this.#cancelRequested) {{
-                                    throw new Error('cancel was not requested, but no value present at return');
-                                }}
-
+                            if (subtaskValue === null && this.#cancelRequested) {{
                                 if (this.#state === {subtask_class}.State.STARTING) {{
                                     this.#state = {subtask_class}.State.CANCELLED_BEFORE_STARTED;
                                 }} else {{

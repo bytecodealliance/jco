@@ -92,6 +92,28 @@ describe("Node.js Preview3 wasi-cli", () => {
     Object.defineProperty(process, "stdin", { value: originalStdin });
   });
 
+  test("readViaStream async iterator resolves future on eof", async () => {
+    const { cli } = await import("@bytecodealliance/preview3-shim");
+
+    const fakeStdin = Readable.from([]);
+    const originalStdin = process.stdin;
+
+    Object.defineProperty(process, "stdin", {
+      value: fakeStdin,
+      configurable: true,
+    });
+
+    try {
+      const [streamReader, result] = cli.stdin.readViaStream();
+      const iterator = streamReader[Symbol.asyncIterator]();
+
+      expect(await iterator.next()).toEqual({ value: undefined, done: true });
+      expect(await result).toEqual({ tag: "ok", val: undefined });
+    } finally {
+      Object.defineProperty(process, "stdin", { value: originalStdin });
+    }
+  });
+
   test("writeViaStream writes to stderr", async () => {
     const { cli } = await import("@bytecodealliance/preview3-shim");
     const { stream } = await import("@bytecodealliance/preview3-shim/stream");

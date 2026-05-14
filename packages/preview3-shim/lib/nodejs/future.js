@@ -74,6 +74,10 @@ export class FutureReader {
     }
   }
 
+  then(resolve, reject) {
+    return this.read().then(resolve, reject);
+  }
+
   /**
    * Cancels the future. Not supported for FutureReader.
    */
