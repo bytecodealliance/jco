@@ -2073,6 +2073,7 @@ impl AsyncTaskIntrinsic {
                             isManualAsync,
                             paramLiftFns,
                             resultLowerFns,
+                            hasResultPointer,
                             funcTypeIsAsync,
                             metadata,
                             memoryIdx,
@@ -2105,6 +2106,10 @@ impl AsyncTaskIntrinsic {
 
                         // If there is an existing task, this should be part of a subtask
                         const memory = getMemoryFn();
+                        // Canonical ABI lower appends result storage as a trailing
+                        // param when async lower has any flat result, or sync lower
+                        // has more than one flat result.
+                        const resultPtr = hasResultPointer ? params[params.length - 1] : undefined;
                         const subtask = task.createSubtask({{
                            componentIdx,
                            parentTask: task,
@@ -2116,7 +2121,7 @@ impl AsyncTaskIntrinsic {
                                memory,
                                realloc: getReallocFn?.(),
                                getReallocFn,
-                               resultPtr: params[0],
+                               resultPtr,
                                lowers: resultLowerFns,
                                stringEncoding,
                            }}
@@ -2271,6 +2276,7 @@ impl AsyncTaskIntrinsic {
                             isManualAsync,
                             paramLiftFns,
                             resultLowerFns,
+                            hasResultPointer,
                             funcTypeIsAsync,
                             metadata,
                             memoryIdx,
@@ -2345,6 +2351,10 @@ impl AsyncTaskIntrinsic {
 
                         // If there is an existing task, this should be part of a subtask
                         const memory = getMemoryFn();
+                        // Canonical ABI lower appends result storage as a trailing
+                        // param when async lower has any flat result, or sync lower
+                        // has more than one flat result.
+                        const resultPtr = hasResultPointer ? params[params.length - 1] : undefined;
                         const subtask = task.createSubtask({{
                            componentIdx,
                            parentTask: task,
@@ -2356,7 +2366,7 @@ impl AsyncTaskIntrinsic {
                                memory,
                                realloc: getReallocFn?.(),
                                getReallocFn,
-                               resultPtr: params[0],
+                               resultPtr,
                                lowers: resultLowerFns,
                                stringEncoding,
                            }}

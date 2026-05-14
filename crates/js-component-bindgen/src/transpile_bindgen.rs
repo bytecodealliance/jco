@@ -58,6 +58,8 @@ use crate::{
 /// Size of flat parameters that can be sent, for example via the `task.return`
 /// intrinsic, when returning from an async func
 const MAX_FLAT_PARAMS: usize = 16;
+/// Maximum direct flat results for sync canonical lowering.
+const MAX_FLAT_RESULTS: usize = 1;
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -2174,6 +2176,12 @@ impl<'a> Instantiator<'a, '_> {
                 let result_types = &self.types.index(func_ty.results).types;
                 let result_lower_fns_js =
                     gen_flat_lower_fn_list_js_expr(self, result_types.iter().as_slice(), &None);
+                let result_flat_count = result_types.iter().try_fold(0usize, |count, ty| {
+                    self.types
+                        .canonical_abi(ty)
+                        .flat_count
+                        .map(|flat_count| count + usize::from(flat_count))
+                });
 
                 let get_callback_fn_js = canon_opts
                     .callback
@@ -2210,6 +2218,14 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Build the lower import call that will wrap the actual trampoline
                 let func_ty_async = func_ty.async_;
+                let max_direct_results = if is_async || func_ty_async {
+                    0
+                } else {
+                    MAX_FLAT_RESULTS
+                };
+                let has_result_pointer = result_flat_count
+                    .map(|count| count > max_direct_results)
+                    .unwrap_or(true);
                 let call = format!(
                     r#"{lower_import_intrinsic}.bind(
                         null,
@@ -2220,6 +2236,7 @@ impl<'a> Instantiator<'a, '_> {
                             isManualAsync: _trampoline{i}.manuallyAsync,
                             paramLiftFns: {param_lift_fns_js},
                             resultLowerFns: {result_lower_fns_js},
+                            hasResultPointer: {has_result_pointer},
                             funcTypeIsAsync: {func_ty_async},
                             getCallbackFn: {get_callback_fn_js},
                             getPostReturnFn: {get_post_return_fn_js},

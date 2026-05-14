@@ -36,6 +36,37 @@ suite("Async (WASI P3)", () => {
         await cleanup();
     });
 
+    test("lowered imports use trailing result pointer", async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "async-lower-result-pointer.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:test-components/async-lower-result-pointer-host": {
+                        addFive: async (a, b, c, d, e) => a + b + c + d + e,
+                    },
+                    "jco:test-components/sync-lower-result-pointer-host": {
+                        addPair: (a, b, c, d, e) => [a + b + c + d + e, a * b * c * d * e],
+                    },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                },
+            },
+        });
+
+        try {
+            await instance["jco:test-components/local-run-async"].run();
+        } finally {
+            await cleanup();
+        }
+    });
+
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
     test("simple async returns", async () => {
         const { instance, cleanup } = await setupAsyncTest({
