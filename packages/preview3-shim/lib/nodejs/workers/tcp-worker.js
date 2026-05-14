@@ -4,7 +4,7 @@ import { pipeline } from "stream/promises";
 import { once } from "node:events";
 
 import { Router } from "../workers/resource-worker.js";
-import { serializeIpAddress, makeIpAddress } from "../sockets/address.js";
+import { serializeIpAddress, makeIpAddress, ipAddressConflict } from "../sockets/address.js";
 import { SocketError } from "../sockets/error.js";
 
 import process from "node:process";
@@ -12,9 +12,8 @@ const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 
 // Socket instances stored by ID
 const sockets = new Map();
-// Unique IDs for sockets and servers
+// Unique IDs for sockets
 let NEXT_SOCKET_ID = 0n;
-let NEXT_SERVER_ID = 0n;
 
 // Handle worker messages
 Router()
@@ -48,6 +47,7 @@ function handleTcpCreate({ family }) {
     tcp: null,
     server: null,
     backlog: 128,
+    localAddress: null,
   });
 
   return { socketId };
@@ -60,6 +60,17 @@ async function handleTcpBind({ socketId, localAddress }) {
   const port = localAddress.val.port;
 
   const { handle, family } = socket;
+
+  const hasConflict = [...sockets].some(
+    ([id, { localAddress: boundAddress }]) =>
+      id !== socketId && boundAddress && ipAddressConflict(boundAddress, localAddress),
+  );
+
+  if (hasConflict) {
+    const err = new Error("EADDRINUSE");
+    err.code = "EADDRINUSE";
+    throw err;
+  }
 
   await new Promise((resolve, reject) => {
     let code;
@@ -75,6 +86,13 @@ async function handleTcpBind({ socketId, localAddress }) {
       resolve();
     }
   });
+
+  const out = {};
+  const code = handle.getsockname(out);
+  if (code !== 0) {
+    throw SocketError.from(-code);
+  }
+  socket.localAddress = makeIpAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
 // Connect a socket to remote address
@@ -119,9 +137,21 @@ async function handleTcpListen({ socketId, stream }) {
 
   await Promise.race([onListening, onError]);
 
+  const addr = server.address();
+  if (addr && typeof addr === "object") {
+    socket.localAddress = makeIpAddress(family, addr.address, addr.port);
+  }
+
   server.on("connection", (conn) => {
-    const id = NEXT_SERVER_ID++;
-    sockets.set(id, { handle: conn._handle, family, backlog, tcp: conn });
+    const id = NEXT_SOCKET_ID++;
+    sockets.set(id, {
+      handle: conn._handle,
+      family,
+      backlog,
+      tcp: conn,
+      server: null,
+      localAddress: makeIpAddress(family, conn.localAddress, conn.localPort),
+    });
     writer.write({ family, socketId: id });
   });
 

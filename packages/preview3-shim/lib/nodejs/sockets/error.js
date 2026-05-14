@@ -109,6 +109,9 @@ export class SocketError extends Error {
       if (tag === "other") {
         val = err.code;
       }
+    } else if (err && typeof err.message === "string" && ERROR_MAP[err.message]) {
+      tag = ERROR_MAP[err.message];
+      message = err.message;
     } else {
       tag = "other";
       message = err?.message;

@@ -128,7 +128,7 @@ describe("TCP Socket Listen", () => {
     client.listen();
 
     expect(() => client.setListenBacklogSize(1000n)).toThrow(
-      expect.objectContaining({ payload: { tag: "invalid-state" } }),
+      expect.objectContaining({ payload: { tag: "not-supported" } }),
     );
   });
 

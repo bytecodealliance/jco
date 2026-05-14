@@ -1,6 +1,12 @@
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { SocketError } from "./error.js";
-import { isWildcardIpAddress, isUnicastIpAddress, IP_ADDRESS_FAMILY } from "./address.js";
+import {
+  isWildcardIpAddress,
+  isUnicastIpAddress,
+  isIpv4MappedAddress,
+  isBindableIpAddress,
+  IP_ADDRESS_FAMILY,
+} from "./address.js";
 
 let WORKER = null;
 function worker() {
@@ -55,8 +61,8 @@ export class UdpSocket {
   #remote = null;
   #options = {
     hopLimit: 1,
-    receiveBufferSize: undefined,
-    sendBufferSize: undefined,
+    receiveBufferSize: 65_536n,
+    sendBufferSize: 65_536n,
   };
 
   /**
@@ -123,8 +129,15 @@ export class UdpSocket {
     if (this.#state !== STATE.UNBOUND) {
       throw new SocketError("invalid-state");
     }
-    if (localAddress.tag !== this.#family) {
+    if (
+      localAddress.tag !== this.#family ||
+      (!isUnicastIpAddress(localAddress) && !isWildcardIpAddress(localAddress)) ||
+      isIpv4MappedAddress(localAddress)
+    ) {
       throw new SocketError("invalid-argument");
+    }
+    if (!isBindableIpAddress(localAddress)) {
+      throw new SocketError("address-not-bindable");
     }
 
     try {
@@ -153,14 +166,12 @@ export class UdpSocket {
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
   connect(remoteAddress) {
-    if (this.#state === STATE.CONNECTED) {
-      throw new SocketError("invalid-state");
-    }
     if (
       remoteAddress.tag !== this.#family ||
       remoteAddress.val.port === 0 ||
       isWildcardIpAddress(remoteAddress) ||
-      !isUnicastIpAddress(remoteAddress)
+      !isUnicastIpAddress(remoteAddress) ||
+      isIpv4MappedAddress(remoteAddress)
     ) {
       throw new SocketError("invalid-argument");
     }
@@ -221,7 +232,7 @@ export class UdpSocket {
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
   async send(data, remoteAddress = null) {
-    if (this.#state === STATE.UNBOUND || this.#state === STATE.CLOSED) {
+    if (this.#state === STATE.CLOSED) {
       throw new SocketError("invalid-state");
     }
 
@@ -230,7 +241,14 @@ export class UdpSocket {
     }
 
     const addr = remoteAddress ?? this.#remote;
-    if (!addr || addr.val.port === 0 || addr.tag !== this.#family) {
+    if (
+      !addr ||
+      addr.val.port === 0 ||
+      addr.tag !== this.#family ||
+      isWildcardIpAddress(addr) ||
+      isIpv4MappedAddress(addr) ||
+      !isUnicastIpAddress(addr)
+    ) {
       throw new SocketError("invalid-argument");
     }
 
@@ -244,6 +262,7 @@ export class UdpSocket {
       throw new SocketError("invalid-argument");
     }
 
+    const wasUnbound = this.#state === STATE.UNBOUND;
     try {
       await worker().run(
         {
@@ -254,6 +273,9 @@ export class UdpSocket {
         },
         [data.buffer],
       );
+      if (wasUnbound) {
+        this.#state = STATE.BOUND;
+      }
     } catch (e) {
       throw SocketError.from(e);
     }
@@ -280,7 +302,7 @@ export class UdpSocket {
         op: "udp-receive",
         socketId: this.#socketId,
       });
-      return { data: new Uint8Array(data), addr: remoteAddress };
+      return [new Uint8Array(data), remoteAddress];
     } catch (e) {
       throw SocketError.from(e);
     }
@@ -372,6 +394,10 @@ export class UdpSocket {
     }
 
     this.#options.hopLimit = value;
+    if (this.#state === STATE.UNBOUND) {
+      return;
+    }
+
     try {
       worker().runSync({
         op: "udp-set-unicast-hop-limit",

@@ -66,10 +66,10 @@ describe("UDP Socket Bind", () => {
     );
   });
 
-  test("throws on send before bind", async () => {
+  test("throws on send without a remote address", async () => {
     const sock = await createIpv4Socket();
     await expect(sock.send(new Uint8Array([1, 2, 3]))).rejects.toSatisfy(
-      (err) => err.payload.tag === "invalid-state",
+      (err) => err.payload.tag === "invalid-argument",
     );
   });
 });
@@ -103,11 +103,25 @@ describe("UDP Send/Receive without connect", () => {
     const msg = new TextEncoder().encode("hello");
     await sock.send(msg, makeIpAddress("ipv4", "127.0.0.1", port));
 
-    const { data, addr } = await recvPromise;
+    const [data, addr] = await recvPromise;
 
     expect(data).toStrictEqual(new Uint8Array(Buffer.from("pong")));
     expect(addr.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
     expect(addr.val.port).toBe(port);
+
+    sock[Symbol.dispose]();
+  });
+
+  test("send with explicit address binds an unbound socket", async () => {
+    const sock = createIpv4Socket();
+
+    await expect(
+      sock.send(new TextEncoder().encode("hello"), makeIpAddress("ipv4", "127.0.0.1", port)),
+    ).resolves.toBeUndefined();
+
+    const local = sock.getLocalAddress();
+    expect(local.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
+    expect(local.val.port).toBeGreaterThan(0);
 
     sock[Symbol.dispose]();
   });
@@ -121,12 +135,36 @@ describe("UDP Send/Receive without connect", () => {
     const msg = new TextEncoder().encode("ping");
     await sock.send(msg);
 
-    const { data, addr } = await recvPromise;
+    const [data, addr] = await recvPromise;
     expect(data).toStrictEqual(new Uint8Array(Buffer.from("pong")));
     expect(addr.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
     expect(addr.val.port).toBe(port);
 
     sock[Symbol.dispose]();
+  });
+
+  test("returns queued datagrams", async () => {
+    const server = createIpv4Socket();
+    server.bind(makeIpAddress("ipv4", "127.0.0.1", 0));
+    const serverAddress = server.getLocalAddress();
+    const client = createIpv4Socket();
+    client.bind(makeIpAddress("ipv4", "0.0.0.0", 0));
+    client.connect(serverAddress);
+    const clientAddress = client.getLocalAddress();
+
+    await client.send(new Uint8Array(0));
+    await client.send(new TextEncoder().encode("Hello, world!"), serverAddress);
+
+    const first = await server.receive();
+    expect(first[0]).toStrictEqual(new Uint8Array(0));
+    expect(first[1]).toStrictEqual(clientAddress);
+
+    const second = await server.receive();
+    expect(second[0]).toStrictEqual(new TextEncoder().encode("Hello, world!"));
+    expect(second[1]).toStrictEqual(clientAddress);
+
+    server[Symbol.dispose]();
+    client[Symbol.dispose]();
   });
 
   test("disconnect allows send with explicit address", async () => {

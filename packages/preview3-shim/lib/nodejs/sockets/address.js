@@ -1,4 +1,5 @@
 // Adapted from preview2-shim/lib/io/worker-sockets.js
+import { networkInterfaces } from "node:os";
 
 // TODO(tandr): switch to generated types
 export const IP_ADDRESS_FAMILY = {
@@ -47,7 +48,7 @@ export const ipv4ToTuple = (ipv4) => {
 
 export const isMulticastIpAddress = ({ tag, val: { address } }) =>
   (tag === "ipv4" && address[0] >= 0xe0 && address[0] <= 0xef) ||
-  (tag === "ipv6" && address[0] === 0xff);
+  (tag === "ipv6" && (address[0] & 0xff00) === 0xff00);
 
 export const isIpv4MappedAddress = ({ tag, val: { address } }) =>
   tag === "ipv6" &&
@@ -65,6 +66,19 @@ export const isBroadcastIpAddress = ({ tag, val: { address } }) =>
 
 export const isUnicastIpAddress = (a) =>
   !isMulticastIpAddress(a) && !isBroadcastIpAddress(a) && !isWildcardIpAddress(a);
+
+export const isLoopbackIpAddress = ({ tag, val: { address } }) =>
+  (tag === "ipv4" && address[0] === 127) ||
+  (tag === "ipv6" && address.slice(0, 7).every((segment) => segment === 0) && address[7] === 1);
+
+export const ipAddressConflict = (a, b) =>
+  a.tag === b.tag &&
+  Number(a.val.port) !== 0 &&
+  Number(b.val.port) !== 0 &&
+  Number(a.val.port) === Number(b.val.port) &&
+  (isWildcardIpAddress(a) ||
+    isWildcardIpAddress(b) ||
+    a.val.address.every((segment, idx) => segment === b.val.address[idx]));
 
 /**
  * Serialize a socket‐address to text.
@@ -106,4 +120,28 @@ export const makeIpAddress = (family, host, port) => {
   return family === "ipv4"
     ? { tag: "ipv4", val: base }
     : { tag: "ipv6", val: { ...base, flowInfo: 0, scopeId: 0 } };
+};
+
+/**
+ * Determine whether an IP address can be used as a local bind address.
+ * @param {{tag:'ipv4'|'ipv6',val:{address:number[]}}} ipAddress
+ * @returns {boolean}
+ */
+export const isBindableIpAddress = (ipAddress) => {
+  if (isWildcardIpAddress(ipAddress)) {
+    return true;
+  }
+
+  const expectedFamily = ipAddress.tag === "ipv4" ? "IPv4" : "IPv6";
+  const expectedAddress = ipAddress.val.address;
+  return Object.values(networkInterfaces())
+    .flat()
+    .some((iface) => {
+      if (iface?.family !== expectedFamily) {
+        return false;
+      }
+      const ifaceAddress =
+        ipAddress.tag === "ipv4" ? ipv4ToTuple(iface.address) : ipv6ToTuple(iface.address);
+      return expectedAddress.every((segment, idx) => segment === ifaceAddress[idx]);
+    });
 };

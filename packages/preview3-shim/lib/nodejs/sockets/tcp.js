@@ -8,6 +8,7 @@ import {
   isUnicastIpAddress,
   isMulticastIpAddress,
   isIpv4MappedAddress,
+  isBindableIpAddress,
   IP_ADDRESS_FAMILY,
 } from "./address.js";
 
@@ -77,11 +78,8 @@ export class TcpSocket {
     keepAliveInterval: 1_000_000_000n,
     keepAliveCount: 10,
     hopLimit: 1,
-
-    // For sendBufferSize and receiveBufferSize we can at least
-    // use the system defaults, but still we can't support setting them.
-    receiveBufferSize: undefined,
-    sendBufferSize: undefined,
+    receiveBufferSize: 65_536n,
+    sendBufferSize: 65_536n,
   };
 
   /**
@@ -150,6 +148,9 @@ export class TcpSocket {
 
     if (!this.#isValidLocalAddress(localAddress)) {
       throw new SocketError("invalid-argument");
+    }
+    if (!isBindableIpAddress(localAddress)) {
+      throw new SocketError("address-not-bindable");
     }
     try {
       worker().runSync({
@@ -224,10 +225,12 @@ export class TcpSocket {
     }
     try {
       // Convert incoming connections from worker to TcpSocket instances
+      const listener = this;
       const transform = new TransformStream({
         transform({ family, socketId }, controller) {
           const socket = TcpSocket._create(token(), family, socketId);
           socket.#state = STATE.CONNECTED;
+          socket.#options = { ...listener.#options };
           controller.enqueue(socket);
         },
       });
@@ -422,7 +425,11 @@ export class TcpSocket {
       throw new SocketError("invalid-argument");
     }
 
-    if (this.#state === STATE.CONNECTING || this.#state === STATE.CONNECTED) {
+    if (
+      this.#state === STATE.CONNECTING ||
+      this.#state === STATE.CONNECTED ||
+      this.#state === STATE.LISTENING
+    ) {
       throw new SocketError("not-supported");
     }
 
@@ -518,6 +525,7 @@ export class TcpSocket {
     }
 
     if (value === this.#options.keepAliveIdleTime || !this.#options.keepAliveEnabled) {
+      this.#options.keepAliveIdleTime = value;
       return;
     }
 
@@ -744,7 +752,7 @@ export class TcpSocket {
   #isValidLocalAddress(localAddress) {
     return (
       this.#family === localAddress.tag &&
-      isUnicastIpAddress(localAddress) &&
+      (isUnicastIpAddress(localAddress) || isWildcardIpAddress(localAddress)) &&
       !isIpv4MappedAddress(localAddress)
     );
   }
