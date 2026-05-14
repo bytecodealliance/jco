@@ -98,6 +98,15 @@ jobs:
                 return;
             }
 
+      - name: Delete existing draft release if present
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -X DELETE \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.meta.outputs.project }}-v${{ steps.meta.outputs.version }} \
+          || true
+
       - name: Push tag
         if: ${{ steps.meta.outputs.proceed }}
         env:
