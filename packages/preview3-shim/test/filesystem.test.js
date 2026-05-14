@@ -71,6 +71,73 @@ describe("Descriptor with os.tmpdir()", () => {
     child[Symbol.dispose]?.();
   });
 
+  test("writeViaStream accepts non zero offsets", async () => {
+    const sub = `${relBase}/file-write-offset.txt`;
+    const child = await rootDescriptor.openAt(
+      {},
+      sub,
+      { create: true },
+      { read: true, write: true },
+    );
+
+    const { tx, rx } = stream();
+    await tx.write("Hello, World!");
+    await tx.close();
+    await child.writeViaStream(rx, 5n);
+
+    const [sr, fr] = child.readViaStream(0n);
+    const buf = await sr.readAll();
+    await fr.read();
+
+    expect(buf).toEqual(Buffer.from("\0\0\0\0\0Hello, World!"));
+
+    child[Symbol.dispose]?.();
+  });
+
+  test("readViaStream accepts non zero offsets", async () => {
+    const sub = `${relBase}/file-read-offset.txt`;
+    const child = await rootDescriptor.openAt(
+      {},
+      sub,
+      { create: true },
+      { read: true, write: true },
+    );
+
+    const { tx, rx } = stream();
+    await tx.write("skip-read");
+    await tx.close();
+    await child.writeViaStream(rx, 5n);
+
+    const [sr, fr] = child.readViaStream(5n);
+    const buf = await sr.readAll();
+    await fr.read();
+
+    expect(new TextDecoder().decode(buf)).toBe("skip-read");
+
+    child[Symbol.dispose]?.();
+  });
+
+  test("writeViaStream rejects read-only descriptors before consuming data", async () => {
+    const sub = `${relBase}/file-read-only-write.txt`;
+    const writable = await rootDescriptor.openAt(
+      {},
+      sub,
+      { create: true },
+      { read: true, write: true },
+    );
+    writable[Symbol.dispose]?.();
+
+    const readOnly = await rootDescriptor.openAt({}, sub, {}, { read: true });
+    const reader = {
+      read: vi.fn(async () => Uint8Array.of(1)),
+    };
+
+    await expect(readOnly.writeViaStream(reader, 0n)).rejects.toThrow();
+    expect(reader.read).not.toHaveBeenCalled();
+
+    readOnly[Symbol.dispose]?.();
+  });
+
   test("appendViaStream <=> readViaStream round-trip", async () => {
     const sub = `${relBase}/file-append.txt`;
     const child = await rootDescriptor.openAt(
@@ -129,6 +196,27 @@ describe("Descriptor with os.tmpdir()", () => {
     expect(entriesAfterRemove.some((e) => e.name === "subdir")).toBe(false);
 
     dirDesc[Symbol.dispose]?.();
+  });
+
+  test("readDirectory works on preopen descriptors", async () => {
+    const entryName = "preopen-entry.txt";
+    await fs.writeFile(path.join(tmpDir, entryName), "");
+
+    const virtualPath = `/preview3-test-${path.basename(tmpDir)}`;
+    filesystem._addPreopen(virtualPath, tmpDir);
+    const [preopen] = filesystem.preopens
+      .getDirectories()
+      .find(([_desc, path]) => path === virtualPath);
+
+    const [stream, future] = preopen.readDirectory();
+    const entries = [];
+    let entry;
+    while ((entry = await stream.read()) !== null) {
+      entries.push(entry);
+    }
+    await future.read();
+
+    expect(entries.some((e) => e.name === entryName)).toBe(true);
   });
 
   test("isSameObject & metadataHash vs metadataHashAt", async () => {

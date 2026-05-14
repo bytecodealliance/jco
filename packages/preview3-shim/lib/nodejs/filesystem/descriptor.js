@@ -131,7 +131,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async writeViaStream(data, offset) {
-    this.#ensureHandle();
+    this.#ensureWritable(data);
     const stream = readableByteStreamFromReader(data, { name: "file write data" });
 
     try {
@@ -154,7 +154,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async appendViaStream(data) {
-    this.#ensureHandle();
+    this.#ensureWritable(data);
     const offset = await this.#handle.stat().then((s) => s.size);
     return this.writeViaStream(data, offset);
   }
@@ -310,7 +310,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   readDirectory() {
-    if (!this.#fullPath) {
+    const fullPath = this.#fullPath ?? this.#hostPreopen;
+    if (!fullPath) {
       throw new FSError("invalid");
     }
 
@@ -321,7 +322,7 @@ class Descriptor {
       .run(
         {
           op: "readDir",
-          fullPath: this.#fullPath,
+          fullPath,
           stream: transform.writable,
           preopens,
         },
@@ -925,6 +926,15 @@ class Descriptor {
 
   #ensureHandle() {
     if (!this.#handle) {
+      throw new FSError("bad-descriptor");
+    }
+  }
+
+  #ensureWritable(data) {
+    this.#ensureHandle();
+    if (!this.#mode.write) {
+      data?.[symbolDispose]?.();
+      data?.close?.();
       throw new FSError("bad-descriptor");
     }
   }

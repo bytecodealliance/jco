@@ -13,6 +13,7 @@ const { opendir } = fs.promises;
 const CHUNK_BYTES = 64 * 1024;
 // Reuse a single buffer for all read/write ops
 const BUFFER = Buffer.alloc(CHUNK_BYTES);
+const MAX_SAFE_FILE_POSITION = BigInt(Number.MAX_SAFE_INTEGER);
 
 /** Auto‐dispatch all ops */
 Router().op("read", handleRead).op("write", handleWrite).op("readDir", handleReadDir);
@@ -32,7 +33,7 @@ async function handleRead({ fd, offset, stream }) {
     const start = pos;
 
     while (true) {
-      const { bytesRead } = await readAsync(fd, BUFFER, 0, CHUNK_BYTES, pos);
+      const { bytesRead } = await readAsync(fd, BUFFER, 0, CHUNK_BYTES, filePosition(pos));
       if (bytesRead === 0) {
         break;
       }
@@ -70,7 +71,7 @@ async function handleWrite({ fd, offset, stream }) {
         break;
       }
       const buf = Buffer.from(value);
-      const { bytesWritten } = await writeAsync(fd, buf, 0, buf.length, pos);
+      const { bytesWritten } = await writeAsync(fd, buf, 0, buf.length, filePosition(pos));
       pos += BigInt(bytesWritten);
     }
     return { bytesWritten: pos - start };
@@ -78,6 +79,13 @@ async function handleWrite({ fd, offset, stream }) {
     await reader.cancel(err);
     throw err;
   }
+}
+
+function filePosition(position) {
+  if (position < 0n || position > MAX_SAFE_FILE_POSITION) {
+    throw new FSError("invalid");
+  }
+  return Number(position);
 }
 
 async function handleReadDir({ fullPath, stream, preopens }) {
