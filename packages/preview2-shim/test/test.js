@@ -500,6 +500,40 @@ suite("Node.js Preview2", () => {
       }),
     );
   });
+
+  suite("WASI Sockets (IP Name Lookup)", async () => {
+    test(
+      "ipNameLookup.resolveAddresses(): should return valid IP addresses",
+      testWithGCWrap(async () => {
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+        const network = sockets.instanceNetwork.instanceNetwork();
+        const stream = sockets.ipNameLookup.resolveAddresses(network, "localhost");
+
+        const poll = stream.subscribe();
+        poll.block();
+
+        const addressGroup = stream.resolveNextAddress();
+
+        assert.ok(addressGroup != null, "should resolve to at least one address");
+        assert.ok(addressGroup.length, "should be an address group");
+        assert.ok(
+          addressGroup[0].tag === "ipv4" || addressGroup[0].tag === "ipv6",
+          "should be an IP address variant",
+        );
+        assert.ok(Array.isArray(addressGroup[0].val), "address payload should be a tuple");
+
+        if (addressGroup[0].tag === "ipv4") {
+          assert.strictEqual(addressGroup[0].val.length, 4);
+        } else {
+          assert.strictEqual(addressGroup[0].val.length, 8);
+        }
+
+        poll[symbolDispose]();
+        stream[symbolDispose]();
+      }),
+    );
+  });
 });
 
 suite("HTTPServer", () => {
