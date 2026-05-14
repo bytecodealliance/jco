@@ -73,9 +73,8 @@ export const isLoopbackIpAddress = ({ tag, val: { address } }) =>
 
 export const ipAddressConflict = (a, b) =>
   a.tag === b.tag &&
-  Number(a.val.port) !== 0 &&
-  Number(b.val.port) !== 0 &&
   Number(a.val.port) === Number(b.val.port) &&
+  Number(a.val.port) !== 0 &&
   (isWildcardIpAddress(a) ||
     isWildcardIpAddress(b) ||
     a.val.address.every((segment, idx) => segment === b.val.address[idx]));

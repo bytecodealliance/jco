@@ -101,15 +101,15 @@ async function handleConnect({ socketId, remoteAddress }) {
     isLoopbackIpAddress(socket.connected) &&
     isLoopbackIpAddress(remoteAddress);
 
-  if (preserveLocalAddress) {
-    const localAddress = socket.localAddress;
+  if (socket.connected) {
+    const localAddress = preserveLocalAddress ? socket.localAddress : null;
     await new Promise((resolve) => socket.udp.close(resolve));
     socket.udp = createSocket(socket);
-    await handleBind({ socketId, localAddress });
-  } else if (socket.connected) {
-    await new Promise((resolve) => socket.udp.close(resolve));
-    socket.udp = createSocket(socket);
-    socket.localAddress = null;
+    if (localAddress) {
+      await handleBind({ socketId, localAddress });
+    } else {
+      socket.localAddress = null;
+    }
   }
 
   const addr = serializeIpAddress(remoteAddress);
@@ -134,17 +134,13 @@ async function handleSend({ socketId, data, remoteAddress }) {
   const isConnected = socket.connected != null;
 
   await new Promise((resolve, reject) => {
-    try {
-      if (isConnected) {
-        socket.udp.send(data, (err) => (err ? reject(err) : resolve()));
-      } else {
-        const addr = serializeIpAddress(remoteAddress);
-        const port = remoteAddress.val.port;
+    if (isConnected) {
+      socket.udp.send(data, (err) => (err ? reject(err) : resolve()));
+    } else {
+      const addr = serializeIpAddress(remoteAddress);
+      const port = remoteAddress.val.port;
 
-        socket.udp.send(data, port, addr, (err) => (err ? reject(err) : resolve()));
-      }
-    } catch (err) {
-      reject(err);
+      socket.udp.send(data, port, addr, (err) => (err ? reject(err) : resolve()));
     }
   });
 
