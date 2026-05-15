@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.19.0-rc.4] - 2026-05-15
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ use builder for TranspileOpts by @vados-cosmonic in #1490
+
+
+
+
 ## [1.19.0-rc.3] - 2026-05-15
 
 ### 🚀 Features
