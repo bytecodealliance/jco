@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.19.0-rc.3] - 2026-05-15
+
+### 🚀 Features
+
+- _(bindgen)_ allow expanding numeric chunks in stream lowering by @andreiltd in #1481
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ make canon opts optional for func bindgen by @vados-cosmonic in #1488
+
+
+
+
 ## [1.19.0-rc.2] - 2026-05-13
 
 This RC tests new release machinery that allows for augmenting changelog entries
