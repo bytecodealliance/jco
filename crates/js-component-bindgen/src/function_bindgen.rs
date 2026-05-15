@@ -4,9 +4,8 @@ use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
-    CanonicalOptions, CanonicalOptionsDataModel, InterfaceType, LinearMemoryOptions, ResourceIndex,
-    TypeComponentLocalErrorContextTableIndex, TypeFutureTableIndex, TypeResourceTableIndex,
-    TypeStreamTableIndex,
+    InterfaceType, ResourceIndex, TypeComponentLocalErrorContextTableIndex, TypeFutureTableIndex,
+    TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
@@ -205,12 +204,6 @@ pub struct FunctionBindgen<'a> {
     /// Whether the function is guest async lifted (i.e. WASI P3)
     pub is_async: bool,
 
-    /// Canon opts
-    ///
-    /// Note: this is an Option for downstream users that may not process the component completely,
-    /// and do not have access to `CanonicalOptions` for the given function (e.g. in the case of a dummy module)
-    pub canon_opts: Option<&'a CanonicalOptions>,
-
     /// Interface name
     pub iface_name: Option<&'a str>,
 
@@ -390,13 +383,7 @@ impl FunctionBindgen<'_> {
         let is_manual_async = self.requires_async_porcelain;
         let fn_name = self.callee;
         let err_handling = self.err.to_js_string();
-        let callback_fn_js = self
-            .canon_opts
-            .expect("canon opts should be provided")
-            .callback
-            .as_ref()
-            .map(|v| format!("callback_{}", v.as_u32()))
-            .unwrap_or_else(|| "null".into());
+
         let (calling_wasm_export, prefix) = match instr {
             Instruction::CallWasm { .. } => (true, "_wasm_call_"),
             Instruction::CallInterface { .. } => (false, "_interface_call_"),
@@ -407,22 +394,17 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentTask,
         ));
-        let component_instance_idx = self
-            .canon_opts
-            .expect("canon opts should be provided")
-            .instance
-            .as_u32();
 
         uwriteln!(
             self.src,
             r#"
               const [task, {prefix}currentTaskID] = {start_current_task_fn}({{
-                  componentIdx: {component_instance_idx},
+                  componentIdx: _FN_LOCALS._componentIdx,
                   isAsync: {is_async},
                   isManualAsync: {is_manual_async},
                   entryFnName: '{fn_name}',
-                  getCallbackFn: () => {callback_fn_js},
-                  callbackFnName: '{callback_fn_js}',
+                  getCallbackFn: _FN_LOCALS._getCallbackFn,
+                  callbackFnName: _FN_LOCALS._callbackFnName,
                   errHandling: '{err_handling}',
                   callingWasmExport: {calling_wasm_export},
               }});
@@ -1491,13 +1473,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "{scope_id}++;");
                 }
 
-                // Save the memory for this task,
-                // which will be used for any subtasks that might be spawned
-                if let Some(mem_idx) = self.canon_opts.expect("missing canon opts").memory() {
-                    let idx = mem_idx.as_u32();
-                    uwriteln!(self.src, "task.setReturnMemoryIdx({idx});");
-                    uwriteln!(self.src, "task.setReturnMemory(memory{idx});");
-                }
+                uwriteln!(self.src, "task.setReturnMemoryIdx(_FN_LOCALS._memoryIdx);");
+                uwriteln!(self.src, "task.setReturnMemory(_FN_LOCALS._memory);");
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 // along with the code to perofrm the call
@@ -1611,11 +1588,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
                 let current_task_get_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let component_instance_idx = self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .instance
-                    .as_u32();
 
                 // At first, use the global current task metadata, in case we are executing from
                 // inside a with-global-current-task wrapper
@@ -1664,11 +1636,11 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     const createTask = () => {{
                         const results = {start_current_task_fn}({{
-                            componentIdx: -1, // {component_instance_idx},
+                            componentIdx: -1,
                             isAsync: {is_async},
                             entryFnName: '{fn_name}',
-                            getCallbackFn: () => {callback_fn_js},
-                            callbackFnName: '{callback_fn_js}',
+                            getCallbackFn: _FN_LOCALS._getCallbackFn,
+                            callbackFnName: _FN_LOCALS._callbackFnName,
                             errHandling: '{err_handling}',
                             callingWasmExport: false,
                         }});
@@ -1677,8 +1649,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     taskCreation: {{
                         parentTask = {current_task_get_fn}(
-                            {component_instance_idx},
-                            {get_global_current_task_meta_fn}({component_instance_idx})?.taskID,
+                            _FN_LOCALS._componentIdx,
+                            {get_global_current_task_meta_fn}(_FN_LOCALS._componentIdx)?.taskID,
                         )?.task;
 
                         if (!parentTask) {{
@@ -1700,13 +1672,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     is_async = self.is_async,
                     fn_name = self.callee,
                     err_handling = self.err.to_js_string(),
-                    callback_fn_js = self
-                        .canon_opts
-                        .expect("canon opts should be provided")
-                        .callback
-                        .as_ref()
-                        .map(|v| format!("callback_{}", v.as_u32()))
-                        .unwrap_or_else(|| "null".into()),
                 );
 
                 let is_async = self.requires_async_porcelain || *async_;
@@ -1900,16 +1865,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                let component_idx = self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .instance
-                    .as_u32();
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
                         format!(
                             r#"
-                        let cstate = {get_or_create_async_state_fn}({component_idx});
+                        let cstate = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
                         cstate.mayLeave = false;
                         {post_return_call}
                         cstate.mayLeave = true;
@@ -2721,12 +2681,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     AsyncFutureIntrinsic::NestedFutureSymbol,
                 ));
 
-                let component_idx = self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .instance
-                    .as_u32();
-
                 let future_arg = operands
                     .first()
                     .expect("unexpectedly missing ErrorContextLower arg");
@@ -2822,22 +2776,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     ),
                 };
 
-                // Retrieve the realloc fn if present, in case lowering fns need to allocate
-                //
-                // The realloc fn is saved on the element metadata which is passed through to
-                // stream end and underlying buffer
-                let get_realloc_fn_js = match self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .data_model
-                {
-                    CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
-                        realloc: Some(realloc_idx),
-                        ..
-                    }) => format!("() => realloc{}", realloc_idx.as_u32()),
-                    _ => "undefined".into(),
-                };
-
                 let tmp = self.tmp();
                 let lowered_future_waitable_idx = format!("futureWaitableIdx{tmp}");
 
@@ -2849,9 +2787,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             throw new Error('unrecognized future object (not Promise/Thenable)');
                         }}
 
-                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx});
+                        const cstate{tmp} = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
                         if (!cstate{tmp}) {{
-                            throw new Error(`missing component state for component [{component_idx}]`);
+                            throw new Error(`missing component state for component [${{_FN_LOCALS._componentIdx}}]`);
                         }}
 
                         // TODO(feat): facilitate non utf8 string encoding for lowered futures
@@ -2884,7 +2822,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     align32: {payload_align32_js},
                                     size32: {payload_size32_js},
                                     stringEncoding,
-                                    getReallocFn: {get_realloc_fn_js},
+                                    getReallocFn: _FN_LOCALS._getReallocFn,
                                 }}
                             }});
 
@@ -2906,7 +2844,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             future{tmp}.readEndWaitableIdx = readEndWaitableIdx;
                             future{tmp}.writeEndWaitableIdx = writeEndWaitableIdx;
                             future{tmp}.futureTableIdx = {future_table_idx};
-                            future{tmp}.componentIdx = {component_idx};
+                            future{tmp}.componentIdx = _FN_LOCALS._componentIdx;
                             future{tmp}.then = async (resolve, reject) => {{
                                 let p;
                                 if (openedCount === {nesting_level}) {{
@@ -3010,17 +2948,12 @@ impl Bindgen for FunctionBindgen<'_> {
                         };
 
                     let future_table_idx = future_table_idx_ty.as_u32();
-                    let component_idx = self
-                        .canon_opts
-                        .expect("canon opts should be provided")
-                        .instance
-                        .as_u32();
 
                     uwriteln!(
                         self.src,
                         "
                         const {result_var} = {future_new_from_lift_fn}({{
-                            componentIdx: {component_idx},
+                            componentIdx: _FN_LOCALS._componentIdx,
                             futureTableIdx: {future_table_idx},
                             futureEndWaitableIdx: {arg_future_end_idx},
                             payloadLiftFn: {lift_fn_js},
@@ -3074,11 +3007,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     unreachable!("invalid resource table observed during stream lower");
                 };
 
-                let component_idx = self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .instance
-                    .as_u32();
                 let stream_table_idx = stream_table_idx_ty.as_u32();
 
                 let (
@@ -3148,22 +3076,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     ),
                 };
 
-                // Retrieve the realloc fn if present, in case lowering fns need to allocate
-                //
-                // The realloc fn is saved on the element metadata which is passed through to
-                // stream end and underlying buffer
-                let get_realloc_fn_js = match self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .data_model
-                {
-                    CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
-                        realloc: Some(realloc_idx),
-                        ..
-                    }) => format!("() => realloc{}", realloc_idx.as_u32()),
-                    _ => "undefined".into(),
-                };
-
                 let tmp = self.tmp();
                 let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
                 uwriteln!(
@@ -3176,8 +3088,8 @@ impl Bindgen for FunctionBindgen<'_> {
                             throw new Error('unrecognized stream object (no supported stream protocol)');
                         }}
 
-                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx});
-                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx}]`); }}
+                        const cstate{tmp} = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
+                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [${{_FN_LOCALS._componentIdx}}]`); }}
 
                         const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = cstate{tmp}.createStream({{
                             tableIdx: {stream_table_idx},
@@ -3194,7 +3106,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 size32: {payload_size32_js},
                                 // TODO(feat): facilitate non utf8 string encoding for lowered streams
                                 stringEncoding: 'utf8',
-                                getReallocFn: {get_realloc_fn_js},
+                                getReallocFn: _FN_LOCALS._getReallocFn,
                             }},
                         }});
 
@@ -3227,11 +3139,6 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::StreamLift { payload, ty } => {
-                let component_idx = self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .instance
-                    .as_u32();
                 let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamNewFromLift,
                 ));
@@ -3305,7 +3212,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         self.src,
                         "
                         const {result_var} = {stream_new_from_lift_fn}({{
-                            componentIdx: {component_idx},
+                            componentIdx: _FN_LOCALS._componentIdx,
                             streamTableIdx: {stream_table_idx},
                             streamEndWaitableIdx: {arg_stream_end_idx},
                             payloadLiftFn: {lift_fn_js},
@@ -3342,11 +3249,6 @@ impl Bindgen for FunctionBindgen<'_> {
             //
             Instruction::AsyncTaskReturn { name, params } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let component_instance_idx = self
-                    .canon_opts
-                    .expect("canon opts should be provided")
-                    .instance
-                    .as_u32();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
                 let async_driver_loop_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
@@ -3359,7 +3261,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "{debug_log_fn}('{prefix}  [Instruction::AsyncTaskReturn]', {{
                          funcName: '{name}',
                          paramCount: {param_count},
-                         componentIdx: {component_instance_idx},
+                         componentIdx: _FN_LOCALS._componentIdx,
                          postReturn: {post_return_present},
                          hostProvided,
                       }});",
@@ -3418,18 +3320,18 @@ impl Bindgen for FunctionBindgen<'_> {
                           return task.completionPromise();
                       }}
 
-                      const componentState = {get_or_create_async_state_fn}({component_instance_idx});
+                      const componentState = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 
                       queueMicrotask(async (resolve, reject) => {{
                           try {{
                               {debug_log_fn}("[Instruction::AsyncTaskReturn] starting driver loop", {{
                                   fnName: '{name}',
-                                  componentInstanceIdx: {component_instance_idx},
+                                  componentInstanceIdx: _FN_LOCALS._componentIdx,
                                   taskID: task.id(),
                               }});
                               await {async_driver_loop_fn}({{
-                                  componentInstanceIdx: {component_instance_idx},
+                                  componentInstanceIdx: _FN_LOCALS._componentIdx,
                                   componentState,
                                   task,
                                   fnName: '{name}',

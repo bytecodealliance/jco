@@ -4003,6 +4003,52 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // Build an object which contains function locals that will be needed
+        // by function bindgen output.
+        //
+        // This will be used as a global by function binden, as once the function
+        // preambles are written, this variable will be assumed to exist.
+        let component_idx = opts.instance.as_u32();
+        uwriteln!(
+            self.src.js,
+            r#"
+              const _FN_LOCALS = {{}};
+              _FN_LOCALS._componentIdx = {component_idx};
+            "#,
+        );
+
+        // Write realloc and memory metadata as function local
+        if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+            realloc: Some(realloc_idx),
+            ..
+        }) = opts.data_model
+        {
+            uwriteln!(
+                self.src.js,
+                "_FN_LOCALS._getReallocFn = () => realloc{idx};",
+                idx = realloc_idx.as_u32(),
+            );
+        }
+
+        // Write callback fn getter as function local
+        if let Some(callback_idx) = opts.callback {
+            uwriteln!(
+                self.src.js,
+                r#"
+                  _FN_LOCALS._getCallbackFn = () => callback_{idx};
+                  _FN_LOCALS._callbackFnName = 'callback_{idx}';
+                "#,
+                idx = callback_idx.as_u32(),
+            );
+        }
+
+        // Write memory out for fn as function local
+        if let Some(mem_idx) = opts.memory() {
+            let idx = mem_idx.as_u32();
+            uwriteln!(self.src.js, "_FN_LOCALS._memoryIdx = {idx};");
+            uwriteln!(self.src.js, "_FN_LOCALS._memory = memory{idx};");
+        }
+
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
@@ -4047,7 +4093,6 @@ impl<'a> Instantiator<'a, '_> {
             resolve: self.resolve,
             requires_async_porcelain,
             is_async,
-            canon_opts: Some(opts),
             iface_name,
             asmjs: self.bindgen.opts.asmjs,
         };
