@@ -52,26 +52,28 @@ struct JsComponentBindgenComponent;
 impl bindings::Guest for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
-        let opts = js_component_bindgen::TranspileOpts {
-            name: options.name,
-            no_typescript: options.no_typescript.unwrap_or(false),
-            instantiation: options.instantiation.map(Into::into),
-            map: options.map.map(|map| map.into_iter().collect()),
-            nodejs_compat_disabled: options.no_nodejs_compat.unwrap_or(false),
-            base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
-            tla_compat: options
-                .tla_compat
-                .unwrap_or(options.compat.unwrap_or(false)),
-            valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
-            tracing: options.tracing.unwrap_or(false),
-            no_namespaced_exports: options.no_namespaced_exports.unwrap_or(false),
-            multi_memory: options.multi_memory.unwrap_or(false),
-            import_bindings: options.import_bindings.map(Into::into),
-            guest: options.guest.unwrap_or(false),
-            async_mode: options.async_mode.map(Into::into),
-            strict: options.strict.unwrap_or(false),
-            asmjs: options.asmjs.unwrap_or(false),
-        };
+        let opts = js_component_bindgen::TranspileOpts::builder()
+            .name(options.name)
+            .no_typescript(options.no_typescript.unwrap_or(false))
+            .maybe_instantiation_mode(options.instantiation.map(Into::into))
+            .maybe_map(options.map.map(|map| map.into_iter().collect()))
+            .nodejs_compat_disabled(options.no_nodejs_compat.unwrap_or(false))
+            .base64_cutoff(options.base64_cutoff.unwrap_or(5000) as usize)
+            .tla_compat(
+                options
+                    .tla_compat
+                    .unwrap_or(options.compat.unwrap_or(false)),
+            )
+            .valid_lifting_optimization(options.valid_lifting_optimization.unwrap_or(false))
+            .tracing(options.tracing.unwrap_or(false))
+            .no_namespaced_exports(options.no_namespaced_exports.unwrap_or(false))
+            .multi_memory(options.multi_memory.unwrap_or(false))
+            .maybe_import_bindings(options.import_bindings.map(Into::into))
+            .guest(options.guest.unwrap_or(false))
+            .maybe_async_mode(options.async_mode.map(Into::into))
+            .strict(options.strict.unwrap_or(false))
+            .asmjs(options.asmjs.unwrap_or(false))
+            .build();
 
         let js_component_bindgen::Transpiled {
             files,
@@ -150,24 +152,23 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .select_world(&[ids], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
-        let opts = js_component_bindgen::TranspileOpts {
-            name: "component".to_string(),
-            no_typescript: false,
-            nodejs_compat_disabled: false,
-            instantiation: opts.instantiation.map(Into::into),
-            map: opts.map.map(|map| map.into_iter().collect()),
-            tla_compat: opts.tla_compat.unwrap_or(false),
-            valid_lifting_optimization: false,
-            base64_cutoff: 0,
-            tracing: false,
-            no_namespaced_exports: false,
-            multi_memory: false,
-            import_bindings: None,
-            guest: opts.guest.unwrap_or(false),
-            async_mode: opts.async_mode.map(Into::into),
-            strict: opts.strict.unwrap_or(false),
-            asmjs: false,
-        };
+        let opts = js_component_bindgen::TranspileOpts::builder()
+            .name("component".into())
+            .no_typescript(false)
+            .nodejs_compat_disabled(false)
+            .maybe_instantiation_mode(opts.instantiation.map(Into::into))
+            .maybe_map(opts.map.map(|map| map.into_iter().collect()))
+            .tla_compat(opts.tla_compat.unwrap_or(false))
+            .valid_lifting_optimization(false)
+            .base64_cutoff(0)
+            .tracing(false)
+            .no_namespaced_exports(false)
+            .multi_memory(false)
+            .guest(opts.guest.unwrap_or(false))
+            .maybe_async_mode(opts.async_mode.map(Into::into))
+            .strict(opts.strict.unwrap_or(false))
+            .asmjs(false)
+            .build();
 
         let files = js_component_bindgen::generate_types(&name, resolve, world, opts)
             .with_context(|| format!("generating types for [{}]", &name))

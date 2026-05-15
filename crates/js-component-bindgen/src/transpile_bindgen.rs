@@ -59,15 +59,16 @@ use crate::{
 /// intrinsic, when returning from an async func
 const MAX_FLAT_PARAMS: usize = 16;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
     /// Disables generation of `*.d.ts` files and instead only generates `*.js`
     /// source files.
+    #[builder(default)]
     pub no_typescript: bool,
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
-    pub instantiation: Option<InstantiationMode>,
+    pub instantiation_mode: Option<InstantiationMode>,
     /// Configure how import bindings are provided, as high-level JS bindings,
     /// or as hybrid optimized bindings.
     pub import_bindings: Option<BindingsMode>,
@@ -75,36 +76,47 @@ pub struct TranspileOpts {
     /// component import specifiers to JS import specifiers.
     pub map: Option<HashMap<String, String>>,
     /// Disables compatibility in Node.js without a fetch global.
+    #[builder(default)]
     pub nodejs_compat_disabled: bool,
     /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode
     /// (set to 0 to disable all base64 inlining)
+    #[builder(default)]
     pub base64_cutoff: usize,
     /// Enables compatibility for JS environments without top-level await support
     /// via an async $init promise export to wait for instead.
+    #[builder(default)]
     pub tla_compat: bool,
     /// Disable verification of component Wasm data structures when
     /// lifting as a production optimization
+    #[builder(default)]
     pub valid_lifting_optimization: bool,
     /// Whether or not to emit `tracing` calls on function entry/exit.
+    #[builder(default)]
     pub tracing: bool,
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
+    #[builder(default)]
     pub no_namespaced_exports: bool,
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
+    #[builder(default)]
     pub multi_memory: bool,
     /// Whether to generate types for a guest module using module declarations.
+    #[builder(default)]
     pub guest: bool,
     /// Configure whether to use `async` imports or exports with
     /// JavaScript Promise Integration (JSPI).
     pub async_mode: Option<AsyncMode>,
     /// Configure whether to generate code that includes strict type checks
+    #[builder(default)]
     pub strict: bool,
     /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
+    #[builder(default)]
     pub asmjs: bool,
 }
 
 #[derive(Default, Clone, Debug)]
+#[non_exhaustive]
 pub enum AsyncMode {
     #[default]
     Sync,
@@ -115,6 +127,7 @@ pub enum AsyncMode {
 }
 
 #[derive(Default, Clone, Debug)]
+#[non_exhaustive]
 pub enum InstantiationMode {
     #[default]
     Async,
@@ -138,6 +151,7 @@ enum CallType {
 }
 
 #[derive(Default, Clone, Debug)]
+#[non_exhaustive]
 pub enum BindingsMode {
     Hybrid,
     #[default]
@@ -371,7 +385,7 @@ impl JsBindgen<'_> {
         }
 
         // adds a default implementation of `getCoreModule`
-        if matches!(self.opts.instantiation, Some(InstantiationMode::Async)) {
+        if matches!(self.opts.instantiation_mode, Some(InstantiationMode::Async)) {
             uwriteln!(
                 compilation_promises,
                 "if (!getCoreModule) getCoreModule = (name) => {}(new URL(`./${{name}}`, import.meta.url));",
@@ -384,7 +398,7 @@ impl JsBindgen<'_> {
         for i in 0..self.core_module_cnt {
             let local_name = format!("module{i}");
             let mut name_idx = core_file_name(name, i as u32);
-            if self.opts.instantiation.is_some() {
+            if self.opts.instantiation_mode.is_some() {
                 uwriteln!(
                     compilation_promises,
                     "const {local_name} = getCoreModule('{name_idx}');"
@@ -420,13 +434,13 @@ impl JsBindgen<'_> {
 
         let render_args = RenderIntrinsicsArgs::builder()
             .intrinsics(&mut self.all_intrinsics)
-            .instantiation_occurred(self.opts.instantiation.is_some())
+            .instantiation_occurred(self.opts.instantiation_mode.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
 
-        if let Some(instantiation) = &self.opts.instantiation {
+        if let Some(instantiation) = &self.opts.instantiation_mode {
             uwrite!(
                 output,
                 "\
@@ -447,7 +461,7 @@ impl JsBindgen<'_> {
         }
 
         // Render all imports
-        let imports_object = if self.opts.instantiation.is_some() {
+        let imports_object = if self.opts.instantiation_mode.is_some() {
             Some("imports")
         } else {
             None
@@ -456,11 +470,11 @@ impl JsBindgen<'_> {
             .render_imports(&mut output, imports_object, &mut self.local_names);
 
         // Create instantiation code
-        if self.opts.instantiation.is_some() {
+        if self.opts.instantiation_mode.is_some() {
             uwrite!(&mut self.src.js, "{}", &core_exported_funcs as &str);
             self.esm_bindgen.render_exports(
                 &mut self.src.js,
-                self.opts.instantiation.is_some(),
+                self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
                 opts,
             );
@@ -499,7 +513,7 @@ impl JsBindgen<'_> {
             );
         } else {
             let (maybe_init_export, maybe_init) =
-                if self.opts.tla_compat && opts.instantiation.is_none() {
+                if self.opts.tla_compat && opts.instantiation_mode.is_none() {
                     uwriteln!(self.src.js_init, "_initialized = true;");
                     (
                         "\
@@ -562,7 +576,7 @@ impl JsBindgen<'_> {
 
             self.esm_bindgen.render_exports(
                 &mut output,
-                self.opts.instantiation.is_some(),
+                self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
                 opts,
             );
@@ -789,7 +803,7 @@ impl<'a> Instantiator<'a, '_> {
             assert_eq!(i, *index);
         }
 
-        if let Some(InstantiationMode::Async) = self.bindgen.opts.instantiation {
+        if let Some(InstantiationMode::Async) = self.bindgen.opts.instantiation_mode {
             // To avoid uncaught promise rejection errors, we attach an intermediate
             // Promise.all with a rejection handler, if there are multiple promises.
             if self.modules.len() > 1 {
@@ -909,7 +923,7 @@ impl<'a> Instantiator<'a, '_> {
             self.trampoline(i, trampoline);
         }
 
-        if self.bindgen.opts.instantiation.is_some() {
+        if self.bindgen.opts.instantiation_mode.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
         }
@@ -2863,7 +2877,7 @@ impl<'a> Instantiator<'a, '_> {
         let instantiate = self.bindgen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
 
-        match self.bindgen.opts.instantiation {
+        match self.bindgen.opts.instantiation_mode {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
@@ -3961,7 +3975,7 @@ impl<'a> Instantiator<'a, '_> {
         // If TLA compat was enabled, ensure that it was initialized
         if self.bindgen.opts.tla_compat
             && matches!(abi, AbiVariant::GuestExport)
-            && self.bindgen.opts.instantiation.is_none()
+            && self.bindgen.opts.instantiation_mode.is_none()
         {
             let throw_uninitialized = self.bindgen.intrinsic(Intrinsic::ThrowUninitialized);
             uwrite!(

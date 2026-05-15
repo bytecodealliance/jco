@@ -182,25 +182,23 @@ fn transpile(args: TranspileArgs) -> Result<()> {
             "@bytecodealliance/preview2-shim/sockets#*".into(),
         ),
     ]);
-    let opts = js_component_bindgen::TranspileOpts {
-        name,
-        no_typescript: false,
-        instantiation: None,
-        map: Some(import_map),
-        nodejs_compat_disabled: false,
-        base64_cutoff: 5000_usize,
-        tla_compat: true,
-        valid_lifting_optimization: false,
-        tracing: false,
-        no_namespaced_exports: true,
-        multi_memory: true,
-        import_bindings: Some(BindingsMode::Js),
-        guest: false,
-        async_mode: None,
+    let opts = js_component_bindgen::TranspileOpts::builder()
+        .name(name)
+        .no_typescript(false)
+        .map(import_map)
+        .nodejs_compat_disabled(false)
+        .base64_cutoff(5000_usize)
+        .tla_compat(true)
+        .valid_lifting_optimization(false)
+        .tracing(false)
+        .no_namespaced_exports(true)
+        .multi_memory(true)
+        .import_bindings(BindingsMode::Js)
+        .guest(false)
         // TODO(breaking): strict by default
-        strict: false,
-        asmjs: false,
-    };
+        .strict(false)
+        .asmjs(false)
+        .build();
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
 

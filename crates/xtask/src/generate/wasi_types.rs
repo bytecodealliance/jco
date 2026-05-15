@@ -48,12 +48,11 @@ fn process_wasi_types(wasi: WasiTypes<'_>) -> Result<()> {
 
         let world = resolve.select_world(&[*package], Some(world_name))?;
 
-        let opts = js_component_bindgen::TranspileOpts {
-            name: "component".to_string(),
-            import_bindings: Some(BindingsMode::Js),
-            no_namespaced_exports: true,
-            ..Default::default()
-        };
+        let opts = js_component_bindgen::TranspileOpts::builder()
+            .name("component".into())
+            .import_bindings(BindingsMode::Js)
+            .no_namespaced_exports(true)
+            .build();
 
         let files = generate_types(&name, resolve, world, opts)?;
 

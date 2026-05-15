@@ -176,7 +176,7 @@ pub fn ts_bindgen(
                                 name,
                                 *id,
                                 files,
-                                opts.instantiation.is_some(),
+                                opts.instantiation_mode.is_some(),
                             );
                         }
 
@@ -262,7 +262,7 @@ pub fn ts_bindgen(
                 name.as_ref(),
                 import_interfaces,
                 files,
-                opts.instantiation.is_some(),
+                opts.instantiation_mode.is_some(),
             );
         }
     }
@@ -311,7 +311,7 @@ pub fn ts_bindgen(
                     continue;
                 }
 
-                let instantiation = opts.instantiation.is_some();
+                let instantiation = opts.instantiation_mode.is_some();
                 bindgen.export_interface(resolve, export_name, *id, files, instantiation);
                 // Also export the interface name as a type alias
                 let alt_export_name = iface_name.to_lower_camel_case();
@@ -323,7 +323,13 @@ pub fn ts_bindgen(
         }
     }
     if !funcs.is_empty() {
-        bindgen.export_funcs(resolve, id, &funcs, files, opts.instantiation.is_none());
+        bindgen.export_funcs(
+            resolve,
+            id,
+            &funcs,
+            files,
+            opts.instantiation_mode.is_none(),
+        );
     }
 
     let camel = world.name.to_upper_camel_case();
@@ -334,7 +340,7 @@ pub fn ts_bindgen(
     // With the current representation of a "world" this is an import object
     // per-imported-interface where the type of that field is defined by the
     // interface bindgen.
-    if opts.instantiation.is_some() {
+    if opts.instantiation_mode.is_some() {
         uwriteln!(bindgen.src, "export interface ImportObject {{");
         bindgen.src.push_str(&bindgen.import_object);
         uwriteln!(bindgen.src, "}}");
@@ -342,7 +348,7 @@ pub fn ts_bindgen(
 
     // Generate a type definition for the export object from instantiating
     // the component.
-    if opts.instantiation.is_some() {
+    if opts.instantiation_mode.is_some() {
         uwriteln!(bindgen.src, "export interface {camel} {{",);
         bindgen.src.push_str(&bindgen.export_object);
         uwriteln!(bindgen.src, "}}");
@@ -350,7 +356,7 @@ pub fn ts_bindgen(
         bindgen.src.push_str(&bindgen.export_object);
     }
 
-    if opts.tla_compat && opts.instantiation.is_none() {
+    if opts.tla_compat && opts.instantiation_mode.is_none() {
         uwriteln!(
             bindgen.src,
             "
@@ -361,7 +367,7 @@ pub fn ts_bindgen(
     // Generate the TypeScript definition of the `instantiate` function
     // which is the main workhorse of the generated bindings.
     if opts.asmjs {
-        if let Some(mode) = &opts.instantiation {
+        if let Some(mode) = &opts.instantiation_mode {
             uwriteln!(
                 bindgen.src,
                 "
@@ -387,7 +393,7 @@ pub fn ts_bindgen(
             );
         }
     } else {
-        match opts.instantiation {
+        match opts.instantiation_mode {
             Some(InstantiationMode::Async) => {
                 uwriteln!(
                 bindgen.src,
