@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.19.0-rc.5] - 2026-05-15
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ getGlobalCurrentTaskMeta null handling by @wondenge in #1378
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ remove canon opts from function bindgen by @vados-cosmonic
+
+
+
+
 ## [1.19.0-rc.4] - 2026-05-15
 
 ### 🐛 Bug Fixes
