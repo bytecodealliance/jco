@@ -57,7 +57,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             no_typescript: options.no_typescript.unwrap_or(false),
             instantiation: options.instantiation.map(Into::into),
             map: options.map.map(|map| map.into_iter().collect()),
-            no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
+            nodejs_compat_disabled: options.no_nodejs_compat.unwrap_or(false),
             base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
             tla_compat: options
                 .tla_compat
@@ -153,7 +153,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
         let opts = js_component_bindgen::TranspileOpts {
             name: "component".to_string(),
             no_typescript: false,
-            no_nodejs_compat: false,
+            nodejs_compat_disabled: false,
             instantiation: opts.instantiation.map(Into::into),
             map: opts.map.map(|map| map.into_iter().collect()),
             tla_compat: opts.tla_compat.unwrap_or(false),

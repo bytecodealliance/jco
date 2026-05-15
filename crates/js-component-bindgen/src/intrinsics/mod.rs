@@ -3,8 +3,6 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
-use anyhow::{Context as _, Result};
-
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
@@ -186,7 +184,7 @@ impl Intrinsic {
                     output,
                     "const {var_name} = '{determinism}';",
                     var_name = self.name(),
-                    determinism = args.determinism,
+                    determinism = args.determinism_profile,
                 );
             }
 
@@ -248,7 +246,7 @@ impl Intrinsic {
             }
 
             Intrinsic::Base64Compile => {
-                if !args.nodejs_compat_disabled {
+                if !args.transpile_opts.nodejs_compat_disabled {
                     uwriteln!(
                         output,
                         r#"
@@ -309,7 +307,7 @@ impl Intrinsic {
             ),
 
             Intrinsic::FetchCompile => {
-                if !args.nodejs_compat_disabled {
+                if !args.transpile_opts.nodejs_compat_disabled {
                     output.push_str("
                     const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
                     let _fs;
@@ -373,7 +371,7 @@ impl Intrinsic {
             ),
 
             Intrinsic::InstantiateCore => {
-                if !args.instantiation {
+                if !args.instantiation_occurred {
                     output.push_str(
                         "
                     const instantiateCore = WebAssembly.instantiate;
@@ -1069,80 +1067,19 @@ impl std::fmt::Display for AsyncDeterminismProfile {
 }
 
 /// Arguments to `render_intrinsics`
+#[derive(bon::Builder)]
 #[non_exhaustive]
 pub struct RenderIntrinsicsArgs<'a> {
     /// List of intrinsics being built for use
     pub(crate) intrinsics: &'a mut BTreeSet<Intrinsic>,
-    /// Whether to use NodeJS compat
-    pub(crate) nodejs_compat_disabled: bool,
     /// Whether instantiation has occurred
-    pub(crate) instantiation: bool,
+    #[builder(default)]
+    pub(crate) instantiation_occurred: bool,
     /// The kind of determinism to use
-    pub(crate) determinism: AsyncDeterminismProfile,
+    #[builder(default)]
+    pub(crate) determinism_profile: AsyncDeterminismProfile,
     /// Options provided when performing transpilation
     pub(crate) transpile_opts: &'a TranspileOpts,
-}
-
-impl<'a> RenderIntrinsicsArgs<'a> {
-    /// Create a builder for rendering intrinsics with `render_intrinsics`
-    pub fn builder() -> RenderIntrinsicsArgsBuilder<'a> {
-        RenderIntrinsicsArgsBuilder::default()
-    }
-}
-
-/// Builder for constructing `RenderIntrinsicsArgs`.
-#[derive(Default)]
-pub struct RenderIntrinsicsArgsBuilder<'a> {
-    nodejs_compat_disabled: Option<bool>,
-    instantiation: Option<bool>,
-    determinism: Option<AsyncDeterminismProfile>,
-    transpile_opts: Option<&'a TranspileOpts>,
-    intrinsics: Option<&'a mut BTreeSet<Intrinsic>>,
-}
-
-impl<'a> RenderIntrinsicsArgsBuilder<'a> {
-    /// Sets whether to use NodeJS compatibility mode.
-    pub fn nodejs_compat_disabled(mut self, disabled: bool) -> Self {
-        self.nodejs_compat_disabled = Some(disabled);
-        self
-    }
-
-    /// Sets whether instantiation has occurred.
-    pub fn instantiation_occurred(mut self, occurred: bool) -> Self {
-        self.instantiation = Some(occurred);
-        self
-    }
-
-    /// Sets the required determinism profile.
-    pub fn determinism_profile(mut self, determinism: AsyncDeterminismProfile) -> Self {
-        self.determinism = Some(determinism);
-        self
-    }
-
-    /// Sets the required determinism profile.
-    pub fn intrinsics(mut self, intrinsics: &'a mut BTreeSet<Intrinsic>) -> Self {
-        self.intrinsics = Some(intrinsics);
-        self
-    }
-
-    /// Sets transpilation options
-    pub fn transpile_options(mut self, opts: &'a TranspileOpts) -> Self {
-        self.transpile_opts = Some(opts);
-        self
-    }
-
-    /// Build the final `RenderIntrinsicsArgs` object
-    pub fn build(self) -> Result<RenderIntrinsicsArgs<'a>> {
-        Ok(RenderIntrinsicsArgs {
-            intrinsics: self.intrinsics.context("missing intrinsic set")?,
-            nodejs_compat_disabled: self.nodejs_compat_disabled.unwrap_or_default(),
-            instantiation: self.instantiation.unwrap_or_default(),
-            determinism: self.determinism.unwrap_or_default(),
-            transpile_opts: self
-                .transpile_opts
-                .context("transpile options must be provided")?,
-        })
-    }
 }
 
 /// Intrinsics that should be rendered as early as possible

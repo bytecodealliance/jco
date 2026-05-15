@@ -27,6 +27,7 @@ all-features = true
 [dependencies]
 anyhow = { workspace = true }
 base64 = { workspace = true, features = [ "alloc" ] }
+bon = { workspace = true, features = [ "std", "alloc" ] }
 heck = { workspace = true }
 log = { workspace = true }
 semver = { workspace = true }

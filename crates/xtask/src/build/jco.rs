@@ -187,7 +187,7 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         no_typescript: false,
         instantiation: None,
         map: Some(import_map),
-        no_nodejs_compat: false,
+        nodejs_compat_disabled: false,
         base64_cutoff: 5000_usize,
         tla_compat: true,
         valid_lifting_optimization: false,

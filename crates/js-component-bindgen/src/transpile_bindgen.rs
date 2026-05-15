@@ -75,7 +75,7 @@ pub struct TranspileOpts {
     /// component import specifiers to JS import specifiers.
     pub map: Option<HashMap<String, String>>,
     /// Disables compatibility in Node.js without a fetch global.
-    pub no_nodejs_compat: bool,
+    pub nodejs_compat_disabled: bool,
     /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode
     /// (set to 0 to disable all base64 inlining)
     pub base64_cutoff: usize,
@@ -420,12 +420,10 @@ impl JsBindgen<'_> {
 
         let render_args = RenderIntrinsicsArgs::builder()
             .intrinsics(&mut self.all_intrinsics)
-            .nodejs_compat_disabled(self.opts.no_nodejs_compat)
             .instantiation_occurred(self.opts.instantiation.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
-            .transpile_options(opts)
-            .build()
-            .expect("failed to build args to render intrinsics");
+            .transpile_opts(opts)
+            .build();
         let js_intrinsics = render_intrinsics(render_args);
 
         if let Some(instantiation) = &self.opts.instantiation {
@@ -4018,7 +4016,7 @@ impl<'a> Instantiator<'a, '_> {
             resolve: self.resolve,
             requires_async_porcelain,
             is_async,
-            canon_opts: opts,
+            canon_opts: Some(opts),
             iface_name,
             asmjs: self.bindgen.opts.asmjs,
         };

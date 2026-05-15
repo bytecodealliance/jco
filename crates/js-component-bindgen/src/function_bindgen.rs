@@ -133,6 +133,8 @@ pub struct ResourceTable {
 /// A mapping of type IDs to the resources that they represent
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
+#[derive(bon::Builder)]
+#[non_exhaustive]
 pub struct FunctionBindgen<'a> {
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
@@ -204,7 +206,10 @@ pub struct FunctionBindgen<'a> {
     pub is_async: bool,
 
     /// Canon opts
-    pub canon_opts: &'a CanonicalOptions,
+    ///
+    /// Note: this is an Option for downstream users that may not process the component completely,
+    /// and do not have access to `CanonicalOptions` for the given function (e.g. in the case of a dummy module)
+    pub canon_opts: Option<&'a CanonicalOptions>,
 
     /// Interface name
     pub iface_name: Option<&'a str>,
@@ -387,6 +392,7 @@ impl FunctionBindgen<'_> {
         let err_handling = self.err.to_js_string();
         let callback_fn_js = self
             .canon_opts
+            .expect("canon opts should be provided")
             .callback
             .as_ref()
             .map(|v| format!("callback_{}", v.as_u32()))
@@ -401,7 +407,11 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentTask,
         ));
-        let component_instance_idx = self.canon_opts.instance.as_u32();
+        let component_instance_idx = self
+            .canon_opts
+            .expect("canon opts should be provided")
+            .instance
+            .as_u32();
 
         uwriteln!(
             self.src,
@@ -1483,7 +1493,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Save the memory for this task,
                 // which will be used for any subtasks that might be spawned
-                if let Some(mem_idx) = self.canon_opts.memory() {
+                if let Some(mem_idx) = self.canon_opts.expect("missing canon opts").memory() {
                     let idx = mem_idx.as_u32();
                     uwriteln!(self.src, "task.setReturnMemoryIdx({idx});");
                     uwriteln!(self.src, "task.setReturnMemory(memory{idx});");
@@ -1601,7 +1611,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
                 let current_task_get_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let component_instance_idx = self.canon_opts.instance.as_u32();
+                let component_instance_idx = self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .instance
+                    .as_u32();
 
                 // At first, use the global current task metadata, in case we are executing from
                 // inside a with-global-current-task wrapper
@@ -1688,6 +1702,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     err_handling = self.err.to_js_string(),
                     callback_fn_js = self
                         .canon_opts
+                        .expect("canon opts should be provided")
                         .callback
                         .as_ref()
                         .map(|v| format!("callback_{}", v.as_u32()))
@@ -1885,6 +1900,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
+                let component_idx = self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .instance
+                    .as_u32();
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
                         format!(
@@ -1896,7 +1916,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         task.exit();
                         {ret_stmt}
                             "#,
-                            component_idx = self.canon_opts.instance.as_u32(),
                             ret_stmt = ret_stmt.unwrap_or_default(),
                         )
                     };
@@ -2702,7 +2721,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     AsyncFutureIntrinsic::NestedFutureSymbol,
                 ));
 
-                let component_idx = self.canon_opts.instance.as_u32();
+                let component_idx = self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .instance
+                    .as_u32();
 
                 let future_arg = operands
                     .first()
@@ -2803,7 +2826,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 //
                 // The realloc fn is saved on the element metadata which is passed through to
                 // stream end and underlying buffer
-                let get_realloc_fn_js = match self.canon_opts.data_model {
+                let get_realloc_fn_js = match self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .data_model
+                {
                     CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
                         realloc: Some(realloc_idx),
                         ..
@@ -2983,7 +3010,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         };
 
                     let future_table_idx = future_table_idx_ty.as_u32();
-                    let component_idx = self.canon_opts.instance.as_u32();
+                    let component_idx = self
+                        .canon_opts
+                        .expect("canon opts should be provided")
+                        .instance
+                        .as_u32();
 
                     uwriteln!(
                         self.src,
@@ -3043,7 +3074,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     unreachable!("invalid resource table observed during stream lower");
                 };
 
-                let component_idx = self.canon_opts.instance.as_u32();
+                let component_idx = self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .instance
+                    .as_u32();
                 let stream_table_idx = stream_table_idx_ty.as_u32();
 
                 let (
@@ -3117,7 +3152,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 //
                 // The realloc fn is saved on the element metadata which is passed through to
                 // stream end and underlying buffer
-                let get_realloc_fn_js = match self.canon_opts.data_model {
+                let get_realloc_fn_js = match self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .data_model
+                {
                     CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
                         realloc: Some(realloc_idx),
                         ..
@@ -3188,7 +3227,11 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::StreamLift { payload, ty } => {
-                let component_idx = self.canon_opts.instance.as_u32();
+                let component_idx = self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .instance
+                    .as_u32();
                 let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamNewFromLift,
                 ));
@@ -3299,7 +3342,11 @@ impl Bindgen for FunctionBindgen<'_> {
             //
             Instruction::AsyncTaskReturn { name, params } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let component_instance_idx = self.canon_opts.instance.as_u32();
+                let component_instance_idx = self
+                    .canon_opts
+                    .expect("canon opts should be provided")
+                    .instance
+                    .as_u32();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
                 let async_driver_loop_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
