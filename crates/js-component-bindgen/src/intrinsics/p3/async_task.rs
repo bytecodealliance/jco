@@ -336,7 +336,7 @@ impl AsyncTaskIntrinsic {
                 uwriteln!(
                     output,
                     r#"
-                      const {var_name} = new WebAssembly.Global({{ value: 'i32', mutable: true }}, 0);
+                      const {var_name} = globalThis.WebAssembly ? new globalThis.WebAssembly.Global({{ value: 'i32', mutable: true }}, 0) : false;
                     "#
                 );
             }
