@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.19.0-rc.6] - 2026-05-16
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ avoid assuming WebAssembly global is present by @vados-cosmonic in #1497
+
+
+
+
 ## [1.19.0-rc.5] - 2026-05-15
 
 ### 🐛 Bug Fixes
