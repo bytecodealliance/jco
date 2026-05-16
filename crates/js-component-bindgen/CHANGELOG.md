@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.19.0-rc.7] - 2026-05-16
+
+### 🚜 Refactor
+
+- _(bindgen)_ remove usage of _FN_LOCALS by @vados-cosmonic in #1500
+
+
+
+
 ## [1.19.0-rc.6] - 2026-05-16
 
 ### 🐛 Bug Fixes
