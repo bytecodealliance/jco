@@ -30,8 +30,8 @@ use wit_parser::{
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
-    ErrHandling, FunctionBindgen, PayloadTypeMetadata, ResourceData, ResourceExtraData,
-    ResourceMap, ResourceTable,
+    ErrHandling, FunctionBindgen, FunctionBindgenComponentState, PayloadTypeMetadata, ResourceData,
+    ResourceExtraData, ResourceMap, ResourceTable,
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
@@ -4003,52 +4003,6 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        // Build an object which contains function locals that will be needed
-        // by function bindgen output.
-        //
-        // This will be used as a global by function binden, as once the function
-        // preambles are written, this variable will be assumed to exist.
-        let component_idx = opts.instance.as_u32();
-        uwriteln!(
-            self.src.js,
-            r#"
-              const _FN_LOCALS = {{}};
-              _FN_LOCALS._componentIdx = {component_idx};
-            "#,
-        );
-
-        // Write realloc and memory metadata as function local
-        if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
-            realloc: Some(realloc_idx),
-            ..
-        }) = opts.data_model
-        {
-            uwriteln!(
-                self.src.js,
-                "_FN_LOCALS._getReallocFn = () => realloc{idx};",
-                idx = realloc_idx.as_u32(),
-            );
-        }
-
-        // Write callback fn getter as function local
-        if let Some(callback_idx) = opts.callback {
-            uwriteln!(
-                self.src.js,
-                r#"
-                  _FN_LOCALS._getCallbackFn = () => callback_{idx};
-                  _FN_LOCALS._callbackFnName = 'callback_{idx}';
-                "#,
-                idx = callback_idx.as_u32(),
-            );
-        }
-
-        // Write memory out for fn as function local
-        if let Some(mem_idx) = opts.memory() {
-            let idx = mem_idx.as_u32();
-            uwriteln!(self.src.js, "_FN_LOCALS._memoryIdx = {idx};");
-            uwriteln!(self.src.js, "_FN_LOCALS._memory = memory{idx};");
-        }
-
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
@@ -4095,6 +4049,19 @@ impl<'a> Instantiator<'a, '_> {
             is_async,
             iface_name,
             asmjs: self.bindgen.opts.asmjs,
+            component_state: Some(FunctionBindgenComponentState {
+                component_idx: opts.instance,
+                realloc_fn_idx: if let CanonicalOptionsDataModel::LinearMemory(
+                    LinearMemoryOptions { realloc, .. },
+                ) = opts.data_model
+                {
+                    realloc
+                } else {
+                    None
+                },
+                memory_idx: opts.memory(),
+                callback_fn_idx: opts.callback,
+            }),
         };
 
         // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of

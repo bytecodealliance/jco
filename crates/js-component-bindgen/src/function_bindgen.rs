@@ -4,8 +4,9 @@ use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
-    InterfaceType, ResourceIndex, TypeComponentLocalErrorContextTableIndex, TypeFutureTableIndex,
-    TypeResourceTableIndex, TypeStreamTableIndex,
+    InterfaceType, ResourceIndex, RuntimeCallbackIndex, RuntimeComponentInstanceIndex,
+    RuntimeMemoryIndex, RuntimeReallocIndex, TypeComponentLocalErrorContextTableIndex,
+    TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
@@ -209,6 +210,86 @@ pub struct FunctionBindgen<'a> {
 
     /// Whether the callee was transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     pub asmjs: bool,
+
+    /// Component state generated from processing a component.
+    ///
+    /// This information is normally accessible via producing/having
+    /// access to a [`wasmtime_environ::component::Component`]), and
+    /// is required for *some* bindgen instructions.
+    ///
+    /// If you are performing bindgen aganist a dummy module, you may omit this field, but if
+    /// processing has been performed on the component, and this state is available at time of generation for
+    /// this function, provide this information (normally found in [`CanonicalOptions`]s)
+    ///
+    pub component_state: Option<FunctionBindgenComponentState>,
+}
+
+/// Metadata that is derived from processing a component.
+///
+/// This information is often required to perform bindgen completely, *but*
+/// requires component processing which not all downstream bindgen consumers may
+/// perform.
+///
+/// For bindgen consumers that perform generation which requires this information,
+/// the information should be provided.
+///
+#[derive(bon::Builder)]
+#[non_exhaustive]
+pub struct FunctionBindgenComponentState {
+    pub(crate) component_idx: RuntimeComponentInstanceIndex,
+    pub(crate) realloc_fn_idx: Option<RuntimeReallocIndex>,
+    pub(crate) memory_idx: Option<RuntimeMemoryIndex>,
+    pub(crate) callback_fn_idx: Option<RuntimeCallbackIndex>,
+}
+
+/// JS expressions that resolve to or return component state
+#[derive(bon::Builder)]
+#[non_exhaustive]
+pub struct ComponentStateJsExprs {
+    /// JS expression that is a number, e.g. "0"
+    pub(crate) component_idx: String,
+    /// JS expression that is the generated name of the callback, e.g. "callback_1"
+    pub(crate) callback_fn_name: String,
+    /// JS function expression that returns the callback function for this function, e.g. "() => callback_1"
+    pub(crate) get_callback_fn: String,
+    /// JS expression that is the index of the top-level declared memory associated with this function, e.g. "1"
+    pub(crate) memory_idx: String,
+    /// JS function expression that returns the top-level declared memory associated with this function, e.g. "() => memory0"
+    pub(crate) get_memory_fn: String,
+    /// JS function expression that returns the realloc fn relevant to this function, e.g. "() => realloc0"
+    pub(crate) get_realloc_fn: String,
+}
+
+impl FunctionBindgenComponentState {
+    /// Get JS expressions that represent the bindgen state
+    ///
+    /// When certain values are missing either `null` or `() => null` JS expressions are returned
+    ///
+    fn get_js_exprs(&self) -> ComponentStateJsExprs {
+        ComponentStateJsExprs {
+            component_idx: self.component_idx.as_u32().to_string(),
+            callback_fn_name: match self.callback_fn_idx {
+                Some(idx) => format!("callback_{}", idx.as_u32()),
+                None => "null".into(),
+            },
+            get_callback_fn: match self.callback_fn_idx {
+                Some(idx) => format!("() => callback_{}", idx.as_u32()),
+                None => "() => null".into(),
+            },
+            memory_idx: match self.memory_idx {
+                Some(idx) => idx.as_u32().to_string(),
+                None => "null".into(),
+            },
+            get_memory_fn: match self.memory_idx {
+                Some(idx) => format!("() => memory{}", idx.as_u32()),
+                None => "() => null".into(),
+            },
+            get_realloc_fn: match self.realloc_fn_idx {
+                Some(idx) => format!("() => realloc{}", idx.as_u32()),
+                None => "() => null".into(),
+            },
+        }
+    }
 }
 
 impl FunctionBindgen<'_> {
@@ -395,16 +476,29 @@ impl FunctionBindgen<'_> {
             AsyncTaskIntrinsic::CreateNewCurrentTask,
         ));
 
+        let (component_idx_expr, get_callback_fn_expr, callback_fn_name) =
+            if let Some(state) = &self.component_state {
+                let ComponentStateJsExprs {
+                    component_idx,
+                    callback_fn_name,
+                    get_callback_fn,
+                    ..
+                } = state.get_js_exprs();
+                (component_idx, get_callback_fn, callback_fn_name)
+            } else {
+                ("1".into(), "() => null".into(), "null".into())
+            };
+
         uwriteln!(
             self.src,
             r#"
               const [task, {prefix}currentTaskID] = {start_current_task_fn}({{
-                  componentIdx: _FN_LOCALS._componentIdx,
+                  componentIdx: {component_idx_expr},
                   isAsync: {is_async},
                   isManualAsync: {is_manual_async},
                   entryFnName: '{fn_name}',
-                  getCallbackFn: _FN_LOCALS._getCallbackFn,
-                  callbackFnName: _FN_LOCALS._callbackFnName,
+                  getCallbackFn: {get_callback_fn_expr},
+                  callbackFnName: {callback_fn_name},
                   errHandling: '{err_handling}',
                   callingWasmExport: {calling_wasm_export},
               }});
@@ -1473,8 +1567,27 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "{scope_id}++;");
                 }
 
-                uwriteln!(self.src, "task.setReturnMemoryIdx(_FN_LOCALS._memoryIdx);");
-                uwriteln!(self.src, "task.setReturnMemory(_FN_LOCALS._memory);");
+                // Set task memory index and memory object
+                let (memory_idx_expr, get_memory_fn_expr) =
+                    if let Some(state) = &self.component_state {
+                        let ComponentStateJsExprs {
+                            memory_idx,
+                            get_memory_fn,
+                            ..
+                        } = state.get_js_exprs();
+                        (memory_idx, get_memory_fn)
+                    } else {
+                        ("null".into(), "() => null".into())
+                    };
+                uwriteln!(
+                    self.src,
+                    r#"
+                      if ({memory_idx_expr} !== null) {{
+                          task.setReturnMemoryIdx({memory_idx_expr});
+                          task.setReturnMemory({get_memory_fn_expr}());
+                      }}
+                    "#
+                );
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 // along with the code to perofrm the call
@@ -1613,6 +1726,20 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(self.src, "let hostProvided = true;");
 
+                // Set task memory index and memory object
+                let (component_idx_expr, callback_fn_name_expr, get_callback_fn_expr) =
+                    if let Some(state) = &self.component_state {
+                        let ComponentStateJsExprs {
+                            component_idx,
+                            callback_fn_name,
+                            get_callback_fn,
+                            ..
+                        } = state.get_js_exprs();
+                        (component_idx, callback_fn_name, get_callback_fn)
+                    } else {
+                        ("-1".into(), "null".into(), "() => null".into())
+                    };
+
                 // Start the necessary subtasks and/or host task
                 //
                 // We must create a subtask in the case of an async host import.
@@ -1639,8 +1766,8 @@ impl Bindgen for FunctionBindgen<'_> {
                             componentIdx: -1,
                             isAsync: {is_async},
                             entryFnName: '{fn_name}',
-                            getCallbackFn: _FN_LOCALS._getCallbackFn,
-                            callbackFnName: _FN_LOCALS._callbackFnName,
+                            getCallbackFn: {get_callback_fn_expr},
+                            callbackFnName: {callback_fn_name_expr},
                             errHandling: '{err_handling}',
                             callingWasmExport: false,
                         }});
@@ -1649,8 +1776,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     taskCreation: {{
                         parentTask = {current_task_get_fn}(
-                            _FN_LOCALS._componentIdx,
-                            {get_global_current_task_meta_fn}(_FN_LOCALS._componentIdx)?.taskID,
+                            {component_idx_expr},
+                            {get_global_current_task_meta_fn}({component_idx_expr})?.taskID,
                         )?.task;
 
                         if (!parentTask) {{
@@ -1860,6 +1987,14 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                 );
 
+                // Get the component idx expr
+                let component_idx_expr = if let Some(state) = &self.component_state {
+                    let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
+                    component_idx
+                } else {
+                    "-1".into()
+                };
+
                 // Build the post return functionality
                 // to clean up tasks and possibly return values
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
@@ -1869,7 +2004,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
                         format!(
                             r#"
-                        let cstate = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
+                        let cstate = {get_or_create_async_state_fn}({component_idx_expr});
                         cstate.mayLeave = false;
                         {post_return_call}
                         cstate.mayLeave = true;
@@ -2779,6 +2914,18 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let lowered_future_waitable_idx = format!("futureWaitableIdx{tmp}");
 
+                let (component_idx_expr, get_realloc_fn_expr) =
+                    if let Some(state) = &self.component_state {
+                        let ComponentStateJsExprs {
+                            component_idx,
+                            get_realloc_fn,
+                            ..
+                        } = state.get_js_exprs();
+                        (component_idx, get_realloc_fn)
+                    } else {
+                        ("-1".into(), "() => null".into())
+                    };
+
                 uwriteln!(
                     self.src,
                     r#"
@@ -2787,9 +2934,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             throw new Error('unrecognized future object (not Promise/Thenable)');
                         }}
 
-                        const cstate{tmp} = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
+                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx_expr});
                         if (!cstate{tmp}) {{
-                            throw new Error(`missing component state for component [${{_FN_LOCALS._componentIdx}}]`);
+                            throw new Error(`missing component state for component [{component_idx_expr}]`);
                         }}
 
                         // TODO(feat): facilitate non utf8 string encoding for lowered futures
@@ -2822,7 +2969,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     align32: {payload_align32_js},
                                     size32: {payload_size32_js},
                                     stringEncoding,
-                                    getReallocFn: _FN_LOCALS._getReallocFn,
+                                    getReallocFn: {get_realloc_fn_expr},
                                 }}
                             }});
 
@@ -2844,7 +2991,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             future{tmp}.readEndWaitableIdx = readEndWaitableIdx;
                             future{tmp}.writeEndWaitableIdx = writeEndWaitableIdx;
                             future{tmp}.futureTableIdx = {future_table_idx};
-                            future{tmp}.componentIdx = _FN_LOCALS._componentIdx;
+                            future{tmp}.componentIdx = {component_idx_expr};
                             future{tmp}.then = async (resolve, reject) => {{
                                 let p;
                                 if (openedCount === {nesting_level}) {{
@@ -2949,11 +3096,19 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     let future_table_idx = future_table_idx_ty.as_u32();
 
+                    // Set task memory index and memory object
+                    let component_idx_expr = if let Some(state) = &self.component_state {
+                        let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
+                        component_idx
+                    } else {
+                        "-1".into()
+                    };
+
                     uwriteln!(
                         self.src,
                         "
                         const {result_var} = {future_new_from_lift_fn}({{
-                            componentIdx: _FN_LOCALS._componentIdx,
+                            componentIdx: {component_idx_expr},
                             futureTableIdx: {future_table_idx},
                             futureEndWaitableIdx: {arg_future_end_idx},
                             payloadLiftFn: {lift_fn_js},
@@ -3076,6 +3231,19 @@ impl Bindgen for FunctionBindgen<'_> {
                     ),
                 };
 
+                // Set task memory index and memory object
+                let (component_idx_expr, get_realloc_fn_expr) =
+                    if let Some(state) = &self.component_state {
+                        let ComponentStateJsExprs {
+                            component_idx,
+                            get_realloc_fn,
+                            ..
+                        } = state.get_js_exprs();
+                        (component_idx, get_realloc_fn)
+                    } else {
+                        ("-1".into(), "() => null".into())
+                    };
+
                 let tmp = self.tmp();
                 let lowered_stream_waitable_idx = format!("streamWaitableIdx{tmp}");
                 uwriteln!(
@@ -3088,8 +3256,8 @@ impl Bindgen for FunctionBindgen<'_> {
                             throw new Error('unrecognized stream object (no supported stream protocol)');
                         }}
 
-                        const cstate{tmp} = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
-                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [${{_FN_LOCALS._componentIdx}}]`); }}
+                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx_expr});
+                        if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx_expr}]`); }}
 
                         const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = cstate{tmp}.createStream({{
                             tableIdx: {stream_table_idx},
@@ -3106,7 +3274,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 size32: {payload_size32_js},
                                 // TODO(feat): facilitate non utf8 string encoding for lowered streams
                                 stringEncoding: 'utf8',
-                                getReallocFn: _FN_LOCALS._getReallocFn,
+                                getReallocFn: {get_realloc_fn_expr},
                             }},
                         }});
 
@@ -3208,11 +3376,19 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     let stream_table_idx = stream_table_idx_ty.as_u32();
 
+                    // Set task memory index and memory object
+                    let component_idx_expr = if let Some(state) = &self.component_state {
+                        let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
+                        component_idx
+                    } else {
+                        "-1".into()
+                    };
+
                     uwriteln!(
                         self.src,
                         "
                         const {result_var} = {stream_new_from_lift_fn}({{
-                            componentIdx: _FN_LOCALS._componentIdx,
+                            componentIdx: {component_idx_expr},
                             streamTableIdx: {stream_table_idx},
                             streamEndWaitableIdx: {arg_stream_end_idx},
                             payloadLiftFn: {lift_fn_js},
@@ -3256,12 +3432,20 @@ impl Bindgen for FunctionBindgen<'_> {
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
 
+                // Set task memory index and memory object
+                let component_idx_expr = if let Some(state) = &self.component_state {
+                    let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
+                    component_idx
+                } else {
+                    "-1".into()
+                };
+
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix}  [Instruction::AsyncTaskReturn]', {{
                          funcName: '{name}',
                          paramCount: {param_count},
-                         componentIdx: _FN_LOCALS._componentIdx,
+                         componentIdx: {component_idx_expr},
                          postReturn: {post_return_present},
                          hostProvided,
                       }});",
@@ -3320,18 +3504,18 @@ impl Bindgen for FunctionBindgen<'_> {
                           return task.completionPromise();
                       }}
 
-                      const componentState = {get_or_create_async_state_fn}(_FN_LOCALS._componentIdx);
+                      const componentState = {get_or_create_async_state_fn}({component_idx_expr});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 
                       queueMicrotask(async (resolve, reject) => {{
                           try {{
                               {debug_log_fn}("[Instruction::AsyncTaskReturn] starting driver loop", {{
                                   fnName: '{name}',
-                                  componentInstanceIdx: _FN_LOCALS._componentIdx,
+                                  componentInstanceIdx: {component_idx_expr},
                                   taskID: task.id(),
                               }});
                               await {async_driver_loop_fn}({{
-                                  componentInstanceIdx: _FN_LOCALS._componentIdx,
+                                  componentInstanceIdx: {component_idx_expr},
                                   componentState,
                                   task,
                                   fnName: '{name}',
