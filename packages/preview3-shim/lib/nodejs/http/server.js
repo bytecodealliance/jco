@@ -7,7 +7,11 @@ import { Request } from "./request.js";
 import { Response } from "./response.js";
 
 import { HttpError } from "./error.js";
-import { _fieldsFromEntriesChecked } from "./fields.js";
+import {
+  _fieldsFromEntriesChecked,
+  _readTrailersForTransport,
+  _trailerResultFromEntries,
+} from "./fields.js";
 
 let WORKER = null;
 function worker() {
@@ -94,11 +98,9 @@ export class HttpServer extends EventEmitter {
 
           const stream = readableByteStreamFromReader(body, { name: "response body" });
 
-          // Send trailers when ready
-          trailers
-            .read()
+          _readTrailersForTransport(trailers)
             .then((val) => tx.postMessage({ val }))
-            .catch((err) => tx.postMessage({ err }))
+            .catch((err) => tx.postMessage({ err: HttpError.from(err).payload }))
             .finally(() => tx.close());
 
           await worker().run(
@@ -144,7 +146,7 @@ const requestFromParts = (parts) => {
     });
   });
 
-  const future = new FutureReader(promise);
+  const future = new FutureReader(promise.then(_trailerResultFromEntries));
   const contents = new StreamReader(body);
   const fields = _fieldsFromEntriesChecked(headers);
 

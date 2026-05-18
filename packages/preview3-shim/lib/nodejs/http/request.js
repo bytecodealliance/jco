@@ -2,7 +2,7 @@ import { HttpError } from "./error.js";
 import { _fieldsLock, Fields } from "./fields.js";
 
 import { FutureReader, future } from "../future.js";
-import { StreamReader } from "../stream.js";
+import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 
 const SUPPORTED_METHODS = [
   "get",
@@ -194,8 +194,8 @@ export class Request {
    * ```
    *
    * @param {Fields} headers  immutable headers resource
-   * @param {?StreamReader} contents  optional body stream
-   * @param {FutureReader} trailers  future for trailers
+   * @param {?StreamReader|object} contents  optional body stream
+   * @param {FutureReader|Promise} trailers  future for trailers
    * @param {?RequestOptions} options  optional RequestOptions
    * @returns {[Request, FutureReader]}
    * @throws {HttpError} with payload.tag 'invalid-argument' for invalid arguments
@@ -210,12 +210,24 @@ export class Request {
       throw new HttpError("invalid-argument", "headers must be Fields");
     }
 
-    if (contents != null && !(contents instanceof StreamReader)) {
-      throw new HttpError("invalid-argument", "contents must be StreamReader");
+    if (!(trailers instanceof FutureReader) && (!trailers || typeof trailers.then !== "function")) {
+      throw new HttpError("invalid-argument", "trailers must be FutureReader or Promise");
     }
 
+    if (contents != null && !(contents instanceof StreamReader)) {
+      try {
+        const inner = readableByteStreamFromReader(contents, { name: "contents" });
+        contents = new StreamReader(inner);
+      } catch (err) {
+        throw new HttpError("invalid-argument", err.message);
+      }
+    }
+
+    // Generated P3 futures are lazy thenables so we want to observe them now so early error paths don't hang.
     if (!(trailers instanceof FutureReader)) {
-      throw new HttpError("invalid-argument", "trailers must be FutureReader");
+      const promise = Promise.resolve(trailers);
+      void promise.catch(() => {});
+      trailers = new FutureReader(promise);
     }
 
     let request = new Request(token());
@@ -396,7 +408,12 @@ export class Request {
    * @returns {[StreamReader, FutureReader]} A tuple of [body stream, trailers future].
    * @throws {HttpError} with payload.tag 'invalid-state' if body already open or consumed.
    */
-  static consumeBody(request, _res) {
+  static consumeBody(request, res) {
+    if (res && typeof res.then === "function") {
+      // TODO: Use res to abort/close the body transport on errors.
+      void Promise.resolve(res).catch(() => {});
+    }
+
     if (request.#bodyOpen) {
       throw new HttpError("invalid-state", "body already called and not yet closed");
     }
@@ -414,8 +431,8 @@ export class Request {
     request.#bodyOpen = true;
 
     const readFn = reader.read.bind(reader);
-    reader.read = () => {
-      const chunk = readFn();
+    reader.read = async (...args) => {
+      const chunk = await readFn(...args);
       if (chunk === null) {
         request.#bodyEnded = true;
         request.#bodyOpen = false;

@@ -6,7 +6,12 @@ const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = http;
 let FORBIDDEN_HEADERS = null;
 export const _forbiddenHeaders = {
   get value() {
-    return (FORBIDDEN_HEADERS ??= new Set(["connection", "keep-alive", "host"]));
+    return (FORBIDDEN_HEADERS ??= new Set([
+      "connection",
+      "keep-alive",
+      "host",
+      "custom-forbidden-header",
+    ]));
   },
 };
 
@@ -288,4 +293,67 @@ export function _fieldsLock(fields) {
 
 export function _fieldsFromEntriesChecked(entries) {
   return Fields._fromEntriesChecked(entries);
+}
+
+export async function _readTrailersForTransport(trailers) {
+  const fields = _unwrapTrailersResult(await trailers.read());
+
+  if (fields == null) {
+    return undefined;
+  }
+
+  if (fields instanceof Fields) {
+    return fields.copyAll();
+  }
+
+  if (Array.isArray(fields)) {
+    return fields;
+  }
+
+  throw new HttpError("invalid-argument", "trailers must be Fields or a list of entries");
+}
+
+export function _trailerResultFromEntries(entries) {
+  return {
+    tag: "ok",
+    val: entries && entries.length ? _fieldsFromEntriesChecked(entries) : null,
+  };
+}
+
+function _unwrapTrailersResult(result) {
+  if (result == null) {
+    return undefined;
+  }
+
+  if (result instanceof Fields || Array.isArray(result)) {
+    return result;
+  }
+
+  if (typeof result === "object") {
+    if (result.tag === "ok") {
+      return _unwrapTrailersResult(result.val);
+    }
+
+    if (result.tag === "some") {
+      return _unwrapTrailersResult(result.val);
+    }
+
+    if (result.tag === "none") {
+      return undefined;
+    }
+
+    if (result.tag === "err") {
+      throw HttpError.from(result.val);
+    }
+
+    if (Object.hasOwn(result, "ok")) {
+      return _unwrapTrailersResult(result.ok);
+    }
+
+    if (Object.hasOwn(result, "err")) {
+      throw HttpError.from(result.err);
+    }
+  }
+
+  return result;
 }

@@ -15,6 +15,36 @@ import { future } from "@bytecodealliance/preview3-shim/future";
 import { stream, readableStreamFromIterator } from "@bytecodealliance/preview3-shim/stream";
 
 const ENCODER = new TextEncoder();
+const DECODER = new TextDecoder();
+
+async function withTimeout(promise, ms) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readResponseText(response) {
+  const { rx } = future();
+  const [body] = Response.consumeBody(response, rx);
+  const reader = readableStreamFromIterator(body[Symbol.asyncIterator]()).getReader();
+  let result = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return result;
+    }
+    result += DECODER.decode(value);
+  }
+}
 
 describe("HttpClient Integration", () => {
   let server;
@@ -33,6 +63,14 @@ describe("HttpClient Integration", () => {
           res.writeHead(200, { "Content-Type": "text/plain" });
           res.end("ok");
         }, 200);
+        return;
+      }
+
+      if (req.url === "/early-response") {
+        res.writeHead(200, { "Content-Type": "text/plain", "X-Test-Header": "early" });
+        res.write("ready");
+        req.on("end", () => res.end(" done"));
+        req.resume();
         return;
       }
 
@@ -153,6 +191,95 @@ describe("HttpClient Integration", () => {
     expect(data.method).toBe("POST");
     expect(data.path).toBe("/submit");
     expect(data.body).toBe(requestData);
+  });
+
+  test("sends a GET request body when provided", async () => {
+    const headers = new Fields();
+    headers.append("content-type", ENCODER.encode("text/plain"));
+    headers.append("content-length", ENCODER.encode("14"));
+
+    const { tx: bodyTx, rx: bodyRx } = stream();
+    const { tx: trailersTx, rx: trailersRx } = future();
+
+    const [req] = Request.new(headers, bodyRx, trailersRx);
+    req.setMethod("GET");
+    req.setAuthority(authority);
+    req.setPathWithQuery("/get-body");
+
+    const responsePromise = client.send(req);
+    await bodyTx.write(Buffer.from("hello from get"));
+    await bodyTx.close();
+    await trailersTx.write(null);
+
+    const response = await responsePromise;
+    expect(response.getStatusCode()).toBe(200);
+
+    const data = JSON.parse(await readResponseText(response));
+    expect(data.method).toBe("GET");
+    expect(data.path).toBe("/get-body");
+    expect(data.body).toBe("hello from get");
+  });
+
+  test("client.send resolves before request body stream closes", async () => {
+    const headers = new Fields();
+    headers.append("content-type", ENCODER.encode("text/plain"));
+
+    const { tx: bodyTx, rx: bodyRx } = stream();
+    const { tx: trailersTx, rx: trailersRx } = future();
+
+    const [req, transmit] = Request.new(headers, bodyRx, trailersRx);
+    req.setMethod("POST");
+    req.setAuthority(authority);
+    req.setPathWithQuery("/early-response");
+
+    let transmitted = false;
+    const transmitResult = transmit.read().then((result) => {
+      transmitted = true;
+      return result;
+    });
+
+    const responsePromise = client.send(req);
+    await bodyTx.write(Buffer.from("partial"));
+
+    let response;
+    try {
+      response = await withTimeout(responsePromise, 1_000);
+      expect(response.getStatusCode()).toBe(200);
+      expect(transmitted).toBe(false);
+    } finally {
+      await bodyTx.close().catch(() => {});
+      await trailersTx.write(null).catch(() => {});
+    }
+
+    await expect(withTimeout(transmitResult, 1_000)).resolves.toEqual({
+      tag: "ok",
+      val: undefined,
+    });
+    expect(await readResponseText(response)).toBe("ready done");
+  });
+
+  test("request transmission future reports trailer errors", async () => {
+    const headers = new Fields();
+    headers.append("content-type", ENCODER.encode("text/plain"));
+
+    const { tx: bodyTx, rx: bodyRx } = stream();
+    const { tx: trailersTx, rx: trailersRx } = future();
+
+    const [req, transmit] = Request.new(headers, bodyRx, trailersRx);
+    req.setMethod("POST");
+    req.setAuthority(authority);
+    req.setPathWithQuery("/error");
+
+    const response = await client.send(req);
+    expect(response.getStatusCode()).toBe(500);
+
+    await bodyTx.close();
+    await trailersTx.write({ tag: "err", val: { tag: "HTTP-protocol-error" } });
+
+    await expect(withTimeout(transmit.read(), 1_000)).resolves.toEqual({
+      tag: "err",
+      val: { tag: "HTTP-protocol-error" },
+    });
   });
 
   test("handles server errors properly", async () => {

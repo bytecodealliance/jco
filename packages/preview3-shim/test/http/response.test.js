@@ -5,7 +5,7 @@ import { describe, test, expect, beforeEach } from "vitest";
 import { Fields, HttpError, Response } from "@bytecodealliance/preview3-shim/http";
 
 import { FutureReader, future } from "@bytecodealliance/preview3-shim/future";
-import { stream } from "@bytecodealliance/preview3-shim/stream";
+import { StreamReader, stream } from "@bytecodealliance/preview3-shim/stream";
 
 const ENCODER = new TextEncoder();
 
@@ -35,6 +35,19 @@ describe("Response", () => {
     expect(res).toBeInstanceOf(Response);
     expect(future).toBeInstanceOf(FutureReader);
     expect(res.getStatusCode()).toBe(200); // Default status code
+  });
+
+  test("new() accepts generated stream-like bodies and promise trailers", async () => {
+    const body = { read: async () => null };
+    const [res, fut] = Response.new(headers, body, Promise.resolve({ tag: "ok", val: null }));
+
+    expect(fut).toBeInstanceOf(FutureReader);
+
+    const { rx: resRx } = future();
+    const [consumedBody, consumedTrailers] = Response.consumeBody(res, resRx);
+    expect(consumedBody).toBeInstanceOf(StreamReader);
+    expect(await consumedBody.read()).toBeNull();
+    expect(await consumedTrailers.read()).toEqual({ tag: "ok", val: null });
   });
 
   test("new() validates arguments", () => {

@@ -1,10 +1,14 @@
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader, future } from "../future.js";
-import { _fieldsFromEntriesChecked } from "./fields.js";
 import { HttpError } from "./error.js";
 import { _schemeToString, Request } from "./request.js";
 import { Response } from "./response.js";
+import {
+  _fieldsFromEntriesChecked,
+  _readTrailersForTransport,
+  _trailerResultFromEntries,
+} from "./fields.js";
 
 let WORKER = null;
 function worker() {
@@ -35,10 +39,18 @@ export const client = {
     const authority = req.getAuthority();
 
     if (!authority) {
-      throw new HttpError("internal-error", "Request.authority must be set for client.send");
+      const err = new HttpError("internal-error", "Request.authority must be set for client.send");
+      req._resolve({ tag: "err", val: err.payload });
+      throw err;
     }
 
-    const path = req.getPathWithQuery() ?? "/";
+    const path = req.getPathWithQuery();
+    if (path == null) {
+      const err = new HttpError("HTTP-request-URI-invalid", "Request.pathWithQuery must be set");
+      req._resolve({ tag: "err", val: err.payload });
+      throw err;
+    }
+
     const url = `${scheme}://${authority}${path}`;
 
     const opts = req.getOptions();
@@ -49,17 +61,35 @@ export const client = {
     const { rx: resRx } = future();
     const [body, trailers] = Request.consumeBody(req, resRx);
     const { port1: tx, port2: rx } = new MessageChannel();
+    const { port1: transmitRx, port2: transmitTx } = new MessageChannel();
 
-    const transfer = [rx];
+    const transfer = [rx, transmitTx];
     const stream = body ? readableByteStreamFromReader(body, { name: "request body" }) : undefined;
     if (stream) {
       transfer.unshift(stream);
     }
 
-    trailers
-      .read()
+    let transmitSettled = false;
+    const settleTransmit = (result) => {
+      if (transmitSettled) {
+        return;
+      }
+      transmitSettled = true;
+      transmitRx.close();
+      req._resolve(result);
+    };
+
+    transmitRx.once("message", ({ val, err }) => {
+      if (err) {
+        settleTransmit({ tag: "err", val: err });
+      } else {
+        settleTransmit({ tag: "ok", val });
+      }
+    });
+
+    _readTrailersForTransport(trailers)
       .then((val) => tx.postMessage({ val }))
-      .catch((err) => tx.postMessage({ err }))
+      .catch((err) => tx.postMessage({ err: HttpError.from(err).payload }))
       .finally(() => tx.close());
 
     try {
@@ -76,14 +106,17 @@ export const client = {
             betweenBytesTimeoutNs,
           },
           trailers: rx,
+          transmit: transmitTx,
           body: stream,
         },
         transfer,
       );
 
       return responseFromParts(parts);
-    } catch (err) {
-      throw HttpError.from(err);
+    } catch (e) {
+      const err = HttpError.from(e);
+      settleTransmit({ tag: "err", val: err.payload });
+      throw err;
     }
   },
 };
@@ -103,7 +136,7 @@ const responseFromParts = (parts) => {
     });
   });
 
-  const future = new FutureReader(promise);
+  const future = new FutureReader(promise.then(_trailerResultFromEntries));
   const contents = new StreamReader(body);
   const fields = _fieldsFromEntriesChecked(headers);
 

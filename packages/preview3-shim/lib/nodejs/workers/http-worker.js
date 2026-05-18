@@ -87,8 +87,8 @@ async function handleNext({ serverId }) {
   const stream = Writable.fromWeb(writable);
 
   pipeline(req, stream)
-    .then(() => tx.postMessage({ value: req.trailersDistinct || {} }))
-    .catch((err) => tx.postMessage({ error: err }))
+    .then(() => tx.postMessage({ val: toEntries(req.trailersDistinct || req.trailers || {}) }))
+    .catch((err) => tx.postMessage({ err }))
     .finally(() => tx.close());
 
   const headers = toEntries(req.headersDistinct);
@@ -121,11 +121,12 @@ async function handleResponse({ serverId, requestId, statusCode, headers, traile
   try {
     res.writeHead(statusCode, toObject(headers));
     if (stream) {
-      await pipeline(Readable.fromWeb(stream), res);
+      await pipeline(Readable.fromWeb(stream), res, { end: false });
       const fields = await recvTrailers(trailers);
       if (fields) {
         res.addTrailers(toObject(fields));
       }
+      res.end();
     } else {
       res.end();
     }
@@ -139,7 +140,18 @@ async function handleResponse({ serverId, requestId, statusCode, headers, traile
   return null;
 }
 
-async function handleRequest({ url, method, headers, trailers, body, timeouts }) {
+async function handleRequest(args) {
+  const transmit = transmitReporter(args.transmit);
+
+  try {
+    return await doHandleRequest(args, transmit);
+  } catch (err) {
+    transmit.err(err);
+    throw HttpError.from(err).payload;
+  }
+}
+
+async function doHandleRequest({ url, method, headers, trailers, body, timeouts }, transmit) {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new HttpError("HTTP-protocol-error");
@@ -168,26 +180,17 @@ async function handleRequest({ url, method, headers, trailers, body, timeouts })
     req.setTimeout(msecs(firstByteTimeoutNs));
   }
 
-  if (body) {
-    try {
-      const stream = Readable.fromWeb(body);
-      await pipeline(stream, req);
-      const fields = await recvTrailers(trailers);
-      if (fields) {
-        req.addTrailers(toObject(fields));
-      }
-    } catch (err) {
-      req.destroy();
-      throw err;
-    }
-  } else {
-    req.end();
-  }
-
-  const res = await new Promise((resolve, reject) => {
+  let resStarted = false;
+  const response = new Promise((resolve, reject) => {
     const onResponse = (response) => {
+      resStarted = true;
       cleanup();
       resolve(response);
+    };
+    const onConnect = (_response, socket) => {
+      cleanup();
+      socket.destroy();
+      reject(new HttpError("HTTP-protocol-error"));
     };
     const onError = (err) => {
       cleanup();
@@ -206,16 +209,33 @@ async function handleRequest({ url, method, headers, trailers, body, timeouts })
 
     const cleanup = () => {
       req.off("response", onResponse);
+      req.off("connect", onConnect);
       req.off("error", onError);
       req.off("timeout", onTimeout);
       req.off("close", onClose);
     };
 
     req.once("response", onResponse);
+    req.once("connect", onConnect);
     req.once("error", onError);
     req.once("timeout", onTimeout);
     req.once("close", onClose);
   });
+
+  const upload = body ? sendRequestBody(req, body, trailers, () => resStarted) : endRequest(req);
+
+  upload.then(
+    () => transmit.ok(),
+    (err) => transmit.err(err),
+  );
+
+  let res;
+  try {
+    res = await response;
+  } catch (err) {
+    req.destroy();
+    throw err;
+  }
 
   if (betweenBytesTimeoutNs) {
     res.once("readable", () =>
@@ -231,7 +251,7 @@ async function handleRequest({ url, method, headers, trailers, body, timeouts })
   const { port1: tx, port2: rx } = new MessageChannel();
 
   pipeline(res, pass)
-    .then(() => tx.postMessage({ val: res.trailers || {} }))
+    .then(() => tx.postMessage({ val: toEntries(res.trailersDistinct || res.trailers || {}) }))
     .catch((err) => tx.postMessage({ err }))
     .finally(() => tx.close());
 
@@ -265,6 +285,70 @@ async function handleHttpServerClose({ serverId }) {
   servers.delete(serverId);
 
   return serverId;
+}
+
+async function sendRequestBody(req, body, trailers, resStarted) {
+  try {
+    req.flushHeaders();
+    await pipeline(Readable.fromWeb(body), req, { end: false });
+    const fields = await recvTrailers(trailers);
+    if (fields) {
+      req.addTrailers(toObject(fields));
+    }
+    await endRequest(req);
+  } catch (err) {
+    if (!resStarted()) {
+      req.destroy(err);
+    }
+    throw err;
+  }
+}
+
+function endRequest(req) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (fn, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      req.off("error", onError);
+      req.off("close", onClose);
+      fn(value);
+    };
+    const onError = (err) => settle(reject, err);
+    const onClose = () => settle(reject, new HttpError("connection-terminated"));
+
+    req.once("error", onError);
+    req.once("close", onClose);
+
+    try {
+      req.end(() => settle(resolve));
+    } catch (err) {
+      settle(reject, err);
+    }
+  });
+}
+
+function transmitReporter(port) {
+  let settled = false;
+  const send = (msg) => {
+    if (settled || !port) {
+      return;
+    }
+    settled = true;
+    port.postMessage(msg);
+    port.close();
+  };
+
+  return {
+    ok() {
+      send({ val: undefined });
+    },
+    err(err) {
+      send({ err: HttpError.from(err).payload });
+    },
+  };
 }
 
 async function recvTrailers(port) {
