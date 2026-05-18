@@ -514,17 +514,19 @@ class Fields {
       } catch {
         throw { tag: "invalid-syntax" };
       }
-      throw { tag: "invalid-syntax" };
     }
     const lowercased = name.toLowerCase();
     if (_forbiddenHeaders.has(lowercased)) {
       throw { tag: "forbidden" };
     }
-    const tableEntries = this.#table.get(lowercased);
+    let tableEntries = this.#table.get(lowercased);
     if (tableEntries) {
       this.#entries = this.#entries.filter((entry) => !tableEntries.includes(entry));
+      tableEntries.splice(0, tableEntries.length);
+    } else {
+      this.#table.set(lowercased, []);
+      tableEntries = this.#table.get(lowercased);
     }
-    tableEntries.splice(0, tableEntries.length);
     for (const value of values) {
       const entry = [name, value];
       this.#entries.push(entry);

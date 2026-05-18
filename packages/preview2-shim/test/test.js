@@ -128,6 +128,108 @@ suite("Node.js Preview2", () => {
     }
   });
 
+  test("Fields.set on a fresh Fields", async () => {
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields } = http.types;
+    const encoder = new TextEncoder();
+
+    // valid set on a new key must succeed (regression for #1503)
+    const fields = Fields.fromList([]);
+    fields.set("content-type", [encoder.encode("text/plain; charset=utf-8")]);
+
+    const entries = fields.entries();
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0][0], "content-type");
+    assert.deepEqual(entries[0][1], encoder.encode("text/plain; charset=utf-8"));
+  });
+
+  test("Fields.set replaces existing values", async () => {
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields } = http.types;
+    const encoder = new TextEncoder();
+
+    const fields = Fields.fromList([["content-type", encoder.encode("text/plain")]]);
+    fields.set("content-type", [encoder.encode("application/json")]);
+
+    const entries = fields.entries();
+    assert.strictEqual(entries.length, 1);
+    assert.deepEqual(entries[0][1], encoder.encode("application/json"));
+  });
+
+  test("Fields.set with an empty values list registers the key with no entries", async () => {
+    // The fix introduces a new else-branch that initializes
+    // `this.#table.set(lowercased, [])` for new keys. Calling set with an
+    // empty values list exercises that branch without pushing any entry,
+    // so this locks in the resulting state.
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields } = http.types;
+
+    const fields = Fields.fromList([]);
+    fields.set("x-foo", []);
+
+    assert.strictEqual(fields.has("x-foo"), true);
+    assert.deepEqual(fields.get("x-foo"), []);
+    assert.strictEqual(fields.entries().length, 0);
+  });
+
+  test("Fields.set throws immutable when fields are locked", async () => {
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields, OutgoingRequest } = http.types;
+    const encoder = new TextEncoder();
+
+    // OutgoingRequest's constructor locks the Fields passed in.
+    const hdrs = Fields.fromList([]);
+    new OutgoingRequest(hdrs);
+
+    throws(
+      () => hdrs.set("content-type", [encoder.encode("text/plain")]),
+      (err) => err?.tag === "immutable",
+    );
+  });
+
+  test("Fields.set throws invalid-syntax for an invalid name", async () => {
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields } = http.types;
+    const encoder = new TextEncoder();
+
+    const fields = Fields.fromList([]);
+    throws(
+      // names with spaces are rejected by node:http's validateHeaderName
+      () => fields.set("bad header", [encoder.encode("ok value")]),
+      (err) => err?.tag === "invalid-syntax",
+    );
+  });
+
+  test("Fields.set throws invalid-syntax for an invalid value", async () => {
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields } = http.types;
+    const encoder = new TextEncoder();
+
+    const fields = Fields.fromList([]);
+    throws(
+      // values containing CR/LF are rejected by node:http's validateHeaderValue
+      () => fields.set("x-foo", [encoder.encode("bad\nvalue")]),
+      (err) => err?.tag === "invalid-syntax",
+    );
+  });
+
+  test("Fields.set throws forbidden for restricted header names", async () => {
+    const { http } = await import("@bytecodealliance/preview2-shim");
+    const { Fields } = http.types;
+    const encoder = new TextEncoder();
+
+    // _forbiddenHeaders is { connection, keep-alive, host } (lowercased),
+    // so the input is matched case-insensitively.
+    for (const name of ["Connection", "Keep-Alive", "Host"]) {
+      const fields = Fields.fromList([]);
+      throws(
+        () => fields.set(name, [encoder.encode("x")]),
+        (err) => err?.tag === "forbidden",
+        `expected forbidden for ${name}`,
+      );
+    }
+  });
+
   test(
     "WASI HTTP",
     testWithGCWrap(async () => {
