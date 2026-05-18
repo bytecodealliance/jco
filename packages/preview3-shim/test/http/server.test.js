@@ -1,4 +1,5 @@
 import { TextEncoder } from "node:util";
+import http from "node:http";
 
 import { describe, test, expect, afterAll, beforeAll } from "vitest";
 
@@ -30,7 +31,9 @@ describe("HttpServer Integration", () => {
         res.setStatusCode(200);
         await bodyTx.write(Buffer.from("hello world"));
         await bodyTx.close();
-        await trailersTx.write(null);
+        const trailers = new Fields();
+        trailers.append("content-md5", ENCODER.encode("test-md5"));
+        await trailersTx.write(trailers);
         return { tag: "ok", val: res };
       },
     };
@@ -52,6 +55,18 @@ describe("HttpServer Integration", () => {
     const text = await res.text();
     expect(text).toBe("hello world");
     expect(res.headers.get("content-type")).toBe("text/plain");
+  });
+
+  test("sends response trailers", async () => {
+    const res = await new Promise((resolve, reject) => {
+      const req = http.get(`http://${host}:${port}/`, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res));
+      });
+      req.on("error", reject);
+    });
+
+    expect(res.trailers).toEqual({ "content-md5": "test-md5" });
   });
 });
 

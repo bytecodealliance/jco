@@ -5,7 +5,7 @@ import { describe, test, expect } from "vitest";
 import { Fields, HttpError, RequestOptions, Request } from "@bytecodealliance/preview3-shim/http";
 
 import { FutureReader, future } from "@bytecodealliance/preview3-shim/future";
-import { stream } from "@bytecodealliance/preview3-shim/stream";
+import { StreamReader, stream } from "@bytecodealliance/preview3-shim/stream";
 
 const ENCODER = new TextEncoder();
 
@@ -29,6 +29,20 @@ describe("Request", () => {
     expect(req.getPathWithQuery()).toBeUndefined();
     expect(req.getScheme()).toBeUndefined();
     expect(req.getAuthority()).toBeUndefined();
+  });
+
+  test("new() accepts generated stream-like bodies and promise trailers", async () => {
+    const body = { read: async () => null };
+    const [req, fut] = Request.new(headers, body, Promise.resolve({ tag: "ok", val: null }));
+
+    expect(fut).toBeInstanceOf(FutureReader);
+
+    const { rx: resRx } = future();
+    const [consumedBody, consumedTrailers] = Request.consumeBody(req, resRx);
+
+    expect(consumedBody).toBeInstanceOf(StreamReader);
+    expect(await consumedBody.read()).toBeNull();
+    expect(await consumedTrailers.read()).toEqual({ tag: "ok", val: null });
   });
 
   test("setMethod accepts standard and custom methods", () => {
