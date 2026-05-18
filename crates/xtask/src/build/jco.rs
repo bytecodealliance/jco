@@ -212,8 +212,22 @@ fn transpile(args: TranspileArgs) -> Result<()> {
     Ok(())
 }
 
+/// Generate TypeScript type declarations for the `@bytecodealliance/jco` package.
+///
+/// This must run after [transpile_components] because `src/api.js` uses types from
+/// `obj/wasm-tools.js`.
+///
+fn generate_jco_type_declarations() -> Result<()> {
+    let sh = Shell::new()?;
+
+    cmd!(sh, "npx -w @bytecodealliance/jco tsc").read()?;
+
+    Ok(())
+}
+
 pub(crate) fn run(release: bool) -> Result<()> {
     let build_type = BuildType::from_str(if release { "release" } else { "debug" })?;
     transpile_components(build_type)?;
+    generate_jco_type_declarations()?;
     Ok(())
 }

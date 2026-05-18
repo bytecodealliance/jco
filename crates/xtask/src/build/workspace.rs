@@ -14,7 +14,5 @@ pub(crate) fn run(release: bool) -> anyhow::Result<()> {
         cmd!(sh, "cargo build --workspace --target wasm32-wasip1").read()?;
     }
 
-    // Build Jco TS code
-    cmd!(sh, "npx -w @bytecodealliance/jco tsc -p tsconfig.json").read()?;
     Ok(())
 }
