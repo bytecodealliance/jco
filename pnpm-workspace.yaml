@@ -1,0 +1,27 @@
+minimumReleaseAge: 10080
+blockExoticSubdeps: true
+# allowBuilds:
+#   puppeteer: true
+
+packages:
+  - packages/jco
+  - packages/jco-transpile
+  - packages/jco-std
+  - packages/preview2-shim
+  - packages/preview3-shim
+  - examples/components/add
+  - examples/components/adder
+  - examples/components/fs-write-file
+  - examples/components/host-logging
+  - examples/components/http-hello-world
+  - examples/components/http-server-fetch-handler
+  - examples/components/http-server-hono
+  - examples/components/http-server-hono-with-bindings
+  - examples/components/node-compat
+  - examples/components/node-fetch
+  - examples/components/string-reverse
+  - examples/components/string-reverse-upper
+  - examples/components/ts-resource-export
+  - examples/components/ts-resource-import
+  - examples/components/typegen-async-export
+  - examples/components/webidl-book-library
