@@ -21,7 +21,6 @@ pnpm run test
 > [!NOTE]
 > We recommend `pnpm` due to it's security-focused and space-saving features.
 
-
 If you find that tests are not taking into account changes you've made to projects like `js-component-bindgen`,
 this is likely because the new crate has not been built (thus Jco cannot use it's output).
 
