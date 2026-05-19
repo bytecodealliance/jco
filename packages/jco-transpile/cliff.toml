@@ -60,6 +60,7 @@ commit_parsers = [
     { message = '^test\(transpile\)', group = '<!-- 6 -->🧪 Testing' },
     { message = '^release', skip = true },
     { message = '^chore\(transpile\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
+    { message = '^sec\(transpile\)', group = '<!-- 8 -->🔒️ Security' },
 ]
 
 # filter out the commits that are not matched by commit parsers
