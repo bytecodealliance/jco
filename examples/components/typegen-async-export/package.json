@@ -11,7 +11,7 @@
     "all": "npm run build && npm run run:wasmtime"
   },
   "dependencies": {
-    "@bytecodealliance/jco": "file:../../home/mrman/code/work/cosmonic/forks/jco/packages/jco"
+    "@bytecodealliance/jco": "workspace:*"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.1",

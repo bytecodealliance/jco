@@ -18,7 +18,7 @@
   "description": "",
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.20.0",
-    "@bytecodealliance/jco": "file:../../../packages/jco",
+    "@bytecodealliance/jco": "workspace:*",
     "@bytecodealliance/preview2-shim": "file:../../../packages/preview2-shim",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.4",
