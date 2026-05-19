@@ -51,7 +51,7 @@
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
-        "lint:fix": "pnpm run lint -- --fix",
+        "lint:fix": "oxlint --fix",
         "build:ts": "tsc -p tsconfig.json",
         "build": "pnpm run build:vendor && pnpm run build:ts",
         "test": "vitest run -c test/vitest.ts",
