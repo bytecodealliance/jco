@@ -14,11 +14,12 @@ All of the above is done with Typescript, built via Rollup.
 To build this example into a demo page that you can visit, run:
 
 ```console
-npm install
-npm run all
+pnpm install
+pnpm run all
 ```
+
 > [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 The `all` script will:
 
@@ -32,11 +33,11 @@ The `all` script will:
 
 ```console
 > ts-resource-import@0.1.0 all
-> npm run build && npm run transpile && npm run build:embedding && npm run run:embedding
+> pnpm run build && pnpm run transpile && pnpm run build:embedding && pnpm run run:embedding
 
 
 > ts-resource-import@0.1.0 build
-> npm run gen:types && npm run build:ts && npm run build:component
+> pnpm run gen:types && pnpm run build:ts && pnpm run build:component
 
 
 > ts-resource-import@0.1.0 gen:types
@@ -124,14 +125,11 @@ Want to go through it step-by-step? Read along from here.
 
 ### Install dependencies
 
-Similar to any other NodeJS project, you can install dependencies with `npm install`:
+Similar to any other NodeJS project, you can install dependencies with `pnpm install`:
 
 ```console
-npm install
+pnpm install
 ```
-
-> [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
 
 ### Install WIT dependencies
 
@@ -159,7 +157,7 @@ wkg wit fetch
 You can build the [Javascript code in `component.js`](./src/component.js) into a WebAssembly component by running:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 <details>
@@ -169,7 +167,7 @@ You should see output like the following:
 
 ```console
 > ts-resource-import@0.1.0 build
-> npm run gen:types && npm run build:ts && npm run build:component
+> pnpm run gen:types && pnpm run build:ts && pnpm run build:component
 
 
 > ts-resource-import@0.1.0 gen:types
@@ -265,7 +263,7 @@ it *on NodeJS*, by converting the WebAssembly component into code that `node` *c
 In practice this means producing a bundle of JS + WebAssembly Modules that can run in NodeJS:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 <details>
@@ -324,7 +322,7 @@ To be able to use our transpiled component, the included [`embedding.mts` script
 can be used:
 
 ```console
-npm run embedding # or 'run:embedding' to skip the build
+pnpm run embedding # or 'run:embedding' to skip the build
 ```
 
 <details>
@@ -334,7 +332,7 @@ You should see output like the following:
 
 ```
 > ts-resource-import@0.1.0 embedding
-> npm run build:embedding && npm run run:embedding
+> pnpm run build:embedding && pnpm run run:embedding
 
 
 > ts-resource-import@0.1.0 build:embedding

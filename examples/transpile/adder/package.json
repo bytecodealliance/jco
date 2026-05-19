@@ -4,7 +4,7 @@
     "type": "module",
     "scripts": {
         "demo": "node demo.js",
-        "all": "npm run demo"
+        "all": "pnpm run demo"
     },
     "dependencies": {
         "@bytecodealliance/jco-transpile": "^0.0.5"

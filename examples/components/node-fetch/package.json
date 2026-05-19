@@ -6,7 +6,7 @@
     "build:component": "jco componentize -w wit -o component.wasm component.js ",
     "transpile": "jco transpile -o dist/transpiled component.wasm",
     "demo": "node demo.js",
-    "all": "npm run build:component && npm run transpile && npm run demo"
+    "all": "pnpm run build:component && pnpm run transpile && pnpm run demo"
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.17.6"

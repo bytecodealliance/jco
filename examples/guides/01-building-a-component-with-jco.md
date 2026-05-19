@@ -71,7 +71,7 @@ OK Successfully written add.wasm.
 ```
 
 > [!NOTE]
-> As the `add` example is a regular [NodeJS][nodejs] project, you can run `npm install && npm run build`
+> As the `add` example is a regular [NodeJS][nodejs] project, you can run `pnpm install && pnpm run build`
 > without having `jco` and `componentize-js` installed globally.
 
 [wit]: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md

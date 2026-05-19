@@ -30,11 +30,12 @@ available HTTP request (`wasi:http/outgoing-handler`).
 To build this example into a demo page that you can visit, run:
 
 ```console
-npm install
-npm run demo
+pnpm install
+pnpm run demo
 ```
+
 > [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 You should see output like the following:
 
@@ -42,10 +43,10 @@ You should see output like the following:
 <summary><h4>Expected output</h4></summary>
 
 ```
-npm run demo
+pnpm run demo
 
 > demo
-> npm run build:component && npm run transpile && npm run demo
+> pnpm run build:component && pnpm run transpile && pnpm run demo
 
 
 > build:component
@@ -94,21 +95,18 @@ Want to go through it step-by-step? Read along from here.
 
 ### Install dependencies
 
-Similar to any other NodeJS project, you can install dependencies with `npm install`:
+Similar to any other NodeJS project, you can install dependencies with `pnpm install`:
 
 ```console
-npm install
+pnpm install
 ```
-
-> [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
 
 ### Build the WebAssembly component
 
 You can turn the [Javascript code in `component.js`](./component.js) into a WebAssembly component by running:
 
 ```console
-npm run build:component
+pnpm run build:component
 ```
 
 <details>
@@ -117,7 +115,7 @@ npm run build:component
 You should see output like the following:
 
 ```console
-npm run build:component
+pnpm run build:component
 
 > build:component
 > jco componentize -w component.wit component.js -o component.wasm
@@ -182,7 +180,7 @@ it *on NodeJS*, by converting the WebAssembly component into code that `node` *c
 In practice this means producing a bundle of JS + WebAssembly Modules that can run in NodeJS:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 <details>
@@ -235,7 +233,7 @@ To be able to use our transpiled component, we'll need to write [a litte `demo.j
 To run the demo:
 
 ```console
-npm run demo
+pnpm run demo
 ```
 
 <details>

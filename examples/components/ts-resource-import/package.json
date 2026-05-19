@@ -6,12 +6,12 @@
     "gen:types": "jco guest-types -o generated/types/guest/import wit/ --world-name imported",
     "build:ts": "rollup -c component.rollup.mjs",
     "build:component": "jco componentize -w wit/ --world-name imported --disable=http dist/component.js -o dist/component.wasm",
-    "build": "npm run gen:types && npm run build:ts && npm run build:component",
+    "build": "pnpm run gen:types && pnpm run build:ts && pnpm run build:component",
     "transpile": "jco transpile dist/component.wasm -o dist/transpiled --instantiation=async",
     "run:embedding": "node dist/transpiled/embedding.js",
     "build:embedding": "rollup -c embedding.rollup.mjs",
-    "embedding": "npm run build:embedding && npm run run:embedding",
-    "all": "npm run build && npm run transpile && npm run build:embedding && npm run run:embedding"
+    "embedding": "pnpm run build:embedding && pnpm run run:embedding",
+    "all": "pnpm run build && pnpm run transpile && pnpm run build:embedding && pnpm run run:embedding"
   },
   "author": "",
   "license": "ISC",

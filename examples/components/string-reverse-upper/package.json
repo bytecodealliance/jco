@@ -4,11 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "jco componentize string-reverse-upper.js --wit wit/ --world-name revup --out string-reverse-upper.incomplete.wasm --disable all",
-    "build:dep": "cd ../string-reverse ; npm run build",
-    "compose": "npm run build:dep && wac plug --plug ../string-reverse/string-reverse.wasm string-reverse-upper.incomplete.wasm -o string-reverse-upper.wasm",
+    "build:dep": "cd ../string-reverse ; pnpm run build",
+    "compose": "pnpm run build:dep && wac plug --plug ../string-reverse/string-reverse.wasm string-reverse-upper.incomplete.wasm -o string-reverse-upper.wasm",
     "transpile": "jco transpile string-reverse-upper.wasm -o dist/transpiled",
     "transpiled-js": "node run-transpiled.js",
-    "all": "npm run build:dep ; npm run build ; npm run compose ; npm run transpile ; npm run transpiled-js"
+    "all": "pnpm run build:dep ; pnpm run build ; pnpm run compose ; pnpm run transpile ; pnpm run transpiled-js"
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.17.6"

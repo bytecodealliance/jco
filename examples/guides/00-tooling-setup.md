@@ -18,11 +18,15 @@ which means installing [`jco`][jco] and related tooling.
 [`jco`][jco] and [`componentize-js`][componentize-js] can be installed with standard NodeJS tooling:
 
 ```console
-npm install -g @bytecodealliance/componentize-js @bytecodealliance/jco
+pnpm install -g @bytecodealliance/componentize-js @bytecodealliance/jco
 ```
 
 > [!NOTE]
-> `jco` and `componentize-js` can be installed in a project-local manner with `npm install -D`
+> We recommend `pnpm` due to it's security-focused and space-saving features.
+
+
+> [!NOTE]
+> `jco` and `componentize-js` can be installed in a project-local manner with `pnpm install -D`
 
 [ComponentizeJS][componentize-js] provides tooling used by `jco` to transpile JS to Wasm, so installing both packages is required.
 

@@ -85,7 +85,7 @@ jco componentize \
 > so we `--disable` all of them.
 >
 > Rather than typing out the `jco componentize` command manually, you can also run
-> the build command with `npm run build`.
+> the build command with `pnpm run build`.
 
 You should see output like the following:
 
@@ -116,7 +116,7 @@ You should see the following output:
 > [!TIP]
 > Yes, transpilation *does* produce [Typescript declaration file][ts-decl-file], so you can also use a Typescript-focused workflows.
 >
-> In the [`string-reverse` example project][examples-string-reverse] you can run this step via `npm run transpile`.
+> In the [`string-reverse` example project][examples-string-reverse] you can run this step via `pnpm run transpile`.
 
 ## Running from Javascript (NodeJS)
 
@@ -134,7 +134,7 @@ console.log(`reverseString('!dlroW olleH') = ${reversed}`);
 ```
 
 > [!NOTE]
-> In the [`string-reverse` example project][examples-string-reverse], you can run `npm run transpiled-js` to execute the code above.
+> In the [`string-reverse` example project][examples-string-reverse], you can run `pnpm run transpiled-js` to execute the code above.
 
 You should see output like the following:
 

@@ -37,11 +37,12 @@ that handles incoming HTTP requests (`wasi:http/incoming-handler`).
 To build this example into a demo page that you can visit, run:
 
 ```console
-npm install
-npm run all
+pnpm install
+pnpm run all
 ```
+
 > [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 The `all` script will:
 
@@ -55,11 +56,11 @@ The `all` script will:
 
 ```console
 > http-server-hono@0.1.0 all
-> npm run build && npm run demo
+> pnpm run build && pnpm run demo
 
 
 > http-server-hono@0.1.0 build
-> npm run gen:types && npm run build:js && npm run build:component
+> pnpm run gen:types && pnpm run build:js && pnpm run build:component
 
 
 > http-server-hono@0.1.0 gen:types
@@ -111,14 +112,11 @@ Want to go through it step-by-step? Read along from here.
 
 ### Install dependencies
 
-Similar to any other NodeJS project, you can install dependencies with `npm install`:
+Similar to any other NodeJS project, you can install dependencies with `pnpm install`:
 
 ```console
-npm install
+pnpm install
 ```
-
-> [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
 
 ### Install WIT dependencies
 
@@ -146,7 +144,7 @@ wkg wit fetch
 You can build the [Javascript code in `component.js`](./src/component.js) into a WebAssembly component by running:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 <details>
@@ -156,7 +154,7 @@ You should see output like the following:
 
 ```console
 > http-server-hono@0.1.0 build
-> npm run gen:types && npm run build:js && npm run build:component
+> pnpm run gen:types && pnpm run build:js && pnpm run build:component
 
 
 > http-server-hono@0.1.0 gen:types
@@ -260,7 +258,7 @@ it *on NodeJS*, by converting the WebAssembly component into code that `node` *c
 In practice this means producing a bundle of JS + WebAssembly Modules that can run in NodeJS:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 <details>
@@ -317,7 +315,7 @@ to serve the component.
 To run the demo:
 
 ```console
-npm run demo
+pnpm run demo
 ```
 
 <details>

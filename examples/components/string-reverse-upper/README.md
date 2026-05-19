@@ -45,11 +45,11 @@ world revup {
 First, install required project-level dependencies:
 
 ```console
-npm install
+pnpm install
 ```
 
 > [!NOTE]
-> As this is a regular NodeJS project, you can use your package manager of choice (e.g. `yarn`, `pnpm`)
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 Along with projet related dependencies, since this is a *compound* component (this component is composed with another),
 we'll need to install the [WebAssembly Composition tool (`wac`)][wac], which we will use later to compose components.
@@ -61,7 +61,7 @@ we'll need to install the [WebAssembly Composition tool (`wac`)][wac], which we 
 Then, build the component with `jco`:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 A WebAssembly binary will be written to `string-reverse-upper.incomplete.wasm`.
@@ -99,7 +99,7 @@ The component we will be composing with our as-of-yet incomplete binary *must* s
 > You may notice that the interface there is identical to [the one defined in the `string-reverse` example](../string-reverse/wit/component.wit)
 
 ```console
-npm run compose
+pnpm run compose
 ```
 
 > [!WARNING]
@@ -130,7 +130,7 @@ world root {
 We can transpile that *composed* component to a JS module with `jco`:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 Transpilation produces files in `dist/transpiled` that enable the WebAssembly component (`string-reverse.wasm`) to run in any compliant JS runtime:
@@ -149,7 +149,7 @@ dist
 With this transpiled code available, we can now run native NodeJS code that will *use* the WebAssembly module:
 
 ```
-npm run transpiled-js
+pnpm run transpiled-js
 ```
 
 > [!NOTE]

@@ -20,11 +20,11 @@ It uses [`jco`][jco] to:
 First, install required dependencies:
 
 ```console
-npm install
+pnpm install
 ```
 
 > [!NOTE]
-> As this is a regular NodeJS project, you can use your package manager of choice (e.g. `yarn`, `pnpm`)
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 At this point, since this project is *just* NodeJS, you could use the module from any NodeJS project or browser project where appropriate.
 
@@ -66,7 +66,7 @@ dist/component.wasm: WebAssembly (wasm) binary version 0x1000d (component)
 We can do all this quickly with the `build` script:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 ## Transpiling the WebAssembly component
@@ -118,7 +118,7 @@ glue code, and typescript necessary to interact with the interfaces that are use
 We can do all of this quickly with the `transpile` script:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 ## Running the transpiled WebAssembly component
@@ -160,7 +160,7 @@ As WebAssembly has a capability-driven security model, all access to the filesyt
 To run the demo all at once:
 
 ```
-npm run transpiled-js
+pnpm run transpiled-js
 ```
 
 # How it works

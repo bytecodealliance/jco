@@ -25,7 +25,7 @@ To run this example, you'll need the following tools
 
 | Tool                       | Description                      | Install instructions                    |
 |----------------------------|----------------------------------|-----------------------------------------|
-| [`jco`][jco]               | Javascript WebAssembly toolcahin | `npm install -g @bytecodealliance/jco`  |
+| [`jco`][jco]               | Javascript WebAssembly toolcahin | `pnpm install -g @bytecodealliance/jco`  |
 | [`webidl2wit`][webidl2wit] | Converts WebIDL to WIT           | `cargo install --locked webidl2wit-cli` |
 
 [jco]: https://github.com/bytecodealliance/jco
@@ -36,15 +36,16 @@ To run this example, you'll need the following tools
 Once dependencies are installed, you can use your favorite NodeJS package manager to run the steps:
 
 ```console
-npm install
-npm run generate:wit
-npm run generate:types
-npm run build
-npm run transpile
+pnpm install
+pnpm run generate:wit
+pnpm run generate:types
+pnpm run build
+pnpm run transpile
 ```
 
 > [!NOTE]
-> To run all these steps at once, you can run `npm run all`
+> We recommend `pnpm` due to it's security-focused and space-saving features.
+
 
 After running the component build, we can run the example code that uses our WebAssembly component,
 and the WebIDL interface & implementation we made:

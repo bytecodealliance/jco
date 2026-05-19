@@ -48,11 +48,11 @@ A component that implements the `component` world exports a single interface cal
 First, install required dependencies:
 
 ```console
-npm install
+pnpm install
 ```
 
 > [!NOTE]
-> As this is a regular NodeJS project, you can use your package manager of choice (e.g. `yarn`, `pnpm`)
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 At this point, since this project is *just* NodeJS, you could use the module from any NodeJS project or browser project where appropriate.
 
@@ -64,7 +64,7 @@ including in other languages, and the browser.
 We can build a WebAssembly binary out of this JS project with `jco`:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 A WebAssembly binary will be written to `component.wasm`.
@@ -76,7 +76,7 @@ While somewhat redundant in this JS-native context, we can use our produced WebA
 The process we want `jco` to perform for us is "transpilation" -- converting a WebAssembly binary into a JS module that can be run on any JS runtime that supports WebAssembly:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 Transpilation produces files in `dist/transpiled` that enable the WebAssembly component (`component.wasm`) to run in any compliant JS runtime.
@@ -84,7 +84,7 @@ Transpilation produces files in `dist/transpiled` that enable the WebAssembly co
 With this transpiled module available, we can now run native JS code *uses* the WebAssembly module:
 
 ```
-npm run transpiled-js
+pnpm run transpiled-js
 ```
 
 See `run-transpiled.js` for the full code listing.
