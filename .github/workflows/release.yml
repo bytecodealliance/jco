@@ -423,9 +423,9 @@ jobs:
             export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
           fi
 
-          npm publish \
+          pnpm publish \
+            --filter '@bytecodealliance/${{ needs.meta.outputs.project }}' \
             --verbose \
-            -w @bytecodealliance/${{ needs.meta.outputs.project }} \
             --access=public \
             --provenance \
             $OPT_DRY_RUN \
