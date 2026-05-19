@@ -45,17 +45,17 @@
         }
     },
     "scripts": {
-        "setup:jco:build": "npm run -w @bytecodealliance/jco build:release",
-        "setup:jco:vendor": "npm run setup:jco:build && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
+        "setup:jco:build": "pnpm run -w @bytecodealliance/jco build:release",
+        "setup:jco:vendor": "pnpm run setup:jco:build && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
         "build:vendor": "node scripts/setup-vendor.mjs",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
-        "lint:fix": "npm run lint -- --fix",
+        "lint:fix": "pnpm run lint -- --fix",
         "build:ts": "tsc -p tsconfig.json",
-        "build": "npm run build:vendor && npm run build:ts",
+        "build": "pnpm run build:vendor && pnpm run build:ts",
         "test": "vitest run -c test/vitest.ts",
-        "prepack": "npm run setup:jco:vendor && npm run build"
+        "prepack": "pnpm run setup:jco:vendor && pnpm run build"
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.17.5",
