@@ -20,7 +20,7 @@ Or install it locally and use `pnpx` to run it:
 
 ```shell
 $ pnpm install @bytecodealliance/jco
-$ pnpx jco --version
+$ pnpm exec jco --version
 1.0.3
 ```
 

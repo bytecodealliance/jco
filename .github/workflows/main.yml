@@ -176,7 +176,7 @@ jobs:
       # properly place the framework (dynamic lib) files, so we perform a manual download
       # of a set version instead.
       #
-      # TODO: revert to simple `npx puppeteer browsers install chrome` once this problem is fixed upstream
+      # TODO: revert to simple `pnpx puppeteer browsers install chrome` once this problem is fixed upstream
       - name: Install puppeteer
         id: puppeteer
         env:
@@ -216,7 +216,7 @@ jobs:
                   echo -e "ERROR: unexpected OS";
                   exit 1;
               fi
-              npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
+              pnpm exec puppeteer browsers install chrome@${PUPPETEER_VERSION}
           fi
 
       - name: Restore jco build
@@ -418,7 +418,7 @@ jobs:
 
       - name: Install puppeteer
         run: |
-          npx puppeteer browsers install chrome
+          pnpm exec puppeteer browsers install chrome
 
       - name: Build jco
         run: pnpm run build
