@@ -35,7 +35,7 @@ For creating components in other languages, see the [Component Model Book](https
 ## Installation
 
 ```shell
-npm install @bytecodealliance/jco
+pnpm install @bytecodealliance/jco
 ```
 
 Jco can be used as either a library import or as a CLI via the `jco` command.

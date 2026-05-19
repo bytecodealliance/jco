@@ -62,12 +62,12 @@
     "scripts": {
         "build": "cargo xtask build debug",
         "build:release": "cargo xtask build release",
-        "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
+        "build:types:preview2-shim": "pnpm run build:types:preview2-shim --include-workspace-root",
         "build:test:components": "cargo xtask build-test-components",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
-        "lint:fix": "npm run lint -- --fix",
+        "lint:fix": "pnpm run lint -- --fix",
         "test": "vitest run -c test/vitest.ts",
         "test:lts": "vitest run -c test/vitest.lts.ts",
         "prepack": "cargo xtask build release"
