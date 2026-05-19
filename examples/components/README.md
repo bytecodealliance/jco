@@ -1,7 +1,7 @@
 ## Example Components
 
 Most (if not all) individual example projects are standard Javascript projects commonplace ecosystem tooling, whether
-for server side ([NodeJS][nodejs] -- `npm`, etc) or the browser.
+for server side ([NodeJS][nodejs], etc) or the browser.
 
 A brief description of the examples contained in this folder:
 

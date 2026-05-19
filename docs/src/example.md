@@ -11,16 +11,16 @@ To demonstrate a full end-to-end component, we can create a JavaScript component
 Either install Jco globally:
 
 ```shell
-$ npm install -g @bytecodealliance/jco
+$ pnpm install -g @bytecodealliance/jco
 $ jco --version
 1.0.3
 ```
 
-Or install it locally and use `npx` to run it:
+Or install it locally and use `pnpx` to run it:
 
 ```shell
-$ npm install @bytecodealliance/jco
-$ npx jco --version
+$ pnpm install @bytecodealliance/jco
+$ pnpx jco --version
 1.0.3
 ```
 
@@ -32,13 +32,13 @@ replacing all `jco` shell calls in the following example with either `./node_mod
 To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:
 
 ```shell
-$ npm install -g @bytecodealliance/componentize-js
+$ pnpm install -g @bytecodealliance/componentize-js
 ```
 
 Or locally:
 
 ```shell
-$ npm install @bytecodealliance/componentize-js
+$ pnpm install @bytecodealliance/componentize-js
 ```
 
 Now the `jco componentize` command will be ready to use.

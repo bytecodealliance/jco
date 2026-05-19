@@ -59,18 +59,20 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 
 Jco can be used as either a library import or as a CLI via the `jco` command.
 
-To install it, use `npm` (or your favorite `npm` equivalent):
+To install it, use [`pnpm`][pnpm]:
 
 ```console
-npm install @bytecodealliance/jco
+pnpm install @bytecodealliance/jco
 ```
 
 > [!NOTE]
 > If you're using jco to build components, you should also install `componentize-js`, which is dynamically imported:
 >
 > ```console
-> npm install @bytecodealliance/componentize-js
+> pnpm install @bytecodealliance/componentize-js
 > ```
+
+[pnpm]: https://pnpm.io/
 
 ### Building an example component
 
@@ -95,15 +97,15 @@ If installing on Node 18.x with a version of `@bytecodealliance/componentize-js`
 For example, on linux this would mean the following:
 
 ```console
-npm install oxc-parser --ignore-engines
-npm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
+pnpm install oxc-parser --ignore-engines
+pnpm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
 ```
 
 It may be necessary to replace `@oxc-parser/binding-linux-x64-gnu` with whatever platform is appropriate.
 
 > [!NOTE]
-> Similar installation issues may occur if using an `npm` version older than 11.3.0, 
-> due to [`npm` bugs related to optional dependencies][npm-opt-deps-issues]
+> If you are using pnpm *instaed* of pnpm, similar installation issues may occur when 
+> using an `npm` version older than 11.3.0, due to [`npm` bugs related to optional dependencies][npm-opt-deps-issues]
 
 [npm-opt-deps-issues]: https://github.com/npm/cli/issues/4828
 
