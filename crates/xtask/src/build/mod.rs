@@ -20,14 +20,6 @@ pub(crate) static WORKSPACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 ///
 pub(crate) fn generate_jco_type_declarations() -> Result<()> {
     let sh = Shell::new()?;
-    sh.change_dir(WORKSPACE_DIR.join("packages/jco"));
-    let output = cmd!(sh, "pnpm exec tsc").ignore_status().output()?;
-    if let Ok(stdout) = String::from_utf8(output.stdout) {
-        eprintln!("STDOUT:\n{stdout}\n");
-    }
-    if let Ok(stderr) = String::from_utf8(output.stderr) {
-        eprintln!("STDERR:\n{stderr}\n");
-    }
-    assert!(output.status.success());
+    cmd!(sh, "pnpm run --filter '@bytecodealliance/jco' build:ts").read()?;
     Ok(())
 }
