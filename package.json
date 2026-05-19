@@ -7,11 +7,11 @@
     "build:types:preview2-shim": "cargo xtask generate wasi-types preview2",
     "build:types:preview3-shim": "cargo xtask generate wasi-types preview3",
     "build:test:components": "pnpm run build:test:components --ws --if-present",
-    "fmt": "pnpm run fmt --ws --if-present",
-    "fmt:check": "pnpm run fmt:check --ws --if-present",
-    "lint": "pnpm run lint --ws --if-present",
-    "lint:fix": "pnpm run lint:fix --ws --if-present",
-    "test:examples": "pnpm run all --ws --if-present"
+    "fmt": "pnpm run -r fmt",
+    "fmt:check": "pnpm run -r fmt:check",
+    "lint": "pnpm run -r lint",
+    "lint:fix": "pnpm run -r lint:fix",
+    "test:examples": "pnpm run -r all"
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
