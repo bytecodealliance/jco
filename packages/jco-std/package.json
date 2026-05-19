@@ -74,7 +74,7 @@
     }
   },
   "scripts": {
-    "setup:jco-transpile:build": "pnpm run build -w @bytecodealliance/jco-transpile",
+    "setup:jco-transpile:build": "pnpm run --filter '@bytecodealliance/jco-transpile' build",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
