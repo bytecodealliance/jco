@@ -286,7 +286,7 @@ impl FunctionBindgenComponentState {
             },
             get_realloc_fn: match self.realloc_fn_idx {
                 Some(idx) => format!("() => realloc{}", idx.as_u32()),
-                None => "() => null".into(),
+                None => "undefined".into(),
             },
         }
     }
@@ -2923,7 +2923,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         } = state.get_js_exprs();
                         (component_idx, get_realloc_fn)
                     } else {
-                        ("-1".into(), "() => null".into())
+                        ("-1".into(), "undefined".into())
                     };
 
                 uwriteln!(
@@ -3241,7 +3241,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         } = state.get_js_exprs();
                         (component_idx, get_realloc_fn)
                     } else {
-                        ("-1".into(), "() => null".into())
+                        ("-1".into(), "undefined".into())
                     };
 
                 let tmp = self.tmp();
