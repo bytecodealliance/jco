@@ -74,18 +74,18 @@
     }
   },
   "scripts": {
-    "setup:jco-transpile:build": "npm run build -w @bytecodealliance/jco-transpile",
+    "setup:jco-transpile:build": "pnpm run build -w @bytecodealliance/jco-transpile",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
-    "lint:fix": "npm run lint -- --fix",
+    "lint:fix": "pnpm run lint -- --fix",
     "build:bindings:wasi:http:0.2.6": "WIT_PATH=wit/http-v0m2p6 OUTPUT_DIR_PATH=src/wasi/0.2.6/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings:wasi:http:0.2.3": "WIT_PATH=wit/http-v0m2p3 OUTPUT_DIR_PATH=src/wasi/0.2.3/generated/types node scripts/generate-wasi-bindings.mjs",
-    "build:bindings": "npm run build:bindings:wasi:http:0.2.3 && npm run build:bindings:wasi:http:0.2.6",
+    "build:bindings": "pnpm run build:bindings:wasi:http:0.2.3 && pnpm run build:bindings:wasi:http:0.2.6",
     "build:ts": "tsc",
-    "build": "npm run setup:jco-transpile:build && npm run build:bindings && npm run build:ts",
+    "build": "pnpm run setup:jco-transpile:build && pnpm run build:bindings && pnpm run build:ts",
     "test": "vitest run -c test/vitest.ts",
-    "prepack": "npm run build"
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.20.0",

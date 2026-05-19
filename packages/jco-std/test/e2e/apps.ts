@@ -87,7 +87,7 @@ export async function getTmpDir() {
  *
  * ```
  * export NODE_DEBUG=test-e2e
- * npm run build && npm run test
+ * pnpm run build && pnpm run test
  * ```
  */
 const log = debuglog("test-e2e");
