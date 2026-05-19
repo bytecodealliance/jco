@@ -18,7 +18,7 @@
 # Package management
 node_modules
 **/*/package-lock.json
-pnpm-lock.yaml
+pacakge-lock.yaml
 
 # Test output
 crates/jco/tests/rundir
