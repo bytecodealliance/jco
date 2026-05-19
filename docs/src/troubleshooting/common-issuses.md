@@ -7,7 +7,7 @@
 During a `jco serve` or attempting to run the result of a `jco transpile`, you may see an error like the following:
 
 ```
-$ npx jco serve dist/component.wasm --jco-dir /tmp/jco-serve-output
+$ pnpm exec jco serve dist/component.wasm --jco-dir /tmp/jco-serve-output
 node:internal/modules/esm/load:183
     throw new ERR_UNSUPPORTED_ESM_URL_SCHEME(parsed, schemes);
           ^

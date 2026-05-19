@@ -134,7 +134,7 @@ It's as-if we never imported any functionality at all -- the functionality prese
 We can run this completed component with in any WebAssembly-capable native Javascript environment by using a the transpiled result:
 
 ```console
-npx jco transpile string-reverse-upper.wasm -o dist/transpiled
+pnpm exec jco transpile string-reverse-upper.wasm -o dist/transpiled
 ```
 
 > [!NOTE]
