@@ -19,6 +19,7 @@ const config = {
                 'revert',
                 'style',
                 'test',
+                'sec', // security
             ],
         ],
         'scope-enum': [
