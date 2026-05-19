@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.19.1] - 2026-05-19
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ fix realloc fn lowering by @andreiltd in #1509
+
+
+
+
 ## [1.19.0] - 2026-05-16
 
 ### 🚀 Features
