@@ -44,11 +44,12 @@ See [`run-transpiled.js`](./run-transpiled.js) for more information.
 To build this example into a demo page that you can visit, run:
 
 ```console
-npm install
-npm run all
+pnpm install
+pnpm run all
 ```
+
 > [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 The `all` script will:
 
@@ -63,11 +64,11 @@ The `all` script will:
 ```console
 
 > node-compat@0.0.1 all
-> npm run build; npm run transpile; npm run run-transpiled
+> pnpm run build; pnpm run transpile; pnpm run run-transpiled
 
 
 > node-compat@0.0.1 build
-> npm run build:js && npm run build:component
+> pnpm run build:js && pnpm run build:component
 
 
 > node-compat@0.0.1 build:js
@@ -233,7 +234,7 @@ it *on NodeJS*, by converting the WebAssembly component into code that `node` *c
 In practice this means producing a bundle of JS + WebAssembly Modules that can run in NodeJS:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 <details>
@@ -289,7 +290,7 @@ to serve the component.
 To run the demo:
 
 ```console
-npm run run-transpiled
+pnpm run run-transpiled
 ```
 
 <details>

@@ -31,12 +31,13 @@ incoming HTTP requests (`wasi:http/incoming-handler`).
 To build this example into a demo page that you can visit, run:
 
 ```console
-npm install
-npm run all
-npm run demo
+pnpm install
+pnpm run all
+pnpm run demo
 ```
+
 > [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 The targets above (all, demo) will build the component, transpile it, then start a webserver that serves [`demo.html`](./demo.html) in this folder:
 
@@ -45,11 +46,11 @@ The targets above (all, demo) will build the component, transpile it, then start
 
 ```console
 > all
-> npm run build && npm run demo
+> pnpm run build && pnpm run demo
 
 
 > build
-> npm run build:component
+> pnpm run build:component
 
 
 > build:component
@@ -72,14 +73,11 @@ Want to go through it step-by-step? Read along from here.
 
 ### Install dependencies
 
-Similar to any other NodeJS project, you can install dependencies with `npm install`:
+Similar to any other NodeJS project, you can install dependencies with `pnpm install`:
 
 ```console
-npm install
+pnpm install
 ```
-
-> [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
 
 ### Install WIT dependencies
 
@@ -103,7 +101,7 @@ wkg wit fetch
 You can build the [Javascript code in `component.js`](./component.js) into a WebAssembly component by running:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 <details>
@@ -113,7 +111,7 @@ You should see output like the following:
 
 ```console
 > build
-> npm run build:component
+> pnpm run build:component
 
 
 > build:component
@@ -180,7 +178,7 @@ it *on NodeJS*, by converting the WebAssembly component into code that `node` *c
 In practice this means producing a bundle of JS + WebAssembly Modules that can run in NodeJS:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 <details>
@@ -235,7 +233,7 @@ to serve the component.
 To run the demo:
 
 ```console
-npm run demo
+pnpm run demo
 ```
 
 <details>

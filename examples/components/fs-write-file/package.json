@@ -6,7 +6,7 @@
         "build": "jco componentize component.js --wit wit --world-name component --out component.wasm",
         "transpile": "jco transpile component.wasm --instantiation=async -o dist/transpiled",
         "transpiled-js": "node run-transpiled.js",
-        "all": "npm run build; npm run transpile; npm run transpiled-js"
+        "all": "pnpm run build; pnpm run transpile; pnpm run transpiled-js"
     },
     "devDependencies": {
         "@bytecodealliance/jco": "^1.17.6"

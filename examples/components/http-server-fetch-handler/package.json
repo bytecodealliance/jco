@@ -4,11 +4,11 @@
   "type": "module",
   "scripts": {
     "build:component": "jco componentize -w wit component.js -o component.wasm",
-    "build": "npm run build:component",
+    "build": "pnpm run build:component",
     "transpile": "jco transpile -o dist/transpiled component.wasm",
     "serve": "http-server .",
     "demo": "node demo.js",
-    "all": "npm run build && npm run demo"
+    "all": "pnpm run build && pnpm run demo"
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.17.6"

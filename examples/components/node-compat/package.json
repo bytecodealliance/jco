@@ -7,10 +7,10 @@
   "scripts": {
     "build:js": "rolldown -c rolldown.config.mjs",
     "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
-    "build": "npm run build:js && npm run build:component",
+    "build": "pnpm run build:js && pnpm run build:component",
     "transpile": "jco transpile dist/component.wasm -o dist/transpiled",
     "run-transpiled": "node run-transpiled.js ",
-    "all": "npm run build; npm run transpile; npm run run-transpiled"
+    "all": "pnpm run build; pnpm run transpile; pnpm run run-transpiled"
   },
   "keywords": [],
   "dependencies": {

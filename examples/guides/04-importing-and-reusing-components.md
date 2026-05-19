@@ -115,7 +115,7 @@ wac plug \
 ```
 
 > [!NOTE]
-> You can also run this step with `npm run compose`.
+> You can also run this step with `pnpm run compose`.
 
 A new component `string-reverse-upper.wasm` should now be present, which is a "complete" component -- we can check the output of `jco wit` to ensure that all the imports are satisfied:
 
@@ -138,7 +138,7 @@ npx jco transpile string-reverse-upper.wasm -o dist/transpiled
 ```
 
 > [!NOTE]
-> In the example project, you can run `npm run transpile` instead.
+> In the example project, you can run `pnpm run transpile` instead.
 
 You should see output like the following:
 
@@ -167,7 +167,7 @@ console.log(`reverseAndUppercase('!dlroW olleH') = ${result}`);
 ```
 
 > [!NOTE]
-> In the [`string-reverse-upper` example project][examples-string-reverse-upper], you can run `npm run transpiled-js`
+> In the [`string-reverse-upper` example project][examples-string-reverse-upper], you can run `pnpm run transpiled-js`
 
 You should see output like the following:
 

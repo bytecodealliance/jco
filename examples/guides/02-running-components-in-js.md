@@ -36,7 +36,7 @@ You should see output similar to the following:
 > [!NOTE]
 > To follow along, see the [`add` example component][examples-add]
 >
-> With the project pulled locally, you also run `npm run transpile` which
+> With the project pulled locally, you also run `pnpm run transpile` which
 > outputs to the slightly more standard `dist/transpiled` rather than `out-dir` above.
 
 ## Using the component from Javscript (NodeJS)

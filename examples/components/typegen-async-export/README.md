@@ -7,11 +7,12 @@ This project showcases type generation for an `async` export from a component bu
 To build this example into a demo page that you can visit, run:
 
 ```console
-npm install
-npm run all
+pnpm install
+pnpm run all
 ```
+
 > [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 The `all` script will:
 
@@ -23,11 +24,11 @@ The `all` script will:
 
 ```console
 > typegen-async-export@0.1.0 all
-> npm run build && npm run run:wasmtime
+> pnpm run build && pnpm run run:wasmtime
 
 
 > typegen-async-export@0.1.0 build
-> npm run gen:types && npm run build:ts && npm run build:component
+> pnpm run gen:types && pnpm run build:ts && pnpm run build:component
 
 
 > typegen-async-export@0.1.0 gen:types
@@ -67,21 +68,18 @@ Want to go through it step-by-step? Read along from here.
 
 ### Install dependencies
 
-Similar to any other NodeJS project, you can install dependencies with `npm install`:
+Similar to any other NodeJS project, you can install dependencies with `pnpm install`:
 
 ```console
-npm install
+pnpm install
 ```
-
-> [!NOTE]
-> Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
 
 ### Generate types for WIT interface
 
 Generating the types that reflect the exported WIT interfaces is simple:
 
 ```console
-npm run gen:types
+pnpm run gen:types
 ```
 
 <details>
@@ -108,7 +106,7 @@ You should see output like the following:
 You can build the [Javascript code in `src/component.js`](./src/component.js) into a WebAssembly component by running:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 <details>
@@ -118,7 +116,7 @@ You should see output like the following:
 
 ```console
 > typegen-async-export@0.1.0 build
-> npm run gen:types && npm run build:ts && npm run build:component
+> pnpm run gen:types && pnpm run build:ts && pnpm run build:component
 
 
 > typegen-async-export@0.1.0 gen:types
