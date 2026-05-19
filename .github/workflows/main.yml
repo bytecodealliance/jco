@@ -27,6 +27,10 @@ jobs:
         with:
           node-version: "latest"
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - name: Install Rust
         run: rustup update stable --no-self-update
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -41,10 +45,6 @@ jobs:
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-        with:
-          version: 11
-
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -56,10 +56,10 @@ jobs:
         run: pnpm install
 
       - name: Build jco
-        run: pnpm run build
+        run: pnpm run --filter @bytecodealliance/jco build
 
       - name: Build rust test components
-        run: pnpm run build:test:components
+        run: pnpm run --filter @bytecodealliance/jco build:test:components
 
       - name: Upload jco build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -400,6 +400,10 @@ jobs:
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -436,6 +440,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -453,6 +461,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
 
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -506,6 +518,10 @@ jobs:
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -524,12 +540,12 @@ jobs:
 
       - name: Build jco-transpile, jco-std
         run: |
-          pnpm run build -w packages/jco-transpile
-          pnpm --workspace packages/${{ matrix.workspace }} run build
+          pnpm --filter "packages/jco-transpile" run build
+          pnpm --filter "packages/${{ matrix.workspace }}" run build
 
-      - name: Test jco-std workspace
+      - name: run test on workspace
         run: |
-          pnpm run test --workspace packages/${{ matrix.workspace }}
+          pnpm --filter "packages/${{ matrix.workspace }}" run test
 
   examples:
     needs:
@@ -583,6 +599,10 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: ${{ matrix.node.version }}
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
 
       - name: Restore jco build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
