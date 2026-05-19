@@ -49,18 +49,18 @@ which takes in two signed integers and produces a signed integer as a result.
 First, install required dependencies:
 
 ```console
-npm install
+pnpm install
 ```
 
 > [!NOTE]
-> As this is a regular NodeJS project, you can use your package manager of choice (e.g. `yarn`, `pnpm`)
+> We recommend `pnpm` due to it's security-focused and space-saving features.
 
 ## Building the WebAssembly binary
 
 We can build a WebAssembly binary out of the `adder.js` JS module with `jco`:
 
 ```console
-npm run build
+pnpm run build
 ```
 
 A WebAssembly binary will be written to `adder.wasm`.
@@ -74,7 +74,7 @@ The process we want `jco` to perform for us is "transpilation" -- converting a W
 into a JS module that can be run on any JS runtime that supports WebAssembly:
 
 ```console
-npm run transpile
+pnpm run transpile
 ```
 
 Transpilation produces files in `dist/transpiled` that enable the WebAssembly component (`adder.wasm`) to run in any compliant JS runtime:
@@ -90,7 +90,7 @@ dist
 With this transpiled module available, we can now run native JS code *uses* the WebAssembly module:
 
 ```
-npm run transpiled-js
+pnpm run transpiled-js
 ```
 
 See `run-transpiled.js` for the full code listing.

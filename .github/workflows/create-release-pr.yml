@@ -61,16 +61,19 @@ jobs:
         with:
           tool: cargo-edit
 
-      - name: Cache npm install
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Cache node modules
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
             node_modules
-      - name: Install debug NPM packages
+
+      - name: Install debug packages
         run: |
-          npm install -D
+          pnpm install -D
 
       - name: Gather project metadata
         id: project-meta
@@ -154,7 +157,7 @@ jobs:
           if [ "true" == "${{ steps.project-meta.outputs.is-rust-project }}" ]; then
             cargo set-version -p ${{ steps.project-meta.outputs.project }} ${{ steps.project-meta.outputs.next-version }};
           elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
-            npm pkg set version=${{ steps.project-meta.outputs.next-version }};
+            pnpm pkg set version=${{ steps.project-meta.outputs.next-version }};
           fi
 
           if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
@@ -193,7 +196,7 @@ jobs:
 
       # Run fmt before pull request creation
       - name: format codebase
-        run: npm run fmt
+        run: pnpm run fmt
 
       # Create release PR
       - name: Create release prep PR

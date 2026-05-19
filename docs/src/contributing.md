@@ -1,19 +1,24 @@
 # Contributing to the Codebase
 
-Development is based on a standard NodeJS workflow, i.e.:
+Development is based on a standard NodeJS workflow, with [`pnpm`][pnpm] as the package manager, i.e.:
 
 ```console
-npm install
-npm run build
-npm run test
+pnpm install
+pnpm run build
+pnpm run test
 ```
+
+[pnpm]: https://pnpm.io
 
 ## Prerequisites
 
 Required prerequisites for building jco include:
 
 * [Latest stable Rust](https://www.rust-lang.org/tools/install) with the `wasm32-wasi` target
-* Node.js 18+ & npm (https://nodejs.org/en)
+* [Node.js][node] 18+
+* [`pnpm`][pnpm]
+
+[node]: https://nodejs.org/en
 
 ### Rust Toolchain
 
@@ -35,33 +40,35 @@ jco is effectively a monorepo consisting of the following projects:
 * `crates/js-component-bindgen`: Rust crate for creating JS component bindgen, published under https://crates.io/crates/js-component-bindgen.
 * `crates/js-component-bindgen-component`: Component wrapper crate for the component bindgen. This allows bindgen to be self-hosted in JS.
 * `crates/wasm-tools-component`: Component wrapper crate for wasm-tools, allowing jco to invoke various Wasm toolchain functionality and also make it available through the jco API.
-* `src/api.js`: The jco API which can be used as a library dependency on npm. Published as https://npmjs.org/package/@bytecodealliance/jco.
-* `src/jco.js`: The jco CLI. Published as https://npmjs.org/package/@bytecodealliance/jco.
-* `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.
+* `src/api.js`: The jco API which can be used as a library dependency. Published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
+* `src/jco.js`: The jco CLI. Published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
+* `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as [`@bytecodealliance/preview2-shim`](https://www.npmjs.com/package/@bytecodealliance/preview2-shim).
 * `packages/preview3-shim`: The WASI Preview3 host implementations for Node.js
 
 ### Files that should be checked in
 
-The repository is for project related code only -- avoid checking in files related to specific platforms or IDEs. One off configuration and/or secrets should of course not be checked in either.
+The repository is for project related code only -- avoid checking in files related to specific platforms or IDEs.
+One off configuration and/or secrets should of course not be checked in either.
 
-If there is information/configuration that is important for users or developers to see, include them in documentation and/or examples with appropriate context/explanation.
+If there is information/configuration that is important for users or developers to see, include them in documentation
+and/or examples with appropriate context/explanation.
 
 ## Building
 
 To build jco, run:
 
 ```
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Testing
 
 There are three test suites in jco:
 
-* `npm run test`: Project-level transpilation, CLI & API tests.
-* `npm run test --workspace packages/preview2-shim`: `preview2-shim` unit tests.
-* `npm run test --workspace packages/preview3-shim`: `preview3-shim` unit tests.
+* `pnpm run test`: Project-level transpilation, CLI & API tests.
+* `pnpm run test --workspace packages/preview2-shim`: `preview2-shim` unit tests.
+* `pnpm run test --workspace packages/preview3-shim`: `preview3-shim` unit tests.
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
 
@@ -71,30 +78,27 @@ There are three test suites in jco:
 >
 > ```
 > cd packages/jco
-> npm run build && npm run test api.js
+> pnpm run build
+> pnpm run test api.js
 > ```
 >
 > The command above runs a single test file -- the name of the file is relative to `packages/jco/test`.
 
-### Running tests without bundling
-
-Tests can be run without bundling via `npm run build:dev && npm run test:dev`.
-
 ### Running specific tests
 
 JS tests are powered by [`vitest`][vitest], and a specific test suite can be run by passing
-the filename to `npm run test`:
+the filename to `pnpm run test`:
 
 ```console
 cd packages/jco
-npm run test runtime.js
+pnpm run test runtime.js
 ```
 
 For example, to run multiple tests in a given folder:
 
 ```console
 cd packages/jco
-npm run test test/p3/*.js
+pnpm run test test/p3/*.js
 ```
 
 [vitest]: https://vitest.dev
@@ -123,6 +127,7 @@ The following types are valid:
 - `revert`
 - `style`
 - `test`
+- `sec` (security)
 
 The following project scopes are valid:
 - `jco`
@@ -130,6 +135,7 @@ The following project scopes are valid:
 - `p3-shim`
 - `bindgen`
 - `transpile`
+- `std`
 
 For changes made to projects in the repository to be included in releases, the appropriate project scope must be applied.
 
