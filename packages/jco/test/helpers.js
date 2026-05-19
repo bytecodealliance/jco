@@ -12,7 +12,7 @@ import { parse } from "smol-toml";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
-import { NODE_MODULES_TSC_BIN_PATH, JCO_JS_PATH } from "./common.js";
+import { JCO_JS_PATH } from "./common.js";
 
 export const isWindows = platform === "win32";
 
@@ -581,7 +581,7 @@ export function tsCodegenPromise() {
         return TS_CODEGEN_PROMISE;
     }
     return (TS_CODEGEN_PROMISE = (async () => {
-        var { stderr } = await exec(NODE_MODULES_TSC_BIN_PATH, "-p", "test/tsconfig.json");
+        var { stderr } = await exec("pnpm", "exec", "tsc", "-p", "test/tsconfig.json");
         if (stderr !== "") {
             throw new Error(`ERROR: stderr for tsc generation was non-empty\n${stderr}`);
         }
@@ -611,7 +611,7 @@ export function tsGenerationPromise() {
     }
     return (TS_GEN_PROMISE = (async () => {
         const tsConfigPath = fileURLToPath(new URL("./tsconfig.json", import.meta.url));
-        var { stderr } = await exec(NODE_MODULES_TSC_BIN_PATH, "-p", tsConfigPath);
+        var { stderr } = await exec("pnpm", "exec", "tsc", "-p", tsConfigPath);
         if (stderr !== "") {
             throw new Error(`stderr unexpectedly contains content: ${stderr}`);
         }

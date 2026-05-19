@@ -11,11 +11,6 @@ export const LINTER_PATH = fileURLToPath(new URL("../../../node_modules/oxlint/b
 
 export const AsyncFunction = (async () => {}).constructor;
 
-/** Path to `tsc` binary as installed by npm-compatible tooling */
-export const NODE_MODULES_TSC_BIN_PATH = fileURLToPath(
-    new URL("../../../node_modules/typescript/bin/tsc", import.meta.url),
-);
-
 /** Path to Jco JS script */
 export const JCO_JS_PATH = fileURLToPath(new URL("../src/jco.js", import.meta.url));
 
