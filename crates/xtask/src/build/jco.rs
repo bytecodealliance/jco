@@ -1,19 +1,15 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::{collections::HashMap, sync::LazyLock};
 
 use anyhow::{Context, Result, bail};
 use js_component_bindgen::BindingsMode;
 use wit_component::ComponentEncoder;
 use xshell::{Shell, cmd};
 
-static WORKSPACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    // NOTE this goes to the xtask dir
-    let xtask_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    xtask_manifest_dir.join("../../")
-});
+use crate::build::{WORKSPACE_DIR, generate_jco_type_declarations};
 
 /// Type of build being performed
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -208,19 +204,6 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         let mut file = fs::File::create(outfile).unwrap();
         file.write_all(contents).unwrap();
     }
-
-    Ok(())
-}
-
-/// Generate TypeScript type declarations for the `@bytecodealliance/jco` package.
-///
-/// This must run after [transpile_components] because `src/api.js` uses types from
-/// `obj/wasm-tools.js`.
-///
-fn generate_jco_type_declarations() -> Result<()> {
-    let sh = Shell::new()?;
-
-    cmd!(sh, "npx -w @bytecodealliance/jco tsc").read()?;
 
     Ok(())
 }

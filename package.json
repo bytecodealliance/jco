@@ -6,7 +6,7 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types preview2",
     "build:types:preview3-shim": "cargo xtask generate wasi-types preview3",
-    "build:test:components": "pnpm run build:test:components --ws --if-present",
+    "build:test:components": "pnpm run -r build:test:components",
     "fmt": "pnpm run -r fmt",
     "fmt:check": "pnpm run -r fmt:check",
     "lint": "pnpm run -r lint",
