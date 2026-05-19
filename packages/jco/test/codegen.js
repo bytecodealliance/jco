@@ -18,7 +18,12 @@ import {
     readComponentBytes,
     tsGenerationPromise,
 } from "./helpers.js";
-import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR, LOCAL_TEST_COMPONENTS_DIR } from "./common.js";
+import { 
+    getDefaultComponentFixtures, 
+    COMPONENT_FIXTURES_DIR, 
+    LOCAL_TEST_COMPONENTS_DIR, 
+    LINTER_PATH 
+} from "./common.js";
 
 suite(`Transpiler codegen`, async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -46,13 +51,11 @@ suite(`Transpiler codegen`, async () => {
                     return;
                 }
 
-                // TODO(fix): re-enable after move to pnpm (npm has a bug pulling native deps)
-                //
-                // const eslintOutput = await exec(
-                //     LINTER_PATH,
-                //     fileURLToPath(new URL(`./output/${testName}/${testName}.js`, import.meta.url)),
-                // );
-                // assert.strictEqual(eslintOutput.stderr, "");
+                const eslintOutput = await exec(
+                    LINTER_PATH,
+                    fileURLToPath(new URL(`./output/${testName}/${testName}.js`, import.meta.url)),
+                );
+                assert.strictEqual(eslintOutput.stderr, "");
             });
         }
     });
