@@ -53,7 +53,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
-    "lint:fix": "pnpm run lint -- --fix",
+    "lint:fix": "oxlint --fix",
     "test": "vitest run -c test/vitest.ts"
   },
   "devDependencies": {
