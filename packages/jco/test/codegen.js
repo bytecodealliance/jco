@@ -18,11 +18,11 @@ import {
     readComponentBytes,
     tsGenerationPromise,
 } from "./helpers.js";
-import { 
-    getDefaultComponentFixtures, 
-    COMPONENT_FIXTURES_DIR, 
-    LOCAL_TEST_COMPONENTS_DIR, 
-    LINTER_PATH 
+import {
+    getDefaultComponentFixtures,
+    COMPONENT_FIXTURES_DIR,
+    LOCAL_TEST_COMPONENTS_DIR,
+    LINTER_PATH,
 } from "./common.js";
 
 suite(`Transpiler codegen`, async () => {
