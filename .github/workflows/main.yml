@@ -57,8 +57,8 @@ jobs:
 
       - name: Build jco for test
         run: |
-          pnpm run build
-          pnpm run build:test:components
+          pnpm --filter '@bytecodealliance/jco' run build
+          pnpm --filter '@bytecodealliance/jco' run build:test:components
 
       - name: Upload jco build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -75,7 +75,7 @@ jobs:
             packages/jco/test/output/rust-test-components
 
       - name: Build jco-transpile
-        run: pnpm run --filter '@bytecodealliance/jco-transpile' build
+        run: pnpm --filter '@bytecodealliance/jco-transpile' run build
 
       - name: Upload jco-transpile vendor
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -177,7 +177,7 @@ jobs:
       # properly place the framework (dynamic lib) files, so we perform a manual download
       # of a set version instead.
       #
-      # TODO: revert to simple `pnpx puppeteer browsers install chrome` once this problem is fixed upstream
+      # TODO: revert to simple `pnpm exec puppeteer browsers install chrome` once this problem is fixed upstream
       - name: Install puppeteer
         id: puppeteer
         env:
@@ -217,7 +217,8 @@ jobs:
                   echo -e "ERROR: unexpected OS";
                   exit 1;
               fi
-              pnpm exec puppeteer browsers install chrome@${PUPPETEER_VERSION}
+
+              pnpm --filter '@bytecodealliance/jco' exec puppeteer browsers install chrome@${PUPPETEER_VERSION}
           fi
 
       - name: Restore jco build
