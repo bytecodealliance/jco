@@ -67,8 +67,8 @@ pnpm run build
 There are three test suites in jco:
 
 * `pnpm run test`: Project-level transpilation, CLI & API tests.
-* `pnpm run test --workspace packages/preview2-shim`: `preview2-shim` unit tests.
-* `pnpm run test --workspace packages/preview3-shim`: `preview3-shim` unit tests.
+* `pnpm run --filter 'packages/preview2-shim' test`: `preview2-shim` unit tests.
+* `pnpm run --filter 'packages/preview3-shim' test`: `preview3-shim` unit tests.
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
 
