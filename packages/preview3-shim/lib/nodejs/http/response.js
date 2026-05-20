@@ -3,6 +3,8 @@ import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { HttpError } from "./error.js";
 import { Fields, _fieldsLock } from "./fields.js";
 
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
+
 let RESPONSE_CREATE_TOKEN = null;
 function token() {
   return (RESPONSE_CREATE_TOKEN ??= Symbol("ResponseCreateToken"));
@@ -14,6 +16,7 @@ export class Response {
   #contents = null;
   #trailersFuture = null;
   #responseFuture = null;
+  #contentsDispose = null;
   #bodyOpen = false;
   #bodyEnded = false;
 
@@ -54,8 +57,10 @@ export class Response {
       throw new HttpError("invalid-argument", "trailers must be FutureReader or Promise");
     }
 
+    let dispose = null;
     if (contents != null && !(contents instanceof StreamReader)) {
       try {
+        dispose = contents[symbolDispose]?.bind(contents);
         const inner = readableByteStreamFromReader(contents, { name: "contents" });
         contents = new StreamReader(inner);
       } catch (err) {
@@ -73,12 +78,24 @@ export class Response {
     const response = new Response(token());
     response.#headers = _fieldsLock(headers);
     response.#contents = contents;
+    response.#contentsDispose = dispose;
     response.#trailersFuture = trailers;
 
     const { tx, rx } = future();
     response.#responseFuture = tx;
 
     return [response, rx];
+  }
+
+  [symbolDispose]() {
+    if (this.#contents && !this.#bodyOpen && !this.#bodyEnded) {
+      this.#contentsDispose?.();
+      this.#contents.close();
+    }
+    this.#contents = null;
+    this.#contentsDispose = null;
+    this.#bodyOpen = false;
+    this.#bodyEnded = true;
   }
 
   /**
