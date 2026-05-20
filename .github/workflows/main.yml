@@ -56,23 +56,22 @@ jobs:
         run: pnpm install
 
       - name: Build jco for test
+        working-directory: packages/jco
         run: |
           pnpm --filter '@bytecodealliance/jco' run build
           pnpm --filter '@bytecodealliance/jco' run build:test:components
 
-      - name: Upload jco build
+      - name: Upload jco build output
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: jco-build
-          path: |
-            packages/jco/obj
+          name: build
+          path: packages/jco/obj
 
-      - name: Upload jco test components
+      - name: Upload artifacts for js tests
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: jco-test-components
-          path: |
-            packages/jco/test/output/rust-test-components
+          name: js-generated-tests
+          path: packages/jco/test/output
 
       - name: Build jco-transpile
         run: pnpm --filter '@bytecodealliance/jco-transpile' run build
@@ -129,7 +128,6 @@ jobs:
       # Determine weval version
       - name: Determine weval version
         id: weval-meta
-        shell: bash
         run: |
           export WEVAL_LATEST_URL=`curl -Ls -o /dev/null -w %{url_effective} https://github.com/bytecodealliance/weval/releases/latest`
           export WEVAL_VERSION=${WEVAL_LATEST_URL#https://github.com/bytecodealliance/weval/releases/tag/}
@@ -165,86 +163,50 @@ jobs:
         run: pnpm install
 
       - name: Cache puppeteer install
-        id: cache-puppeteer
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
+
+      - name: Cache puppeteer install
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
+          path: |
             /Users/runner/.cache/puppeteer
 
-      # NOTE: on macos-latest w/ latest node (26.x), installing puppeteer via npx does not
-      # properly place the framework (dynamic lib) files, so we perform a manual download
-      # of a set version instead.
-      #
-      # TODO: revert to simple `pnpm exec puppeteer browsers install chrome` once this problem is fixed upstream
+      - name: Cache puppeteer install
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
+          path: |
+            /c/users/runneradmin/.cache/puppeteer
+
       - name: Install puppeteer
-        id: puppeteer
-        env:
-          PUPPETEER_VERSION: "148.0.7778.97"
-          OS_LINUX: ${{ startsWith(matrix.os, 'ubuntu') }}
-          OS_MACOS: ${{ startsWith(matrix.os, 'macos') }}
-          OS_WINDOWS: ${{ startsWith(matrix.os, 'windows') }}
         run: |
-          if [ "$OS_MACOS" = "true" && "${{ matrix.node }}" = "latest" ]; then
-              export EXPECTED_PATH="/Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
-              if [ ! -f "$EXPECTED_PATH" ]; then
-                  echo 'installing fresh macos chrome'
-                  rm -rf /Users/runner/.cache/puppeteer/chrome
-                  wget https://storage.googleapis.com/chrome-for-testing-public/${PUPPETEER_VERSION}/mac-arm64/chrome-mac-arm64.zip
-                  mkdir -p /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/
-                  unzip chrome-mac-arm64.zip -d /Users/runner/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}
-                  npx puppeteer browsers install chrome@${PUPPETEER_VERSION}
-              else
-                  echo 'using cached macos chrome'
-              fi
-              echo -e "puppeteer-path=$EXPECTED_PATH" >> $GITHUB_OUTPUT
-          else
-              echo 'installing non-macos chrome'
-              if [ "$OS_LINUX" = "true" ]; then
-                  if [ ! -f "$HOME/.cache/puppeteer/chrome/linux-${PUPPETEER_VERSION}/chrome-linux64/chrome" ]; then
-                      rm -rf $HOME/.cache/puppeteer/chrome;
-                  fi
-              elif [ "$OS_WINDOWS" = "true" ]; then
-                  if [ ! -f "$HOME/.cache/puppeteer/chrome/win64-${PUPPETEER_VERSION}/chrome-win/chrome.exe" ]; then
-                      rm -rf $HOME/.cache/puppeteer/chrome;
-                  fi
-              elif [ "$OS_MACOS" = "true" ]; then
-                  if [ ! -f "$HOME/.cache/puppeteer/chrome/mac_arm-${PUPPETEER_VERSION}/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" ]; then
-                      rm -rf $HOME/.cache/puppeteer/chrome;
-                  fi
-              else
-                  echo -e "ERROR: unexpected OS";
-                  exit 1;
-              fi
+          pnpm run test:setup:puppeteer
 
-              echo -e "installing chrome@${PUPPETEER_VERSION}..."
-              pnpm --filter '@bytecodealliance/jco' exec puppeteer browsers install chrome@${PUPPETEER_VERSION}
-              echo -e "succesfully installed chrome@${PUPPETEER_VERSION}"
-          fi
-
-      - name: Restore jco build
+      - name: Restore jco build output
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-build
-          path: |
-            packages/jco/obj
+          name: build
+          path: packages/jco/obj
 
-      - name: Restore jco test components
+      - name: Restore artifacts for JS tests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-test-components
-          path: |
-            packages/jco/test/output/rust-test-components
+          name: js-generated-tests
+          path: packages/jco/test/output
 
       - name: Test LTS Node.js
         if: matrix.node != 'latest'
         working-directory: packages/jco
         run: |
-          if [ "${{ steps.puppeteer.outputs.puppeteer-path }}" != "" ]; then
-              export PUPPETEER_PATH=${{ steps.puppeteer.outputs.puppeteer-path }}
-          fi
-          pnpm run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
+          pnpm --filter '@bytecodealliance/jco' run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
       - name: Test Latest Node.js
         if: matrix.node == 'latest'
@@ -252,10 +214,7 @@ jobs:
         env:
           WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
         run: |
-          if [ "${{ steps.puppeteer.outputs.puppeteer-path }}" != "" ]; then
-              export PUPPETEER_PATH=${{ steps.puppeteer.outputs.puppeteer-path }}
-          fi
-          pnpm run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
+          pnpm --filter '@bytecodealliance/jco' run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   test-wasi-deno:
     runs-on: "ubuntu-latest"
@@ -294,19 +253,17 @@ jobs:
       - name: Install node modules
         run: pnpm install
 
-      - name: Restore jco build
+      - name: Restore jco build output
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-build
-          path: |
-            packages/jco/obj
+          name: build
+          path: packages/jco/obj
 
-      - name: Restore jco test components
+      - name: Restore artifacts for JS tests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-test-components
-          path: |
-            packages/jco/test/output/rust-test-components
+          name: js-generated-tests
+          path: packages/jco/test/output
 
       - name: Generate tests
         run: |
@@ -366,19 +323,17 @@ jobs:
           path: |
             node_modules
 
-      - name: Restore jco build
+      - name: Restore jco build output
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-build
-          path: |
-            packages/jco/obj
+          name: build
+          path: packages/jco/obj
 
-      - name: Restore jco test components
+      - name: Restore artifacts for JS tests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-test-components
-          path: |
-            packages/jco/test/output/rust-test-components
+          name: js-generated-tests
+          path: packages/jco/test/output
 
       - name: Install node modules
         run: pnpm install
@@ -422,16 +377,32 @@ jobs:
         run: pnpm install
 
       - name: Cache puppeteer install
-        id: cache-puppeteer
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
 
+      - name: Cache puppeteer install
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
+          path: |
+            /Users/runner/.cache/puppeteer
+
+      - name: Cache puppeteer install
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
+          path: |
+            /c/users/runneradmin/.cache/puppeteer
+
       - name: Install puppeteer
         run: |
-          pnpm exec puppeteer browsers install chrome
+          pnpm run test:setup:puppeteer
 
       - name: Build jco
         run: pnpm run build
@@ -440,7 +411,7 @@ jobs:
         env:
           TEST_PUPPETEER_LAUNCH_ARGS: |
             --no-sandbox
-        run: pnpm run --filter 'packages/${{ matrix.workspace }}' test
+        run: pnpm --filter 'packages/${{ matrix.workspace }}' run test
 
   lint:
     runs-on: ubuntu-latest
@@ -611,19 +582,17 @@ jobs:
         with:
           version: 11
 
-      - name: Restore jco build
+      - name: Restore jco build output
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-build
-          path: |
-            packages/jco/obj
+          name: build
+          path: packages/jco/obj
 
-      - name: Restore jco test components
+      - name: Restore artifacts for JS tests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: jco-test-components
-          path: |
-            packages/jco/test/output/rust-test-components
+          name: js-generated-tests
+          path: packages/jco/test/output
 
       - name: Restore jco-transpile vendor
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -672,4 +641,4 @@ jobs:
 
       - name: Run all script for (${{ matrix.project.name }})
         run: |
-          pnpm run --filter '${{ matrix.project.workspace }}' all
+          pnpm --filter '${{ matrix.project.workspace }}' run all

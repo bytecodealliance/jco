@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@puppeteer/browsers':
+        specifier: ^2.13.2
+        version: 2.13.2
     devDependencies:
       '@actions/github':
         specifier: ^6.0.1
@@ -23,6 +27,9 @@ importers:
       '@commitlint/read':
         specifier: ^21.0.0
         version: 21.0.0(conventional-commits-parser@6.4.0)
+      '@puppeteer/browsers':
+        specifier: ^2.13.2
+        version: 2.13.2
       conventional-changelog-conventionalcommits:
         specifier: ^9.3.1
         version: 9.3.1

@@ -11,6 +11,7 @@
     "fmt:check": "pnpm run -r fmt:check",
     "lint": "pnpm run -r lint",
     "lint:fix": "pnpm run -r lint:fix",
+    "test:setup:puppeteer": "node scripts/install-puppeteer.mjs",
     "test:examples": "pnpm run -r all"
   },
   "devDependencies": {
@@ -19,9 +20,13 @@
     "@commitlint/lint": "^21.0.0",
     "@commitlint/load": "^21.0.0",
     "@commitlint/read": "^21.0.0",
+    "@puppeteer/browsers": "^2.13.2",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "git-cliff": "^2.10.0",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0"
+  },
+  "dependencies": {
+    "@puppeteer/browsers": "^2.13.2"
   }
 }
