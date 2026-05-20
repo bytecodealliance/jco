@@ -7,14 +7,13 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@puppeteer/browsers':
-        specifier: ^2.13.2
-        version: 2.13.2
     devDependencies:
       '@actions/github':
         specifier: ^6.0.1
         version: 6.0.1
+      '@bytecodealliance/preview2-shim':
+        specifier: workspace:*
+        version: link:packages/preview2-shim
       '@commitlint/config-conventional':
         specifier: ^19.8.1
         version: 19.8.1

@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
+    "@bytecodealliance/preview2-shim": "workspace:*",
     "@commitlint/config-conventional": "^19.8.1",
     "@commitlint/lint": "^21.0.0",
     "@commitlint/load": "^21.0.0",
@@ -25,8 +26,5 @@
     "git-cliff": "^2.10.0",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0"
-  },
-  "dependencies": {
-    "@puppeteer/browsers": "^2.13.2"
   }
 }
