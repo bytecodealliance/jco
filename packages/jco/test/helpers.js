@@ -1,7 +1,7 @@
 import { version, env, argv, execArgv, platform } from "node:process";
 import { createServer as createNetServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
-import { basename, join, isAbsolute, resolve, normalize, sep, relative, dirname, extname } from "node:path";
+import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from "node:path";
 import { cp, mkdtemp, writeFile, stat, mkdir, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -9,6 +9,7 @@ import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
 import mime from "mime";
 import { parse } from "smol-toml";
+import ts from "typescript";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
@@ -575,17 +576,75 @@ export async function readComponentBytes(componentPath) {
     return componentBytes;
 }
 
+function tsCodegen(args) {
+    if (!args) {
+        throw new Error("missing tscodegen args");
+    }
+    const cwd = args?.cwd ?? process.cwd();
+    if (!args.tsConfigPath) {
+        throw new Error("missing/invalid tsconfig path");
+    }
+    const configPath = args.tsConfigPath;
+
+    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (error) {
+        throw new Error(
+            ts.formatDiagnosticsWithColorAndContext([error], {
+                getCanonicalFileName: (f) => f,
+                getCurrentDirectory: ts.sys.getCurrentDirectory,
+                getNewLine: () => ts.sys.newLine,
+            }),
+        );
+    }
+
+    // Apply overrides
+    if (args.configOverrides) {
+        if (args.configOverrides.include) {
+            config.include = args.configOverrides.include;
+        }
+        if (args.configOverrides.compilerOptions?.outDir) {
+            config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
+        }
+    }
+
+    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd);
+
+    const program = ts.createProgram({
+        rootNames: parsed.fileNames,
+        options: parsed.options,
+    });
+
+    const emitResult = program.emit();
+
+    const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
+
+    if (diagnostics.length > 0) {
+        console.error(
+            ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                getCanonicalFileName: (f) => f,
+                getCurrentDirectory: ts.sys.getCurrentDirectory,
+                getNewLine: () => ts.sys.newLine,
+            }),
+        );
+    }
+
+    if (emitResult.emitSkipped) {
+        throw new Error("TypeScript emit skipped, no files were emitted");
+    }
+}
+
 let TS_CODEGEN_PROMISE;
-export function tsCodegenPromise() {
+export function runTSCodegen(args) {
+    if (!args) {
+        throw new Error("missing tscodegen args");
+    }
+
     if (TS_CODEGEN_PROMISE) {
         return TS_CODEGEN_PROMISE;
     }
-    return (TS_CODEGEN_PROMISE = (async () => {
-        var { stderr } = await exec("pnpm", "exec", "tsc", "-p", "test/tsconfig.json");
-        if (stderr !== "") {
-            throw new Error(`ERROR: stderr for tsc generation was non-empty\n${stderr}`);
-        }
-    })());
+    tsCodegen(args);
+    TS_CODEGEN_PROMISE = Promise.resolve();
+    return TS_CODEGEN_PROMISE;
 }
 
 /** Get the current version of `wit-component` which is reflected in WAT output and used for tests */
@@ -602,18 +661,4 @@ export async function getCurrentWitComponentVersion() {
     }
     CURRENT_WIT_COMPONENT_VERSION = version;
     return CURRENT_WIT_COMPONENT_VERSION;
-}
-
-let TS_GEN_PROMISE;
-export function tsGenerationPromise() {
-    if (TS_GEN_PROMISE) {
-        return TS_GEN_PROMISE;
-    }
-    return (TS_GEN_PROMISE = (async () => {
-        const tsConfigPath = fileURLToPath(new URL("./tsconfig.json", import.meta.url));
-        var { stderr } = await exec("pnpm", "exec", "tsc", "-p", tsConfigPath);
-        if (stderr !== "") {
-            throw new Error(`stderr unexpectedly contains content: ${stderr}`);
-        }
-    })());
 }

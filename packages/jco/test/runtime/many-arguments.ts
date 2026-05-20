@@ -1,7 +1,7 @@
 // Flags: --instantiation
 
 // @ts-ignore
-import { instantiate } from "../output/many-arguments/many-arguments.js";
+import { instantiate } from "../js-test-components/many-arguments/many-arguments.js";
 // @ts-ignore
 import * as helpers from "./helpers.js";
 

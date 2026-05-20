@@ -1,7 +1,7 @@
 // Flags: --map testwasi=../helpers.js --map r=../resource_borrow_simple.js#R test=../resource_borrow_simple.js#test
 
 // @ts-ignore
-import { testImports } from "../output/resource_borrow_simple/resource_borrow_simple.js";
+import { testImports } from "../js-test-components/resource_borrow_simple/resource_borrow_simple.js";
 
 // @ts-nocheck
 import * as assert from "assert";

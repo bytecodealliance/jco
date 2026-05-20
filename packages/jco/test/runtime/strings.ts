@@ -4,7 +4,7 @@
 import * as assert from "assert";
 
 // @ts-ignore
-import { instantiate } from "../output/strings/strings.js";
+import { instantiate } from "../js-test-components/strings/strings.js";
 // @ts-ignore
 import { loadWasm } from "./helpers.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";

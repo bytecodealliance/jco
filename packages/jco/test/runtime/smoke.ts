@@ -1,7 +1,7 @@
 // Flags: --tla-compat --map testwasi=../helpers.js --map test:smoke/imports=../smoke.js --base64-cutoff=2500
 
 // @ts-ignore
-import { $init, thunk as importedThunk } from "../output/smoke/smoke.js";
+import { $init, thunk as importedThunk } from "../js-test-components/smoke/smoke.js";
 
 function assert(x: boolean, msg: string) {
     if (!x) {

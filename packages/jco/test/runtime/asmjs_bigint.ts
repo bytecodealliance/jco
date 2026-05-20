@@ -1,6 +1,8 @@
 // Flags: --js --instantiation
 
-import { instantiate } from "../output/asmjs_bigint/asmjs_bigint.js";
+// @ts-ignore
+import { instantiate } from "../js-test-components/asmjs_bigint/asmjs_bigint.js";
+
 // @ts-ignore
 import { strictEqual } from "node:assert";
 

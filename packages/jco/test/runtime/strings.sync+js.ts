@@ -1,7 +1,7 @@
 // Flags: --instantiation sync --js
 
 import * as helpers from "./helpers.js";
-import { instantiate } from "../output/strings.sync+js/strings.sync+js.js";
+import { instantiate } from "../js-test-components/strings.sync+js/strings.sync+js.js";
 
 // @ts-ignore
 import * as assert from "assert";

@@ -3,7 +3,7 @@
 // @ts-ignore
 import * as helpers from "./helpers.js";
 // @ts-ignore
-import { instantiate } from "../output/numbers/numbers.js";
+import { instantiate } from "../js-test-components/numbers/numbers.js";
 // @ts-ignore
 import { strictEqual } from "node:assert";
 
