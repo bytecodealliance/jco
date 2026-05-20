@@ -122,4 +122,82 @@ suite("Async (WASI P3)", () => {
 
         await cleanup();
     });
+
+    test("async return of imported owned resource", async () => {
+        class ExampleResource {
+            constructor(id) {
+                this.id = id;
+            }
+            getId() {
+                return this.id;
+            }
+        }
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "async-return-imported-resource.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:test-components/resources": { ExampleResource },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncExports: ["jco:test-components/return-imported-resource-fns#get-resource-result"],
+                    },
+                },
+            },
+        });
+
+        const exported = instance["jco:test-components/return-imported-resource-fns"];
+        assert.instanceOf(exported.getResourceResult, AsyncFunction);
+
+        const resource = await exported.getResourceResult(42);
+        assert.instanceOf(resource, ExampleResource);
+        assert.strictEqual(resource.getId(), 42);
+
+        await cleanup();
+    });
+
+    // TODO(tandr): this test currently fails and needs fixes in wit-bindgen-core:
+    // https://github.com/bytecodealliance/wit-bindgen/pull/1614
+    test.skip("async return of bare imported owned resource", async () => {
+        class ExampleResource {
+            constructor(id) {
+                this.id = id;
+            }
+            getId() {
+                return this.id;
+            }
+        }
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "async-return-imported-resource.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:test-components/resources": { ExampleResource },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncExports: ["jco:test-components/return-imported-resource-fns#get-resource"],
+                    },
+                },
+            },
+        });
+
+        const exported = instance["jco:test-components/return-imported-resource-fns"];
+        assert.instanceOf(exported.getResource, AsyncFunction);
+
+        const resource = await exported.getResource(7);
+        assert.instanceOf(resource, ExampleResource);
+        assert.strictEqual(resource.getId(), 7);
+
+        await cleanup();
+    });
 });

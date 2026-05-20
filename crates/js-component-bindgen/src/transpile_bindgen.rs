@@ -5227,6 +5227,7 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
             instantiator.add_intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
             instantiator.add_intrinsic(Intrinsic::SymbolResourceHandle);
+            instantiator.add_intrinsic(Intrinsic::SymbolResourceRep);
             instantiator.add_intrinsic(Intrinsic::SymbolDispose);
             instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
             instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
@@ -5264,8 +5265,8 @@ pub fn gen_flat_lift_fn_js_expr(
                         ),
 
                         // Resource type was found in either resource_exports or extra provided resource map
-                        (Some(ResourceTable { data, .. }), _)
-                        | (_, Some(ResourceTable { data, .. })) => match data {
+                        (Some(ResourceTable { imported, data }), _)
+                        | (_, Some(ResourceTable { imported, data })) => match data {
                             ResourceData::Guest { .. } => {
                                 unimplemented!(
                                     "owned resources created by guests should must have host-side data"
@@ -5273,9 +5274,9 @@ pub fn gen_flat_lift_fn_js_expr(
                             }
                             ResourceData::Host {
                                 tid,
+                                rid,
                                 local_name,
                                 dtor_name,
-                                ..
                             } => {
                                 let empty_func = JsHelperIntrinsic::EmptyFunc.name();
                                 let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
@@ -5285,43 +5286,66 @@ pub fn gen_flat_lift_fn_js_expr(
                                 let tid = tid.as_u32();
                                 let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
 
-                                let dtor_setup_js = dtor_name
-                                .as_ref()
-                                .map(|dtor|
-                                     format!(
-                                         r#"
-                                           Object.defineProperty(
-                                               resourceObj,
-                                               {symbol_dispose},
-                                               {{
-                                                   writable: true,
-                                                   value: function() {{
-                                                       finalizationRegistry{tid}.unregister(resourceObj);
-                                                       {rsc_table_remove}(handleTable{tid}, handle);
-                                                       resourceObj[{symbol_dispose}] = {empty_func};
-                                                       resourceObj[{symbol_resource_handle}] = undefined;
-                                                       {dtor}(handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag});
-                                                   }}
-                                              }}
-                                          );
-                                    "#
-                                     )
-                                ).unwrap_or_default();
+                                // Mirrors `Instruction::HandleLift` in `function_bindgen.rs`:
+                                let create_resource_fn_js = if *imported {
+                                    let symbol_resource_rep = Intrinsic::SymbolResourceRep.name();
+                                    let rid = rid.as_u32();
+                                    format!(
+                                        r#"
+                                      (handle) => {{
+                                          const rep = handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag};
+                                          let resourceObj = captureTable{rid}.get(rep);
+                                          if (!resourceObj) {{
+                                              resourceObj = Object.create({local_name}.prototype);
+                                              Object.defineProperty(resourceObj, {symbol_resource_handle}, {{ writable: true, value: handle }});
+                                              Object.defineProperty(resourceObj, {symbol_resource_rep}, {{ writable: true, value: rep }});
+                                          }} else {{
+                                              captureTable{rid}.delete(rep);
+                                          }}
+                                          {rsc_table_remove}(handleTable{tid}, handle);
+                                          return resourceObj;
+                                      }}
+                                     "#
+                                    )
+                                } else {
+                                    let dtor_setup_js = dtor_name
+                                    .as_ref()
+                                    .map(|dtor|
+                                         format!(
+                                             r#"
+                                               Object.defineProperty(
+                                                   resourceObj,
+                                                   {symbol_dispose},
+                                                   {{
+                                                       writable: true,
+                                                       value: function() {{
+                                                           finalizationRegistry{tid}.unregister(resourceObj);
+                                                           {rsc_table_remove}(handleTable{tid}, handle);
+                                                           resourceObj[{symbol_dispose}] = {empty_func};
+                                                           resourceObj[{symbol_resource_handle}] = undefined;
+                                                           {dtor}(handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag});
+                                                       }}
+                                                  }}
+                                              );
+                                        "#
+                                         )
+                                    ).unwrap_or_default();
 
-                                let create_resource_fn_js = format!(
-                                    r#"
-                                  (handle) => {{
-                                      const resourceObj = Object.create({local_name}.prototype);
-                                      Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
-                                          writable: true,
-                                          value: handle,
-                                      }});
-                                      finalizationRegistry{tid}.register(resourceObj, handle, resourceObj);
-                                      {dtor_setup_js}
-                                      return resourceObj;
-                                  }}
-                                 "#
-                                );
+                                    format!(
+                                        r#"
+                                      (handle) => {{
+                                          const resourceObj = Object.create({local_name}.prototype);
+                                          Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
+                                              writable: true,
+                                              value: handle,
+                                          }});
+                                          finalizationRegistry{tid}.register(resourceObj, handle, resourceObj);
+                                          {dtor_setup_js}
+                                          return resourceObj;
+                                      }}
+                                     "#
+                                    )
+                                };
 
                                 (local_name.to_string(), create_resource_fn_js)
                             }
