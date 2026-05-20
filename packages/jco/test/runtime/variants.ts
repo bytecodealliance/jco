@@ -4,7 +4,7 @@
 import * as assert from "assert";
 
 // @ts-ignore
-import { instantiate } from "../output/variants/variants.js";
+import { instantiate } from "../js-test-components/variants/variants.js";
 // @ts-ignore
 import { loadWasm, wasi } from "./helpers.js";
 

@@ -1,9 +1,6 @@
 {
-    "include": ["runtime/*.ts"],
-    "TODO": "why are these runtime tests excluded?",
     "exclude": ["runtime/strings.async+js.ts", "runtime/strings.sync+js.ts", "runtime/strings.sync.ts"],
     "compilerOptions": {
-        "outDir": "output",
         "module": "nodenext",
         "moduleResolution": "nodenext",
         "target": "es2020",

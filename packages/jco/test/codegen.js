@@ -16,7 +16,7 @@ import {
     getTmpDir,
     getRandomPort,
     readComponentBytes,
-    tsGenerationPromise,
+    runTSCodegen,
 } from "./helpers.js";
 import {
     getDefaultComponentFixtures,
@@ -106,7 +106,7 @@ suite(`Transpiler codegen`, async () => {
             }).listen(port); // transpile component expects this port
 
             // Ignore errors from compilation (usually TS warnings)
-            await tsGenerationPromise();
+            await runTSCodegen();
 
             const runtimeName = "wasi-http-proxy";
             try {

@@ -76,7 +76,7 @@ export function listOfVariants(bools: any, results: any, enums: any) {
 }
 
 export async function run() {
-    const wasm = await import("../output/flavorful/flavorful.js");
+    const wasm = await import("../js-test-components/flavorful/flavorful.js");
 
     wasm.testImports();
     assert.strictEqual(wasm["test:flavorful/test"], wasm.test);

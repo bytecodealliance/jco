@@ -1,11 +1,11 @@
-import { stat } from "node:fs/promises";
+import { stat, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { URL, fileURLToPath } from "node:url";
 
 import { suite, test, assert } from "vitest";
 
-import { getDefaultComponentFixtures } from "./common.js";
-import { jcoPath, exec, readFixtureFlags, tsGenerationPromise } from "./helpers.js";
+import { getDefaultComponentFixtures, TEST_TS_CONFIG_PATH } from "./common.js";
+import { jcoPath, exec, readFixtureFlags, runTSCodegen } from "./helpers.js";
 
 /**
  * To run the runtime tests specified below, transpilation must be performed
@@ -37,8 +37,6 @@ const CODEGEN_TRANSPILE_DEPS = {
 
 // NOTE: if you find this test failing despite code changes, you may need to clear the test/output folder
 suite("Runtime", async () => {
-    await tsGenerationPromise();
-
     const runtimeFolderPath = fileURLToPath(new URL("./runtime", import.meta.url));
 
     // Pre-process the list of fixtures to get the runtime specific tests
@@ -50,24 +48,38 @@ suite("Runtime", async () => {
                 .filter((f) => !f.startsWith("wasi-http-proxy"))
                 // Get the fixture, along with a runtime test name
                 .map((f) => [f, f.replace(/(\.component)?\.(wat|wasm)$/, "")])
-                .map(([f, r]) =>
-                    stat(join(runtimeFolderPath, `${r}.ts`))
-                        .then(() => [f, r])
-                        .catch(() => null),
-                ),
+                .map(([f, r]) => {
+                    const tsPath = join(runtimeFolderPath, `${r}.ts`);
+                    return stat(tsPath)
+                        .then(() => [f, r, tsPath])
+                        .catch(() => null);
+                }),
         )
     ).filter((v) => v !== null);
 
+    const outputFolderPath = join(fileURLToPath(new URL("./output", import.meta.url)), "js-test-components");
+    await mkdir(outputFolderPath, { recursive: true });
+
+    // Transpile JS test code
+    await runTSCodegen({
+        tsConfigPath: TEST_TS_CONFIG_PATH,
+        configOverrides: {
+            include: runtimes.map(([_fixtureName, _testName, tsPath]) => tsPath),
+            compilerOptions: {
+                outDir: outputFolderPath,
+            },
+        },
+    });
+
     // Create all runtime tests
-    const outputFolderPath = fileURLToPath(new URL("./output", import.meta.url));
     const componentFixturesFolderPath = fileURLToPath(new URL("./fixtures/components", import.meta.url));
-    for (const [fixtureName, testName] of runtimes) {
+    for (const [fixtureName, testName, tsPath] of runtimes) {
         test.concurrent(testName, async () => {
             // Perform transpilation on deps where necessary
             if (CODEGEN_TRANSPILE_DEPS[testName]) {
                 for (const filename of CODEGEN_TRANSPILE_DEPS[testName]) {
-                    // Skip files that have already been generated
                     const requiredOutputPath = join(outputFolderPath, filename);
+
                     let exists;
                     try {
                         exists = (await stat(requiredOutputPath)).isFile();
@@ -78,11 +90,8 @@ suite("Runtime", async () => {
                         continue;
                     }
 
-                    const tsFileName = `${testName}.ts`;
-
                     // Read flags
-                    const runtimeTestPath = join(runtimeFolderPath, tsFileName);
-                    const flags = await readFixtureFlags(runtimeTestPath);
+                    const flags = await readFixtureFlags(tsPath);
 
                     // Perform transpilation
                     let componentFixturePath = join(componentFixturesFolderPath, fixtureName);

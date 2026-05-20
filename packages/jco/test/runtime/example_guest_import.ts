@@ -3,7 +3,7 @@
 import { strictEqual } from "node:assert";
 
 // @ts-ignore
-import * as wasm from "../output/example_guest_import/example_guest_import.js";
+import * as wasm from "../js-test-components/example_guest_import/example_guest_import.js";
 
 let instance = 0;
 

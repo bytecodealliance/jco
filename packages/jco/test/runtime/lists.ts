@@ -3,7 +3,7 @@
 // @ts-ignore
 import * as helpers from "./helpers.js";
 // @ts-ignore
-import { instantiate } from "../output/lists/lists.js";
+import { instantiate } from "../js-test-components/lists/lists.js";
 
 // @ts-ignore
 import * as assert from "assert";

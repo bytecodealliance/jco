@@ -1,7 +1,7 @@
 import * as assert from "node:assert";
 
 // @ts-ignore
-import { commands } from "../output/wasi-http-proxy/wasi-http-proxy.js";
+import { commands } from "../js-test-components/wasi-http-proxy/wasi-http-proxy.js";
 
 const defaultHeaders: [string, string][] = [
     ["content-type", "text/plain"],

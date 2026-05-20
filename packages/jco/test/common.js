@@ -14,6 +14,9 @@ export const AsyncFunction = (async () => {}).constructor;
 /** Path to Jco JS script */
 export const JCO_JS_PATH = fileURLToPath(new URL("../src/jco.js", import.meta.url));
 
+/** Path to test/tsconfig.json */
+export const TEST_TS_CONFIG_PATH = fileURLToPath(new URL("./tsconfig.json", import.meta.url));
+
 /** Path to fixture components */
 export const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL("./fixtures/components", import.meta.url));
 
