@@ -499,6 +499,19 @@ class Fields {
     }
     return tableEntries.map(([, v]) => v);
   }
+  /**
+   * WIT spec (https://github.com/WebAssembly/WASI/blob/91bb44c3c3a9b1e09187db23c85fa844d1fd6b15/proposals/http/wit/types.wit#L215-L223):
+   *
+   * > Set all of the values for a name. Clears any existing values for that
+   * > name, if they have been set.
+   * >
+   * > Fails with `header-error.immutable` if the `fields` are immutable.
+   * >
+   * > Fails with `header-error.invalid-syntax` if the `field-name` or any of
+   * > the `field-value`s are syntactically invalid.
+   *
+   * The existing-branch splice/reuse is an allocation optimization — values are cleared, not retained.
+   */
   set(name, values) {
     if (this.#immutable) {
       throw { tag: "immutable" };
