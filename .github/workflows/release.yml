@@ -82,7 +82,11 @@ jobs:
         with:
           node-version: ">=22"
 
-      - name: Cache npm install
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
+      - name: Cache node modules
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -90,9 +94,9 @@ jobs:
           path: |
             node_modules
 
-      - name: Install debug NPM packages
+      - name: Install debug packages
         run: |
-          npm install -D
+          pnpm install -D
 
       - name: Collect metadata
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -250,7 +254,11 @@ jobs:
         with:
           node-version: ">=22"
 
-      - name: Cache npm install
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
+      - name: Cache node modules
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -260,17 +268,11 @@ jobs:
 
       - name: Install NPM packages
         run: |
-          npm install
-
-      - name: Install NPM packages (project)
-        working-directory: ${{ needs.meta.outputs.project-dir }}
-        run: |
-          npm install
+          pnpm install
 
       - name: Create release package
-        working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
-          npm pack
+          pnpm --filter '${{ needs.meta.outputs.project-dir }}' pack
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -317,6 +319,10 @@ jobs:
         with:
           node-version: ">=22"
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - name: Test built jco NPM package
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
@@ -334,8 +340,8 @@ jobs:
           export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
           cp -r examples/transpile/adder /tmp/test
           cd /tmp/test
-          npm install --save $PACKAGE_DIR
-          npm run all
+          pnpm install --save $PACKAGE_DIR
+          pnpm run all
 
   crate-publish:
     runs-on: ubuntu-24.04
@@ -386,6 +392,10 @@ jobs:
         with:
           node-version: ">=22"
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
@@ -399,14 +409,9 @@ jobs:
           path: |
             node_modules
 
-      - name: Install NPM packages
+      - name: Install node modules
         run: |
-          npm install
-
-      - name: Install NPM packages (project)
-        working-directory: ${{ needs.meta.outputs.project-dir }}
-        run: |
-          npm install
+          pnpm install
 
       - name: Publish ${{ needs.meta.outputs.project }} to NPM
         shell: bash
@@ -448,6 +453,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11
+
       - name: install git-cliff
         uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
@@ -478,7 +487,7 @@ jobs:
           files: |
             ./artifacts/*
 
-      - name: Cache npm install
+      - name: Cache node modules
         continue-on-error: true
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -486,9 +495,10 @@ jobs:
           key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
       - name: Install debug NPM packages
         run: |
-          npm install -D
+          pnpm install -D
 
       - name: Update related PRs with release note
         continue-on-error: true
