@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.19.2] - 2026-05-20
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ lift imported own handles via captureTable by @andreiltd in #1515
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ update git cliff config by @vados-cosmonic
+
+
+
+
 ## [1.19.1] - 2026-05-19
 
 ### 🐛 Bug Fixes
