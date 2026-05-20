@@ -1,7 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
 import { componentNew, componentEmbed, preview1AdapterCommandPath } from "@bytecodealliance/jco";
 import { transpile } from "../src/api.js";
@@ -22,7 +22,7 @@ import {
     getDefaultComponentFixtures,
     COMPONENT_FIXTURES_DIR,
     LOCAL_TEST_COMPONENTS_DIR,
-    // LINTER_PATH,
+    TEST_TS_CONFIG_PATH,
 } from "./common.js";
 
 suite(`Transpiler codegen`, async () => {
@@ -81,9 +81,20 @@ suite(`Transpiler codegen`, async () => {
             assert.strictEqual(stderr, "writing to stderr: hello, world\n");
         });
 
-        test.each(["p2"])("wasi-http-proxy-%s", async (ver) => {
+        test("wasi-http-proxy-p2", async () => {
             const tmpDir = await getTmpDir();
             const outFile = resolve(tmpDir, "out-component-file");
+
+            // Ignore errors from compilation (usually TS warnings)
+            await runTSCodegen({
+                tsConfigPath: TEST_TS_CONFIG_PATH,
+                configOverrides: {
+                    include: [fileURLToPath(new URL("./runtime/wasi-http-proxy.ts", import.meta.url))],
+                    compilerOptions: {
+                        outDir: fileURLToPath(new URL("./output/js-test-components", import.meta.url)),
+                    },
+                },
+            });
 
             const port = await getRandomPort();
             const server = createServer(async (req, res) => {
@@ -105,17 +116,15 @@ suite(`Transpiler codegen`, async () => {
                 res.end();
             }).listen(port); // transpile component expects this port
 
-            // Ignore errors from compilation (usually TS warnings)
-            await runTSCodegen();
-
             const runtimeName = "wasi-http-proxy";
             try {
+                // Componentize
                 const { stderr } = await exec(
                     jcoPath,
                     "componentize",
                     fileURLToPath(new URL("./fixtures/componentize/wasi-http-proxy/source.js", import.meta.url)),
                     "-w",
-                    fileURLToPath(new URL(`./fixtures/${ver}/wit`, import.meta.url)),
+                    fileURLToPath(new URL(`./fixtures/p2/wit`, import.meta.url)),
                     "--world-name",
                     "test:jco/command-extended",
                     "-o",
@@ -129,12 +138,15 @@ suite(`Transpiler codegen`, async () => {
                     stderr,
                     /https:\/\/bytecodealliance\.github\.io\/jco\/troubleshooting\/common-issues\.html#componentize-js-0193-fallback/,
                 );
-                const outDir = fileURLToPath(new URL(`./output/${runtimeName}`, import.meta.url));
+
+                // Transpile
+                const outDir = fileURLToPath(new URL(`./output/js-test-components/${runtimeName}`, import.meta.url));
+                await mkdir(outDir, { recursive: true });
                 {
                     const { stderr } = await exec(jcoPath, "transpile", outFile, "--name", runtimeName, "-o", outDir);
                     assert.strictEqual(stderr, "");
                 }
-                await exec(`test/output/${runtimeName}.js`, `--test-port=${port}`);
+                await exec(`test/output/js-test-components/${runtimeName}.js`, `--test-port=${port}`);
             } finally {
                 server.close();
             }

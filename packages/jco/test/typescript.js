@@ -6,15 +6,9 @@ import { fileURLToPath, URL } from "node:url";
 import { transpile, componentNew, componentEmbed } from "../src/api.js";
 import { typesComponent } from "../src/cmd/types.js";
 
-import { suite, test, beforeAll, assert } from "vitest";
-
-import { tsGenerationPromise } from "./helpers.js";
+import { suite, test, assert } from "vitest";
 
 suite(`TypeScript`, async () => {
-    beforeAll(async () => {
-        await tsGenerationPromise();
-    });
-
     test(`TS aliasing`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wits/issue-365/issue-365.wit`, import.meta.url)),
