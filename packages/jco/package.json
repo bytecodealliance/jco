@@ -74,7 +74,7 @@
         "prepack": "cargo xtask build release"
     },
     "dependencies": {
-        "@bytecodealliance/componentize-js": "^0.20.0",
+        "@bytecodealliance/componentize-js": "^0.21.0",
         "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
         "@bytecodealliance/preview2-shim": "^0.17.9",
         "@bytecodealliance/preview3-shim": "workspace:^0.1.0",
