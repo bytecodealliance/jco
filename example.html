@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e959cb69.js";
+            window.path_to_searchindex_js = "searchindex-e12025d6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-69241bbd.js"></script>
@@ -186,23 +186,23 @@
 <p>To demonstrate a full end-to-end component, we can create a JavaScript component embedding Spidermnokey then run it in JavaScript.</p>
 <h3 id="installing-jco"><a class="header" href="#installing-jco">Installing Jco</a></h3>
 <p>Either install Jco globally:</p>
-<pre><code class="language-shell">$ npm install -g @bytecodealliance/jco
+<pre><code class="language-shell">$ pnpm install -g @bytecodealliance/jco
 $ jco --version
 1.0.3
 </code></pre>
-<p>Or install it locally and use <code>npx</code> to run it:</p>
-<pre><code class="language-shell">$ npm install @bytecodealliance/jco
-$ npx jco --version
+<p>Or install it locally and use <code>pnpx</code> to run it:</p>
+<pre><code class="language-shell">$ pnpm install @bytecodealliance/jco
+$ pnpm exec jco --version
 1.0.3
 </code></pre>
 <p>Local usage can be preferable to ensure the project is reproducible and self-contained, but requires
 replacing all <code>jco</code> shell calls in the following example with either <code>./node_modules/.bin/jco</code> or <code>npx jco</code>.</p>
 <h3 id="installing-componentizejs"><a class="header" href="#installing-componentizejs">Installing ComponentizeJS</a></h3>
 <p>To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:</p>
-<pre><code class="language-shell">$ npm install -g @bytecodealliance/componentize-js
+<pre><code class="language-shell">$ pnpm install -g @bytecodealliance/componentize-js
 </code></pre>
 <p>Or locally:</p>
-<pre><code class="language-shell">$ npm install @bytecodealliance/componentize-js
+<pre><code class="language-shell">$ pnpm install @bytecodealliance/componentize-js
 </code></pre>
 <p>Now the <code>jco componentize</code> command will be ready to use.</p>
 <h3 id="creating-a-component-with-componentizejs"><a class="header" href="#creating-a-component-with-componentizejs">Creating a Component with ComponentizeJS</a></h3>
