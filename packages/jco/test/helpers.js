@@ -46,6 +46,7 @@ export async function exec(cmd, ...args) {
     if (!cmd) {
         throw new Error("cmd not specified");
     }
+    const options = typeof args.at(-1) === "object" && args.at(-1)?.closeStdin !== undefined ? args.pop() : {};
     let stdout = "",
         stderr = "";
     await new Promise((resolve, reject) => {
@@ -54,6 +55,9 @@ export async function exec(cmd, ...args) {
         const cp = spawn(processCmd, cmdArgs, {
             stdio: "pipe",
         });
+        if (options.closeStdin) {
+            cp.stdin.end();
+        }
         cp.stdout.on("data", (chunk) => {
             stdout += chunk;
             if (env.JCO_DEBUG) {

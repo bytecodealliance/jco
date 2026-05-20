@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+
 import { assert } from "vitest";
 
 import { Fields, Request, Response } from "@bytecodealliance/preview3-shim/http";
@@ -26,6 +28,42 @@ function buildFields(entries) {
 
 function fieldsToObject(fields) {
     return Object.fromEntries(fields.copyAll().map(([name, value]) => [name, DECODER.decode(value)]));
+}
+
+export async function startP3HttpServer() {
+    const server = createServer((req, res) => {
+        const headers = {
+            "content-type": "application/octet-stream",
+            "x-wasmtime-test-method": req.method,
+            "x-wasmtime-test-uri": req.url,
+        };
+
+        if (req.headers["content-length"]) {
+            headers["content-length"] = req.headers["content-length"];
+        }
+
+        res.writeHead(200, headers);
+        res.flushHeaders();
+        req.pipe(res);
+    });
+
+    server.on("connect", (_req, socket) => socket.destroy());
+
+    await new Promise((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const { address, port } = server.address();
+
+    return {
+        address: `${address}:${port}`,
+        cleanup: () =>
+            new Promise((resolve, reject) => {
+                server.closeAllConnections?.();
+                server.close((err) => (err ? reject(err) : resolve()));
+            }),
+    };
 }
 
 /**

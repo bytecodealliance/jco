@@ -23,7 +23,7 @@ export default defineConfig({
             "test/common.js",
             "test/helpers.js",
             "test/p3/cli-runner.js",
-            "test/p3/handler-runner.js",
+            "test/p3/helpers/**",
             "test/p3/ported/wasmtime/component-async/common.js",
         ],
         testTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
