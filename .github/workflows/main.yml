@@ -189,13 +189,13 @@ jobs:
       # NOTE: We can stop pinning the version of puppeteer when the version that the mac atttempts to use
       # syncs up (right now newest is 148.0.7778.178, but puppeteer will attempt to use 148.0.7778.97)
       - name: Install puppeteer (pinned)
-        if: ${{ startsWith(runner.os, 'macos') && matrix.node == 'latest' }}
+        if: ${{ matrix.node == 'latest' }}
         run: |
           export PUPPETEER_VERSION=148.0.7778.97
           pnpm run test:setup:puppeteer
 
       - name: Install puppeteer
-        if: ${{ !startsWith(runner.os, 'macos') || matrix.node != 'latest' }}
+        if: ${{ matrix.node != 'latest' }}
         run: |
           pnpm run test:setup:puppeteer
 
