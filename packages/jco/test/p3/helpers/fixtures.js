@@ -25,6 +25,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "http/p3-http-outbound-request-missing-path-and-query.wasm" },
     { path: "http/p3-http-outbound-request-post.wasm" },
     { path: "http/p3-http-outbound-request-put.wasm" },
+    { path: "http/p3-http-outbound-request-response-build.wasm" },
     { path: "http/p3-http-outbound-request-timeout.wasm" },
     { path: "http/p3-http-outbound-request-unknown-method.wasm" },
     { path: "http/p3-http-outbound-request-unsupported-scheme.wasm" },
@@ -46,7 +47,6 @@ export const P3_CLI_RUN_FIXTURES = [
     // currently failing
     { path: "http/p3-http-outbound-request-content-length.wasm", failing: true },
     { path: "http/p3-http-outbound-request-large-post.wasm", failing: true },
-    { path: "http/p3-http-outbound-request-response-build.wasm", failing: true },
     { path: "sockets/p3-sockets-tcp-streams.wasm", failing: true },
 ];
 

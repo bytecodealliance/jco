@@ -8,6 +8,7 @@ import { FutureReader, future } from "@bytecodealliance/preview3-shim/future";
 import { StreamReader, stream } from "@bytecodealliance/preview3-shim/stream";
 
 const ENCODER = new TextEncoder();
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 describe("Response", () => {
   // Prepare common test variables
@@ -48,6 +49,21 @@ describe("Response", () => {
     expect(consumedBody).toBeInstanceOf(StreamReader);
     expect(await consumedBody.read()).toBeNull();
     expect(await consumedTrailers.read()).toEqual({ tag: "ok", val: null });
+  });
+
+  test("dispose drops an unconsumed generated body stream", () => {
+    let disposed = false;
+    const body = {
+      read: async () => null,
+      [symbolDispose]() {
+        disposed = true;
+      },
+    };
+
+    const [res] = Response.new(headers, body, Promise.resolve({ tag: "ok", val: null }));
+    res[symbolDispose]();
+
+    expect(disposed).toBe(true);
   });
 
   test("new() validates arguments", () => {

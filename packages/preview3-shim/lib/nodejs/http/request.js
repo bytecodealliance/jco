@@ -4,6 +4,8 @@ import { _fieldsLock, Fields } from "./fields.js";
 import { FutureReader, future } from "../future.js";
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
+
 const SUPPORTED_METHODS = [
   "get",
   "head",
@@ -171,6 +173,7 @@ export class Request {
   #pathWithQuery = undefined;
   #trailersFuture = null;
   #requestFuture = null;
+  #contentsDispose = null;
   #bodyOpen = false;
   #bodyEnded = false;
 
@@ -214,8 +217,10 @@ export class Request {
       throw new HttpError("invalid-argument", "trailers must be FutureReader or Promise");
     }
 
+    let dispose = null;
     if (contents != null && !(contents instanceof StreamReader)) {
       try {
+        dispose = contents[symbolDispose]?.bind(contents);
         const inner = readableByteStreamFromReader(contents, { name: "contents" });
         contents = new StreamReader(inner);
       } catch (err) {
@@ -233,6 +238,7 @@ export class Request {
     let request = new Request(token());
     request.#headers = headers;
     request.#contents = contents;
+    request.#contentsDispose = dispose;
     request.#options = options;
     request.#trailersFuture = trailers;
     request.#pathWithQuery = undefined;
@@ -246,6 +252,17 @@ export class Request {
     request.#requestFuture = tx;
 
     return [request, rx];
+  }
+
+  [symbolDispose]() {
+    if (this.#contents && !this.#bodyOpen && !this.#bodyEnded) {
+      this.#contentsDispose?.();
+      this.#contents.close();
+    }
+    this.#contents = null;
+    this.#contentsDispose = null;
+    this.#bodyOpen = false;
+    this.#bodyEnded = true;
   }
 
   /**
@@ -545,6 +562,11 @@ export function _schemeToString(scheme) {
 function validateUrlPart(value, part) {
   if (value == null) {
     return;
+  }
+
+  // URL parsing may normalize some raw control characters but wasi treats them as invalid syntax.
+  if (/[\u0000-\u001f\u007f]/.test(value)) {
+    throw new HttpError("invalid-syntax", `Invalid ${part}: ${value}`);
   }
 
   try {
