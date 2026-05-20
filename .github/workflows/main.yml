@@ -218,7 +218,9 @@ jobs:
                   exit 1;
               fi
 
+              echo -e "installing chrome@${PUPPETEER_VERSION}..."
               pnpm --filter '@bytecodealliance/jco' exec puppeteer browsers install chrome@${PUPPETEER_VERSION}
+              echo -e "succesfully installed chrome@${PUPPETEER_VERSION}"
           fi
 
       - name: Restore jco build
