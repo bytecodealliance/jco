@@ -41,6 +41,9 @@ importers:
       oxlint:
         specifier: ^1.47.0
         version: 1.64.0
+      semver:
+        specifier: ^7.8.0
+        version: 7.8.0
 
   examples/components/add:
     dependencies:
