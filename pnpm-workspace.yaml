@@ -1,7 +1,8 @@
 minimumReleaseAge: 10080
 blockExoticSubdeps: true
-# allowBuilds:
-#   puppeteer: true
+allowBuilds:
+  esbuild: true
+  puppeteer: true
 
 packages:
   - packages/jco
@@ -25,6 +26,3 @@ packages:
   - examples/components/ts-resource-import
   - examples/components/typegen-async-export
   - examples/components/webidl-book-library
-allowBuilds:
-  esbuild: true
-  puppeteer: true
