@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
-    "@bytecodealliance/preview2-shim": "workspace:*",
+    "@bytecodealliance/preview2-shim": "0.17.9",
     "@commitlint/config-conventional": "^19.8.1",
     "@commitlint/lint": "^21.0.0",
     "@commitlint/load": "^21.0.0",
