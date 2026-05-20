@@ -267,6 +267,17 @@ world future-tx {
   export get-future-async;
 }
 
+interface return-imported-resource-fns {
+  use resources.{example-resource};
+  get-resource: async func(id: u32) -> example-resource;
+  get-resource-result: async func(id: u32) -> result<example-resource, string>;
+}
+
+world async-return-imported-resource {
+  import resources;
+  export return-imported-resource-fns;
+}
+
 interface sleep-post-return {
   run: async func(sleep-time-millis: u64);
 }
