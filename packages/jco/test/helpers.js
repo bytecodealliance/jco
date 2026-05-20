@@ -578,7 +578,7 @@ export async function readComponentBytes(componentPath) {
 
 function tsCodegen(args) {
     if (!args) {
-        throw new Error("missing tscodegen args");
+        throw new Error("missing ts codegen args");
     }
     const cwd = args?.cwd ?? process.cwd();
     if (!args.tsConfigPath) {
