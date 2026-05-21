@@ -1,7 +1,5 @@
 name: create-release-pr
 run-name: create-release-pr
-description: |
-  Create a release PR for a project in the repository
 
 on:
   workflow_dispatch:
@@ -84,12 +82,12 @@ jobs:
           PROJECT: ${{ inputs.project }}
         shell: bash
         run: |
-          if [[ $NEXT_VERSION == v* ]]; then
+          if [[ "$NEXT_VERSION" == v* ]]; then
             echo "::error::next version [$NEXT_VERSION] starts with 'v' -- enter only the semver version (ex. '0.1.0', not 'v0.1.0')";
             exit 1;
           fi
 
-          case $PROJECT in
+          case "$PROJECT" in
             jco)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
@@ -176,12 +174,16 @@ jobs:
       - name: Generate changelog
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          PROJECT_VERSION_TAG: ${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}
+          IS_PRERELEASE: ${{ steps.project-meta.outputs.is-prerelease }}
+          DEFAULT_TAG_PATTERN: "'^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'"
+          PRERELEASE_TAG_PATTERN: "'^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'"
         run: |
-          export OPT_TAG=--tag='${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}';
+          export OPT_TAG=--tag="$PROJECT_VERSION_TAG"';
 
-          export OPT_TAG_PATTERN=--tag-pattern='^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
-          if [ "true" == "${{ steps.project-meta.outputs.is-prerelease }}" ]; then
-            export OPT_TAG_PATTERN=--tag-pattern='^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+          export OPT_TAG_PATTERN=--tag-pattern=$DEFAULT_TAG_PATTERN;
+          if [ "true" == "$IS_PRERELEASE" ]; then
+            export OPT_TAG_PATTERN=--tag-pattern=$PRERELEASE_TAG_PATTERN;
           fi
 
           # NOTE: we use a custom local-only tag here to force git cliff to
