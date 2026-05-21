@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "dist",
-    "lib": ["es2024"],
+    "lib": ["esnext", "dom"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowJs": true,

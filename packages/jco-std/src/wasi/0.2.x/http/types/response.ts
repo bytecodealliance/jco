@@ -41,7 +41,7 @@ export function genWriteWebResponseFn(args: GenWriteWebResponseFnArgs) {
   ): Promise<void> {
     // Build headers
     const fields: [string, FieldValue][] = [];
-    for (const [k, v] of [...resp.headers.entries()]) {
+    for (const [k, v] of [...Object.entries(resp.headers)]) {
       fields.push([k.toString(), ENCODER.encode(v)]);
     }
     const headers = Fields.fromList(fields);
@@ -97,7 +97,7 @@ export function genWriteWebResponseFn(args: GenWriteWebResponseFnArgs) {
           }
 
           // Write a view of the chunk in
-          const view = new Uint8Array(chunk, Number(written), pendingAmt);
+          const view = new Uint8Array(chunk.buffer, Number(written), pendingAmt);
           outputStream.write(view);
 
           written += BigInt(pendingAmt);
