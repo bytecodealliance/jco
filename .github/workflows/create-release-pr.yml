@@ -159,7 +159,7 @@ jobs:
           if [ "true" == "${{ steps.project-meta.outputs.is-rust-project }}" ]; then
             cargo set-version -p ${{ steps.project-meta.outputs.project }} ${{ steps.project-meta.outputs.next-version }};
           elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
-            pnpm pkg set version=${{ steps.project-meta.outputs.next-version }};
+            npm pkg set version=${{ steps.project-meta.outputs.next-version }};
           fi
 
           if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
