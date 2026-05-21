@@ -175,7 +175,7 @@ jobs:
               export ARTIFACT_NAME="bytecodealliance-preview3-shim-$NEXT_VERSION.tgz";
               ;;
             js-component-bindgen)
-              export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/crates/$PROJECT";
               export PROJECT_PACKAGE_NAME="$PROJECT";
               export CURRENT_VERSION=$(cargo get package.version --terminator Nul --entry=$PROJECT_DIR);
               export IS_RUST_PROJECT=true;
@@ -278,8 +278,10 @@ jobs:
           pnpm install
 
       - name: Create release package
+        env:
+          PROJECT_PACKAGE_NAME: ${{ needs.meta.outputs.project-package-name }}
         run: |
-          pnpm --filter '${{ needs.meta.outputs.project-package-name }}' pack
+          pnpm --filter "$PROJECT_PACKAGE_NAME" pack
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -300,12 +302,15 @@ jobs:
 
       - name: Test built crates.io crate
         if: ${{ needs.meta.outputs.project == 'js-component-bindgen' }}
+        env:
+          PROJECT: ${{ needs.meta.outputs.project }}
+          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
         shell: bash
         run: |
-          mkdir -p /tmp/${{ needs.meta.outputs.project }}
-          cp -r artifacts/* /tmp/${{ needs.meta.outputs.project }}/
-          cd /tmp/${{ needs.meta.outputs.project }}
-          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
+          mkdir -p /tmp/$PROJECT
+          cp -r artifacts/* /tmp/$PROJECT/
+          cd /tmp/$PROJECT
+          tar --strip-components=1 -xvf $ARTIFACT_NAME
           rm Cargo.toml.orig
 
           cargo build
@@ -333,8 +338,10 @@ jobs:
       - name: Test built jco NPM package
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
+        env:
+          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/$ARTIFACT_NAME
           cp -r examples/components/http-hello-world /tmp/test
           cd /tmp/test
           npm install --save $PACKAGE_DIR
@@ -343,8 +350,10 @@ jobs:
       - name: Test built jco-transpile NPM package
         if: ${{ needs.meta.outputs.project == 'jco-transpile' }}
         shell: bash
+        env:
+          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/$ARTIFACT_NAME
           cp -r examples/transpile/adder /tmp/test
           cd /tmp/test
           pnpm install --save $PACKAGE_DIR
@@ -369,16 +378,18 @@ jobs:
       - name: Publish ${{ needs.meta.outputs.project }} to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          PROJECT: ${{ needs.meta.outputs.project }}
+          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
         run: |
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
             export OPT_DRY_RUN="";
           fi
 
-          mkdir -p /tmp/${{ needs.meta.outputs.project }}
-          cp -r artifacts/* /tmp/${{ needs.meta.outputs.project }}/
-          cd /tmp/${{ needs.meta.outputs.project }}
-          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
+          mkdir -p /tmp/$PROJECT
+          cp -r artifacts/* /tmp/$PROJECT/
+          cd /tmp/$PROJECT
+          tar --strip-components=1 -xvf $ARTIFACT_NAME
           rm Cargo.toml.orig
 
           cargo publish $OPT_DRY_RUN
@@ -422,8 +433,13 @@ jobs:
 
       - name: Publish ${{ needs.meta.outputs.project }} to NPM
         shell: bash
+        env:
+          PROJECT: ${{ needs.meta.outputs.project }}
+          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
+          IS_PRERELEASE: ${{ needs.meta.outputs.is-prerelease }}
+          PRERELEASE_TAG: ${{ needs.meta.outputs.prerelease-tag }}
         run: |
-          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/$ARTIFACT_NAME
 
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
@@ -431,12 +447,12 @@ jobs:
           fi
 
           export OPT_RELEASE_TAG=""
-          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
-            export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
+          if [ "true" == "$IS_PRERELEASE" ]; then
+            export OPT_RELEASE_TAG="--tag $PRERELEASE_TAG";
           fi
 
           pnpm publish \
-            --filter '@bytecodealliance/${{ needs.meta.outputs.project }}' \
+            --filter "@bytecodealliance/$PROJECT" \
             --verbose \
             --access=public \
             --provenance \
