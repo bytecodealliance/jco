@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.1.4] - 2026-05-21
+
+### 🐛 Bug Fixes
+
+- _(std)_ setup cmd by @vados-cosmonic
+
+- _(std)_ lint:fix target by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(std)_ use old componentize-js in tests where necessary by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update componentize-js to 0.21.0-rc.0 by @vados-cosmonic
+
+- _(std)_ update git cliff config by @vados-cosmonic
+
+- _(std)_ update componentize-js to 0.20.0 by @vados-cosmonic
+
+
+### 🔒️ Security
+
+- _(std)_ move to pnpm by @vados-cosmonic
+
+
+
+
 ## [0.1.3] - 2026-02-14
 
 ### 🐛 Bug Fixes
