@@ -63,6 +63,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       project: ${{ steps.meta.outputs.project }}
       project-dir: ${{ steps.project-meta.outputs.project-dir }}
+      project-package-name: ${{ steps.project-meta.outputs.project-package-name }}
       is-js-project: ${{ steps.project-meta.outputs.is-js-project }}
       is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
       artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
