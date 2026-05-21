@@ -73,7 +73,7 @@ jobs:
 
       - name: Install debug packages
         run: |
-          pnpm install -D
+          pnpm install
 
       - name: Gather project metadata
         id: project-meta
@@ -197,6 +197,10 @@ jobs:
             $OPT_TAG \
             $OPT_TAG_PATTERN \
             --prepend=${{ steps.project-meta.outputs.project-dir }}/CHANGELOG.md
+
+      - name: fmt
+        run: |
+          pnpm fmt
 
       # Create release PR
       - name: Create release prep PR
