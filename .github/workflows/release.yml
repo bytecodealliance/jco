@@ -128,7 +128,7 @@ jobs:
           PROJECT: ${{ steps.meta.outputs.project }}
         shell: bash
         run: |
-          if [[ $NEXT_VERSION == v* ]]; then
+          if [[ "$NEXT_VERSION" == v* ]]; then
             echo "::error::next version [$NEXT_VERSION] starts with 'v' -- enter only the semver version (ex. '0.1.0', not 'v0.1.0')";
             exit 1;
           fi
@@ -534,6 +534,5 @@ jobs:
           GIT_CLIFF_CONFIG_PATH: ${{ needs.meta.outputs.project-dir }}/cliff.toml
           GIT_CLIFF_REPOSITORY: ${{ github.workspace }}/.git
           GIT_CLIFF_RELEASE_TAG: ${{ needs.meta.outputs.next-release-tag }}
-          GIT_CLIFF_TAG_PATTERN: ${{ steps.changelog-regen.outputs.tag-pattern }}
         run: |
           node scripts/post-release-issue-update.mjs

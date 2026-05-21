@@ -1,7 +1,5 @@
 name: tag-release
 run-name: tag-release
-description: |
-  Tag a given commit as a release
 
 on:
   merge_group:

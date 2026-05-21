@@ -380,28 +380,11 @@ jobs:
         run: pnpm install
 
       - name: Cache puppeteer install
-        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
-
-      - name: Cache puppeteer install
-        if: ${{ startsWith(matrix.os, 'macos') }}
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
-          path: |
-            /Users/runner/.cache/puppeteer
-
-      - name: Cache puppeteer install
-        if: ${{ startsWith(matrix.os, 'windows') }}
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
-          path: |
-            /c/users/runneradmin/.cache/puppeteer
 
       - name: Install puppeteer
         run: |
@@ -604,11 +587,11 @@ jobs:
             packages/jco-transpile/vendor
 
       - name: Install Rust
-        if: ${{ matrix.project.requires-crates != '[]' }}
+        if: ${{ toJSON(matrix.project.requires-crates) != '[]' }}
         run: rustup update stable --no-self-update && rustup default stable
 
       - name: Install required rust crates
-        if: ${{ matrix.project.requires-crates != '[]' }}
+        if: ${{ toJSON(matrix.project.requires-crates) != '[]' }}
         uses: taiki-e/install-action@65851e10cd6c377f11a60e600abc07cb08643468 # v2
         with:
           tool: ${{ join(matrix.project.requires-crates, ',') }}
@@ -633,10 +616,6 @@ jobs:
             node_modules
 
       - run: pnpm install
-
-      - name: Install node modules (project)
-        working-directory: ${{ matrix.project.dir }}
-        run: pnpm install
 
       - name: Build required deps
         run: |
