@@ -10,6 +10,6 @@
     "all": "pnpm run generate:wit && pnpm run generate:types && pnpm run build && pnpm run transpile && node demo.js"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "1.17.6"
+    "@bytecodealliance/jco": "1.19.0"
   }
 }
