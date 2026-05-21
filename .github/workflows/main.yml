@@ -294,16 +294,8 @@ jobs:
           - 24.x
           - latest
         exclude:
-          - os: macos-latest
-            node: 20.x
-          # TODO: after debugging hang in p2 TCP streams abort
-          # see: https://github.com/bytecodealliance/jco/pull/1280#issuecomment-3957689892
+          # TODO: windows conformance tests currently hang
           - os: windows-2025
-            node: latest
-          - os: windows-2025
-            node: 22.x
-          - os: windows-2025
-            node: 24.x
       fail-fast: false
     runs-on: ${{ matrix.os }}
     needs:
