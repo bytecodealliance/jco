@@ -34,3 +34,6 @@ packages/jco/test/output
 #
 # While the vendor folder should be present, no contents should be checked in
 packages/jco-transpile/vendor/*
+
+# Pre-release artifacts placed by github
+gh-artifacts
