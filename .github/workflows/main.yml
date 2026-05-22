@@ -91,7 +91,6 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
-          - windows-2025
           - macos-latest
         node:
           - 20.x
@@ -99,8 +98,6 @@ jobs:
           - 24.x
           - latest # 26.x
         include:
-          - os: windows-2025
-            weval-bin-path: .weval-bin/weval.exe
           - os: ubuntu-22.04
             weval-bin-path: .weval-bin/weval
           - os: macos-latest
@@ -108,8 +105,6 @@ jobs:
         exclude:
           - os: macos-latest
             node: 20.x
-          - os: windows-2025
-            node: latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -147,11 +142,6 @@ jobs:
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
           tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
           mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux/weval .weval-bin
-      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'windows') }}
-        run: |
-          curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
-          unzip weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
-          mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows .weval-bin
       - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'macos') }}
         run: |
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
@@ -177,14 +167,6 @@ jobs:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /Users/runner/.cache/puppeteer
-
-      - name: Cache puppeteer install
-        if: ${{ startsWith(matrix.os, 'windows') }}
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
-          path: |
-            /c/users/runneradmin/.cache/puppeteer
 
       # NOTE: We can stop pinning the version of puppeteer when the version that the mac atttempts to use
       # syncs up (right now newest is 148.0.7778.178, but puppeteer will attempt to use 148.0.7778.97)
@@ -286,21 +268,12 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - windows-2025
           - macos-latest
         node:
           - 20.x
           - 22.x
           - 24.x
           - latest
-        exclude:
-          # TODO: windows conformance tests hang periodically
-          - os: windows-2025
-            node: 20.x
-          - os: windows-2025
-            node: 22.x
-          - os: windows-2025
-            node: 24.x
       fail-fast: false
     runs-on: ${{ matrix.os }}
     needs:
