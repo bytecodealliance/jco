@@ -278,6 +278,7 @@ jobs:
           pnpm install
 
       - name: Create release package
+        working-directory: ${{ needs.meta.outputs.project-dir }}
         env:
           PROJECT_PACKAGE_NAME: ${{ needs.meta.outputs.project-package-name }}
         run: |
