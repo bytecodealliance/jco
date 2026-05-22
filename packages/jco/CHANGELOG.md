@@ -1,5 +1,371 @@
 # Changelog
 
+## [1.20.0] - 2026-05-22
+
+### 🚀 Features
+
+- _(jco)_ explicit types for jco API exports by @youngspe in #1506
+
+- _(jco)_ add future lower tests, refactor existing by @vados-cosmonic
+
+- _(jco)_ added warning when using fallback ComponentizeJS by @EngoDev in #1416
+
+- _(jco)_ detect older `wasi:http` version for older componentizejs by @vados-cosmonic
+
+- _(jco)_ add import/export metadata getter fn to wasm-tools by @vados-cosmonic
+
+- _(jco)_ add componentize-js v0.19.3 as dep by @vados-cosmonic
+
+- _(jco)_ add --strict option for enabling bindgen type checks by @vados-cosmonic
+
+- _(jco)_ error on attempt to set async imports for sync transpile by @vados-cosmonic
+
+- _(jco)_ enable p3 async post return test by @vados-cosmonic
+
+- _(jco)_ add --debug, refactor feature enable/disable by @vados-cosmonic in #984
+
+- _(jco)_ add wit & output path defaults for type generation by @vados-cosmonic in #986
+
+- _(jco)_ support async export generation for guest-types by @vados-cosmonic
+
+- _(jco)_ allow configurable wasm-opt bin path by @vados-cosmonic in #957
+
+- _(jco)_ begin stabilizing p3 async task implementation (#817) by @vados-cosmonic in #817
+
+- _(jco)_ update componentize-js to v0.18.4 (#881) by @vados-cosmonic in #881
+
+### 🐛 Bug Fixes
+
+- _(jco)_ p2 proxy codegen test by @vados-cosmonic
+
+- _(jco)_ p3-shim workspace dep by @vados-cosmonic
+
+- _(jco)_ lint:fix target, lint by @vados-cosmonic
+
+- _(jco)_ address code review by @andreiltd in #1516
+
+- _(jco)_ fix invalid types for jco api by @youngspe
+
+- _(jco)_ `u64/s64` parameters and returns in `--js` mode by @QuantumSegfault in #1421
+
+- _(jco)_ look for all old wasi versions by @vados-cosmonic
+
+- _(jco)_ add old componentize-js checking for fetch import by @vados-cosmonic
+
+- _(jco)_ fix older wasi test on windows by @vados-cosmonic
+
+- _(jco)_ version number by @vados-cosmonic
+
+- _(jco)_ eslint use in tests, avoid formatting tsc output by @vados-cosmonic
+
+- _(jco)_ test use of push context by @vados-cosmonic
+
+- _(jco)_ browser tests by @vados-cosmonic
+
+- _(jco)_ tests, async tick() behavior by @vados-cosmonic
+
+- _(jco)_ async return writing for caller memory by @vados-cosmonic in #1143
+
+- _(jco)_ asyncMode usage in transpile test by @vados-cosmonic in #959
+
+- _(jco)_ async export type generation by @vados-cosmonic in #946
+
+- _(jco)_ improve exec failure message during tests by @vados-cosmonic in #943
+
+- _(jco)_ optional arguments for jco and opt (#875) by @vados-cosmonic in #875
+
+- _(jco)_ opt subcommand usage of '--' (#874) by @vados-cosmonic in #874
+
+- _(jco)_ remove double dash option (#871) by @vados-cosmonic in #871
+
+- _(jco)_ run linter on jco package source code (#758) by @andreiltd in #758
+
+### 🚜 Refactor
+
+- _(jco)_ comment out unminify by @vados-cosmonic
+
+- _(jco)_ remove chalk dependency by @vados-cosmonic in #1010
+
+- _(jco)_ move type generation functions to separate file (#839) by @vados-cosmonic in #839
+
+### 🧪 Testing
+
+- _(jco)_ refactor runtime TS generation by @vados-cosmonic
+
+- _(jco)_ disable codegen lint by @vados-cosmonic
+
+- _(jco)_ increase tranpiled code char limit by @vados-cosmonic in #1493
+
+- _(jco)_ allow JSPI for newer Node LTS versions by @vados-cosmonic in #1463
+
+- _(jco)_ fix check for function asyncness by @vados-cosmonic
+
+- _(jco)_ fix stream-tx.wasm reference by @vados-cosmonic
+
+- _(jco)_ add links to float reinterpret issue by @vados-cosmonic
+
+- _(jco)_ update tests for future lift/lower, add list<u32, 3> by @vados-cosmonic
+
+- _(jco)_ fill in nested future stream lower test by @vados-cosmonic
+
+- _(jco)_ skip possibly-invalid borrowing test by @vados-cosmonic in #1425
+
+- _(jco)_ refactor tests, and explicitly shared instances by @vados-cosmonic
+
+- _(jco)_ update directive test to check for 'use components' by @vados-cosmonic in #1410
+
+- _(jco)_ add codegen test for --strict by @vados-cosmonic
+
+- _(jco)_ add async future lift tests future tx component by @vados-cosmonic
+
+- _(jco)_ add test for generation determinism by @vados-cosmonic in #1373
+
+- _(jco)_ enable test for lowered stream<string> by @vados-cosmonic
+
+- _(jco)_ update tests for lowered resources by @vados-cosmonic
+
+- _(jco)_ add test stubs by @vados-cosmonic
+
+- _(jco)_ add test for stream of list<record> by @vados-cosmonic
+
+- _(jco)_ impove fixed length list test by @vados-cosmonic in #1366
+
+- _(jco)_ add more stream lower tests by @vados-cosmonic
+
+- _(jco)_ add async stream lower variant test by @vados-cosmonic
+
+- _(jco)_ move readable stream creating helper, fix test by @vados-cosmonic
+
+- _(jco)_ adapt closed stream test to async iterator semantics by @vados-cosmonic
+
+- _(jco)_ add async stream lower variant test by @vados-cosmonic
+
+- _(jco)_ add async record lower test by @vados-cosmonic
+
+- _(jco)_ fix & re-enable tests for primitives and string by @vados-cosmonic
+
+- _(jco)_ add more lower tests by @vados-cosmonic
+
+- _(jco)_ implement tests for stream lower values by @vados-cosmonic
+
+- _(jco)_ async passthrough stream lower test by @vados-cosmonic
+
+- _(jco)_ update stream lift tests by @vados-cosmonic
+
+- _(jco)_ fix stream test by @vados-cosmonic
+
+- _(jco)_ update tests with async itereator adoption by @vados-cosmonic
+
+- _(jco)_ finish test for sync stream passthrough by @vados-cosmonic
+
+- _(jco)_ add test for stream lower impl by @vados-cosmonic
+
+- _(jco)_ add component for stream-rx tests by @vados-cosmonic
+
+- _(jco)_ add read resource stream test by @vados-cosmonic
+
+- _(jco)_ add inter-task comms test by @vados-cosmonic
+
+- _(jco)_ add short reads test by @vados-cosmonic
+
+- _(jco)_ add test for host->host, host->guest closed streams by @vados-cosmonic
+
+- _(jco)_ ensure that last read is undefined by @vados-cosmonic
+
+- _(jco)_ add test for sync closed stream by @vados-cosmonic
+
+- _(jco)_ enable nested stream test by @vados-cosmonic in #1340
+
+- _(jco)_ use drop in resoruce lift by @vados-cosmonic in #1339
+
+- _(jco)_ avoid recursive re-entrancy by @vados-cosmonic
+
+- _(jco)_ enable resource test, start fixing owned stream lift test by @vados-cosmonic
+
+- _(jco)_ add regression test for bare export initialize by @vados-cosmonic in #1335
+
+- _(jco)_ re-enable all stream tests by @vados-cosmonic in #1329
+
+- _(jco)_ run p3 stream tests in parallel w/ diff instantiations by @vados-cosmonic in #1327
+
+- _(jco)_ add test for stream lift of list<u8> by @vados-cosmonic
+
+- _(jco)_ remove todo on throwing for overflow by @vados-cosmonic in #1326
+
+- _(jco)_ add list, record stream lift tests by @vados-cosmonic
+
+- _(jco)_ add test for fixed length lists by @vados-cosmonic
+
+- _(jco)_ enable test for stream list, fixed size list by @vados-cosmonic
+
+- _(jco)_ add test for stream lift enum by @vados-cosmonic
+
+- _(jco)_ enable stream tx test for flags by @vados-cosmonic
+
+- _(jco)_ enable flat lift test for tuple<t> by @vados-cosmonic
+
+- _(jco)_ add tests for fixed length lists by @yannbolliger
+
+- _(jco)_ reverse expeted/actual values for stream testing helper by @vados-cosmonic
+
+- _(jco)_ add record test by @vados-cosmonic
+
+- _(jco)_ add stream<string> test, refactor & uncomment existing by @vados-cosmonic in #1304
+
+- _(jco)_ increase timeout in CI by @vados-cosmonic in #1291
+
+- _(jco)_ update and add async tests by @vados-cosmonic
+
+- _(jco)_ add initial, incomplete tests for returned streams by @vados-cosmonic
+
+- _(jco)_ re-enable stream tests by @vados-cosmonic
+
+- _(jco)_ uncomment s32 stream test by @vados-cosmonic
+
+- _(jco)_ temporarily disable post-codegen lint by @vados-cosmonic in #1255
+
+- _(jco)_ use assert.strictEqual in value check by @vados-cosmonic in #1256
+
+- _(jco)_ temporarily disable s32 stream test by @vados-cosmonic
+
+- _(jco)_ add tests for p3 streams by @vados-cosmonic
+
+- _(jco)_ add regression test for improved mapping semantics by @vados-cosmonic
+
+- _(jco)_ test telemetry directive by @vados-cosmonic in #1228
+
+- _(jco)_ re-add basic custom component tests by @vados-cosmonic
+
+- _(jco)_ re-add basic backpressure test by @vados-cosmonic
+
+- _(jco)_ update previously deleted test to use test components by @vados-cosmonic
+
+- _(jco)_ add machinery for building local rust p3 test components by @vados-cosmonic
+
+- _(jco)_ simply remove outdated async component tests by @vados-cosmonic
+
+- _(jco)_ fix the post-return tests for updated upstream deps by @vados-cosmonic
+
+- _(jco)_ update error-context tests by @vados-cosmonic
+
+- _(jco)_ update error context to newer binaries by @vados-cosmonic
+
+- _(jco)_ fix ts generation helper usage by @vados-cosmonic
+
+- _(jco)_ refactor typescript fixture generation code by @vados-cosmonic
+
+- _(jco)_ use p2-shim in strings test by @vados-cosmonic
+
+- _(jco)_ update browser template by @vados-cosmonic
+
+- _(jco)_ update async context test by @vados-cosmonic
+
+- _(jco)_ re-enable skipped and excluded tests by @vados-cosmonic
+
+- _(jco)_ add basic test for async imports by @vados-cosmonic
+
+- _(jco)_ improve documentation for setup helper by @vados-cosmonic
+
+- _(jco)_ add test for basic direct import async function by @vados-cosmonic
+
+- _(jco)_ add/improve testing for direct exported async returns by @vados-cosmonic
+
+- _(jco)_ skip hanging context.get/set test by @vados-cosmonic
+
+- _(jco)_ print actual usage for memory leak test by @vados-cosmonic
+
+- _(jco)_ update/fix tests with updated component bindgen by @vados-cosmonic
+
+- _(jco)_ port p3 post-return scenario tests by @vados-cosmonic
+
+- _(jco)_ port p3 backpressure scenario tests by @vados-cosmonic
+
+- _(jco)_ refactor vite SSR hack for vitest by @vados-cosmonic
+
+- _(jco)_ add upstream error-context caller/callee tests by @vados-cosmonic
+
+- _(jco)_ port single-component p3 error-context scenario by @vados-cosmonic
+
+- _(jco)_ add machinery for running upstream tests by @vados-cosmonic
+
+- _(jco)_ port more tests, use updated wit-bindgen-core by @vados-cosmonic
+
+- _(jco)_ port p3-prototyping tests by @vados-cosmonic
+
+- _(jco)_ remove declare use from tests by @vados-cosmonic in #994
+
+- _(jco)_ add test for transpile mapping by @vados-cosmonic in #987
+
+- _(jco)_ add memory usage test by @vados-cosmonic in #950
+
+- _(jco)_ allow retries on browser test (#919) by @vados-cosmonic in #919
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update componentize-js to 0.21.0-rc.0 by @vados-cosmonic
+
+- _(jco)_ update generated api.d.ts by @vados-cosmonic
+
+- _(jco)_ update git cliff config by @vados-cosmonic
+
+- _(jco)_ add p3 fixtures test runners by @andreiltd
+
+- _(jco)_ add p3 wasi test components by @vados-cosmonic in #1431
+
+- _(jco)_ update componentize-js to 0.20.0 by @vados-cosmonic
+
+- _(jco)_ update bundled preview2-shim version to v1.17.9 by @vados-cosmonic in #1408
+
+- _(jco)_ remove debug code in test by @vados-cosmonic in #1403
+
+- _(jco)_ lint by @vados-cosmonic
+
+- _(jco)_ lint by @vados-cosmonic
+
+- _(jco)_ fmt by @vados-cosmonic
+
+- _(jco)_ fmt by @vados-cosmonic in #1273
+
+- _(jco)_ lint by @vados-cosmonic
+
+- _(jco)_ ignore build-output TS files in lint by @vados-cosmonic
+
+- _(jco)_ oxfmt by @vados-cosmonic
+
+- _(jco)_ swap eslint for oxlint by @vados-cosmonic
+
+- _(jco)_ update transpile tests, replace & updatte wasm binaries by @vados-cosmonic
+
+- _(jco)_ re-enable all error-context tests by @vados-cosmonic
+
+- _(jco)_ update upstream p3 test binaries by @vados-cosmonic
+
+- _(jco)_ fix lint by @vados-cosmonic
+
+- _(jco)_ remove stale TODO by @vados-cosmonic
+
+- _(jco)_ fix imports of bare node 'url' builtin by @vados-cosmonic
+
+- _(jco)_ update componentize-js to v0.19.3 by @vados-cosmonic in #1070
+
+- _(jco)_ fix lint by @vados-cosmonic in #1061
+
+- _(jco)_ update componentize-js to v0.19.1 by @vados-cosmonic in #1044
+
+- _(jco)_ eslint fix by @vados-cosmonic
+
+- _(jco)_ remove prettier in favor of eslint w/ fix by @vados-cosmonic
+
+- _(jco)_ regenerate internal type declarations by @vados-cosmonic in #990
+
+- _(jco)_ update preview2-shim to v0.17.3 by @vados-cosmonic in #968
+
+- _(jco)_ update generated types (#864) by @vados-cosmonic in #864
+
+### 🔒️ Security
+
+- _(jco)_ move to pnpm by @vados-cosmonic
+
 ## [1.19.0] - 2026-04-22
 
 ### 🐛 Bug Fixes
