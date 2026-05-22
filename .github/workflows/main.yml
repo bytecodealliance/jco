@@ -366,7 +366,7 @@ jobs:
 
       - name: Install Rust
         run: rustup update stable --no-self-update
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.91
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
@@ -452,11 +452,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Install Rust
         run: rustup update stable && rustup default stable && rustup component add rustfmt
+
       - name: Remove tests mod
         run: rm -r crates/jco/tests/mod.rs
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
       - name: Format source code
         run: cargo fmt -- --check
 
@@ -464,11 +470,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Install Rust
         run: rustup update stable && rustup default stable
+
       - name: Remove tests mod
         run: rm -r crates/jco/tests/mod.rs
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
       - name: Run clippy
         run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
 
