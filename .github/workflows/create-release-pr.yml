@@ -179,7 +179,7 @@ jobs:
           DEFAULT_TAG_PATTERN: "'^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'"
           PRERELEASE_TAG_PATTERN: "'^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'"
         run: |
-          export OPT_TAG="--tag='$PROJECT_VERSION_TAG'";
+          export OPT_TAG="--tag=$PROJECT_VERSION_TAG";
 
           export OPT_TAG_PATTERN="--tag-pattern=$DEFAULT_TAG_PATTERN";
           if [ "true" == "$IS_PRERELEASE" ]; then
