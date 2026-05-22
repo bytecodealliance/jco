@@ -466,7 +466,7 @@ jobs:
             --provenance \
             $OPT_DRY_RUN \
             $OPT_RELEASE_TAG \
-            $NO_GIT_CHECKS \
+            $OPT_NO_GIT_CHECKS \
             $PACKAGE_FILE_PATH
 
   create-gh-release:
