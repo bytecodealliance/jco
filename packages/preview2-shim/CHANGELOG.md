@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.18.0] - 2026-05-22
+
+### 🚀 Features
+
+- _(p2-shim)_ implement browser HTTP fetch support via JSPI by @danbopes in #1249
+
+- _(p2-shim)_ add sandboxing configuration to WASIShim by @andreiltd
+
+- _(p2-shim)_ add support for retrieving HTTP server address by @vados-cosmonic in #1001
+
+- _(p2-shim)_ accomodate versioned WASI import objects by @vados-cosmonic
+
+- _(p2-shim)_ add easy to use p2 shim object (#599) by @vados-cosmonic in #599
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ accept valid input in Fields.set by @glassmonkey
+
+- _(p2-shim)_ lint:fix target by @vados-cosmonic
+
+- _(p2-shim)_ ip dns lookup mapping return by @vados-cosmonic in #1453
+
+- _(p2-shim)_ incorrect ns magnitude by @vados-cosmonic
+
+- _(p2-shim)_ return protocol from stream subscribe by @molarmanful in #1184
+
+- _(p2-shim)_ missing browser shim bits by @vados-cosmonic in #1155
+
+- _(p2-shim)_ undeclared var assignment for \_cwd by @vados-cosmonic
+
+- _(p2-shim)_ circular dependency warning by @vados-cosmonic in #978
+
+- _(p2-shim)_ typo in filesystems imports in WASIShim object by @vados-cosmonic in #981
+
+- _(p2-shim)_ types and instantiation code for shim object by @vados-cosmonic in #963
+
+- _(p2-shim)_ nsToDateTime by @lrowe in #956
+
+- _(p2-shim)_ throw exception on exceeding stream buffer limit error (#756) by @emmanuel-ferdman in #756
+
+### 🧪 Testing
+
+- _(p2-shim)_ set retry for pollable tests by @vados-cosmonic
+
+- _(p2-shim)_ avoid tight monotonic test in CI by @vados-cosmonic in #1099
+
+- _(p2-shim)_ increase tolerance for pollable ready testing by @vados-cosmonic
+
+- _(p2-shim)_ support puppeteer launch args by @vados-cosmonic in #1075
+
+- _(p2-shim)_ add test machinery for browsers by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ update componentize-js to 0.21.0-rc.0 by @vados-cosmonic
+
+- _(p2-shim)_ update git cliff config by @vados-cosmonic
+
+- _(p2-shim)_ update componentize-js to 0.20.0 by @vados-cosmonic
+
+- _(p2-shim)_ oxfmt by @vados-cosmonic
+
+- _(p2-shim)_ swap eslint for oxlint by @vados-cosmonic
+
+- _(p2-shim)_ remove unused eslint rule by @vados-cosmonic
+
+- _(p2-shim)_ eslint fix by @vados-cosmonic
+
+- _(p2-shim)_ remove mocha (#671) by @vados-cosmonic in #671
+
+### 🔒️ Security
+
+- _(p2-shim)_ move to pnpm by @vados-cosmonic
+
 ## [0.17.9] - 2026-04-17
 
 ### 🐛 Bug Fixes
