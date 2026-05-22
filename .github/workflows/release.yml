@@ -346,8 +346,8 @@ jobs:
           export PACKAGE_DIR=${{ github.workspace }}/gh-artifacts/$ARTIFACT_NAME
           cp -r examples/components/http-hello-world /tmp/test
           cd /tmp/test
-          npm install --save $PACKAGE_DIR
-          npm run all
+          pnpm install --save $PACKAGE_DIR
+          pnpm run all
 
       - name: Test built jco-transpile NPM package
         if: ${{ needs.meta.outputs.project == 'jco-transpile' }}
