@@ -440,6 +440,7 @@ jobs:
           ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
           IS_PRERELEASE: ${{ needs.meta.outputs.is-prerelease }}
           PRERELEASE_TAG: ${{ needs.meta.outputs.prerelease-tag }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
         run: |
           export PACKAGE_FILE_PATH=${{ github.workspace }}/gh-artifacts/$ARTIFACT_NAME
 
@@ -453,6 +454,11 @@ jobs:
             export OPT_RELEASE_TAG="--tag $PRERELEASE_TAG";
           fi
 
+          export OPT_NO_GIT_CHECKS=""
+          if [ "true" == "$IS_TAG" ]; then
+            export OPT_NO_GIT_CHECKS="--no-git-checks";
+          fi
+
           pnpm publish \
             --filter "@bytecodealliance/$PROJECT" \
             --verbose \
@@ -460,6 +466,7 @@ jobs:
             --provenance \
             $OPT_DRY_RUN \
             $OPT_RELEASE_TAG \
+            $NO_GIT_CHECKS \
             $PACKAGE_FILE_PATH
 
   create-gh-release:
