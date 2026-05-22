@@ -300,7 +300,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: artifacts
+          path: gh-artifacts
 
       - name: Test built crates.io crate
         if: ${{ needs.meta.outputs.project == 'js-component-bindgen' }}
@@ -310,7 +310,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/$PROJECT
-          cp -r artifacts/* /tmp/$PROJECT/
+          cp -r gh-artifacts/* /tmp/$PROJECT/
           cd /tmp/$PROJECT
           tar --strip-components=1 -xvf $ARTIFACT_NAME
           rm Cargo.toml.orig
@@ -327,7 +327,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: artifacts
+          path: gh-artifacts
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
@@ -343,7 +343,7 @@ jobs:
         env:
           ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/$ARTIFACT_NAME
+          export PACKAGE_DIR=${{ github.workspace }}/gh-artifacts/$ARTIFACT_NAME
           cp -r examples/components/http-hello-world /tmp/test
           cd /tmp/test
           npm install --save $PACKAGE_DIR
@@ -355,7 +355,7 @@ jobs:
         env:
           ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/$ARTIFACT_NAME
+          export PACKAGE_DIR=${{ github.workspace }}/gh-artifacts/$ARTIFACT_NAME
           cp -r examples/transpile/adder /tmp/test
           cd /tmp/test
           pnpm install --save $PACKAGE_DIR
@@ -372,7 +372,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: artifacts
+          path: gh-artifacts
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
@@ -389,7 +389,7 @@ jobs:
           fi
 
           mkdir -p /tmp/$PROJECT
-          cp -r artifacts/* /tmp/$PROJECT/
+          cp -r gh-artifacts/* /tmp/$PROJECT/
           cd /tmp/$PROJECT
           tar --strip-components=1 -xvf $ARTIFACT_NAME
           rm Cargo.toml.orig
@@ -418,7 +418,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: artifacts
+          path: gh-artifacts
 
       # NOTE: We install node modules because the pre-pack for various projects may require
       # the cargo xtask build in release mode (even though we're using),
@@ -441,7 +441,7 @@ jobs:
           IS_PRERELEASE: ${{ needs.meta.outputs.is-prerelease }}
           PRERELEASE_TAG: ${{ needs.meta.outputs.prerelease-tag }}
         run: |
-          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/$ARTIFACT_NAME
+          export PACKAGE_FILE_PATH=${{ github.workspace }}/gh-artifacts/$ARTIFACT_NAME
 
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
@@ -490,7 +490,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: artifacts
+          path: gh-artifacts
 
       - name: extract latest changelog section
         env:
@@ -510,7 +510,7 @@ jobs:
           body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.latest
           make_latest: ${{ needs.meta.outputs.project == 'jco' && github.ref_type == 'tag' && needs.meta.outputs.is-prerelease == 'false' }}
           files: |
-            ./artifacts/*
+            ./gh-artifacts/*
 
       - name: Cache node modules
         continue-on-error: true
