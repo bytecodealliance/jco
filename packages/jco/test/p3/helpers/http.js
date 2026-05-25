@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { Buffer } from "node:buffer";
 
 import { assert } from "vitest";
 
@@ -63,6 +64,33 @@ export async function startP3HttpServer() {
                 server.closeAllConnections?.();
                 server.close((err) => (err ? reject(err) : resolve()));
             }),
+    };
+}
+
+export function createEchoHandler() {
+    return {
+        async handle(request) {
+            const { rx: requestResultRx } = future();
+            const [bodyReader, trailerReader] = Request.consumeBody(request, requestResultRx);
+            const headers = request.getHeaders().copyAll();
+            const body = bodyReader ? await bodyReader.readAll() : Buffer.alloc(0);
+            const trailers = await trailerReader.read();
+
+            const { tx: bodyTx, rx: bodyRx } = stream();
+            const { tx: trailersTx, rx: trailersRx } = future();
+            const [response] = Response.new(Fields.fromList(headers), bodyRx, trailersRx);
+
+            const pump = (async () => {
+                if (body.length > 0) {
+                    await bodyTx.write(body);
+                }
+                await bodyTx.close();
+                await trailersTx.write(trailers);
+            })();
+
+            pump.catch(() => {});
+            return response;
+        },
     };
 }
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { P3_COMPONENT_FIXTURES_DIR } from "../../common.js";
 import { setupAsyncTest } from "../../helpers.js";
 
+const CHAIN_HTTP_HELPER_MODULE = new URL("./chain-http.js", import.meta.url).href;
 const P3_CLI_FIXTURE_OUTPUT_DIR = fileURLToPath(new URL("../../output/p3-cli-fixtures", import.meta.url));
 const P3_HANDLER_FIXTURE_OUTPUT_DIR = fileURLToPath(new URL("../../output/p3-handler-fixtures", import.meta.url));
 
@@ -50,15 +51,22 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "sockets/p3-sockets-tcp-streams.wasm", failing: true },
 ];
 
+function withExtraHeaders(payload, headers) {
+    return { ...payload, headers: { ...payload.headers, ...headers } };
+}
+
 const REQUEST = {
     headers: { foo: "bar" },
     body: "And the mome raths outgrabe",
     trailers: { fizz: "buzz" },
 };
 
-function withExtraHeaders(payload, headers) {
-    return { ...payload, headers: { ...payload.headers, ...headers } };
-}
+const POST_REQUEST = {
+    ...REQUEST,
+    method: "POST",
+    pathWithQuery: "/post",
+    headers: { ...REQUEST.headers, "content-length": String(Buffer.byteLength(REQUEST.body)) },
+};
 
 export const P3_HANDLER_RUN_FIXTURES = [
     {
@@ -80,10 +88,31 @@ export const P3_HANDLER_RUN_FIXTURES = [
         path: "cli/p3-cli-serve-hello-world.wasm",
         expect: { body: "Hello, WASI!" },
     },
-    // TODO(tandr): cli/p3-cli-serve-sleep.wasm
-    // TODO(tandr): http/p3-http-middleware.wasm
-    // TODO(tandr): http/p3-http-middleware-with-chain.wasm
-    // TODO(tandr): http/p3-http-proxy.wasm
+    {
+        path: "http/p3-http-middleware.wasm",
+        outbound: REQUEST,
+        expect: REQUEST,
+    },
+    {
+        path: "http/p3-http-middleware-with-chain.wasm",
+        outbound: REQUEST,
+        expect: REQUEST,
+        map: { "local:local/chain-http": CHAIN_HTTP_HELPER_MODULE },
+    },
+    {
+        path: "http/p3-http-proxy.wasm",
+        outbound: ({ server }) =>
+            withExtraHeaders(POST_REQUEST, {
+                url: `http://${server.address}/proxy`,
+            }),
+        expect: {
+            body: REQUEST.body,
+            headers: {
+                "x-wasmtime-test-method": "POST",
+                "x-wasmtime-test-uri": "/proxy",
+            },
+        },
+    },
 ];
 
 export function fixtureTestName(fixture) {
@@ -101,7 +130,6 @@ function outputDirFor(fixture) {
 async function setupP3Fixture({ fixture, outputRootDir, asyncExports, preopen = false }) {
     const outputDir = join(outputRootDir, outputDirFor(fixture));
     const preopenDir = preopen ? join(outputDir, "preopen") : null;
-
     await rm(outputDir, { recursive: true, force: true });
     await mkdir(preopenDir ?? outputDir, { recursive: true });
 
@@ -119,6 +147,7 @@ async function setupP3Fixture({ fixture, outputRootDir, asyncExports, preopen = 
                     extraArgs: {
                         instantiation: null,
                         asyncExports,
+                        map: fixture.map,
                     },
                 },
             },
