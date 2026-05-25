@@ -1254,7 +1254,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Determine what methods to use with a DataView when setting the data
                 let (dataview_set_method, check_fn_intrinsic) =
-                    gen_dataview_set_and_check_fn_js_for_numeric_type(element);
+                    gen_dataview_set_and_check_fn_js_for_numeric_type(resolve, element);
 
                 // Detect whether we're dealing with a regular array
                 uwriteln!(
@@ -3627,7 +3627,10 @@ pub fn js_array_ty(resolve: &Resolve, element_ty: &Type) -> Option<&'static str>
 ///
 /// * `ty` - the [`Type`] to check
 ///
-fn gen_dataview_set_and_check_fn_js_for_numeric_type(ty: &Type) -> (&str, String) {
+fn gen_dataview_set_and_check_fn_js_for_numeric_type(
+    resolve: &Resolve,
+    ty: &Type,
+) -> (&'static str, String) {
     let check_fn = Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
     match ty {
         // Unsigned Integers
@@ -3644,6 +3647,53 @@ fn gen_dataview_set_and_check_fn_js_for_numeric_type(ty: &Type) -> (&str, String
         // Floating point
         Type::F32 => ("setFloat32", format!("{check_fn}.bind(null, 'f32')",)),
         Type::F64 => ("setFloat64", format!("{check_fn}.bind(null, 'f64')",)),
+        Type::Id(id) => {
+            let type_ = &resolve.types[*id];
+            match type_.kind {
+                TypeDefKind::Type(ty) => {
+                    gen_dataview_set_and_check_fn_js_for_numeric_type(resolve, &ty)
+                }
+                _ => {
+                    unreachable!(
+                        "unsupported type [{ty:?}] (as type {type_:?}) for canonical list lower [{:?}]",
+                        type_
+                    )
+                }
+            }
+        }
         _ => unreachable!("unsupported type [{ty:?}] for canonical list lower"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_alias_type_gen_dataview_set_and_check_fn_js_for_numeric_type() {
+        let mut resolve = Resolve::new();
+
+        let owner = wit_parser::TypeOwner::Interface(resolve.interfaces.next_id());
+
+        let ty_id = resolve.types.alloc(wit_parser::TypeDef {
+            name: None,
+            kind: TypeDefKind::Type(Type::U64),
+            docs: Default::default(),
+            stability: Default::default(),
+            owner,
+            span: Default::default(),
+        });
+
+        let ty_ = Type::Id(ty_id);
+
+        let (dataview_set_method, check_fn_intrinsic) =
+            gen_dataview_set_and_check_fn_js_for_numeric_type(&resolve, &ty_);
+
+        assert_eq!(dataview_set_method, "setBigUint64");
+
+        let check_fn =
+            Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+
+        assert_eq!(check_fn_intrinsic, format!("{check_fn}.bind(null, 'u64')",));
     }
 }
