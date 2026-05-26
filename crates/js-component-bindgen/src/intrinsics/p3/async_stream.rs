@@ -493,7 +493,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         const streamEnd = this;
-                        const processFn = (result, reclaimBufferFn) => {{
+                        const processFn = (result, reclaimBufferFn, rejectedLength) => {{
                             if (reclaimBufferFn) {{ reclaimBufferFn(); }}
 
                             if (result === {stream_end_class}.CopyResult.DROPPED) {{
@@ -512,6 +512,9 @@ impl AsyncStreamIntrinsic {
 
                             const packedResult = (Number(buffer.processed) << 4) | result;
                             const event = {{ code: eventCode, payload0: streamEnd.waitableIdx(), payload1: packedResult }};
+                            if (rejectedLength !== undefined) {{
+                                event.rejectedLength = rejectedLength;
+                            }}
 
                             return event;
                         }};
@@ -522,9 +525,9 @@ impl AsyncStreamIntrinsic {
                             }});
                         }};
 
-                        const onCopyDoneFn = (result) => {{
+                        const onCopyDoneFn = (result, rejectedLength) => {{
                             streamEnd.setPendingEvent(() => {{
-                                return processFn(result);
+                                return processFn(result, undefined, rejectedLength);
                             }});
                         }};
 
@@ -590,6 +593,14 @@ impl AsyncStreamIntrinsic {
                                 // to the internal buffer from the incoming buffer
                                 let transferred = false;
                                 if (buffer.remaining() > 0) {{
+                                    const rejectLength = this.#pendingBufferMeta.rejectLength;
+                                    if (rejectLength !== undefined && buffer.remaining() > rejectLength) {{
+                                        const pendingOnCopyDoneFn = this.#pendingBufferMeta.onCopyDoneFn;
+                                        this.resetPendingBufferMeta();
+                                        pendingOnCopyDoneFn({stream_end_class}.CopyResult.DROPPED, buffer.remaining());
+                                        onCopyDoneFn({stream_end_class}.CopyResult.DROPPED);
+                                        return;
+                                    }}
                                     const numElements = Math.min(buffer.remaining(), this.#pendingBufferMeta.buffer.remaining());
                                     this.#pendingBufferMeta.buffer.write(buffer.read(numElements));
                                     this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
@@ -610,7 +621,7 @@ impl AsyncStreamIntrinsic {
                         format!(
                             r#"
                             _read(args) {{
-                                const {{ buffer, onCopyDoneFn, onCopyFn, componentIdx }} = args;
+                                const {{ buffer, onCopyDoneFn, onCopyFn, componentIdx, rejectLength }} = args;
                                 if (this.isDropped()) {{
                                     onCopyDoneFn({stream_end_class}.CopyResult.DROPPED);
                                     return;
@@ -622,6 +633,7 @@ impl AsyncStreamIntrinsic {
                                         buffer,
                                         onCopyFn,
                                         onCopyDoneFn,
+                                        rejectLength,
                                     }});
                                     return;
                                 }}
@@ -653,6 +665,11 @@ impl AsyncStreamIntrinsic {
                                 let transferred = false;
                                 if (pendingRemaining > 0) {{
                                     const bufferRemaining = buffer.remaining();
+                                    if (rejectLength !== undefined && pendingRemaining > rejectLength) {{
+                                        this.resetAndNotifyPending({stream_end_class}.CopyResult.DROPPED);
+                                        onCopyDoneFn({stream_end_class}.CopyResult.DROPPED, pendingRemaining);
+                                        return;
+                                    }}
                                     if (bufferRemaining > 0) {{
                                         const count = Math.min(pendingRemaining, bufferRemaining);
                                         buffer.write(this.#pendingBufferMeta.buffer.read(count))
@@ -666,7 +683,7 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.COMPLETED);
-                                this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn }});
+                                this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn, rejectLength }});
                             }}
                             "#,
                         ),
@@ -696,6 +713,7 @@ impl AsyncStreamIntrinsic {
                                  skipStateCheck,
                                  stringEncoding,
                                  reallocFn,
+                                 rejectLength,
                              }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
 
@@ -743,6 +761,7 @@ impl AsyncStreamIntrinsic {
                                  onCopyFn,
                                  onCopyDoneFn,
                                  componentIdx,
+                                 rejectLength,
                              }});
 
                              let injectedWritePromise;
@@ -812,6 +831,9 @@ impl AsyncStreamIntrinsic {
                                  throw new Error(errMsg);
                              }}
 
+                             if (event.rejectedLength !== undefined) {{
+                                 this.#rejectedLength = event.rejectedLength;
+                             }}
                              return payload;
                          }}
                     "#
@@ -1000,12 +1022,13 @@ impl AsyncStreamIntrinsic {
                     // fn (below) via an anonymous function.
                     Self::StreamReadableEndClass => format!(
                         r#"
-                         async read(count = 1) {{
+                         async read(opts = 1) {{
                             {debug_log_fn}('[{end_class_name}#read()]');
 
                             if (this.#endOfStream) {{
                                 return {{ value: undefined, done: true }};
                             }}
+                            let {{ count, rejectLength }} = this.#readOpts(opts);
 
                             // Wait for an existing read operation to end, if present,
                             // otherwise register this read for any future operations.
@@ -1034,9 +1057,6 @@ impl AsyncStreamIntrinsic {
                             // TODO(fix): when we do a read, we need to GET the string encoding from the
                             // other side, via the lift/lower fn?
 
-                            if (!Number.isInteger(count) || count < 1) {{
-                                throw new TypeError(`invalid stream read count [${{count}}]`);
-                            }}
                             count = Math.min(count, {managed_buffer_class}.MAX_LENGTH);
                             try {{
                                 const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
@@ -1057,6 +1077,7 @@ impl AsyncStreamIntrinsic {
                                     buffer,
                                     eventCode: {async_event_code_enum}.STREAM_READ,
                                     componentIdx: -1,
+                                    rejectLength,
                                 }});
 
                                 if (packedResult === {async_blocked_const}) {{
@@ -1085,6 +1106,9 @@ impl AsyncStreamIntrinsic {
                                     }}
 
                                     if (index !== this.waitableIdx()) {{ throw new Error('invalid stream end index'); }}
+                                    if (event.rejectedLength !== undefined) {{
+                                        this.#rejectedLength = event.rejectedLength;
+                                    }}
                                     packedResult = payload;
 
                                     if (packedResult === {async_blocked_const}) {{
@@ -1116,7 +1140,25 @@ impl AsyncStreamIntrinsic {
                             }}
 
                             const res = await promise;
-                            return {{ value: res, done: res === undefined }};
+                            const rejectedLength = this.#rejectedLength;
+                            this.#rejectedLength = null;
+                            const result = {{ value: res, done: res === undefined }};
+                            if (rejectedLength !== null) {{
+                                result.rejectedLength = rejectedLength;
+                            }}
+                            return result;
+                         }}
+
+                         #readOpts(opts) {{
+                             const count = opts === undefined ? 1 : typeof opts === "number" ? opts : opts && typeof opts === "object" ? opts.count ?? 1 : undefined;
+                             const rejectLength = opts && typeof opts === "object" ? opts.rejectLength : undefined;
+                             if (!Number.isInteger(count) || count < (rejectLength !== undefined ? 0 : 1)) {{
+                                 throw new TypeError(`invalid stream read count [${{count}}]`);
+                             }}
+                             if (rejectLength !== undefined && (!Number.isInteger(rejectLength) || rejectLength < 0)) {{
+                                 throw new TypeError(`invalid stream read reject length [${{rejectLength}}]`);
+                             }}
+                             return {{ count, rejectLength }};
                          }}
                         "#
                     ),
@@ -1150,6 +1192,7 @@ impl AsyncStreamIntrinsic {
                         #result = null;
 
                         #endOfStream = false;
+                        #rejectedLength = null;
 
                         constructor(args) {{
                             {debug_log_fn}('[{end_class_name}#constructor()] args', args);
@@ -1208,15 +1251,16 @@ impl AsyncStreamIntrinsic {
                         {copy_impl}
 
                         setPendingBufferMeta(args) {{
-                            const {{ componentIdx, buffer, onCopyFn, onCopyDoneFn }} = args;
+                            const {{ componentIdx, buffer, onCopyFn, onCopyDoneFn, rejectLength }} = args;
                             this.#pendingBufferMeta.componentIdx = componentIdx;
                             this.#pendingBufferMeta.buffer = buffer;
                             this.#pendingBufferMeta.onCopyFn = onCopyFn;
                             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
+                            this.#pendingBufferMeta.rejectLength = rejectLength;
                         }}
 
                         resetPendingBufferMeta() {{
-                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyFn: null, onCopyDoneFn: null }});
+                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyFn: null, onCopyDoneFn: null, rejectLength: undefined }});
                         }}
 
                         getPendingBufferMeta() {{ return this.#pendingBufferMeta; }}
@@ -1409,8 +1453,8 @@ impl AsyncStreamIntrinsic {
                                 isReadable: streamEnd.isReadable(),
                                 isWritable: streamEnd.isWritable(),
                                 globalRep: this.#rep,
-                                readFn: async (count) => {{
-                                    return await streamEnd.read(count);
+                                readFn: async (opts) => {{
+                                    return await streamEnd.read(opts);
                                 }},
                                 writeFn: async (v) => {{
                                     await streamEnd.write(v);
@@ -1578,13 +1622,18 @@ impl AsyncStreamIntrinsic {
                         async read(opts) {{
                             {debug_log_fn}('[{external_stream_class_name}#read()]', {{ opts }});
                             if (!this.#isReadable) {{ throw new Error("stream is not marked as readable and cannot be read from"); }}
-                            return this.#readFn(this.#readCount(opts));
+                            const readOpts = this.#readOpts(opts);
+                            return this.#readFn(readOpts);
                         }}
 
-                        #readCount(opts) {{
+                        #readOpts(opts) {{
                             const count = opts === undefined ? 1 : typeof opts === "number" ? opts : opts && typeof opts === "object" ? opts.count ?? 1 : undefined;
-                            if (!Number.isInteger(count) || count < 1) {{ throw new TypeError(`invalid stream read count [${{count}}]`); }}
-                            return count;
+                            const rejectLength = opts && typeof opts === "object" ? opts.rejectLength : undefined;
+                            if (!Number.isInteger(count) || count < (rejectLength !== undefined ? 0 : 1)) {{ throw new TypeError(`invalid stream read count [${{count}}]`); }}
+                            if (rejectLength !== undefined && (!Number.isInteger(rejectLength) || rejectLength < 0)) {{
+                                throw new TypeError(`invalid stream read reject length [${{rejectLength}}]`);
+                            }}
+                            return {{ count, rejectLength }};
                         }}
 
                         async write() {{
