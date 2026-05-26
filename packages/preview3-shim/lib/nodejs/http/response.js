@@ -71,7 +71,6 @@ export class Response {
     // Generated P3 futures are lazy thenables so we want to observe them now so early error paths don't hang.
     if (!(trailers instanceof FutureReader)) {
       const promise = Promise.resolve(trailers);
-      void promise.catch(() => {});
       trailers = new FutureReader(promise);
     }
 

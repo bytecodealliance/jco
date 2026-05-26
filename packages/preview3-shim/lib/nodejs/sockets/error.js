@@ -20,6 +20,7 @@ export const ERROR_MAP = {
   ENONET: "remote-unreachable",
   ECONNREFUSED: "connection-refused",
   EPIPE: "connection-broken",
+  "write EPIPE": "connection-broken",
   ECONNRESET: "connection-reset",
   ECONNABORTED: "connection-aborted",
   EMSGSIZE: "datagram-too-large",

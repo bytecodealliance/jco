@@ -52,6 +52,9 @@ export class FutureReader {
     if (!promise || typeof promise.then !== "function") {
       throw new Error("Provided future must be a Promise");
     }
+    if (promise instanceof Promise) {
+      promise.catch(() => {});
+    }
     this.#promise = promise;
   }
 
