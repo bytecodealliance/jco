@@ -13,6 +13,7 @@ import {
 } from "./address.js";
 
 let WORKER = null;
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 function worker() {
   return (WORKER ??= new ResourceWorker(new URL("../workers/tcp-worker.js", import.meta.url)));
 }
@@ -61,6 +62,8 @@ export class TcpSocket {
   #socketId = null;
   #family = null;
   #state = "unbound";
+  #sendStarted = false;
+  #receiveStarted = false;
   #options = {
     // defaults per https://nodejs.org/docs/latest/api/net.html#socketsetkeepaliveenable-initialdelay
     keepAliveEnabled: false,
@@ -270,6 +273,10 @@ export class TcpSocket {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
+    if (this.#sendStarted) {
+      data?.[symbolDispose]?.();
+      throw new SocketError("invalid-state");
+    }
     let stream;
     try {
       stream = readableByteStreamFromReader(data, { name: "tcp send data" });
@@ -279,6 +286,7 @@ export class TcpSocket {
       }
       throw error;
     }
+    this.#sendStarted = true;
 
     try {
       // Transfer the stream to the worker
@@ -310,6 +318,16 @@ export class TcpSocket {
     if (this.#state !== STATE.CONNECTED) {
       throw new SocketError("invalid-state");
     }
+    if (this.#receiveStarted) {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      });
+      const promise = Promise.reject(new SocketError("invalid-state"));
+      return [new StreamReader(stream, { preventCancel: false }), new FutureReader(promise)];
+    }
+    this.#receiveStarted = true;
 
     const transform = new TransformStream();
     const promise = worker()
@@ -325,7 +343,10 @@ export class TcpSocket {
         throw SocketError.from(err);
       });
 
-    return [new StreamReader(transform.readable), new FutureReader(promise)];
+    return [
+      new StreamReader(transform.readable, { preventCancel: false }),
+      new FutureReader(promise),
+    ];
   }
 
   /**

@@ -1,4 +1,5 @@
 export const DEFAULT_BYTE_STREAM_CHUNK_SIZE = 64 * 1024;
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 let BYTE_STREAM_ENCODER = null;
 function encoder() {
@@ -84,6 +85,15 @@ function byteStreamSource(reader, opts) {
           return result;
         }
         return { value: result, done: result === null };
+      },
+      cancel(reason) {
+        if (typeof reader.cancel === "function") {
+          return reader.cancel(reason);
+        }
+        if (typeof reader.close === "function") {
+          return reader.close();
+        }
+        return reader[symbolDispose]?.();
       },
     };
   }
@@ -196,7 +206,7 @@ export class StreamReader {
    * @param {AsyncIterable|Iterable} source - An async or sync iterable to consume e.g. ReadableStream, async generator, array.
    * @throws {Error} If the provided source does not implement `[Symbol.asyncIterator]` or `[Symbol.iterator]`.
    */
-  constructor(source) {
+  constructor(source, opts = {}) {
     if (
       !source ||
       (typeof source[Symbol.asyncIterator] !== "function" &&
@@ -210,7 +220,7 @@ export class StreamReader {
     // For ReadableStream, use values() with preventCancel so the underlying
     // stream is not cancelled when the iterator is released.
     if (source instanceof ReadableStream) {
-      this.#iterator = source.values({ preventCancel: true });
+      this.#iterator = source.values({ preventCancel: opts.preventCancel ?? true });
     } else if (typeof source[Symbol.asyncIterator] === "function") {
       this.#iterator = source[Symbol.asyncIterator]();
     } else {
@@ -296,6 +306,10 @@ export class StreamReader {
       this.#iterator.return();
     }
     this.#iterator = null;
+  }
+
+  [symbolDispose]() {
+    this.close();
   }
 
   /**

@@ -1,5 +1,5 @@
 import { Socket, Server } from "node:net";
-import { Readable, Writable } from "stream";
+import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { once } from "node:events";
 
@@ -48,6 +48,8 @@ function handleTcpCreate({ family }) {
     server: null,
     backlog: 128,
     localAddress: null,
+    disposed: false,
+    activeStreams: 0,
   });
 
   return { socketId };
@@ -143,6 +145,7 @@ async function handleTcpListen({ socketId, stream }) {
   }
 
   server.on("connection", (conn) => {
+    conn.allowHalfOpen = true;
     const id = NEXT_SOCKET_ID++;
     sockets.set(id, {
       handle: conn._handle,
@@ -151,6 +154,8 @@ async function handleTcpListen({ socketId, stream }) {
       tcp: conn,
       server: null,
       localAddress: makeIpAddress(family, conn.localAddress, conn.localPort),
+      disposed: false,
+      activeStreams: 0,
     });
     writer.write({ family, socketId: id });
   });
@@ -162,19 +167,110 @@ async function handleTcpListen({ socketId, stream }) {
 
 async function handleTcpSend({ socketId, stream }) {
   const socket = sockets.get(socketId);
+  socket.activeStreams++;
+
   const { tcp } = socket;
   const readable = Readable.fromWeb(stream);
 
-  // TODO(tandr): Should we handle FIN packet?
-  await pipeline(readable, tcp);
+  try {
+    await pipeline(readable, tcp);
+  } finally {
+    socket.activeStreams--;
+    cleanupDisposedSocket(socketId, socket);
+  }
 }
 
 async function handleTcpReceive({ socketId, stream }) {
   const socket = sockets.get(socketId);
+  const writer = stream.getWriter();
+  socket.activeStreams++;
+
   const { tcp } = socket;
 
-  const writable = Writable.fromWeb(stream);
-  await pipeline(tcp, writable);
+  try {
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      let pending = Promise.resolve();
+
+      const cleanup = () => {
+        tcp.off("data", onData);
+        tcp.off("end", onEnd);
+        tcp.off("error", onError);
+      };
+      const settle = (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      };
+      const onData = (chunk) => {
+        tcp.pause();
+        pending = pending.then(async () => {
+          try {
+            await writer.write(chunk);
+          } catch {
+            settle();
+            return;
+          } finally {
+            if (!tcp.destroyed) {
+              tcp.resume();
+            }
+          }
+        }, settle);
+      };
+      const onEnd = () => {
+        pending = pending.then(async () => {
+          try {
+            await writer.close();
+          } catch {
+            // The guest can drop the receive stream before remote EOF.
+          }
+          settle();
+        }, settle);
+      };
+      const onError = (err) => {
+        pending = pending.finally(() => settle(err));
+      };
+
+      writer.closed.then(
+        () => settle(),
+        () => settle(),
+      );
+      tcp.on("data", onData);
+      tcp.once("end", onEnd);
+      tcp.once("error", onError);
+      tcp.resume();
+    });
+  } finally {
+    writer.releaseLock();
+    socket.activeStreams--;
+    cleanupDisposedSocket(socketId, socket);
+  }
+}
+
+function cleanupDisposedSocket(socketId, socket) {
+  if (!socket.disposed || socket.activeStreams > 0) {
+    return;
+  }
+
+  if (socket.server) {
+    socket.server.close();
+  }
+
+  if (socket.tcp) {
+    socket.tcp.destroy();
+  }
+  if (socket.handle) {
+    socket.handle.close();
+  }
+
+  sockets.delete(socketId);
 }
 
 async function handleGetLocalAddress({ socketId }) {
@@ -241,18 +337,8 @@ function handleTcpDispose({ socketId }) {
     return;
   }
 
-  if (socket.server) {
-    socket.server.close();
-  }
-
-  if (socket.tcp) {
-    socket.tcp.destroy();
-  }
-  if (socket.handle) {
-    socket.handle.close();
-  }
-
-  sockets.delete(socketId);
+  socket.disposed = true;
+  cleanupDisposedSocket(socketId, socket);
 }
 
 let _recvBufferSize, _sendBufferSize;
