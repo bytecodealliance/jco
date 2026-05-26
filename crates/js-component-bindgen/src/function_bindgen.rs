@@ -12,7 +12,7 @@ use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::{
-    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
+    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDef, TypeDefKind, TypeId,
 };
 
 use crate::intrinsics::Intrinsic;
@@ -3647,20 +3647,21 @@ fn gen_dataview_set_and_check_fn_js_for_numeric_type(
         // Floating point
         Type::F32 => ("setFloat32", format!("{check_fn}.bind(null, 'f32')",)),
         Type::F64 => ("setFloat64", format!("{check_fn}.bind(null, 'f64')",)),
-        Type::Id(id) => {
-            let type_ = &resolve.types[*id];
-            match type_.kind {
-                TypeDefKind::Type(ty) => {
-                    gen_dataview_set_and_check_fn_js_for_numeric_type(resolve, &ty)
-                }
-                _ => {
-                    unreachable!(
-                        "unsupported type [{ty:?}] (as type {type_:?}) for canonical list lower [{:?}]",
-                        type_
-                    )
-                }
+        Type::Id(id) => match resolve.types.get(*id) {
+            // Type aliases should resolve to types that have the kind `TypeDefKind::Type`
+            Some(TypeDef {
+                kind: TypeDefKind::Type(inner_ty),
+                ..
+            }) => gen_dataview_set_and_check_fn_js_for_numeric_type(resolve, inner_ty),
+            // We do not expect to resolve to types that *do not* have the `TypeDefKind::Type(...)`
+            Some(inner_ty) => {
+                unreachable!(
+                    "unexpected non-type-kind typedef [{inner_ty:?}] (as type {ty:?}) for canonical list lower [{ty:?}]",
+                )
             }
-        }
+            // All type ids should resolve via the passed in `Resolve`
+            None => unreachable!("missing/unresolvable type [{ty:?}]"),
+        },
         _ => unreachable!("unsupported type [{ty:?}] for canonical list lower"),
     }
 }
