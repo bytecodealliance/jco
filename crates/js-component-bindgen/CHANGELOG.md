@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.19.3] - 2026-05-26
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ propagate host stream drop/cancel by @andreiltd
+
+- _(bindgen)_ support for WIT type aliases
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ match logic for type resolution for type aliases by @vados-cosmonic in #1549
+
+
+
+
 ## [1.19.2] - 2026-05-20
 
 ### 🐛 Bug Fixes
