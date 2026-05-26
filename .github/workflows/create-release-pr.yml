@@ -176,8 +176,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           PROJECT_VERSION_TAG: ${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}
           IS_PRERELEASE: ${{ steps.project-meta.outputs.is-prerelease }}
-          DEFAULT_TAG_PATTERN: "'^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'"
-          PRERELEASE_TAG_PATTERN: "'^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'"
+          DEFAULT_TAG_PATTERN: "^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$"
+          PRERELEASE_TAG_PATTERN: "^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
         run: |
           export OPT_TAG="--tag=$PROJECT_VERSION_TAG";
 
