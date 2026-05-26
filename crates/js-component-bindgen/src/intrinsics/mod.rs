@@ -588,9 +588,8 @@ impl Intrinsic {
                                 values = [...new Array(count)].map(() => null);
                             }} else {{
                                 if (this.isHostOwned()) {{
-                                    const remainingItems = this.#hostOnlyData.slice(count);
-                                    values.push(...this.#hostOnlyData.slice(0, count));
-                                    this.#hostOnlyData = remainingItems;
+                                    values = this.#hostOnlyData.slice(0, count);
+                                    this.#hostOnlyData = this.#hostOnlyData.slice(count);
                                 }} else if (this.#elemMeta.payloadTypeName === 'U8') {{
                                     values = Array.from(new Uint8Array(this.#memory.buffer, this.#ptr, count));
                                     this.#ptr += count;
@@ -635,7 +634,7 @@ impl Intrinsic {
                                 }}
                             }} else {{
                                 if (this.isHostOwned()) {{
-                                    this.#hostOnlyData.push(...values);
+                                    this.#hostOnlyData = this.#hostOnlyData.concat(values);
                                 }} else if (this.#elemMeta.payloadTypeName === 'U8') {{
                                     new Uint8Array(this.#memory.buffer, this.#ptr, values.length).set(values);
                                     this.#ptr += values.length;
