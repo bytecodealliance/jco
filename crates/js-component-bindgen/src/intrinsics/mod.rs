@@ -591,6 +591,9 @@ impl Intrinsic {
                                     const remainingItems = this.#hostOnlyData.slice(count);
                                     values.push(...this.#hostOnlyData.slice(0, count));
                                     this.#hostOnlyData = remainingItems;
+                                }} else if (this.#elemMeta.payloadTypeName === 'U8') {{
+                                    values = Array.from(new Uint8Array(this.#memory.buffer, this.#ptr, count));
+                                    this.#ptr += count;
                                 }} else {{
                                     let currentCount = count;
                                     let startPtr = this.#ptr;
@@ -633,6 +636,9 @@ impl Intrinsic {
                             }} else {{
                                 if (this.isHostOwned()) {{
                                     this.#hostOnlyData.push(...values);
+                                }} else if (this.#elemMeta.payloadTypeName === 'U8') {{
+                                    new Uint8Array(this.#memory.buffer, this.#ptr, values.length).set(values);
+                                    this.#ptr += values.length;
                                 }} else {{
                                     let startPtr = this.#ptr;
                                     if (this.#elemMeta.stringEncoding === undefined) {{

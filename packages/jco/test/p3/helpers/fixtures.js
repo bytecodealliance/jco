@@ -18,6 +18,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "fs/p3-file-write.wasm" },
     { path: "fs/p3-filesystem-file-read-write.wasm" },
     { path: "fs/p3-readdir.wasm" },
+    { path: "http/p3-http-outbound-request-content-length.wasm" },
     { path: "http/p3-http-outbound-request-get.wasm" },
     { path: "http/p3-http-outbound-request-invalid-dnsname.wasm" },
     { path: "http/p3-http-outbound-request-invalid-header.wasm" },
@@ -26,6 +27,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "http/p3-http-outbound-request-missing-path-and-query.wasm" },
     { path: "http/p3-http-outbound-request-post.wasm" },
     { path: "http/p3-http-outbound-request-put.wasm" },
+    { path: "http/p3-http-outbound-request-response-build.wasm" },
     { path: "http/p3-http-outbound-request-timeout.wasm" },
     { path: "http/p3-http-outbound-request-unknown-method.wasm" },
     { path: "http/p3-http-outbound-request-unsupported-scheme.wasm" },
@@ -46,9 +48,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "sockets/p3-sockets-udp-sockopts.wasm" },
     { path: "sockets/p3-sockets-udp-states.wasm" },
     // currently failing
-    { path: "http/p3-http-outbound-request-content-length.wasm", failing: true },
     { path: "http/p3-http-outbound-request-large-post.wasm", failing: true },
-    { path: "http/p3-http-outbound-request-response-build.wasm" },
 ];
 
 function withExtraHeaders(payload, headers) {
