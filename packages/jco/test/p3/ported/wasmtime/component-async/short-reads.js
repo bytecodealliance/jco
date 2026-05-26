@@ -9,9 +9,9 @@ import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from "./common.js";
 // In the upstream wasmtime repo, see:
 // wasmtime/crates/misc/component-async-tests/tests/scenario/streams.rs
 //
-suite.skip("short reads scenario", () => {
-    test("component", async () => {
-        const componentPath = join(COMPONENT_FIXTURES_DIR, "p3/streams/async-short-reads.wasm");
+suite("short reads scenario", () => {
+    test.skip("component", async () => {
+        const componentPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-short-reads.wasm");
         let cleanup;
         try {
             const res = await buildAndTranspile({

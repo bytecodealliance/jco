@@ -25,8 +25,6 @@ suite.skip("inter-task communications scenario", () => {
             const instance = res.instance;
             cleanup = res.cleanup;
 
-            // TODO(fix): requires futures!
-
             await instance["local:local/run"].run();
             await instance["local:local/run"].run();
         } finally {
