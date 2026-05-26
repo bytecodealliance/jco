@@ -62,7 +62,7 @@ export function readableByteStreamFromReader(reader, opts = {}) {
         controller.close();
         return;
       }
-      controller.enqueue(byteChunk(value));
+      controller.enqueue(_byteChunk(value));
     },
     cancel(reason) {
       return source.cancel?.(reason);
@@ -117,7 +117,7 @@ function isIteratorResult(value) {
   return value != null && typeof value === "object" && typeof value.done === "boolean";
 }
 
-function byteChunk(value) {
+export function _byteChunk(value) {
   if (value instanceof Uint8Array) {
     return value;
   }

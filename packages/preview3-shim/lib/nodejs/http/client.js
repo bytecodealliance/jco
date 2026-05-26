@@ -136,7 +136,7 @@ const responseFromParts = (parts) => {
     });
   });
 
-  const future = new FutureReader(promise.then(_trailerResultFromEntries));
+  const future = new TrailerFutureReader(promise.then(_trailerResultFromEntries), trailers);
   const contents = new StreamReader(body);
   const fields = _fieldsFromEntriesChecked(headers);
 
@@ -144,3 +144,18 @@ const responseFromParts = (parts) => {
   res.setStatusCode(statusCode);
   return res;
 };
+
+class TrailerFutureReader extends FutureReader {
+  #trailers;
+
+  constructor(promise, trailers) {
+    super(promise);
+    this.#trailers = trailers;
+  }
+
+  close() {
+    this.#trailers?.close();
+    this.#trailers = null;
+    super.close();
+  }
+}

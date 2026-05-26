@@ -2,7 +2,12 @@ import { HttpError } from "./error.js";
 import { _fieldsLock, Fields } from "./fields.js";
 
 import { FutureReader, future } from "../future.js";
-import { StreamReader, readableByteStreamFromReader } from "../stream.js";
+import {
+  DEFAULT_BYTE_STREAM_CHUNK_SIZE,
+  StreamReader,
+  _byteChunk,
+  readableByteStreamFromReader,
+} from "../stream.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -221,7 +226,7 @@ export class Request {
     if (contents != null && !(contents instanceof StreamReader)) {
       try {
         dispose = contents[symbolDispose]?.bind(contents);
-        const inner = readableByteStreamFromReader(contents, { name: "contents" });
+        const inner = readableContentsStream(contents, headers);
         contents = new StreamReader(inner);
       } catch (err) {
         throw new HttpError("invalid-argument", err.message);
@@ -475,6 +480,93 @@ export class Request {
     }
   }
 }
+
+function readableContentsStream(reader, headers) {
+  const expectedLength = contentLength(headers.copyAll());
+  if (expectedLength === null) {
+    return readableByteStreamFromReader(reader, { name: "contents" });
+  }
+
+  const source =
+    typeof reader?.read === "function"
+      ? reader
+      : new StreamReader(readableByteStreamFromReader(reader, { name: "contents" }));
+  return readableByteStreamFromReader(contentLengthReader(source, expectedLength), {
+    name: "contents",
+  });
+}
+
+function contentLengthReader(reader, expectedLength) {
+  let sent = 0n;
+  return {
+    async read() {
+      const result = await reader.read(readOpts(expectedLength - sent));
+      if (isIteratorResult(result) && result.rejectedLength !== undefined) {
+        throw requestBodySizeError(sent + BigInt(result.rejectedLength));
+      }
+      if (isIteratorResult(result) && result.done) {
+        if (sent < expectedLength) {
+          throw requestBodySizeError(sent);
+        }
+        return result;
+      }
+
+      const value = isIteratorResult(result) ? result.value : result;
+      const chunk = _byteChunk(value);
+      sent += BigInt(chunk.byteLength);
+      if (sent > expectedLength) {
+        throw requestBodySizeError(sent);
+      }
+      return { value: chunk, done: false };
+    },
+    cancel(reason) {
+      if (typeof reader.cancel === "function") {
+        return reader.cancel(reason);
+      }
+      if (typeof reader.close === "function") {
+        return reader.close();
+      }
+      return reader[symbolDispose]?.();
+    },
+  };
+}
+
+function readOpts(remaining) {
+  if (remaining <= 0n) {
+    return { count: 0, rejectLength: 0 };
+  }
+
+  const count = Number(
+    remaining <= BigInt(DEFAULT_BYTE_STREAM_CHUNK_SIZE)
+      ? remaining
+      : BigInt(DEFAULT_BYTE_STREAM_CHUNK_SIZE),
+  );
+  const opts = { count };
+  if (remaining <= BigInt(Number.MAX_SAFE_INTEGER)) {
+    opts.rejectLength = Number(remaining);
+  }
+  return opts;
+}
+
+function requestBodySizeError(bytes) {
+  return { tag: "HTTP-request-body-size", val: bytes };
+}
+
+function isIteratorResult(value) {
+  return value != null && typeof value === "object" && typeof value.done === "boolean";
+}
+
+const decoder = new TextDecoder();
+
+const contentLength = (entries) => {
+  const entry = entries.findLast(([name]) => name.toLowerCase() === "content-length");
+  if (!entry) {
+    return null;
+  }
+
+  const value = decoder.decode(entry[1]);
+  return /^\d+$/.test(value) ? BigInt(value) : null;
+};
 
 const UrlPart = {
   PATH_WITH_QUERY: "pathWithQuery",
