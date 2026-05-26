@@ -24,6 +24,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "http/p3-http-outbound-request-invalid-header.wasm" },
     { path: "http/p3-http-outbound-request-invalid-port.wasm" },
     { path: "http/p3-http-outbound-request-invalid-version.wasm" },
+    { path: "http/p3-http-outbound-request-large-post.wasm" },
     { path: "http/p3-http-outbound-request-missing-path-and-query.wasm" },
     { path: "http/p3-http-outbound-request-post.wasm" },
     { path: "http/p3-http-outbound-request-put.wasm" },
@@ -47,8 +48,6 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "sockets/p3-sockets-udp-send.wasm" },
     { path: "sockets/p3-sockets-udp-sockopts.wasm" },
     { path: "sockets/p3-sockets-udp-states.wasm" },
-    // currently failing
-    { path: "http/p3-http-outbound-request-large-post.wasm", failing: true },
 ];
 
 function withExtraHeaders(payload, headers) {
