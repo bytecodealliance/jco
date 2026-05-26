@@ -46,7 +46,7 @@ suite("read resource stream", () => {
             },
         });
 
-        // TODO(fix): broken due to lower stream from host being broken
+        // TODO(fix): ReadableStream is locked
 
         await instance["local:local/run"].run();
 
