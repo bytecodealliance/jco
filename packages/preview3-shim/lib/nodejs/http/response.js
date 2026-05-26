@@ -89,7 +89,7 @@ export class Response {
   [symbolDispose]() {
     if (this.#contents && !this.#bodyOpen && !this.#bodyEnded) {
       this.#contentsDispose?.();
-      this.#contents.close();
+      this.#closeBody();
     }
     this.#contents = null;
     this.#contentsDispose = null;
@@ -193,9 +193,12 @@ export class Response {
 
     const closedFn = reader.close.bind(reader);
     reader.close = () => {
-      closedFn();
-      response.#bodyEnded = true;
-      response.#bodyOpen = false;
+      response.#closeBody(closedFn);
+    };
+
+    const cancelFn = reader.cancel.bind(reader);
+    reader.cancel = async (...args) => {
+      await response.#closeBody(() => cancelFn(...args));
     };
 
     return [response.#contents, response.#trailersFuture];
@@ -206,6 +209,19 @@ export class Response {
     if (this.#responseFuture) {
       this.#responseFuture.write(result);
       this.#responseFuture = null;
+    }
+  }
+
+  #closeBody(close = this.#contents?.close.bind(this.#contents)) {
+    const closeTrailers = !this.#bodyEnded;
+    try {
+      return close?.();
+    } finally {
+      if (closeTrailers) {
+        this.#trailersFuture.close();
+      }
+      this.#bodyEnded = true;
+      this.#bodyOpen = false;
     }
   }
 }

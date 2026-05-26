@@ -222,7 +222,10 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
     req.once("close", onClose);
   });
 
-  const upload = body ? sendRequestBody(req, body, trailers, () => resStarted) : endRequest(req);
+  const expectedLength = contentLength(headers);
+  const upload = body
+    ? sendRequestBody(req, body, trailers, () => resStarted, expectedLength)
+    : endRequest(req);
 
   upload.then(
     () => transmit.ok(),
@@ -287,10 +290,12 @@ async function handleHttpServerClose({ serverId }) {
   return serverId;
 }
 
-async function sendRequestBody(req, body, trailers, resStarted) {
+async function sendRequestBody(req, body, trailers, resStarted, expectedLength) {
   try {
     req.flushHeaders();
-    await pipeline(Readable.fromWeb(body), req, { end: false });
+    await pipeline(validateRequestBody(Readable.fromWeb(body), expectedLength), req, {
+      end: false,
+    });
     const fields = await recvTrailers(trailers);
     if (fields) {
       req.addTrailers(toObject(fields));
@@ -301,6 +306,21 @@ async function sendRequestBody(req, body, trailers, resStarted) {
       req.destroy(err);
     }
     throw err;
+  }
+}
+
+async function* validateRequestBody(body, expectedLength) {
+  let bytes = 0n;
+  for await (const chunk of body) {
+    bytes += BigInt(chunk.byteLength);
+    if (expectedLength !== null && bytes > expectedLength) {
+      throw new HttpError("HTTP-request-body-size", undefined, bytes);
+    }
+    yield chunk;
+  }
+
+  if (expectedLength !== null && bytes < expectedLength) {
+    throw new HttpError("HTTP-request-body-size", undefined, bytes);
   }
 }
 
@@ -373,6 +393,16 @@ const msecs = (time) => {
 };
 
 const decoder = new TextDecoder();
+
+const contentLength = (entries) => {
+  const entry = entries.findLast(([name]) => name.toLowerCase() === "content-length");
+  if (!entry) {
+    return null;
+  }
+
+  const value = decoder.decode(entry[1]);
+  return /^\d+$/.test(value) ? BigInt(value) : null;
+};
 
 const toObject = (entries) => {
   return Object.fromEntries(entries.map(([key, val]) => [key, decoder.decode(val)]));

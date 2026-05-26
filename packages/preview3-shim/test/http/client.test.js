@@ -282,6 +282,39 @@ describe("HttpClient Integration", () => {
     });
   });
 
+  test("request transmission future reports content-length mismatches", async () => {
+    const sendWithBody = async (contentLength, body) => {
+      const headers = new Fields();
+      headers.append("content-length", ENCODER.encode(String(contentLength)));
+
+      const { tx: bodyTx, rx: bodyRx } = stream();
+      const { tx: trailersTx, rx: trailersRx } = future();
+
+      const [req, transmit] = Request.new(headers, bodyRx, trailersRx);
+      req.setMethod("POST");
+      req.setAuthority(authority);
+      req.setPathWithQuery("/error");
+
+      const responsePromise = client.send(req);
+      await bodyTx.write(Buffer.from(body));
+      await bodyTx.close();
+      await trailersTx.write(null).catch(() => {});
+      await responsePromise.catch(() => {});
+
+      return transmit.read();
+    };
+
+    await expect(withTimeout(sendWithBody(11, "msg"), 1_000)).resolves.toEqual({
+      tag: "err",
+      val: { tag: "HTTP-request-body-size", val: 3n },
+    });
+
+    await expect(withTimeout(sendWithBody(11, "more than 11 bytes"), 1_000)).resolves.toEqual({
+      tag: "err",
+      val: { tag: "HTTP-request-body-size", val: 18n },
+    });
+  });
+
   test("handles server errors properly", async () => {
     const headers = new Fields();
     const { tx: trailersTx, rx: trailersRx } = future();

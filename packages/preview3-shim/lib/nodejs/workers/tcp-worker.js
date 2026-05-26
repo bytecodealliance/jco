@@ -217,11 +217,8 @@ async function handleTcpReceive({ socketId, stream }) {
           } catch {
             settle();
             return;
-          } finally {
-            if (!tcp.destroyed) {
-              tcp.resume();
-            }
           }
+          tcp.resume();
         }, settle);
       };
       const onEnd = () => {
