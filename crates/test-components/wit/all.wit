@@ -308,10 +308,12 @@ world future-concurrency {
 
 interface stream-concurrency-host {
   signal: func();
+  zero-read-complete: func();
 }
 
 interface stream-concurrency-test {
   read-after-signal: async func(s: stream<u8>) -> list<u8>;
+  zero-read-after-cancel: async func(s: stream<u8>) -> list<u8>;
 }
 
 world stream-concurrency {

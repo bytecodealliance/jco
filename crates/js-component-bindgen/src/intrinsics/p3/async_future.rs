@@ -1373,7 +1373,9 @@ impl AsyncFutureIntrinsic {
                     r#"
                       function {gen_host_inject_fn}(genArgs) {{
                           const {{ promise, hostWriteEnd, stringEncoding, getReallocFn }} = genArgs;
-
+                          if (promise instanceof Promise) {{
+                              promise.catch(() => {{}});
+                          }}
                           let done;
 
                           return async function generateFutureHostInject(args) {{

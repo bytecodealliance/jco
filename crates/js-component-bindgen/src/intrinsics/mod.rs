@@ -1409,6 +1409,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ])
     }
 
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::GenStreamHostInjectFn,
+    )) {
+        args.intrinsics.insert(Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::PendingValueQueueClass,
+        ));
+    }
+
     if args
         .intrinsics
         .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture))
