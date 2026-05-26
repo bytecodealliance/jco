@@ -1162,12 +1162,14 @@ impl LowerIntrinsic {
                                         elemMeta,
                                     }});
 
+                                    const readFn = {gen_read_fn_from_lowerable_stream_fn}(stream);
                                     const hostInjectFn = {gen_stream_host_inject_fn}({{
-                                        readFn: {gen_read_fn_from_lowerable_stream_fn}(stream),
+                                        readFn,
                                         hostWriteEnd: writeEnd,
                                         readEnd,
                                     }});
                                     readEnd.setHostInjectFn(hostInjectFn);
+                                    readEnd.setHostDropFn(readFn.drop);
 
                                     waitableIdx = readEnd.waitableIdx();
                                 }}

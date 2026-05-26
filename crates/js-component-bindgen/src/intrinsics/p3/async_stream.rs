@@ -53,6 +53,9 @@ pub enum AsyncStreamIntrinsic {
     ///
     ExternalStreamClass,
 
+    /// The definition of the pending value queue used by host stream injection
+    PendingValueQueueClass,
+
     /// Create a new stream
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturenew
@@ -250,6 +253,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamReadableEndClass => "StreamReadableEnd",
             Self::HostStreamClass => "HostStream",
             Self::ExternalStreamClass => "Stream",
+            Self::PendingValueQueueClass => "PendingValueQueue",
             Self::StreamNew => "streamNew",
             Self::StreamNewFromLift => "streamNewFromLift",
             Self::StreamRead => "streamRead",
@@ -863,7 +867,7 @@ impl AsyncStreamIntrinsic {
                             // (i.e. write #3 must wait on write #2, *not* write #1)
                             //
                             let newResult = {promise_with_resolvers_fn}();
-                            if (this.#result) {{
+                            if (this.#result && !this.#isHostOwned) {{
                                 try {{
                                     const p = this.#result.promise;
                                     this.#result = newResult;
@@ -897,7 +901,7 @@ impl AsyncStreamIntrinsic {
                                 buffer.setTarget(`host stream write buffer (id [${{bufferID}}], count [${{count}}], data len [${{data.length}}])`);
 
                                 let packedResult;
-                                packedResult = await this.copy({{
+                                const copyPromise = this.copy({{
                                     isAsync: true,
                                     count,
                                     bufferID,
@@ -905,6 +909,15 @@ impl AsyncStreamIntrinsic {
                                     eventCode: {async_event_code_enum}.STREAM_WRITE,
                                     componentIdx: -1,
                                 }});
+                                if (this.#isHostOwned && this.hasPendingEvent()) {{
+                                    // Host owned writes are just-in-time writes for an already pending guest read.
+                                    // The guest read path consumes the pending event, so waiting here can deadlock.
+                                    copyPromise.catch(err => reject(err));
+                                    this.#result = null;
+                                    resolve();
+                                    return await promise;
+                                }}
+                                packedResult = await copyPromise;
 
                                 // If we are dealing with a blocked component write operation, we do an immedaite wait
                                 // on the host side to pause the host until the write can be completed.
@@ -1129,6 +1142,8 @@ impl AsyncStreamIntrinsic {
 
                         // only populated for lowered (read) stream ends
                         #hostInjectFn;
+                        #hostDropFn;
+                        #hostCancelFn;
                         // only populated for the write side of a lowered read stream end
                         #isHostOwned;
 
@@ -1173,6 +1188,11 @@ impl AsyncStreamIntrinsic {
                             if (this.#hostInjectFn) {{ throw new Error('host injection fn is already set'); }}
                             this.#hostInjectFn = f;
                         }}
+                        setHostDropFn(f) {{
+                            if (this.#hostDropFn) {{ throw new Error('host drop fn is already set'); }}
+                            this.#hostDropFn = f;
+                        }}
+                        setHostCancelFn(f) {{ this.#hostCancelFn = f; }}
 
                         getElemMeta() {{ return {{...this.#elemMeta}}; }}
 
@@ -1209,15 +1229,36 @@ impl AsyncStreamIntrinsic {
 
                         cancel() {{
                             {debug_log_fn}('[{stream_end_class}#cancel()]');
-                            this.resetAndNotifyPending({stream_end_class}.CopyResult.CANCELLED);
+                            const completeCancel = () => {{
+                                if (this.isDropped()) {{ return; }}
+                                if (this.#hostCancelFn?.()) {{ return; }}
+                                const result = this.#pendingBufferMeta?.buffer?.processed > 0
+                                    ? {stream_end_class}.CopyResult.COMPLETED
+                                    : {stream_end_class}.CopyResult.CANCELLED;
+                                this.resetAndNotifyPending(result);
+                            }};
+                            if (this.#hostInjectFn) {{
+                                setTimeout(completeCancel, 0);
+                            }} else {{
+                                completeCancel();
+                            }}
                         }}
 
                         drop() {{
                             {debug_log_fn}('[{stream_end_class}#drop()]');
                             if (this.isDropped()) {{ return; }}
+                            if (this.#hostDropFn) {{
+                                Promise.resolve(this.#hostDropFn()).catch(err => {{
+                                    {debug_log_fn}('[{stream_end_class}#drop()] host drop failed', err);
+                                }});
+                                this.#hostDropFn = null;
+                            }}
                             super.drop();
                             if (this.#pendingBufferMeta) {{
-                                this.resetAndNotifyPending({stream_end_class}.CopyResult.DROPPED);
+                                const result = this.#pendingBufferMeta.buffer?.processed > 0
+                                    ? {stream_end_class}.CopyResult.COMPLETED
+                                    : {stream_end_class}.CopyResult.DROPPED;
+                                this.resetAndNotifyPending(result);
                             }}
                         }}
                     }}
@@ -1382,6 +1423,97 @@ impl AsyncStreamIntrinsic {
                 ));
             }
 
+            Self::PendingValueQueueClass => {
+                let pending_value_queue_class = self.name();
+
+                output.push_str(&format!(
+                    r#"
+                      class {pending_value_queue_class} {{
+                          #readFn;
+                          #elemMeta;
+                          #done = false;
+                          #sourceReadPromise = null;
+                          #chunks = [];
+                          #offset = 0;
+                          #length = 0;
+
+                          constructor(readFn, elemMeta) {{
+                              this.#readFn = readFn;
+                              this.#elemMeta = elemMeta;
+                          }}
+
+                          get length() {{ return this.#length; }}
+                          get done() {{ return this.#done; }}
+
+                          push(source) {{
+                              if (source.length === 0) {{ return 0; }}
+                              this.#chunks.push(source);
+                              this.#length += source.length;
+                              return source.length;
+                          }}
+
+                          appendReadValue(value) {{
+                              if (value === undefined) {{ return 0; }}
+                              if (this.#elemMeta.isNumeric) {{
+                                  if (value instanceof ArrayBuffer) {{
+                                      value = new Uint8Array(value);
+                                  }}
+                                  if (Array.isArray(value) || (ArrayBuffer.isView(value) && typeof value.length === 'number')) {{
+                                      return this.push(value);
+                                  }}
+                              }}
+                              return this.push([value]);
+                          }}
+
+                          async readSource() {{
+                              if (!this.#sourceReadPromise) {{
+                                  this.#sourceReadPromise = (async () => {{
+                                      const res = await this.#readFn();
+                                      const appended = this.appendReadValue(res.value);
+                                      this.#done = res.done;
+                                      return appended;
+                                  }})().finally(() => {{
+                                      this.#sourceReadPromise = null;
+                                  }});
+                              }}
+                              return this.#sourceReadPromise;
+                          }}
+
+                          prepend(source) {{
+                              if (source.length === 0) {{ return; }}
+                              if (this.#offset !== 0 && this.#chunks.length > 0) {{
+                                  this.#chunks[0] = this.#chunks[0].slice(this.#offset);
+                                  this.#offset = 0;
+                              }}
+                              this.#chunks.unshift(source);
+                              this.#length += source.length;
+                          }}
+
+                          drainInto(target, maxCount) {{
+                              let transferred = 0;
+                              let remaining = Math.min(maxCount, this.#length);
+                              while (remaining > 0) {{
+                                  const chunk = this.#chunks[0];
+                                  const transfer = Math.min(remaining, chunk.length - this.#offset);
+                                  for (let i = 0; i < transfer; i++) {{
+                                      target.push(chunk[this.#offset + i]);
+                                  }}
+                                  this.#offset += transfer;
+                                  this.#length -= transfer;
+                                  transferred += transfer;
+                                  remaining -= transfer;
+                                  if (this.#offset === chunk.length) {{
+                                      this.#chunks.shift();
+                                      this.#offset = 0;
+                                  }}
+                              }}
+                              return transferred;
+                          }}
+                      }}
+                    "#
+                ));
+            }
+
             // NOTE: this stream class is meant to be given to external users and can be passed along
             // to the outside world.
             //
@@ -1432,6 +1564,11 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         [{symbol_async_iterator}]() {{ return this; }}
+
+                        async return() {{
+                            this[{symbol_dispose}]();
+                            return {{ done: true }};
+                        }}
 
                         async next() {{
                             {debug_log_fn}('[{external_stream_class_name}#next()]');
@@ -1880,6 +2017,7 @@ impl AsyncStreamIntrinsic {
                 let async_iterator_symbol = Intrinsic::SymbolAsyncIterator.name();
                 let iterator_symbol = Intrinsic::SymbolIterator.name();
                 let external_readable_stream_class = Intrinsic::PlatformReadableStreamClass.name();
+                let symbol_dispose = Intrinsic::SymbolDispose.name();
 
                 output.push_str(&format!(
                     r#"
@@ -1892,14 +2030,17 @@ impl AsyncStreamIntrinsic {
                           if ({async_iterator_symbol} in stream) {{
                               let asyncIterator = stream[{async_iterator_symbol}]();
                               readFn = () => asyncIterator.next();
+                              readFn.drop = (reason) => asyncIterator.return?.(reason) ?? stream[{symbol_dispose}]?.();
                           }} else if ({iterator_symbol} in stream) {{
                               let iterator = stream[{iterator_symbol}]();
                               readFn = async () => iterator.next();
+                              readFn.drop = (reason) => iterator.return?.(reason) ?? stream[{symbol_dispose}]?.();
                           }} else if (stream instanceof {external_readable_stream_class}) {{
                               // At this point we're dealing with a readable stream that *somehow *does not*
                               // implement the async iterator protocol.
                               const lockedReader = stream.getReader();
                               readFn = () => lockedReader.read();
+                              readFn.drop = (reason) => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock());
                           }} else {{
                               throw new Error("invalid stream object, cannot generate read fn");
                           }}
@@ -1912,6 +2053,7 @@ impl AsyncStreamIntrinsic {
 
             Self::GenStreamHostInjectFn => {
                 let gen_host_inject_fn = self.name();
+                let pending_value_queue_class = Self::PendingValueQueueClass.name();
 
                 output.push_str(&format!(
                     r#"
@@ -1925,75 +2067,96 @@ impl AsyncStreamIntrinsic {
                               if (hostWriteEnd.hasPendingEvent()) {{ hostWriteEnd.getPendingEvent(); }}
                           }};
 
-                          let done = false;
-                          const pendingValues = [];
+                          const elemMeta = hostWriteEnd.getElemMeta();
+
+                          const pendingValues = new {pending_value_queue_class}(readFn, elemMeta);
 
                           return async function generatedStreamHostInject(args) {{
                               let {{ count }} = args;
                               if (count < 0) {{ throw new Error('invalid count'); }}
-                              if (count === 0) {{ return doNothingFn; }}
-                              if (readEnd.hasPendingEvent()) {{ return doNothingFn; }}
+                              if (readEnd.hasPendingEvent()) {{ return resetWriteEndToIdleFn; }}
 
                               if (hostWriteEnd.isDoneState()) {{
                                   return doNothingFn;
                               }}
 
                               const values = [];
-                              const elemMeta = hostWriteEnd.getElemMeta();
-
-                              const appendValues = (source) => {{
-                                  const transfer = Math.min(count, source.length);
-                                  for (let i = 0; i < transfer; i++) {{
-                                      values.push(source[i]);
-                                  }}
-                                  count -= transfer;
-                                  for (let i = transfer; i < source.length; i++) {{
-                                      pendingValues.push(source[i]);
-                                  }}
-                                  return source.length;
-                              }};
-
-                              const appendReadValue = (value) => {{
-                                  if (value === undefined) {{ return 0; }}
-                                  if (elemMeta.isNumeric) {{
-                                      if (value instanceof ArrayBuffer) {{
-                                          value = new Uint8Array(value);
-                                      }}
-                                      if (Array.isArray(value) || (ArrayBuffer.isView(value) && typeof value.length === 'number')) {{
-                                          return appendValues(value);
-                                      }}
-                                  }}
-                                  return appendValues([value]);
-                              }};
+                              const hasPendingReadBuffer = () => !!readEnd.getPendingBufferMeta?.().buffer;
 
                               const drainPendingValues = () => {{
-                                  const transfer = Math.min(count, pendingValues.length);
-                                  for (let i = 0; i < transfer; i++) {{
-                                      values.push(pendingValues[i]);
-                                  }}
-                                  pendingValues.splice(0, transfer);
-                                  count -= transfer;
+                                  count -= pendingValues.drainInto(values, count);
                               }};
 
+                              const writeValues = async (writeValues) => {{
+                                  const writePromise = hostWriteEnd.writeMany(writeValues);
+                                  if (hostWriteEnd.hasPendingEvent()) {{
+                                      void writePromise.catch(() => {{}});
+                                  }} else {{
+                                      await writePromise;
+                                  }}
+                                  resetWriteEndToIdleFn();
+                              }};
+
+                              const bail = () => {{
+                                  pendingValues.prepend(values);
+                                  return doNothingFn;
+                              }};
+
+                              readEnd.setHostCancelFn?.(() => {{
+                                  const buffer = readEnd.getPendingBufferMeta?.().buffer;
+                                  if (!buffer || pendingValues.length === 0) {{ return false; }}
+                                  const cancelValues = [];
+                                  pendingValues.drainInto(cancelValues, buffer.remaining());
+                                  if (cancelValues.length === 0) {{ return false; }}
+                                  const writePromise = hostWriteEnd.writeMany(cancelValues);
+                                  if (!hostWriteEnd.hasPendingEvent()) {{
+                                      pendingValues.prepend(cancelValues);
+                                      return false;
+                                  }}
+                                  void writePromise.catch(() => {{}});
+                                  resetWriteEndToIdleFn();
+                                  return true;
+                              }});
+
+                              if (!hasPendingReadBuffer()) {{ return doNothingFn; }}
+                              if (count === 0) {{
+                                  if (pendingValues.length === 0 && !pendingValues.done) {{
+                                      await pendingValues.readSource();
+                                      if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) {{ return doNothingFn; }}
+                                  }}
+                                  if (pendingValues.length > 0) {{
+                                      const readyValues = [];
+                                      pendingValues.drainInto(readyValues, 1);
+                                      await writeValues(readyValues);
+                                  }} else if (pendingValues.done) {{
+                                      hostWriteEnd.getPendingEvent();
+                                      hostWriteEnd.drop();
+                                  }}
+                                  return doNothingFn;
+                              }}
                               drainPendingValues();
 
-                              while (count > 0 && !done) {{
-                                  const res = await readFn();
-                                  const appended = appendReadValue(res.value);
-                                  done = res.done;
-                                  if (appended === 0 && !done) {{ count -= 1; }}
-                                  if (done) {{ break; }}
+                              while (count > 0 && !pendingValues.done) {{
+                                  const appended = await pendingValues.readSource();
+                                  if (readEnd.hasPendingEvent()) {{ return bail(); }}
+                                  if (!hasPendingReadBuffer()) {{ return bail(); }}
+                                  drainPendingValues();
+                                  if (appended === 0 && !pendingValues.done) {{ count -= 1; }}
+                                  if (pendingValues.done) {{ break; }}
                               }}
 
                               // Iterator provided `done: true` with no final value
-                              if (done && values.length === 0) {{
+                              if (pendingValues.done && values.length === 0 && pendingValues.length > 0 && hasPendingReadBuffer()) {{
+                                  drainPendingValues();
+                              }}
+                              if (pendingValues.done && values.length === 0) {{
                                   hostWriteEnd.getPendingEvent();
                                   hostWriteEnd.drop();
                                   return doNothingFn;
                               }}
 
-                              await hostWriteEnd.writeMany(values);
-                              resetWriteEndToIdleFn();
+                              if (!hasPendingReadBuffer()) {{ return bail(); }}
+                              await writeValues(values);
 
                               return doNothingFn;
                           }};

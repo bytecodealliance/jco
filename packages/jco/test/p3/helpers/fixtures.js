@@ -37,6 +37,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "sockets/p3-sockets-tcp-sample-application.wasm" },
     { path: "sockets/p3-sockets-tcp-sockopts.wasm" },
     { path: "sockets/p3-sockets-tcp-states.wasm" },
+    { path: "sockets/p3-sockets-tcp-streams.wasm" },
     { path: "sockets/p3-sockets-udp-bind.wasm" },
     { path: "sockets/p3-sockets-udp-connect.wasm" },
     { path: "sockets/p3-sockets-udp-receive.wasm" },
@@ -48,7 +49,6 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "http/p3-http-outbound-request-content-length.wasm", failing: true },
     { path: "http/p3-http-outbound-request-large-post.wasm", failing: true },
     { path: "http/p3-http-outbound-request-response-build.wasm" },
-    { path: "sockets/p3-sockets-tcp-streams.wasm", failing: true },
 ];
 
 function withExtraHeaders(payload, headers) {

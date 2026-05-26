@@ -63,6 +63,7 @@ suite("async scheduling regressions", () => {
                     ...new WASIShim().getImportObject(),
                     "jco:test-components/stream-concurrency-host": {
                         signal: () => signaled.resolve(),
+                        zeroReadComplete: () => {},
                     },
                 },
             },
@@ -71,6 +72,58 @@ suite("async scheduling regressions", () => {
         try {
             assert.deepEqual(
                 await instance["jco:test-components/stream-concurrency-test"].readAfterSignal(stream),
+                new Uint8Array([42]),
+            );
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test("zero-length read after cancellation waits for host readiness", async () => {
+        const signaled = Promise.withResolvers();
+        let readStarted = false;
+        let signalCalled = false;
+        let yielded = false;
+
+        const stream = {
+            [Symbol.asyncIterator]() {
+                return {
+                    next: async () => {
+                        readStarted = true;
+                        await signaled.promise;
+                        if (yielded) {
+                            return { value: undefined, done: true };
+                        }
+                        yielded = true;
+                        return { value: 42, done: false };
+                    },
+                };
+            },
+        };
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "stream-concurrency.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:test-components/stream-concurrency-host": {
+                        signal: () => {
+                            assert.isTrue(readStarted);
+                            signalCalled = true;
+                            signaled.resolve();
+                        },
+                        zeroReadComplete: () => {
+                            assert.isTrue(signalCalled);
+                        },
+                    },
+                },
+            },
+        });
+
+        try {
+            assert.deepEqual(
+                await instance["jco:test-components/stream-concurrency-test"].zeroReadAfterCancel(stream),
                 new Uint8Array([42]),
             );
         } finally {
