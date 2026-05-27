@@ -170,7 +170,7 @@ importers:
         version: 0.20.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@bytecodealliance/jco':
         specifier: file:../../../packages/jco
-        version: file:packages/jco(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+        version: link:../../../packages/jco
       '@bytecodealliance/preview2-shim':
         specifier: file:../../../packages/preview2-shim
         version: link:../../../packages/preview2-shim
@@ -250,8 +250,8 @@ importers:
         specifier: ^0.17.9
         version: 0.17.9
       '@bytecodealliance/preview3-shim':
-        specifier: workspace:^0.1.0
-        version: link:../preview3-shim
+        specifier: ^0.1.0
+        version: 0.1.0
       binaryen:
         specifier: ^123.0.0
         version: 123.0.0
@@ -437,12 +437,11 @@ packages:
     resolution: {integrity: sha512-I57cVbL24/u/zCBwHq7D9PyIMP81hFFYF4hL/pW5biRGVLQAZuwEAUaEmghOouyt77bU2ExqscP2wkLvr3nfDw==}
     hasBin: true
 
-  '@bytecodealliance/jco@file:packages/jco':
-    resolution: {directory: packages/jco, type: directory}
-    hasBin: true
-
   '@bytecodealliance/preview2-shim@0.17.9':
     resolution: {integrity: sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA==}
+
+  '@bytecodealliance/preview3-shim@0.1.0':
+    resolution: {integrity: sha512-aw7wk/zMgtwLDve2RvnVJ196QPLq2J5lCd+bP24G1ELx6hZuSLFp/APCzKfdJ5Z4leG2SbRyHneSXwkH8pYYlQ==}
 
   '@bytecodealliance/weval@0.4.1':
     resolution: {integrity: sha512-vJegSAkNjENhJcMUod76KUGAgQLdACDDCwB3JwyR14zDhyHVPAvArvtDDYEEi+c+ELzls62H6wxTvzRmaYTaqg==}
@@ -3437,22 +3436,11 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@bytecodealliance/jco@file:packages/jco(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
-    dependencies:
-      '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
-      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/preview2-shim': 0.17.9
-      '@bytecodealliance/preview3-shim': link:packages/preview3-shim
-      binaryen: 123.0.0
-      commander: 14.0.3
-      mkdirp: 3.0.1
-      ora: 8.2.0
-      terser: 5.47.1
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
   '@bytecodealliance/preview2-shim@0.17.9': {}
+
+  '@bytecodealliance/preview3-shim@0.1.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.17.9
 
   '@bytecodealliance/weval@0.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
