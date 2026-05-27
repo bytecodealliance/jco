@@ -1,5 +1,89 @@
 # Changelog
 
+## [1.20.0] - 2026-05-27
+
+### 🚀 Features
+
+- _(jco)_ explicit types for jco API exports by @youngspe in #1506
+
+- _(jco)_ add future lower tests, refactor existing by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ p2 proxy codegen test by @vados-cosmonic
+
+- _(jco)_ p3-shim workspace dep by @vados-cosmonic
+
+- _(jco)_ lint:fix target, lint by @vados-cosmonic
+
+- _(jco)_ address code review by @andreiltd in #1516
+
+- _(jco)_ fix invalid types for jco api by @youngspe
+
+### 🧪 Testing
+
+- _(jco)_ add trasmit tests by @vados-cosmonic in #1566
+
+- _(jco)_ add async poll tests by @vados-cosmonic
+
+- _(jco)_ add tests for async cancel by @vados-cosmonic
+
+- _(jco)_ add tests for async yield by @vados-cosmonic
+
+- _(jco)_ add async round trip tests by @vados-cosmonic
+
+- _(jco)_ re-enable tests that are now working by @vados-cosmonic
+
+- _(jco)_ add simple imported resource example by @vados-cosmonic in #1564
+
+- _(jco)_ run remaining p3 http fixtures by @andreiltd in #1547
+
+- _(jco)_ refactor runtime TS generation by @vados-cosmonic
+
+- _(jco)_ disable codegen lint by @vados-cosmonic
+
+- _(jco)_ increase tranpiled code char limit by @vados-cosmonic in #1493
+
+- _(jco)_ allow JSPI for newer Node LTS versions by @vados-cosmonic in #1463
+
+- _(jco)_ fix check for function asyncness by @vados-cosmonic
+
+- _(jco)_ fix stream-tx.wasm reference by @vados-cosmonic
+
+- _(jco)_ add links to float reinterpret issue by @vados-cosmonic
+
+- _(jco)_ update tests for future lift/lower, add list<u32, 3> by @vados-cosmonic
+
+- _(jco)_ fill in nested future stream lower test by @vados-cosmonic
+
+- _(jco)_ skip possibly-invalid borrowing test by @vados-cosmonic in #1425
+
+- _(jco)_ refactor tests, and explicitly shared instances by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update preview3-shim to v0.1.0 by @vados-cosmonic in #1569
+
+- _(jco)_ reduce size of sockets test components by @vados-cosmonic in #1555
+
+- _(jco)_ update componentize-js to 0.21.0-rc.0 by @vados-cosmonic
+
+- _(jco)_ update generated api.d.ts by @vados-cosmonic
+
+- _(jco)_ update git cliff config by @vados-cosmonic
+
+- _(jco)_ add p3 fixtures test runners by @andreiltd
+
+- _(jco)_ add p3 wasi test components by @vados-cosmonic in #1431
+
+### 🔒️ Security
+
+- _(jco)_ move to pnpm by @vados-cosmonic
+
+## New Contributors
+
+- @youngspe made their first contribution in [#1506](https://github.com/bytecodealliance/jco/pull/1506)
+
 ## [1.19.0] - 2026-04-22
 
 ### 🐛 Bug Fixes
