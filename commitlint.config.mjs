@@ -35,6 +35,7 @@ const config = {
                 'tests',
                 // Projects
                 'jco',
+                'bare-jco',
                 'bindgen',
                 'p2-shim',
                 'p3-shim',
