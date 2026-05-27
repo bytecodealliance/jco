@@ -4,6 +4,10 @@ interface local-run-async {
     run: async func();
 }
 
+interface local-run {
+    run: func();
+}
+
 interface local-run-string {
     run: func() -> string;
 }
@@ -494,4 +498,9 @@ world future-lower {
     import resources;
     export future-lower-sync;
     export future-lower-async;
+}
+
+world resource-incrementing-id {
+    import resources;
+    export local-run;
 }
