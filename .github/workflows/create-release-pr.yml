@@ -10,6 +10,7 @@ on:
         default: "jco"
         options:
           - jco
+          - bare-jco
           - jco-transpile
           - jco-std
           - js-component-bindgen
@@ -89,6 +90,11 @@ jobs:
 
           case "$PROJECT" in
             jco)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              ;;
+            bare-jco)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
