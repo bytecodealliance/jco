@@ -30,3 +30,4 @@ packages:
 
 minimumReleaseAgeExclude:
   - '@bytecodealliance/componentize-js@0.21.0'
+  - '@bytecodealliance/preview3-shim@0.1.0'
