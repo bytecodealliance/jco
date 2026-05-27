@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.19.4] - 2026-05-27
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ remove _isHostProvided by @vados-cosmonic
+
+- _(bindgen)_ avoid spread calls for host stream buffers by @andreiltd in #1561
+
+- _(bindgen)_ support rejecting oversized host stream reads by @andreiltd
+
+
+
+
 ## [1.19.3] - 2026-05-26
 
 ### 🐛 Bug Fixes
