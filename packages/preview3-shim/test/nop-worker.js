@@ -6,4 +6,11 @@ Router()
   })
   .op("err", () => {
     throw "err";
+  })
+  .op("err-code", () => {
+    const err = new Error("read ECONNRESET");
+    err.code = "ECONNRESET";
+    err.errno = -54;
+    err.syscall = "read";
+    throw err;
   });

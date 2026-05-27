@@ -16,7 +16,30 @@ describe("ResourceWorker round-trip", () => {
     await expect(_worker.run({ op: "err" })).rejects.toThrow("err");
   });
 
+  test("async run err preserves code", async () => {
+    await expect(_worker.run({ op: "err-code" })).rejects.toMatchObject({
+      message: "read ECONNRESET",
+      code: "ECONNRESET",
+      errno: -54,
+      syscall: "read",
+    });
+  });
+
   test("sync run err", () => {
     expect(() => _worker.runSync({ op: "err" })).toThrow("err");
+  });
+
+  test("sync run err preserves code", () => {
+    try {
+      _worker.runSync({ op: "err-code" });
+      throw new Error("expected err-code to throw");
+    } catch (err) {
+      expect(err).toMatchObject({
+        message: "read ECONNRESET",
+        code: "ECONNRESET",
+        errno: -54,
+        syscall: "read",
+      });
+    }
   });
 });
