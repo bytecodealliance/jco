@@ -6,6 +6,7 @@ allowBuilds:
 
 packages:
   - packages/jco
+  - packages/bare-jco
   - packages/jco-transpile
   - packages/jco-std
   - packages/preview2-shim
