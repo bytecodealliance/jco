@@ -1,0 +1,82 @@
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# Changelog\n
+"""
+# template for the changelog body
+# https://keats.github.io/tera/docs/#introduction
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="bare-jco-v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.scope %}_({{ commit.scope }})_ {% endif %}\
+          {% if commit.breaking %}[**breaking**] {% endif %}\
+          {{ commit.message | split(pat="\n") | first | trim }}\
+          {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif %}\
+          {% if commit.remote.pr_number %} in #{{ commit.remote.pr_number }}{%- endif %}
+    {% endfor %}
+{% endfor %}\n
+
+{%- if github and previous.version -%}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+  {% raw %}\n{% endraw -%}
+  ## New Contributors
+{%- endif %}\
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+  - @{{ contributor.username }} made their first contribution
+    {%- if contributor.pr_number %} in \
+      [#{{ contributor.pr_number }}]({{ self::remote_url() }}/pull/{{ contributor.pr_number }}) \
+    {%- endif %}
+{%- endfor -%}
+{% raw %}\n{% endraw -%}
+{% raw %}\n{% endraw -%}
+{% raw %}\n{% endraw -%}
+{%- endif -%}
+
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+"""
+# remove the leading and trailing spaces
+trim = true
+
+[git]
+# parse the commits based on https://www.conventionalcommits.org
+
+# regex for parsing and grouping commits
+commit_parsers = [
+    { message = '^feat\(bare-jco\)', group = '<!-- 0 -->🚀 Features' },
+    { message = '^fix\(bare-jco\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+    { message = '^doc\(bare-jco\)', group = '<!-- 3 -->📚 Documentation' },
+    { message = '^perf\(bare-jco\)', group = '<!-- 4 -->⚡ Performance' },
+    { message = '^refactor\(bare-jco\)', group = '<!-- 2 -->🚜 Refactor' },
+    { message = '^style\(bare-jco\)', group = '<!-- 5 -->🎨 Styling' },
+    { message = '^test\(bare-jco\)', group = '<!-- 6 -->🧪 Testing' },
+    { message = '^release', skip = true },
+    { message = '^chore\(bare-jco\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
+    { message = '^sec\(bare-jco\)', group = '<!-- 8 -->🔒️ Security' },
+]
+
+# filter out the commits that are not matched by commit parsers
+filter_commits = true
+
+filter = { exclude = { scopes = ["ci", "infra", "ops"] } }
+
+# sort the tags topologically
+topo_order = false
+
+# sort the commits inside sections by oldest/newest order
+sort_commits = "newest"
+
+# glob pattern for matching git tags
+tag_pattern = "^bare-jco-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
+
+link_parsers = [{ pattern = "\\(#(\\d+)\\)$", href = "https://github.com/bytecodealliance/jco/pull/$1" }]
+
+include_paths = ["packages/bare-jco/**/*"]
