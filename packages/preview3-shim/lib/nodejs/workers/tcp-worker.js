@@ -217,8 +217,12 @@ async function handleTcpReceive({ socketId, stream }) {
           } catch {
             settle();
             return;
+          } finally {
+            // Always undo the pause, even if the guest dropped or cancelled the
+            // receive stream. Otherwise the send path can remain backpressured
+            // forever.
+            tcp.resume();
           }
-          tcp.resume();
         }, settle);
       };
       const onEnd = () => {
