@@ -46,7 +46,7 @@ export class ResourceWorker {
         port1.close();
 
         if (error) {
-          reject(error);
+          reject(deserializeError(error));
           return;
         }
         resolve(result);
@@ -77,7 +77,7 @@ export class ResourceWorker {
     const { result, error } = message;
 
     if (error) {
-      throw error;
+      throw deserializeError(error);
     }
     return result;
   }
@@ -118,7 +118,7 @@ export function Router() {
         result = outcome;
       }
     } catch (err) {
-      error = err;
+      error = serializeError(err);
     }
 
     _reply.postMessage({ result, error }, transfer);
@@ -142,6 +142,50 @@ export function Router() {
       return this;
     },
   };
+}
+
+function serializeError(err) {
+  if (!(err instanceof Error)) {
+    return err;
+  }
+
+  const serialized = {
+    __resourceWorkerError: true,
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+  };
+
+  for (const key of Reflect.ownKeys(err)) {
+    serialized[key] = err[key];
+  }
+
+  if (err.cause !== undefined) {
+    serialized.cause = serializeError(err.cause);
+  }
+
+  return serialized;
+}
+
+function deserializeError(err) {
+  if (!err || typeof err !== "object" || err.__resourceWorkerError !== true) {
+    return err;
+  }
+
+  const error = new Error(err.message);
+  error.name = err.name;
+  if (err.stack) {
+    error.stack = err.stack;
+  }
+
+  for (const key of Reflect.ownKeys(err)) {
+    if (key === "__resourceWorkerError" || key === "name" || key === "message" || key === "stack") {
+      continue;
+    }
+    error[key] = key === "cause" ? deserializeError(err[key]) : err[key];
+  }
+
+  return error;
 }
 
 function notify(condvar) {
