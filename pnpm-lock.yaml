@@ -236,6 +236,8 @@ importers:
         specifier: 1.17.6
         version: 1.17.6
 
+  packages/bare-jco: {}
+
   packages/jco:
     dependencies:
       '@bytecodealliance/componentize-js':
