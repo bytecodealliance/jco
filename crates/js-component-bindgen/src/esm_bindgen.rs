@@ -406,9 +406,6 @@ impl EsmBindgen {
                                 }}
                                 "#,
                             );
-
-                            // For imports that are functions, ensure that they are noted as host provided
-                            uwriteln!(output, "{local_name}._isHostProvided = true;");
                         }
                     } else if let Some(idl_binding) = idl_binding {
                         uwrite!(
@@ -439,7 +436,6 @@ impl EsmBindgen {
                     } else {
                         uwriteln!(output, "{local_name} from '{specifier}';");
                     }
-                    uwriteln!(output, "{local_name}._isHostProvided = true;");
 
                     for other_local_name in &binding_local_names[1..] {
                         uwriteln!(output, "const {other_local_name} = {local_name};");
@@ -492,8 +488,6 @@ impl EsmBindgen {
                     }}
                     "#,
                 );
-                // For imports that are functions, ensure that they are noted as host provided
-                uwriteln!(output, "{local_name}._isHostProvided = true;");
             }
         }
     }
