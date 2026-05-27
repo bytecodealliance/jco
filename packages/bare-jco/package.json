@@ -1,0 +1,31 @@
+{
+    "name": "jco",
+    "version": "1.0.0",
+    "description": "Redirect for @bytecodealliance/jco",
+    "keywords": [
+        "Component",
+        "Wasm",
+        "WebAssembly"
+    ],
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git"
+    },
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "author": "Victor Adossi",
+    "contributors": [
+        {
+            "name": "Victor Adossi",
+            "email": "vadossi@cosmonic.com"
+        }
+    ],
+    "type": "module",
+    "bin": {
+        "jco": "cli.js"
+    },
+    "main": "cli.js"
+}
