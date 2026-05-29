@@ -1075,7 +1075,6 @@ impl<'a> Instantiator<'a, '_> {
                 self.src.js,
                 r#"
                   const handleTable{rtid} = [{rsc_table_flag}, 0];
-                  handleTable{rtid}._tableID = {rtid};
                   handleTable{rtid}._createdReps = new Set();
                 "#,
             );
@@ -1099,7 +1098,6 @@ impl<'a> Instantiator<'a, '_> {
                 self.src.js,
                 r#"
                    const handleTable{rtid} = [{rsc_table_flag}, 0];
-                   handleTable{rtid}._tableID = {rtid};
                    handleTable{rtid}._createdReps = new Set();
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                        const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}

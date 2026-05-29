@@ -216,9 +216,15 @@ impl ResourceIntrinsic {
                     function {resource_transfer_borrow_fn}(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
                         const fromHandle = fromTable[(handle << 1) + 1];
-                        const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
                         const isOwn = (fromHandle & T_FLAG) !== 0;
                         const rep = isOwn ? fromHandle & ~T_FLAG : {rsc_table_remove}(fromTable, fromHandle).rep;
+
+                        let toTable = {handle_tables}[toTid];
+                        if (!toTable) {{
+                            {handle_tables}[toTid] = [T_FLAG, 0];
+                            toTable = {handle_tables}[toTid];
+                            toTable._createdReps = new Set();
+                        }}
 
                         if (toTable._createdReps.has(rep)) {{
                             return rep;
@@ -240,15 +246,20 @@ impl ResourceIntrinsic {
                 output.push_str(&format!(r#"
                     function resourceTransferBorrowValidLifting(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const toTable = {handle_tables}[toTid];
                         const isOwn = (fromTable[(handle << 1) + 1] & T_FLAG) !== 0;
                         const rep = isOwn ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
+
+                        let toTable = {handle_tables}[toTid];
+                        if (!toTable) {{
+                            {handle_tables}[toTid] = [T_FLAG, 0];
+                            toTable = {handle_tables}[toTid];
+                            toTable._createdReps = new Set();
+                        }}
 
                         if (toTable._createdReps.has(rep)) {{
                             return rep;
                         }}
 
-                        const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
                         return {rsc_table_create_borrow}(toTable, rep, {scope_id});
                     }}
                 "#));
@@ -258,14 +269,23 @@ impl ResourceIntrinsic {
                 let handle_tables = Intrinsic::HandleTables.name();
                 let rsc_table_remove = Self::ResourceTableRemove.name();
                 let rsc_table_create_own = Self::ResourceTableCreateOwn.name();
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     function resourceTransferOwn(handle, fromTid, toTid) {{
                         const {{ rep }} = {rsc_table_remove}({handle_tables}[fromTid], handle);
-                        const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
+
+                        let toTable = {handle_tables}[toTid];
+                        if (!toTable) {{
+                            {handle_tables}[toTid] = [T_FLAG, 0];
+                            toTable = {handle_tables}[toTid];
+                            toTable._createdReps = new Set();
+                        }}
+
                         const newHandle = {rsc_table_create_own}(toTable, rep);
                         return newHandle;
                     }}
-                "#));
+                "#
+                ));
             }
 
             Self::ResourceCallBorrows => {
