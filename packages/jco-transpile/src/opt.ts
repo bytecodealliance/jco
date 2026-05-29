@@ -91,7 +91,7 @@ export async function runOptimizeComponent(
     // organize components in modules into tree parent and children
     const nodes = componentMetadata.slice(1);
     const getChildren = (parentIndex: number) => {
-        const children = [];
+        const children: EnhancedModuleMetadata[] = [];
         for (let i = 0; i < nodes.length; i++) {
             const metadata = nodes[i];
             if (metadata.parentIndex === parentIndex) {

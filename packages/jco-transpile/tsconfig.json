@@ -6,6 +6,7 @@
         "types": ["node"],
         "module": "nodenext",
         "moduleResolution": "nodenext",
+        "noImplicitAny": false,
         "strict": true,
         "declaration": true,
         "sourceMap": true
