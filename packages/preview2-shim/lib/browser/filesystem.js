@@ -188,7 +188,9 @@ class Descriptor {
 
   read(length, offset) {
     const source = getSource(this.#entry);
-    return [source.slice(offset, offset + length), offset + length >= source.byteLength];
+    const off = typeof offset === "bigint" ? Number(offset) : offset;
+    const len = typeof length === "bigint" ? Number(length) : length;
+    return [source.slice(off, off + len), off + len >= source.byteLength];
   }
 
   write(buffer, offset) {
