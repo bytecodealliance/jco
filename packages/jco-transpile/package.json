@@ -63,7 +63,7 @@
     },
     "devDependencies": {
         "@npmcli/run-script": "^10.0.2",
-        "@types/node": "^24.10.0",
+        "@types/node": "^24.12.4",
         "vite": "^7.1.5",
         "vitest": "^4.0.7"
     }
