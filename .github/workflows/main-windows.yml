@@ -60,7 +60,7 @@ jobs:
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             node_modules
 
@@ -172,7 +172,7 @@ jobs:
         if: ${{ startsWith(matrix.os, 'windows') }}
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             /c/users/runneradmin/.cache/puppeteer
 
@@ -263,7 +263,7 @@ jobs:
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             node_modules
 

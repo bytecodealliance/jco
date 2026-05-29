@@ -96,7 +96,7 @@ jobs:
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             node_modules
 
@@ -285,7 +285,7 @@ jobs:
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             node_modules
 
@@ -440,7 +440,7 @@ jobs:
       - name: Cache npm install
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             node_modules
 
@@ -539,7 +539,7 @@ jobs:
         id: cache-node-modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           path: |
             node_modules
 
