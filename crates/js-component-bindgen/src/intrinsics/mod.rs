@@ -358,11 +358,15 @@ impl Intrinsic {
 
             Intrinsic::WebIdl(w) => w.render(output),
 
-            Intrinsic::HandleTables => output.push_str(
-                "
-                const handleTables = [];
-            ",
-            ),
+            Intrinsic::HandleTables => {
+                let var_name = self.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      const {var_name} = [];
+                    "#,
+                );
+            }
 
             Intrinsic::HasOwnProperty => output.push_str(
                 "
@@ -1640,7 +1644,7 @@ impl Intrinsic {
                 "fetchCompile",
                 "finalizationRegistryCreate",
                 "getErrorPayload",
-                "handleTables",
+                "HANDLE_TABLES",
                 "hasOwnProperty",
                 "imports",
                 "instantiateCore",
@@ -1707,7 +1711,7 @@ impl Intrinsic {
             Intrinsic::FinalizationRegistryCreate => "finalizationRegistryCreate",
             Intrinsic::GetErrorPayload => "getErrorPayload",
             Intrinsic::GetErrorPayloadString => "getErrorPayloadString",
-            Intrinsic::HandleTables => "handleTables",
+            Intrinsic::HandleTables => "HANDLE_TABLES",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
