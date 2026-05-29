@@ -92,7 +92,6 @@ pub enum Intrinsic {
     SymbolAsyncIterator,
     SymbolIterator,
     ScopeId,
-    DefinedResourceTables,
     HandleTables,
 
     /// Class that conforms to a `ReadableStreams`-like interface and is usable externally
@@ -292,8 +291,6 @@ impl Intrinsic {
                 }
             ",
             ),
-
-            Intrinsic::DefinedResourceTables => {}
 
             Intrinsic::FinalizationRegistryCreate => output.push_str(
                 "
@@ -1640,7 +1637,6 @@ impl Intrinsic {
                 "base64Compile",
                 "clampGuest",
                 "ComponentError",
-                "definedResourceTables",
                 "fetchCompile",
                 "finalizationRegistryCreate",
                 "getErrorPayload",
@@ -1706,7 +1702,6 @@ impl Intrinsic {
             Intrinsic::Base64Compile => "base64Compile",
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",
-            Intrinsic::DefinedResourceTables => "definedResourceTables",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::FinalizationRegistryCreate => "finalizationRegistryCreate",
             Intrinsic::GetErrorPayload => "getErrorPayload",

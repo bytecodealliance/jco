@@ -323,9 +323,7 @@ pub fn transpile_bindgen(
     instantiator.initialize();
     instantiator.instantiate();
 
-    let mut intrinsic_definitions = source::Source::default();
-
-    instantiator.resource_definitions(&mut intrinsic_definitions);
+    instantiator.resource_definitions();
     instantiator.instance_flags();
 
     instantiator.bindgen.src.js(&instantiator.src.js);
@@ -333,7 +331,7 @@ pub fn transpile_bindgen(
 
     instantiator
         .bindgen
-        .finish_component(name, files, &opts, intrinsic_definitions);
+        .finish_component(name, files, &opts, source::Source::default());
 
     let exports = instantiator
         .bindgen
@@ -956,7 +954,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn resource_definitions(&mut self, definitions: &mut source::Source) {
+    fn resource_definitions(&mut self) {
         // It is theoretically possible for locally defined resources used in no functions
         // to still be exported
         for resource in 0..self.component.num_resources {
@@ -970,30 +968,21 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
-        // Write out the defined resource table indices for the runtime
-        if self.bindgen.all_intrinsics.contains(&Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTransferBorrow,
-        )) || self.bindgen.all_intrinsics.contains(&Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-        )) {
-            let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
-            uwrite!(definitions, "const {defined_resource_tables} = [");
-            // Table per-resource
-            for tidx in 0..self.component.num_resources {
-                let tid = TypeResourceTableIndex::from_u32(tidx);
-                let resource_table_ty = &self.types[tid];
-                let rid = resource_table_ty.unwrap_concrete_ty();
-                if let Some(defined_index) = self.component.defined_resource_index(rid) {
-                    let instance_idx = resource_table_ty.unwrap_concrete_instance();
-                    if instance_idx == self.component.defined_resource_instances[defined_index] {
-                        uwrite!(definitions, "true,");
-                    }
-                } else {
-                    uwrite!(definitions, ",");
-                };
-            }
-            uwrite!(definitions, "];\n");
-        }
+        // TODO(feat): In the past, we could eagerly build a mapping of resources defined to the tables they correspond to
+        // to make runtime checks of which table a resource must have been created into first (i.e. the component that implements
+        // creation of a given resource) a particular resource faster.
+        //
+        // This logic was based on component.num_resources and was broken for composed components --
+        // wasmtime-environ reported a smaller number of resources, and the check was geared towards a *single* component,
+        // not tying a particular component to a particular table (it is possible for *sub components* to originate different
+        // resources).
+        //
+        // In theory, it should be posible to build this knowledge statically rather than at resource creation,
+        // so in the future we should attempt to rebulid that code, if possible.
+        //
+        // Note that at runtime wasmtime maintains this information and looks it up during a transfer operation, see:
+        //   - https://github.com/bytecodealliance/wasmtime/blob/5f3b67ea055857020bd1ac1f2c3f7fa2e6c31ec0/crates/wasmtime/src/runtime/component/instance.rs#L424
+        //   - https://github.com/bytecodealliance/wasmtime/blob/9c49989a2e71382fd8639288088472f150f2f534/crates/wasmtime/src/runtime/vm/component.rs#L847
     }
 
     /// Ensure a component-local `error-context` table has been created
@@ -1078,34 +1067,48 @@ impl<'a> Instantiator<'a, '_> {
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
 
+        // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
         if is_imported {
+            // imported
             uwriteln!(
                 self.src.js,
-                "const handleTable{rtid} = [{rsc_table_flag}, 0];",
+                r#"
+                  const handleTable{rtid} = [{rsc_table_flag}, 0];
+                  handleTable{rtid}._tableID = {rtid};
+                  handleTable{rtid}._createdReps = new Set();
+                "#,
             );
             if !self.resources_initialized.contains_key(&resource_idx) {
                 let ridx = resource_idx.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const captureTable{ridx} = new Map();
-                    let captureCnt{ridx} = 0;"
+                    r#"
+                      const captureTable{ridx} = new Map();
+                      let captureCnt{ridx} = 0;
+                    "#
                 );
                 self.resources_initialized.insert(resource_idx, true);
             }
         } else {
+            // non imported
             let finalization_registry_create = self
                 .bindgen
                 .intrinsic(Intrinsic::FinalizationRegistryCreate);
             uwriteln!(
                 self.src.js,
-                "const handleTable{rtid} = [{rsc_table_flag}, 0];
-                const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
-                    const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
-                }});
-                ",
+                r#"
+                   const handleTable{rtid} = [{rsc_table_flag}, 0];
+                   handleTable{rtid}._tableID = {rtid};
+                   handleTable{rtid}._createdReps = new Set();
+                   const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
+                       const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
+                   }});
+                "#,
             );
         }
+
+        // Add the handle table to the global list
         uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
         self.resource_tables_initialized
             .insert(resource_table_idx, true);
