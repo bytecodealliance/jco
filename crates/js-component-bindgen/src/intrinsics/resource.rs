@@ -128,7 +128,7 @@ impl ResourceIntrinsic {
                         table.push(rep);
                         return (table.length >> 1) - 1;
                     }
-                    table[0] = table[free];
+                    table[0] = table[free << 1];
                     table[free << 1] = scopeId;
                     table[(free << 1) + 1] = rep;
                     return free;
