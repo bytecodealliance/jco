@@ -1,0 +1,26 @@
+just := env_var_or_default("JUST", just_executable())
+wac := env_var_or_default("WAC", "wac")
+
+@_default:
+    {{just}} --list
+
+# Build all components for test
+[group('build')]
+build:
+    {{just}} build-jco-issue-1380
+
+# Build the components required to test jco issue #1380
+[group('build')]
+@build-jco-issue-1380:
+    echo "==> building jco-issue-1380 caller (cpp)..."
+    mkdir -p output/jco-issue-1380
+    {{just}} -f cpp/jco-issue-1380/caller/justfile build
+    echo "==> building jco-issue-1380 callee (python)..."
+    mv cpp/jco-issue-1380/caller/component.wasm output/jco-issue-1380/caller.wasm
+    {{just}} -f python/jco-issue-1380/callee/justfile build
+    echo "==> composing components..."
+    mv python/jco-issue-1380/callee/component.wasm output/jco-issue-1380/callee.wasm
+    {{wac}} plug \
+       output/jco-issue-1380/caller.wasm \
+       --plug output/jco-issue-1380/callee.wasm \
+       -o output/jco-issue-1380/composed.wasm

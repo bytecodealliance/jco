@@ -1,0 +1,16 @@
+package test:jco-bug;
+
+interface iface {
+    resource handle {
+        constructor(path: string);
+        append: func(data: string);
+    }
+
+    open-temp: func() -> own<handle>;
+}
+
+world consumer {
+    include wasi:cli/imports@0.2.0;
+    import iface;
+    export wasi:cli/run@0.2.0;
+}
