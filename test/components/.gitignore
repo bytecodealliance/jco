@@ -1,0 +1,5 @@
+# while the output folder is present, we should ignore all it's contents
+output/*
+
+# wasm files should not be checked in, generally
+*.wasm
