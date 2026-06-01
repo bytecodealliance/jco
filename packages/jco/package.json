@@ -71,6 +71,7 @@
         "lint:fix": "oxlint --fix",
         "test": "vitest run -c test/vitest.ts",
         "test:lts": "vitest run -c test/vitest.lts.ts",
+        "test:extended": "vitest run -c test/vitest.extended.ts",
         "prepack": "cargo xtask build release"
     },
     "dependencies": {
