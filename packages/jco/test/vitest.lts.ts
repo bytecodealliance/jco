@@ -24,6 +24,7 @@ export default defineConfig({
         setupFiles: ["test/meta-resolve-stub.ts"],
         include: ["test/*.js"],
         exclude: [
+            "test/extended/*",
             "test/output/*",
             "test/fixtures/*",
             "test/common.js",

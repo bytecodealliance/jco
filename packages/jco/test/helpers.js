@@ -662,3 +662,9 @@ export async function getCurrentWitComponentVersion() {
     CURRENT_WIT_COMPONENT_VERSION = version;
     return CURRENT_WIT_COMPONENT_VERSION;
 }
+
+export async function fileExists(p) {
+    return stat(p)
+        .then((f) => f.isFile())
+        .catch(() => false);
+}

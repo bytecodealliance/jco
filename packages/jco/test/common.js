@@ -29,6 +29,9 @@ export const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, "p3");
 /** Path to built custom rust components (i.e. output of `cargo xtask build-test-components`) */
 export const LOCAL_TEST_COMPONENTS_DIR = join(COMPONENT_FIXTURES_DIR, "../../output/rust-test-components");
 
+/** Path to built extended test components (i.e. output of `just build` run in `jco/test/components`) */
+export const EXTENDED_TEST_COMPONENTS_DIR = fileURLToPath(new URL("../../../test/components/output", import.meta.url));
+
 /**
  * Retrieve a list of all component fixtures
  *
