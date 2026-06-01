@@ -43,6 +43,22 @@ const timeZero = {
   nanoseconds: 0,
 };
 
+/** Coerce the given object to a safe integer */
+function coerceToSafeIntegerNumber(obj) {
+  let n;
+  if (typeof obj === "number") {
+    n = obj;
+  } else if (typeof obj == "bigint") {
+    n = Number(obj);
+  } else {
+    throw new TypeError(`unexpected non-numeric type: ${obj}`);
+  }
+  if (n > Number.MAX_SAFE_INTEGER) {
+    throw new TypeError(`excessively large number: ${n}`);
+  }
+  return n;
+}
+
 function getChildEntry(parentEntry, subpath, openFlags) {
   if (subpath === "." && _rootPreopen && descriptorGetEntry(_rootPreopen[0]) === parentEntry) {
     subpath = _getCwd();
@@ -188,8 +204,8 @@ class Descriptor {
 
   read(length, offset) {
     const source = getSource(this.#entry);
-    const off = typeof offset === "bigint" ? Number(offset) : offset;
-    const len = typeof length === "bigint" ? Number(length) : length;
+    const off = coerceToSafeIntegerNumber(offset);
+    const len = coerceToSafeIntegerNumber(length);
     return [source.slice(off, off + len), off + len >= source.byteLength];
   }
 
