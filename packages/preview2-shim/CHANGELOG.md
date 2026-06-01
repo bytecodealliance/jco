@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.18.1] - 2026-06-01
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ coerce browser file read bounds to numbers
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ add helper function for coercing read args by @vados-cosmonic in #1574
+
 ## [0.18.0] - 2026-05-22
 
 ### 🚀 Features
