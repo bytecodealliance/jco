@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.19.5] - 2026-06-01
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ track resource origination at runtime by @vados-cosmonic
+
+- _(bindgen)_ resource transfer logic by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ clearer autovivicaion of individual handle table by @vados-cosmonic in #1572
+
+- _(bindgen)_ make handle tables global screaming snake case by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ remove dead code by @vados-cosmonic
+
+
+
+
 ## [1.19.4] - 2026-05-27
 
 ### 🐛 Bug Fixes
