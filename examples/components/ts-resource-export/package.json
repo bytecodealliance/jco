@@ -22,7 +22,7 @@
     "@bytecodealliance/preview2-shim": "file:../../../packages/preview2-shim",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.4",
-    "rollup": "^4.47.1",
+    "rollup": "^4.60.4",
     "typescript": "^5.9.2"
   }
 }

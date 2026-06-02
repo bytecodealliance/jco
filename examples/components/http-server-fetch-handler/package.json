@@ -11,6 +11,6 @@
     "all": "pnpm run build && pnpm run demo"
   },
   "dependencies": {
-    "@bytecodealliance/jco": "^1.17.6"
+    "@bytecodealliance/jco": "^1.19.0"
   }
 }

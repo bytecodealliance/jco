@@ -58,7 +58,7 @@
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "0.21.0",
-    "@bytecodealliance/jco": "1.15.2",
+    "@bytecodealliance/jco": "1.19.0",
     "mime": "^4.0.7",
     "puppeteer": "catalog:"
   }
