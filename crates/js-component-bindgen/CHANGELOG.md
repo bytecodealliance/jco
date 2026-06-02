@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.19.6] - 2026-06-02
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ restore storageLen budget after a list field in records and tuples by @temporaryfix in #1586
+
+
+
+## New Contributors
+* @temporaryfix made their first contribution in [#1586](https://github.com/bytecodealliance/jco/pull/1586)
+
+
 ## [1.19.5] - 2026-06-01
 
 ### 🐛 Bug Fixes
