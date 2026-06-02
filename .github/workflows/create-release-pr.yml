@@ -174,7 +174,7 @@ jobs:
           NEXT_VERSION: ${{ steps.project-meta.outputs.next-version }}
           IS_RUST_PROJECT: ${{ steps.project-meta.outputs.is-rust-project }}
           IS_JS_PROJECT: ${{ steps.project-meta.outputs.is-js-project }}
-        runf: |
+        run: |
           if [ "true" == "$IS_RUST_PROJECT" ]; then
             cargo set-version -p "$PROJECT" "$NEXT_VERSION";
           elif [ "true" == "$IS_JS_PROJECT" ]; then
