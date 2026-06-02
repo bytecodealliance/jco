@@ -1,6 +1,8 @@
 just := env_var_or_default("JUST", just_executable())
 wac := env_var_or_default("WAC", "wac")
 
+component_output_dir := justfile_directory() / "output"
+
 @_default:
     {{just}} --list
 
@@ -11,6 +13,7 @@ build:
     {{just}} build-jco-issue-1381
     {{just}} build-jco-issue-1383
     {{just}} build-jco-issue-1384
+    {{just}} build-jco-issue-1390
 
 # Build the components required to test jco issue #1380
 [group('build')]
@@ -66,12 +69,46 @@ build:
     echo "==> building jco-issue-1384 caller (cpp)..."
     mkdir -p output/jco-issue-1384
     {{just}} -f cpp/jco-issue-1384/caller/justfile build
-    echo "==> building jco-issue-1384 callee (python)..."
     mv cpp/jco-issue-1384/caller/component.wasm output/jco-issue-1384/caller.wasm
+    echo "==> building jco-issue-1384 callee (python)..."
     {{just}} -f python/jco-issue-1384/callee/justfile build
-    echo "==> composing components..."
     mv python/jco-issue-1384/callee/component.wasm output/jco-issue-1384/callee.wasm
+    echo "==> composing components..."
     {{wac}} plug \
        output/jco-issue-1384/caller.wasm \
        --plug output/jco-issue-1384/callee.wasm \
        -o output/jco-issue-1384/composed.wasm
+
+# Build the components required to test jco issue #1384
+[group('build')]
+@build-jco-issue-1389:
+    echo "==> building jco-issue-1389 caller (rust)..."
+    mkdir -p output/jco-issue-1389
+    {{just}} -f rust/justfile build
+    mv rust/output/jco_issue_1389_caller.wasm output/jco-issue-1389/caller.wasm
+    echo "==> building jco-issue-1389 callee (moonbit)..."
+    {{just}} -f moonbit/jco-issue-1389/callee/justfile build
+    mv python/jco-issue-1389/callee/component.wasm output/jco-issue-1389/callee.wasm
+    echo "==> composing components..."
+    {{wac}} plug \
+       output/jco-issue-1389/caller.wasm \
+       --plug output/jco-issue-1389/callee.wasm \
+       -o output/jco-issue-1389/composed.wasm
+
+# Build the components required to test jco issue #1384
+[group('build')]
+@build-jco-issue-1390:
+    echo "==> building jco-issue-1390 caller (rust)..."
+    mkdir -p output/jco-issue-1390
+    COMPONENT_OUT_DIR={{component_output_dir}}/jco-issue-1390 {{just}} -f rust/justfile build
+    if [ -f "rust/artifacts/output/jco-issue-1390-caller.wasm" ]; then \
+        cp rust/artifacts/output/jco-issue-1390-caller.wasm output/jco-issue-1390/caller.wasm; \
+    fi
+    echo "==> building jco-issue-1390 callee (js)..."
+    {{just}} -f js/jco-issue-1390/callee/justfile build
+    mv js/jco-issue-1390/callee/component.wasm output/jco-issue-1390/callee.wasm
+    echo "==> composing components..."
+    {{wac}} plug \
+       output/jco-issue-1390/caller.wasm \
+       --plug output/jco-issue-1390/callee.wasm \
+       -o output/jco-issue-1390/composed.wasm

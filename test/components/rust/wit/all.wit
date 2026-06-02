@@ -1,0 +1,15 @@
+package test:jco-bug;
+
+interface fs-provider-read-borrow {
+    resource file {
+        constructor(path: string);
+        size: func() -> u64;
+    }
+    read-borrow: func(f: borrow<file>) -> string;
+}
+
+world fs-provider-read-borrow-consumer {
+    include wasi:cli/imports@0.2.6;
+    import fs-provider-read-borrow;
+    export wasi:cli/run@0.2.6;
+}

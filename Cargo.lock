@@ -515,6 +515,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "extended-jco-test-components"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "extended-jco-test-components-artifacts"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "cargo_metadata",
+ "heck 0.5.0",
+ "tokio",
+ "wasmtime",
+ "wit-component",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

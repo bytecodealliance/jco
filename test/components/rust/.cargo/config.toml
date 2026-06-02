@@ -1,0 +1,7 @@
+[build]
+# NOTE: We have to build for wasm32-wasip1 until wasm-component-ld is updated to
+# support P3 components w/ the upstream Rust toolchain (at that point we will likely
+# have a wasm32-wasip2 target).
+#
+# Until then, we build for P1 and adapt components where necessary before use.
+target = "wasm32-wasip1"
