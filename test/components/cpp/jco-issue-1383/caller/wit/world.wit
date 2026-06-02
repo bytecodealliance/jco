@@ -1,0 +1,18 @@
+package test:jco-bug;
+
+interface fs-provider-borrow {
+    resource file {
+        size: func() -> u64;
+    }
+
+    open-temp: func() -> own<file>;
+    borrow-one: func(a: borrow<file>) -> u64;
+}
+
+world fs-provider-borrow-consumer {
+    include wasi:cli/imports@0.2.0;
+
+    import fs-provider-borrow;
+
+    export wasi:cli/run@0.2.0;
+}
