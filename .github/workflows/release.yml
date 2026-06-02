@@ -343,6 +343,7 @@ jobs:
           mkdir -p "/tmp/$PROJECT"
           cp -r gh-artifacts/* "/tmp/$PROJECT/"
           cd "/tmp/$PROJECT"
+          tree .
           tar --strip-components=1 -xvf "$ARTIFACT_NAME"
           rm Cargo.toml.orig
 
