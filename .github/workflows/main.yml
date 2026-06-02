@@ -140,16 +140,21 @@ jobs:
 
       # (no cached weval bin) download weval release
       - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'ubuntu') }}
+        env:
+          WEVAL_VERSION: ${{ steps.weval-meta.outputs.version }}
         run: |
-          curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
-          tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
-          mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux/weval .weval-bin
+          curl -LO "https://github.com/bytecodealliance/weval/releases/download/$WEVAL_VERSION/weval-$WEVAL_VERSION-x86_64-linux.tar.xz"
+          tar -xvJf "weval-$WEVAL_VERSION-x86_64-linux.tar.xz"
+          mv "weval-$WEVAL_VERSION-x86_64-linux/weval" .weval-bin
+
       - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'macos') }}
+        env:
+          WEVAL_VERSION: ${{ steps.weval-meta.outputs.version }}
         run: |
-          curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
-          tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
+          curl -LO https://github.com/bytecodealliance/weval/releases/download/$WEVAL_VERSION/weval-$WEVAL_VERSION-aarch64-macos.tar.xz
+          tar -xvJf weval-$WEVAL_VERSION-aarch64-macos.tar.xz
           mkdir .weval-bin
-          mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
+          mv weval-$WEVAL_VERSION-aarch64-macos/weval .weval-bin/
 
       - name: Install NPM packages
         run: pnpm install
