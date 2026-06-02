@@ -9,6 +9,10 @@ import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
 import type { IncomingRequest, IncomingBody } from "wasi:http/types@0.2.3";
 import type { InputStream, Pollable } from "wasi:io/streams@0.2.3";
 
+interface ErrorWithPayload {
+  payload: { tag: string };
+}
+
 /**
  * Generates a function that can be used to read 0.2.x WASI HTTP requests
  * and convert them into web `Request`s
@@ -27,6 +31,9 @@ export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
     const pathWithQuery = wasiIncomingRequest.pathWithQuery();
 
     const schemeRaw = wasiIncomingRequest.scheme();
+    if (!schemeRaw) {
+      throw new Error("unexpectedly missing scheme");
+    }
     let scheme;
     switch (schemeRaw.tag) {
       case "HTTP":
@@ -56,7 +63,7 @@ export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
     let incomingBodyStream: InputStream;
     let incomingBodyPollable: Pollable;
 
-    let body: ReadableStream;
+    let body: ReadableStream | undefined = undefined;
     if (requestShouldHaveBody({ method })) {
       body = new ReadableStream({
         start() {
@@ -82,7 +89,11 @@ export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
               }
               controller.enqueue(bytes);
             } catch (err) {
-              if (err.payload.tag === "closed") {
+              if (
+                err &&
+                typeof err === "object" &&
+                (err as ErrorWithPayload)?.payload.tag === "closed"
+              ) {
                 break;
               }
               throw err;
