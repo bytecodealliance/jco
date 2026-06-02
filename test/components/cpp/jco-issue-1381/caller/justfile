@@ -1,0 +1,35 @@
+wkg := env_var_or_default("WKG", "wkg")
+just := env_var_or_default("JUST", just_executable())
+wit_bindgen := env_var_or_default("WIT_BINDGEN", "wit-bindgen")
+
+# Required base dir to installation of wasi-sdk
+# see: https://github.com/WebAssembly/wasi-sdk
+wasi_sdk_base_dir := env_var_or_default("WASI_SDK", "/opt/wasi-sdk")
+
+@_default:
+    {{just}} --list
+
+# Fetch required WIT (i.e. wasi)
+wit-fetch:
+    {{wkg}} wit fetch
+
+# NOTE: you will need a recent version of wit-bindgen
+#
+# Generate WIT bindings
+gen-bindings: wit-fetch
+    {{wit_bindgen}} cpp wit --world consumer --out-dir bindings
+
+# Build python wasm component
+build: gen-bindings
+    @if [ ! -d "{{wasi_sdk_base_dir}}" ]; then \
+        echo '[error] failed to find wasi-sdk dir [{{wasi_sdk_base_dir}}]'; \
+        echo '    is wasi-sdk installed? (at /opt/wasi-sdk, or specified via WASI_SDK env var)'; \
+        exit -1; \
+    fi
+    {{wasi_sdk_base_dir}}/bin/wasm32-wasip2-clang++ \
+      -std=c++23 \
+      -mexec-model=reactor \
+      -o component.wasm \
+      component.cpp \
+      bindings/consumer.cpp \
+      bindings/consumer_component_type.o
