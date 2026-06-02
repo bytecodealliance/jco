@@ -10,6 +10,7 @@ build:
     {{just}} build-jco-issue-1380
     {{just}} build-jco-issue-1381
     {{just}} build-jco-issue-1383
+    {{just}} build-jco-issue-1384
 
 # Build the components required to test jco issue #1380
 [group('build')]
@@ -58,3 +59,19 @@ build:
        output/jco-issue-1383/caller.wasm \
        --plug output/jco-issue-1383/callee.wasm \
        -o output/jco-issue-1383/composed.wasm
+
+# Build the components required to test jco issue #1384
+[group('build')]
+@build-jco-issue-1384:
+    echo "==> building jco-issue-1384 caller (cpp)..."
+    mkdir -p output/jco-issue-1384
+    {{just}} -f cpp/jco-issue-1384/caller/justfile build
+    echo "==> building jco-issue-1384 callee (python)..."
+    mv cpp/jco-issue-1384/caller/component.wasm output/jco-issue-1384/caller.wasm
+    {{just}} -f python/jco-issue-1384/callee/justfile build
+    echo "==> composing components..."
+    mv python/jco-issue-1384/callee/component.wasm output/jco-issue-1384/callee.wasm
+    {{wac}} plug \
+       output/jco-issue-1384/caller.wasm \
+       --plug output/jco-issue-1384/callee.wasm \
+       -o output/jco-issue-1384/composed.wasm
