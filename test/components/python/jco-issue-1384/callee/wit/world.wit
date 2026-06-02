@@ -1,0 +1,23 @@
+package test:jco-bug;
+
+interface fs-provider {
+    resource file {
+        constructor(path: string);
+        id: func() -> u32;
+    }
+
+    resource group {
+        constructor(a: own<file>, b: own<file>);
+        take-a: func() -> own<file>;
+    }
+
+    make-file: func(id: u32) -> own<file>;
+    make-group: func(a: own<file>, b: own<file>) -> own<group>;
+}
+
+world provider {
+    include wasi:cli/imports@0.2.0;
+
+    export fs-provider;
+    export wasi:cli/run@0.2.0;
+}
