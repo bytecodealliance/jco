@@ -1,0 +1,9 @@
+[project]
+name = "jco-issue-1383-callee"
+version = "0.1.0"
+description = "callee component for jco-issue-1383"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "componentize-py>=0.23.0",
+]
