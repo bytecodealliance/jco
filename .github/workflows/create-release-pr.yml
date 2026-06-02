@@ -170,7 +170,7 @@ jobs:
         working-directory: ${{ steps.project-meta.outputs.project-dir }}
         shell: bash
         env:
-          PROJECT_PROJECT: ${{ steps.project-meta.outputs.project }}
+          PROJECT: ${{ steps.project-meta.outputs.project }}
           NEXT_VERSION: ${{ steps.project-meta.outputs.next-version }}
           IS_RUST_PROJECT: ${{ steps.project-meta.outputs.is-rust-project }}
           IS_JS_PROJECT: ${{ steps.project-meta.outputs.is-js-project }}
