@@ -89,7 +89,8 @@ export function genWriteWebResponseFn(args: GenWriteWebResponseFnArgs) {
           let pendingAmt: number;
           if (remaining <= bytesAllowedRaw) {
             pendingAmt = chunk.length;
-          } else if (remaining > bytesAllowedRaw) {
+          } else {
+            // i.e. remaining > bytesAllowedRaw
             if (bytesAllowedRaw > BigInt(Number.MAX_SAFE_INTEGER)) {
               throw new Error("check-write with values greater than u32s not yet supported");
             }
