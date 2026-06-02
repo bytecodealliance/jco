@@ -4,6 +4,8 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: 'npm'
     directories:
@@ -22,10 +24,13 @@ updates:
       day: 'monday'
       time: '09:00'
       timezone: 'America/New_York'
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "cargo"
     directories:
       - '/crates/*'
     schedule:
       interval: "weekly"
-      
+    cooldown:
+      default-days: 7
