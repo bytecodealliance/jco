@@ -1,0 +1,20 @@
+pnpm := env_var_or_default("PNPM", "pnpm")
+wkg := env_var_or_default("WKG", "wkg")
+just := env_var_or_default("JUST", just_executable())
+
+bindings_dir := "bindings"
+
+@_default:
+    {{just}} --list
+
+# Set up the project
+setup:
+    {{pnpm}} install
+
+# Fetch required WIT (i.e. wasi)
+wit-fetch:
+    {{wkg}} wit fetch
+
+# Build python wasm component
+build: setup wit-fetch
+    {{pnpm}} exec componentize-js -w wit -o component.wasm src/component.js

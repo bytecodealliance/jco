@@ -15,6 +15,9 @@ members = [
   "crates/jco",
   "crates/test-components",
   "crates/test-components/artifacts",
+  # extended test components
+  "test/components/rust",
+  "test/components/rust/artifacts",
 ]
 
 [workspace.package]

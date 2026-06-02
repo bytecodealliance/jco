@@ -1,0 +1,19 @@
+package test:jco-bug;
+
+interface fs-provider-read-borrow {
+    resource file {
+        constructor(path: string);
+        size: func() -> u64;
+    }
+    read-borrow: func(f: borrow<file>) -> string;
+}
+
+world component {
+    export fs-provider-read-borrow;
+    // NOTE: we have to be a little bit more careful here, as we want to avoid
+    // pulling in wasi:sockets via an `include wasi:cli;` as in other extended
+    // test components.
+    //
+    // componentize-js splicing does not currently remove wasi:sockets
+    export wasi:cli/run@0.2.6;
+}

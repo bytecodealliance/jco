@@ -1,0 +1,6 @@
+{
+    "type": "module",
+    "devDependencies": {
+        "@bytecodealliance/componentize-js": "^0.21.0"
+    }
+}

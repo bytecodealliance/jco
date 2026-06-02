@@ -1,0 +1,16 @@
+wkg := env_var_or_default("WKG", "wkg")
+cargo := env_var_or_default("CARGO", "cargo")
+just := env_var_or_default("JUST", just_executable())
+wit_bindgen := env_var_or_default("WIT_BINDGEN", "wit-bindgen")
+
+@_default:
+    {{just}} --list
+
+# Fetch required WIT (i.e. wasi)
+wit-fetch:
+    {{wkg}} wit fetch
+
+# Build all rust components
+build: wit-fetch
+    {{cargo}} build --release
+    {{cargo}} build -p extended-jco-test-components-artifacts --release

@@ -1,0 +1,15 @@
+[package]
+name = "extended-jco-test-components"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = """
+Test components for use during extended jco testing
+"""
+
+[dependencies]
+futures = { version = "0.3.32", default-features = false, features = ["alloc"] }
+wit-bindgen = { workspace = true, features = [ "macros", "async-spawn"] }
+
+[build-dependencies]
+anyhow = { workspace = true }
