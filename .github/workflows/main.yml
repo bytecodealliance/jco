@@ -663,7 +663,8 @@ jobs:
         with:
           tool: wkg
 
-      - uses: bytecodealliance/setup-wasi-sdk-action@b2de090b44eb70013ee96b393727d473b35e1728
+      - id: wasi-sdk
+        uses: bytecodealliance/setup-wasi-sdk-action@b2de090b44eb70013ee96b393727d473b35e1728
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
@@ -677,6 +678,8 @@ jobs:
 
       - name: Build extended component tree
         working-directory: test/components
+        env:
+          WASI_SDK: ${{ steps.wasi-sdk.outputs.wasi-sdk-path }}
         run: just build
 
       - name: Run extended component tests
