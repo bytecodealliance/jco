@@ -54,8 +54,8 @@ jobs:
 
       - name: Setup sccache
         run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
 
       - name: Cache node modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -144,9 +144,10 @@ jobs:
       - name: Determine weval version
         id: weval-meta
         run: |
-          export WEVAL_LATEST_URL=`curl -Ls -o /dev/null -w %{url_effective} https://github.com/bytecodealliance/weval/releases/latest`
-          export WEVAL_VERSION=${WEVAL_LATEST_URL#https://github.com/bytecodealliance/weval/releases/tag/}
-          echo -e "version=$WEVAL_VERSION" >> $GITHUB_OUTPUT
+          WEVAL_LATEST_URL="$(curl -Ls -o /dev/null -w %\{url_effective\} https://github.com/bytecodealliance/weval/releases/latest)"
+          export WEVAL_LATEST_URL;
+          export WEVAL_VERSION="${WEVAL_LATEST_URL#https://github.com/bytecodealliance/weval/releases/tag/}"
+          echo -e "version=$WEVAL_VERSION" >> "$GITHUB_OUTPUT"
 
       # Use cached weval bin if present
       - name: Cache weval bin
@@ -161,9 +162,9 @@ jobs:
         env:
           WEVAL_VERSION: ${{ steps.weval-meta.outputs.version }}
         run: |
-          curl -LO https://github.com/bytecodealliance/weval/releases/download/${WEVAL_VERSION}/weval-${WEVAL_VERSION}-x86_64-windows.zip
-          unzip weval-${WEVAL_VERSION}-x86_64-windows.zip
-          mv weval-${WEVAL_VERSION}-x86_64-windows .weval-bin
+          curl -LO "https://github.com/bytecodealliance/weval/releases/download/${WEVAL_VERSION}/weval-${WEVAL_VERSION}-x86_64-windows.zip"
+          unzip "weval-${WEVAL_VERSION}-x86_64-windows.zip"
+          mv "weval-${WEVAL_VERSION}-x86_64-windows" .weval-bin
 
       - name: Install NPM packages
         run: pnpm install

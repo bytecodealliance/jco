@@ -91,37 +91,44 @@ jobs:
           case "$PROJECT" in
             jco)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
             bare-jco)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
             jco-transpile)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
             jco-std)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
             preview2-shim)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
             preview3-shim)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
             js-component-bindgen)
               export PROJECT_DIR="$PWD/crates/$PROJECT";
-              export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
+              CURRENT_VERSION="$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen)";
+              export CURRENT_VERSION;
               export IS_RUST_PROJECT=true;
               ;;
             *)
@@ -129,7 +136,8 @@ jobs:
               exit 1;
           esac
 
-          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs $NEXT_VERSION);
+          IS_PRERELEASE="$(node scripts/semver-is-prerelease.mjs "$NEXT_VERSION");"
+          export IS_PRERELEASE;
 
           echo -e "project=$PROJECT"
           echo -e "project-dir=$PROJECT_DIR"
@@ -139,13 +147,15 @@ jobs:
           echo -e "is-js-project=$IS_JS_PROJECT"
           echo -e "is-prerelease=$IS_PRERELEASE"
 
-          echo -e "project=$PROJECT" >> $GITHUB_OUTPUT
-          echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
-          echo -e "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo -e "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
-          echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
-          echo -e "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          {
+              echo -e "project=$PROJECT";
+              echo -e "project-dir=$PROJECT_DIR";
+              echo -e "current-version=$CURRENT_VERSION";
+              echo -e "next-version=$NEXT_VERSION";
+              echo -e "is-rust-project=$IS_RUST_PROJECT";
+              echo -e "is-js-project=$IS_JS_PROJECT";
+              echo -e "is-prerelease=$IS_PRERELEASE";
+          } >> "$GITHUB_OUTPUT"
 
       - name: Ensure next version is after current
         run: |
@@ -159,14 +169,19 @@ jobs:
       - name: Set project version
         working-directory: ${{ steps.project-meta.outputs.project-dir }}
         shell: bash
-        run: |
-          if [ "true" == "${{ steps.project-meta.outputs.is-rust-project }}" ]; then
-            cargo set-version -p ${{ steps.project-meta.outputs.project }} ${{ steps.project-meta.outputs.next-version }};
-          elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
-            npm pkg set version=${{ steps.project-meta.outputs.next-version }};
+        env:
+          PROJECT_PROJECT: ${{ steps.project-meta.outputs.project }}
+          NEXT_VERSION: ${{ steps.project-meta.outputs.next-version }}
+          IS_RUST_PROJECT: ${{ steps.project-meta.outputs.is-rust-project }}
+          IS_JS_PROJECT: ${{ steps.project-meta.outputs.is-js-project }}
+        runf: |
+          if [ "true" == "$IS_RUST_PROJECT" ]; then
+            cargo set-version -p "$PROJECT" "$NEXT_VERSION";
+          elif [ "true" == "$IS_JS_PROJECT" ]; then
+            npm pkg set "version=$NEXT_VERSION";
           fi
 
-          if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
+          if [ "jco" == "$PROJECT" ]; then
             sed \
               -i \
               's/version("${{ steps.project-meta.outputs.current-version }}")/version("${{ steps.project-meta.outputs.next-version }}")/' \
@@ -200,8 +215,8 @@ jobs:
             --repository=${{ github.workspace }}/.git \
             --config=${{ steps.project-meta.outputs.project-dir }}/cliff.toml \
             --latest \
-            $OPT_TAG \
-            $OPT_TAG_PATTERN \
+            "$OPT_TAG" \
+            "$OPT_TAG_PATTERN" \
             --prepend=${{ steps.project-meta.outputs.project-dir }}/CHANGELOG.md
 
       - name: fmt
