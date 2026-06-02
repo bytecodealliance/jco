@@ -152,10 +152,10 @@ jobs:
         env:
           WEVAL_VERSION: ${{ steps.weval-meta.outputs.version }}
         run: |
-          curl -LO https://github.com/bytecodealliance/weval/releases/download/$WEVAL_VERSION/weval-$WEVAL_VERSION-aarch64-macos.tar.xz
-          tar -xvJf weval-$WEVAL_VERSION-aarch64-macos.tar.xz
+          curl -LO "https://github.com/bytecodealliance/weval/releases/download/$WEVAL_VERSION/weval-$WEVAL_VERSION-aarch64-macos.tar.xz"
+          tar -xvJf "weval-$WEVAL_VERSION-aarch64-macos.tar.xz"
           mkdir .weval-bin
-          mv weval-$WEVAL_VERSION-aarch64-macos/weval .weval-bin/
+          mv "weval-$WEVAL_VERSION-aarch64-macos/weval" .weval-bin/
 
       - name: Install NPM packages
         run: pnpm install
