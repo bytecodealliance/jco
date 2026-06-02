@@ -504,3 +504,20 @@ world resource-incrementing-id {
     import resources;
     export local-run;
 }
+
+// Regression coverage for https://github.com/bytecodealliance/jco/issues/1585:
+// lifting a record (and a tuple) whose first field is a `list` immediately
+// followed by a fixed-width field, over the async flat ABI. The list lift
+// repurposes the storage-length budget while reading out-of-line data; the
+// following fixed-width field must still see the correct remaining budget.
+world lift-list-before-fixed {
+    record blob {
+        data: list<u8>,
+        count: u32,
+        label: string,
+    }
+
+    export get-blob: async func() -> blob;
+    export get-empty-blob: async func() -> blob;
+    export get-list-then-u32: async func() -> tuple<list<u8>, u32>;
+}
