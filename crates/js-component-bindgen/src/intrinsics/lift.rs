@@ -745,12 +745,26 @@ impl LiftIntrinsic {
                                     fieldPtr = ctx.storagePtr;
                                 }}
 
+                                // A field occupies exactly size32 bytes of the record's
+                                // flat storage. Capture the remaining storage budget before
+                                // lifting the field and restore it afterwards: a field's own
+                                // lift fn may repurpose storageLen internally (e.g. a list
+                                // sets it to the element-buffer length while reading
+                                // out-of-line data and never restores it), which would
+                                // otherwise corrupt the budget the next field sees.
+                                // See https://github.com/bytecodealliance/jco/issues/1585.
+                                let fieldLen;
+                                if (ctx.storageLen !== undefined) {{ fieldLen = ctx.storageLen; }}
+
                                 let [val, newCtx] = liftFn(ctx);
                                 res[key] = val;
                                 ctx = newCtx;
 
                                 if (fieldPtr !== undefined) {{
                                     ctx.storagePtr = Math.max(ctx.storagePtr, fieldPtr + size32);
+                                }}
+                                if (fieldLen !== undefined) {{
+                                    ctx.storageLen = fieldLen - size32;
                                 }}
                             }}
 
@@ -992,12 +1006,24 @@ impl LiftIntrinsic {
                                     elemPtr = ctx.storagePtr;
                                 }}
 
+                                // As in _liftFlatRecord: an element occupies exactly size32
+                                // bytes of the tuple's flat storage, so capture and restore
+                                // the storage budget around the element lift to stop a
+                                // field's internal storageLen use (e.g. lists) leaking into
+                                // the next element.
+                                // See https://github.com/bytecodealliance/jco/issues/1585.
+                                let elemLen;
+                                if (ctx.storageLen !== undefined) {{ elemLen = ctx.storageLen; }}
+
                                 const [newValue, newCtx] = liftFn(ctx);
                                 val.push(newValue);
                                 ctx = newCtx;
 
                                 if (elemPtr !== undefined) {{
                                     ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + size32);
+                                }}
+                                if (elemLen !== undefined) {{
+                                    ctx.storageLen = elemLen - size32;
                                 }}
                             }}
 
