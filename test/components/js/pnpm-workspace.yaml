@@ -1,0 +1,12 @@
+minimumReleaseAge: 10080
+blockExoticSubdeps: true
+allowBuilds: []
+
+packages:
+  - jco-issue-1390/callee
+
+catalog:
+  puppeteer: ^25.1.0
+
+minimumReleaseAgeExclude:
+  - '@bytecodealliance/componentize-js@0.21.0'

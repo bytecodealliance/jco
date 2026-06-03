@@ -4,6 +4,12 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    puppeteer:
+      specifier: ^25.1.0
+      version: 25.1.0
+
 importers:
 
   .:
@@ -390,12 +396,6 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(jiti@2.6.1)(terser@5.47.1))
-
-  test/components/js/jco-issue-1390/callee:
-    devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.21.0
-        version: 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
 
 packages:
 
