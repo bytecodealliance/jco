@@ -10,6 +10,63 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // wasmtime/crates/misc/component-async-tests/tests/scenario/yield_.rs
 //
 suite("yield scenario", () => {
+    let WAKER_ID = 0;
+    let HOST_THING_ID = 0;
+    let THINGS_TABLE = {};
+
+    class HostThing {
+        #id;
+        #wakers;
+
+        constructor() {
+            console.log("HostThing#constructor()",{ args: [...arguments] });
+            this.#id = HOST_THING_ID++;
+            THINGS_TABLE[this.#id] = this;
+        }
+
+        setReady(ready) {
+            console.log("HostThing#setReady()",{ args: [...arguments] });
+            if (ready) {
+                if (!this.#wakers) { throw new Error("wakers not yet set"); }
+                for (const w of this.#wakers) {
+                    console.log("RESOLVING");
+                    w.resolve();
+                }
+            }
+
+            if (!this.#wakers) { this.#wakers = []; }
+        }
+
+        [Symbol.asyncDispose]() {
+            delete THINGS_TABLE[this.#id];
+        }
+
+        async whenReady() {
+            console.log("HostThing#whenReady()",{ args: [...arguments] });
+
+            const { promise, resolve } = Promise.withResolvers();
+            if (!this.#wakers) { throw new Error('wakers should have been initialized'); }
+            this.#wakers.push({ promise, resolve, id: WAKER_ID++ });
+            console.log("WAITING");
+            await Promise.all(this.#wakers.map(w => w.promise));
+        }
+    }
+
+    const genYieldRunnerIface = () => {
+        let _continue;
+        return {
+            setContinue(v) {
+                console.log("setContinue()",{ args: [...arguments] });
+                _continue = v;
+            },
+
+            getContinue() {
+                console.log("getContinue()",{ args: [...arguments] });
+                return _continue;
+            }
+        };
+    };
+
     test.only("synchronous", async () => {
         let cleanup;
         try {
@@ -22,31 +79,27 @@ suite("yield scenario", () => {
 
             const res = await buildAndTranspile({
                 componentPath,
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
+                instantiation: {
+                    imports: {
+                        "local:local/continue": {
+                            ...genYieldRunnerIface(),
+                        },
+                        "local:local/ready": {
+                            Thing: HostThing,
+                        },
+                    },
+                },
 
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                }
             });
             const { instance } = res;
             cleanup = res.cleanup;
-            console.log("instance?", instance);
 
-            instance["wasi:cli/run@0.2.10"].run();
-
-            throw new Error("not implemented");
+            await instance["local:local/run"].run();
         } finally {
             if (cleanup) {
                 await cleanup();
@@ -66,28 +119,27 @@ suite("yield scenario", () => {
 
             const res = await buildAndTranspile({
                 componentPath,
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
+                instantiation: {
+                    imports: {
+                        "local:local/continue": {
+                            ...genYieldRunnerIface(),
+                        },
+                        "local:local/ready": {
+                            Thing: HostThing,
+                        },
+                    },
+                },
 
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                }
             });
-            const { instance, cleanup } = res;
-            void [instance, cleanup];
+            const { instance } = res;
+            cleanup = res.cleanup;
 
-            throw new Error("not implemented");
+            await instance["local:local/run"].run();
         } finally {
             if (cleanup) {
                 await cleanup();
@@ -107,28 +159,27 @@ suite("yield scenario", () => {
 
             const res = await buildAndTranspile({
                 componentPath,
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
+                instantiation: {
+                    imports: {
+                        "local:local/continue": {
+                            ...genYieldRunnerIface(),
+                        },
+                        "local:local/ready": {
+                            Thing: HostThing,
+                        },
+                    },
+                },
 
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                }
             });
-            const { instance, cleanup } = res;
-            void [instance, cleanup];
+            const { instance } = res;
+            cleanup = res.cleanup;
 
-            throw new Error("not implemented");
+            await instance["local:local/run"].run();
         } finally {
             if (cleanup) {
                 await cleanup();
@@ -148,28 +199,27 @@ suite("yield scenario", () => {
 
             const res = await buildAndTranspile({
                 componentPath,
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
+                instantiation: {
+                    imports: {
+                        "local:local/continue": {
+                            ...genYieldRunnerIface(),
+                        },
+                        "local:local/ready": {
+                            Thing: HostThing,
+                        },
+                    },
+                },
 
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                }
             });
-            const { instance, cleanup } = res;
-            void [instance, cleanup];
+            const { instance } = res;
+            cleanup = res.cleanup;
 
-            throw new Error("not implemented");
+            await instance["local:local/run"].run();
         } finally {
             if (cleanup) {
                 await cleanup();
