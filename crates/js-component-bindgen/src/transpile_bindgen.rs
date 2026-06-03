@@ -1148,9 +1148,9 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::FutureCancelWrite { .. }
                 | Trampoline::FutureDropReadable { .. }
                 | Trampoline::FutureDropWritable { .. }
+                | Trampoline::FutureNew { .. }
                 | Trampoline::FutureRead { .. }
                 | Trampoline::FutureWrite { .. }
-                | Trampoline::FutureNew { .. }
                 | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop { .. }
@@ -1171,6 +1171,8 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::SyncStartCall { .. }
                 | Trampoline::TaskCancel { .. }
                 | Trampoline::TaskReturn { .. }
+                | Trampoline::ThreadYield { .. }
+                | Trampoline::ThreadYieldToSuspended { .. }
                 | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
                 | Trampoline::WaitableSetNew { .. }
