@@ -17,4 +17,4 @@ wit-fetch:
 
 # Build python wasm component
 build: setup wit-fetch
-    {{pnpm}} exec componentize-js -w wit -o component.wasm src/component.js
+    {{pnpm}} run build
