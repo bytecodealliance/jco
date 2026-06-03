@@ -10,11 +10,11 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // wasmtime/crates/misc/component-async-tests/tests/scenario/yield_.rs
 //
 suite("yield scenario", () => {
-    test.skip("synchronous", async () => {
+    test.only("synchronous", async () => {
         let cleanup;
         try {
-            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-caller.wasm");
-            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-callee-synchronous.wasm");
+            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-caller.wasm");
+            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-callee-synchronous.wasm");
             const componentPath = await composeCallerCallee({
                 callerPath,
                 calleePath,
@@ -40,8 +40,11 @@ suite("yield scenario", () => {
                 //     },
                 // }
             });
-            const { instance, cleanup } = res;
-            void [instance, cleanup];
+            const { instance } = res;
+            cleanup = res.cleanup;
+            console.log("instance?", instance);
+
+            instance["wasi:cli/run@0.2.10"].run();
 
             throw new Error("not implemented");
         } finally {
@@ -54,8 +57,8 @@ suite("yield scenario", () => {
     test.skip("stackless", async () => {
         let cleanup;
         try {
-            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-caller.wasm");
-            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-callee-stackless.wasm");
+            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-caller.wasm");
+            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-callee-stackless.wasm");
             const componentPath = await composeCallerCallee({
                 callerPath,
                 calleePath,
@@ -95,8 +98,8 @@ suite("yield scenario", () => {
     test.skip("cancel synchronous", async () => {
         let cleanup;
         try {
-            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-caller-cancel.wasm");
-            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-callee-synchronous.wasm");
+            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-caller-cancel.wasm");
+            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-callee-synchronous.wasm");
             const componentPath = await composeCallerCallee({
                 callerPath,
                 calleePath,
@@ -136,8 +139,8 @@ suite("yield scenario", () => {
     test.skip("cancel stackless", async () => {
         let cleanup;
         try {
-            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-caller-cancel.wasm");
-            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-yield-callee-stackless.wasm");
+            const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-caller-cancel.wasm");
+            const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-callee-stackless.wasm");
             const componentPath = await composeCallerCallee({
                 callerPath,
                 calleePath,
