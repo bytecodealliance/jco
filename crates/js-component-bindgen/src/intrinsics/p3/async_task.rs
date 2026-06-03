@@ -558,13 +558,13 @@ impl AsyncTaskIntrinsic {
 
             Self::Yield => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let yield_fn = Self::Yield.name();
+                let yield_fn = self.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
 
                 output.push_str(&format!(
                     "
-                    function {yield_fn}(ctx) {{
+                    async function {yield_fn}(ctx) {{
                         {debug_log_fn}('[{yield_fn}()] args', {{ ctx }});
                         const {{ componentIdx, isCancellable }} = ctx;
                         const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
