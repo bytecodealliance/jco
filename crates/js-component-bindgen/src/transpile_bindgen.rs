@@ -2669,10 +2669,10 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = {yield_fn}.bind(null, {{
+                      const trampoline{i} = new WebAssembly.Suspending({yield_fn}.bind(null, {{
                           isCancellable: {cancellable},
                           componentIdx: {component_instance_idx},
-                      }});
+                      }}));
                     "#,
                 );
             }
