@@ -489,8 +489,14 @@ impl AsyncTaskIntrinsic {
                         //
                         // See also documentation on `HostIntrinsic::PrepareCall`
                         const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
-                        if (subtaskCallMetadata?.returnFn) {{
-                            subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]);
+                        if (subtaskCallMetadata?.returnFn && !subtaskCallMetadata.returnFnCalled) {{
+                            {debug_log_fn}('[{task_return_fn}()] calling return fn on subtask', {{
+                                componentIdx,
+                                taskID: task.id(),
+                                subtaskID: task.getParentSubtask()?.id(),
+                                returnFnParams: [...params, subtaskCallMetadata.resultPtr],
+                            }});
+                            const res = subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]);
                             subtaskCallMetadata.returnFnCalled = true;
                             task.resolve([]);
                             return;
@@ -1193,7 +1199,14 @@ impl AsyncTaskIntrinsic {
                         // TODO(threads): equivalent to thread.suspend_until()
                         async immediateSuspendUntil(opts) {{
                             const {{ cancellable, readyFn }} = opts;
-                            {debug_log_fn}('[{task_class}#immediateSuspendUntil()] args', {{ cancellable, readyFn }});
+                            {debug_log_fn}('[{task_class}#immediateSuspendUntil()] args', {{
+                                args: {{
+                                    cancellable,
+                                    readyFn,
+                                }},
+                                taskID: this.#id,
+                                componentIdx: this.#componentIdx,
+                            }});
 
                             const ready = readyFn();
                             if (ready && {global_async_determinism} === 'random') {{
