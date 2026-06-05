@@ -42,6 +42,16 @@ describe("Fields tests", () => {
     expect(result).toEqual(["a", "b"]);
   });
 
+  test("append preserves existing field name casing", () => {
+    const f = new Fields();
+    f.append("X-Custom", ENCODER.encode("a"));
+    f.append("x-custom", ENCODER.encode("b"));
+    expect(f.copyAll().map(([name, value]) => [name, DECODER.decode(value)])).toEqual([
+      ["X-Custom", "a"],
+      ["X-Custom", "b"],
+    ]);
+  });
+
   test("preserves insertion order in copyAll()", () => {
     const f = new Fields();
     f.append("A", ENCODER.encode("1"));
@@ -59,6 +69,27 @@ describe("Fields tests", () => {
     f.set("Tok", [ENCODER.encode("two"), ENCODER.encode("three")]);
     const vals = f.get("tok").map((v) => DECODER.decode(v));
     expect(vals).toEqual(["two", "three"]);
+  });
+
+  test("set with empty values clears previous values", () => {
+    const f = new Fields();
+    f.append("Tok", ENCODER.encode("one"));
+    f.set("Tok", []);
+    expect(f.has("tok")).toBe(false);
+    expect(f.get("tok")).toEqual([]);
+  });
+
+  test("allows obs-text field value bytes", () => {
+    const f = new Fields();
+    const value = Uint8Array.from([0x80, 0xff]);
+    f.set("Tok", [value]);
+    expect(f.get("tok")).toEqual([value]);
+  });
+
+  test("rejects invalid control bytes in field values", () => {
+    const f = new Fields();
+    expect(() => f.set("Tok", [Uint8Array.from([0x00])])).toThrow(HttpError);
+    expect(() => f.append("Tok", Uint8Array.from([0x7f]))).toThrow(HttpError);
   });
 
   test("delete removes the header entirely", () => {

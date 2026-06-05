@@ -115,16 +115,19 @@ export class Fields {
     let bucket = this.#table.get(lowercased);
     if (bucket) {
       this.#entries = this.#entries.filter((e) => !bucket.includes(e));
-      bucket.splice(0, bucket.length);
-    } else {
-      bucket = [];
-      this.#table.set(lowercased, bucket);
+      this.#table.delete(lowercased);
     }
 
+    if (values.length === 0) {
+      return;
+    }
+
+    bucket = [];
+    this.#table.set(lowercased, bucket);
     for (const value of values) {
       const entry = [name, value];
       this.#entries.push(entry);
-      this.#table.get(lowercased).push(entry);
+      bucket.push(entry);
     }
   }
 
@@ -140,6 +143,7 @@ export class Fields {
    */
   delete(name) {
     this.#ensureMutable();
+    this.#validateName(name);
     const lowercased = name.toLowerCase();
     const tableEntries = this.#table.get(lowercased);
 
@@ -162,6 +166,7 @@ export class Fields {
    */
   getAndDelete(name) {
     this.#ensureMutable();
+    this.#validateName(name);
 
     const values = this.get(name);
     this.delete(name);
@@ -188,10 +193,11 @@ export class Fields {
     this.#validateValue(name, value);
 
     const lowercased = name.toLowerCase();
-    const entry = [name, value];
-    this.#entries.push(entry);
 
     const tableEntries = this.#table.get(lowercased);
+    const entryName = tableEntries?.[0]?.[0] ?? name;
+    const entry = [entryName, value];
+    this.#entries.push(entry);
     if (tableEntries) {
       tableEntries.push(entry);
     } else {
@@ -274,7 +280,7 @@ export class Fields {
 
   #validateValue(name, value) {
     try {
-      validateHeaderValue(name, new TextDecoder().decode(value));
+      validateHeaderValue(name, bytesToHeaderValueString(value));
     } catch {
       throw new HttpError("invalid-syntax", `Invalid header value for ${name}`);
     }
@@ -285,6 +291,14 @@ export class Fields {
       throw new HttpError("immutable", "Cannot modify immutable fields");
     }
   }
+}
+
+function bytesToHeaderValueString(value) {
+  let result = "";
+  for (let i = 0; i < value.length; i += 0x8000) {
+    result += String.fromCharCode(...value.subarray(i, i + 0x8000));
+  }
+  return result;
 }
 
 export function _fieldsLock(fields) {

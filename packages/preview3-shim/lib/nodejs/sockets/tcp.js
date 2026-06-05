@@ -23,6 +23,16 @@ function token() {
   return (TCP_CREATE_TOKEN ??= Symbol("TcpCreateToken"));
 }
 
+function invalidRecv() {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.close();
+    },
+  });
+  const promise = Promise.reject(new SocketError("invalid-state"));
+  return [new StreamReader(stream, { preventCancel: false }), new FutureReader(promise)];
+}
+
 const STATE = {
   UNBOUND: "unbound",
   BOUND: "bound",
@@ -316,16 +326,10 @@ export class TcpSocket {
    */
   receive() {
     if (this.#state !== STATE.CONNECTED) {
-      throw new SocketError("invalid-state");
+      return invalidRecv();
     }
     if (this.#receiveStarted) {
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-      const promise = Promise.reject(new SocketError("invalid-state"));
-      return [new StreamReader(stream, { preventCancel: false }), new FutureReader(promise)];
+      return invalidRecv();
     }
     this.#receiveStarted = true;
 
