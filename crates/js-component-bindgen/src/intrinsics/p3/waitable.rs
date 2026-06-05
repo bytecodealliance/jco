@@ -283,6 +283,8 @@ impl WaitableIntrinsic {
 
                         #waitableSet = null;
 
+                        #hasSyncWaiter = false;
+
                         #idx = null; // to component-global waitables
 
                         target;
@@ -379,6 +381,21 @@ impl WaitableIntrinsic {
                                 throw new Error('waitables with pending events cannot be dropped');
                             }}
                             this.join(null);
+                        }}
+
+                        async waitForPendingEvent(args) {{
+                            const {{ cstate }} = args;
+                            if (!cstate) {{ throw new TypeError('missing component state'); }}
+
+                            if (this.#waitableSet !== null || this.#hasSyncWaiter) {{
+                                throw new Error("waitable is already in a set/has a sync waiter");
+                            }}
+                            this.#hasSyncWaiter = true;
+                            await cstate.waitUntil({{
+                                cancellable: false,
+                                readyFn: () => this.hasPendingEvent(),
+                            }});
+                            this.#hasSyncWaiter = false;
                         }}
 
                     }}
