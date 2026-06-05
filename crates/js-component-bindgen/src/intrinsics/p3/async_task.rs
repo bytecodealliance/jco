@@ -2233,41 +2233,54 @@ impl AsyncTaskIntrinsic {
                             manualAsyncResult = {promise_with_resolvers_fn}();
                         }}
 
-                        try {{
-                            {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
-                            const res = await importFn(...params);
-                            if (requiresManualAsyncResult) {{
-                                manualAsyncResult.resolve(subtask.getResult());
+                        // Build a response that *may* resolve quickly
+                        let importFnReturned = false;
+
+                        queueMicrotask(async () => {{
+                            try {{
+                                {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
+                                await importFn(...params);
+                                importFnReturned = true;
+                                if (requiresManualAsyncResult) {{
+                                    manualAsyncResult.resolve(subtask.getResult());
+                                }}
+                            }} catch (err) {{
+                                {debug_log_fn}("[{lower_import_fn}()] import fn error:", err);
+                                if (requiresManualAsyncResult) {{
+                                    manualAsyncResult.reject(err);
+                                }}
+                                throw err;
                             }}
-                        }} catch (err) {{
-                            {debug_log_fn}("[{lower_import_fn}()] import fn error:", err);
-                            if (requiresManualAsyncResult) {{
-                                manualAsyncResult.reject(err);
-                            }}
-                            throw err;
-                        }}
+                        }});
 
                         if (requiresManualAsyncResult) {{ return manualAsyncResult.promise; }}
 
-                        const subtaskState = subtask.getStateNumber();
-                        if (subtaskState < 0 || subtaskState >= 2**4) {{
-                            throw new Error('invalid subtask state, out of valid range');
-                        }}
-
-                        // An async-lowered import whose callee resolved synchronously returns
-                        // [Subtask.State.RETURNED] only an no subtask handle is exposed.
-                        if (subtask.isReturned()) {{
-                            if (!subtask.resolveDelivered()) {{
-                                subtask.deliverResolve();
-                            }}
-                            const removed = cstate.handles.remove(subtask.waitableRep());
-                            if (removed !== subtask) {{
-                                throw new Error('subtask handle cleanup removed unexpected entry');
-                            }}
-                            return subtaskState;
-                        }}
-
-                        return Number(subtask.waitableRep()) << 4 | subtaskState;
+                        return new Promise((resolve, reject) => {{
+                            setTimeout(() => {{
+                                const subtaskState = subtask.getStateNumber();
+                                if (subtaskState < 0 || subtaskState >= 2**4) {{
+                                    // throw new Error('invalid subtask state, out of valid range');
+                                    reject(new Error('invalid subtask state, out of valid range'));
+                                }}
+                                let res;
+                                // An async-lowered import whose callee resolved synchronously returns
+                                // [Subtask.State.RETURNED] only an no subtask handle is exposed.
+                                if (subtask.isReturned()) {{
+                                    if (!subtask.resolveDelivered()) {{
+                                        subtask.deliverResolve();
+                                    }}
+                                    const removed = cstate.handles.remove(subtask.waitableRep());
+                                    if (removed !== subtask) {{
+                                        throw new Error('subtask handle cleanup removed unexpected entry');
+                                        reject(new Error('subtask handle cleanup removed unexpected entry'));
+                                    }}
+                                    res = subtaskState;
+                                }} else {{
+                                    res = Number(subtask.waitableRep()) << 4 | subtaskState;
+                                }}
+                                    resolve(res);
+                            }}, 0);
+                        }});
                     }}
                     "#
                 ));
