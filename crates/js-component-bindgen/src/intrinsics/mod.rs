@@ -1549,6 +1549,12 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         || args
             .intrinsics
             .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead))
     {
         args.intrinsics.extend([
             &Intrinsic::GlobalBufferManager,
