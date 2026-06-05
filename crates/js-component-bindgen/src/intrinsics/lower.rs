@@ -846,10 +846,14 @@ impl LowerIntrinsic {
 
                             let flagObj = ctx.vals[0];
                             let flagValue = 0;
-                            for (const [idx, name] of names.entries()) {{
-                                if (flagObj[name] === true) {{
-                                    flagValue |= 1 << idx;
+                            if (typeof flagObj === 'object' && flagObj !== null) {{
+                                for (const [idx, name] of names.entries()) {{
+                                    if (flagObj[name] === true) {{
+                                        flagValue |= 1 << idx;
+                                    }}
                                 }}
+                            }} else if (flagObj !== null && flagObj !== undefined) {{
+                                throw new TypeError('only an object, undefined or null can be converted to flags');
                             }}
 
                             const rem = ctx.storagePtr % align32;

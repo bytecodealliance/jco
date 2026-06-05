@@ -5110,7 +5110,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 flags_ty
                     .names
                     .iter()
-                    .map(|s| format!("'{s}'"))
+                    .map(|s| format!("'{}'", s.to_lower_camel_case()))
                     .collect::<Vec<_>>()
                     .join(",")
             );
@@ -5669,7 +5669,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 flags_ty
                     .names
                     .iter()
-                    .map(|s| format!("'{s}'"))
+                    .map(|s| format!("'{}'", s.to_lower_camel_case()))
                     .collect::<Vec<_>>()
                     .join(",")
             );

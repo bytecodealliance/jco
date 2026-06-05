@@ -19,6 +19,13 @@ impl local_run_async::Guest for Component {
 
         let result = async_lower_result_pointer_host::add_five(1, 2, 3, 4, 5).await;
         assert_eq!(result, Ok(15));
+
+        let flags = async_lower_result_pointer_host::get_flags().await;
+        assert_eq!(
+            flags,
+            Ok(async_lower_result_pointer_host::TestFlags::FIRST
+                | async_lower_result_pointer_host::TestFlags::THIRD_FLAG,),
+        );
     }
 }
 

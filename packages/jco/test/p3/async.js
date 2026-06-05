@@ -45,6 +45,7 @@ suite("Async (WASI P3)", () => {
                     ...new WASIShim().getImportObject(),
                     "jco:test-components/async-lower-result-pointer-host": {
                         addFive: async (a, b, c, d, e) => a + b + c + d + e,
+                        getFlags: async () => ({ first: true, thirdFlag: true }),
                     },
                     "jco:test-components/sync-lower-result-pointer-host": {
                         addPair: (a, b, c, d, e) => [a + b + c + d + e, a * b * c * d * e],
