@@ -581,7 +581,10 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        await task.yield({{ isAsync, isCancellable }});
+                        return task.waitUntil({{
+                            cancellable: isCancellable,
+                            readyFn: () => true,
+                        }});
                     }}
                 "
                 ));
