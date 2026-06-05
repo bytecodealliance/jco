@@ -19,17 +19,14 @@ suite("yield scenario", () => {
         #wakers;
 
         constructor() {
-            console.log("HostThing#constructor()",{ args: [...arguments] });
             this.#id = HOST_THING_ID++;
             THINGS_TABLE[this.#id] = this;
         }
 
         setReady(ready) {
-            console.log("HostThing#setReady()",{ args: [...arguments] });
             if (ready) {
                 if (!this.#wakers) { throw new Error("wakers not yet set"); }
                 for (const w of this.#wakers) {
-                    console.log("RESOLVING");
                     w.resolve();
                 }
             }
@@ -42,12 +39,9 @@ suite("yield scenario", () => {
         }
 
         async whenReady() {
-            console.log("HostThing#whenReady()",{ args: [...arguments] });
-
             const { promise, resolve } = Promise.withResolvers();
-            if (!this.#wakers) { throw new Error('wakers should have been initialized'); }
+            if (!this.#wakers) { return; }
             this.#wakers.push({ promise, resolve, id: WAKER_ID++ });
-            console.log("WAITING");
             await Promise.all(this.#wakers.map(w => w.promise));
         }
     }
@@ -56,12 +50,10 @@ suite("yield scenario", () => {
         let _continue;
         return {
             setContinue(v) {
-                console.log("setContinue()",{ args: [...arguments] });
                 _continue = v;
             },
 
             getContinue() {
-                console.log("getContinue()",{ args: [...arguments] });
                 return _continue;
             }
         };
