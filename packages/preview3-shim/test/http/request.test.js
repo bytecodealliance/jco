@@ -32,6 +32,23 @@ describe("Request", () => {
     expect(req.getAuthority()).toBeUndefined();
   });
 
+  test("setPathWithQuery normalizes an empty path to slash", () => {
+    const [req] = Request.new(headers, contents, trailers, options);
+
+    req.setPathWithQuery("");
+    expect(req.getPathWithQuery()).toBe("/");
+  });
+
+  test("setPathWithQuery rejects raw invalid URI characters", () => {
+    const [req] = Request.new(headers, contents, trailers, options);
+
+    for (const path of ["/ ", "/<", "/>", "/`"]) {
+      expect(() => req.setPathWithQuery(path)).toThrowError(
+        expect.objectContaining({ payload: { tag: "invalid-syntax" } }),
+      );
+    }
+  });
+
   test("new() accepts generated stream-like bodies and promise trailers", async () => {
     const body = { read: async () => null };
     const [req, fut] = Request.new(headers, body, Promise.resolve({ tag: "ok", val: null }));
@@ -69,6 +86,18 @@ describe("Request", () => {
 
     req.setMethod("X-CUSTOM");
     expect(req.getMethod()).toEqual({ tag: "other", val: "x-custom" });
+
+    req.setMethod({ tag: "other", val: "GET" });
+    expect(req.getMethod()).toEqual({ tag: "get" });
+
+    req.setMethod({ tag: "other", val: "get" });
+    expect(req.getMethod()).toEqual({ tag: "other", val: "get" });
+
+    req.setMethod({ tag: "other", val: "Custom" });
+    expect(req.getMethod()).toEqual({ tag: "other", val: "Custom" });
+
+    req.setMethod({ tag: "other", val: "!*+-.^_`|~09" });
+    expect(req.getMethod()).toEqual({ tag: "other", val: "!*+-.^_`|~09" });
   });
 
   test("setMethod rejects invalid syntax", () => {
@@ -84,6 +113,15 @@ describe("Request", () => {
 
     req.setScheme({ tag: "HTTPS" });
     expect(req.getScheme()).toEqual({ tag: "HTTPS" });
+
+    req.setScheme({ tag: "other", val: "https" });
+    expect(req.getScheme()).toEqual({ tag: "HTTPS" });
+
+    req.setScheme({ tag: "other", val: "http" });
+    expect(req.getScheme()).toEqual({ tag: "HTTP" });
+
+    req.setScheme({ tag: "other", val: "Custom" });
+    expect(req.getScheme()).toEqual({ tag: "other", val: "Custom" });
 
     req.setScheme(undefined);
     expect(req.getScheme()).toBeUndefined();

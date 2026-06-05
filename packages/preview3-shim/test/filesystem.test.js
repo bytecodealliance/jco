@@ -219,6 +219,157 @@ describe("Descriptor with os.tmpdir()", () => {
     expect(entries.some((e) => e.name === entryName)).toBe(true);
   });
 
+  test("preopen descriptors expose directory mutation flags", async () => {
+    const virtualPath = `/preview3-test-flags-${path.basename(tmpDir)}`;
+    filesystem._addPreopen(virtualPath, tmpDir);
+    const [preopen] = filesystem.preopens
+      .getDirectories()
+      .find(([_desc, path]) => path === virtualPath);
+
+    await expect(preopen.getFlags()).resolves.toMatchObject({
+      read: true,
+      mutateDirectory: true,
+    });
+  });
+
+  test("openAt reports effective descriptor flags", async () => {
+    const defaultSub = `${relBase}/flags-default.txt`;
+    await fs.writeFile(path.join(tmpDir, "flags-default.txt"), "");
+    const defaultDesc = await rootDescriptor.openAt({}, defaultSub, {}, {});
+    await expect(defaultDesc.getFlags()).resolves.toMatchObject({
+      read: true,
+      write: false,
+    });
+    defaultDesc[Symbol.dispose]?.();
+
+    const createDefaultSub = `${relBase}/flags-create-default.txt`;
+    const createDefaultDesc = await rootDescriptor.openAt(
+      {},
+      createDefaultSub,
+      { create: true, exclusive: true },
+      {},
+    );
+    await expect(createDefaultDesc.getFlags()).resolves.toMatchObject({
+      read: true,
+      write: true,
+    });
+    createDefaultDesc[Symbol.dispose]?.();
+
+    const createReadSub = `${relBase}/flags-create-read.txt`;
+    const createReadDesc = await rootDescriptor.openAt(
+      {},
+      createReadSub,
+      { create: true, exclusive: true },
+      { read: true },
+    );
+    await expect(createReadDesc.getFlags()).resolves.toMatchObject({
+      read: true,
+      write: true,
+    });
+    createReadDesc[Symbol.dispose]?.();
+
+    const createWriteSub = `${relBase}/flags-create-write.txt`;
+    const createWriteDesc = await rootDescriptor.openAt(
+      {},
+      createWriteSub,
+      { create: true, exclusive: true },
+      { write: true },
+    );
+    await expect(createWriteDesc.getFlags()).resolves.toMatchObject({
+      read: false,
+      write: true,
+    });
+    createWriteDesc[Symbol.dispose]?.();
+  });
+
+  test("empty relative paths reject with no-entry", async () => {
+    const dirDesc = await rootDescriptor.openAt(
+      {},
+      relBase,
+      { directory: true },
+      { read: true, mutateDirectory: true },
+    );
+
+    await expect(dirDesc.openAt({}, "", {}, { read: true })).rejects.toMatchObject({
+      payload: { tag: "no-entry" },
+    });
+    await expect(dirDesc.createDirectoryAt("")).rejects.toMatchObject({
+      payload: { tag: "no-entry" },
+    });
+    await expect(dirDesc.unlinkFileAt("")).rejects.toMatchObject({
+      payload: { tag: "no-entry" },
+    });
+    await expect(dirDesc.linkAt({}, "", dirDesc, "x")).rejects.toMatchObject({
+      payload: { tag: "no-entry" },
+    });
+
+    dirDesc[Symbol.dispose]?.();
+  });
+
+  test("path operations reject symlink escapes from preopen", async () => {
+    const dirDesc = await rootDescriptor.openAt(
+      {},
+      relBase,
+      { directory: true },
+      { read: true, mutateDirectory: true },
+    );
+
+    await dirDesc.symlinkAt("..", "parent.cleanup");
+
+    await expect(dirDesc.createDirectoryAt("parent.cleanup/out")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(dirDesc.statAt({ symlinkFollow: true }, "parent.cleanup")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(dirDesc.linkAt({}, "parent.cleanup/out", dirDesc, "x")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(dirDesc.renameAt("a.txt", dirDesc, "parent.cleanup/out")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(dirDesc.unlinkFileAt("parent.cleanup/out")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+
+    await fs.unlink(path.join(tmpDir, "parent.cleanup"));
+    dirDesc[Symbol.dispose]?.();
+  });
+
+  test("path operations reject non-directory base descriptors", async () => {
+    const sub = `${relBase}/not-dir-base.txt`;
+    const child = await rootDescriptor.openAt(
+      {},
+      sub,
+      { create: true },
+      { read: true, write: true },
+    );
+
+    await expect(child.statAt({}, ".")).rejects.toMatchObject({
+      payload: { tag: "not-directory" },
+    });
+    await expect(child.openAt({}, ".", {}, { read: true })).rejects.toMatchObject({
+      payload: { tag: "not-directory" },
+    });
+
+    child[Symbol.dispose]?.();
+  });
+
+  test("removeDirectoryAt rejects current directory", async () => {
+    const dirDesc = await rootDescriptor.openAt(
+      {},
+      relBase,
+      { directory: true },
+      { read: true, mutateDirectory: true },
+    );
+
+    await expect(dirDesc.removeDirectoryAt(".")).rejects.toMatchObject({
+      payload: { tag: "invalid" },
+    });
+
+    dirDesc[Symbol.dispose]?.();
+  });
+
   test("isSameObject & metadataHash vs metadataHashAt", async () => {
     const sub = `${relBase}/file3.txt`;
     const child = await rootDescriptor.openAt(

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import nodePath from "node:path";
 import process from "node:process";
 
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";
@@ -29,8 +30,10 @@ class Descriptor {
   #finalizer;
   /** Host filesystem path for preopened directories */
   #hostPreopen;
+  /** Whether this descriptor refers to a directory. */
+  #isDirectory = false;
 
-  static _create(handle, mode, fullPath) {
+  static _create(handle, mode, fullPath, isDirectory = false) {
     const {
       read = false,
       write = false,
@@ -52,6 +55,7 @@ class Descriptor {
     const desc = new Descriptor();
     desc.#handle = handle;
     desc.#fullPath = fullPath;
+    desc.#isDirectory = isDirectory;
     desc.#mode = merged;
     desc.#finalizer = registerDispose(desc, null, handle, (handle) => handle.close());
 
@@ -60,6 +64,15 @@ class Descriptor {
 
   static _createPreopen(hostPreopen) {
     const desc = new Descriptor();
+    desc.#isDirectory = true;
+    desc.#mode = {
+      read: true,
+      write: false,
+      fileIntegritySync: false,
+      dataIntegritySync: false,
+      requestedWriteSync: false,
+      mutateDirectory: true,
+    };
 
     if (hostPreopen.endsWith("/")) {
       desc.#hostPreopen = hostPreopen.slice(0, -1) || "/";
@@ -363,6 +376,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async createDirectoryAt(path) {
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, false);
     try {
       await fs.mkdir(full);
@@ -426,6 +440,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async statAt(flags, path) {
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, flags.symlinkFollow);
     try {
       const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
@@ -464,6 +479,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
+    await this.#ensureSandboxedPath(path);
     const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, path);
 
     if (!flags.symlinkFollow && !fs.lutimes) {
@@ -501,6 +517,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async linkAt(oldFlags, oldPath, newDesc, newPath) {
+    await this.#ensureSandboxedPath(oldPath);
+    await newDesc.#ensureSandboxedPath(newPath);
     const src = this.#getFullPath(oldPath, oldFlags.symlinkFollow);
     const dst = newDesc.#getFullPath(newPath, false);
 
@@ -542,8 +560,15 @@ class Descriptor {
       throw new FSError("access");
     }
 
+    await this.#ensureSandboxedPath(path);
     const fullPath = this.#getFullPath(path, pf.symlinkFollow);
     const target = stripTrailingSlash(fullPath);
+
+    const mode = {
+      ...df,
+      read: df.read || !df.write,
+      write: df.write || of.create || of.truncate,
+    };
 
     const makeFsFlags = () => {
       let fsFlags = 0;
@@ -559,11 +584,11 @@ class Descriptor {
       if (of.truncate) {
         fsFlags |= fs.constants.O_TRUNC;
       }
-      if (df.read && df.write) {
+      if (mode.read && mode.write) {
         fsFlags |= fs.constants.O_RDWR;
-      } else if (df.write) {
+      } else if (mode.write) {
         fsFlags |= fs.constants.O_WRONLY;
-      } else if (df.read) {
+      } else if (mode.read) {
         fsFlags |= fs.constants.O_RDONLY;
       }
       if (df.fileIntegritySync) {
@@ -610,8 +635,9 @@ class Descriptor {
 
     try {
       const handle = await fs.open(target, fsFlags);
-      const desc = descriptorCreate(handle, df, fullPath);
-      const isDir = (await desc.getType()).tag === "directory";
+      const stats = await handle.stat();
+      const isDir = stats.isDirectory();
+      const desc = descriptorCreate(handle, mode, fullPath, isDir);
 
       if (fullPath.endsWith("/") && !isDir) {
         desc[symbolDispose]();
@@ -639,6 +665,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async readlinkAt(path) {
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, false);
     try {
       return await fs.readlink(full);
@@ -660,6 +687,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async removeDirectoryAt(path) {
+    if (path === ".") {
+      throw new FSError("invalid");
+    }
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, false);
     try {
       await fs.rmdir(full);
@@ -686,6 +717,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async renameAt(oldPath, newDesc, newPath) {
+    await this.#ensureSandboxedPath(oldPath);
+    await newDesc.#ensureSandboxedPath(newPath);
     const src = this.#getFullPath(oldPath, false);
     const dst = newDesc.#getFullPath(newPath, false);
     try {
@@ -715,6 +748,7 @@ class Descriptor {
     if (target.startsWith("/")) {
       throw new FSError("not-permitted");
     }
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, false);
 
     try {
@@ -750,6 +784,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async unlinkFileAt(path) {
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, false);
     if (full.endsWith("/")) {
       const isDir = (await fs.stat(full)).isDirectory();
@@ -787,7 +822,8 @@ class Descriptor {
    * @returns {Promise<boolean>}
    */
   async isSameObject(other) {
-    return other === this;
+    const [left, right] = await Promise.all([this.#statForIdentity(), other.#statForIdentity()]);
+    return left.dev === right.dev && left.ino === right.ino;
   }
 
   /**
@@ -802,11 +838,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async metadataHash() {
-    if (this.#hostPreopen) {
-      return { upper: 0n, lower: BigInt(this._id) };
-    }
     try {
-      const s = await this.#handle.stat();
+      const s = await this.#statForIdentity();
       return { upper: s.mtimeNs, lower: s.ino };
     } catch (e) {
       throw FSError.from(e);
@@ -827,10 +860,11 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async metadataHashAt(flags, path) {
+    await this.#ensureSandboxedPath(path);
     const full = this.#getFullPath(path, false);
     try {
       const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
-      const s = await statFn(full);
+      const s = await statFn(full, { bigint: true });
       return { upper: s.mtimeNs, lower: s.ino };
     } catch (e) {
       throw FSError.from(e);
@@ -896,6 +930,10 @@ class Descriptor {
   #getFullPath(subpath, _followSymlinks) {
     subpath = subpath.replaceAll("\\", "/").replace(/\/\/+/g, "/");
 
+    if (subpath === "") {
+      throw new FSError("no-entry");
+    }
+
     if (subpath.startsWith("/")) {
       throw new FSError("not-permitted");
     }
@@ -922,6 +960,59 @@ class Descriptor {
 
     const baseNormalized = stripTrailingSlash(base);
     return `${baseNormalized}/${segments.join("/")}`;
+  }
+
+  async #statForIdentity() {
+    if (this.#hostPreopen) {
+      return fs.stat(this.#hostPreopen, { bigint: true });
+    }
+    this.#ensureHandle();
+    return this.#handle.stat({ bigint: true });
+  }
+
+  // WASI paths are always relative to a directory descriptor. During path
+  // resolution, both `..` and symlinks must not escape that descriptor's base.
+  async #ensureSandboxedPath(subpath) {
+    if (!this.#isDirectory) {
+      throw new FSError("not-directory");
+    }
+
+    const base = this.#hostPreopen ?? this.#fullPath;
+    const baseResolved = nodePath.resolve(base);
+    const segments = subpath.replaceAll("\\", "/").replace(/\/\/+/g, "/").split("/");
+    let current = baseResolved;
+
+    for (const seg of segments) {
+      if (seg === "" || seg === ".") {
+        continue;
+      }
+      if (seg === "..") {
+        current = nodePath.dirname(current);
+        if (!isWithinPath(baseResolved, current)) {
+          throw new FSError("not-permitted");
+        }
+        continue;
+      }
+
+      current = nodePath.join(current, seg);
+      let stat;
+      try {
+        stat = await fs.lstat(current);
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return;
+        }
+        throw FSError.from(err);
+      }
+
+      if (stat.isSymbolicLink()) {
+        const target = await fs.readlink(current);
+        current = nodePath.resolve(nodePath.dirname(current), target);
+        if (!isWithinPath(baseResolved, current)) {
+          throw new FSError("not-permitted");
+        }
+      }
+    }
   }
 
   #ensureHandle() {
@@ -962,6 +1053,11 @@ function stripTrailingSlash(path) {
     return "/";
   }
   return path.replace(/\/+$/, "");
+}
+
+function isWithinPath(base, candidate) {
+  const relative = nodePath.relative(base, candidate);
+  return relative === "" || (!relative.startsWith("..") && !nodePath.isAbsolute(relative));
 }
 
 const preopenEntries = [];

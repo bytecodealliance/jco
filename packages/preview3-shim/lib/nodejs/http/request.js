@@ -325,7 +325,7 @@ export class Request {
    */
   setPathWithQuery(pathWithQuery) {
     validateUrlPart(pathWithQuery, UrlPart.PATH_WITH_QUERY);
-    this.#pathWithQuery = pathWithQuery ?? undefined;
+    this.#pathWithQuery = pathWithQuery === "" ? "/" : (pathWithQuery ?? undefined);
   }
 
   /**
@@ -575,7 +575,7 @@ const UrlPart = {
 };
 
 function normalizeMethod(method) {
-  const VALUE_TOKEN_RE = /^[a-zA-Z-]+$/;
+  const VALUE_TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
   if (typeof method === "string") {
     if (!VALUE_TOKEN_RE.test(method)) {
@@ -597,7 +597,10 @@ function normalizeMethod(method) {
   }
 
   if (method.tag === "other" && typeof method.val === "string" && VALUE_TOKEN_RE.test(method.val)) {
-    return { tag: "other", val: method.val.toLowerCase() };
+    const standard = method.val.toLowerCase();
+    return SUPPORTED_METHODS.includes(standard) && method.val === method.val.toUpperCase()
+      ? { tag: standard }
+      : { tag: "other", val: method.val };
   }
 
   throw new HttpError("invalid-syntax");
@@ -614,7 +617,7 @@ function normalizeScheme(scheme) {
     if (uppercase === "HTTP" || uppercase === "HTTPS") {
       return { tag: uppercase };
     }
-    return { tag: "other", val: scheme.toLowerCase() };
+    return { tag: "other", val: scheme };
   }
 
   if (typeof scheme !== "object" || typeof scheme.tag !== "string") {
@@ -627,7 +630,11 @@ function normalizeScheme(scheme) {
 
   if (scheme.tag === "other" && typeof scheme.val === "string") {
     validateUrlPart(scheme.val, UrlPart.SCHEME);
-    return { tag: "other", val: scheme.val.toLowerCase() };
+    const uppercase = scheme.val.toUpperCase();
+    if (uppercase === "HTTP" || uppercase === "HTTPS") {
+      return { tag: uppercase };
+    }
+    return { tag: "other", val: scheme.val };
   }
 
   throw new HttpError("invalid-syntax");
@@ -657,6 +664,10 @@ function validateUrlPart(value, part) {
 
   // URL parsing may normalize some raw control characters but wasi treats them as invalid syntax.
   if (/[\u0000-\u001f\u007f]/.test(value)) {
+    throw new HttpError("invalid-syntax", `Invalid ${part}: ${value}`);
+  }
+
+  if (part === UrlPart.PATH_WITH_QUERY && /[ <>`]/.test(value)) {
     throw new HttpError("invalid-syntax", `Invalid ${part}: ${value}`);
   }
 
