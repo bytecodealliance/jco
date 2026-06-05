@@ -1600,23 +1600,35 @@ impl Bindgen for FunctionBindgen<'_> {
                         (
                             "await ",
                             Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
-                            r#"
+                            format!(
+                                r#"
+                              {debug_log_fn}('[Instruction::CallWasm] error during async call', {{
+                                  taskID: task.id(),
+                                  err,
+                              }});
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               return task.completionPromise();
-                            "#,
+                            "#
+                            ),
                         )
                     } else {
                         (
                             "",
                             Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
-                            r#"
+                            format!(
+                                r#"
+                              {debug_log_fn}('[Instruction::CallWasm] error during sync call', {{
+                                  taskID: task.id(),
+                                  err,
+                              }});
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               throw err;
-                            "#,
+                            "#
+                            ),
                         )
                     };
 
@@ -1827,30 +1839,46 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // Build the JS expression that calls the callee
-                let (call_prefix, call_wrapper, call_err_cleanup) =
-                    if is_async || self.requires_async_porcelain {
-                        (
-                            "await ",
-                            Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
+                let (call_prefix, call_wrapper, call_err_cleanup) = if is_async
+                    || self.requires_async_porcelain
+                {
+                    (
+                        "await ",
+                        Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
+                        format!(
                             r#"
+                              {debug_log_fn}('[Instruction::CallInterface] error during async call', {{
+                                  taskID: task.id(),
+                                  subtaskID: currentSubtask?.id(),
+                                  err,
+                              }});
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               return task.completionPromise();
-                            "#,
-                        )
-                    } else {
-                        (
-                            "",
-                            Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
+                            "#
+                        ),
+                    )
+                } else {
+                    (
+                        "",
+                        Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
+                        format!(
                             r#"
+                              {debug_log_fn}('[Instruction::CallInterface] error during sync call', {{
+                                  taskID: task.id(),
+                                  subtaskID: currentSubtask?.id(),
+                                  err,
+                              }});
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
                               throw err;
-                            "#,
-                        )
-                    };
+                            "#
+                        ),
+                    )
+                };
+
                 let call = format!(
                     r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),
