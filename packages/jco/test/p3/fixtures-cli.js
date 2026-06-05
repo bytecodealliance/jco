@@ -26,6 +26,10 @@ suite("P3 CLI fixtures", () => {
     });
 
     for (const fixture of P3_CLI_RUN_FIXTURES) {
+        if (processEnv.TEST_ONLY_FIXTURE_WASM && !fixture.path.includes(processEnv.TEST_ONLY_FIXTURE_WASM)) {
+            continue;
+        }
+
         const run = fixture.failing ? test.skip : test.concurrent;
         run(`run ${fixtureTestName(fixture)}`, { retry: fixture.retry ?? 0 }, async () => {
             const { esModuleHref, preopenDir, runnerArgs, cleanup } = await setupP3CliFixture(fixture);
