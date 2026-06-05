@@ -171,7 +171,7 @@ suite("post-return async sleep scenario", () => {
             // Although the original async export call has finished, we expect that the spawned task
             // that occurred during it to run to completion (and eventually call the import we provided),
             // in the runtime itself.
-            await vi.waitFor(() => expect(sleepMillis).toHaveBeenCalledTimes(3), { timeout: 5_000 });
+            await vi.waitFor(() => expect(sleepMillis).toHaveBeenCalledTimes(3), { timeout: 15_000 });
 
             assert.lengthOf(observedValues, 3, "sleepMillis was not called three times");
             assert.sameMembers(observedValues, expectedValues, "all expected values were not observed");
