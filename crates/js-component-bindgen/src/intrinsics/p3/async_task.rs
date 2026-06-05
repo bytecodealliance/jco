@@ -1049,6 +1049,7 @@ impl AsyncTaskIntrinsic {
                                 taskID: this.#id,
                                 componentIdx: this.#componentIdx,
                                 subtaskID: this.getParentSubtask()?.id(),
+                                args: opts,
                                 entryFnName: this.#entryFnName,
                             }});
 
@@ -1132,7 +1133,7 @@ impl AsyncTaskIntrinsic {
 
                         async waitUntil(opts) {{
                             const {{ readyFn, cancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#waitUntil()] args', {{ taskID: this.#id, cancellable }});
+                            {debug_log_fn}('[{task_class}#waitUntil()] args', {{ taskID: this.#id, args: {{ cancellable }} }});
 
                             // TODO(fix): check for cancel
                             // TODO(fix): determinism
@@ -1148,7 +1149,13 @@ impl AsyncTaskIntrinsic {
 
                         async yieldUntil(opts) {{
                             const {{ readyFn, cancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#yieldUntil()] args', {{ taskID: this.#id, cancellable }});
+                            {debug_log_fn}('[{task_class}#yieldUntil()]', {{
+                                taskID: this.#id,
+                                args: {{
+                                    cancellable,
+                                }},
+                                componentIdx: this.#componentIdx,
+                            }});
 
                             const keepGoing = await this.suspendUntil({{ readyFn, cancellable }});
                             if (keepGoing) {{
@@ -1168,7 +1175,13 @@ impl AsyncTaskIntrinsic {
 
                         async suspendUntil(opts) {{
                             const {{ cancellable, readyFn }} = opts;
-                            {debug_log_fn}('[{task_class}#suspendUntil()] args', {{ cancellable }});
+                            {debug_log_fn}('[{task_class}#suspendUntil()] args', {{
+                                taskID: this.#id,
+                                args: {{
+                                    cancellable,
+                                }},
+                                componentIdx: this.#componentIdx,
+                            }});
 
                             const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
                             if (pendingCancelled) {{ return false; }}
@@ -1207,7 +1220,11 @@ impl AsyncTaskIntrinsic {
 
                         deliverPendingCancel(opts) {{
                             const {{ cancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#deliverPendingCancel()] args', {{ cancellable }});
+                            {debug_log_fn}('[{task_class}#deliverPendingCancel()]', {{
+                                args: {{ cancellable }},
+                                taskID: this.#id,
+                                componentIdx: this.#componentIdx,
+                            }});
 
                             if (cancellable && this.#state === {task_class}.State.PENDING_CANCEL) {{
                                 this.#state = {task_class}.State.CANCEL_DELIVERED;
@@ -1235,7 +1252,6 @@ impl AsyncTaskIntrinsic {
                             this.#onResolveHandlers = [];
                             for (const f of handlers) {{
                                 try {{
-                                    // TODO(fix): resolve handlers getting called a ton?
                                     f(taskValue);
                                 }} catch (err) {{
                                     {debug_log_fn}("[{task_class}#onResolve] error during task resolve handler", err);
@@ -1626,6 +1642,7 @@ impl AsyncTaskIntrinsic {
                                 subtaskID: this.#id,
                                 parentTaskID: this.parentTaskID(),
                                 fnName: this.fnName,
+                                args,
                             }});
 
                             if (this.#onProgressFn) {{ this.#onProgressFn(); }}

@@ -388,7 +388,10 @@ impl ComponentIntrinsic {
                         }}
 
                         #removeSuspendedTaskMeta(taskID) {{
-                            {debug_log_fn}('[{component_async_state_class}#removeSuspendedTaskMeta()] removing suspended task', {{ taskID }});
+                            {debug_log_fn}('[{component_async_state_class}#removeSuspendedTaskMeta()] removing suspended task', {{
+                                taskID,
+                                componentIdx: this.#componentIdx,
+                            }});
                             const idx = this.#suspendedTaskIDs.findIndex(t => t === taskID);
                             const meta = this.#suspendedTasksByTaskID.get(taskID);
                             this.#suspendedTaskIDs[idx] = null;
@@ -410,12 +413,17 @@ impl ComponentIntrinsic {
                         suspendTask(args) {{
                             const {{ task, readyFn }} = args;
                             const taskID = task.id();
+                            const componentIdx = task.componentIdx();
                             {debug_log_fn}('[{component_async_state_class}#suspendTask()]', {{
                                 taskID,
                                 componentIdx: this.#componentIdx,
                                 taskEntryFnName: task.entryFnName(),
                                 subtask: task.getParentSubtask(),
                             }});
+
+                            if (componentIdx !== this.#componentIdx) {{
+                                throw new Error('assert: task component idx should match async state');
+                            }}
 
                             if (this.#getSuspendedTaskMeta(taskID)) {{
                                 throw new Error(`task [${{taskID}}] already suspended`);
@@ -427,7 +435,10 @@ impl ComponentIntrinsic {
                                 taskID,
                                 readyFn,
                                 resume: () => {{
-                                    {debug_log_fn}('[{component_async_state_class}#suspendTask()] resuming suspended task', {{ taskID }});
+                                    {debug_log_fn}('[{component_async_state_class}] resuming suspended task', {{
+                                        taskID,
+                                        componentIdx: this.#componentIdx,
+                                    }});
                                     // TODO(threads): it's thread cancellation we should be checking for below, not task
                                     resolve(!task.isCancelled());
                                 }},
@@ -471,7 +482,7 @@ impl ComponentIntrinsic {
                                 // If the task failed via any means, allow the task to resume because
                                 // it's been cancelled -- the callback should immediately exit as well
                                 if (meta.task.isRejected()) {{
-                                    {debug_log_fn}('[{component_async_state_class}#suspendTask()] detected task rejection, leaving early', {{ meta }});
+                                    {debug_log_fn}('[{component_async_state_class}#tick()] detected task rejection, leaving early', {{ meta }});
                                     this.resumeTaskByID(taskID);
                                     return;
                                 }}
@@ -479,6 +490,10 @@ impl ComponentIntrinsic {
                                 const isReady = meta.readyFn();
                                 if (!isReady) {{ continue; }}
 
+                                {debug_log_fn}('[{component_async_state_class}#tick()] resuming task via tick', {{
+                                    taskID,
+                                    componentIdx: this.#componentIdx,
+                                }});
                                 this.resumeTaskByID(taskID);
                             }}
 
