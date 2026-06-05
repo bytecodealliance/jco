@@ -2237,13 +2237,11 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         // Build a response that *may* resolve quickly
-                        let importFnReturned = false;
 
                         queueMicrotask(async () => {{
                             try {{
                                 {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
                                 await importFn(...params);
-                                importFnReturned = true;
                                 if (requiresManualAsyncResult) {{
                                     manualAsyncResult.resolve(subtask.getResult());
                                 }}
