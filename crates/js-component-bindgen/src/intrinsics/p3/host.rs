@@ -452,15 +452,31 @@ impl HostIntrinsic {
                             }});
                         }});
 
-                        // Start the (event) driver loop that will resolve the task
-                        queueMicrotask(async () => {{
+                        // Start the (event) driver loop that will resolve the subtask
+                        // in a new JS task
+                        setTimeout(async () => {{
+                            {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
+                                taskID: preparedTask.id(),
+                                subtaskID: subtask.id(),
+                                callerComponentIdx,
+                                calleeComponentIdx,
+                            }});
+
                             let startRes = subtask.onStart({{ startFnParams: params }});
                             startRes = Array.isArray(startRes) ? startRes : [startRes];
 
-                            await calleeComponentState.suspendTask({{
-                                task: preparedTask,
-                                readyFn: () => !calleeComponentState.isExclusivelyLocked(),
-                            }});
+                            if (calleeComponentState.isExclusivelyLocked()) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] during continuation callee is exclusively locked, suspending...', {{
+                                    taskID: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                    callerComponentIdx,
+                                    calleeComponentIdx,
+                                }});
+                                await calleeComponentState.suspendTask({{
+                                    task: preparedTask,
+                                    readyFn: () => !calleeComponentState.isExclusivelyLocked(),
+                                }});
+                            }}
 
                             const started = await preparedTask.enter();
                             if (!started) {{
@@ -543,7 +559,7 @@ impl HostIntrinsic {
                                 {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
                             }}
 
-                        }});
+                        }}, 0);
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
