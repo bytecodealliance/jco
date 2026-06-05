@@ -108,8 +108,13 @@ suite("post-return async sleep scenario", () => {
         }
     });
 
-    // NOTE: this test was changed upstream
+    // NOTE: this test was removed usptream:
     // see: https://github.com/bytecodealliance/wasmtime/pull/12567
+    //
+    // You can find the code for the caller/callee in the following files:
+    //   - crates/test-components/src/bin/async_sleep_post_retun_caller.rs
+    //   - crates/test-components/src/bin/async_sleep_post_retun_callee.rs
+    //
     test("caller & callee", async () => {
         const callerPath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-caller.wasm");
         const calleePath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-callee.wasm");
