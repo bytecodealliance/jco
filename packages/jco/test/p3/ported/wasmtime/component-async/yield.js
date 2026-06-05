@@ -25,13 +25,17 @@ suite("yield scenario", () => {
 
         setReady(ready) {
             if (ready) {
-                if (!this.#wakers) { throw new Error("wakers not yet set"); }
+                if (!this.#wakers) {
+                    throw new Error("wakers not yet set");
+                }
                 for (const w of this.#wakers) {
                     w.resolve();
                 }
             }
 
-            if (!this.#wakers) { this.#wakers = []; }
+            if (!this.#wakers) {
+                this.#wakers = [];
+            }
         }
 
         [Symbol.asyncDispose]() {
@@ -40,9 +44,11 @@ suite("yield scenario", () => {
 
         async whenReady() {
             const { promise, resolve } = Promise.withResolvers();
-            if (!this.#wakers) { return; }
+            if (!this.#wakers) {
+                return;
+            }
             this.#wakers.push({ promise, resolve, id: WAKER_ID++ });
-            await Promise.all(this.#wakers.map(w => w.promise));
+            await Promise.all(this.#wakers.map((w) => w.promise));
         }
     }
 
@@ -55,11 +61,11 @@ suite("yield scenario", () => {
 
             getContinue() {
                 return _continue;
-            }
+            },
         };
     };
 
-    test.only("synchronous", async () => {
+    test.concurrent("synchronous", async () => {
         let cleanup;
         try {
             const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-caller.wasm");
@@ -81,12 +87,11 @@ suite("yield scenario", () => {
                         },
                     },
                 },
-
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                }
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     },
+                // }
             });
             const { instance } = res;
             cleanup = res.cleanup;
@@ -99,7 +104,7 @@ suite("yield scenario", () => {
         }
     });
 
-    test.skip("stackless", async () => {
+    test.concurrent("stackless", async () => {
         let cleanup;
         try {
             const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/yield/async-yield-caller.wasm");
@@ -121,12 +126,11 @@ suite("yield scenario", () => {
                         },
                     },
                 },
-
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                }
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     },
+                // }
             });
             const { instance } = res;
             cleanup = res.cleanup;
@@ -161,12 +165,11 @@ suite("yield scenario", () => {
                         },
                     },
                 },
-
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                }
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     },
+                // }
             });
             const { instance } = res;
             cleanup = res.cleanup;
@@ -201,12 +204,11 @@ suite("yield scenario", () => {
                         },
                     },
                 },
-
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                }
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     },
+                // }
             });
             const { instance } = res;
             cleanup = res.cleanup;
