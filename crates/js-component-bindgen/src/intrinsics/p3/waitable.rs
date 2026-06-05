@@ -352,14 +352,22 @@ impl WaitableIntrinsic {
                             {debug_log_fn}('[{waitable_class}#join()] args', {{
                                 waitable: this,
                                 waitableSet: waitableSet,
+                                isRemoval: waitableSet === null,
                             }});
-                            if (this.#waitableSet) {{ this.#waitableSet.removeWaitable(this); }}
-                            if (!waitableSet) {{
-                                this.#waitableSet = null;
-                                return;
+
+                            if (this.#waitableSet === undefined) {{
+                                throw new TypeError('waitable set must be not be undefined');
                             }}
-                            waitableSet.addWaitable(this);
+
+                            if (this.#waitableSet) {{
+                                this.#waitableSet.removeWaitable(this);
+                            }}
+
                             this.#waitableSet = waitableSet;
+
+                            if (waitableSet) {{
+                                this.#waitableSet.addWaitable(this);
+                            }}
                         }}
 
                         drop() {{
@@ -441,7 +449,14 @@ impl WaitableIntrinsic {
                         }}
 
                         const event = await wset.waitUntil({{ readyFn: () => true, task, cancellable: false }});
-                        return {store_event_in_component_memory_fn}({{ memory, ptr: resultPtr, event }});
+                        return {store_event_in_component_memory_fn}({{
+                            memory,
+                            ptr: resultPtr,
+                            event,
+                            componentIdx,
+                            task,
+                            memoryIdx,
+                        }});
                     }}
                 "#));
             }
@@ -488,14 +503,34 @@ impl WaitableIntrinsic {
                         let event;
                         const cancelDelivered = task.deliverPendingCancel({{ cancellable: isCancellable }});
                         if (cancelDelivered) {{
+                            {debug_log_fn}('[{waitable_set_poll_fn}()] detected cancel delivered', {{
+                                componentIdx,
+                                waitableSetRep,
+                            }});
                             event = {{ code: {async_event_code_enum}.TASK_CANCELLED, payload0: 0, payload1: 0 }};
                         }} else if (!wset.hasPendingEvent()) {{
+                            {debug_log_fn}('[{waitable_set_poll_fn}()] no pending event', {{
+                                componentIdx,
+                                waitableSetRep,
+                            }});
                             event = {{ code: {async_event_code_enum}.NONE, payload0: 0, payload1: 0 }};
                         }} else {{
+                            {debug_log_fn}('[{waitable_set_poll_fn}()] retrieving waiting pending event', {{
+                                componentIdx,
+                                waitableSetRep,
+                            }});
                             event = wset.getPendingEvent();
                         }}
 
-                        const eventCode = {store_event_in_component_memory_fn}({{ event, ptr: resultPtr, memory: getMemoryFn() }});
+                        const eventCode = {store_event_in_component_memory_fn}({{
+                            event,
+                            ptr: resultPtr,
+                            memory: getMemoryFn(),
+                            componentIdx,
+                            task,
+                            memoryIdx,
+                        }});
+
                         return eventCode;
                     }}
                 "#));
@@ -565,7 +600,12 @@ impl WaitableIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!(r#"
                     function {waitable_join_fn}(componentIdx, waitableRep, waitableSetRep) {{
-                        {debug_log_fn}('[{waitable_join_fn}()] args', {{ componentIdx, waitableSetRep, waitableRep }});
+                        {debug_log_fn}('[{waitable_join_fn}()] args', {{
+                            componentIdx,
+                            waitableSetRep,
+                            isRemoval: waitableSetRep === 0,
+                            waitableRep,
+                        }});
 
                         const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state) {{
