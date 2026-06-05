@@ -947,12 +947,37 @@ impl Intrinsic {
                 ));
             }
 
+            // NOTE: this function wrapper/closure intrinsic essentially acts as a
+            // defactor task queue, ensuring that the right "current task" is set when
+            // callees and/or callbacks (WebAssembly functions) run.
+            //
+            // The idea here is to avoid creating *our own* centralized task queue/event loop,
+            // and allow the underlying JS runtime (NodeJS, Browser) to do it's normal scheduling.
+            //
+            // This costs us complexity -- an `await`/`.then()`/etc anywhere else could park a
+            // runtime task and bring us here, in which case we'd be executing *right* before a completely
+            // unrelated task (this matters most when it's multiple tasks in the same component idx)
+            //
+            // e.g.:
+            // 1. [componentIdx 1, task 2] entered -- it's async so this is an `await task.enter()`
+            // 2. JS runtime switches away from that task
+            // 3. [componentIdx 1, task 1] already running, and is about to run it's callee or a callback
+            //
+            // At (3), we must be careful because the "current" thread is *not* [componentIdx 1, task 1] which
+            // is about to try to run it's callback.
+            //
+            // This is complicated because when two tasks run at the same time, we have to ensure that the component
+            // is not exclusively locked by one task. This generally happens @ task.enter(), but an interleaving
+            // of events in which this check happens, then *another* task attempts to exclusively lock could happen.
+            //
+            // In the future, this mechanism may be replaced with a simple event loop that necessarily executes
+            // all pending work serially, with this intrinsic becoming simply queueing work onto that event loop.
+            //
             Self::WithGlobalCurrentTaskMetaFnAsync => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let with_global_current_task_meta_async_fn =
                     Self::WithGlobalCurrentTaskMetaFnAsync.name();
                 let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
 
                 output.push_str(&format!(
                     r#"
@@ -962,26 +987,8 @@ impl Intrinsic {
                           if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
                           if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
                           if (!args.fn) {{ throw new TypeError('missing fn'); }}
+
                           const {{ taskID, componentIdx, fn }} = args;
-
-                          // If there is already an async task executing, we must wait for it
-                          // to complete before we can can run the closure we were given
-                          //
-                          let current = {global_current_task_meta_obj}[componentIdx];
-                          let cstate;
-                          if (current && current.taskID !== taskID) {{
-                              cstate = {get_or_create_async_state_fn}(componentIdx);
-                              while (current && current.taskID !== taskID) {{
-                                  const {{ promise, resolve }} = Promise.withResolvers();
-                                  cstate.onNextExclusiveRelease(resolve);
-                                  await promise;
-                                  current = {global_current_task_meta_obj}[componentIdx];
-                              }}
-
-                              // Since we've just waited for the component to not be locked, re-lock
-                              // exclusivity so we can run the fn below (likely a callee/callback)
-                              cstate.exclusiveLock();
-                          }}
 
                           try {{
                               {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
