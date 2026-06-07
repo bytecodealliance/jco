@@ -1,10 +1,11 @@
-import { env } from "node:process";
+import process, { env } from "node:process";
 import { pathToFileURL, URL, fileURLToPath } from "node:url";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { sep, normalize, resolve, extname } from "node:path";
 import { createServer as createHTTPServer } from "node:http";
 
+import ts from "typescript";
 import puppeteer from "puppeteer";
 import mime from "mime";
 
@@ -15,6 +16,8 @@ export const BASIC_HARNESS_HTML_DIR = fileURLToPath(
 );
 
 export const P2_SHIM_CODE_DIR = fileURLToPath(new URL("../", import.meta.url));
+
+export const FIXTURES_TYPES_DIR = fileURLToPath(new URL("./fixtures/types", import.meta.url));
 
 export const FIXTURES_WIT_DIR = fileURLToPath(new URL("./fixtures/wit", import.meta.url));
 
@@ -289,4 +292,63 @@ export async function runBasicHarnessPageTest(args) {
   await page.close();
 
   return { statusJSON };
+}
+
+export function tsCodegen(args) {
+    if (!args) {
+        throw new Error("missing ts codegen args");
+    }
+    const cwd = args?.cwd ?? process.cwd();
+    if (!args.tsConfigPath) {
+        throw new Error("missing/invalid tsconfig path");
+    }
+    const configPath = args.tsConfigPath;
+
+    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (error) {
+        throw new Error(
+            ts.formatDiagnosticsWithColorAndContext([error], {
+                getCanonicalFileName: (f) => f,
+                getCurrentDirectory: ts.sys.getCurrentDirectory,
+                getNewLine: () => ts.sys.newLine,
+            }),
+        );
+    }
+
+    // Apply overrides
+    if (args.configOverrides) {
+        if (args.configOverrides.include) {
+            config.include = args.configOverrides.include;
+        }
+        if (args.configOverrides.compilerOptions?.outDir) {
+            config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
+        }
+    }
+
+    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd);
+
+    const program = ts.createProgram({
+        rootNames: parsed.fileNames,
+        options: parsed.options,
+    });
+
+    const emitResult = program.emit();
+
+    const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
+
+    if (diagnostics.length > 0) {
+        console.error(
+            ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                getCanonicalFileName: (f) => f,
+                getCurrentDirectory: ts.sys.getCurrentDirectory,
+                getNewLine: () => ts.sys.newLine,
+            }),
+        );
+    }
+
+    if (emitResult.emitSkipped) {
+        throw new Error("TypeScript emit skipped, no files were emitted");
+    }
+
+    return { diagnostics, emitResult };
 }
