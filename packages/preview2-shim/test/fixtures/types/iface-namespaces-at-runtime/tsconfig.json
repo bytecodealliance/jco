@@ -1,14 +1,14 @@
 {
-    "exclude": ["./**/*"],
-    "compilerOptions": {
-        "outDir": "dist",
-        "rootDir": "test/fixtures/types/iface-namespaces-at-runtime",
-        "module": "nodenext",
-        "moduleResolution": "nodenext",
-        "noEmit": true,
-        "noImplicitAny": false,
-        "strict": true,
-        "declaration": true,
-        "sourceMap": true
-    }
+  "exclude": ["./**/*"],
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "test/fixtures/types/iface-namespaces-at-runtime",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noEmit": true,
+    "noImplicitAny": false,
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true
+  }
 }
