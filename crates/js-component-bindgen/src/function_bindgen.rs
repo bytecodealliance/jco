@@ -222,6 +222,10 @@ pub struct FunctionBindgen<'a> {
     /// this function, provide this information (normally found in [`CanonicalOptions`]s)
     ///
     pub component_state: Option<FunctionBindgenComponentState>,
+
+    /// Whether the bindgen is being performed for an import
+    /// (false implies generation is being performed for an export)
+    pub(crate) for_import: Option<bool>,
 }
 
 /// Metadata that is derived from processing a component.
@@ -2866,38 +2870,57 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let result_var = format!("futureResult{tmp}");
 
-                // We only need to attempt to do an immediate lift in non-async cases,
-                // as the return of the function execution ('above' in the code)
-                // will be the future idx
-                if !self.is_async {
-                    // If we're dealing with a sync function, we can use the return directly
-                    let arg_future_end_idx = operands
-                        .first()
-                        .expect("unexpectedly missing future end return arg in FutureLift");
+                // TODO: if host (sync/async), we need to lift
+                // if component sync, we must trap on any attempt to wait
+                //     in JS we must just disallow import of async fn from sync?
+                // if component async
+                //     passed directly -- we can take the idx?
+                //     passed indirectly -- we have to get the idx?
 
-                    let (payload_ty_size32_js, payload_ty_align32_js) =
-                        if let Some(payload_ty) = payload {
-                            (
-                                self.sizes.size(payload_ty).size_wasm32().to_string(),
-                                self.sizes.align(payload_ty).align_wasm32().to_string(),
-                            )
+                // // We only need to attempt to do an immediate lift in non-async cases,
+                // // as the return of the function execution ('above' in the code)
+                // // will be the future idx
+                // if self.is_async {
+                //     uwriteln!(
+                //         self.src,
+                //         "const {result_var} = {};",
+                //         operands.first().expect("unexpectedly missing future arg")
+                //     );
+                // } else {
+
+                let is_host = self.component_state.is_none();
+                match (self.is_async, is_host) {
+                    // If dealing with either a async/sync host call *or* a sync component call,
+                    // we must lift the future into place for the component that is going to make the call.
+                    (_is_async @ true, _is_host @ true) | (_is_async @ false, _is_host @ _) => {
+                        // If we're dealing with a sync function, we can use the return directly
+                        let arg_future_end_idx = operands
+                            .first()
+                            .expect("unexpectedly missing future end return arg in FutureLift");
+
+                        let (payload_ty_size32_js, payload_ty_align32_js) =
+                            if let Some(payload_ty) = payload {
+                                (
+                                    self.sizes.size(payload_ty).size_wasm32().to_string(),
+                                    self.sizes.align(payload_ty).align_wasm32().to_string(),
+                                )
+                            } else {
+                                ("null".into(), "null".into())
+                            };
+
+                        let future_table_idx = future_table_idx_ty.as_u32();
+
+                        // Set task memory index and memory object
+                        let component_idx_expr = if let Some(state) = &self.component_state {
+                            let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
+                            component_idx
                         } else {
-                            ("null".into(), "null".into())
+                            "-1".into()
                         };
 
-                    let future_table_idx = future_table_idx_ty.as_u32();
-
-                    // Set task memory index and memory object
-                    let component_idx_expr = if let Some(state) = &self.component_state {
-                        let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
-                        component_idx
-                    } else {
-                        "-1".into()
-                    };
-
-                    uwriteln!(
-                        self.src,
-                        "
+                        uwriteln!(
+                            self.src,
+                            "
                         const {result_var} = {future_new_from_lift_fn}({{
                             componentIdx: {component_idx_expr},
                             futureTableIdx: {future_table_idx},
@@ -2907,7 +2930,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             payloadTypeSize32: {payload_ty_size32_js},
                             payloadTypeAlign32: {payload_ty_align32_js},
                         }});",
-                    );
+                        );
+                    }
+
+                    // For other cases, we can do nothing as the future idx passes right through
+                    _ => {}
                 }
 
                 results.push(result_var.clone());
@@ -3151,38 +3178,51 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let result_var = format!("streamResult{tmp}");
 
-                // We only need to attempt to do an immediate lift in non-async cases,
-                // as the return of the function execution ('above' in the code)
-                // will be the stream idx
-                if !self.is_async {
-                    // If we're dealing with a sync function, we can use the return directly
-                    let arg_stream_end_idx = operands
-                        .first()
-                        .expect("unexpectedly missing stream end return arg in StreamLift");
+                // // We only need to attempt to do an immediate lift in non-async cases,
+                // // as the return of the function execution ('above' in the code)
+                // // will be the stream idx
+                // if self.is_async {
+                //     // NOTE: This Should be about the host? We need to lift into a value the host can take!
+                //     uwriteln!(
+                //         self.src,
+                //         "const {result_var} = {};",
+                //         operands.first().expect("unexpectedly missing stream arg")
+                //     );
+                // } else {
+                // If we're dealing with a sync function, we can use the return directly
 
-                    let (payload_ty_size32_js, payload_ty_align32_js) =
-                        if let Some(payload_ty) = payload {
-                            (
-                                self.sizes.size(payload_ty).size_wasm32().to_string(),
-                                self.sizes.align(payload_ty).align_wasm32().to_string(),
-                            )
+                let is_host = self.component_state.is_none();
+                match (self.is_async, is_host) {
+                    // If dealing with either a async/sync host call *or* a sync component call,
+                    // we must lift the future into place for the component that is going to make the call.
+                    (_is_async @ true, _is_host @ true) | (_is_async @ false, _is_host @ _) => {
+                        let arg_stream_end_idx = operands
+                            .first()
+                            .expect("unexpectedly missing stream end return arg in StreamLift");
+
+                        let (payload_ty_size32_js, payload_ty_align32_js) =
+                            if let Some(payload_ty) = payload {
+                                (
+                                    self.sizes.size(payload_ty).size_wasm32().to_string(),
+                                    self.sizes.align(payload_ty).align_wasm32().to_string(),
+                                )
+                            } else {
+                                ("null".into(), "null".into())
+                            };
+
+                        let stream_table_idx = stream_table_idx_ty.as_u32();
+
+                        // Set task memory index and memory object
+                        let component_idx_expr = if let Some(state) = &self.component_state {
+                            let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
+                            component_idx
                         } else {
-                            ("null".into(), "null".into())
+                            "-1".into()
                         };
 
-                    let stream_table_idx = stream_table_idx_ty.as_u32();
-
-                    // Set task memory index and memory object
-                    let component_idx_expr = if let Some(state) = &self.component_state {
-                        let ComponentStateJsExprs { component_idx, .. } = state.get_js_exprs();
-                        component_idx
-                    } else {
-                        "-1".into()
-                    };
-
-                    uwriteln!(
-                        self.src,
-                        "
+                        uwriteln!(
+                            self.src,
+                            "
                         const {result_var} = {stream_new_from_lift_fn}({{
                             componentIdx: {component_idx_expr},
                             streamTableIdx: {stream_table_idx},
@@ -3192,8 +3232,12 @@ impl Bindgen for FunctionBindgen<'_> {
                             payloadTypeSize32: {payload_ty_size32_js},
                             payloadTypeAlign32: {payload_ty_align32_js},
                         }});",
-                    );
-                }
+                        );
+                    }
+
+                    // For other cases, we can do nothing as the future idx passes right through
+                    _ => {}
+                };
 
                 // TODO(fix): in the async case we return an uninitialized var, which should not be necessary
                 results.push(result_var.clone());

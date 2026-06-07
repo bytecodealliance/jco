@@ -211,6 +211,9 @@ struct JsFunctionBindgenArgs<'a> {
     requires_async_porcelain: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
+    /// Whether the function in question is being generated for an import
+    /// (false implies generation is happening for an export)
+    for_import: bool,
 }
 
 impl<'a> ManagesIntrinsics for JsBindgen<'a> {
@@ -3176,6 +3179,7 @@ impl<'a> Instantiator<'a, '_> {
                     abi,
                     requires_async_porcelain,
                     is_async,
+                    for_import: true,
                 });
                 uwriteln!(self.src.js, "");
 
@@ -3906,6 +3910,7 @@ impl<'a> Instantiator<'a, '_> {
             abi,
             requires_async_porcelain,
             is_async,
+            for_import,
         } = args;
 
         let (memory, realloc) =
@@ -4065,6 +4070,7 @@ impl<'a> Instantiator<'a, '_> {
                 memory_idx: opts.memory(),
                 callback_fn_idx: opts.callback,
             }),
+            for_import: Some(for_import),
         };
 
         // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of
@@ -4644,6 +4650,7 @@ impl<'a> Instantiator<'a, '_> {
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
             is_async,
+            for_import: false,
         });
 
         // End the function
