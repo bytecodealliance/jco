@@ -1547,6 +1547,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
+            &Intrinsic::GlobalBufferManager,
         ]);
     }
 
@@ -1590,6 +1591,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
+            &Intrinsic::GlobalBufferManager,
         ]);
     }
 
