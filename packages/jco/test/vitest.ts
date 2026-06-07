@@ -31,10 +31,6 @@ export default defineConfig({
         hookTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         teardownTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         pool: "forks",
-        poolOptions: {
-            forks: {
-                execArgv: [...JSPI_EXEC_ARGV, "--stack-trace-limit=100"],
-            },
-        },
+        execArgv: [...JSPI_EXEC_ARGV, "--stack-trace-limit=100"],
     },
 });
