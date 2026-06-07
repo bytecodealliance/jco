@@ -30,6 +30,8 @@ packages:
 
 catalog:
   puppeteer: ^25.1.0
+  vitest: ^4.0.8
+  typescript: ^6.0.3
 
 minimumReleaseAgeExclude:
   - '@bytecodealliance/componentize-js@0.21.0'

@@ -9,6 +9,12 @@ catalogs:
     puppeteer:
       specifier: ^25.1.0
       version: 25.1.0
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
+    vitest:
+      specifier: ^4.0.8
+      version: 4.1.6
 
 importers:
 
@@ -28,7 +34,7 @@ importers:
         version: 21.0.0
       '@commitlint/load':
         specifier: ^21.0.0
-        version: 21.0.0(@types/node@24.12.4)(typescript@5.9.3)
+        version: 21.0.0(@types/node@24.12.4)(typescript@6.0.3)
       '@commitlint/read':
         specifier: ^21.0.0
         version: 21.0.0(conventional-commits-parser@6.4.0)
@@ -228,7 +234,7 @@ importers:
         version: 16.0.3(rollup@4.60.3)
       '@rollup/plugin-typescript':
         specifier: ^12.1.4
-        version: 12.3.0(rollup@4.60.3)(tslib@2.8.1)(typescript@5.9.3)
+        version: 12.3.0(rollup@4.60.3)(tslib@2.8.1)(typescript@6.0.3)
       rollup:
         specifier: ^4.48.0
         version: 4.60.3
@@ -380,6 +386,12 @@ importers:
       puppeteer:
         specifier: 'catalog:'
         version: 25.1.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(jiti@2.6.1)(terser@5.48.0))
 
   packages/preview3-shim:
     dependencies:
@@ -3070,6 +3082,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   unbzip2-stream@1.4.3:
     resolution: {integrity: sha512-mlExGW4w71ebDJviH16lQLtZS32VKqsSfk80GCfUlwT/4/hNRFsoscrF/c++9xinkMzECL1uL9DDwXqFWkruPg==}
 
@@ -3517,14 +3534,14 @@ snapshots:
       - '@types/node'
       - typescript
 
-  '@commitlint/load@21.0.0(@types/node@24.12.4)(typescript@5.9.3)':
+  '@commitlint/load@21.0.0(@types/node@24.12.4)(typescript@6.0.3)':
     dependencies:
       '@commitlint/config-validator': 21.0.0
       '@commitlint/execute-rule': 21.0.0
       '@commitlint/resolve-extends': 21.0.0
       '@commitlint/types': 21.0.0
-      cosmiconfig: 9.0.1(typescript@5.9.3)
-      cosmiconfig-typescript-loader: 6.3.0(@types/node@24.12.4)(cosmiconfig@9.0.1(typescript@5.9.3))(typescript@5.9.3)
+      cosmiconfig: 9.0.1(typescript@6.0.3)
+      cosmiconfig-typescript-loader: 6.3.0(@types/node@24.12.4)(cosmiconfig@9.0.1(typescript@6.0.3))(typescript@6.0.3)
       es-toolkit: 1.46.1
       is-plain-obj: 4.1.0
       picocolors: 1.1.1
@@ -4213,6 +4230,15 @@ snapshots:
       rollup: 4.60.3
       tslib: 2.8.1
 
+  '@rollup/plugin-typescript@12.3.0(rollup@4.60.3)(tslib@2.8.1)(typescript@6.0.3)':
+    dependencies:
+      '@rollup/pluginutils': 5.3.0(rollup@4.60.3)
+      resolve: 1.22.12
+      typescript: 6.0.3
+    optionalDependencies:
+      rollup: 4.60.3
+      tslib: 2.8.1
+
   '@rollup/pluginutils@5.3.0(rollup@4.60.3)':
     dependencies:
       '@types/estree': 1.0.9
@@ -4608,6 +4634,13 @@ snapshots:
       jiti: 2.6.1
       typescript: 5.9.3
 
+  cosmiconfig-typescript-loader@6.3.0(@types/node@24.12.4)(cosmiconfig@9.0.1(typescript@6.0.3))(typescript@6.0.3):
+    dependencies:
+      '@types/node': 24.12.4
+      cosmiconfig: 9.0.1(typescript@6.0.3)
+      jiti: 2.6.1
+      typescript: 6.0.3
+
   cosmiconfig@9.0.1(typescript@5.9.3):
     dependencies:
       env-paths: 2.2.1
@@ -4616,6 +4649,15 @@ snapshots:
       parse-json: 5.2.0
     optionalDependencies:
       typescript: 5.9.3
+
+  cosmiconfig@9.0.1(typescript@6.0.3):
+    dependencies:
+      env-paths: 2.2.1
+      import-fresh: 3.3.1
+      js-yaml: 4.1.1
+      parse-json: 5.2.0
+    optionalDependencies:
+      typescript: 6.0.3
 
   cross-spawn@7.0.6:
     dependencies:
@@ -5765,6 +5807,8 @@ snapshots:
   typed-query-selector@2.12.2: {}
 
   typescript@5.9.3: {}
+
+  typescript@6.0.3: {}
 
   unbzip2-stream@1.4.3:
     dependencies:
