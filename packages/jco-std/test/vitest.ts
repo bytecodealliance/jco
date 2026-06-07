@@ -17,10 +17,6 @@ export default defineConfig({
     hookTimeout: DEFAULT_TIMEOUT_MS,
     teardownTimeout: DEFAULT_TIMEOUT_MS,
     pool: "forks",
-    poolOptions: {
-      forks: {
-        execArgv: ["--expose-gc"],
-      },
-    },
+    execArgv: ["--expose-gc"],
   },
 });
