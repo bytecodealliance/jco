@@ -1,3 +1,5 @@
+// eslint-disable no-unused-vars
+
 // Ensures the `io` interface namespaces are usable as runtime values and not
 // just as types, so `tsc` (the `types:check` script) catches a regression to
 // type-only re-exports.

@@ -295,60 +295,60 @@ export async function runBasicHarnessPageTest(args) {
 }
 
 export function tsCodegen(args) {
-    if (!args) {
-        throw new Error("missing ts codegen args");
+  if (!args) {
+    throw new Error("missing ts codegen args");
+  }
+  const cwd = args?.cwd ?? process.cwd();
+  if (!args.tsConfigPath) {
+    throw new Error("missing/invalid tsconfig path");
+  }
+  const configPath = args.tsConfigPath;
+
+  const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (error) {
+    throw new Error(
+      ts.formatDiagnosticsWithColorAndContext([error], {
+        getCanonicalFileName: (f) => f,
+        getCurrentDirectory: ts.sys.getCurrentDirectory,
+        getNewLine: () => ts.sys.newLine,
+      }),
+    );
+  }
+
+  // Apply overrides
+  if (args.configOverrides) {
+    if (args.configOverrides.include) {
+      config.include = args.configOverrides.include;
     }
-    const cwd = args?.cwd ?? process.cwd();
-    if (!args.tsConfigPath) {
-        throw new Error("missing/invalid tsconfig path");
+    if (args.configOverrides.compilerOptions?.outDir) {
+      config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
     }
-    const configPath = args.tsConfigPath;
+  }
 
-    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
-    if (error) {
-        throw new Error(
-            ts.formatDiagnosticsWithColorAndContext([error], {
-                getCanonicalFileName: (f) => f,
-                getCurrentDirectory: ts.sys.getCurrentDirectory,
-                getNewLine: () => ts.sys.newLine,
-            }),
-        );
-    }
+  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd);
 
-    // Apply overrides
-    if (args.configOverrides) {
-        if (args.configOverrides.include) {
-            config.include = args.configOverrides.include;
-        }
-        if (args.configOverrides.compilerOptions?.outDir) {
-            config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
-        }
-    }
+  const program = ts.createProgram({
+    rootNames: parsed.fileNames,
+    options: parsed.options,
+  });
 
-    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd);
+  const emitResult = program.emit();
 
-    const program = ts.createProgram({
-        rootNames: parsed.fileNames,
-        options: parsed.options,
-    });
+  const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
 
-    const emitResult = program.emit();
+  if (diagnostics.length > 0) {
+    console.error(
+      ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+        getCanonicalFileName: (f) => f,
+        getCurrentDirectory: ts.sys.getCurrentDirectory,
+        getNewLine: () => ts.sys.newLine,
+      }),
+    );
+  }
 
-    const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
+  if (emitResult.emitSkipped) {
+    throw new Error("TypeScript emit skipped, no files were emitted");
+  }
 
-    if (diagnostics.length > 0) {
-        console.error(
-            ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-                getCanonicalFileName: (f) => f,
-                getCurrentDirectory: ts.sys.getCurrentDirectory,
-                getNewLine: () => ts.sys.newLine,
-            }),
-        );
-    }
-
-    if (emitResult.emitSkipped) {
-        throw new Error("TypeScript emit skipped, no files were emitted");
-    }
-
-    return { diagnostics, emitResult };
+  return { diagnostics, emitResult };
 }
