@@ -201,4 +201,39 @@ suite("Async (WASI P3)", () => {
 
         await cleanup();
     });
+
+    // https://github.com/bytecodealliance/jco/issues/1601
+    test("import of future-accepting host fn", async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "pass-back-host-resolved-future.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    send: {
+                        default: async (f) => {
+                            const res = await f;
+                            if (typeof res !== "number") {
+                                throw new Error("unexpected value in future, should be number");
+                            }
+                            return res;
+                        },
+                    },
+                },
+                jco: {
+                    transpile: {
+                        extraArgs: {
+                            // minify: false,
+                            asyncMode: "jspi",
+                            asyncImports: ["send"],
+                        },
+                    },
+                },
+            },
+        });
+
+        assert.instanceOf(instance["jco:test-components/local-run-async"].run, AsyncFunction);
+        await instance["jco:test-components/local-run-async"].run();
+
+        await cleanup();
+    });
 });

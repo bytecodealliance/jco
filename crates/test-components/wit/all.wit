@@ -529,3 +529,9 @@ world lift-list-before-fixed {
     export get-empty-blob: async func() -> blob;
     export get-list-then-u32: async func() -> tuple<list<u8>, u32>;
 }
+
+// see: https://github.com/bytecodealliance/jco/issues/1601
+world pass-back-host-resolved-future-value {
+    import send: async func(f: future<u32>) -> u32;
+    export local-run-async;
+}
