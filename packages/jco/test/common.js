@@ -32,6 +32,11 @@ export const LOCAL_TEST_COMPONENTS_DIR = join(COMPONENT_FIXTURES_DIR, "../../out
 /** Path to built extended test components (i.e. output of `just build` run in `jco/test/components`) */
 export const EXTENDED_TEST_COMPONENTS_DIR = fileURLToPath(new URL("../../../test/components/output", import.meta.url));
 
+/** Path to copied component-model repo WAT tests */
+export const COMPONENT_MODEL_FIXTURES_WAST_DIR = fileURLToPath(
+    new URL("./fixtures/wat/component-model", import.meta.url),
+);
+
 /**
  * Retrieve a list of all component fixtures
  *
