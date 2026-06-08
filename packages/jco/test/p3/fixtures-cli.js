@@ -27,7 +27,7 @@ suite("P3 CLI fixtures", () => {
 
     for (const fixture of P3_CLI_RUN_FIXTURES) {
         const run = fixture.failing ? test.skip : test.concurrent;
-        run(`run ${fixtureTestName(fixture)}`, async () => {
+        run(`run ${fixtureTestName(fixture)}`, { retry: fixture.retry ?? 0 }, async () => {
             const { esModuleHref, preopenDir, runnerArgs, cleanup } = await setupP3CliFixture(fixture);
             try {
                 await runP3CliFixture({
