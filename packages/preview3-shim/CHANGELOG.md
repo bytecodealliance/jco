@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-06-08
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ align filesystem tcp and http edge cases by @andreiltd in #1597
+
 ## [0.1.0] - 2026-05-27
 
 ### 🚀 Features
