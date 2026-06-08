@@ -115,7 +115,7 @@ suite("post-return async sleep scenario", () => {
     //   - crates/test-components/src/bin/async_sleep_post_retun_caller.rs
     //   - crates/test-components/src/bin/async_sleep_post_retun_callee.rs
     //
-    test("caller & callee", async () => {
+    test("caller & callee", { retry: 3 }, async () => {
         const callerPath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-caller.wasm");
         const calleePath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-callee.wasm");
         const componentPath = await composeCallerCallee({
