@@ -207,6 +207,10 @@ suite("stream<T> lowers", () => {
         test.concurrent("u32/s32", async () => {
             const instance = await getInstance();
             assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesU32, AsyncFunction);
+            assert.instanceOf(
+                instance["jco:test-components/stream-lower-async"].readStreamValuesU32OversizedRead,
+                AsyncFunction,
+            );
             assert.instanceOf(instance["jco:test-components/stream-lower-async"].readStreamValuesS32, AsyncFunction);
 
             let vals = [10, 5, 0];
@@ -214,6 +218,17 @@ suite("stream<T> lowers", () => {
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, toTypedArray(Uint32Array, vals));
+
+            const openStream = new ReadableStream({
+                start(ctrl) {
+                    ctrl.enqueue(10);
+                },
+            });
+            returnedVals = await Promise.race([
+                instance["jco:test-components/stream-lower-async"].readStreamValuesU32OversizedRead(openStream),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("stream read timed out")), 1_000)),
+            ]);
+            assert.deepEqual(returnedVals, toTypedArray(Uint32Array, [10]));
 
             vals = [-32, 90001, 3200000];
             returnedVals = await instance["jco:test-components/stream-lower-async"].readStreamValuesS32(

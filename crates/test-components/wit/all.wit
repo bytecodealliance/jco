@@ -378,6 +378,7 @@ interface stream-lower-async {
     read-stream-values-s16: async func(s: stream<s16>) -> list<s16>;
 
     read-stream-values-u32: async func(s: stream<u32>) -> list<u32>;
+    read-stream-values-u32-oversized-read: async func(s: stream<u32>) -> list<u32>;
     read-stream-values-s32: async func(s: stream<s32>) -> list<s32>;
 
     read-stream-values-u64: async func(s: stream<u64>) -> list<u64>;

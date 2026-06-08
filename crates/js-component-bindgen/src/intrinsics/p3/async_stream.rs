@@ -2190,6 +2190,7 @@ impl AsyncStreamIntrinsic {
                                   if (readEnd.hasPendingEvent()) {{ return bail(); }}
                                   if (!hasPendingReadBuffer()) {{ return bail(); }}
                                   drainPendingValues();
+                                  if (values.length > 0) {{ break; }}
                                   if (appended === 0 && !pendingValues.done) {{ count -= 1; }}
                                   if (pendingValues.done) {{ break; }}
                               }}

@@ -6,7 +6,7 @@ mod bindings {
     export!(Component);
 }
 
-use wit_bindgen::{FutureReader, StreamReader};
+use wit_bindgen::{FutureReader, StreamReader, StreamResult};
 
 use bindings::exports::jco::test_components::stream_lower_async;
 use bindings::exports::jco::test_components::stream_lower_sync;
@@ -52,6 +52,12 @@ impl stream_lower_async::Guest for Component {
 
     async fn read_stream_values_u32(rx: StreamReader<u32>) -> Vec<u32> {
         read_async_values(rx).await
+    }
+
+    async fn read_stream_values_u32_oversized_read(mut rx: StreamReader<u32>) -> Vec<u32> {
+        let (result, vals) = rx.read(Vec::with_capacity(100)).await;
+        assert_eq!(result, StreamResult::Complete(vals.len()));
+        vals
     }
 
     async fn read_stream_values_s32(rx: StreamReader<i32>) -> Vec<i32> {
