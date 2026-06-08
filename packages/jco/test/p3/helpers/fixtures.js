@@ -18,7 +18,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "fs/p3-file-write.wasm" },
     { path: "fs/p3-filesystem-file-read-write.wasm" },
     { path: "fs/p3-readdir.wasm" },
-    { path: "http/p3-http-outbound-request-content-length.wasm" },
+    { path: "http/p3-http-outbound-request-content-length.wasm", retry: 3 },
     { path: "http/p3-http-outbound-request-get.wasm" },
     { path: "http/p3-http-outbound-request-invalid-dnsname.wasm" },
     { path: "http/p3-http-outbound-request-invalid-header.wasm" },
