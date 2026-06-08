@@ -1,11 +1,11 @@
-import { join, relative } from "node:path";
+import { join, relative, basename } from "node:path";
 import { opendir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 
 import { suite, test, assert, beforeAll } from "vitest";
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from "../../../common.js";
-import { fileExists } from "../../../helpers.js";
+import { fileExists, setupAsyncTest } from "../../../helpers.js";
 
 // Relative paths to tests that should be skipped
 const TESTS_TO_SKIP = new Set([
@@ -28,10 +28,12 @@ suite("component-model", async () => {
 
         const wastPath = join(dirent.parentPath, dirent.name);
         const wastRelPath = relative(COMPONENT_MODEL_FIXTURES_WAST_DIR, wastPath);
-        if (TESTS_TO_SKIP.has(wastRelPath)) { continue; }
+        if (TESTS_TO_SKIP.has(wastRelPath)) {
+            continue;
+        }
 
-        const wasmPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, `${dirent.name}.wasm`);
-        const scriptPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, `${dirent.name}.js`);
+        const wasmPath = join(dirent.parentPath, `${dirent.name}.wasm`);
+        const scriptPath = join(dirent.parentPath, `${dirent.name}.js`);
         metadata.push({
             wastRelPath,
             wastPath,
@@ -40,8 +42,6 @@ suite("component-model", async () => {
         });
     }
 
-    metadata = metadata.slice(0,1);
-
     beforeAll(async () => {
         for (const { wastPath } of metadata) {
             const fixtureBuild = spawn("cargo", ["xtask", "build-wast-fixture", wastPath], {
@@ -49,7 +49,7 @@ suite("component-model", async () => {
                 stdio: "inherit",
                 shell: true,
             });
-            await new Promise(resolve => fixtureBuild.on("exit", resolve));
+            await new Promise((resolve) => fixtureBuild.on("exit", resolve));
         }
     });
 
@@ -58,8 +58,34 @@ suite("component-model", async () => {
         t(wastRelPath, async () => {
             assert(await fileExists(wasmPath), `missing generated wasm component @ [${wasmPath}]`);
             assert(await fileExists(scriptPath), `missing generated script @ [${scriptPath}]`);
-            // TODO: convert WAST test to WAST + executable JS
-            assert.strictEqual(true, true);
+
+            let cleanup;
+            try {
+                const setup = await setupAsyncTest({
+                    asyncMode: "jspi",
+                    component: {
+                        name: basename(wastRelPath).replace(".wast.wasm", ""),
+                        path: wasmPath,
+                    },
+                    jco: {
+                        transpile: {
+                            extraArgs: {
+                                minify: false,
+                            },
+                        },
+                    },
+                });
+                cleanup = setup.cleanup;
+                const instance = setup.instance;
+
+                const mod = await import(scriptPath);
+                await mod.runWastTest({
+                    instance,
+                    assert,
+                });
+            } finally {
+                await cleanup?.();
+            }
         });
     }
 });
