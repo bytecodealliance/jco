@@ -6,6 +6,7 @@ use xshell::{Shell, cmd};
 
 pub(crate) mod jco;
 pub(crate) mod test_components;
+pub(crate) mod wast_fixtures;
 pub(crate) mod workspace;
 
 pub(crate) static WORKSPACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
