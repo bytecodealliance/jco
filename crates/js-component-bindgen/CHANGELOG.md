@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.19.7] - 2026-06-08
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ complete host stream reads after partial progress by @andreiltd in #1604
+
+- _(bindgen)_ lower async flag results with js field names by @andreiltd in #1598
+
+- _(bindgen)_ generate ASYNC_BLOCKED_CODE for futures by @andreiltd in #1599
+
+
+
+
 ## [1.19.6] - 2026-06-02
 
 ### 🐛 Bug Fixes
