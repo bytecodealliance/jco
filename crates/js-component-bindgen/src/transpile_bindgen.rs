@@ -6064,6 +6064,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 is_none_type,
                 is_numeric_type,
                 is_async_value,
+                typed_array_js,
             ) = match payload {
                 None => (
                     0,
@@ -6075,6 +6076,7 @@ pub fn gen_flat_lower_fn_js_expr(
                     true,
                     false,
                     false,
+                    "undefined",
                 ),
                 Some(payload_ty) => {
                     let cabi = instantiator.types.canonical_abi(&payload_ty);
@@ -6105,6 +6107,7 @@ pub fn gen_flat_lower_fn_js_expr(
                             payload_ty,
                             InterfaceType::Stream(_) | InterfaceType::Future(_)
                         ),
+                        js_typed_array_ctor(&payload_ty).unwrap_or("undefined"),
                     )
                 }
             };
@@ -6121,6 +6124,7 @@ pub fn gen_flat_lower_fn_js_expr(
                            isNumeric: {is_numeric_type},
                            isBorrowed: {is_borrowed},
                            isAsyncValue: {is_async_value},
+                           typedArray: {typed_array_js},
                            flatCount: {payload_flat_count_js},
                            align32: {payload_align32},
                            size32: {payload_size32},
