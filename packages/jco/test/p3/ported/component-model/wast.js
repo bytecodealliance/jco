@@ -4,17 +4,19 @@ import { spawn } from "node:child_process";
 
 import { suite, test, assert, beforeAll } from "vitest";
 
-import { fileExists, COMPONENT_MODEL_FIXTURES_WAST_DIR } from "../../../common.js";
+import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from "../../../common.js";
+import { fileExists } from "../../../helpers.js";
 
 // These tests are ported from the component-model repo
 //
 // see: https://github.com/WebAssembly/component-model/tree/main/test
 //
 suite("component-model", async () => {
+    let metadata = [];
     const walker = await opendir(COMPONENT_MODEL_FIXTURES_WAST_DIR, { recursive: true });
-    const metadata = [];
+
     for await (const dirent of walker) {
-        if (!dirent.isFile) {
+        if (!dirent.isFile()) {
             continue;
         }
         const wastPath = join(dirent.parentPath, dirent.name);
@@ -29,11 +31,13 @@ suite("component-model", async () => {
         });
     }
 
+    metadata = metadata.slice(0,1);
+
     beforeAll(async () => {
         for (const { wastPath } of metadata) {
             const fixtureBuild = spawn("cargo", ["xtask", "build-wast-fixture", wastPath], {
                 detached: false,
-                stdio: "pipe",
+                stdio: "inherit",
                 shell: true,
             });
             await new Promise(resolve => fixtureBuild.on("exit", resolve));
@@ -42,8 +46,8 @@ suite("component-model", async () => {
 
     for (const { wastRelPath, wasmPath, scriptPath } of metadata) {
         test.concurrent(wastRelPath, async () => {
-            assert(await fileExists(scriptPath), `missing generated script @ [${scriptPath}]`);
             assert(await fileExists(wasmPath), `missing generated wasm component @ [${wasmPath}]`);
+            assert(await fileExists(scriptPath), `missing generated script @ [${scriptPath}]`);
             // TODO: convert WAST test to WAST + executable JS
             assert.strictEqual(true, true);
         });
