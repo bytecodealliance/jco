@@ -24,6 +24,12 @@ fn convert_wast_file(
     })?;
 
     // TODO: write JS preamble
+    writeln!(
+        output_js,
+        r#"
+          import {{ }} from "../";
+        "#
+    )?;
 
     for directive in parsed.directives {
         match directive {
@@ -40,6 +46,7 @@ fn convert_wast_file(
                         input_wast_path.display()
                     )
                 })?;
+                output_wasm.flush()?;
             }
             wast::WastDirective::ModuleDefinition(_) => {
                 todo!("unsupported directive ModuleDefinition")
@@ -76,7 +83,7 @@ fn convert_wast_file(
         }
     }
 
-    // TODO: output JS file
+    output_js.flush()?;
     Ok(())
 }
 
@@ -96,18 +103,27 @@ pub(crate) fn run(wast_path: &Path) -> Result<()> {
     ensure!(input_wat.metadata()?.is_file(), "wast path must be a file");
 
     let mut output_wasm_path = wast_path.clone();
-    output_wasm_path.add_extension(".wasm");
+    output_wasm_path.add_extension("wasm");
     let mut output_wasm = OpenOptions::new()
         .write(true)
+        .create_new(true)
         .truncate(true)
-        .open(output_wasm_path)?;
+        .open(&output_wasm_path)
+        .with_context(|| {
+            format!(
+                "failed to open output WASM file @ [{}]",
+                output_wasm_path.display()
+            )
+        })?;
 
     let mut output_js_path = wast_path.clone();
-    output_js_path.add_extension(".js");
+    output_js_path.add_extension("js");
     let mut output_js = OpenOptions::new()
         .write(true)
+        .create_new(true)
         .truncate(true)
-        .open(output_js_path)?;
+        .open(output_js_path)
+        .with_context(|| format!("failed to open output JS file @ [{}]", wast_path.display()))?;
 
     convert_wast_file(&mut input_wat, &wast_path, &mut output_wasm, &mut output_js)?;
 
