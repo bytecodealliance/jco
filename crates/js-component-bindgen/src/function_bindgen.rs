@@ -1511,7 +1511,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                 );
 
-                // Write out whether the caller was host provided
+                // Write out whether the callee was host provided
                 // (if we're calling into wasm then we know it was not)
                 uwriteln!(self.src, "const hostProvided = false;");
 
@@ -1740,7 +1740,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     (self.callee.into(), operands.join(", "))
                 };
 
-                uwriteln!(self.src, "let hostProvided = true;");
+                uwriteln!(self.src, "const hostProvided = true;");
 
                 // Set task memory index and memory object
                 let (component_idx_expr, callback_fn_name_expr, get_callback_fn_expr) =
@@ -2870,29 +2870,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let result_var = format!("futureResult{tmp}");
 
-                // TODO: if host (sync/async), we need to lift
-                // if component sync, we must trap on any attempt to wait
-                //     in JS we must just disallow import of async fn from sync?
-                // if component async
-                //     passed directly -- we can take the idx?
-                //     passed indirectly -- we have to get the idx?
-
-                // // We only need to attempt to do an immediate lift in non-async cases,
-                // // as the return of the function execution ('above' in the code)
-                // // will be the future idx
-                // if self.is_async {
-                //     uwriteln!(
-                //         self.src,
-                //         "const {result_var} = {};",
-                //         operands.first().expect("unexpectedly missing future arg")
-                //     );
-                // } else {
-
-                let is_host = self.component_state.is_none();
-                match (self.is_async, is_host) {
-                    // If dealing with either a async/sync host call *or* a sync component call,
-                    // we must lift the future into place for the component that is going to make the call.
-                    (_is_async @ true, _is_host @ true) | (_is_async @ false, _is_host @ _) => {
+                // Optionally preform the lift for the future in question
+                match (self.is_async, self.for_import.unwrap_or_default()) {
+                    // It is possible for lifting to be called both at the *start* and *end* of
+                    // a given function depending on how it called:
+                    //
+                    // 1. lifting results to convert a component-produced result for use by the host *after* `CallWasm` returns
+                    // 2. lifting parameters (`future` -> `Promise`), for use by the host, *before* `CallInterface`
+                    //
+                    // In (1), the function being generated must correspond to an export (from a component), and we only
+                    // perform the lifting if we know the value is imminently ready (i.e. the sync case).
+                    //
+                    // In (2) the function must correspond to an import (from the host), and regardless of whether
+                    // the function being generated is async or not, the host *must* deal in terms of lifted values
+                    // (i.e. `Promise`, not index to a future)
+                    //
+                    (_is_async @ false, _for_import @ false) | (_is_async, _for_import @ true) => {
                         // If we're dealing with a sync function, we can use the return directly
                         let arg_future_end_idx = operands
                             .first()
@@ -2918,22 +2911,30 @@ impl Bindgen for FunctionBindgen<'_> {
                             "-1".into()
                         };
 
+                        // We only need to write the result var for use *if* the
+                        // function that is being executed is provided by the host (i.e. `CallInterface`)
+                        //
+                        // The future value in question is being lifted *from* the component,
+                        // such that the host call can use it (as a `Promise`).
+                        //
+                        // `hostProvided` is set hoistably in `CallWasm`/`CallInterface`
                         uwriteln!(
                             self.src,
-                            "
-                        const {result_var} = {future_new_from_lift_fn}({{
-                            componentIdx: {component_idx_expr},
-                            futureTableIdx: {future_table_idx},
-                            futureEndWaitableIdx: {arg_future_end_idx},
-                            payloadLiftFn: {lift_fn_js},
-                            payloadLowerFn: {lower_fn_js},
-                            payloadTypeSize32: {payload_ty_size32_js},
-                            payloadTypeAlign32: {payload_ty_align32_js},
-                        }});",
+                            r#"
+                              const {result_var} = {future_new_from_lift_fn}({{
+                                  componentIdx: {component_idx_expr},
+                                  futureTableIdx: {future_table_idx},
+                                  futureEndWaitableIdx: {arg_future_end_idx},
+                                  payloadLiftFn: {lift_fn_js},
+                                  payloadLowerFn: {lower_fn_js},
+                                  payloadTypeSize32: {payload_ty_size32_js},
+                                  payloadTypeAlign32: {payload_ty_align32_js},
+                              }});
+                            "#,
                         );
                     }
 
-                    // For other cases, we can do nothing as the future idx passes right through
+                    // For all other cases, we do not need to perform the lift
                     _ => {}
                 }
 
@@ -3178,24 +3179,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let result_var = format!("streamResult{tmp}");
 
-                // // We only need to attempt to do an immediate lift in non-async cases,
-                // // as the return of the function execution ('above' in the code)
-                // // will be the stream idx
-                // if self.is_async {
-                //     // NOTE: This Should be about the host? We need to lift into a value the host can take!
-                //     uwriteln!(
-                //         self.src,
-                //         "const {result_var} = {};",
-                //         operands.first().expect("unexpectedly missing stream arg")
-                //     );
-                // } else {
-                // If we're dealing with a sync function, we can use the return directly
-
-                let is_host = self.component_state.is_none();
-                match (self.is_async, is_host) {
-                    // If dealing with either a async/sync host call *or* a sync component call,
-                    // we must lift the future into place for the component that is going to make the call.
-                    (_is_async @ true, _is_host @ true) | (_is_async @ false, _is_host @ _) => {
+                // Optionally preform the lift for the stream in question
+                match (self.is_async, self.for_import.unwrap_or_default()) {
+                    // It is possible for lifting to be called both at the *start* and *end* of
+                    // a given function depending on how it called:
+                    //
+                    // 1. lifting results to convert a component-produced result for use by the host *after* `CallWasm` returns
+                    // 2. lifting parameters (`stream` -> `AsyncIterator`), for use by the host, *before* `CallInterface`
+                    //
+                    // In (1), the function being generated must correspond to an export (from a component), and we only
+                    // perform the lifting if we know the value is imminently ready (i.e. the sync case).
+                    //
+                    // In (2) the function must correspond to an import (from the host), and regardless of whether
+                    // the function being generated is async or not, the host *must* deal in terms of lifted values
+                    // (i.e. `AsyncIterator`, not index to a stream)
+                    //
+                    (_is_async @ false, _for_import @ false) | (_is_async, _for_import @ true) => {
                         let arg_stream_end_idx = operands
                             .first()
                             .expect("unexpectedly missing stream end return arg in StreamLift");
@@ -3222,16 +3221,17 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         uwriteln!(
                             self.src,
-                            "
-                        const {result_var} = {stream_new_from_lift_fn}({{
-                            componentIdx: {component_idx_expr},
-                            streamTableIdx: {stream_table_idx},
-                            streamEndWaitableIdx: {arg_stream_end_idx},
-                            payloadLiftFn: {lift_fn_js},
-                            payloadLowerFn: {lower_fn_js},
-                            payloadTypeSize32: {payload_ty_size32_js},
-                            payloadTypeAlign32: {payload_ty_align32_js},
-                        }});",
+                            r#"
+                              const {result_var} = {stream_new_from_lift_fn}({{
+                                  componentIdx: {component_idx_expr},
+                                  streamTableIdx: {stream_table_idx},
+                                  streamEndWaitableIdx: {arg_stream_end_idx},
+                                  payloadLiftFn: {lift_fn_js},
+                                  payloadLowerFn: {lower_fn_js},
+                                  payloadTypeSize32: {payload_ty_size32_js},
+                                  payloadTypeAlign32: {payload_ty_align32_js},
+                              }});
+                            "#,
                         );
                     }
 
