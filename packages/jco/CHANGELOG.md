@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.21.0] - 2026-06-08
+
+### 🧪 Testing
+
+- _(jco)_ update vitest config by @vados-cosmonic
+
+- _(jco)_ add repro & test for jco issue 1390 by @vados-cosmonic
+
+- _(jco)_ add reproduction & test for issue 1384 by @vados-cosmonic in #1592
+
+- _(jco)_ add reproduction & test for issue 1383 by @vados-cosmonic in #1588
+
+- _(jco)_ add reproduction & test for issue 1381 by @vados-cosmonic in #1587
+
+- _(jco)_ add extended test suite for niche regression tests by @vados-cosmonic
+
+## New Contributors
+
+- @temporaryfix made their first contribution in [#1586](https://github.com/bytecodealliance/jco/pull/1586)
+
 ## [1.20.0] - 2026-05-27
 
 ### 🚀 Features
