@@ -31,7 +31,8 @@ fn convert_wast_file(
               if (!args) {{ throw new Error('missing args'); }}
               if (!args.instance) {{ throw new Error('missing loaded wasm instance'); }}
               if (!args.assert) {{ throw new Error('missing assert obj'); }}
-              const {{ instance, assert }} = args;
+              if (!args.expect) {{ throw new Error('missing expect obj'); }}
+              const {{ instance, assert, expect }} = args;
               let res;
         "#
     )?;
@@ -69,7 +70,16 @@ fn convert_wast_file(
                 bail!("unsupported directive Register")
             }
             wast::WastDirective::Invoke(_) => bail!("unsupported directive Invoke"),
-            wast::WastDirective::AssertTrap { .. } => bail!("unsupported directive AssertTrap"),
+            wast::WastDirective::AssertTrap { exec, message, .. } => {
+                let (export_name, args) = extract_export_fn(&exec)?;
+                writeln!(
+                    output_js,
+                    r#"
+                      await expect(instance['{export_name}']({})).rejects.toThrow(/trap/, "expected trap with content like [{message}]");
+                    "#,
+                    args_to_js_params(args)?,
+                )?;
+            }
             wast::WastDirective::AssertReturn { exec, results, .. } => {
                 ensure!(
                     results.len() == 1,

@@ -2,7 +2,7 @@ import { join, relative, basename } from "node:path";
 import { opendir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 
-import { suite, test, assert, beforeAll } from "vitest";
+import { suite, test, assert, expect, beforeAll } from "vitest";
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from "../../../common.js";
 import { fileExists, setupAsyncTest } from "../../../helpers.js";
@@ -82,6 +82,7 @@ suite("component-model", async () => {
                 await mod.runWastTest({
                     instance,
                     assert,
+                    expect,
                 });
             } finally {
                 await cleanup?.();
