@@ -27,6 +27,7 @@ export const systemClock = {
 const { subscribeInstant, subscribeDuration, ...baseMonotonicClock } = monotonicClockV2;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const nsToTimeoutMs = (ns) => (ns + 999_999n) / 1_000_000n;
 
 export const monotonicClock = {
   ...baseMonotonicClock,
@@ -58,19 +59,21 @@ export const monotonicClock = {
    * @throws {TypeError} If targetNs is not a bigint
    */
   async waitUntil(targetNs) {
-    const nowNs = monotonicClock.now();
-    const diffNs = targetNs - nowNs;
+    while (true) {
+      const nowNs = monotonicClock.now();
+      const diffNs = targetNs - nowNs;
 
-    if (diffNs <= 0n) {
-      return;
+      if (diffNs <= 0n) {
+        return;
+      }
+
+      const ms = nsToTimeoutMs(diffNs);
+      if (ms > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new TypeError(`Cannot wait for ${targetNs} ns, exceeds maximum safe integer`);
+      }
+
+      await sleep(Number(ms));
     }
-
-    const ms = diffNs / 1_000_000n;
-    if (ms > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new TypeError(`Cannot wait for ${targetNs} ns, exceeds maximum safe integer`);
-    }
-
-    await sleep(Number(ms));
   },
 
   /**
@@ -90,11 +93,6 @@ export const monotonicClock = {
       return;
     }
 
-    const ms = durationNs / 1_000_000n;
-    if (ms > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new TypeError(`Cannot wait for ${durationNs} ns, exceeds maximum safe integer`);
-    }
-
-    await sleep(Number(ms));
+    await monotonicClock.waitUntil(monotonicClock.now() + durationNs);
   },
 };
