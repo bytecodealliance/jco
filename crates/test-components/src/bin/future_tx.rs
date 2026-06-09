@@ -183,7 +183,7 @@ impl get_future_async::Guest for Component {
 
     async fn get_future_future_string(v: String) -> FutureReader<FutureReader<String>> {
         let (tx, rx) = wit_future::new(|| unreachable!());
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             let (nested_tx, nested_rx) = wit_future::new(|| unreachable!());
             // NOTE: order here matters, we must first write the inner rx out before actually filling it
             let _ = tx.write(nested_rx).await;
@@ -194,7 +194,7 @@ impl get_future_async::Guest for Component {
 
     async fn get_future_example_resource_own_attr(v: ExampleResource) -> FutureReader<u32> {
         let (tx, rx) = wit_future::new(|| unreachable!());
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             let _ = tx.write(v.get_id()).await;
         });
         rx
@@ -206,7 +206,7 @@ impl get_future_async::Guest for Component {
     ) -> FutureReader<StreamReader<String>> {
         let (future_tx, future_rx) = wit_future::new(|| unreachable!());
         let (mut stream_tx, stream_rx) = wit_stream::new();
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             let _ = future_tx.write(stream_rx).await;
             for v in vals {
                 stream_tx.write_one(v).await;
@@ -219,7 +219,7 @@ impl get_future_async::Guest for Component {
         v: StreamReader<String>,
     ) -> FutureReader<StreamReader<String>> {
         let (future_tx, future_rx) = wit_future::new(|| unreachable!());
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             let _ = future_tx.write(v).await;
         });
         future_rx
@@ -228,7 +228,7 @@ impl get_future_async::Guest for Component {
 
 fn future_value_async<T: FuturePayload>(v: T) -> FutureReader<T> {
     let (tx, rx) = wit_future::new(|| unreachable!("default value should not be used"));
-    wit_bindgen::spawn(async move {
+    wit_bindgen::spawn_local(async move {
         let _ = tx.write(v).await;
     });
     rx

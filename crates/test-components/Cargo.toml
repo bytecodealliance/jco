@@ -8,7 +8,7 @@ Test components for use during jco testing
 """
 
 [dependencies]
-futures = { version = "0.3.32", default-features = false, features = ["alloc"] }
+futures = { version = "0.3.32", default-features = false, features = ["alloc", "async-await"] }
 wit-bindgen = { workspace = true, features = [ "macros", "async-spawn"] }
 
 [build-dependencies]

@@ -92,12 +92,10 @@ impl bindings::Guest for JsComponentBindgenComponent {
                     (
                         name,
                         match expt {
-                            wasmtime_environ::component::Export::LiftedFunction { .. } => {
+                            js_component_bindgen::ExportKind::LiftedFunction => {
                                 ExportType::Function
                             }
-                            wasmtime_environ::component::Export::Instance { .. } => {
-                                ExportType::Instance
-                            }
+                            js_component_bindgen::ExportKind::Instance => ExportType::Instance,
                             _ => panic!("Unexpected export type"),
                         },
                     )

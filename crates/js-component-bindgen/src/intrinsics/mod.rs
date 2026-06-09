@@ -1266,21 +1266,6 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-            &Intrinsic::AsyncEventCodeEnum,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-        ]);
-    }
-
-    if args
-        .intrinsics
         .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
     {
         args.intrinsics.extend([
