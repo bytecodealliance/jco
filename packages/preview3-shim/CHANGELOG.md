@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] - 2026-06-09
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ handle sub milisecond waits by @andreiltd in #1612
+
 ## [0.1.1] - 2026-06-08
 
 ### 🐛 Bug Fixes
