@@ -1101,7 +1101,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 39] = [
+const EARLY_INTRINSICS: [Intrinsic; 43] = [
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
     Intrinsic::SymbolAsyncIterator,
@@ -1149,6 +1149,11 @@ const EARLY_INTRINSICS: [Intrinsic; 39] = [
     // `UnsafeIntrinsic`s, so they are mapped for any module that uses them
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet),
+    // Required for context.{get,set}
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+    Intrinsic::AsyncEventCodeEnum,
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
 ];
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -1270,21 +1275,6 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-            &Intrinsic::AsyncEventCodeEnum,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
         ]);
     }
 
