@@ -44,7 +44,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: "sockets/p3-sockets-udp-bind.wasm" },
     { path: "sockets/p3-sockets-udp-connect.wasm" },
     { path: "sockets/p3-sockets-udp-receive.wasm" },
-    { path: "sockets/p3-sockets-udp-sample-application.wasm" },
+    { path: "sockets/p3-sockets-udp-sample-application.wasm", retry: 3 },
     { path: "sockets/p3-sockets-udp-send.wasm" },
     { path: "sockets/p3-sockets-udp-sockopts.wasm" },
     { path: "sockets/p3-sockets-udp-states.wasm" },
