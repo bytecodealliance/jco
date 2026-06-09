@@ -330,6 +330,7 @@ pub fn transpile_bindgen(
         stream_tables,
         future_tables,
         err_ctx_tables,
+        init_current_module: None,
     };
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
@@ -681,6 +682,13 @@ pub(crate) struct Instantiator<'a, 'b> {
     resource_exports: ResourceMap,
     /// Map of imported resources built during export bindgen
     resource_imports: ResourceMap,
+
+    /// Component index of the module that is currentlty being initialized
+    ///
+    /// This is only populated after processing of `GlobalInitializer::InstantiateModule`
+    /// blocks has started, and is likely to be stale if read too late (i.e. it will be set
+    /// to the last module processed).
+    init_current_module: Option<RuntimeComponentInstanceIndex>,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -2742,15 +2750,22 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            GlobalInitializer::InstantiateModule(m, instance) => match m {
-                InstantiateModule::Static(idx, args) => {
-                    self.instantiate_static_module(*idx, args, *instance);
+            GlobalInitializer::InstantiateModule(m, instance) => {
+                // NOTE: we keep track of the current component instance index for the module being instantiatied
+                // because some  because context.set/context.get are no longer trampolines,
+                // and we do not have access to the correct component index that each operation belongs to at build time
+                self.init_current_module = instance.clone();
+
+                match m {
+                    InstantiateModule::Static(idx, args) => {
+                        self.instantiate_static_module(*idx, args, *instance);
+                    }
+                    // This is only needed when instantiating an imported core wasm
+                    // module which while easy to implement here is not possible to
+                    // test at this time so it's left unimplemented.
+                    InstantiateModule::Import(..) => unimplemented!(),
                 }
-                // This is only needed when instantiating an imported core wasm
-                // module which while easy to implement here is not possible to
-                // test at this time so it's left unimplemented.
-                InstantiateModule::Import(..) => unimplemented!(),
-            },
+            }
 
             GlobalInitializer::LowerImport { index, import } => {
                 self.lower_import(*index, *import);
@@ -4189,10 +4204,54 @@ impl<'a> Instantiator<'a, '_> {
                 self.used_instance_flags.borrow_mut().insert(*i);
                 format!("instanceFlags{}", i.as_u32())
             }
-            CoreDef::UnsafeIntrinsic(ui) => {
-                let idx = ui.index();
-                format!("unsafeIntrinsic{idx}")
-            }
+            CoreDef::UnsafeIntrinsic(ui) => match ui {
+                wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_0 => {
+                    let context_get_fn =
+                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet).name();
+                    format!(
+                        "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
+                        self.init_current_module
+                            .expect("missing current module")
+                            .as_u32(),
+                    )
+                }
+                wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_0 => {
+                    let context_set_fn =
+                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet).name();
+                    format!(
+                        "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
+                        self.init_current_module
+                            .expect("missing current module")
+                            .as_u32(),
+                    )
+                }
+                wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_1 => {
+                    let context_get_fn =
+                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet).name();
+                    format!(
+                        "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
+                        self.init_current_module
+                            .expect("missing current module")
+                            .as_u32(),
+                    )
+                }
+                wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_1 => {
+                    let context_set_fn =
+                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet).name();
+                    format!(
+                        "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
+                        self.init_current_module
+                            .expect("missing current module")
+                            .as_u32(),
+                    )
+                }
+
+                // All other intriniscs can be set generically
+                ui => {
+                    let idx = ui.index();
+                    format!("unsafeIntrinsic{idx}")
+                }
+            },
         }
     }
 

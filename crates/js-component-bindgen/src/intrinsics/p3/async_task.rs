@@ -12,6 +12,37 @@ use crate::uwriteln;
 /// This enum contains intrinsics that implement async tasks
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AsyncTaskIntrinsic {
+    /// Set the value of a context local storage for the current task/thread
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type SlotIndex = 0 | 1;
+    /// function contextSet(slot: SlotIndex, value: number);
+    /// ```
+    ///
+    ContextSet,
+
+    /// Gets the value stored in context local storage for the current task/thread
+    ///
+    /// Guest code uses this to reference internally stored context local storage,
+    /// whether that is task local or thread local.
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type SlotIndex = 0 | 1;
+    /// function contextGet(slot: SlotIndex): i32;
+    /// ```
+    ///
+    ContextGet,
+
     /// Return a value to a caller of an lifted export.
     ///
     /// Consider the following scenario:
@@ -244,6 +275,8 @@ impl AsyncTaskIntrinsic {
             Self::AsyncBlockedConstant.name(),
             Self::AsyncSubtaskClass.name(),
             Self::AsyncTaskClass.name(),
+            Self::ContextGet.name(),
+            Self::ContextSet.name(),
             Self::GetCurrentTask.name(),
             Self::CreateNewCurrentTask.name(),
             Self::ClearCurrentTask.name(),
@@ -272,6 +305,8 @@ impl AsyncTaskIntrinsic {
             Self::AsyncBlockedConstant => "ASYNC_BLOCKED_CODE",
             Self::AsyncSubtaskClass => "AsyncSubtask",
             Self::AsyncTaskClass => "AsyncTask",
+            Self::ContextGet => "contextGet",
+            Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
             Self::CreateNewCurrentTask => "createNewCurrentTask",
             Self::ClearCurrentTask => "clearCurrentTask",
@@ -322,6 +357,90 @@ impl AsyncTaskIntrinsic {
             Self::AsyncBlockedConstant => {
                 let name = Self::AsyncBlockedConstant.name();
                 output.push_str(&format!("const {name} = 0xFFFF_FFFF;"));
+            }
+
+            Self::ContextSet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let context_set_fn = Self::ContextSet.name();
+                let current_task_get_fn = Self::GetCurrentTask.name();
+                let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
+                uwriteln!(
+                    output,
+                    r#"
+                      function {context_set_fn}(ctx, value) {{
+                          const {{ componentIdx, slot }} = ctx;
+                          if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                          if (slot === undefined) {{ throw new TypeError("missing slot"); }}
+                          if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
+
+                          const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                          if (!currentTaskMeta) {{
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                          }}
+                          const taskID = currentTaskMeta.taskID;
+
+                          const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                          if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+
+                          let task = taskMeta.task;
+                          if (!task) {{ throw new Error('invalid/missing current task in metadata while setting context'); }}
+
+                          {debug_log_fn}('[{context_set_fn}()] args', {{
+                              slot,
+                              value,
+                              storage: task.storage,
+                              taskID: task.id(),
+                              componentIdx: task.componentIdx(),
+                          }});
+
+                          if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
+                          task.storage[slot] = value;
+                      }}
+                    "#
+                );
+            }
+
+            Self::ContextGet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let context_get_fn = Self::ContextGet.name();
+                let current_task_get_fn = Self::GetCurrentTask.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
+                uwriteln!(
+                    output,
+                    r#"
+                      function {context_get_fn}(ctx) {{
+                          const {{ componentIdx, slot }} = ctx;
+                          if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                          if (slot === undefined) {{ throw new TypeError("missing slot"); }}
+
+                          const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                          if (!currentTaskMeta) {{
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                          }}
+                          const taskID = currentTaskMeta.taskID;
+
+                          const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                          if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+
+                          let task = taskMeta.task;
+                          if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
+
+                          {debug_log_fn}('[{context_get_fn}()] args', {{
+                              slot,
+                              storage: task.storage,
+                              taskID: task.id(),
+                              componentIdx: task.componentIdx(),
+                          }});
+
+                          if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
+
+                          return task.storage[slot];
+                      }}
+                    "#
+                );
             }
 
             // Equivalent of `task.return`
