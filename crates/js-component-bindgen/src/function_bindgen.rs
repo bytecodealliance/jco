@@ -3383,6 +3383,12 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::GuestDeallocateString
             | Instruction::GuestDeallocateList { .. }
             | Instruction::GuestDeallocateVariant { .. } => unimplemented!("Guest deallocation"),
+
+            Instruction::MapLower { .. }
+            | Instruction::MapLift { .. }
+            | Instruction::IterMapKey { .. }
+            | Instruction::IterMapValue { .. }
+            | Instruction::GuestDeallocateMap { .. } => unimplemented!("map support"),
         }
     }
 }

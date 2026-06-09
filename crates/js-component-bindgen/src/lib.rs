@@ -2,9 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use ts_bindgen::ts_bindgen;
-use wasmtime_environ::component::{
-    CanonicalOptions, ComponentTypesBuilder, Export, StaticModuleIndex,
-};
+use wasmtime_environ::component::{CanonicalOptions, ComponentTypesBuilder, StaticModuleIndex};
 use wasmtime_environ::wasmparser::WasmFeatures;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_bindgen_core::wit_parser::Function;
@@ -25,7 +23,9 @@ pub mod intrinsics;
 use intrinsics::Intrinsic;
 
 use transpile_bindgen::transpile_bindgen;
-pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
+pub use transpile_bindgen::{
+    AsyncMode, BindingsMode, ExportKind, InstantiationMode, TranspileOpts,
+};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -56,7 +56,7 @@ macro_rules! uwriteln {
 pub struct Transpiled {
     pub files: Vec<(String, Vec<u8>)>,
     pub imports: Vec<String>,
-    pub exports: Vec<(String, Export)>,
+    pub exports: Vec<(String, transpile_bindgen::ExportKind)>,
 }
 
 pub struct ComponentInfo {
@@ -132,7 +132,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
             | WasmFeatures::WIDE_ARITHMETIC
             | WasmFeatures::COMPONENT_MODEL
             | WasmFeatures::CM_ASYNC
-            | WasmFeatures::CM_ASYNC_BUILTINS
+            | WasmFeatures::CM_MORE_ASYNC_BUILTINS
             | WasmFeatures::CM_ASYNC_STACKFUL
             | WasmFeatures::CM_ERROR_CONTEXT
             | WasmFeatures::CM_FIXED_LENGTH_LISTS,

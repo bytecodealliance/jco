@@ -222,6 +222,15 @@ impl<'a> ManagesIntrinsics for JsBindgen<'a> {
     }
 }
 
+#[derive(PartialEq, Eq, Clone)]
+#[non_exhaustive]
+pub enum ExportKind {
+    /// Maps to `wasmtime_environ::export::LiftedFunction`
+    LiftedFunction,
+    /// Maps to `wasmtime_environ::export::Instance`
+    Instance,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
@@ -232,7 +241,7 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     files: &mut Files,
-) -> (Vec<String>, Vec<(String, Export)>) {
+) -> (Vec<String>, Vec<(String, ExportKind)>) {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
         None | Some(AsyncMode::Sync) => (Default::default(), Default::default()),
         Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
@@ -353,9 +362,21 @@ pub fn transpile_bindgen(
                 .exports
                 .get(&expected_export_name, &NameMapNoIntern)
                 .unwrap_or_else(|| panic!("failed to find component export [{expected_export_name}] (original '{canon_export_name}')"));
+
+            let export_kind = match &instantiator.component.export_items[*export] {
+                wasmtime_environ::component::Export::LiftedFunction { .. } => {
+                    ExportKind::LiftedFunction
+                }
+                wasmtime_environ::component::Export::Instance { .. } => {
+                    ExportKind::Instance
+                }
+                _ => panic!("unexpected export kind"),
+            };
+
+
             (
                 export_name.to_string(),
-                instantiator.component.export_items[*export].clone(),
+export_kind,
             )
         })
         .collect();
@@ -750,7 +771,7 @@ impl<'a> Instantiator<'a, '_> {
                 .component
                 .exports
                 .raw_iter()
-                .find(|(expt_name, _)| *expt_name == name)
+                .find(|(expt_name, _)| ***expt_name == **name)
                 .unwrap();
             let export = &self.component.export_items[*export_idx];
             match item {
@@ -1139,8 +1160,6 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::AsyncStartCall { .. }
                 | Trampoline::BackpressureDec { .. }
                 | Trampoline::BackpressureInc { .. }
-                | Trampoline::ContextGet { .. }
-                | Trampoline::ContextSet { .. }
                 | Trampoline::EnterSyncCall
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
@@ -2495,38 +2514,6 @@ impl<'a> Instantiator<'a, '_> {
                             Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow)
                         });
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
-            }
-
-            Trampoline::ContextSet { instance, slot, .. } => {
-                let context_set_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
-                let component_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = {context_set_fn}.bind(null, {{
-                          componentIdx: {component_idx},
-                          slot: {slot},
-                      }});
-                    "#
-                );
-            }
-
-            Trampoline::ContextGet { instance, slot } => {
-                let context_get_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
-                let component_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = {context_get_fn}.bind(null, {{
-                          componentIdx: {component_idx},
-                          slot: {slot},
-                      }});
-                    "#
-                );
             }
 
             Trampoline::TaskReturn {
@@ -4311,8 +4298,9 @@ impl<'a> Instantiator<'a, '_> {
 
         // Process individual component exports
         for (export_name, export_idx) in self.component.exports.raw_iter() {
+            let export_name = export_name.as_ref().to_string();
             let export = &self.component.export_items[*export_idx];
-            let world_key = &self.exports[export_name];
+            let world_key = &self.exports[&export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut export_resource_map = ResourceMap::new();
 
@@ -4345,7 +4333,7 @@ impl<'a> Instantiator<'a, '_> {
                         ),
                         // Fore free standing functions we can use the exoprt name directly as a local name
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                            self.bindgen.local_names.create_once(export_name)
+                            self.bindgen.local_names.create_once(&export_name)
                         }
                     });
 
@@ -4361,7 +4349,7 @@ impl<'a> Instantiator<'a, '_> {
                         options,
                         func,
                         func_ty,
-                        export_name,
+                        &export_name,
                         &export_resource_map,
                     );
 
@@ -4401,6 +4389,7 @@ impl<'a> Instantiator<'a, '_> {
 
                     // Process exported instances
                     for (func_name, export_idx) in exports.raw_iter() {
+                        let func_name = func_name.as_ref().to_string();
                         let export = &self.component.export_items[*export_idx];
 
                         // Gather function information for all lifted functions in the isntance export
@@ -4410,7 +4399,7 @@ impl<'a> Instantiator<'a, '_> {
                             _ => unreachable!("unexpected non-lifted function export"),
                         };
 
-                        let func = &self.resolve.interfaces[iface_id].functions[func_name];
+                        let func = &self.resolve.interfaces[iface_id].functions[&func_name];
 
                         self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
@@ -4430,7 +4419,7 @@ impl<'a> Instantiator<'a, '_> {
                             }
                             // For free standing functions we can use the bare func name
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                                self.bindgen.local_names.create_once(func_name)
+                                self.bindgen.local_names.create_once(&func_name)
                             }
                         });
 
@@ -4446,7 +4435,7 @@ impl<'a> Instantiator<'a, '_> {
                             options,
                             func,
                             func_ty,
-                            export_name,
+                            &export_name,
                             &export_resource_map,
                         );
 
@@ -4470,7 +4459,7 @@ impl<'a> Instantiator<'a, '_> {
 
                         // Add the export binding
                         self.bindgen.esm_bindgen.add_export_binding(
-                            Some(export_name),
+                            Some(&export_name),
                             local_name,
                             export_binding_name,
                             func,
@@ -5405,6 +5394,8 @@ pub fn gen_flat_lift_fn_js_expr(
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext).name();
             format!("{f}.bind(null, {table_idx})")
         }
+
+        InterfaceType::Map(_) => unimplemented!("map support"),
     }
 }
 
@@ -6150,6 +6141,8 @@ pub fn gen_flat_lower_fn_js_expr(
                 Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext).name();
             format!("{lower_flat_err_ctx_fn}.bind(null, {table_idx})")
         }
+
+        InterfaceType::Map(_) => unimplemented!("map support"),
     }
 }
 

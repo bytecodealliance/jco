@@ -199,7 +199,7 @@ impl get_stream_async::Guest for Component {
 
     async fn get_stream_example_resource_own_attr(vals: Vec<ExampleResource>) -> StreamReader<u32> {
         let (mut tx, rx) = wit_stream::new();
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             for r in vals.iter() {
                 tx.write(vec![r.get_id()]).await;
             }
@@ -209,7 +209,7 @@ impl get_stream_async::Guest for Component {
 
     async fn get_stream_stream_string(vals: Vec<String>) -> StreamReader<StreamReader<String>> {
         let (mut tx, rx) = wit_stream::new();
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             for v in vals {
                 let (mut nested_tx, nested_rx) = wit_stream::new();
                 tx.write(vec![nested_rx]).await;
@@ -223,7 +223,7 @@ impl get_stream_async::Guest for Component {
         vals: Vec<FutureReader<String>>,
     ) -> StreamReader<FutureReader<String>> {
         let (mut tx, rx) = wit_stream::new();
-        wit_bindgen::spawn(async move {
+        wit_bindgen::spawn_local(async move {
             for v in vals {
                 tx.write_one(v).await;
             }
@@ -234,7 +234,7 @@ impl get_stream_async::Guest for Component {
 
 fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> StreamReader<T> {
     let (mut tx, rx) = wit_stream::new();
-    wit_bindgen::spawn(async move {
+    wit_bindgen::spawn_local(async move {
         tx.write_all(vals).await;
     });
     rx

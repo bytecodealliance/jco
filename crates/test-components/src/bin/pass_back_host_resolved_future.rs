@@ -22,7 +22,7 @@ impl local_run_async::Guest for Component {
 
 fn future_value_async<T: FuturePayload>(v: T) -> FutureReader<T> {
     let (tx, rx) = wit_future::new(|| unreachable!("default value should not be used"));
-    wit_bindgen::spawn(async move {
+    wit_bindgen::spawn_local(async move {
         let _ = tx.write(v).await;
     });
     rx

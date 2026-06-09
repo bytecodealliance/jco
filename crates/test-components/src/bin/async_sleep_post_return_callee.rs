@@ -16,7 +16,7 @@ struct Component;
 impl Guest for Component {
     async fn run(sleep_time_millis: u64) {
         // Spawn a task to run post-return and otherwise return immediately.
-        async_support::spawn(async move {
+        async_support::spawn_local(async move {
             // Sleep for as long as requested:
             sleep::sleep_millis(sleep_time_millis).await;
         });
