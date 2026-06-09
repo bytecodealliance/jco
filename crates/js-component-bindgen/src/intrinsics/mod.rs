@@ -889,8 +889,13 @@ impl Intrinsic {
                     output,
                     r#"
                       function {get_current_global_task_meta_fn}(componentIdx) {{
+                          if (componentIdx === null || componentIdx === undefined) {{
+                              throw new Error("missing/invalid component idx");
+                          }}
                           const v = {global_current_task_meta_obj}[componentIdx];
-                          if (v === undefined || v === null) {{ return undefined; }}
+                          if (v === undefined || v === null) {{
+                              return undefined;
+                          }}
                           return {{ ...v }};
                       }}
                     "#,
@@ -1022,7 +1027,7 @@ impl Intrinsic {
                           const {{ taskID, componentIdx }} = args;
 
                           const meta = {global_current_task_meta_obj}[componentIdx];
-                          if (!meta) {{ throw new Error(`missing current task meta for component idx [${{componentIdx}}]n`); }}
+                          if (!meta) {{ throw new Error(`missing current task meta for component idx [${{componentIdx}}]`); }}
 
                           if (meta.taskID !== taskID) {{
                               throw new Error(`task ID [${{meta.taskID}}] != requested ID [${{taskID}}]`);
@@ -1096,7 +1101,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 37] = [
+const EARLY_INTRINSICS: [Intrinsic; 39] = [
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
     Intrinsic::SymbolAsyncIterator,
@@ -1140,6 +1145,10 @@ const EARLY_INTRINSICS: [Intrinsic; 37] = [
     Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
     // Error context helpers
     Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap),
+    // Context get/set are not used via trampolines but are
+    // `UnsafeIntrinsic`s, so they are mapped for any module that uses them
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet),
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet),
 ];
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -1261,6 +1270,21 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+            &Intrinsic::AsyncEventCodeEnum,
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
         ]);
     }
 
