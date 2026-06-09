@@ -14,6 +14,10 @@ describe("monotonic clock tests", () => {
 
   test("waits for the correct timeout in waitFor", async () => {
     const waitForSpy = vi.fn(monotonicClock.waitFor);
+    vi.spyOn(monotonicClock, "now")
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValue(250_000_000n);
     const promise = waitForSpy(250_000_000n); // 250ms
 
     vi.advanceTimersByTime(249);
@@ -40,7 +44,7 @@ describe("monotonic clock tests", () => {
 
   test("waits until target time in waitUntil", async () => {
     const waitUntilSpy = vi.fn(monotonicClock.waitUntil.bind(monotonicClock));
-    vi.spyOn(monotonicClock, "now").mockReturnValue(100n);
+    vi.spyOn(monotonicClock, "now").mockReturnValueOnce(100n).mockReturnValue(350_000_000n);
     const promise = waitUntilSpy(350_000_000n); // 350 ms target
 
     vi.advanceTimersByTime(349);
@@ -49,6 +53,37 @@ describe("monotonic clock tests", () => {
     vi.advanceTimersByTime(1);
     await promise;
     expect(waitUntilSpy).toHaveResolved();
+  });
+
+  test("waitUntil rounds positive sub-millisecond waits up", async () => {
+    const waitUntilSpy = vi.fn(monotonicClock.waitUntil.bind(monotonicClock));
+    vi.spyOn(monotonicClock, "now").mockReturnValueOnce(1n).mockReturnValue(1_000_000n);
+    const promise = waitUntilSpy(1_000_000n);
+
+    vi.advanceTimersByTime(0);
+    await Promise.resolve();
+    expect(waitUntilSpy).not.toHaveResolved();
+
+    vi.advanceTimersByTime(1);
+    await promise;
+    expect(waitUntilSpy).toHaveResolved();
+  });
+
+  test("waitFor rounds positive sub-millisecond waits up", async () => {
+    const waitForSpy = vi.fn(monotonicClock.waitFor);
+    vi.spyOn(monotonicClock, "now")
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValue(1n);
+    const promise = waitForSpy(1n);
+
+    vi.advanceTimersByTime(0);
+    await Promise.resolve();
+    expect(waitForSpy).not.toHaveResolved();
+
+    vi.advanceTimersByTime(1);
+    await promise;
+    expect(waitForSpy).toHaveResolved();
   });
 
   test("throws if duration exceeds MAX_SAFE_INTEGER in waitFor", async () => {
