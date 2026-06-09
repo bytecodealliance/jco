@@ -2754,7 +2754,7 @@ impl<'a> Instantiator<'a, '_> {
                 // NOTE: we keep track of the current component instance index for the module being instantiatied
                 // because some  because context.set/context.get are no longer trampolines,
                 // and we do not have access to the correct component index that each operation belongs to at build time
-                self.init_current_module = instance.clone();
+                self.init_current_module = *instance;
 
                 match m {
                     InstantiateModule::Static(idx, args) => {
