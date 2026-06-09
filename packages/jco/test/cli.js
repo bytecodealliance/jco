@@ -335,6 +335,8 @@ suite("CLI", () => {
             "test:flavorful/test=./flavorful.js",
             "--valid-lifting-optimization",
             "--tla-compat",
+            // "--minify",
+            // "false",
             "--js",
             "--base64-cutoff=0",
             "-o",

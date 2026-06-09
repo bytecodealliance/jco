@@ -144,6 +144,7 @@ async function setupP3Fixture({ fixture, outputRootDir, asyncExports, preopen = 
             jco: {
                 transpile: {
                     extraArgs: {
+                        // minify: false,
                         instantiation: null,
                         asyncExports,
                         map: fixture.map,
