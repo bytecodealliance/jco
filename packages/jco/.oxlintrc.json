@@ -7,7 +7,7 @@
     "env": {
         "builtin": true
     },
-    "ignorePatterns": ["test/output/**/*.js"],
+    "ignorePatterns": ["test/output/**/*.js", "test/fixtures/wat/component-model/**/*.wast.js"],
     "rules": {
         "no-unused-vars": [
             "error",
