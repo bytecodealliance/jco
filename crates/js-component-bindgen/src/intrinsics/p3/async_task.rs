@@ -1068,11 +1068,16 @@ impl AsyncTaskIntrinsic {
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
+                            if (opts?.isHost) {{
+                                this.#entered = true;
+                                return this.#entered;
+                            }}
+
                             await cstate.nextTaskExecutionSlot({{ task: this }});
 
-                            // If a task is either synchronous or host-provided (e.g. a host import, whether sync or async)
-                            // then we can avoid component-relevant tracking and immediately enter
-                            if (this.isSync() || opts?.isHost) {{
+                            // If a task is synchronous then we can avoid component-relevant
+                            // tracking and immediately enter.
+                            if (this.isSync()) {{
                                 this.#entered = true;
 
                                 // TODO(breaking): remove once manually-specifying async fns is removed

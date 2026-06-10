@@ -8,6 +8,38 @@ import { setupAsyncTest } from "../helpers.js";
 import { LOCAL_TEST_COMPONENTS_DIR, toTypedArrayChunks } from "../common.js";
 
 suite("async scheduling regressions", () => {
+    test("host import can be unblocked by a host import sibling", async () => {
+        const signaled = Promise.withResolvers();
+        let signalCalled = false;
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "host-import-concurrency.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:test-components/host-import-concurrency-host": {
+                        wait: async () => {
+                            await signaled.promise;
+                            return 42;
+                        },
+                        signal: async () => {
+                            signalCalled = true;
+                            signaled.resolve();
+                        },
+                    },
+                },
+            },
+        });
+
+        try {
+            await instance["jco:test-components/local-run-async"].run();
+            assert.isTrue(signalCalled);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test("host future can be completed by a guest sibling task", async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: "jspi",

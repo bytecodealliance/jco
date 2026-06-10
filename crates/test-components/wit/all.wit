@@ -317,6 +317,16 @@ world future-concurrency {
   export local-run-async;
 }
 
+interface host-import-concurrency-host {
+  wait: async func() -> u32;
+  signal: async func();
+}
+
+world host-import-concurrency {
+  import host-import-concurrency-host;
+  export local-run-async;
+}
+
 interface stream-concurrency-host {
   signal: func();
   zero-read-complete: func();
