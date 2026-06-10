@@ -8,7 +8,7 @@ async function main() {
     version = version.slice(1);
   }
   if (!version || !semver.valid(version)) {
-    throw new Error("Missing/invalid semver value");
+    throw new Error(`Missing/invalid semver value [${version}]`);
   }
 
   let isPrerelease = semver.prerelease(version) !== null;
