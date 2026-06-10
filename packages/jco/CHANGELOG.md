@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.22.0] - 2026-06-10
+
+### 🧪 Testing
+
+- _(jco)_ add test for host fn using future by @vados-cosmonic
+
+- _(jco)_ add retry to udp-sample-application test by @vados-cosmonic in #1603
+
+- _(jco)_ allow retry for post return async sleep by @vados-cosmonic
+
+- _(jco)_ add retry for http outbound content length test by @vados-cosmonic
+
+- _(jco)_ increase allowed time for post return async sleep by @vados-cosmonic
+
+- _(jco)_ re-enable yield tests by @vados-cosmonic
+
+- _(jco)_ add note about sleep post return components by @vados-cosmonic
+
+- _(jco)_ remove logging, update called time expect fn by @vados-cosmonic
+
+- _(jco)_ support focusing on single fixture by @vados-cosmonic
+
+- _(jco)_ fill out async yield tests by @vados-cosmonic
+
+- _(jco)_ fix async p3 yield scenario test setup, update vitest by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update bundled preview3-shim to 0.1.2 by @vados-cosmonic in #1622
+
+- _(jco)_ ignore generated JS by @vados-cosmonic in #1610
+
 ## [1.21.0] - 2026-06-08
 
 ### 🧪 Testing
