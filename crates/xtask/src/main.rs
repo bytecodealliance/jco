@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use structopt::StructOpt;
 
 mod build;
@@ -14,6 +16,11 @@ enum Cmd {
     Generate(Generate),
     /// Build test components (i.e. `test-components` crate)
     BuildTestComponents,
+    /// Build a single WAST fixture into a Wasm component and executable JS
+    BuildWastFixture {
+        /// Path to the given .wast file
+        path: PathBuf,
+    },
 }
 
 #[derive(StructOpt)]
@@ -64,6 +71,10 @@ fn main() -> anyhow::Result<()> {
         }
         Cmd::BuildTestComponents => {
             build::test_components::run()?;
+            Ok(())
+        }
+        Cmd::BuildWastFixture { path } => {
+            build::wast_fixtures::run(&path)?;
             Ok(())
         }
         Cmd::Test(Platform::Node) => test::run(false),

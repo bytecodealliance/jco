@@ -1920,6 +1920,19 @@ dependencies = [
 
 [[package]]
 name = "wast"
+version = "245.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28cf1149285569120b8ce39db8b465e8a2b55c34cbb586bd977e43e2bc7300bf"
+dependencies = [
+ "bumpalo",
+ "leb128fmt",
+ "memchr",
+ "unicode-width 0.2.2",
+ "wasm-encoder 0.245.1",
+]
+
+[[package]]
+name = "wast"
 version = "246.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96cf2d50bc7478dcca61d00df4dadf922ef46c5924db20a97e6daaf09fe1cb09"
@@ -1937,7 +1950,7 @@ version = "1.246.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "723f2473b47f738c12fc11c8e0bb8b27ce7cf9c78cf1a29dadbc2d34a2513292"
 dependencies = [
- "wast",
+ "wast 246.0.1",
 ]
 
 [[package]]
@@ -2167,6 +2180,7 @@ dependencies = [
  "js-component-bindgen",
  "semver",
  "structopt",
+ "wast 245.0.1",
  "webidl2wit",
  "weedle",
  "wit-component",
