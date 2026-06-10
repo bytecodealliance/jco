@@ -61,4 +61,4 @@ wit-bindgen-core = { version = "0.54.0", default-features = false }
 wit-component = { version = "0.245.1", features = ["dummy-module"] }
 wit-parser = { version = "0.245.1", default-features = false }
 
-js-component-bindgen = { version = "1.19.7", path = "./crates/js-component-bindgen" }
+js-component-bindgen = { version = "1.20.0", path = "./crates/js-component-bindgen" }
