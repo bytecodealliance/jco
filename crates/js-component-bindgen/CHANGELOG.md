@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.20.1] - 2026-06-10
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ let host provided imports enter immediately by @andreiltd in #1619
+
+
+
+
 ## [1.20.0] - 2026-06-10
 
 ### 🚀 Features
