@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.20.0] - 2026-06-10
+
+### 🚀 Features
+
+- _(bindgen)_ pass through generation purpose (import/export) by @vados-cosmonic
+
+- _(bindgen)_ add Waitable#waitForPendingEvent by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ perform lifts on async-ness and host imports by @vados-cosmonic
+
+- _(bindgen)_ yield intrinsic using removed yield fn by @vados-cosmonic
+
+- _(bindgen)_ start lowered import in microtask by @vados-cosmonic
+
+- _(bindgen)_ use new JS task for subtask start by @vados-cosmonic
+
+- _(bindgen)_ remove current task wait code by @vados-cosmonic
+
+- _(bindgen)_ mark thread yield as early trampoline by @vados-cosmonic
+
+- _(bindgen)_ use of jspi for yield by @vados-cosmonic
+
+- _(bindgen)_ set typedArray in js lowering functions by @lann in #1611
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ add debug logging for errors during calls by @vados-cosmonic
+
+- _(bindgen)_ improve logging, add check for return fn called by @vados-cosmonic
+
+- _(bindgen)_ improve debug logging by @vados-cosmonic
+
+
+
+## New Contributors
+* @lann made their first contribution in [#1611](https://github.com/bytecodealliance/jco/pull/1611)
+
+
 ## [1.19.7] - 2026-06-08
 
 ### 🐛 Bug Fixes
