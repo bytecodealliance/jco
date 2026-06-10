@@ -904,34 +904,9 @@ impl LiftIntrinsic {
                             let liftResults;
                             if (knownLen !== undefined) {{ // list with known length
                                 if (ctx.useDirectParams) {{
-                                    if (ctx.memory === null) {{
-                                        // If this lift should be using direct params,
-                                        // and the memory is missing, we are in the case where
-                                        // a fixed length list (or other value) is being passed only
-                                        // via parameters to the function.
-                                        //
-                                        // Normally, we would expect to use the direct parameters as a
-                                        // memory location + size, but in this case, *all* values are being passed directly,
-                                        // via params.
-                                        //
-                                        {debug_log_fn}('memory unexpectedly missing while lifting unknown length list', {{ ctx }});
-                                        liftResults = [listValue(ctx.params.slice(0, knownLen)), ctx];
-                                        ctx.params = ctx.params.slice(knownLen);
-                                    }} else {{
-                                        // in-memory list with unknown length w/ direct params
-                                        const dataPtr = ctx.params[0];
-                                        ctx.params = ctx.params.slice(1);
-
-                                        ctx.useDirectParams = false;
-                                        const originalPtr = ctx.storagePtr;
-                                        ctx.storageLen = knownLen * elemSize32;
-
-                                        liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, knownLen);
-
-                                        ctx.useDirectParams = true;
-                                        ctx.storagePtr = undefined;
-                                        ctx.storageLen = undefined;
-                                    }}
+                                    {debug_log_fn}('memory unexpectedly missing while lifting unknown length list', {{ ctx }});
+                                    liftResults = [listValue(ctx.params.slice(0, knownLen)), ctx];
+                                    ctx.params = ctx.params.slice(knownLen);
                                 }} else {{ // indirect params
                                     if (ctx.memory === null) {{
                                         {debug_log_fn}('memory unexpectedly missing while lifting known length list', {{ knownLen, ctx }});
