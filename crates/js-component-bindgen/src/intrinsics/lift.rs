@@ -562,6 +562,13 @@ impl LiftIntrinsic {
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single f32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
+
+                            if (ctx.inVariant) {{
+                                const dv = new DataView(new ArrayBuffer(4));
+                                dv.setInt32(0, val);
+                                val = dv.getFloat32(0);
+                            }}
+
                             return [val, ctx];
                         }}
 
@@ -797,6 +804,11 @@ impl LiftIntrinsic {
 
                             const origUseParams = ctx.useDirectParams;
 
+                            // If we're in the process of lifting a variant, we note
+                            // we are during any lifting that happens (e.g. to accomodate f32/f64 mechanics)
+                            const wasInVariant = ctx.inVariant;
+                            ctx.inVariant = true;
+
                             let caseIdx;
                             let liftRes;
                             const originalPtr = ctx.storagePtr;
@@ -861,6 +873,8 @@ impl LiftIntrinsic {
                                 const rem = ctx.storagePtr % align32;
                                 if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
                             }}
+
+                            ctx.inVariant = wasInVariant;
 
                             return [val, ctx];
                         }}
