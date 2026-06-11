@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.23.0] - 2026-06-11
+
+### 🚜 Refactor
+
+- _(jco)_ stream tests, add debug config hint by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ re-enable test, make tests in p3/async.js concurrent by @vados-cosmonic in #1624
+
+- _(jco)_ add f64 to tests, re-enable all by @vados-cosmonic
+
+- _(jco)_ re-enable variant f32 flattening test by @vados-cosmonic
+
+- _(jco)_ remove unused tests by @vados-cosmonic
+
+- _(jco)_ reduce binary sizes by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ lint, remove invalid uses of checkStreamValues by @vados-cosmonic
+
+- _(jco)_ update hello-stdout component by @vados-cosmonic
+
+- _(jco)_ add minify hints by @vados-cosmonic
+
 ## [1.22.0] - 2026-06-10
 
 ### 🧪 Testing
