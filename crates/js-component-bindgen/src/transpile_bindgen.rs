@@ -5075,14 +5075,11 @@ pub fn gen_flat_lift_fn_js_expr(
                     ),
                     None => ("null".into(), "0".into()),
                 };
+                let case_size32 = variant_ty.abi.size32;
+                let case_align32 = variant_ty.abi.align32;
+                let case_payload_offset32 = variant_ty.info.payload_offset32;
                 cases_and_lifts_expr.push_str(&format!(
-                    "['{name}', {}, {}, {}, {}, {}, {}],",
-                    lift_fn_js,
-                    variant_ty.abi.size32,
-                    variant_ty.abi.align32,
-                    variant_ty.info.payload_offset32,
-                    case_flat_count,
-                    variant_flat_count,
+                    "['{name}', {lift_fn_js}, {case_size32}, {case_align32}, {case_payload_offset32}, {case_flat_count}, {variant_flat_count}],",
                 ));
             }
             cases_and_lifts_expr.push(']');
