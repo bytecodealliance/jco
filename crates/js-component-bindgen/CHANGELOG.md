@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.0.0] - 2026-06-11
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ flattening of f32 in variant by @vados-cosmonic
+
+- _(bindgen)_ direct param lifts by @vados-cosmonic in #1615
+
+- _(bindgen)_ context.get/set deps by @vados-cosmonic
+
+- _(bindgen)_ save component idx during gen for context.{get,set} by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ rework lowers for variant based types by @vados-cosmonic
+
+
+
+
 ## [1.20.1] - 2026-06-10
 
 ### 🐛 Bug Fixes
