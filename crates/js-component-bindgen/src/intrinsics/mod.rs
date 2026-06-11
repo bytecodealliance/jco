@@ -1374,6 +1374,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
             &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
             &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64),
         ]);
     }
 

@@ -590,29 +590,41 @@ impl LiftIntrinsic {
             Self::LiftFlatFloat64 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_flat_f64_fn = self.name();
-                output.push_str(&format!("
-                    function {lift_flat_f64_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_f64_fn}()] args', {{ ctx }});
-                        let val;
+                uwriteln!(
+                    output,
+                    r#"
+                      function {lift_flat_f64_fn}(ctx) {{
+                          {debug_log_fn}('[{lift_flat_f64_fn}()] args', {{ ctx }});
+                          let val;
 
-                        if (ctx.useDirectParams) {{
-                            if (ctx.params.length === 0) {{ throw new Error('expected at least one single f64 argument'); }}
-                            val = ctx.params[0];
-                            ctx.params = ctx.params.slice(1);
-                            return [val, ctx];
-                        }}
+                          if (ctx.useDirectParams) {{
+                              if (ctx.params.length === 0) {{
+                                  throw new Error('expected at least one single f64 argument');
+                              }}
+                              val = ctx.params[0];
+                              ctx.params = ctx.params.slice(1);
 
-                        if (ctx.storageLen !== undefined && ctx.storageLen < 8) {{
-                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (f64 requires 8 bytes)`);
-                        }}
+                              if (ctx.inVariant) {{
+                                  const dv = new DataView(new ArrayBuffer(8));
+                                  dv.setBigInt64(0, val);
+                                  val = dv.getFloat64(0);
+                              }}
 
-                        val = new DataView(ctx.memory.buffer).getFloat64(ctx.storagePtr, true);
-                        ctx.storagePtr += 8;
-                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
+                              return [val, ctx];
+                          }}
 
-                        return [val, ctx];
-                    }}
-                "));
+                          if (ctx.storageLen !== undefined && ctx.storageLen < 8) {{
+                              throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (f64 requires 8 bytes)`);
+                          }}
+
+                          val = new DataView(ctx.memory.buffer).getFloat64(ctx.storagePtr, true);
+                          ctx.storagePtr += 8;
+                          if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
+
+                          return [val, ctx];
+                      }}
+                "#
+                );
             }
 
             Self::LiftFlatChar => {
@@ -674,8 +686,9 @@ impl LiftIntrinsic {
 
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
-                            const offset = ctx.params[0];
-                            if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
+                            let offset = ctx.params[0];
+                            if (typeof offset === 'bigint') {{ offset = Number(offset); }}
+                            if (!Number.isSafeInteger(offset)) {{ throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
                             val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len));
@@ -712,6 +725,7 @@ impl LiftIntrinsic {
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
                             const offset = ctx.params[0];
+                            if (typeof offset === 'bigint') {{ offset = Number(offset); }}
                             if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
@@ -797,11 +811,21 @@ impl LiftIntrinsic {
                 let lift_u8 = Self::LiftFlatU8.name();
                 let lift_u16 = Self::LiftFlatU16.name();
                 let lift_u32 = Self::LiftFlatU32.name();
+                let lift_f64 = Self::LiftFlatFloat64.name();
+
                 output.push_str(&format!(r#"
-                    function {lift_flat_variant_fn}(casesAndLiftFns) {{
+                    function {lift_flat_variant_fn}(meta) {{
+                        const {{
+                            caseMetas,
+                            variantSize32,
+                            variantAlign32,
+                            variantPayloadOffset32,
+                            variantFlatCount,
+                            isEnum,
+                        }} = meta;
+
                         return function {lift_flat_variant_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_variant_fn}()] args', {{ ctx }});
-
                             const origUseParams = ctx.useDirectParams;
 
                             // If we're in the process of lifting a variant, we note
@@ -812,8 +836,8 @@ impl LiftIntrinsic {
                             let caseIdx;
                             let liftRes;
                             const originalPtr = ctx.storagePtr;
-                            const numCases =  casesAndLiftFns.length;
-                            if (casesAndLiftFns.length < 256) {{
+                            const numCases =  caseMetas.length;
+                            if (caseMetas.length < 256) {{
                                 liftRes = {lift_u8}(ctx);
                             }} else if (numCases >= 256 && numCases < 65536) {{
                                 liftRes = {lift_u16}(ctx);
@@ -825,11 +849,20 @@ impl LiftIntrinsic {
                             caseIdx = liftRes[0];
                             ctx = liftRes[1];
 
-                            const [ tag, liftFn, size32, align32, payloadOffset32, caseFlatCount, variantFlatCount ] = casesAndLiftFns[caseIdx];
-                            if (payloadOffset32 === undefined) {{ throw new Error('unexpectedly missing payload offset'); }}
+                            const [
+                                tag,
+                                liftFn,
+                                caseSize32,
+                                caseAlign32,
+                                caseFlatCount,
+                            ] = caseMetas[caseIdx];
+
+                            if (variantPayloadOffset32 === undefined) {{
+                               throw new Error('unexpectedly missing payload offset');
+                            }}
 
                             if (originalPtr !== undefined) {{
-                                ctx.storagePtr = originalPtr + payloadOffset32;
+                                ctx.storagePtr = originalPtr + variantPayloadOffset32;
                             }}
 
                             let val;
@@ -838,28 +871,32 @@ impl LiftIntrinsic {
                                 // NOTE: here we need to move past the entire object in memory
                                 // despite moving to the payload which we now know is missing/unnecessary
                                 if (originalPtr !== undefined) {{
-                                    ctx.storagePtr = originalPtr + size32;
+                                    ctx.storagePtr = originalPtr + variantSize32;
                                 }}
                             }} else {{
+                                if (ctx.useDirectParams && ctx.params && liftFn !== {lift_f64} && typeof ctx.params[0] === 'bigint') {{
+                                    if (ctx.params[0] > BigInt(Number.MAX_SAFE_INTEGER)) {{
+                                        throw new Error(`invalid value, reinterpreted i32/f32 too large: [${{ctx.params[0]}}]`);
+                                    }}
+                                    ctx.params[0] = Number(ctx.params[0]);
+                                }}
+
                                 const [newVal, newCtx] = liftFn(ctx);
                                 val = {{ tag, val: newVal }};
                                 ctx = newCtx;
-
-                                // NOTE: Padding can be left over after doing the lift if it was less than
-                                // space left for the payload normally.
-                                if (originalPtr !== undefined) {{
-                                    ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + size32);
-                                }}
                             }}
 
                             if (origUseParams) {{
-                                if (caseFlatCount === undefined || variantFlatCount === undefined) {{
-                                    throw new Error('variant flat count metadata is missing');
-                                }}
-                                if (caseFlatCount === null || variantFlatCount === null) {{
+                                if (variantFlatCount === undefined || variantFlatCount === null) {{
+                                    {debug_log_fn}('[{lift_flat_variant_fn}()] variant with unknown flat count', {{ ctx, meta }});
                                     throw new Error('cannot lift variant with unknown flat count');
                                 }}
-                                const remainingPayloadParams = variantFlatCount - 1 - caseFlatCount;
+                                if (caseFlatCount === undefined || caseFlatCount === null) {{
+                                    {debug_log_fn}('[{lift_flat_variant_fn}()] case with unknown flat count', {{ ctx, meta, case: meta.caseMetas[caseIdx] }});
+                                    throw new Error('cannot lift case with unknown flat count');
+                                }}
+                                // NOTE: enums can be tightly packed and do not have a descriminant
+                                const remainingPayloadParams = variantFlatCount - caseFlatCount - (isEnum ? 0 : 1);
                                 if (remainingPayloadParams < 0) {{
                                     throw new Error(`invalid variant flat count metadata`);
                                 }}
@@ -870,8 +907,8 @@ impl LiftIntrinsic {
                             }}
 
                             if (ctx.storagePtr !== undefined) {{
-                                const rem = ctx.storagePtr % align32;
-                                if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                                const rem = ctx.storagePtr % variantAlign32;
+                                if (rem !== 0) {{ ctx.storagePtr += variantAlign32 - rem; }}
                             }}
 
                             ctx.inVariant = wasInVariant;
@@ -1040,10 +1077,12 @@ impl LiftIntrinsic {
                 let lift_flat_enum_fn = self.name();
                 output.push_str(&format!(
                     r#"
-                    function {lift_flat_enum_fn}(casesAndLiftFns) {{
+                    function {lift_flat_enum_fn}(meta) {{
+                        meta.isEnum = true;
+                        const f = {lift_variant}(meta);
                         return function {lift_flat_enum_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_enum_fn}()] args', {{ ctx }});
-                            const res = {lift_variant}(casesAndLiftFns)(ctx);
+                            const res = f(ctx);
                             res[0] = res[0].tag;
                             return res;
                         }}
@@ -1058,10 +1097,11 @@ impl LiftIntrinsic {
                 let lift_flat_option_fn = self.name();
                 output.push_str(&format!(
                     r#"
-                    function {lift_flat_option_fn}(casesAndLiftFns) {{
+                    function {lift_flat_option_fn}(meta) {{
+                        const f = {lift_variant}(meta);
                         return function {lift_flat_option_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_option_fn}()] args', {{ ctx }});
-                            return {lift_variant}(casesAndLiftFns)(ctx);
+                            return f(ctx);
                         }}
                     }}
                 "#
@@ -1074,10 +1114,11 @@ impl LiftIntrinsic {
                 let lift_flat_result_fn = self.name();
                 output.push_str(&format!(
                     r#"
-                    function {lift_flat_result_fn}(casesAndLiftFns) {{
+                    function {lift_flat_result_fn}(meta) {{
+                        const f = {lift_variant}(meta);
                         return function {lift_flat_result_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_result_fn}()] args', {{ ctx }});
-                            return {lift_variant}(casesAndLiftFns)(ctx);
+                            return f(ctx);
                         }}
                     }}
                     "#

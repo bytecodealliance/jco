@@ -648,9 +648,11 @@ impl LowerIntrinsic {
                 let lower_u32_fn = Self::LowerFlatU32.name();
 
                 output.push_str(&format!(r#"
-                    function {lower_flat_variant_fn}(lowerMetas) {{
+                    function {lower_flat_variant_fn}(meta) {{
+                        const {{ variantSize32, variantAlign32, variantPayloadOffset32, caseMetas }} = meta;
+
                         let caseLookup = {{}};
-                        for (const [idx, meta] of lowerMetas.entries()) {{
+                        for (const [idx, meta] of caseMetas.entries()) {{
                             let tag = meta[0];
                             caseLookup[tag] = {{ discriminant: idx, meta }};
                         }}
@@ -664,30 +666,30 @@ impl LowerIntrinsic {
                                 throw new Error(`missing tag [${{tag}}] (valid tags: ${{Object.keys(caseLookup)}})`);
                             }}
 
-                            const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = variantCase.meta;
+                            const [ _tag, lowerFn, caseSize32, caseAlign32, caseFlatCount ] = variantCase.meta;
 
                             const originalPtr = ctx.storagePtr;
                             ctx.vals = [variantCase.discriminant];
                             let discLowerRes;
-                            if (lowerMetas.length < 256) {{
+                            if (caseMetas.length < 256) {{
                                 discLowerRes = {lower_u8_fn}(ctx);
-                            }} else if (lowerMetas.length >= 256 && lowerMetas.length < 65536) {{
+                            }} else if (caseMetas.length >= 256 && caseMetas.length < 65536) {{
                                 discLowerRes = {lower_u16_fn}(ctx);
-                            }} else if (lowerMetas.length >= 65536 && lowerMetas.length < 4_294_967_296) {{
+                            }} else if (caseMetas.length >= 65536 && caseMetas.length < 4_294_967_296) {{
                                 discLowerRes = {lower_u32_fn}(ctx);
                             }} else {{
-                                throw new Error(`unsupported number of cases [${{lowerMetas.length}}]`);
+                                throw new Error(`unsupported number of cases [${{caseMetas.length}}]`);
                             }}
 
-                            const payloadOffsetPtr = originalPtr + payloadOffset32;
+                            const payloadOffsetPtr = originalPtr + variantPayloadOffset32;
                             ctx.storagePtr = payloadOffsetPtr;
                             ctx.vals = [val];
                             if (lowerFn) {{ lowerFn(ctx); }}
 
-                            ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + size32);
+                            ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + variantSize32);
 
-                            const rem = ctx.storagePtr % align32;
-                            if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}
+                            const rem = ctx.storagePtr % variantAlign32;
+                            if (rem !== 0) {{ ctx.storagePtr += varianttAlign32 - rem; }}
                         }}
                     }}
                 "#));
@@ -883,7 +885,8 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(
                     r#"
-                    function {lower_flat_enum_fn}(lowerMetas) {{
+                    function {lower_flat_enum_fn}(meta) {{
+                        const f = {lower_variant_fn}(meta);
                         return function {lower_flat_enum_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_enum_fn}()] args', {{ ctx }});
 
@@ -895,7 +898,7 @@ impl LowerIntrinsic {
                                 ctx.vals[0] = {{ tag: v }};
                             }}
 
-                            {lower_variant_fn}(lowerMetas)(ctx);
+                            f(ctx);
                         }}
                     }}
                 "#
@@ -909,7 +912,8 @@ impl LowerIntrinsic {
 
                 output.push_str(&format!(
                     "
-                    function {lower_flat_option_fn}(lowerMetas) {{
+                    function {lower_flat_option_fn}(meta) {{
+                        const f = {lower_variant_fn}(meta);
                         return function {lower_flat_option_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_option_fn}()] args', {{ ctx }});
 
@@ -927,7 +931,7 @@ impl LowerIntrinsic {
                                 }}
                             }}
 
-                            {lower_variant_fn}(lowerMetas)(ctx);
+                            f(ctx);
                         }}
                     }}
                 "
@@ -938,11 +942,13 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_result_fn = self.name();
                 let lower_variant_fn = Self::LowerFlatVariant.name();
+
                 output.push_str(&format!(
                     r#"
-                    function {lower_flat_result_fn}(lowerMetas) {{
+                    function {lower_flat_result_fn}(meta) {{
+                       const f = {lower_variant_fn}(meta);
                        return function {lower_flat_result_fn}Inner(ctx) {{
-                           {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ lowerMetas }});
+                           {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ ctx }});
 
                            const v = ctx.vals[0];
                            const isNotResultObject = typeof v !== 'object'
@@ -954,7 +960,7 @@ impl LowerIntrinsic {
                                ctx.vals[0] = {{ tag: 'ok', val: v }};
                            }}
 
-                           {lower_variant_fn}(lowerMetas)(ctx);
+                           f(ctx);
                        }};
                     }}
                     "#
