@@ -58,13 +58,13 @@ export async function getDefaultComponentFixtures() {
 
 /** Check the values of a given stream (normally returned from a component) */
 export async function checkStreamValues(args) {
-    const { stream, vals, typeName, assertEqFn, partial } = args ?? {};
+    const { stream, typeName, assertEqFn, partial } = args ?? {};
     const expectedValues = args.expectedValues ?? [];
 
     // Ensure the values produced match expected
     const eq = assertEqFn ?? assert.equal;
     let iteratorRes;
-    for (const [idx, v] of vals.entries()) {
+    for (const [idx, v] of expectedValues.entries()) {
         const expected = expectedValues[idx] ?? v;
         iteratorRes = await stream.next();
         assert.isFalse(iteratorRes.done);
