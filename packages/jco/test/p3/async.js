@@ -9,7 +9,7 @@ import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
 
 suite("Async (WASI P3)", () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
-    test("incorrect task return params offloading", async () => {
+    test.concurrent("incorrect task return params offloading", async () => {
         const name = "async-flat-param-adder";
         const { instance, cleanup } = await setupAsyncTest({
             component: {
@@ -36,7 +36,7 @@ suite("Async (WASI P3)", () => {
         await cleanup();
     });
 
-    test("lowered imports use trailing result pointer", async () => {
+    test.concurrent("lowered imports use trailing result pointer", async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: "jspi",
             component: {
@@ -69,7 +69,7 @@ suite("Async (WASI P3)", () => {
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    test("simple async returns", async () => {
+    test.concurrent("simple async returns", async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, "async-simple-return.wasm"),
@@ -95,7 +95,7 @@ suite("Async (WASI P3)", () => {
     });
 
     // https://github.com/bytecodealliance/jco/issues/1150
-    test("simple bare async host imports", async () => {
+    test.concurrent("simple bare async host imports", async () => {
         const hostStr = "loaded-from-host";
         const hostU32 = 43;
 
@@ -129,7 +129,7 @@ suite("Async (WASI P3)", () => {
         await cleanup();
     });
 
-    test("async return of imported owned resource", async () => {
+    test.concurrent("async return of imported owned resource", async () => {
         class ExampleResource {
             constructor(id) {
                 this.id = id;
@@ -167,9 +167,7 @@ suite("Async (WASI P3)", () => {
         await cleanup();
     });
 
-    // TODO(tandr): this test currently fails and needs fixes in wit-bindgen-core:
-    // https://github.com/bytecodealliance/wit-bindgen/pull/1614
-    test.skip("async return of bare imported owned resource", async () => {
+    test.concurrent("async return of bare imported owned resource", async () => {
         class ExampleResource {
             constructor(id) {
                 this.id = id;
@@ -208,7 +206,7 @@ suite("Async (WASI P3)", () => {
     });
 
     // https://github.com/bytecodealliance/jco/issues/1601
-    test("import of future-accepting host fn", async () => {
+    test.concurrent("import of future-accepting host fn", async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, "pass-back-host-resolved-future.wasm"),
