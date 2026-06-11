@@ -258,10 +258,7 @@ suite("stream<T> lifts", () => {
         await checkStreamValues({ stream, expectedValues: vals, typeName: "record", assertEqFn: assert.deepEqual });
     });
 
-    // TODO(fix): RACY!!! values are coming back in the wrong order!
-
-    // TODO: Broken
-    test.only("variant", async () => {
+    test.concurrent("variant", async () => {
         const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariant, AsyncFunction);
 
@@ -280,7 +277,7 @@ suite("stream<T> lifts", () => {
         // Ensure first two values match
         await checkStreamValues({
             stream,
-            vals: [
+            expectedValues: [
                 // TODO: wit type representation smoothing mismatch,
                 // non-nullable option<t> values are *not* wrapped as objects
                 { tag: "maybe-u32", val: { tag: "some", val: 123 } },
@@ -294,7 +291,7 @@ suite("stream<T> lifts", () => {
         // Check float member
         await checkStreamValues({
             stream,
-            vals: vals.slice(2, 3),
+            expectedValues: vals.slice(2, 3),
             typeName: "variant<float>",
             partial: true,
             assertEqFn: (value, expected) => {
@@ -308,14 +305,13 @@ suite("stream<T> lifts", () => {
         // Check rest of values
         await checkStreamValues({
             stream,
-            vals: vals.slice(3),
+            expectedValues: vals.slice(3),
             typeName: "variant<rest>",
             assertEqFn: assert.deepEqual,
         });
     });
 
-    // TODO: BROKEN
-    test.skip("variant layout", async () => {
+    test.concurrent("variant layout", async () => {
         const instance = await getInstance();
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamLayoutVariant, AsyncFunction);
         assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamVariantStringRecord, AsyncFunction);
@@ -324,7 +320,7 @@ suite("stream<T> lifts", () => {
         let stream = await instance["jco:test-components/get-stream-async"].getStreamLayoutVariant(variants);
         await checkStreamValues({
             stream,
-            vals: variants,
+            expectedValues: variants,
             typeName: "layout-variant",
             assertEqFn: assert.deepEqual,
         });
@@ -336,7 +332,7 @@ suite("stream<T> lifts", () => {
         stream = await instance["jco:test-components/get-stream-async"].getStreamVariantStringRecord(records);
         await checkStreamValues({
             stream,
-            vals: records,
+            expectedValues: records,
             typeName: "variant-string-record",
             assertEqFn: assert.deepEqual,
         });
