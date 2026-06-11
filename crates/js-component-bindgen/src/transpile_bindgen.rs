@@ -5066,24 +5066,43 @@ pub fn gen_flat_lift_fn_js_expr(
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
             let variant_flat_count = flat_count_js_expr(&variant_ty.abi.flat_count);
-            let mut cases_and_lifts_expr = String::from("[");
+            let variant_size32 = variant_ty.abi.size32;
+            let variant_align32 = variant_ty.abi.align32;
+            let variant_payload_offset32 = variant_ty.info.payload_offset32;
+
+            let mut lift_metas_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
-                let (lift_fn_js, case_flat_count) = match maybe_ty {
-                    Some(ty) => (
-                        gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
-                        flat_count_js_expr(&component_types.canonical_abi(ty).flat_count),
-                    ),
-                    None => ("null".into(), "0".into()),
+                let (lift_fn_js, case_size32, case_align32, case_flat_count) = match maybe_ty {
+                    Some(ty) => {
+                        let cabi_info = component_types.canonical_abi(ty);
+                        (
+                            gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
+                            cabi_info.size32.to_string(),
+                            cabi_info.align32.to_string(),
+                            cabi_info
+                                .flat_count(MAX_FLAT_PARAMS)
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| "null".into()),
+                        )
+                    }
+                    None => ("null".into(), "0".into(), "0".into(), "0".into()),
                 };
-                let case_size32 = variant_ty.abi.size32;
-                let case_align32 = variant_ty.abi.align32;
-                let case_payload_offset32 = variant_ty.info.payload_offset32;
-                cases_and_lifts_expr.push_str(&format!(
-                    "['{name}', {lift_fn_js}, {case_size32}, {case_align32}, {case_payload_offset32}, {case_flat_count}, {variant_flat_count}],",
+
+                lift_metas_expr.push_str(&format!(
+                    "['{name}', {lift_fn_js}, {case_size32}, {case_align32}, {case_flat_count}],",
                 ));
             }
-            cases_and_lifts_expr.push(']');
-            format!("{lift_fn}({cases_and_lifts_expr})")
+            lift_metas_expr.push(']');
+
+            format!(
+                "{lift_fn}({{
+                     caseMetas: {lift_metas_expr},
+                     variantSize32: {variant_size32},
+                     variantAlign32: {variant_align32},
+                     variantPayloadOffset32: {variant_payload_offset32},
+                     variantFlatCount: {variant_flat_count},
+                 }} )"
+            )
         }
 
         InterfaceType::List(ty_idx) => {
@@ -5186,40 +5205,61 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name();
             let enum_ty = &component_types[*ty_idx];
-            let size_32 = enum_ty.abi.size32;
-            let align_32 = enum_ty.abi.align32;
-            let payload_offset_32 = enum_ty.info.payload_offset32;
-            let flat_count = flat_count_js_expr(&enum_ty.abi.flat_count);
+            let enum_size32 = enum_ty.abi.size32;
+            let enum_align32 = enum_ty.abi.align32;
+            let enum_payload_offset32 = enum_ty.info.payload_offset32;
+            let enum_flat_count = flat_count_js_expr(&enum_ty.abi.flat_count);
 
             let mut elem_lifts_expr = String::from("[");
             for name in &enum_ty.names {
                 elem_lifts_expr.push_str(&format!(
-                    "['{name}', null, {size_32}, {align_32}, {payload_offset_32}, 0, {flat_count}],"
+                    "['{name}', null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],"
                 ));
             }
             elem_lifts_expr.push(']');
 
-            format!("{f}({elem_lifts_expr})")
+            format!(
+                r#"
+                  {f}({{
+                      caseMetas: {elem_lifts_expr},
+                      variantSize32: {enum_size32},
+                      variantAlign32: {enum_align32},
+                      variantPayloadOffset32: {enum_payload_offset32},
+                      variantFlatCount: {enum_flat_count},
+                  }})
+               "#
+            )
         }
 
         InterfaceType::Option(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name();
             let option_ty = &component_types[*ty_idx];
-            let payload_offset_32 = option_ty.info.payload_offset32;
-            let align_32 = option_ty.abi.align32;
-            let size_32 = option_ty.abi.size32;
-            let flat_count = flat_count_js_expr(&option_ty.abi.flat_count);
-            let some_flat_count =
-                flat_count_js_expr(&component_types.canonical_abi(&option_ty.ty).flat_count);
-            let lift_fn_js =
+            let option_payload_offset32 = option_ty.info.payload_offset32;
+            let option_align32 = option_ty.abi.align32;
+            let option_size32 = option_ty.abi.size32;
+            let option_flat_count = flat_count_js_expr(&option_ty.abi.flat_count);
+
+            let some_ty_abi = component_types.canonical_abi(&option_ty.ty);
+            let some_ty_flat_count = flat_count_js_expr(&some_ty_abi.flat_count);
+            let some_ty_size32 = some_ty_abi.size32;
+            let some_ty_align32 = some_ty_abi.align32;
+            let some_ty_lift_fn_js =
                 gen_flat_lift_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
-            // NOTE: options are treated as variants
+
             format!(
-                "{f}([
-                     ['none', null, {size_32}, {align_32}, {payload_offset_32}, 0, {flat_count} ],
-                     ['some', {lift_fn_js}, {size_32}, {align_32}, {payload_offset_32}, {some_flat_count}, {flat_count} ],
-                 ])"
+                r#"
+                {f}({{
+                    caseMetas: [
+                        ['none', null, 0, 0, 0 ],
+                        ['some', {some_ty_lift_fn_js}, {some_ty_size32}, {some_ty_align32}, {some_ty_flat_count} ],
+                    ],
+                    variantSize32: {option_size32},
+                    variantAlign32: {option_align32},
+                    variantPayloadOffset32: {option_payload_offset32},
+                    variantFlatCount: {option_flat_count},
+                }})
+                "#
             )
         }
 
@@ -5227,55 +5267,52 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
             let result_ty = &component_types[*ty_idx];
+            let result_size32 = result_ty.abi.size32;
+            let result_align32 = result_ty.abi.align32;
+            let result_payload_offset32 = result_ty.info.payload_offset32;
             let result_flat_count = flat_count_js_expr(&result_ty.abi.flat_count);
-            let mut cases_and_lifts_expr = String::from("[");
 
+            let mut cases_and_lifts_expr = String::from("[");
             if let Some(ok_ty) = result_ty.ok {
-                let ok_flat_count =
-                    flat_count_js_expr(&component_types.canonical_abi(&ok_ty).flat_count);
+                let ok_ty_abi = component_types.canonical_abi(&ok_ty);
+                let ok_ty_size32 = ok_ty_abi.size32;
+                let ok_ty_align32 = ok_ty_abi.align32;
+                let ok_flat_count = flat_count_js_expr(&ok_ty_abi.flat_count);
+                let ok_ty_lift_fn =
+                    gen_flat_lift_fn_js_expr(instantiator, &ok_ty, extra_resource_map);
                 cases_and_lifts_expr.push_str(&format!(
-                    "['ok', {}, {}, {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(instantiator, &ok_ty, extra_resource_map),
-                    result_ty.abi.size32,
-                    result_ty.abi.align32,
-                    result_ty.info.payload_offset32,
-                    ok_flat_count,
-                    result_flat_count,
+                    "['ok', {ok_ty_lift_fn}, {ok_ty_size32}, {ok_ty_align32}, {ok_flat_count}],",
                 ))
             } else {
-                cases_and_lifts_expr.push_str(&format!(
-                    "['ok', null, {}, {}, {}, 0, {}],",
-                    result_ty.abi.size32,
-                    result_ty.abi.align32,
-                    result_ty.info.payload_offset32,
-                    result_flat_count,
-                ));
+                cases_and_lifts_expr.push_str("['ok', null, 0, 0, 0],");
             }
 
             if let Some(err_ty) = &result_ty.err {
-                let err_flat_count =
-                    flat_count_js_expr(&component_types.canonical_abi(err_ty).flat_count);
+                let err_ty_abi = component_types.canonical_abi(err_ty);
+                let err_ty_size32 = err_ty_abi.size32;
+                let err_ty_align32 = err_ty_abi.align32;
+                let err_ty_flat_count = flat_count_js_expr(&err_ty_abi.flat_count);
+                let err_ty_lift_fn =
+                    gen_flat_lift_fn_js_expr(instantiator, err_ty, extra_resource_map);
                 cases_and_lifts_expr.push_str(&format!(
-                    "['err', {}, {}, {}, {}, {}, {}],",
-                    gen_flat_lift_fn_js_expr(instantiator, err_ty, extra_resource_map),
-                    result_ty.abi.size32,
-                    result_ty.abi.align32,
-                    result_ty.info.payload_offset32,
-                    err_flat_count,
-                    result_flat_count,
+                    "['err', {err_ty_lift_fn}, {err_ty_size32}, {err_ty_align32}, {err_ty_flat_count}],",
                 ))
             } else {
-                cases_and_lifts_expr.push_str(&format!(
-                    "['err', null, {}, {}, {}, 0, {}],",
-                    result_ty.abi.size32,
-                    result_ty.abi.align32,
-                    result_ty.info.payload_offset32,
-                    result_flat_count,
-                ));
+                cases_and_lifts_expr.push_str("['err', null, 0, 0, 0],");
             }
-
             cases_and_lifts_expr.push(']');
-            format!("{lift_fn}({cases_and_lifts_expr})")
+
+            format!(
+                r#"
+                  {lift_fn}({{
+                      caseMetas: {cases_and_lifts_expr},
+                      variantSize32: {result_size32},
+                      variantAlign32: {result_align32},
+                      variantPayloadOffset32: {result_payload_offset32},
+                      variantFlatCount: {result_flat_count},
+                  }})
+                "#
+            )
         }
 
         InterfaceType::Own(ty_idx) => {
@@ -5629,14 +5666,30 @@ pub fn gen_flat_lower_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
+            let variant_flat_count = flat_count_js_expr(&variant_ty.abi.flat_count);
             let size32 = variant_ty.abi.size32;
             let align32 = variant_ty.abi.align32;
             let payload_offset32 = variant_ty.info.payload_offset32;
 
             let mut lower_metas_expr = String::from("[");
             for (name, maybe_ty) in variant_ty.cases.iter() {
+                let (case_size32, case_align32, case_flat_count) = if let Some(iface_ty) = maybe_ty
+                {
+                    let cabi_info = component_types.canonical_abi(iface_ty);
+                    (
+                        cabi_info.size32.to_string(),
+                        cabi_info.align32.to_string(),
+                        cabi_info
+                            .flat_count(MAX_FLAT_PARAMS)
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "null".into()),
+                    )
+                } else {
+                    ("0".into(), "0".into(), "0".into())
+                };
+
                 lower_metas_expr.push_str(&format!(
-                    "[ '{name}', {}, {size32}, {align32}, {payload_offset32} ],",
+                    "[ '{name}', {}, {case_size32}, {case_align32}, {case_flat_count} ],",
                     maybe_ty
                         .map(|ty| gen_flat_lower_fn_js_expr(instantiator, &ty, &None))
                         .unwrap_or_else(|| "null".into()),
@@ -5644,7 +5697,15 @@ pub fn gen_flat_lower_fn_js_expr(
             }
             lower_metas_expr.push(']');
 
-            format!("{lower_fn}({lower_metas_expr})")
+            format!(
+                "{lower_fn}({{
+                     caseMetas: {lower_metas_expr},
+                     variantSize32: {size32},
+                     variantAlign32: {align32},
+                     variantPayloadOffset32: {payload_offset32},
+                     variantFlatCount: {variant_flat_count},
+                 }} )"
+            )
         }
 
         InterfaceType::List(ty_idx) => {
@@ -5747,36 +5808,60 @@ pub fn gen_flat_lower_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum).name();
             let enum_ty = &component_types[*ty_idx];
-            let size32 = enum_ty.abi.size32;
-            let align32 = enum_ty.abi.align32;
-            let payload_offset32 = enum_ty.info.payload_offset32;
+            let enum_size32 = enum_ty.abi.size32;
+            let enum_align32 = enum_ty.abi.align32;
+            let enum_flat_count = flat_count_js_expr(&enum_ty.abi.flat_count);
+            let enum_payload_offset32 = enum_ty.info.payload_offset32;
 
             let mut elem_lowers_expr = String::from("[");
             for name in &enum_ty.names {
                 elem_lowers_expr.push_str(&format!(
-                    "['{name}', null, {size32}, {align32}, {payload_offset32}],"
+                    "['{name}', null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],"
                 ));
             }
             elem_lowers_expr.push(']');
 
-            format!("{f}({elem_lowers_expr})")
+            format!(
+                r#"
+                  {f}({{
+                       caseMetas: {elem_lowers_expr},
+                       variantSize32: {enum_size32},
+                       variantAlign32: {enum_align32},
+                       variantPayloadOffset32: {enum_payload_offset32},
+                       variantFlatCount: {enum_flat_count},
+                  }})
+                "#
+            )
         }
 
         InterfaceType::Option(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
             let option_ty = &component_types[*ty_idx];
-            let size32 = option_ty.abi.size32;
-            let align32 = option_ty.abi.align32;
-            let payload_offset32 = option_ty.info.payload_offset32;
-            let lower_fn_js =
+            let option_size32 = option_ty.abi.size32;
+            let option_align32 = option_ty.abi.align32;
+            let option_payload_offset32 = option_ty.info.payload_offset32;
+            let option_flat_count = flat_count_js_expr(&option_ty.abi.flat_count);
+
+            let some_ty_abi = component_types.canonical_abi(&option_ty.ty);
+            let some_ty_flat_count = flat_count_js_expr(&some_ty_abi.flat_count);
+            let some_ty_size32 = some_ty_abi.size32;
+            let some_ty_align32 = some_ty_abi.align32;
+            let some_ty_lower_fn_js =
                 gen_flat_lower_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
 
             format!(
-                r#"{f}([
-                       [ 'none', null, {size32}, {align32}, {payload_offset32} ],
-                       [ 'some', {lower_fn_js}, {size32}, {align32}, {payload_offset32} ],
-                   ])
+                r#"
+                  {f}({{
+                       caseMetas: [
+                           [ 'none', null, 0, 0, 0 ],
+                           [ 'some', {some_ty_lower_fn_js}, {some_ty_size32}, {some_ty_align32}, {some_ty_flat_count}],
+                       ],
+                       variantSize32: {option_size32},
+                       variantAlign32: {option_align32},
+                       variantPayloadOffset32: {option_payload_offset32},
+                       variantFlatCount: {option_flat_count},
+                   }})
                 "#
             )
         }
@@ -5785,9 +5870,11 @@ pub fn gen_flat_lower_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
             let result_ty = &component_types[*ty_idx];
-            let size32 = result_ty.abi.size32;
-            let align32 = result_ty.abi.align32;
-            let payload_offset32 = result_ty.info.payload_offset32;
+            let result_size32 = result_ty.abi.size32;
+            let result_align32 = result_ty.abi.align32;
+            let result_payload_offset32 = result_ty.info.payload_offset32;
+            let result_flat_count = flat_count_js_expr(&result_ty.abi.flat_count);
+
             let ok_lower_fn_js = result_ty
                 .ok
                 .map(|ty| gen_flat_lower_fn_js_expr(instantiator, &ty, extra_resource_map))
@@ -5798,10 +5885,17 @@ pub fn gen_flat_lower_fn_js_expr(
                 .unwrap_or_else(|| "null".into());
 
             format!(
-                r#"{lower_fn}([
-                       [ 'ok', {ok_lower_fn_js}, {size32}, {align32}, {payload_offset32} ],
-                       [ 'err', {err_lower_fn_js}, {size32}, {align32}, {payload_offset32} ],
-                   ])
+                r#"
+                   {lower_fn}({{
+                       caseMetas: [
+                           [ 'ok', {ok_lower_fn_js}, {result_size32}, {result_align32}, {result_payload_offset32} ],
+                           [ 'err', {err_lower_fn_js}, {result_size32}, {result_align32}, {result_payload_offset32} ],
+                       ],
+                       variantSize32: {result_size32},
+                       variantAlign32: {result_align32},
+                       variantPayloadOffset32: {result_payload_offset32},
+                       variantFlatCount: {result_flat_count},
+                   }})
                 "#
             )
         }
