@@ -303,7 +303,10 @@ suite("future<T> lowers", () => {
                 );
             }
 
-            vals = [{ tag: "float", val: 123.1 }];
+            vals = [
+                { tag: "float", val: 123.1 },
+                { tag: "float64", val: 246.2 },
+            ];
             for (const [idx, v] of vals.entries()) {
                 const returned = await instance["jco:test-components/future-lower-async"].readFutureValueVariant(
                     Promise.resolve(v),
@@ -312,7 +315,7 @@ suite("future<T> lowers", () => {
             }
         });
 
-        test("tuple", async () => {
+        test.concurrent("tuple", async () => {
             assert.instanceOf(instance["jco:test-components/future-lower-async"].readFutureValueTuple, AsyncFunction);
 
             let vals = [

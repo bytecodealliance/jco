@@ -47,6 +47,7 @@ interface example-types {
         num(u32),
         str(string),
         float(f32),
+        float64(f64),
         maybe-u32(option<u32>),
     }
 
