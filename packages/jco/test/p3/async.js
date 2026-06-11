@@ -75,6 +75,11 @@ suite("Async (WASI P3)", () => {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, "async-simple-return.wasm"),
                 imports: new WASIShim().getImportObject(),
             },
+            // jco: {
+            //     extraArgs: {
+            //         minify: false
+            //     }
+            // }
         });
 
         assert.instanceOf(instance.getString, AsyncFunction);
