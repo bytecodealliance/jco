@@ -9,7 +9,7 @@ WIT_DIR="$REPO_ROOT/packages/jco/test/fixtures/p3/wit"
 TYPES_DIR="$REPO_ROOT/packages/preview3-shim/types"
 
 # Update world.wit to the latest version from the registry and we extract it from there
-VERSION=$(grep -oP '@\K[0-9a-z.\-]+' "$WIT_DIR/world.wit" | head -1)
+VERSION=$(sed -n 's/.*@\([0-9a-z.\-]*\).*/\1/p' "$WIT_DIR/world.wit" | head -1)
 if [ -z "$VERSION" ]; then
   echo "Error: could not extract version from world.wit" >&2
   exit 1
