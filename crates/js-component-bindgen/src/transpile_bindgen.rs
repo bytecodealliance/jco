@@ -6442,12 +6442,12 @@ mod tests {
             "@bytecodealliance/preview2-shim/cli#*".into(),
         );
         map.insert(
-            "wasi:cli/*@0.3.0-rc-2026-03-15".into(),
+            "wasi:cli/*@0.3.0".into(),
             "@bytecodealliance/preview3-shim/cli#*".into(),
         );
         let map = Some(map);
         assert_eq!(
-            map_import(&map, "wasi:cli/stdout@0.3.0-rc-2026-03-15"),
+            map_import(&map, "wasi:cli/stdout@0.3.0"),
             (
                 "@bytecodealliance/preview3-shim/cli".into(),
                 Some("stdout".into())
