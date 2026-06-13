@@ -1,19 +1,19 @@
-/** @module Interface wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15 **/
+/** @module Interface wasi:sockets/ip-name-lookup@0.3.0 **/
 /**
  * Resolve an internet host name to a list of IP addresses.
- *
+ * 
  * Unicode domain names are automatically converted to ASCII using IDNA
  * encoding. If the input is an IP address string, the address is parsed
  * and returned as-is without making any external requests.
- *
+ * 
  * See the wasi-socket proposal README.md for a comparison with getaddrinfo.
- *
+ * 
  * The results are returned in connection order preference.
- *
+ * 
  * This function never succeeds with 0 results. It either fails or succeeds
  * with at least one address. Additionally, this function never returns
  * IPv4-mapped IPv6 addresses.
- *
+ * 
  * # References:
  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
  * - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
@@ -28,7 +28,7 @@ export type IpAddress = import('./wasi-sockets-types.js').IpAddress;
 export type ErrorCode = ErrorCodeAccessDenied | ErrorCodeInvalidArgument | ErrorCodeNameUnresolvable | ErrorCodeTemporaryResolverFailure | ErrorCodePermanentResolverFailure | ErrorCodeOther;
 /**
  * Access denied.
- *
+ * 
  * POSIX equivalent: EACCES, EPERM
  */
 export interface ErrorCodeAccessDenied {
@@ -36,7 +36,7 @@ export interface ErrorCodeAccessDenied {
 }
 /**
  * `name` is a syntactically invalid domain name or IP address.
- *
+ * 
  * POSIX equivalent: EINVAL
  */
 export interface ErrorCodeInvalidArgument {
@@ -44,7 +44,7 @@ export interface ErrorCodeInvalidArgument {
 }
 /**
  * Name does not exist or has no suitable associated IP addresses.
- *
+ * 
  * POSIX equivalent: EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY
  */
 export interface ErrorCodeNameUnresolvable {
@@ -52,7 +52,7 @@ export interface ErrorCodeNameUnresolvable {
 }
 /**
  * A temporary failure in name resolution occurred.
- *
+ * 
  * POSIX equivalent: EAI_AGAIN
  */
 export interface ErrorCodeTemporaryResolverFailure {
@@ -60,7 +60,7 @@ export interface ErrorCodeTemporaryResolverFailure {
 }
 /**
  * A permanent failure in name resolution occurred.
- *
+ * 
  * POSIX equivalent: EAI_FAIL
  */
 export interface ErrorCodePermanentResolverFailure {
