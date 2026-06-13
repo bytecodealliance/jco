@@ -10,7 +10,7 @@ import { future } from "@bytecodealliance/preview3-shim/future";
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
 
-const WASI_HTTP_HANDLER_EXPORT = "wasi:http/handler@0.3.0-rc-2026-03-15";
+const WASI_HTTP_HANDLER_EXPORT = "wasi:http/handler@0.3.0";
 
 const DEFAULT_REQUEST = {
     method: "GET",
