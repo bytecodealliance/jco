@@ -134,7 +134,7 @@ export async function transpileComponent(component, opts = {}) {
     }
 
     if (opts.wasiShim !== false) {
-        const p3VersionTag = "0.3.0-rc-2026-03-15";
+        const p3VersionTag = "0.3.0";
         opts.map = Object.assign(
             {
                 "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
