@@ -1,4 +1,4 @@
-/** @module Interface wasi:http/types@0.3.0-rc-2026-03-15 **/
+/** @module Interface wasi:http/types@0.3.0 **/
 export type Duration = import('./wasi-clocks-types.js').Duration;
 /**
  * This type corresponds to HTTP standard Methods.
@@ -294,7 +294,7 @@ export interface RequestOptionsErrorOther {
 }
 /**
  * Field names are always strings.
- *
+ * 
  * Field names should always be treated as case insensitive by the `fields`
  * resource for the purposes of equality checking.
  */
@@ -322,24 +322,24 @@ export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 export class Fields {
   /**
   * Construct an empty HTTP Fields.
-  *
+  * 
   * The resulting `fields` is mutable.
   */
   constructor()
   /**
   * Construct an HTTP Fields.
-  *
+  * 
   * The resulting `fields` is mutable.
-  *
+  * 
   * The list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
   * list with the same name.
-  *
+  * 
   * The tuple is a pair of the field name, represented as a string, and
   * Value, represented as a list of bytes. In a valid Fields, all names
   * and values are valid UTF-8 strings. However, values are not always
   * well-formed, so they are represented as a raw list of bytes.
-  *
+  * 
   * An error result will be returned if any header or value was
   * syntactically invalid, if a header was forbidden, or if the
   * entries would exceed an implementation size limit.
@@ -360,9 +360,9 @@ export class Fields {
   /**
   * Set all of the values for a name. Clears any existing values for that
   * name, if they have been set.
-  *
+  * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
-  *
+  * 
   * Fails with `header-error.size-exceeded` if the name or values would
   * exceed an implementation-defined size limit.
   */
@@ -370,25 +370,25 @@ export class Fields {
   /**
   * Delete all values for a name. Does nothing if no values for the name
   * exist.
-  *
+  * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
   */
   'delete'(name: FieldName): void;
   /**
   * Delete all values for a name. Does nothing if no values for the name
   * exist.
-  *
+  * 
   * Returns all values previously corresponding to the name, if any.
-  *
+  * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
   */
   getAndDelete(name: FieldName): Array<FieldValue>;
   /**
   * Append a value for a name. Does not change or delete any existing
   * values for that name.
-  *
+  * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
-  *
+  * 
   * Fails with `header-error.size-exceeded` if the value would exceed
   * an implementation-defined size limit.
   */
@@ -396,11 +396,11 @@ export class Fields {
   /**
   * Retrieve the full set of names and values in the Fields. Like the
   * constructor, the list represents each name-value pair.
-  *
+  * 
   * The outer list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
   * list with the same name.
-  *
+  * 
   * The names and values are always returned in the original casing and in
   * the order in which they will be serialized for transport.
   */
@@ -421,24 +421,24 @@ export class Request {
   /**
   * Construct a new `request` with a default `method` of `GET`, and
   * `none` values for `path-with-query`, `scheme`, and `authority`.
-  *
+  * 
   * `headers` is the HTTP Headers for the Request.
-  *
+  * 
   * `contents` is the optional body content stream with `none`
   * representing a zero-length content stream.
   * Once it is closed, `trailers` future must resolve to a result.
   * If `trailers` resolves to an error, underlying connection
   * will be closed immediately.
-  *
+  * 
   * `options` is optional `request-options` resource to be used
   * if the request is sent over a network connection.
-  *
+  * 
   * It is possible to construct, or manipulate with the accessor functions
   * below, a `request` with an invalid combination of `scheme`
   * and `authority`, or `headers` which are not permitted to be sent.
   * It is the obligation of the `handler.handle` implementation
   * to reject invalid constructions of `request`.
-  *
+  * 
   * The returned future resolves to result of transmission of this request.
   */
   static 'new'(headers: Headers, contents: ReadableStream<number> | undefined, trailers: Promise<Result<Trailers | undefined, ErrorCode>>, options: RequestOptions | undefined): [Request, Promise<Result<void, ErrorCode>>];
@@ -488,10 +488,10 @@ export class Request {
   setAuthority(authority: string | undefined): void;
   /**
   * Get the `request-options` to be associated with this request
-  *
+  * 
   * The returned `request-options` resource is immutable: `set-*` operations
   * will fail if invoked.
-  *
+  * 
   * This `request-options` resource is a child: it must be dropped before
   * the parent `request` is dropped, or its ownership is transferred to
   * another component by e.g. `handler.handle`.
@@ -499,22 +499,22 @@ export class Request {
   getOptions(): RequestOptions | undefined;
   /**
   * Get the headers associated with the Request.
-  *
+  * 
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
   */
   getHeaders(): Headers;
   /**
   * Get body of the Request.
-  *
+  * 
   * Stream returned by this method represents the contents of the body.
   * Once the stream is reported as closed, callers should await the returned
   * future to determine whether the body was received successfully.
   * The future will only resolve after the stream is reported as closed.
-  *
+  * 
   * This function takes a `res` future as a parameter, which can be used to
   * communicate an error in handling of the request.
-  *
+  * 
   * Note that function will move the `request`, but references to headers or
   * request options acquired from it previously will remain valid.
   */
@@ -573,15 +573,15 @@ export class Response {
   * Construct a new `response`, with a default `status-code` of `200`.
   * If a different `status-code` is needed, it must be set via the
   * `set-status-code` method.
-  *
+  * 
   * `headers` is the HTTP Headers for the Response.
-  *
+  * 
   * `contents` is the optional body content stream with `none`
   * representing a zero-length content stream.
   * Once it is closed, `trailers` future must resolve to a result.
   * If `trailers` resolves to an error, underlying connection
   * will be closed immediately.
-  *
+  * 
   * The returned future resolves to result of transmission of this response.
   */
   static 'new'(headers: Headers, contents: ReadableStream<number> | undefined, trailers: Promise<Result<Trailers | undefined, ErrorCode>>): [Response, Promise<Result<void, ErrorCode>>];
@@ -596,22 +596,22 @@ export class Response {
   setStatusCode(statusCode: StatusCode): void;
   /**
   * Get the headers associated with the Response.
-  *
+  * 
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
   */
   getHeaders(): Headers;
   /**
   * Get body of the Response.
-  *
+  * 
   * Stream returned by this method represents the contents of the body.
   * Once the stream is reported as closed, callers should await the returned
   * future to determine whether the body was received successfully.
   * The future will only resolve after the stream is reported as closed.
-  *
+  * 
   * This function takes a `res` future as a parameter, which can be used to
   * communicate an error in handling of the response.
-  *
+  * 
   * Note that function will move the `response`, but references to headers
   * acquired from it previously will remain valid.
   */

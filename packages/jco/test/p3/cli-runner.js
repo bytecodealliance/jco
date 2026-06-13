@@ -11,7 +11,7 @@ import {
     _setTerminalStderr,
 } from "@bytecodealliance/preview3-shim/cli";
 
-const WASI_CLI_RUN_EXPORT = "wasi:cli/run@0.3.0-rc-2026-03-15";
+const WASI_CLI_RUN_EXPORT = "wasi:cli/run@0.3.0";
 
 const [, , esModuleHref, preopenDir, argsJson] = argv;
 if (!esModuleHref || !preopenDir || !argsJson) {
