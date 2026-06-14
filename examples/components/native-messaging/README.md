@@ -22,7 +22,7 @@ bun x jco componentize nm_componentize_js.js --wit . --world-name native-messagi
 
 ```
 
-# Installation and usage on Chrome and Chromium
+### Installation and usage on Chrome and Chromium
 
 1. Navigate to `chrome://extensions`.
 2. Toggle `Developer mode`.
@@ -37,7 +37,7 @@ The Native Messaging host echoes back the message passed.
 
 
 
-# Examples
+### Examples
 
 
 The maximum message length sent from the client to the host in one message is 64 MiB of JSON. The host can only send 1 MiB of valid JSON back to the client per message. This host is implemented to handle JSON `Array` messages from the client over 1 MiB; since a JSON `Array` is similar in structure to a `Uint8Array` (essentially any data type can be converted to a `u8` type and written to a `Uint8Array`) facilitating streaming data back and forth between browser and native applications.
