@@ -67,12 +67,12 @@ port.postMessage(data);
 data.length = 0;
 ```
 
-Send arbitrary command to the host to execute and send results back, e.g., a REPL. Using `sendNativeMessage` sends one message at a time, the callback receives the message from the host, and then the process exits.
+Using `sendNativeMessage` sends one message at a time, the callback receives the message from the host, and then the process exits. Send arbitrary command to the host to execute and send results back, e.g., a REPL (requires modification of the base echo/roundtrip example host `nm_componentize_js.js`).
 
 ```javascript
 chrome.runtime.sendNativeMessage(
   "nm_componentize_js", 
-  { command: `node -e 'console.log(require("fs").readFileSync("package.wit"))` }, 
+  { command: "deno eval 'Deno.stdout.write(new TextEncoder().encode(JSON.stringify(Deno.version)))'" }, 
   (message) => {
   if (chrome.runtime.lastError) {
     console.error(chrome.runtime.lastError);
