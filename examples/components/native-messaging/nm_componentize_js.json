@@ -1,0 +1,9 @@
+{
+  "name": "nm_componentize_js",
+  "description": "ComponentizeJS Native Messaging host",
+  "path": "/ABSOLUTE/PATH/TO/jco/examples/nm_componentize_js.sh",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://<ID>/"
+  ]
+}
