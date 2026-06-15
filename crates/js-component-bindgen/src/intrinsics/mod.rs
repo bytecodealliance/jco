@@ -1360,7 +1360,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
         | args
             .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
     {
         args.intrinsics
             .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
