@@ -724,7 +724,7 @@ impl LiftIntrinsic {
 
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
-                            const offset = ctx.params[0];
+                            let offset = ctx.params[0];
                             if (typeof offset === 'bigint') {{ offset = Number(offset); }}
                             if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
