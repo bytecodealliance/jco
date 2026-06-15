@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.1] - 2026-06-15
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ storage len accounting when lifting lists by @vados-cosmonic in #1634
+
+
+
+
 ## [2.0.0] - 2026-06-11
 
 ### 🐛 Bug Fixes
