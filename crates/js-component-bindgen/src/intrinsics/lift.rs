@@ -933,7 +933,7 @@ impl LiftIntrinsic {
                             ? values => values
                             : values => new typedArray(values);
 
-                        const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {{
+                        const readValuesAndReset = (ctx, originalPtr, originalLen, dataPtr, len) => {{
                             ctx.storagePtr = dataPtr;
                             const val = [];
                             for (var i = 0; i < len; i++) {{
@@ -946,6 +946,7 @@ impl LiftIntrinsic {
                                 ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
                             }}
                             if (originalPtr !== null) {{ ctx.storagePtr = originalPtr; }}
+                            if (originalLen !== null) {{ ctx.storageLen = originalLen; }}
                             return [listValue(val), ctx];
                         }};
 
@@ -964,8 +965,11 @@ impl LiftIntrinsic {
                                         throw new Error(`memory missing while lifting known length (${{knownLen}}) list`);
                                     }}
 
+                                    const originalLen = ctx.storageLen;
+                                    const originalPtr = ctx.storagePtr;
+
                                     ctx.storageLen = knownLen * elemSize32;
-                                    liftResults = readValuesAndReset(ctx, null, ctx.storagePtr, knownLen);
+                                    liftResults = readValuesAndReset(ctx, null, originalLen, ctx.storagePtr, knownLen);
                                 }}
 
                             }} else {{ // unknown length list
@@ -978,16 +982,15 @@ impl LiftIntrinsic {
 
                                     ctx.useDirectParams = false;
                                     const originalPtr = ctx.storagePtr;
+                                    const originalLen = ctx.storageLen;
                                     ctx.storageLen = len * elemSize32;
 
-                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+                                    liftResults = readValuesAndReset(ctx, originalPtr, originalLen, dataPtr, len);
 
                                     ctx.useDirectParams = true;
-                                    ctx.storagePtr = undefined;
-                                    ctx.storageLen = undefined;
-
                                 }} else {{
                                     // unknown length list ptr w/ in-memory params
+                                    const originalLen = ctx.storageLen;
                                     ctx.storageLen = 8;
 
                                     const dataPtrLiftRes = {lift_u32}(ctx);
@@ -1002,7 +1005,7 @@ impl LiftIntrinsic {
                                     ctx.storagePtr = dataPtr;
 
                                     ctx.storageLen = len * elemSize32;
-                                    liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+                                    liftResults = readValuesAndReset(ctx, originalPtr, originalLen, dataPtr, len);
                                 }}
                             }}
 
