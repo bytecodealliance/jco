@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.2] - 2026-06-15
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ update to WASI 0.3.0 by @vados-cosmonic
+
+
+
+
 ## [2.0.1] - 2026-06-15
 
 ### 🐛 Bug Fixes
