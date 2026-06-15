@@ -599,3 +599,42 @@ suite("stream<T> lifts", () => {
         assert.isUndefined(value);
     });
 });
+
+suite("storage len budgeting", () => {
+    // see: https://github.com/bytecodealliance/jco/issues/1633
+    test.concurrent("storage len budget during record lift", async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, "byte-batch-producer.wasm"),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                },
+            },
+        });
+
+        try {
+            const stream = await instance["jco:test-components/byte-batch-example"].run();
+            let vals = [];
+            for await (const b of stream) {
+                vals.push(b);
+            }
+            assert.deepStrictEqual(vals, [
+                {
+                    bytes: new Uint8Array([1, 2, 3]),
+                    len: 3,
+                    msg: "example",
+                },
+            ]);
+        } finally {
+            await cleanup();
+        }
+    });
+});

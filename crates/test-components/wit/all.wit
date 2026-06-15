@@ -546,3 +546,18 @@ world pass-back-host-resolved-future-value {
     import send: async func(f: future<u32>) -> u32;
     export local-run-async;
 }
+
+
+// see: https://github.com/bytecodealliance/jco/issues/1633
+interface byte-batch-example {
+    record byte-batch {
+        bytes: list<u8>,
+        len: u32,
+        msg: string,
+    }
+
+    run: async func() -> stream<byte-batch>;
+}
+world byte-batch-producer {
+    export byte-batch-example;
+}
