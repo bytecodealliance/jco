@@ -1551,6 +1551,12 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ]);
     }
 
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::ExternalStreamClass,
+    )) {
+        args.intrinsics.insert(Intrinsic::SymbolResourceRep);
+    }
+
     if args
         .intrinsics
         .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
