@@ -546,8 +546,7 @@ jobs:
             is-composed: true
           - name: webidl-book-library
             workspace: examples/components/webidl-book-library
-            requires-crates:
-              - webidl2wit-cli
+            used-webidl2wit: true
           - name: node-fetch
             workspace: examples/components/node-fetch
           - name: http-hello-world
@@ -603,14 +602,14 @@ jobs:
             packages/jco-transpile/vendor
 
       - name: Install Rust
-        if: ${{ toJSON(matrix.project.requires-crates) != '[]' }}
+        if: ${{ matrix.project.uses-webidl2wit }}
         run: rustup update stable --no-self-update && rustup default stable
 
-      - name: Install required rust crates
-        if: ${{ toJSON(matrix.project.requires-crates) != '[]' }}
-        uses: taiki-e/install-action@56545b37b57562edd73171cb6c62cc509db4c34e # v2
+      - name: install webidl2wit-cli
+        if: ${{ matrix.project.uses-webidl2wit }}
+        uses: taiki-e/cache-cargo-install-action@417450f3c33ee20393705369577571770643d4c7 # v3.0.7
         with:
-          tool: ${{ join(matrix.project.requires-crates, ',') }}
+          tool: webidl2wit-cli
 
       - name: Install wac
         if: ${{ matrix.project.is-composed }}
