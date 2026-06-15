@@ -546,7 +546,7 @@ jobs:
             is-composed: true
           - name: webidl-book-library
             workspace: examples/components/webidl-book-library
-            used-webidl2wit: true
+            uses-webidl2wit: true
           - name: node-fetch
             workspace: examples/components/node-fetch
           - name: http-hello-world
