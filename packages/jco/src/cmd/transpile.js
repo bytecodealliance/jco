@@ -29,6 +29,8 @@ import { isWindows } from "../common.js";
 // These re-exports exist to avoid breaking backwards compatibility
 export { types, guestTypes, typesComponent } from "./types.js";
 
+const SUPPORTED_P3_VERSIONS = ["0.3.0-rc-2026-03-15", "0.3.0"];
+
 export async function transpile(witPath, opts, program) {
     const varIdx = program?.parent.rawArgs.indexOf("--");
     if (varIdx !== undefined && varIdx !== -1) {
@@ -134,25 +136,36 @@ export async function transpileComponent(component, opts = {}) {
     }
 
     if (opts.wasiShim !== false) {
-        const p3VersionTag = "0.3.0";
-        opts.map = Object.assign(
-            {
-                "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
-                "wasi:clocks/*": "@bytecodealliance/preview2-shim/clocks#*",
-                "wasi:filesystem/*": "@bytecodealliance/preview2-shim/filesystem#*",
-                "wasi:http/*": "@bytecodealliance/preview2-shim/http#*",
-                "wasi:io/*": "@bytecodealliance/preview2-shim/io#*",
-                "wasi:random/*": "@bytecodealliance/preview2-shim/random#*",
-                "wasi:sockets/*": "@bytecodealliance/preview2-shim/sockets#*",
-                [`wasi:cli/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/cli#*",
-                [`wasi:clocks/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/clocks#*",
-                [`wasi:filesystem/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/filesystem#*",
-                [`wasi:http/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/http#*",
-                [`wasi:random/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/random#*",
-                [`wasi:sockets/*@${p3VersionTag}`]: "@bytecodealliance/preview3-shim/sockets#*",
-            },
-            opts.map || {},
-        );
+        const shims = {
+            "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
+            "wasi:clocks/*": "@bytecodealliance/preview2-shim/clocks#*",
+            "wasi:filesystem/*": "@bytecodealliance/preview2-shim/filesystem#*",
+            "wasi:http/*": "@bytecodealliance/preview2-shim/http#*",
+            "wasi:io/*": "@bytecodealliance/preview2-shim/io#*",
+            "wasi:random/*": "@bytecodealliance/preview2-shim/random#*",
+            "wasi:sockets/*": "@bytecodealliance/preview2-shim/sockets#*",
+        };
+
+        // To avoid breaking compatibility with earlier version of p3 (including draft versions),
+        // we over-populate the map with references to the *current* preview3-shim that has been
+        // imported.
+        //
+        // This implicitly upgrades versions of P3 in use (a component that asks for 0.3.0 will get 0.3.1 if that
+        // is the current version in preview3-shim0, but that should be acceptable as p3 should not have breaking
+        // changes going forward.
+        //
+        for (const version of SUPPORTED_P3_VERSIONS) {
+            Object.assign(shims, {
+                [`wasi:cli/*@${version}`]: "@bytecodealliance/preview3-shim/cli#*",
+                [`wasi:clocks/*@${version}`]: "@bytecodealliance/preview3-shim/clocks#*",
+                [`wasi:filesystem/*@${version}`]: "@bytecodealliance/preview3-shim/filesystem#*",
+                [`wasi:http/*@${version}`]: "@bytecodealliance/preview3-shim/http#*",
+                [`wasi:random/*@${version}`]: "@bytecodealliance/preview3-shim/random#*",
+                [`wasi:sockets/*@${version}`]: "@bytecodealliance/preview3-shim/sockets#*",
+            });
+        }
+
+        opts.map = Object.assign(shims, opts.map || {});
     }
 
     let instantiation = null;
