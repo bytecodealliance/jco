@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.23.1] - 2026-06-15
+
+### 🧪 Testing
+
+- _(jco)_ add regression test for storage len budgets during lift by @vados-cosmonic
+
 ## [1.23.0] - 2026-06-11
 
 ### 🚜 Refactor
