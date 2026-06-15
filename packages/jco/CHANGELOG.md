@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.24.0] - 2026-06-15
+
+### 🚜 Refactor
+
+- _(jco)_ map previous p3 versions to avoid breaking changes by @vados-cosmonic in #1627
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update to WASI 0.3.0 by @vados-cosmonic
+
 ## [1.23.1] - 2026-06-15
 
 ### 🧪 Testing
