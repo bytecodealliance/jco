@@ -9,6 +9,6 @@
     "all": "pnpm run build:component && pnpm run transpile && pnpm run demo"
   },
   "dependencies": {
-    "@bytecodealliance/jco": "^1.17.6"
+    "@bytecodealliance/jco": "^1.20.0"
   }
 }
