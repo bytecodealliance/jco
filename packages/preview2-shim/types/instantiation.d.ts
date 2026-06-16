@@ -56,13 +56,13 @@ type VersionedWASIImportObject<V extends string> = {
 type AppendVersion<
     Key extends string | number | symbol,
     Version extends string,
-> = Version extends `${infer V}`
-    ? Key extends `${infer K}`
-        ? Key extends ''
-            ? `${K}`
-            : `${K}@${V}`
-        : never
-    : never;
+> = Version extends ''
+    ? Key
+    : Version extends `${infer V}`
+      ? Key extends `${infer K}`
+          ? `${K}@${V}`
+          : never
+      : never;
 
 /**
  * Sandbox configuration options for WASIShim
