@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.3] - 2026-06-16
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ fix missing async stream early intrinsic by @gurkerl83 in #1646
+
+- _(bindgen)_ include missing enum lifting early intrinsic by @gurkerl83
+
+- _(bindgen)_ utf-16 bindgen by @gurkerl83
+
+
+
+## New Contributors
+* @gurkerl83 made their first contribution in [#1646](https://github.com/bytecodealliance/jco/pull/1646)
+
+
 ## [2.0.2] - 2026-06-15
 
 ### ⚙️ Miscellaneous Tasks
