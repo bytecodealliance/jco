@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.1] - 2026-06-16
+
+This release updates jco-internal `js-component-bindgen` code to v2.0.3, which
+includes some bindgen fixes.
+
+see: https://github.com/bytecodealliance/jco/releases/tag/js-component-bindgen-v2.0.3
+
 ## [1.24.0] - 2026-06-15
 
 ### 🚜 Refactor
