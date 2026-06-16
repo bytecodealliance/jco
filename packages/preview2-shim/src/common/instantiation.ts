@@ -1,0 +1,258 @@
+import * as wasi from "@bytecodealliance/preview2-shim";
+import { types, _createPreopenDescriptor } from "@bytecodealliance/preview2-shim/filesystem";
+import type {
+  WASIShimConfig,
+  GetImportObjectArgs,
+  WASIImportObject,
+} from "../../types/instantiation.js";
+
+/**
+ * (EXPERIMENTAL) A class that holds WASI shims and can be used to configure
+ * an instantiation of a WebAssembly component transpiled with jco
+ * (i.e. via `jco transpile`).
+ *
+ * Normally, transpiled components contain mapping for WASI interfaces
+ * and/or imports that import the relevant packages (ex. `@bytecodealliance/preview2-shim/clocks`)
+ * from the right sources.
+ *
+ * This function makes use of the `WASIShim` object to provide an object that can be easily
+ * fed to the `instantiate` function produced by a transpiled component:
+ *
+ * ```js
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
+ * // ...
+ * import { instantiate } from "path/to/transpiled/component.js"
+ * // ...
+ * const component = await instantiate(null, new WASIShim().getImportObject())
+ * ```
+ *
+ * You can also replace imports that you'd like to override with custom implementations,
+ * by using the `WASIShim` object directly:
+ *
+ * ```js
+ * import { random } from "@bytecodealliance/preview2-shim"
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
+ * // ...
+ * import { instantiate } from "path/to/transpiled/component.js"
+ * // ...
+ * const customWASIShim = new WASIShim({
+ *     random: {
+ *         // For these two interfaces we re-use the default provided shim
+ *         random: random.random,
+ *         insecure-seed: random.insecureSeed,
+ *         // For insecure, we can supply our own custom implementation
+ *         insecure: {
+ *             ...
+ *         }
+ *     }
+ * });
+ *
+ * const component = await instantiate(null, customWASIShim.getImportObject())
+ * ```
+ *
+ * For sandboxing, you can configure preopens, environment variables, and other
+ * capabilities via the `sandbox` option:
+ *
+ * ```js
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
+ *
+ * // Fully sandboxed - no filesystem, network, or env access
+ * const sandboxedShim = new WASIShim({
+ *   sandbox: {
+ *     preopens: {},           // No filesystem access
+ *     env: {},                // No environment variables
+ *     args: ['program'],      // Custom arguments
+ *     enableNetwork: false,   // Disable network (default: true for backward compat)
+ *   }
+ * });
+ *
+ * // Limited filesystem access
+ * const limitedShim = new WASIShim({
+ *   sandbox: {
+ *     preopens: {
+ *       '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+ *       '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+ *     }
+ *   }
+ * });
+ * ```
+ *
+ * Note that this object is similar but not identical to the Node `WASI` object --
+ * it is solely concerned with shimming of preview2 when dealing with a WebAssembly
+ * component transpiled by Jco. While this object *does* work with Node (and the browser)
+ * semantics are not the same as Node's `WASI` object.
+ *
+ * @class WASIShim
+ */
+export class WASIShim {
+  /** Object that confirms to the shim interface for `wasi:cli` */
+  #cli: any;
+  /** Object that confirms to the shim interface for `wasi:filesystem` */
+  #filesystem: any;
+  /** Object that confirms to the shim interface for `wasi:io` */
+  #io: any;
+  /** Object that confirms to the shim interface for `wasi:random` */
+  #random: any;
+  /** Object that confirms to the shim interface for `wasi:clocks` */
+  #clocks: any;
+  /** Object that confirms to the shim interface for `wasi:sockets` */
+  #sockets: any;
+  /** Object that confirms to the shim interface for `wasi:http` */
+  #http: any;
+  /** Isolated preopens for this instance */
+  #preopens: any;
+  /** Isolated environment for this instance */
+  #environment: any;
+
+  /**
+   * Create a new WASIShim instance.
+   *
+   * @param config - Configuration options
+   */
+  constructor(config?: WASIShimConfig) {
+    // Support both old 'shims' parameter name and new 'config' style
+    const shims = config;
+
+    this.#cli = shims?.cli ?? wasi.cli;
+    this.#filesystem = shims?.filesystem ?? wasi.filesystem;
+    this.#io = shims?.io ?? wasi.io;
+    this.#random = shims?.random ?? wasi.random;
+    this.#clocks = shims?.clocks ?? wasi.clocks;
+    this.#sockets = shims?.sockets ?? wasi.sockets;
+    this.#http = shims?.http ?? wasi.http;
+
+    // Extract sandbox options
+    const sandbox = shims?.sandbox;
+
+    // Create isolated preopens if configured
+    if (sandbox?.preopens !== undefined) {
+      this.#preopens = createIsolatedPreopens(sandbox.preopens);
+    }
+
+    // Create isolated environment if env or args are configured
+    if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
+      this.#environment = createIsolatedEnvironment(sandbox?.env, sandbox?.args, this.#cli);
+    }
+
+    // Apply network restrictions if disabled
+    if (sandbox?.enableNetwork === false) {
+      // Use the sockets module's built-in deny functions
+      if (this.#sockets._denyTcp) {
+        this.#sockets._denyTcp();
+      }
+      if (this.#sockets._denyUdp) {
+        this.#sockets._denyUdp();
+      }
+      if (this.#sockets._denyDnsLookup) {
+        this.#sockets._denyDnsLookup();
+      }
+    }
+  }
+
+  /**
+   * Generate an import object for the shim that can be used with
+   * functions like `instantiate` that are exposed from a transpiled
+   * WebAssembly component.
+   *
+   * @param opts - options for import object generation
+   * @returns WASIImportObject
+   */
+  getImportObject(opts?: GetImportObjectArgs) {
+    const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : "";
+
+    const obj = {};
+
+    obj[`wasi:cli/environment${versionSuffix}`] = this.#environment ?? this.#cli.environment;
+    obj[`wasi:cli/exit${versionSuffix}`] = this.#cli.exit;
+    obj[`wasi:cli/stderr${versionSuffix}`] = this.#cli.stderr;
+    obj[`wasi:cli/stdin${versionSuffix}`] = this.#cli.stdin;
+    obj[`wasi:cli/stdout${versionSuffix}`] = this.#cli.stdout;
+    obj[`wasi:cli/terminal-input${versionSuffix}`] = this.#cli.terminalInput;
+    obj[`wasi:cli/terminal-output${versionSuffix}`] = this.#cli.terminalOutput;
+    obj[`wasi:cli/terminal-stderr${versionSuffix}`] = this.#cli.terminalStderr;
+    obj[`wasi:cli/terminal-stdin${versionSuffix}`] = this.#cli.terminalStdin;
+    obj[`wasi:cli/terminal-stdout${versionSuffix}`] = this.#cli.terminalStdout;
+
+    obj[`wasi:sockets/instance-network${versionSuffix}`] = this.#sockets.instanceNetwork;
+    obj[`wasi:sockets/ip-name-lookup${versionSuffix}`] = this.#sockets.ipNameLookup;
+    obj[`wasi:sockets/network${versionSuffix}`] = this.#sockets.network;
+    obj[`wasi:sockets/tcp${versionSuffix}`] = this.#sockets.tcp;
+    obj[`wasi:sockets/tcp-create-socket${versionSuffix}`] = this.#sockets.tcpCreateSocket;
+    obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
+    obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
+
+    obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#preopens ?? this.#filesystem.preopens;
+    obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.types;
+
+    obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
+    obj[`wasi:io/poll${versionSuffix}`] = this.#io.poll;
+    obj[`wasi:io/streams${versionSuffix}`] = this.#io.streams;
+
+    obj[`wasi:random/random${versionSuffix}`] = this.#random.random;
+    obj[`wasi:random/insecure${versionSuffix}`] = this.#random.insecure;
+    obj[`wasi:random/insecure-seed${versionSuffix}`] = this.#random.insecureSeed;
+
+    obj[`wasi:clocks/monotonic-clock${versionSuffix}`] = this.#clocks.monotonicClock;
+    obj[`wasi:clocks/wall-clock${versionSuffix}`] = this.#clocks.wallClock;
+
+    obj[`wasi:http/types${versionSuffix}`] = this.#http.types;
+    obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
+
+    return obj as WASIImportObject;
+  }
+}
+
+/**
+ * Create an isolated preopens object with its own preopen entries.
+ *
+ * @param preopensConfig - Map of virtual paths to host paths
+ * @returns A preopens object with Descriptor and getDirectories()
+ */
+function createIsolatedPreopens(preopensConfig: Record<string, string>) {
+  const entries: any[] = [];
+
+  // Populate entries using the filesystem's descriptor creation
+  if (_createPreopenDescriptor) {
+    for (const [virtualPath, hostPath] of Object.entries(preopensConfig)) {
+      const descriptor = _createPreopenDescriptor(hostPath);
+      entries.push([descriptor, virtualPath]);
+    }
+  }
+
+  return {
+    Descriptor: types.Descriptor,
+    getDirectories() {
+      return entries;
+    },
+  };
+}
+
+/**
+ * Create an isolated CLI environment with its own env and args.
+ *
+ * @param env - Environment variables
+ * @param args - Command-line arguments
+ * @param baseCli - The base CLI module to extend
+ * @returns An isolated CLI environment object
+ */
+function createIsolatedEnvironment(
+  env: Record<string, string> | undefined,
+  args: string[] | undefined,
+  baseCli: any,
+) {
+  const envEntries = env ? Object.entries(env) : null;
+  const argsArray = args || null;
+
+  return {
+    ...baseCli.environment,
+    getEnvironment() {
+      return envEntries ?? baseCli.environment.getEnvironment();
+    },
+    getArguments() {
+      return argsArray ?? baseCli.environment.getArguments();
+    },
+    initialCwd() {
+      return baseCli.environment.initialCwd();
+    },
+  };
+}

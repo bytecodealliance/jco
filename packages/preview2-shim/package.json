@@ -30,35 +30,47 @@
     "lib"
   ],
   "type": "module",
-  "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "node": "./lib/nodejs/index.js",
+      "types": "./lib/browser/index.d.ts",
+      "node": {
+        "types": "./lib/nodejs/index.d.ts",
+        "default": "./lib/nodejs/index.js"
+      },
       "default": "./lib/browser/index.js"
     },
     "./*": {
-      "types": "./types/*.d.ts",
-      "node": "./lib/nodejs/*.js",
+      "types": "./lib/browser/*.d.ts",
+      "node": {
+        "types": "./lib/nodejs/*.d.ts",
+        "default": "./lib/nodejs/*.js"
+      },
       "default": "./lib/browser/*.js"
     },
     "./instantiation": {
       "types": "./types/instantiation.d.ts",
       "node": "./lib/common/instantiation.js",
       "default": "./lib/common/instantiation.js"
+    },
+    "./interfaces/*": {
+      "types": "./types/interfaces/*.d.ts"
     }
   },
   "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "build:watch": "tsc --watch",
     "types:check": "tsc --noEmit",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "test": "vitest run -c test/vitest.ts"
+    "test": "vitest run -c test/vitest.ts",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "0.21.0",
     "@bytecodealliance/jco": "1.20.0",
+    "@types/node": "^24.12.4",
     "mime": "^4.0.7",
     "puppeteer": "catalog:",
     "typescript": "catalog:",

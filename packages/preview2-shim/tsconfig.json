@@ -1,11 +1,20 @@
 {
+  "include": ["src/**/*", "test/**/*.ts"],
   "compilerOptions": {
+    "outDir": "lib",
+    "target": "ES2022",
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "noEmit": true,
     "strict": true,
     "noImplicitAny": false,
-    "strictNullChecks": true
-  },
-  "include": ["./types", "example.ts"]
+    "strictNullChecks": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
 }
