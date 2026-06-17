@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.3] - 2026-06-17
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ feature passthrough during type gen by @vados-cosmonic in #1661
+
 ## [0.3.2] - 2026-06-17
 
 ### 🚀 Features
