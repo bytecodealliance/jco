@@ -267,7 +267,6 @@ export async function transpileBytes(
         // Otherwise, if `--js` is present, an `instantiate` function is required.
         instantiation = { tag: 'async' };
     }
-    console.log('INSTANTIATION', instantiation);
 
     // Determine the async mode that should be used
     // (i.e. determining whether JSPI should be used)
@@ -301,7 +300,6 @@ export async function transpileBytes(
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };
-    console.log('OPTS', generateOpts);
 
     // Generate the component
     const generated = generate(component, generateOpts);
