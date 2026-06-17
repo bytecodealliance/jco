@@ -2,9 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import { byteLengthLEB128, runWASMTransformProgram } from './common.js';
 
-import { $init, tools } from '../vendor/wasm-tools.js';
-import type { ModuleMetadata } from '../vendor/interfaces/local-wasm-tools-tools.js';
-const { metadataShow, print } = tools;
+import { metadataShow, print } from './wasm-tools.js';
+import type { tools as ToolsNamespace } from '../vendor/wasm-tools.js';
 
 export interface OptimizeOptions {
     quiet: boolean;
@@ -24,7 +23,7 @@ interface OptimizeResult {
     compressionInfo: CompressionInfo[];
 }
 
-interface EnhancedModuleMetadata extends ModuleMetadata {
+interface EnhancedModuleMetadata extends ToolsNamespace.ModuleMetadata {
     index?: number;
     prevLEBLen?: number;
     newLEBLen?: number;
@@ -44,9 +43,7 @@ export async function runOptimizeComponent(
     componentBytes: Uint8Array,
     opts?: OptimizeOptions,
 ): Promise<OptimizeResult> {
-    await $init;
-
-    const componentMetadata = metadataShow(componentBytes);
+    const componentMetadata = await metadataShow(componentBytes);
     componentMetadata.forEach((metadata, index) => {
         (metadata as EnhancedModuleMetadata).index = index;
         const size = metadata.range[1] - metadata.range[0];
@@ -194,7 +191,7 @@ export async function runOptimizeComponent(
     // verify it still parses ok
     if (!opts?.noVerify) {
         try {
-            print(outComponentBytes);
+            await print(outComponentBytes);
         } catch (e) {
             throw new Error(`Internal error performing optimization.\n${e instanceof Error ? e.message : ''}`);
         }
