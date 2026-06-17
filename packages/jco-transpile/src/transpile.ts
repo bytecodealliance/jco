@@ -259,10 +259,16 @@ export async function transpileBytes(
     // Determine the kind of instantiation that should be used (sync/async)
     let instantiation: WITInstantiationMode | undefined = undefined;
     if (opts.instantiation) {
-        if (opts.instantiation !== 'sync' && opts.instantiation !== 'async') {
-            throw new Error(`invalid/unrecognized instantiation mode [${opts.instantiation}]`);
+        if (typeof opts.instantiation === 'string') {
+            if (opts.instantiation !== 'sync' && opts.instantiation !== 'async') {
+                throw new Error(`invalid/unrecognized instantiation mode [${opts.instantiation}]`);
+            }
+            instantiation = { tag: opts.instantiation };
+        } else if (typeof opts.instantiation === 'object') {
+            instantiation = opts.instantiation;
+        } else {
+            throw new Error('invalid instantiation configuration value');
         }
-        instantiation = { tag: opts.instantiation };
     } else if (opts.js) {
         // Otherwise, if `--js` is present, an `instantiate` function is required.
         instantiation = { tag: 'async' };

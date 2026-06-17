@@ -209,6 +209,9 @@ export function extractWITAsyncModeFromOpts(opts: AsyncOptionsLike): WITAsyncMod
     if (opts.asyncMode === undefined || opts.asyncMode === 'sync') {
         return { tag: 'sync' };
     }
+    if (opts.asyncMode && typeof opts.asyncMode === 'object') {
+        return opts.asyncMode;
+    }
     return {
         tag: 'jspi',
         val: {
