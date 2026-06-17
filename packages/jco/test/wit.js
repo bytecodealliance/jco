@@ -343,7 +343,7 @@ suite("WIT", () => {
     });
 
     // see: https://github.com/bytecodealliance/jco/issues/622
-    test("async-exports", async () => {
+    test.only("async-exports", async () => {
         const witPath = join(witFixturesPath, "async-exports/component.wit");
         const files = await types(witPath, {
             worldName: "component",

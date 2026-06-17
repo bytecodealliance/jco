@@ -4,7 +4,6 @@ import { extname, basename, resolve } from "node:path";
 import { generateGuestTypes, generateHostTypes } from "@bytecodealliance/jco-transpile";
 
 import {
-    isWindows,
     writeFiles,
     resolveDefaultWITPath,
     styleText,
@@ -75,16 +74,23 @@ export async function guestTypes(witPath, opts) {
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
 export async function typesComponent(witPath, opts) {
-    await $init;
     const name =
         opts.name ||
         (opts.worldName
             ? opts.worldName.split(":").pop().split("/").pop()
             : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+
     let instantiation;
     if (opts.instantiation) {
-        instantiation = { tag: opts.instantiation };
+        if (typeof opts.instantiation === "string") {
+            instantiation = { tag: opts.instantiation };
+        } else if (typeof opts.instantiation === "object") {
+            instantiation = opts.instantiation;
+        } else {
+            throw new Error("invalid instantiation configuration value");
+        }
     }
+
     let outDir = (opts.outDir ?? "").replace(/\\/g, "/");
     if (!outDir.endsWith("/") && outDir !== "") {
         outDir += "/";
@@ -135,16 +141,17 @@ export async function typesComponent(witPath, opts) {
     const guest = opts.guest ?? false;
     const generateFn = guest ? generateGuestTypes : generateHostTypes;
     try {
-        types = generateFn(name, {
-            wit: { tag: "path", val: (isWindows ? "//?/" : "") + absWitPath },
+        const generated = await generateFn(absWitPath, {
+            name,
             instantiation,
             tlaCompat: opts.tlaCompat ?? false,
             world: opts.worldName,
             features,
-            guest: opts.guest ?? false,
+            guest,
             strict: opts.strict === true,
             asyncMode: asyncModeObj,
-        }).map(([name, file]) => [`${outDir}${name}`, file]);
+        });
+        types = Object.entries(generated).map(([name, bytes]) => [`${outDir}${name}`, bytes]);
     } catch (err) {
         if (err.toString().includes("does not match previous package name")) {
             const hint = await printWITLayoutHint(absWitPath);

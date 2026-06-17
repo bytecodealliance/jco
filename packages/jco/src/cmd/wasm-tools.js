@@ -1,29 +1,27 @@
 import { resolve, basename, extname } from "node:path";
 import { writeFile } from "node:fs/promises";
 
+import {
+    print as printFn,
+    parse as parseFn,
+    componentWit as componentWitFn,
+    componentNew as componentNewFn,
+    componentEmbed as componentEmbedFn,
+    metadataAdd as metadataAddFn,
+    metadataShow as metadataShowFn,
+} from "@bytecodealliance/jco-transpile/wasm-tools";
+
 import { readFile, isWindows, styleText } from "../common.js";
-import { $init, tools } from "../../obj/wasm-tools.js";
-const {
-    print: printFn,
-    parse: parseFn,
-    componentWit: componentWitFn,
-    componentNew: componentNewFn,
-    componentEmbed: componentEmbedFn,
-    metadataAdd: metadataAddFn,
-    metadataShow: metadataShowFn,
-} = tools;
 
 export async function parse(file, opts) {
-    await $init;
     const source = (await readFile(file)).toString();
-    const output = parseFn(source);
+    const output = await parseFn(source);
     await writeFile(opts.output, output);
 }
 
 export async function print(file, opts) {
-    await $init;
     const source = await readFile(file);
-    const output = printFn(source);
+    const output = await printFn(source);
     if (opts.output) {
         await writeFile(opts.output, output);
     } else {
@@ -32,9 +30,8 @@ export async function print(file, opts) {
 }
 
 export async function componentWit(file, opts) {
-    await $init;
     const source = await readFile(file);
-    const output = componentWitFn(source, opts.document);
+    const output = await componentWitFn(source, opts.document);
     if (opts.output) {
         await writeFile(opts.output, output);
     } else {
@@ -43,7 +40,6 @@ export async function componentWit(file, opts) {
 }
 
 export async function componentNew(file, opts) {
-    await $init;
     const source = file ? await readFile(file) : null;
     let adapters = [];
     if (opts.wasiReactor && opts.wasiCommand) {
@@ -80,12 +76,11 @@ export async function componentNew(file, opts) {
             ),
         );
     }
-    const output = componentNewFn(source, adapters);
+    const output = await componentNewFn(source, adapters);
     await writeFile(opts.output, output);
 }
 
 export async function componentEmbed(file, opts) {
-    await $init;
     if (opts.metadata) {
         opts.metadata = opts.metadata.map((meta) => {
             const [field, data = ""] = meta.split("=");
@@ -96,28 +91,26 @@ export async function componentEmbed(file, opts) {
     const source = file ? await readFile(file) : null;
     opts.binary = source;
     opts.witPath = (isWindows ? "//?/" : "") + resolve(opts.wit);
-    const output = componentEmbedFn(opts);
+    const output = await componentEmbedFn(opts);
     await writeFile(opts.output, output);
 }
 
 export async function metadataAdd(file, opts) {
-    await $init;
     const metadata = opts.metadata.map((meta) => {
         const [field, data = ""] = meta.split("=");
         const [name, version = ""] = data.split("@");
         return [field, [[name, version]]];
     });
     const source = await readFile(file);
-    const output = metadataAddFn(source, metadata);
+    const output = await metadataAddFn(source, metadata);
     await writeFile(opts.output, output);
 }
 
 export async function metadataShow(file, opts) {
-    await $init;
     const source = await readFile(file);
     let output = "",
         stack = [1];
-    const meta = metadataShowFn(source);
+    const meta = await metadataShowFn(source);
     if (opts.json) {
         console.log(JSON.stringify(meta, null, 2));
     } else {
