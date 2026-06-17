@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-06-17
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ remove log messages by @vados-cosmonic in #1657
+
 ## [0.3.0] - 2026-06-17
 
 ### 🐛 Bug Fixes
