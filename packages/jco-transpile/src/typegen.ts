@@ -131,6 +131,8 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         features = { tag: 'all' };
     } else if (Array.isArray(opts.features)) {
         features = { tag: 'list', val: opts.features };
+    } else if (typeof opts.features === 'object') {
+        features = opts.features;
     } else {
         features = { tag: 'list', val: [] };
     }
