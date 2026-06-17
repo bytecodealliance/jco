@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { basename } from 'node:path';
 
-import type { Files, ExportType } from '../vendor/js-component-bindgen-component.js';
+import type { ExportType } from '../vendor/js-component-bindgen-component.js';
 
 import { runWASMTransformProgram } from './common.js';
 import type { TranspilationOptions, WITInstantiationMode } from './transpile.js';
@@ -10,9 +10,9 @@ import type { TranspilationOptions, WITInstantiationMode } from './transpile.js'
 /** Arguments to `generateASMJS()` */
 interface GenerateASMJSArgs {
     opts: TranspilationOptions;
-    inputJS: Uint8Array;
+    inputJS: string | Uint8Array;
     instantiation: WITInstantiationMode;
-    files: Files;
+    files: [string, Uint8Array][];
     imports: string[];
     exports: Array<[string, ExportType]>;
 }
@@ -70,7 +70,6 @@ interface GenerateASMJSArgs {
  */
 export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
     const { opts, inputJS, instantiation, imports, exports } = args;
-    let files = args.files;
 
     const withInstantiation = opts.instantiation !== undefined;
     const async_ = instantiation.tag == 'async' ? 'async ' : '';
@@ -84,10 +83,7 @@ export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
         .replace(/export (async )?function instantiate/, '$1function _instantiate');
 
     // Filter to get all current generated wasm files
-    const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
-
-    // Filter out wasm files
-    files = files.filter(([name]) => !name.endsWith('.wasm'));
+    const wasmFiles = args.files.filter(([name]) => name.endsWith('.wasm'));
 
     // Compile all Wasm modules into ASM.js code
     const asmFiles = await Promise.all(
@@ -100,6 +96,7 @@ export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
         }),
     );
 
+    // Generate instantiation wrappers
     const asms = asmFiles
         .map(
             (asm, nth) => `function asm${nth}(imports) {
@@ -117,7 +114,7 @@ export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
         )
         .join(',\n');
 
-    // The `instantiate` function.
+    // Generate the `instantiate` function
     const instantiateFunction = `${withInstantiation ? 'export ' : ''}${async_}function instantiate(imports) {
   const wasm_file_to_asm_index = {
     ${wasmFiles.map(([path], nth) => `'${basename(path)}': ${nth}`).join(',\n    ')}
@@ -130,7 +127,7 @@ export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
   );
 }`;
 
-    // If `--js` is used without `--instantiation`.
+    // If `--js` is used without `--instantiation`
     let importDirectives = '';
     let exportDirectives = '';
     let exportTrampolines = '';

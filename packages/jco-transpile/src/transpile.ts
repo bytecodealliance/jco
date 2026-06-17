@@ -141,15 +141,18 @@ export interface TranspilationOptions {
 
     /** Whether to create a stub */
     stub?: boolean;
+
+    /** Whether to run bindgen in strict mode */
+    strict?: boolean;
 }
 
 interface TranspilationResult {
-    files: {
-        [filename: string]: Uint8Array;
-    };
+    files: Record<string, Uint8Array>;
     imports: string[];
     exports: [string, 'function' | 'instance'][];
 }
+
+const SUPPORTED_P3_VERSIONS = ['0.3.0-rc-2026-03-15', '0.3.0'];
 
 /**
  * Transpile a provided WebAssembly component to an ES module
@@ -219,30 +222,51 @@ export async function transpileBytes(
 
     // Perform optimization if specified
     if (opts.optimize) {
+        // TODO: progress indication
         const optResult = await runOptimizeComponent(component, opts.optimizeOptions);
         component = optResult.component;
     }
 
     // If WASI shimming has been enabled, update the map option
     if (opts.wasiShim === true) {
-        opts.map = Object.assign(
-            {
-                'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-                'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-                'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
-                'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-                'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-                'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-                'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
-            },
-            opts.map || {},
-        );
+        const shims = {
+            'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
+            'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
+            'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
+            'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
+            'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
+            'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
+            'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
+        };
+
+        // To avoid breaking compatibility with earlier version of p3 (including draft versions),
+        // we over-populate the map with references to the *current* preview3-shim that has been
+        // imported.
+        //
+        // This implicitly upgrades versions of P3 in use (a component that asks for 0.3.0 will get 0.3.1 if that
+        // is the current version in preview3-shim0, but that should be acceptable as p3 should not have breaking
+        // changes going forward.
+        //
+        for (const version of SUPPORTED_P3_VERSIONS) {
+            Object.assign(shims, {
+                [`wasi:cli/*@${version}`]: '@bytecodealliance/preview3-shim/cli#*',
+                [`wasi:clocks/*@${version}`]: '@bytecodealliance/preview3-shim/clocks#*',
+                [`wasi:filesystem/*@${version}`]: '@bytecodealliance/preview3-shim/filesystem#*',
+                [`wasi:http/*@${version}`]: '@bytecodealliance/preview3-shim/http#*',
+                [`wasi:random/*@${version}`]: '@bytecodealliance/preview3-shim/random#*',
+                [`wasi:sockets/*@${version}`]: '@bytecodealliance/preview3-shim/sockets#*',
+            });
+        }
+
+        opts.map = Object.assign(shims, opts.map || {});
     }
 
+    // Determine the kind of instantiation that should be used (sync/async)
     let instantiation: WITInstantiationMode = { tag: 'sync' };
-
-    // Let's define `instantiation` from `--instantiation` if it's present.
     if (opts.instantiation) {
+        if (opts.instantiation !== 'sync' && opts.instantiation !== 'async') {
+            throw new Error(`invalid/unrecognized instantiation mode [${opts.instantiation}]`);
+        }
         instantiation = { tag: opts.instantiation };
     } else if (opts.js) {
         // Otherwise, if `--js` is present, an `instantiate` function is required.
@@ -277,12 +301,13 @@ export async function transpileBytes(
         base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
         noNamespacedExports: opts.namespacedExports === false,
         multiMemory: opts.multiMemory === true,
+        strict: opts.strict === true,
+        idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };
 
     // Generate the component
     const generated = generate(component, generateOpts);
-    let files = generated.files;
     const imports = generated.imports;
     const exports = generated.exports;
 
@@ -291,13 +316,19 @@ export async function transpileBytes(
     if (!outDir.endsWith('/') && outDir !== '') {
         outDir += '/';
     }
-    files = files.map(([name, source]) => [`${outDir}${name}`, source]);
+    const files: [string, Uint8Array][] = generated.files.map(([name, source]) => [`${outDir}${name}`, source]);
 
     // Find JS files
-    const jsFiles = files.find(([name]) => name.endsWith('.js'));
+    const jsFiles = files.find(([name]) => {
+        if (typeof name !== 'string') {
+            throw new Error('unexpected name value');
+        }
+        name.endsWith('.js');
+    });
 
     // Generate ASM.js from the JS files if configured
     if (opts.js && jsFiles) {
+        // TODO: progress report about to start (could take a while...)
         jsFiles[1] = Buffer.from(
             await generateASMJS({
                 opts,
@@ -308,6 +339,7 @@ export async function transpileBytes(
                 exports,
             }),
         );
+        // TODO: stop spinner
     }
 
     // Perform minification if configured
