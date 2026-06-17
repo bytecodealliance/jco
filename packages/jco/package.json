@@ -32,11 +32,7 @@
     "files": [
         "lib",
         "src",
-        "types",
-        "obj/*.core*.wasm",
-        "obj/*.js",
-        "obj/*.ts",
-        "obj/interfaces"
+        "types"
     ],
     "type": "module",
     "main": "src/jco.js",

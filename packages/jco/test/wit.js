@@ -42,7 +42,7 @@ suite("WIT", () => {
     //
     // NOTE: this works primarily the features are fed through to the `wit_parser::Resolve` that is used,
     // not due to active filtering on the jco side.
-    test("Feature gates (no features)", async () => {
+    test.concurrent("Feature gates (no features)", async () => {
         // Build a dummy WIT component
         const generatedComponent = await componentEmbed({
             witSource: featureGatesWitContent,
@@ -86,7 +86,7 @@ suite("WIT", () => {
     //
     // NOTE: this works primarily the features are fed through to the `wit_parser::Resolve` that is used,
     // not due to active filtering on the jco side.
-    test("Feature gates (unrelated feature)", async () => {
+    test.concurrent("Feature gates (unrelated feature)", async () => {
         // Build a dummy WIT component
         const generatedComponent = await componentEmbed({
             witSource: featureGatesWitContent,
@@ -134,7 +134,7 @@ suite("WIT", () => {
     //
     // NOTE: this works primarily the features are fed through to the `wit_parser::Resolve` that is used,
     // not due to active filtering on the jco side.
-    test("Feature gates (single feature enabled)", async () => {
+    test.concurrent("Feature gates (single feature enabled)", async () => {
         // Build a dummy WIT component
         const generatedComponent = await componentEmbed({
             witSource: featureGatesWitContent,
@@ -182,7 +182,7 @@ suite("WIT", () => {
     //
     // NOTE: this works primarily the features are fed through to the `wit_parser::Resolve` that is used,
     // not due to active filtering on the jco side.
-    test("Feature gates (all features enabled)", async () => {
+    test.concurrent("Feature gates (all features enabled)", async () => {
         // Build a dummy WIT component
         const generatedComponent = await componentEmbed({
             witSource: featureGatesWitContent,
@@ -224,7 +224,7 @@ suite("WIT", () => {
     });
 
     // (`jco types`) features marked @unstable() are missing as imports *and* exports
-    test("Feature gates - (types, no features enabled)", async () => {
+    test.concurrent("Feature gates - (types, no features enabled)", async () => {
         const files = await types(featureGatesWitPath, {
             worldName: "import-and-export",
         });
@@ -249,7 +249,7 @@ suite("WIT", () => {
     });
 
     // (`jco types`) features marked @unstable(feature = f) should be present when the specific feature is enabled
-    test("Feature gates (types, single feature enabled)", async () => {
+    test.concurrent("Feature gates (types, single feature enabled)", async () => {
         const files = await types(featureGatesWitPath, {
             worldName: "import-and-export",
             features: ["fancier-foo"],
@@ -275,7 +275,7 @@ suite("WIT", () => {
     });
 
     // (`jco types`) features marked @unstable() should be present with all features enabled
-    test("Feature gates (types, all features enabled)", async () => {
+    test.concurrent("Feature gates (types, all features enabled)", async () => {
         const files = await types(featureGatesWitPath, {
             worldName: "import-and-export",
             allFeatures: true,
@@ -302,7 +302,7 @@ suite("WIT", () => {
 
     // (`jco types`) WIT errors are handled gracefully and print useful error messages
     // see: https://github.com/bytecodealliance/jco/issues/442
-    test("Invalid WIT produce better error messages", async () => {
+    test.concurrent("Invalid WIT produce better error messages", async () => {
         try {
             await types(join(witFixturesPath, "invalid/invalid-fn.wit"), {
                 worldName: "invalid",
@@ -318,7 +318,7 @@ suite("WIT", () => {
 
     // (`jco types`) Same-package sibling WIT files can be referred to
     // see: https://github.com/bytecodealliance/jco/issues/442
-    test("same-package sibling WIT files work", async () => {
+    test.concurrent("same-package sibling WIT files work", async () => {
         const witPath = join(witFixturesPath, "valid/no-deps");
         await types(witPath, {
             worldName: "component",
@@ -328,7 +328,7 @@ suite("WIT", () => {
 
     // (`jco types`)  WIT files can be referred to
     // see: https://github.com/bytecodealliance/jco/issues/442
-    test("different-package sibling WIT files fail w/ good error messages", async () => {
+    test.concurrent("different-package sibling WIT files fail w/ good error messages", async () => {
         const witPath = join(witFixturesPath, "invalid/sibling-diff-pkg");
         try {
             await types(witPath, {
@@ -343,7 +343,7 @@ suite("WIT", () => {
     });
 
     // see: https://github.com/bytecodealliance/jco/issues/622
-    test.only("async-exports", async () => {
+    test.concurrent("async-exports", async () => {
         const witPath = join(witFixturesPath, "async-exports/component.wit");
         const files = await types(witPath, {
             worldName: "component",
