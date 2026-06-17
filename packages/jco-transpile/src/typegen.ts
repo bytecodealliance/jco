@@ -6,8 +6,9 @@ import {
     type EnabledFeatureSet,
     generateTypes,
 } from '../vendor/js-component-bindgen-component.js';
+import type { InstantiationMode as WITInstantiationMode } from '../vendor/js-component-bindgen-component.js';
 
-import { InstantiationMode, TranspilationOptions } from './transpile.js';
+import { TranspilationOptions } from './transpile.js';
 import { extractWITAsyncModeFromOpts, type FileBytes, isWindows } from './common.js';
 
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
@@ -21,7 +22,7 @@ interface TypegenOptions {
     worldName?: string;
 
     /** Instantiation mode to use */
-    instantiation?: InstantiationMode;
+    instantiation?: WITInstantiationMode;
 
     /** Whether to add code for Top Level Await compatibility */
     tlaCompat?: TranspilationOptions['tlaCompat'];
