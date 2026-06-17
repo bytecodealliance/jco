@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.0] - 2026-06-17
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ tsconfig node dep by @vados-cosmonic
+
+- _(transpile)_ specify rootDir in tsconfig by @vados-cosmonic
+
+- _(transpile)_ setup cmd by @vados-cosmonic
+
+- _(transpile)_ lint:fix target by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ port transpile changes from jco by @vados-cosmonic
+
+- _(transpile)_ fix types, allow implicit any by @vados-cosmonic in #1571
+
+- _(transpile)_ update git cliff config by @vados-cosmonic
+
+### 🔒️ Security
+
+- _(transpile)_ move to pnpm by @vados-cosmonic
+
+## New Contributors
+
+- @QuantumSegfault made their first contribution in [#1421](https://github.com/bytecodealliance/jco/pull/1421)
+
 ## [0.1.3] - 2026-03-30
 
 ### 🧪 Testing
