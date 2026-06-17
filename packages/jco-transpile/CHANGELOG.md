@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2] - 2026-06-17
+
+### 🚀 Features
+
+- _(transpile)_ make more wasm-tools utilites available by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ pass-through of options for typegen by @vados-cosmonic in #1659
+
 ## [0.3.1] - 2026-06-17
 
 ### 🐛 Bug Fixes
