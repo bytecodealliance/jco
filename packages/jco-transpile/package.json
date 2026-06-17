@@ -42,6 +42,10 @@
         "./helpers": {
             "types": "./dist/helpers.d.ts",
             "default": "./dist/helpers.js"
+        },
+        "./wasm-tools": {
+            "types": "./dist/wasm-tools.d.ts",
+            "default": "./dist/wasm-tools.js"
         }
     },
     "scripts": {
