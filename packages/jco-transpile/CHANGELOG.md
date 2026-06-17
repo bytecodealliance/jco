@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] - 2026-06-17
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ match current jco transpilation defaults by @vados-cosmonic in #1655
+
 ## [0.2.0] - 2026-06-17
 
 ### 🐛 Bug Fixes
