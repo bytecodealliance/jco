@@ -1,6 +1,6 @@
 {
     "$schema": "./node_modules/oxfmt/configuration_schema.json",
-    "ignorePatterns": ["types/**/*", "test/fixtures/wat/component-model/**/*.wast.js"],
+    "ignorePatterns": ["types/**/*", "test/fixtures/wat/component-model/**/*.wast.js", "test/output/**/*"],
     "printWidth": 120,
     "tabWidth": 4
 }

@@ -41,7 +41,7 @@ export class R {
 }
 
 let tested = false;
-export function test(r) {
+export function test(r: R) {
     assert.ok(r instanceof R);
     tested = true;
 }
