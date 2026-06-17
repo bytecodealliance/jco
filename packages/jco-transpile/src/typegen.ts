@@ -6,7 +6,7 @@ import {
     type EnabledFeatureSet,
     generateTypes,
 } from '../vendor/js-component-bindgen-component.js';
-import type { InstantiationMode as WITInstantiationMode } from '../vendor/js-component-bindgen-component.js';
+import type { InstantiationMode as WITInstantiationMode, WitPath } from '../vendor/js-component-bindgen-component.js';
 
 import { TranspilationOptions } from './transpile.js';
 import { extractWITAsyncModeFromOpts, type FileBytes, isWindows } from './common.js';
@@ -66,7 +66,7 @@ interface TypegenOptions {
  * @returns A `Promise` that resolves to written file data
  */
 export async function generateHostTypes(witPath: string, opts: TypegenOptions): Promise<FileBytes> {
-    return await runTypesComponent(witPath, opts);
+    return runTypesComponent(witPath, opts);
 }
 
 /**
@@ -77,7 +77,7 @@ export async function generateHostTypes(witPath: string, opts: TypegenOptions): 
  * @returns A `Promise` that resolves to written file data
  */
 export async function generateGuestTypes(witPath: string, opts: TypegenOptions): Promise<FileBytes> {
-    return await runTypesComponent(witPath, { ...opts, guest: true });
+    return runTypesComponent(witPath, { ...opts, guest: true });
 }
 
 /**
@@ -112,7 +112,13 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
 
     let instantiation;
     if (opts.instantiation) {
-        instantiation = { tag: opts.instantiation };
+        if (typeof opts.instantiation === 'string') {
+            instantiation = { tag: opts.instantiation };
+        } else if (typeof opts.instantiation === 'object') {
+            instantiation = opts.instantiation;
+        } else {
+            throw new Error('invalid instantiation configuration value');
+        }
     }
 
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
@@ -144,15 +150,17 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
 
     const absWitPath = resolve(witPath);
 
-    const types = generateTypes(name, {
-        wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
+    const generateOpts = {
+        ...opts,
+        wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath } as WitPath,
         instantiation,
         tlaCompat: opts.tlaCompat ?? false,
         world: opts.worldName,
         features,
         guest: opts.guest ?? false,
         asyncMode,
-    }).map(([name, file]) => [`${outDir}${name}`, file]);
+    };
+    const types = generateTypes(name, generateOpts).map(([name, file]) => [`${outDir}${name}`, file]);
 
     return Object.fromEntries(types);
 }
