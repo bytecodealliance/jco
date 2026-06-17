@@ -3,9 +3,10 @@ import { Buffer } from 'node:buffer';
 import { basename } from 'node:path';
 
 import type { ExportType } from '../vendor/js-component-bindgen-component.js';
+import type { InstantiationMode as WITInstantiationMode } from '../vendor/js-component-bindgen-component.js';
 
 import { runWASMTransformProgram } from './common.js';
-import type { TranspilationOptions, WITInstantiationMode } from './transpile.js';
+import type { TranspilationOptions } from './transpile.js';
 
 /** Arguments to `generateASMJS()` */
 interface GenerateASMJSArgs {

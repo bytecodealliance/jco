@@ -5,6 +5,10 @@ import { extname, basename, resolve } from 'node:path';
 import { minify } from 'terser';
 
 import { $init as $initBindgenComponent, generate } from '../vendor/js-component-bindgen-component.js';
+import type {
+    AsyncMode as WITAsyncMode,
+    InstantiationMode as WITInstantiationMode,
+} from '../vendor/js-component-bindgen-component.js';
 
 import { $init as $initWasmToolsComponent, tools } from '../vendor/wasm-tools.js';
 const { componentEmbed, componentNew } = tools;
@@ -14,20 +18,11 @@ import { isWindows } from './common.js';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 import { generateASMJS } from './asm.js';
 
-/** Representation of WIT enums */
-export type WITVariant<T, V> = { tag: T; val?: V };
-
 /** Instantiation mode for a transpiled component */
 export type InstantiationMode = 'async' | 'sync';
 
-/** Instantiation mode as a WIT enum */
-export type WITInstantiationMode = WITVariant<InstantiationMode, undefined>;
-
 /** Async mode for the component (i.e. whether to use JSPI) */
 export type AsyncMode = 'sync' | 'jspi';
-
-/** Async mode as a WIT variant */
-export type WITAsyncMode = WITVariant<AsyncMode, { imports: string[]; exports: string[] }>;
 
 /** Options for transpilation */
 export interface TranspilationOptions {
@@ -41,7 +36,7 @@ export interface TranspilationOptions {
      * which influeces whether imports can be supplied dynamically at instantiation
      * time or not.
      */
-    instantiation?: InstantiationMode;
+    instantiation?: InstantiationMode | WITInstantiationMode;
 
     /** How to import bindings */
     importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
@@ -59,7 +54,7 @@ export interface TranspilationOptions {
     map?: Record<string, string>;
 
     /** Asynchronous mode to use */
-    asyncMode?: AsyncMode;
+    asyncMode?: AsyncMode | WITAsyncMode;
 
     /**
      * Imports that should be treated as asynchronous *host side* functions
@@ -227,8 +222,8 @@ export async function transpileBytes(
         component = optResult.component;
     }
 
-    // If WASI shimming has been enabled, update the map option
-    if (opts.wasiShim === true) {
+    // If WASI shimming has not been explicitly disabled set up shims
+    if (opts.wasiShim !== false) {
         const shims = {
             'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
             'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
@@ -262,7 +257,7 @@ export async function transpileBytes(
     }
 
     // Determine the kind of instantiation that should be used (sync/async)
-    let instantiation: WITInstantiationMode = { tag: 'sync' };
+    let instantiation: WITInstantiationMode | undefined = undefined;
     if (opts.instantiation) {
         if (opts.instantiation !== 'sync' && opts.instantiation !== 'async') {
             throw new Error(`invalid/unrecognized instantiation mode [${opts.instantiation}]`);
@@ -272,19 +267,20 @@ export async function transpileBytes(
         // Otherwise, if `--js` is present, an `instantiate` function is required.
         instantiation = { tag: 'async' };
     }
+    console.log('INSTANTIATION', instantiation);
 
     // Determine the async mode that should be used
     // (i.e. determining whether JSPI should be used)
-    const asyncMode =
-        !opts.asyncMode || opts.asyncMode === 'sync'
-            ? undefined
-            : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+    let asyncMode: WITAsyncMode | undefined = undefined;
+    if (opts.asyncMode === 'jspi') {
+        asyncMode = {
+            tag: 'jspi',
+            val: {
+                imports: opts.asyncImports || [],
+                exports: opts.asyncExports || [],
+            },
+        };
+    }
 
     // Build the options for calling into the js-component-bindgen's `generate()` export
     const generateOpts = {
@@ -305,6 +301,7 @@ export async function transpileBytes(
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };
+    console.log('OPTS', generateOpts);
 
     // Generate the component
     const generated = generate(component, generateOpts);
@@ -319,20 +316,26 @@ export async function transpileBytes(
     const files: [string, Uint8Array][] = generated.files.map(([name, source]) => [`${outDir}${name}`, source]);
 
     // Find JS files
-    const jsFiles = files.find(([name]) => {
+    const jsFile = files.find(([name]) => {
         if (typeof name !== 'string') {
             throw new Error('unexpected name value');
         }
-        name.endsWith('.js');
+        return name.endsWith('.js');
     });
+    if (!jsFile) {
+        throw new Error('failed to find generated JS module');
+    }
 
     // Generate ASM.js from the JS files if configured
-    if (opts.js && jsFiles) {
+    if (opts.js && jsFile) {
         // TODO: progress report about to start (could take a while...)
-        jsFiles[1] = Buffer.from(
+        if (!instantiation) {
+            throw new Error('missing required instantiation for jS');
+        }
+        jsFile[1] = Buffer.from(
             await generateASMJS({
                 opts,
-                inputJS: jsFiles[1],
+                inputJS: jsFile[1],
                 files,
                 instantiation,
                 imports,
@@ -343,8 +346,8 @@ export async function transpileBytes(
     }
 
     // Perform minification if configured
-    if (opts.minify && jsFiles) {
-        const minified = await minify(Buffer.from(jsFiles[1]).toString('utf8'), {
+    if (opts.minify && jsFile) {
+        const minified = await minify(Buffer.from(jsFile[1]).toString('utf8'), {
             module: true,
             compress: {
                 ecma: 2019,
@@ -354,7 +357,7 @@ export async function transpileBytes(
                 keep_classnames: true,
             },
         });
-        jsFiles[1] = new TextEncoder().encode(minified.code);
+        jsFile[1] = new TextEncoder().encode(minified.code);
     }
 
     return { files: Object.fromEntries(files), imports, exports };

@@ -355,6 +355,9 @@ importers:
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.5
         version: 0.17.9
+      binaryen:
+        specifier: ^130.0.0
+        version: 130.0.0
       terser:
         specifier: ^5
         version: 5.47.1
@@ -2231,6 +2234,10 @@ packages:
 
   binaryen@123.0.0:
     resolution: {integrity: sha512-/hls/a309aZCc0itqP6uhoR+5DsKSlJVfB8Opd2BY9Ndghs84IScTunlyidyF4r2Xe3lQttnfBNIDjaNpj6mTw==}
+    hasBin: true
+
+  binaryen@130.0.0:
+    resolution: {integrity: sha512-XDrb+zql0RbFPKgj7MuH9zOc78R3Fa/P/VSGnnpdwYsvNZPWjcMYMdAkKCOQEL2A7yqgjSMTDRFp6gfSDW+/QQ==}
     hasBin: true
 
   bl@1.2.3:
@@ -5182,6 +5189,8 @@ snapshots:
   before-after-hook@2.2.3: {}
 
   binaryen@123.0.0: {}
+
+  binaryen@130.0.0: {}
 
   bl@1.2.3:
     dependencies:

@@ -4,7 +4,9 @@ import { readFile as fsReadFile, writeFile, rm, mkdtemp, mkdir } from 'node:fs/p
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
 import * as nodeUtils from 'node:util';
-import { AsyncMode, WITAsyncMode } from './transpile.js';
+
+import type { TranspilationOptions } from './transpile.js';
+import type { AsyncMode as WITAsyncMode } from '../vendor/js-component-bindgen-component.js';
 
 /** Detect a windows environment */
 export const isWindows = platform === 'win32';
@@ -197,7 +199,7 @@ export function styleText(...args: Parameters<typeof nodeUtils.styleText>) {
 }
 
 interface AsyncOptionsLike {
-    asyncMode?: AsyncMode;
+    asyncMode?: TranspilationOptions['asyncMode'];
     asyncImports?: string[];
     asyncExports?: string[];
 }
@@ -208,7 +210,7 @@ export function extractWITAsyncModeFromOpts(opts: AsyncOptionsLike): WITAsyncMod
         return { tag: 'sync' };
     }
     return {
-        tag: opts.asyncMode,
+        tag: 'jspi',
         val: {
             imports: opts.asyncImports || [],
             exports: opts.asyncExports || [],
