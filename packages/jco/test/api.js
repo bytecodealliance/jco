@@ -25,7 +25,8 @@ const isWindows = platform === "win32";
 // - (2025/12/16) increased due to more async task impl
 // - (2026/03/09) increased due to more async task impl
 // - (2026/05/15) increased due to addition of _FN_LOCALS
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 160_000;
+// - (2026/06/17) increased due to updated binaryen
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 170_000;
 
 suite("API", () => {
     let flavorfulWasmBytes;
