@@ -46,12 +46,19 @@ export async function setOutgoingResponse(id, { statusCode, headers, streamId })
   responses.delete(id);
 }
 
-export async function startHttpServer(id, { port, host }) {
+export async function startHttpServer(id: number, { port, host }) {
   const server = createServer((req, res) => {
+    // MessagePort is only available when running in worker thread.
+    if (!parentPort) {
+      throw {
+        tag: "internal-error",
+        val: "Unable to post message. Likely running in main thread.",
+      };
+    }
     // create the streams and their ids
     const streamId = createReadableStream(req);
     const responseId = ++responseCnt;
-    parentPort?.postMessage({
+    parentPort.postMessage({
       type: HTTP_SERVER_INCOMING_HANDLER,
       id,
       payload: {

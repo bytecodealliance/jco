@@ -111,7 +111,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -121,7 +120,6 @@ export const test = {
         "wasi:io/streams#[method]input-stream.blocking-read",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -214,7 +212,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -224,7 +221,6 @@ export const test = {
         "wasi:io/streams#[method]input-stream.blocking-read",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -326,7 +322,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -337,7 +332,6 @@ export const test = {
         "wasi:clocks/monotonic-clock#subscribe-duration",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -429,7 +423,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -439,7 +432,6 @@ export const test = {
         "wasi:io/streams#[method]input-stream.blocking-read",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -499,7 +491,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -509,7 +500,6 @@ export const test = {
         "wasi:clocks/monotonic-clock#subscribe-instant",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -577,7 +567,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -587,7 +576,6 @@ export const test = {
         "wasi:clocks/monotonic-clock#subscribe-duration",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -641,7 +629,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -650,7 +637,6 @@ export const test = {
         "wasi:clocks/monotonic-clock#subscribe-duration",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -793,7 +779,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -803,7 +788,6 @@ export const test = {
         "wasi:io/streams#[method]input-stream.blocking-read",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -990,7 +974,6 @@ export const test = {
     );
 
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
@@ -1000,7 +983,6 @@ export const test = {
         "wasi:io/streams#[method]input-stream.blocking-read",
       ],
       asyncExports: ["tests:p2-shim/test#run"],
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {
@@ -1057,11 +1039,9 @@ export const test = {
 
     // Transpile the component, write all output files to a temporary directory
     const { files }: TranspileOutput = await transpile(component, {
-      async: true,
       name: "component",
       optimize: false,
       asyncMode: "jspi",
-      wasiShim: true,
       outDir,
     });
     for (const [outPath, source] of Object.entries(files)) {

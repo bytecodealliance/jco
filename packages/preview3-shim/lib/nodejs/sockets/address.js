@@ -1,4 +1,4 @@
-// Adapted from preview2-shim/lib/io/worker-sockets.js
+// Adapted from preview2-shim/src/io/worker-sockets.ts
 import { networkInterfaces } from "node:os";
 
 // TODO(tandr): switch to generated types

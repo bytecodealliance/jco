@@ -13,7 +13,7 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
-    const { cli } = await import("../src/nodejs/index.js");
+    const { cli } = await import("@bytecodealliance/preview2-shim");
     cli.stdout.getStdout().blockingWriteAndFlush(new TextEncoder().encode("test stdout"));
     cli.stderr.getStderr().blockingWriteAndFlush(new TextEncoder().encode("test stderr"));
   });
@@ -22,7 +22,7 @@ suite("Node.js Preview2", () => {
     test("Wall clock", async () => {
       const {
         clocks: { wallClock },
-      } = await import("../src/nodejs/index.js");
+      } = await import("@bytecodealliance/preview2-shim");
 
       {
         const { seconds, nanoseconds } = wallClock.now();
@@ -40,7 +40,7 @@ suite("Node.js Preview2", () => {
     test("Monotonic clock now", async () => {
       const {
         clocks: { monotonicClock },
-      } = await import("../src/nodejs/index.js");
+      } = await import("@bytecodealliance/preview2-shim");
 
       assert.strictEqual(typeof monotonicClock.resolution(), "bigint");
       const curNow = monotonicClock.now();
@@ -51,7 +51,7 @@ suite("Node.js Preview2", () => {
     test("Monotonic clock immediately resolved polls", async () => {
       const {
         clocks: { monotonicClock },
-      } = await import("../src/nodejs/index.js");
+      } = await import("@bytecodealliance/preview2-shim");
       const curNow = monotonicClock.now();
       {
         const poll = monotonicClock.subscribeInstant(curNow - 10n);
@@ -66,7 +66,7 @@ suite("Node.js Preview2", () => {
     test("Monotonic clock subscribe duration", async () => {
       const {
         clocks: { monotonicClock },
-      } = await import("../src/nodejs/index.js");
+      } = await import("@bytecodealliance/preview2-shim");
 
       const curNow = monotonicClock.now();
 
@@ -84,7 +84,7 @@ suite("Node.js Preview2", () => {
     test("Monotonic clock subscribe instant", async () => {
       const {
         clocks: { monotonicClock },
-      } = await import("../src/nodejs/index.js");
+      } = await import("@bytecodealliance/preview2-shim");
 
       const curNow = monotonicClock.now();
 
@@ -93,9 +93,10 @@ suite("Node.js Preview2", () => {
 
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
-      assert.ok(nextNow - curNow >= 10e6);
+      const elapsed = nextNow - curNow;
+      assert.ok(elapsed >= 10e6);
       if (!env.CI) {
-        assert.ok(nextNow - curNow < 15e6);
+        assert.ok(elapsed < 15e6);
       }
     });
   });
@@ -103,7 +104,7 @@ suite("Node.js Preview2", () => {
   test("FS read", async () => {
     let toDispose: any[] = [];
     await (async () => {
-      const { filesystem } = await import("../src/nodejs/index.js");
+      const { filesystem } = await import("@bytecodealliance/preview2-shim");
       const [[rootDescriptor]] = filesystem.preopens.getDirectories();
       const childDescriptor = rootDescriptor.openAt(
         {},
@@ -135,7 +136,7 @@ suite("Node.js Preview2", () => {
   });
 
   test("Fields.set on a fresh Fields", async () => {
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields } = http.types;
     const encoder = new TextEncoder();
 
@@ -150,7 +151,7 @@ suite("Node.js Preview2", () => {
   });
 
   test("Fields.set replaces existing values", async () => {
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields } = http.types;
     const encoder = new TextEncoder();
 
@@ -167,7 +168,7 @@ suite("Node.js Preview2", () => {
     // `this.#table.set(lowercased, [])` for new keys. Calling set with an
     // empty values list exercises that branch without pushing any entry,
     // so this locks in the resulting state.
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields } = http.types;
 
     const fields = Fields.fromList([]);
@@ -179,7 +180,7 @@ suite("Node.js Preview2", () => {
   });
 
   test("Fields.set throws immutable when fields are locked", async () => {
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields, OutgoingRequest } = http.types;
     const encoder = new TextEncoder();
 
@@ -194,7 +195,7 @@ suite("Node.js Preview2", () => {
   });
 
   test("Fields.set throws invalid-syntax for an invalid name", async () => {
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields } = http.types;
     const encoder = new TextEncoder();
 
@@ -207,7 +208,7 @@ suite("Node.js Preview2", () => {
   });
 
   test("Fields.set throws invalid-syntax for an invalid value", async () => {
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields } = http.types;
     const encoder = new TextEncoder();
 
@@ -220,7 +221,7 @@ suite("Node.js Preview2", () => {
   });
 
   test("Fields.set throws forbidden for restricted header names", async () => {
-    const { http } = await import("../src/nodejs/index.js");
+    const { http } = await import("@bytecodealliance/preview2-shim");
     const { Fields } = http.types;
     const encoder = new TextEncoder();
 
@@ -239,7 +240,7 @@ suite("Node.js Preview2", () => {
   test(
     "WASI HTTP",
     testWithGCWrap(async () => {
-      const { http } = await import("../src/nodejs/index.js");
+      const { http } = await import("@bytecodealliance/preview2-shim");
       const { handle } = http.outgoingHandler;
       const { OutgoingRequest, OutgoingBody, Fields } = http.types;
       const encoder = new TextEncoder();
@@ -305,14 +306,14 @@ suite("Node.js Preview2", () => {
 
   suite("WASI Sockets (TCP)", async () => {
     test("sockets.instanceNetwork() should be a singleton", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
       const network2 = sockets.instanceNetwork.instanceNetwork();
       assert.strictEqual(network1, network2);
     });
 
     test("sockets.tcpCreateSocket() should throw not-supported", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const socket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
       assert.notEqual(socket, null);
 
@@ -324,7 +325,7 @@ suite("Node.js Preview2", () => {
       );
     });
     test("tcp.bind(): should bind to a valid ipv4 address", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
       const localAddress: IpSocketAddress = {
@@ -348,7 +349,7 @@ suite("Node.js Preview2", () => {
     });
 
     test("tcp.bind(): should bind to a valid ipv6 address and port=0", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv6");
       const localAddress: IpSocketAddress = {
@@ -381,7 +382,7 @@ suite("Node.js Preview2", () => {
     });
 
     test("tcp.bind(): should throw invalid-argument when invalid address family", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
@@ -404,7 +405,7 @@ suite("Node.js Preview2", () => {
     });
 
     test("tcp.bind(): should throw invalid-state when already bound", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
@@ -427,7 +428,7 @@ suite("Node.js Preview2", () => {
     });
 
     test("tcp.listen(): should listen to an ipv4 address", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
       const localAddress: IpSocketAddress = {
@@ -451,7 +452,7 @@ suite("Node.js Preview2", () => {
       { retry: env.CI ? 3 : 0 },
       testWithGCWrap(async () => {
         const { lookup } = await import("node:dns");
-        const { sockets } = await import("../src/nodejs/index.js");
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
         const network = sockets.instanceNetwork.instanceNetwork();
         const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
 
@@ -510,7 +511,7 @@ suite("Node.js Preview2", () => {
 
   suite("WASI Sockets (UDP)", async () => {
     test("sockets.udpCreateSocket() should create sockets", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const socket1 = sockets.udpCreateSocket.createUdpSocket("ipv4");
       assert.notEqual(socket1, null);
       const socket2 = sockets.udpCreateSocket.createUdpSocket("ipv4");
@@ -519,7 +520,7 @@ suite("Node.js Preview2", () => {
 
     // TODO: figure out how to mock handle.on("message", ...)
     test("udp.bind(): should bind to a valid ipv4 address and port=0", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket("ipv4");
       const localAddress: IpSocketAddress = {
@@ -542,7 +543,7 @@ suite("Node.js Preview2", () => {
     });
 
     test("udp.bind(): should bind to a valid ipv6 address and port=0", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket("ipv6");
       const localAddress = {
@@ -575,7 +576,7 @@ suite("Node.js Preview2", () => {
     });
 
     test("udp.stream(): should connect to a valid ipv4 address", async () => {
-      const { sockets } = await import("../src/nodejs/index.js");
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket("ipv4");
       const localAddress: IpSocketAddress = {
@@ -610,7 +611,7 @@ suite("Node.js Preview2", () => {
     test(
       "udp.stream(): should connect to a valid ipv6 address",
       testWithGCWrap(async () => {
-        const { sockets } = await import("../src/nodejs/index.js");
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
         const network = sockets.instanceNetwork.instanceNetwork();
         const socket = sockets.udpCreateSocket.createUdpSocket("ipv6");
         const localAddress: IpSocketAddress = {
@@ -641,7 +642,7 @@ suite("Node.js Preview2", () => {
     test(
       "ipNameLookup.resolveAddresses(): should return valid IP addresses",
       testWithGCWrap(async () => {
-        const { sockets } = await import("../src/nodejs/index.js");
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
 
         const network = sockets.instanceNetwork.instanceNetwork();
         const stream = sockets.ipNameLookup.resolveAddresses(network, "localhost");
@@ -680,8 +681,7 @@ suite("HTTPServer", () => {
   test(
     "HTTPServer: can retrieve randomized server address",
     testWithGCWrap(async () => {
-      // HTTPServer is a Node.js-only feature
-      const httpModule = await import("../src/nodejs/http.js");
+      const httpModule = await import("@bytecodealliance/preview2-shim/http");
       const HTTPServer = (httpModule as any).HTTPServer;
       if (!HTTPServer) {
         console.log("HTTPServer not available in this environment, skipping test");
@@ -704,8 +704,8 @@ suite("HTTPServer", () => {
 
 suite("Instantiation", () => {
   test("WASIShim export (random)", async () => {
-    const { random } = await import("../src/nodejs/index.js");
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { random } = await import("@bytecodealliance/preview2-shim");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
     const shim = new WASIShim();
     assert.ok(shim);
     assert.deepStrictEqual(
@@ -723,8 +723,8 @@ suite("Instantiation", () => {
   });
 
   test("WASIShim export override", async () => {
-    const { random } = await import("../src/nodejs/index.js");
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { random } = await import("@bytecodealliance/preview2-shim");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
     const invalidWASIShim = {
       random: {
         random: {
@@ -752,14 +752,14 @@ suite("Sandboxing", () => {
   let originalArgs: string[];
 
   beforeEach(async () => {
-    const { cli } = await import("../src/nodejs/index.js");
+    const { cli } = await import("@bytecodealliance/preview2-shim");
     // Save original state
     originalEnv = cli.environment.getEnvironment() as [string, string][];
     originalArgs = cli.environment.getArguments();
   });
 
   afterEach(async () => {
-    const { cli, filesystem } = await import("../src/nodejs/index.js");
+    const { cli, filesystem } = await import("@bytecodealliance/preview2-shim");
     // Restore default state
     (filesystem as any)._setPreopens({ "/": "/" });
     cli._setEnv(Object.fromEntries(originalEnv));
@@ -767,7 +767,7 @@ suite("Sandboxing", () => {
   });
 
   test("_clearPreopens removes filesystem access", async () => {
-    const { filesystem } = await import("../src/nodejs/index.js");
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
     const initialPreopens = filesystem.preopens.getDirectories();
 
     assert.ok(initialPreopens.length > 0, "Should have default preopens");
@@ -778,7 +778,7 @@ suite("Sandboxing", () => {
   });
 
   test("_setPreopens replaces preopens", async () => {
-    const { filesystem } = await import("../src/nodejs/index.js");
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
 
     (filesystem as any)._setPreopens({
       "/custom": "/tmp",
@@ -790,7 +790,7 @@ suite("Sandboxing", () => {
   });
 
   test("_getPreopens returns current preopens", async () => {
-    const { filesystem } = await import("../src/nodejs/index.js");
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
 
     const preopens = filesystem._getPreopens();
     assert.ok(Array.isArray(preopens), "Should return an array");
@@ -801,7 +801,7 @@ suite("Sandboxing", () => {
   });
 
   test("WASIShim with empty preopens provides no filesystem access", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const sandboxedShim = new WASIShim({
       sandbox: {
@@ -815,7 +815,7 @@ suite("Sandboxing", () => {
   });
 
   test("WASIShim with custom env", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const customShim = new WASIShim({
       sandbox: {
@@ -832,7 +832,7 @@ suite("Sandboxing", () => {
   });
 
   test("WASIShim with custom args", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const customShim = new WASIShim({
       sandbox: {
@@ -846,7 +846,7 @@ suite("Sandboxing", () => {
   });
 
   test("WASIShim with enableNetwork=false denies network", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const noNetworkShim = new WASIShim({
       sandbox: {
@@ -878,8 +878,8 @@ suite("Sandboxing", () => {
   });
 
   test("WASIShim with enableNetwork=true (default) allows network", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
-    const { sockets } = await import("../src/nodejs/index.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+    const { sockets } = await import("@bytecodealliance/preview2-shim");
 
     const defaultShim = new WASIShim();
 
@@ -897,7 +897,7 @@ suite("Sandboxing", () => {
   });
 
   test("Fully sandboxed WASIShim", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const sandboxed = new WASIShim({
       sandbox: {
@@ -943,7 +943,7 @@ suite("Sandboxing", () => {
   });
 
   test("Multiple WASIShim instances have isolated preopens", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     // Create two shims with different preopens
     const shim1 = new WASIShim({
@@ -973,7 +973,7 @@ suite("Sandboxing", () => {
   });
 
   test("Multiple WASIShim instances have isolated env and args", async () => {
-    const { WASIShim } = await import("../src/common/instantiation.js");
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const shim1 = new WASIShim({
       sandbox: {
@@ -1005,7 +1005,7 @@ suite("Sandboxing", () => {
   test(
     "WASIShim isolated preopens can read files",
     testWithGCWrap(async () => {
-      const { WASIShim } = await import("../src/common/instantiation.js");
+      const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
       const { dirname } = await import("node:path");
 
       const testFilePath = fileURLToPath(import.meta.url);
@@ -1053,7 +1053,7 @@ suite("Sandboxing", () => {
   test(
     "WASIShim isolated preopens don't access paths outside preopen",
     testWithGCWrap(async () => {
-      const { WASIShim } = await import("../src/common/instantiation.js");
+      const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
       const { dirname } = await import("node:path");
 
       const testFilePath = fileURLToPath(import.meta.url);
