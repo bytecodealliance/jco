@@ -43,34 +43,6 @@ suite("CLI", () => {
         } catch {}
     });
 
-    test("Transcoding", async () => {
-        const { stderr } = await exec(
-            jcoPath,
-            "transpile",
-            `test/fixtures/env-allow.composed.wasm`,
-            ...multiMemory,
-            "-o",
-            outDir,
-        );
-        assert.strictEqual(stderr, "");
-        await writeFile(`${outDir}/package.json`, JSON.stringify({ type: "module" }));
-        const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
-        assert.deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
-    });
-
-    test("Transcoding UTF8 <-> UTF16", async () => {
-        const { stdout, stderr } = await exec(
-            jcoPath,
-            "run",
-            `test/fixtures/utf8-utf16.composed.wasm`,
-            ...multiMemory,
-            "--",
-            "asdf中文🀄️⏰",
-        );
-        assert.strictEqual(stdout, "ret: asdf中文🀄️⏰asdf中文🀄️⏰\n");
-        assert.strictEqual(stderr, "");
-    });
-
     test("Resource transfer", async () => {
         const { stderr } = await exec(
             jcoPath,

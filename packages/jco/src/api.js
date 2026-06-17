@@ -1,6 +1,7 @@
 // @ts-check
 export { optimizeComponent as opt } from "./cmd/opt.js";
 export { transpileComponent as transpile, typesComponent as types } from "./cmd/transpile.js";
+
 import { $init, tools } from "../obj/wasm-tools.js";
 const {
     print: printFn,

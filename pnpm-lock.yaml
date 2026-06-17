@@ -258,6 +258,9 @@ importers:
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.9
         version: 0.17.9
@@ -265,8 +268,8 @@ importers:
         specifier: ^0.1.2
         version: 0.1.2
       binaryen:
-        specifier: ^123.0.0
-        version: 123.0.0
+        specifier: ^130.0.0
+        version: 130.0.0
       commander:
         specifier: ^14
         version: 14.0.3
@@ -445,6 +448,9 @@ packages:
 
   '@bytecodealliance/jco-transpile@0.1.3':
     resolution: {integrity: sha512-SiEcmlbzOzd00v6XwfO+80B6lgc1KjWt8irykadbJWP00RMJrPMopY9FEXE689HNrx/PeBUCCWwgDEnrgn2uBg==}
+
+  '@bytecodealliance/jco-transpile@0.2.0':
+    resolution: {integrity: sha512-LpHDtgSzSPVAYdV+HWEVzOXV5Mi5DTrnfjFjp1f00EZKErU2AL8yh3EM9XoGzm3rjYOpMpyim+kiyQvz+t/0cg==}
 
   '@bytecodealliance/jco@1.20.0':
     resolution: {integrity: sha512-E3CNiV+yFEMIE69RnzOgN0vvCGr90+32rX7VBeerxadcAONnclFrXLba243XIuLuiUHQIa9IFcWkiq6dhF5pVw==}
@@ -3833,7 +3839,12 @@ snapshots:
   '@bytecodealliance/jco-transpile@0.1.3':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.17.9
-      terser: 5.47.1
+      terser: 5.48.0
+
+  '@bytecodealliance/jco-transpile@0.2.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.17.9
+      terser: 5.48.0
 
   '@bytecodealliance/jco@1.20.0':
     dependencies:
@@ -3869,9 +3880,10 @@ snapshots:
     dependencies:
       '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.2.0
       '@bytecodealliance/preview2-shim': 0.17.9
       '@bytecodealliance/preview3-shim': 0.1.2
-      binaryen: 123.0.0
+      binaryen: 130.0.0
       commander: 14.0.3
       mkdirp: 3.0.1
       ora: 8.2.0

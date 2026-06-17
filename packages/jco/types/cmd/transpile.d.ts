@@ -1,10 +1,5 @@
-export function transpile(witPath: any, opts: any, program: any): Promise<void>;
 /**
- * Execute the bundled pre-transpiled component that can perform component transpilation,
- * for the given component.
- *
- * @param {Uint8Array} component
- * @param {{
+ * @typedef {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
  *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
@@ -26,10 +21,31 @@ export function transpile(witPath: any, opts: any, program: any): Promise<void>;
  *   experimentalIdlImports?: bool,
  *   optArgs?: string[],
  *   wasmOptBin?: string[],
- * }} opts
+ * }} TranspileOpts
+ */
+/**
+ * Transpile a component, given a path.
+ *
+ * @param {string} componentPath
+ * @param {TranspileOpts} opts
+ * @param {object} comander `Program` object
+ */
+export function transpileCmd(componentPath: string, opts: TranspileOpts, program: any): Promise<void>;
+/**
+ * Transpile a component, given WebAssembly bytes.
+ *
+ * @param {Uint8Array} component
+ * @param {TranspileOpts} [opts]
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
-export function transpileComponent(component: Uint8Array, opts?: {
+export function transpileComponent(component: Uint8Array, opts?: TranspileOpts): Promise<{
+    files: {
+        [filename: string]: Uint8Array;
+    };
+    imports: string[];
+    exports: [string, "function" | "instance"][];
+}>;
+export type TranspileOpts = {
     name: string;
     instantiation?: "async" | "sync";
     importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
@@ -51,12 +67,6 @@ export function transpileComponent(component: Uint8Array, opts?: {
     experimentalIdlImports?: bool;
     optArgs?: string[];
     wasmOptBin?: string[];
-}): Promise<{
-    files: {
-        [filename: string]: Uint8Array;
-    };
-    imports: string[];
-    exports: [string, "function" | "instance"][];
-}>;
+};
 export { types, guestTypes, typesComponent } from "./types.js";
 //# sourceMappingURL=transpile.d.ts.map

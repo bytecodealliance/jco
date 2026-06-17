@@ -3,7 +3,7 @@
 import { program, Option } from "commander";
 
 import { opt } from "./cmd/opt.js";
-import { transpile } from "./cmd/transpile.js";
+import { transpileCmd } from "./cmd/transpile.js";
 import { types, guestTypes } from "./cmd/types.js";
 import { run as runCmd, serve as serveCmd } from "./cmd/run.js";
 import {
@@ -130,7 +130,7 @@ program
     .option("--multi-memory", "optimized output for Wasm multi-memory")
     .option("--strict", "generate bindings with strict type checking")
     .allowExcessArguments(true)
-    .action(asyncAction(transpile));
+    .action(asyncAction(transpileCmd));
 
 program
     .command("types")

@@ -5,7 +5,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { getTmpDir, styleText } from "../common.js";
-import { transpile } from "./transpile.js";
+import { transpileCmd } from "./transpile.js";
 
 const DEFAULT_SERVE_HOST = "localhost";
 
@@ -85,7 +85,7 @@ async function runComponent(componentPath, args, opts, executor) {
 
     try {
         try {
-            await transpile(componentPath, {
+            await transpileCmd(componentPath, {
                 name,
                 quiet: true,
                 noTypescript: true,
