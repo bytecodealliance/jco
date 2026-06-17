@@ -1,7 +1,7 @@
 import { stat, mkdir } from "node:fs/promises";
 import { extname, basename, resolve } from "node:path";
 
-import { $init, generateTypes } from "../../obj/js-component-bindgen-component.js";
+import { generateGuestTypes, generateHostTypes } from "@bytecodealliance/jco-transpile";
 
 import {
     isWindows,
@@ -132,8 +132,10 @@ export async function typesComponent(witPath, opts) {
     // Run the type generation
     let types;
     const absWitPath = resolve(witPath);
+    const guest = opts.guest ?? false;
+    const generateFn = guest ? generateGuestTypes : generateHostTypes;
     try {
-        types = generateTypes(name, {
+        types = generateFn(name, {
             wit: { tag: "path", val: (isWindows ? "//?/" : "") + absWitPath },
             instantiation,
             tlaCompat: opts.tlaCompat ?? false,
