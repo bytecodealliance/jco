@@ -1,15 +1,14 @@
+import { fileURLToPath } from "node:url";
 import { writeFile } from "node:fs/promises";
 
-import { $init, tools } from "../../obj/wasm-tools.js";
-const { metadataShow, print } = tools;
-import { fileURLToPath } from "node:url";
+import { metadataShow, print } from "@bytecodealliance/jco-transpile/wasm-tools";
+
 import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from "../common.js";
 import ora from "#ora";
 
 import { styleText } from "../common.js";
 
 export async function opt(componentPath, opts, program) {
-    await $init;
     const varIdx = program.parent.rawArgs.indexOf("--");
     if (varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
@@ -81,11 +80,10 @@ function byteLengthLEB128(val) {
  * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
 export async function optimizeComponent(componentBytes, opts) {
-    await $init;
     const showSpinner = getShowSpinner();
     let spinner;
     try {
-        let componentMetadata = metadataShow(componentBytes);
+        let componentMetadata = await metadataShow(componentBytes);
         componentMetadata.forEach((metadata, index) => {
             // add index to the metadata object
             metadata.index = index;
@@ -211,7 +209,7 @@ export async function optimizeComponent(componentBytes, opts) {
         // verify it still parses ok
         if (!opts?.noVerify) {
             try {
-                print(outComponentBytes);
+                await print(outComponentBytes);
             } catch (e) {
                 throw new Error(`Internal error performing optimization.\n${e.message}`);
             }

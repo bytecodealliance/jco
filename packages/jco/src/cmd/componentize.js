@@ -1,7 +1,7 @@
 import { stat, readFile, writeFile } from "node:fs/promises";
 import { resolve, basename } from "node:path";
 
-import * as wasmToolsComponent from "../../obj/wasm-tools.js";
+import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { styleText, isWindows } from "../common.js";
 
@@ -19,13 +19,8 @@ const DEBUG_FEATURES = ["stdio"];
  * @returns bool
  */
 async function usesOlderWasiHTTP(witPath, worldName) {
-    await wasmToolsComponent.$init;
-
     witPath = (isWindows ? "//?/" : "") + resolve(witPath);
-    const worldMetadata = wasmToolsComponent.tools.componentWitMetadataForWorld(
-        { tag: "path", val: witPath },
-        worldName ?? null,
-    );
+    const worldMetadata = await componentWitMetadataForWorld({ tag: "path", val: witPath }, worldName ?? null);
 
     // Check if the an old `wasi:http/incoming-handler` version is exported
     const exportsOldIncomingHandler = worldMetadata.exports.some((iface) => {
