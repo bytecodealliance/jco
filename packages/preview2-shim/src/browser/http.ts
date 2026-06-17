@@ -535,7 +535,7 @@ const incomingBodyCreate = IncomingBody._create;
 delete IncomingBody._create;
 
 class IncomingResponse implements TypesNamespace.IncomingResponse {
-  #headers: Fields = undefined as any;
+  #headers!: Fields;
   #status = 0;
   #body: IncomingBody | undefined;
 

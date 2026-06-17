@@ -106,7 +106,7 @@ OK Successfully written dist/component.wasm.
 
 embedding.mts → dist/transpiled/embedding.js...
 (!) Circular dependency
-../../../packages/preview2-shim/lib/browser/filesystem.js -> ../../../packages/preview2-shim/lib/browser/cli.js -> ../../../packages/preview2-shim/lib/browser/filesystem.js
+../../../packages/preview2-shim/dist/browser/filesystem.js -> ../../../packages/preview2-shim/dist/browser/cli.js -> ../../../packages/preview2-shim/dist/browser/filesystem.js
 created dist/transpiled/embedding.js in 1.2s
 
 > ts-resource-import@0.1.0 run:embedding
@@ -341,7 +341,7 @@ You should see output like the following:
 
 embedding.mts → dist/transpiled/embedding.js...
 (!) Circular dependency
-../../../packages/preview2-shim/lib/browser/filesystem.js -> ../../../packages/preview2-shim/lib/browser/cli.js -> ../../../packages/preview2-shim/lib/browser/filesystem.js
+../../../packages/preview2-shim/dist/browser/filesystem.js -> ../../../packages/preview2-shim/dist/browser/cli.js -> ../../../packages/preview2-shim/dist/browser/filesystem.js
 created dist/transpiled/embedding.js in 1.1s
 
 > ts-resource-import@0.1.0 run:embedding

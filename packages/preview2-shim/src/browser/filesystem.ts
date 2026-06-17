@@ -48,7 +48,7 @@ export function _getFileData(): string {
 let _fileData: FileData = { dir: {} };
 
 const timeZero = {
-  seconds: BigInt(0),
+  seconds: 0n,
   nanoseconds: 0,
 };
 
@@ -272,7 +272,7 @@ class Descriptor implements TypesNamespace.Descriptor {
 
   stat() {
     let type: TypesNamespace.DescriptorType = "unknown";
-    let size = BigInt(0);
+    let size = 0n;
     if (this.#entry.source) {
       type = "regular-file";
       const source = getSource(this.#entry);
@@ -282,7 +282,7 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
     return {
       type,
-      linkCount: BigInt(0),
+      linkCount: 0n,
       size,
       dataAccessTimestamp: timeZero,
       dataModificationTimestamp: timeZero,
@@ -296,7 +296,7 @@ class Descriptor implements TypesNamespace.Descriptor {
       directory: false,
     });
     let type: TypesNamespace.DescriptorType = "unknown";
-    let size = BigInt(0);
+    let size = 0n;
     if (entry.source) {
       type = "regular-file";
       const source = getSource(entry);
@@ -306,7 +306,7 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
     return {
       type,
-      linkCount: BigInt(0),
+      linkCount: 0n,
       size,
       dataAccessTimestamp: timeZero,
       dataModificationTimestamp: timeZero,
@@ -358,9 +358,9 @@ class Descriptor implements TypesNamespace.Descriptor {
   }
 
   metadataHash() {
-    let upper = BigInt(0);
+    let upper = 0n;
     upper += BigInt(this.#mtime);
-    return { upper, lower: BigInt(0) };
+    return { upper, lower: 0n };
   }
 
   metadataHashAt(_pathFlags: any, _path: string) {
@@ -516,6 +516,10 @@ function convertFsError(e: any): TypesNamespace.ErrorCode {
       return "unsupported";
     case "ENOTTY":
       return "no-tty";
+    // windows gives this error for badly structured `//` reads
+    // this seems like a slightly better error than unknown given
+    // that it's a common footgun
+    case -4094:
     case "ENXIO":
       return "no-such-device";
     case "EOVERFLOW":
@@ -532,6 +536,13 @@ function convertFsError(e: any): TypesNamespace.ErrorCode {
       return "text-file-busy";
     case "EXDEV":
       return "cross-device";
+    case "UNKNOWN":
+      switch (e.errno) {
+        case -4094:
+          return "no-such-device";
+        default:
+          throw e;
+      }
     default:
       throw e;
   }

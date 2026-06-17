@@ -27,30 +27,30 @@
   },
   "files": [
     "types",
-    "lib"
+    "dist"
   ],
   "type": "module",
   "exports": {
     ".": {
-      "types": "./lib/browser/index.d.ts",
+      "types": "./dist/browser/index.d.ts",
       "node": {
-        "types": "./lib/nodejs/index.d.ts",
-        "default": "./lib/nodejs/index.js"
+        "types": "./dist/nodejs/index.d.ts",
+        "default": "./dist/nodejs/index.js"
       },
-      "default": "./lib/browser/index.js"
+      "default": "./dist/browser/index.js"
     },
     "./*": {
-      "types": "./lib/browser/*.d.ts",
+      "types": "./dist/browser/*.d.ts",
       "node": {
-        "types": "./lib/nodejs/*.d.ts",
-        "default": "./lib/nodejs/*.js"
+        "types": "./dist/nodejs/*.d.ts",
+        "default": "./dist/nodejs/*.js"
       },
-      "default": "./lib/browser/*.js"
+      "default": "./dist/browser/*.js"
     },
     "./instantiation": {
       "types": "./types/instantiation.d.ts",
-      "node": "./lib/common/instantiation.js",
-      "default": "./lib/common/instantiation.js"
+      "node": "./dist/common/instantiation.js",
+      "default": "./dist/common/instantiation.js"
     },
     "./interfaces/*": {
       "types": "./types/interfaces/*.d.ts"
@@ -65,7 +65,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "vitest run -c test/vitest.ts",
-    "prepublishOnly": "pnpm run build"
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "0.21.0",

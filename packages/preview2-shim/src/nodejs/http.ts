@@ -393,7 +393,7 @@ const outgoingBodyCreate = OutgoingBody._create;
 delete OutgoingBody._create;
 
 class IncomingResponse implements TypesNamespace.IncomingResponse {
-  #headers: Fields = undefined as any;
+  #headers!: Fields;
   #status = 0;
   #bodyStream: IncomingBody | undefined;
 
