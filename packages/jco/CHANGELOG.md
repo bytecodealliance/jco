@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.24.2] - 2026-06-18
+
+### 🚀 Features
+
+- _(jco)_ use wasm-tools via jco-transpile by @vados-cosmonic
+
+- _(jco)_ use jco-transpile exclusively for transpile by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(jco)_ use generate fn from jco-transpile by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ remove un-needed dist files, re-enable tests by @vados-cosmonic in #1654
+
+- _(jco)_ update jco-transpile to v0.3.3 by @vados-cosmonic
+
+- _(jco)_ ignore output files in fmt by @vados-cosmonic in #1651
+
 ## [1.24.1] - 2026-06-16
 
 This release updates jco-internal `js-component-bindgen` code to v2.0.3, which
