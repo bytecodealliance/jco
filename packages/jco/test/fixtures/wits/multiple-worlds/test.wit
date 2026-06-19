@@ -1,0 +1,17 @@
+package jco:test;
+
+interface foo1 {
+    foo: func();
+}
+
+interface foo2 {
+    foo: func();
+}
+
+world world1 {
+    export foo1;
+}
+
+world world2 {
+    export foo2;
+}

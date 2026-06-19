@@ -670,6 +670,23 @@ suite("CLI", () => {
         assert(!source.includes("from './filesystem-types.js'"));
         assert(source.includes("from './filesystem-preopens-higher.js'"));
     });
+
+    // see: https://github.com/bytecodealliance/jco/issues/1664
+    test("picking worlds for typegen", async () => {
+        const { stderr } = await exec(
+            jcoPath,
+            "guest-types",
+            "test/fixtures/wits/multiple-worlds/test.wit",
+            "--world-name",
+            "jco:test/world1",
+            "-o",
+            outDir,
+        );
+        assert.strictEqual(stderr, "");
+        const source = await readFile(`${outDir}/interfaces/jco-test-foo1.d.ts`, "utf8");
+        assert.include(source, "declare module 'jco:test/foo1' {");
+        assert.notInclude(source, "declare module 'jco:test/foo2' {");
+    });
 });
 
 // Cache of componentize byte outputs
