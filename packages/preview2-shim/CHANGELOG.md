@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.19.0] - 2026-06-19
+
+### 🚀 Features
+
+- _(p2-shim)_ migrate to typescript by @eduardomourar
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ export io interface namespaces as runtime values by @SAY-5
+
+### 🚜 Refactor
+
+- _(p2-shim)_ restore type exports in io.d.ts by @vados-cosmonic in #1600
+
+### 🧪 Testing
+
+- _(p2-shim)_ add test to ensure exposed iface namespace at runtime by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ lint by @vados-cosmonic
+
+- _(p2-shim)_ update vitest config by @vados-cosmonic
+
+## New Contributors
+
+- @SAY-5 made their first contribution
+
 ## [0.18.1] - 2026-06-01
 
 ### 🐛 Bug Fixes
