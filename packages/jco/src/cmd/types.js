@@ -145,7 +145,7 @@ export async function typesComponent(witPath, opts) {
             name,
             instantiation,
             tlaCompat: opts.tlaCompat ?? false,
-            world: opts.worldName,
+            worldName: opts.worldName,
             features,
             guest,
             strict: opts.strict === true,
