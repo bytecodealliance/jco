@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.24.3] - 2026-06-19
+
+### 🐛 Bug Fixes
+
+- _(jco)_ world name config option regression by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ add regression test for world picking during typegen by @vados-cosmonic in #1665
+
 ## [1.24.2] - 2026-06-18
 
 ### 🚀 Features
