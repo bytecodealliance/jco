@@ -1,0 +1,12 @@
+package jco:test;
+
+interface returns-result {
+    return-err-string: func() -> result<u32, string>;
+    return-err-null: func() -> result<u32>;
+    return-ok: func() -> result<u32>;
+}
+
+world import-manual-result {
+    import returns-result;
+    export returns-result;
+}
