@@ -177,7 +177,7 @@ function assertByte(value) {
  * expect(done).toBeNull();
  *
  */
-export function stream(opts = {}) {
+export function stream(opts: { readableHWM?: number; writableHWM?: number } = {}) {
   const { readableHWM = 64 * 1024, writableHWM = 64 * 1024 } = opts;
 
   const transform = new TransformStream(
@@ -206,7 +206,7 @@ export class StreamReader {
    * @param {AsyncIterable|Iterable} source - An async or sync iterable to consume e.g. ReadableStream, async generator, array.
    * @throws {Error} If the provided source does not implement `[Symbol.asyncIterator]` or `[Symbol.iterator]`.
    */
-  constructor(source, opts = {}) {
+  constructor(source, opts: { preventCancel?: boolean } = {}) {
     if (
       !source ||
       (typeof source[Symbol.asyncIterator] !== "function" &&

@@ -1,4 +1,4 @@
-import { Router } from "../lib/nodejs/workers/resource-worker.js";
+import { Router } from "../dist/nodejs/workers/resource-worker.js";
 
 Router()
   .op("nop", () => {

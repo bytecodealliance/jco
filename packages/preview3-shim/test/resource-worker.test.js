@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { ResourceWorker } from "../lib/nodejs/workers/resource-worker.js";
+import { ResourceWorker } from "../dist/nodejs/workers/resource-worker.js";
 
 const _worker = new ResourceWorker(new URL("./nop-worker.js", import.meta.url));
 

@@ -1,4 +1,4 @@
-let REGISTRY = null;
+let REGISTRY: FinalizationRegistry<() => void> | null = null;
 
 function getRegistry() {
   if (!REGISTRY) {
@@ -27,7 +27,7 @@ export function registerDispose(resource, parent = null, id, disposeFn) {
   return finalizer;
 }
 
-export function earlyDispose(finalizer) {
+export function earlyDispose(finalizer: () => void) {
   getRegistry().unregister(finalizer);
   finalizer();
 }

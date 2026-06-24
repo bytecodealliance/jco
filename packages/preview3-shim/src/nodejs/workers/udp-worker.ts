@@ -10,7 +10,7 @@ import {
 
 import dgram from "node:dgram";
 
-const sockets = new Map();
+const sockets = new Map<any, any>();
 // Unique IDs for sockets
 let NEXT_SOCKET_ID = 0n;
 
@@ -38,7 +38,7 @@ Router()
 
 function handleCreate({ family }) {
   const socketId = NEXT_SOCKET_ID++;
-  const socket = {
+  const socket: any = {
     family,
     connected: null,
     localAddress: null,
@@ -73,7 +73,7 @@ async function handleBind({ socketId, localAddress }) {
   );
 
   if (hasConflict) {
-    const err = new Error("EADDRINUSE");
+    const err = new Error("EADDRINUSE") as NodeJS.ErrnoException;
     err.code = "EADDRINUSE";
     throw err;
   }
@@ -103,7 +103,7 @@ async function handleConnect({ socketId, remoteAddress }) {
 
   if (socket.connected) {
     const localAddress = preserveLocalAddress ? socket.localAddress : null;
-    await new Promise((resolve) => socket.udp.close(resolve));
+    await new Promise<void>((resolve) => socket.udp.close(resolve));
     socket.udp = createSocket(socket);
     if (localAddress) {
       await handleBind({ socketId, localAddress });
@@ -115,7 +115,7 @@ async function handleConnect({ socketId, remoteAddress }) {
   const addr = serializeIpAddress(remoteAddress);
   const port = remoteAddress.val.port;
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     socket.udp.connect(port, addr, (err) => (err ? reject(err) : resolve()));
   });
   const boundAddr = socket.udp.address();
@@ -133,7 +133,7 @@ async function handleSend({ socketId, data, remoteAddress }) {
   const socket = sockets.get(socketId);
   const isConnected = socket.connected != null;
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     if (isConnected) {
       socket.udp.send(data, (err) => (err ? reject(err) : resolve()));
     } else {

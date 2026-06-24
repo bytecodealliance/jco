@@ -8,10 +8,10 @@ import { serializeIpAddress, makeIpAddress, ipAddressConflict } from "../sockets
 import { SocketError } from "../sockets/error.js";
 
 import process from "node:process";
-const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
+const { TCP, constants: TCPConstants } = (process as any).binding("tcp_wrap");
 
 // Socket instances stored by ID
-const sockets = new Map();
+const sockets = new Map<any, any>();
 // Unique IDs for sockets
 let NEXT_SOCKET_ID = 0n;
 
@@ -69,12 +69,12 @@ async function handleTcpBind({ socketId, localAddress }) {
   );
 
   if (hasConflict) {
-    const err = new Error("EADDRINUSE");
+    const err = new Error("EADDRINUSE") as NodeJS.ErrnoException;
     err.code = "EADDRINUSE";
     throw err;
   }
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     let code;
     if (family === "ipv6") {
       code = handle.bind6(address, port, TCPConstants.UV_TCP_IPV6ONLY);
@@ -89,7 +89,7 @@ async function handleTcpBind({ socketId, localAddress }) {
     }
   });
 
-  const out = {};
+  const out: any = {};
   const code = handle.getsockname(out);
   if (code !== 0) {
     throw SocketError.from(-code);
@@ -107,7 +107,7 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
     handle: socket.handle,
     pauseOnCreate: true,
     allowHalfOpen: true,
-  }));
+  } as any));
 
   const onConnect = once(tcp, "connect");
   const onError = once(tcp, "error").then(([err]) => {
@@ -148,7 +148,7 @@ async function handleTcpListen({ socketId, stream }) {
     conn.allowHalfOpen = true;
     const id = NEXT_SOCKET_ID++;
     sockets.set(id, {
-      handle: conn._handle,
+      handle: (conn as any)._handle,
       family,
       backlog,
       tcp: conn,
@@ -188,7 +188,7 @@ async function handleTcpReceive({ socketId, stream }) {
   const { tcp } = socket;
 
   try {
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       let settled = false;
       let pending = Promise.resolve();
 
@@ -197,7 +197,7 @@ async function handleTcpReceive({ socketId, stream }) {
         tcp.off("end", onEnd);
         tcp.off("error", onError);
       };
-      const settle = (err) => {
+      const settle = (err = null) => {
         if (settled) {
           return;
         }
@@ -276,11 +276,11 @@ function cleanupDisposedSocket(socketId, socket) {
 
 async function handleGetLocalAddress({ socketId }) {
   const socket = sockets.get(socketId);
-  const out = {};
+  const out: any = {};
 
   const code = socket.handle.getsockname(out);
   if (code !== 0) {
-    throw new SocketError.from(-code);
+    throw SocketError.from(-code);
   }
 
   return makeIpAddress(out.family.toLowerCase(), out.address, out.port);
@@ -288,11 +288,11 @@ async function handleGetLocalAddress({ socketId }) {
 
 async function handleGetRemoteAddress({ socketId }) {
   const socket = sockets.get(socketId);
-  const out = {};
+  const out: any = {};
 
   const code = socket.handle.getpeername(out);
   if (code !== 0) {
-    throw new SocketError.from(-code);
+    throw SocketError.from(-code);
   }
 
   return makeIpAddress(out.family.toLowerCase(), out.address, out.port);
@@ -309,7 +309,7 @@ async function handleTcpSetKeepAlive({ socketId, keepAliveEnabled, keepAliveIdle
 
   const code = socket.handle.setKeepAlive(keepAliveEnabled, time);
   if (code !== 0) {
-    throw mapErrorCode(-code);
+    throw SocketError.from(-code);
   }
 }
 
@@ -344,9 +344,9 @@ function handleTcpDispose({ socketId }) {
 
 let _recvBufferSize, _sendBufferSize;
 async function getDefaultBufferSizes() {
-  var s = new Socket();
+  var s: any = new Socket();
   s.bind(0);
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     s.once("error", reject);
     s.once("listening", resolve);
   });

@@ -36,6 +36,7 @@ catalog:
 minimumReleaseAgeExclude:
   - '@bytecodealliance/componentize-js@0.21.0'
   - '@bytecodealliance/jco-transpile@0.3.3'
+  - '@bytecodealliance/preview2-shim@0.19.0'
   - '@bytecodealliance/preview3-shim@0.1.2'
   - '@puppeteer/browsers@3.0.4'
   - puppeteer-core@25.1.0

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { MessageChannel } from "node:worker_threads";
 
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";

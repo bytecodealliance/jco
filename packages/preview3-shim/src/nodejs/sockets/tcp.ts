@@ -93,6 +93,7 @@ export class TcpSocket {
     hopLimit: 1,
     receiveBufferSize: 65_536n,
     sendBufferSize: 65_536n,
+    listenBacklogSize: 128n,
   };
 
   /**

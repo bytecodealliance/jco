@@ -68,12 +68,14 @@ export const CODE_MAP = {
  * https://bytecodealliance.github.io/jco/wit-type-representations.html#result-considerations-idiomatic-js-errors-for-host-implementations
  */
 export class SocketError extends Error {
+  payload;
+
   /**
    * @param {string} tag        – machine‐readable error tag
    * @param {string} [message]  – human‐readable message
    * @param {any}    [val]      – optional extra data
    */
-  constructor(tag, message, val, opts = {}) {
+  constructor(tag, message = undefined, val = undefined, opts: { cause?: unknown } = {}) {
     super(message ?? `Error: ${tag}`, { cause: opts.cause });
     this.name = "SocketError";
     this.payload = val !== undefined ? { tag, val } : { tag };
@@ -88,9 +90,7 @@ export class SocketError extends Error {
       return err;
     }
 
-    let tag,
-      message = undefined,
-      val = undefined;
+    let tag, message, val;
 
     if (typeof err === "number") {
       tag = CODE_MAP[err] ?? "other";

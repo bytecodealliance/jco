@@ -56,6 +56,8 @@ function getErrorTag(e) {
  * Custom error for File operations with JCO compatible payload.
  */
 export class FSError extends Error {
+  payload;
+
   /**
    * @param {string} tag        – machine‐readable error tag
    * @param {string} [message]  – human‐readable message
@@ -63,7 +65,7 @@ export class FSError extends Error {
    * @param {object} [opts]
    * @param {Error} [opts.cause]
    */
-  constructor(tag, message, val, opts = {}) {
+  constructor(tag, message = undefined, val = undefined, opts: { cause?: unknown } = {}) {
     super(message ?? `Error: ${tag}`, { cause: opts.cause });
     this.name = "FSError";
     this.payload = val !== undefined ? { tag, val } : { tag };

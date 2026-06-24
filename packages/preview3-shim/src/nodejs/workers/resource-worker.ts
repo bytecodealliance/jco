@@ -144,12 +144,12 @@ export function Router() {
   };
 }
 
-function serializeError(err) {
+function serializeError(err: any) {
   if (!(err instanceof Error)) {
     return err;
   }
 
-  const serialized = {
+  const serialized: any = {
     __resourceWorkerError: true,
     name: err.name,
     message: err.message,
@@ -167,7 +167,7 @@ function serializeError(err) {
   return serialized;
 }
 
-function deserializeError(err) {
+function deserializeError(err: any) {
   if (!err || typeof err !== "object" || err.__resourceWorkerError !== true) {
     return err;
   }
