@@ -1,5 +1,6 @@
 import { Readable, Writable, PassThrough } from "node:stream";
 import { pipeline } from "stream/promises";
+import { MessageChannel } from "node:worker_threads";
 
 import { createServer } from "node:http";
 import { request as httpRequest, Agent as HttpAgent } from "node:http";
@@ -21,6 +22,9 @@ Router()
   .op("client-request", handleRequest);
 
 class Queue {
+  _items = [];
+  _resolvers = [];
+
   constructor() {
     this._items = [];
     this._resolvers = [];
@@ -62,7 +66,7 @@ async function handleHttpServerStart({ port, host }) {
 
   await new Promise((resolve, reject) => {
     server.on("error", reject);
-    server.listen(port, host, resolve);
+    server.listen(port, host, () => resolve(undefined));
   });
 
   servers.set(serverId, { server, pending, inflight });
@@ -343,7 +347,7 @@ function endRequest(req) {
     req.once("close", onClose);
 
     try {
-      req.end(() => settle(resolve));
+      req.end(() => settle(resolve, undefined));
     } catch (err) {
       settle(reject, err);
     }
@@ -410,7 +414,7 @@ const toObject = (entries) => {
 
 const encoder = new TextEncoder();
 
-const toEntries = (obj) => {
+const toEntries = (obj: Record<string, any>) => {
   return Object.entries(obj).flatMap(([k, v]) =>
     Array.isArray(v) ? v.map((val) => [k, encoder.encode(val)]) : [[k, encoder.encode(v)]],
   );

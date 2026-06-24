@@ -209,7 +209,7 @@ export class Request {
    * @throws {HttpError} with payload.tag 'invalid-argument' for invalid arguments
    *
    */
-  static new(headers, contents, trailers, options) {
+  static new(headers, contents, trailers, options): [Request, FutureReader] {
     if (options != null && !(options instanceof RequestOptions)) {
       throw new HttpError("invalid-argument", "options must be RequestOptions");
     }
@@ -541,7 +541,7 @@ function readOpts(remaining) {
       ? remaining
       : BigInt(DEFAULT_BYTE_STREAM_CHUNK_SIZE),
   );
-  const opts = { count };
+  const opts: { count: number; rejectLength?: number } = { count };
   if (remaining <= BigInt(Number.MAX_SAFE_INTEGER)) {
     opts.rejectLength = Number(remaining);
   }

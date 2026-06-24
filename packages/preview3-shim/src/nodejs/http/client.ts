@@ -1,3 +1,5 @@
+import { MessageChannel } from "node:worker_threads";
+
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader, future } from "../future.js";
@@ -63,7 +65,7 @@ export const client = {
     const { port1: tx, port2: rx } = new MessageChannel();
     const { port1: transmitRx, port2: transmitTx } = new MessageChannel();
 
-    const transfer = [rx, transmitTx];
+    const transfer = [rx, transmitTx] as any[];
     const stream = body ? readableByteStreamFromReader(body, { name: "request body" }) : undefined;
     if (stream) {
       transfer.unshift(stream);

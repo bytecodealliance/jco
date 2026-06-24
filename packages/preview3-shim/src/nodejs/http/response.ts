@@ -48,7 +48,7 @@ export class Response {
    * @returns {{ res: Response, future: FutureReader }}
    * @throws {HttpError} with payload.tag 'invalid-argument' for invalid arguments
    */
-  static new(headers, contents, trailers) {
+  static new(headers, contents, trailers): [Response, FutureReader] {
     if (!(headers instanceof Fields)) {
       throw new HttpError("invalid-argument", "headers must be Fields");
     }

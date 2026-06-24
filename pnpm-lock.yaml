@@ -405,17 +405,23 @@ importers:
   packages/preview3-shim:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.18.1
-        version: 0.18.1
+        specifier: ^0.19.0
+        version: 0.19.0
     devDependencies:
+      '@types/node':
+        specifier: ^24.12.4
+        version: 24.12.4
       globals:
         specifier: ^17.6.0
         version: 17.6.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
       vite:
         specifier: ^8.0.16
         version: 8.0.16(@types/node@24.12.4)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.48.0)
       vitest:
-        specifier: ^4.1.0
+        specifier: 'catalog:'
         version: 4.1.6(@types/node@24.12.4)(vite@8.0.16(@types/node@24.12.4)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.48.0))
 
 packages:
@@ -472,6 +478,9 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.18.1':
     resolution: {integrity: sha512-8+QEByJTHusG1JkYQNUwOZO0ZvP3zQJD7UVYcyRh8OedKfVls1VuPw/HfSuK0ustslzAkGz7uQCkaBbW+fal9w==}
+
+  '@bytecodealliance/preview2-shim@0.19.0':
+    resolution: {integrity: sha512-OSUlcM62fXLuzYP0DjBn/SwjKMZ/y/2PMXZ8v5cRiiFcroauntlPRl/oCnx0xYjYiqdYvE0PY50VCNutll0xOw==}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -3899,6 +3908,8 @@ snapshots:
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
   '@bytecodealliance/preview2-shim@0.18.1': {}
+
+  '@bytecodealliance/preview2-shim@0.19.0': {}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:

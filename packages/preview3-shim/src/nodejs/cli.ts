@@ -5,9 +5,18 @@ import { ResourceWorker } from "./workers/resource-worker.js";
 import { StreamReader, readableByteStreamFromReader } from "./stream.js";
 import { future } from "./future.js";
 
-import { environment as environmentV2 } from "@bytecodealliance/preview2-shim/cli";
+import * as cliV2 from "@bytecodealliance/preview2-shim/cli";
 
-export {
+type Preview2NodeCli = typeof cliV2 & {
+  _appendEnv: (env: Record<string, string>) => void;
+  _setTerminalStdin: (terminalStdin: unknown) => void;
+  _setTerminalStdout: (terminalStdout: unknown) => void;
+  _setTerminalStderr: (terminalStderr: unknown) => void;
+};
+
+const nodeCliV2 = cliV2 as Preview2NodeCli;
+
+export const {
   _appendEnv,
   _setEnv,
   _setArgs,
@@ -21,15 +30,15 @@ export {
   terminalStdin,
   terminalStdout,
   terminalStderr,
-} from "@bytecodealliance/preview2-shim/cli";
+} = nodeCliV2;
 
 // `wasi:cli/environment` renamed `initial-cwd` to `get-initial-cwd` between
 // p2 and p3. Adapt the p2-shim shape to the p3 WIT member name while
 // re-exporting the unchanged members.
 export const environment = {
-  getEnvironment: environmentV2.getEnvironment,
-  getArguments: environmentV2.getArguments,
-  getInitialCwd: environmentV2.initialCwd,
+  getEnvironment: cliV2.environment.getEnvironment,
+  getArguments: cliV2.environment.getArguments,
+  getInitialCwd: cliV2.environment.initialCwd,
 };
 
 let WORKER = null;

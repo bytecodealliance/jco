@@ -23,35 +23,44 @@
   },
   "files": [
     "types",
-    "lib"
+    "dist"
   ],
   "type": "module",
-  "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "node": "./lib/nodejs/index.js"
+      "types": "./dist/nodejs/index.d.ts",
+      "node": "./dist/nodejs/index.js"
     },
     "./*": {
-      "types": "./types/*.d.ts",
-      "node": "./lib/nodejs/*.js"
+      "types": "./dist/nodejs/*.d.ts",
+      "node": "./dist/nodejs/*.js"
+    },
+    "./interfaces/*": {
+      "types": "./types/interfaces/*.d.ts"
     }
   },
   "scripts": {
-    "compile:check": "tsc --noEmit types/index.d.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "build:watch": "tsc --watch",
+    "types:check": "tsc --noEmit",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "pretest": "pnpm run build",
     "test": "vitest --run",
-    "bench": "vitest bench --run"
+    "prebench": "pnpm run build",
+    "bench": "vitest bench --run",
+    "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.18.1"
+    "@bytecodealliance/preview2-shim": "^0.19.0"
   },
   "devDependencies": {
+    "@types/node": "^24.12.4",
     "globals": "^17.6.0",
+    "typescript": "catalog:",
     "vite": "^8.0.16",
-    "vitest": "^4.1.0"
+    "vitest": "catalog:"
   }
 }

@@ -4,13 +4,15 @@
  * https://bytecodealliance.github.io/jco/wit-type-representations.html#result-considerations-idiomatic-js-errors-for-host-implementations
  */
 export class HttpError extends Error {
+  payload;
+
   /**
    * Create a new WASI http error
    * @param {string} tag - The error tag/type
    * @param {string} [message] - Human-readable error message
    * @param {any} [val] - Optional value/data for the error
    */
-  constructor(tag, message, val, opts = {}) {
+  constructor(tag, message = undefined, val = undefined, opts: { cause?: unknown } = {}) {
     super(message || `Error: ${tag}`, { cause: opts.cause });
     this.name = "HttpError";
     this.payload = val !== undefined ? { tag, val } : { tag };
@@ -57,7 +59,7 @@ export class HttpError extends Error {
   }
 }
 
-function getFirstError(e) {
+function getFirstError(e: any) {
   if (typeof e !== "object" || e === null) {
     return e;
   }
