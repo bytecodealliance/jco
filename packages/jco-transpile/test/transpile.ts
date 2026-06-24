@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url';
-import { writeFile } from 'node:fs/promises';
+import { Buffer } from 'node:buffer';
 
 import { suite, test, assert } from 'vitest';
 
@@ -88,7 +88,6 @@ suite('Transpile', async () => {
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ['test', 'instance']);
-        await writeFile('/tmp/output.min.js', files[name + '.js']);
-        assert.isAtMost(files[name + '.js'].length, FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
+        assert.isBelow(files[name + '.js'].length, FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
     });
 });
