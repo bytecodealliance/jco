@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-06-24
+
+### 🚜 Refactor
+
+- _(p3-shim)_ migrate preview3-shim package to ts by @andreiltd in #1672
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update to WASI 0.3.0 by @vados-cosmonic
+
 ## [0.1.2] - 2026-06-09
 
 ### 🐛 Bug Fixes
