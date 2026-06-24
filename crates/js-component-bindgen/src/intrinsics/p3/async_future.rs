@@ -368,6 +368,7 @@ impl AsyncFutureIntrinsic {
                            if (!futureEnd) {{
                                throw new Error(`missing future [${{this.#futureEndWaitableIdx}}] (table [${{this.#futureTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
+                           if (futureEnd.isInSet()) {{ throw new Error('trap: futures in waitable sets cannot be lifted'); }}
 
                             return futureEnd.promise();
                         }}
@@ -472,6 +473,11 @@ impl AsyncFutureIntrinsic {
                         hasPendingEvent() {{
                             if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
                             return this.#waitable.hasPendingEvent();
+                        }}
+
+                        isInSet() {{
+                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
+                            return this.#waitable.isInSet();
                         }}
 
                         getPendingEvent() {{

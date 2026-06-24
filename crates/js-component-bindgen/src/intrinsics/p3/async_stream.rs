@@ -377,6 +377,11 @@ impl AsyncStreamIntrinsic {
                             return this.#waitable.hasPendingEvent();
                         }}
 
+                        isInSet() {{
+                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
+                            return this.#waitable.isInSet();
+                        }}
+
                         getPendingEvent() {{
                             if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
                             {debug_log_fn}('[{stream_end_class}#getPendingEvent()]', {{
@@ -1448,6 +1453,7 @@ impl AsyncStreamIntrinsic {
                            if (!streamEnd) {{
                                throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
+                           if (streamEnd.isInSet()) {{ throw new Error('trap: streams in waitable sets cannot be lifted'); }}
 
                             return new {external_stream_class}({{
                                 isReadable: streamEnd.isReadable(),

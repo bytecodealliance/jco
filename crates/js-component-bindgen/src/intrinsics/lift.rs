@@ -1271,6 +1271,7 @@ impl LiftIntrinsic {
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat future of borrowed type'); }}
                             if (futureEnd.isWritable()) {{ throw new Error('only readable futures can be lifted'); }}
                             if (!futureEnd.isIdleState()) {{ throw new Error('futures must be in idle state'); }}
+                            if (futureEnd.isInSet()) {{ throw new Error('trap: futures in waitable sets cannot be lifted'); }}
 
                             return [ futureEnd.promise(), ctx ];
                         }};
@@ -1331,6 +1332,7 @@ impl LiftIntrinsic {
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat stream of borrowed type'); }}
                             if (streamEnd.isWritable()) {{ throw new Error('only readable streams can be lifted'); }}
                             if (!streamEnd.isIdleState()) {{ throw new Error('streams must be in idle state'); }}
+                            if (streamEnd.isInSet()) {{ throw new Error('trap: streams in waitable sets cannot be lifted'); }}
 
                             const stream = new {external_stream_class}({{
                                 globalRep: streamEnd.globalStreamMapRep(),
