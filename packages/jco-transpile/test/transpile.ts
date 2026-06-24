@@ -90,6 +90,6 @@ suite('Transpile', () => {
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ['test', 'instance']);
-        assert.ok(files[name + '.js'].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
+        assert.isBelow(files[name + '.js'].length, FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
     });
 });
