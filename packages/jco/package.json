@@ -79,8 +79,7 @@
         "binaryen": "^130.0.0",
         "commander": "^14",
         "mkdirp": "^3",
-        "ora": "^8",
-        "terser": "^5"
+        "ora": "^8"
     },
     "devDependencies": {
         "@commitlint/config-conventional": "^19.8.1",
