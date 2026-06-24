@@ -64,7 +64,7 @@
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.17.5",
         "binaryen": "^130.0.0",
-        "terser": "^5"
+        "oxc-minify": "^0.136.0"
     },
     "devDependencies": {
         "@npmcli/run-script": "^10.0.2",

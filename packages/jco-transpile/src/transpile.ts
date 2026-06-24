@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Buffer } from 'node:buffer';
 import { extname, basename, resolve } from 'node:path';
 
-import { minify } from 'terser';
+import { minify } from 'oxc-minify';
 
 import { $init as $initBindgenComponent, generate } from '../vendor/js-component-bindgen-component.js';
 import type {
@@ -351,14 +351,13 @@ export async function transpileBytes(
 
     // Perform minification if configured
     if (opts.minify && jsFile) {
-        const minified = await minify(Buffer.from(jsFile[1]).toString('utf8'), {
+        const minified = await minify('component.js', Buffer.from(jsFile[1]).toString('utf8'), {
             module: true,
             compress: {
-                ecma: 2019,
-                unsafe: true,
+                target: "es2019",
             },
             mangle: {
-                keep_classnames: true,
+                keepNames: true,
             },
         });
         jsFile[1] = new TextEncoder().encode(minified.code);
