@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.4] - 2026-06-26
+
+This release contains an update fo the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.0.4](https://crates.io/crates/js-component-bindgen/2.0.4)
+
 ## [0.3.3] - 2026-06-17
 
 ### 🐛 Bug Fixes
