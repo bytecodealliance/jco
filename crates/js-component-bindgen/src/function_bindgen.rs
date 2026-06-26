@@ -1534,7 +1534,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         if (!started) {{
                             {debug_log_fn}('[Instruction::AsyncTaskReturn] failed to enter task', {{
                                 taskID: task.id(),
-                                subtaskID: currentSubtask?.id(),
+                                subtaskID: task.currentSubtask()?.id(),
                             }});
                             throw new Error("failed to enter task");
                         }}
@@ -1832,7 +1832,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         if (!started) {{
                             {debug_log_fn}('[Instruction::CallInterface] failed to enter task', {{
                                 taskID: task.id(),
-                                subtaskID: currentSubtask?.id(),
+                                subtaskID: task.getParentSubtask()?.id(),
                             }});
                             throw new Error("failed to enter task");
                         }}
@@ -1853,7 +1853,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during async call', {{
                                   taskID: task.id(),
-                                  subtaskID: currentSubtask?.id(),
+                                  subtaskID: task.getParentSubtask()?.id(),
                                   err,
                               }});
                               task.setErrored(err);
@@ -1871,7 +1871,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during sync call', {{
                                   taskID: task.id(),
-                                  subtaskID: currentSubtask?.id(),
+                                  subtaskID: task.getParentSubtask()?.id(),
                                   err,
                               }});
                               task.setErrored(err);
