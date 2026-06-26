@@ -84,6 +84,27 @@ There are three test suites in jco:
 >
 > The command above runs a single test file -- the name of the file is relative to `packages/jco/test`.
 
+### Testing Rust-side bindgen changes
+
+When working on the Rust bindgen crate (`crates/js-component-bindgen`), you generally must build `jco-transpile` to see
+changes appear in Jco, along with configuring Jco to use the workspace's version of `jco-transpile` rather than a released one:
+
+In `packages/jco/package.json`:
+
+```diff
+-    "jco-transpile": "X.X.X",
++    "jco-transpile": "workspace:*",
+```
+
+After this has been set, you might run a commands like the following from `packages/jco`:
+
+```console
+pnpm --filter '@bytecodealliance/jco-transpile' build
+pnpm run test future-lifts.js
+```
+
+Ensure to reset the `jco-transpile` dependency to a published version once you've finsihed testing locally
+
 ### Running specific tests
 
 JS tests are powered by [`vitest`][vitest], and a specific test suite can be run by passing
