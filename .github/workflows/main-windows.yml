@@ -95,6 +95,9 @@ jobs:
           path: |
             packages/jco-transpile/vendor
 
+      - name: Build preview2-shim
+        run: pnpm --filter '@bytecodealliance/preview2-shim' run build
+
       - name: Upload preview2-shim build output
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
