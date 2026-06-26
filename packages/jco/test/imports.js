@@ -9,7 +9,7 @@ import { LOCAL_TEST_COMPONENTS_DIR } from "./common.js";
 
 suite("imports", () => {
     // see: https://github.com/bytecodealliance/jco/issues/1676
-    test("host throw", async () => {
+    test.concurrent("host throw", async () => {
         const name = "host-instant-throw";
         const { instance, cleanup } = await setupAsyncTest({
             component: {
@@ -33,6 +33,33 @@ suite("imports", () => {
         });
 
         expect(instance["jco:test-components/local-run"].run).toThrow(42);
+
+        await cleanup();
+    });
+
+    // see: https://github.com/bytecodealliance/jco/issues/1675
+    test.only("host call loop", async () => {
+        const name = "host-call-loop-sync";
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:test-components/tick": {
+                        tick: { default: () => { } }
+                    },
+                },
+            },
+            // jco: {
+            //     transpile: {
+            //         extraArgs: {
+            //             minify: false,
+            //         },
+            //     },
+            // },
+        });
+
+        instance["jco:test-components/local-run-n"].run(1000);
 
         await cleanup();
     });
