@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.5] - 2026-06-26
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ centralize task rejection handling to task.exit() by @vados-cosmonic
+
+
+
+
 ## [2.0.4] - 2026-06-26
 
 ### 🐛 Bug Fixes
