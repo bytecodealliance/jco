@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.24.4] - 2026-06-26
+
+### 🧪 Testing
+
+- _(jco)_ add regression test for subtask reference error fix by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to 0.3.6 by @vados-cosmonic
+
 ## [1.24.3] - 2026-06-19
 
 ### 🐛 Bug Fixes
