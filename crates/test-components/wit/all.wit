@@ -561,3 +561,12 @@ interface byte-batch-example {
 world byte-batch-producer {
     export byte-batch-example;
 }
+
+interface throw {
+    throw: func();
+}
+
+world host-instant-throw {
+    import throw;
+    export local-run;
+}
