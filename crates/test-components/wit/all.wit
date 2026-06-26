@@ -8,6 +8,10 @@ interface local-run {
     run: func();
 }
 
+interface local-run-n {
+    run: func(n: u32);
+}
+
 interface local-run-string {
     run: func() -> string;
 }
@@ -49,7 +53,8 @@ interface example-types {
         float(f32),
         float64(f64),
         maybe-u32(option<u32>),
-    }
+
+}
 
     variant layout-variant {
         empty,
@@ -560,4 +565,17 @@ interface byte-batch-example {
 }
 world byte-batch-producer {
     export byte-batch-example;
+}
+
+interface throw {
+    throw: func();
+}
+
+interface tick {
+    tick: func();
+}
+
+world host-call-loop-sync {
+    import tick;
+    export local-run-n;
 }
