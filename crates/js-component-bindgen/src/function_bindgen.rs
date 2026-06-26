@@ -1611,6 +1611,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   err,
                               }});
                               task.setErrored(err);
+                              task.reject(err);
                               task.exit();
                               return task.completionPromise();
                             "#
@@ -1627,6 +1628,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   err,
                               }});
                               task.setErrored(err);
+                              task.reject(err);
                               task.exit();
                               throw err;
                             "#
@@ -1855,6 +1857,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   err,
                               }});
                               task.setErrored(err);
+                              task.reject(err);
                               task.exit();
                               return task.completionPromise();
                             "#
@@ -1872,6 +1875,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   err,
                               }});
                               task.setErrored(err);
+                              task.reject(err);
                               task.exit();
                               throw err;
                             "#

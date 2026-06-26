@@ -903,9 +903,11 @@ impl AsyncTaskIntrinsic {
                                reject: rejectCompletionPromise,
                            }} = {promise_with_resolvers_fn}();
                            this.#completionPromise = completionPromise;
-                           this.#completionPromise.catch(err => {{}});
 
                            this.#onResolveHandlers.push((results) => {{
+                               if (this.#parentSubtask !== null) {{ return; }}
+                               if (!this.#isAsync) {{ return; }}
+
                                if (this.#errored !== null) {{
                                    rejectCompletionPromise(this.#errored);
                                    return;
@@ -913,6 +915,7 @@ impl AsyncTaskIntrinsic {
                                    rejectCompletionPromise(results);
                                    return;
                                }}
+
                                resolveCompletionPromise(results);
                            }});
 
@@ -922,7 +925,6 @@ impl AsyncTaskIntrinsic {
                                reject: rejectExitPromise,
                            }} = {promise_with_resolvers_fn}();
                            this.#exitPromise = exitPromise;
-                           exitPromise.catch(err => {{}});
 
                            this.#onExitHandlers.push(() => {{
                                resolveExitPromise();
@@ -1340,10 +1342,6 @@ impl AsyncTaskIntrinsic {
 
                             if (this.isResolvedState() || this.#rejected) {{ return; }}
 
-                            for (const subtask of this.#subtasks) {{
-                                subtask.reject(taskErr);
-                            }}
-
                             this.#rejected = true;
                             this.cancelRequested = true;
                             this.#state = {task_class}.State.PENDING_CANCEL;
@@ -1401,20 +1399,7 @@ impl AsyncTaskIntrinsic {
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             if (this.#state !== {task_class}.State.RESOLVED) {{
-                                // If we've hit a task exit with the task in an errored state due to some
-                                // error during execution, we need to reject the task before exiting
-                                if (this.isErrored()) {{
-                                    this.reject(this.#errored);
-                                }} else {{
-                                    throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
-                                    {debug_log_fn}('[{task_class}#exit()] task exited without resolution', {{
-                                        componentIdx: this.#componentIdx,
-                                        taskID: this.#id,
-                                        subtask: this.getParentSubtask(),
-                                        subtaskID: this.getParentSubtask()?.id(),
-                                    }});
-                                    this.#state = {task_class}.State.RESOLVED;
-                                }}
+                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
                             }}
 
                             if (this.borrowedHandles > 0) {{
