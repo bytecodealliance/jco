@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.3.5] - 2026-06-26
+
 ## [0.3.4] - 2026-06-26
 
 This release contains an update fo the underlying transpiled `js-component-bindgen`
