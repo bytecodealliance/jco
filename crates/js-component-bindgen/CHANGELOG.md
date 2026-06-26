@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.4] - 2026-06-26
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ avoid using task.reject by @vados-cosmonic in #1681
+
+- _(bindgen)_ fix use of undefined current subtask by @vados-cosmonic in #1677
+
+- _(bindgen)_ streams/futures in waitable sets cannot be lifted by @vados-cosmonic in #1670
+
+
+
+
 ## [2.0.3] - 2026-06-16
 
 ### 🐛 Bug Fixes
