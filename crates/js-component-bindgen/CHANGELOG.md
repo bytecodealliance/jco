@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.6] - 2026-06-26
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ export result handling, stricter resolution check by @vados-cosmonic in #1690
+
+
+
+
 ## [2.0.5] - 2026-06-26
 
 ### 🐛 Bug Fixes
