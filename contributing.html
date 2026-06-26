@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e12025d6.js";
+            window.path_to_searchindex_js = "searchindex-a8da8a27.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-69241bbd.js"></script>
@@ -240,6 +240,18 @@ pnpm run test api.js
 </code></pre>
 <p>The command above runs a single test file – the name of the file is relative to <code>packages/jco/test</code>.</p>
 </blockquote>
+<h3 id="testing-rust-side-bindgen-changes"><a class="header" href="#testing-rust-side-bindgen-changes">Testing Rust-side bindgen changes</a></h3>
+<p>When working on the Rust bindgen crate (<code>crates/js-component-bindgen</code>), you generally must build <code>jco-transpile</code> to see
+changes appear in Jco, along with configuring Jco to use the workspace’s version of <code>jco-transpile</code> rather than a released one:</p>
+<p>In <code>packages/jco/package.json</code>:</p>
+<pre><code class="language-diff">-    "jco-transpile": "X.X.X",
++    "jco-transpile": "workspace:*",
+</code></pre>
+<p>After this has been set, you might run a commands like the following from <code>packages/jco</code>:</p>
+<pre><code class="language-console">pnpm --filter '@bytecodealliance/jco-transpile' build
+pnpm run test future-lifts.js
+</code></pre>
+<p>Ensure to reset the <code>jco-transpile</code> dependency to a published version once you’ve finsihed testing locally</p>
 <h3 id="running-specific-tests"><a class="header" href="#running-specific-tests">Running specific tests</a></h3>
 <p>JS tests are powered by <a href="https://vitest.dev"><code>vitest</code></a>, and a specific test suite can be run by passing
 the filename to <code>pnpm run test</code>:</p>
