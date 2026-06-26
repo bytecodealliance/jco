@@ -814,6 +814,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask).name();
                 let with_global_current_task_meta_async_fn =
                     Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -900,8 +901,9 @@ impl AsyncTaskIntrinsic {
                                promise: completionPromise,
                                resolve: resolveCompletionPromise,
                                reject: rejectCompletionPromise,
-                           }} = promiseWithResolvers();
+                           }} = {promise_with_resolvers_fn}();
                            this.#completionPromise = completionPromise;
+                           this.#completionPromise.catch(err => {{}});
 
                            this.#onResolveHandlers.push((results) => {{
                                if (this.#errored !== null) {{
@@ -918,8 +920,9 @@ impl AsyncTaskIntrinsic {
                                promise: exitPromise,
                                resolve: resolveExitPromise,
                                reject: rejectExitPromise,
-                           }} = promiseWithResolvers();
+                           }} = {promise_with_resolvers_fn}();
                            this.#exitPromise = exitPromise;
+                           exitPromise.catch(err => {{}});
 
                            this.#onExitHandlers.push(() => {{
                                resolveExitPromise();
@@ -1321,9 +1324,8 @@ impl AsyncTaskIntrinsic {
 
                         isRejected() {{ return this.#rejected; }}
 
-                        setErrored(err) {{
-                            this.#errored = err;
-                        }}
+                        isErrored() {{ return this.#errored; }}
+                        setErrored(err) {{ this.#errored = err; }}
 
                         reject(taskErr) {{
                             {debug_log_fn}('[{task_class}#reject()] args', {{
@@ -1399,22 +1401,20 @@ impl AsyncTaskIntrinsic {
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             if (this.#state !== {task_class}.State.RESOLVED) {{
-                                // TODO(fix): only fused, manually specified post returns seem to break this invariant,
-                                // as the TaskReturn trampoline is not activated it seems.
-                                //
-                                // see: test/p3/ported/wasmtime/component-async/post-return.js
-                                //
-                                // We *should* be able to upgrade this to be more strict and throw at some point,
-                                // which may involve rewriting the upstream test to surface task return manually somehow.
-                                //
-                                //throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
-                                {debug_log_fn}('[{task_class}#exit()] task exited without resolution', {{
-                                    componentIdx: this.#componentIdx,
-                                    taskID: this.#id,
-                                    subtask: this.getParentSubtask(),
-                                    subtaskID: this.getParentSubtask()?.id(),
-                                }});
-                                this.#state = {task_class}.State.RESOLVED;
+                                // If we've hit a task exit with the task in an errored state due to some
+                                // error during execution, we need to reject the task before exiting
+                                if (this.isErrored()) {{
+                                    this.reject(this.#errored);
+                                }} else {{
+                                    throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                    {debug_log_fn}('[{task_class}#exit()] task exited without resolution', {{
+                                        componentIdx: this.#componentIdx,
+                                        taskID: this.#id,
+                                        subtask: this.getParentSubtask(),
+                                        subtaskID: this.getParentSubtask()?.id(),
+                                    }});
+                                    this.#state = {task_class}.State.RESOLVED;
+                                }}
                             }}
 
                             if (this.borrowedHandles > 0) {{
