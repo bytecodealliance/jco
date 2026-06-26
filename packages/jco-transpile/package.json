@@ -1,6 +1,6 @@
 {
     "name": "@bytecodealliance/jco-transpile",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "description": "WebAssembly Component transpilation functionality for Jco",
     "keywords": [
         "Component",
