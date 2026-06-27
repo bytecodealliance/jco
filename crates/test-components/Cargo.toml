@@ -9,7 +9,9 @@ Test components for use during jco testing
 
 [dependencies]
 futures = { version = "0.3.32", default-features = false, features = ["alloc", "async-await"] }
-wit-bindgen = { workspace = true, features = [ "macros", "async-spawn"] }
+#wit-bindgen = { workspace = true, features = [ "macros", "async-spawn"] }
+
+wit-bindgen = { path = "/home/mrman/code/work/cosmonic/forks/wit-bindgen/crates/guest-rust", features = [ "macros", "async-spawn"] }
 
 [build-dependencies]
 anyhow = { workspace = true }

@@ -547,9 +547,12 @@ impl AsyncTaskIntrinsic {
                 let subtask_drop_fn = Self::SubtaskDrop.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                uwriteln!(
+                    output,
+                    r#"
                     function {subtask_drop_fn}(componentIdx, subtaskWaitableRep) {{
                         {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskWaitableRep }});
+                        console.log("SUBTASK DROP");
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
@@ -559,7 +562,8 @@ impl AsyncTaskIntrinsic {
 
                         subtask.drop();
                     }}
-                "));
+                "#
+                );
             }
 
             Self::Yield => {
@@ -1274,6 +1278,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         onResolve(taskValue) {{
+                            // console.log("RESOLVING TASK!", {{ taskID: this.#id }});
                             const handlers = this.#onResolveHandlers;
                             this.#onResolveHandlers = [];
                             for (const f of handlers) {{
@@ -1483,7 +1488,9 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         removeSubtask(subtask) {{
-                            if (this.#subtasks.length === 0) {{ throw new Error('cannot end current subtask: no current subtask'); }}
+                            if (this.#subtasks.length === 0) {{
+                                throw new Error('cannot end current subtask: no current subtask');
+                            }}
                             this.#subtasks = this.#subtasks.filter(t => t !== subtask);
                             return subtask;
                         }}
@@ -1680,6 +1687,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         onResolve(subtaskValue) {{
+                            // console.log("RESOLVING SUBTASK!", {{ subtaskID: this.#id, parentTaskID: this.parentTaskID() }});
                             {debug_log_fn}('[{subtask_class}#onResolve()] args', {{
                                 componentIdx: this.#componentIdx,
                                 subtaskID: this.#id,
@@ -1745,6 +1753,9 @@ impl AsyncTaskIntrinsic {
 
                             this.#resolved = true;
                             this.#parentTask.removeSubtask(this);
+
+                            // TODO: REMOVE
+                            this.#getComponentState().handles.remove(this.waitableRep());
                         }}
 
                         getStateNumber() {{ return this.#state; }}
