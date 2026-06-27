@@ -38,3 +38,5 @@ packages/jco-transpile/vendor/*
 
 # Pre-release artifacts placed by github
 gh-artifacts
+/crates/test-components/target/
+/test/components/rust/target/

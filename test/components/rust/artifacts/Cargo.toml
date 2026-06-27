@@ -6,19 +6,11 @@
 name = "extended-jco-test-components-artifacts"
 version = "0.0.0"
 publish = false
-
-edition.workspace = true
-
-[dependencies]
-wasmtime = { workspace = true, features = [
-  'incremental-cache',
-  'cranelift',
-  'component-model',
-] }
+edition = "2024"
 
 [build-dependencies]
 anyhow = { workspace = true }
 cargo_metadata = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "process"] }
-wit-component = { workspace = true }
 heck = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "process"] }
+wit-component = { workspace = true, features = ["dummy-module"] }
