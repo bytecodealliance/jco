@@ -8,13 +8,6 @@ version = "0.0.0"
 publish = false
 edition = "2024"
 
-[dependencies]
-wasmtime = { workspace = true, features = [
-  'incremental-cache',
-  'cranelift',
-  'component-model',
-] }
-
 [build-dependencies]
 anyhow = { workspace = true }
 cargo_metadata = { workspace = true }
