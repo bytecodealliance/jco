@@ -13,3 +13,4 @@ wit-fetch:
 # Build all rust components
 build: wit-fetch
     {{cargo}} build --release
+    {{cargo}} build -p extended-jco-test-components-artifacts --release

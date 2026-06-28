@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
         .context("failed to build artifacts")?;
 
     // Copy all p3 components to test/components/rust/output
-    let rust_test_components_dir = cargo_manifest_dir.join("output");
+    let rust_test_components_dir = cargo_manifest_dir.join("../output");
     tokio::fs::create_dir_all(&rust_test_components_dir)
         .await
         .context("failed to create rust test component output dir")?;
