@@ -40,6 +40,8 @@ suite("imports", () => {
 
     // see: https://github.com/bytecodealliance/jco/issues/1675
     test.only("host call loop", async () => {
+        let ticks = 1000;
+
         const name = "host-call-loop-sync";
         const { instance, cleanup, outputDir } = await setupAsyncTest({
             component: {
@@ -47,7 +49,9 @@ suite("imports", () => {
                 imports: {
                     ...new WASIShim().getImportObject(),
                     "jco:test-components/tick": {
-                        tick: () => {},
+                        tick: () => {
+                            ticks -= 1;
+                        },
                     },
                 },
             },
@@ -63,7 +67,8 @@ suite("imports", () => {
         console.log("OUTPUT DIR", outputDir);
 
         const before = memoryUsage();
-        instance["jco:test-components/local-run-n"].run(1000);
+        instance["jco:test-components/local-run-n"].run(ticks);
+        assert.strictEqual(ticks, 0);
         const after = memoryUsage();
         const bytesUsed = after.rss - before.rss;
         console.log(`bytes used = ${bytesUsed / (1000 * 1000)}MB`);
