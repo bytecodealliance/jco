@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.24.5] - 2026-06-29
+
+### 🐛 Bug Fixes
+
+- _(jco)_ fix test file generation by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ add regression test for subtask removal memory leak by @vados-cosmonic in #1701
+
+- _(jco)_ refactor to list of explicit tests rather than walking by @vados-cosmonic in #1609
+
+- _(jco)_ rename fixture wat directory to wast by @vados-cosmonic
+
+- _(jco)_ temporarily disable WAST tests by @vados-cosmonic
+
+- _(jco)_ support WastDirective::AssertTrap by @vados-cosmonic
+
+- _(jco)_ wast->js conversion logic by @vados-cosmonic
+
+- _(jco)_ add skipped tests to wast by @vados-cosmonic
+
+- _(jco)_ add component model WAST test harness by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update to jco-transpile v0.3.8 by @vados-cosmonic
+
+- _(jco)_ add component-model repo wat tests by @vados-cosmonic
+
 ## [1.24.4] - 2026-06-26
 
 ### 🧪 Testing
