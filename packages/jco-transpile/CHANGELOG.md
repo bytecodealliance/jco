@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.7] - 2026-06-29
+
+This release contains an update fo the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.0.7](https://crates.io/crates/js-component-bindgen/2.0.7)
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ force build to always fully vendor by @vados-cosmonic in #1678
+
 ## [0.3.6] - 2026-06-26
 
 This release contains an update fo the underlying transpiled `js-component-bindgen`
