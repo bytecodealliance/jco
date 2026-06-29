@@ -547,19 +547,22 @@ impl AsyncTaskIntrinsic {
                 let subtask_drop_fn = Self::SubtaskDrop.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                uwriteln!(
+                    output,
+                    r#"
                     function {subtask_drop_fn}(componentIdx, subtaskWaitableRep) {{
                         {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskWaitableRep }});
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
 
-                        const subtask =  cstate.handles.remove(subtaskWaitableRep);
+                        const subtask = cstate.handles.remove(subtaskWaitableRep);
                         if (!subtask) {{ throw new Error('missing/invalid subtask specified for drop in component instance'); }}
 
                         subtask.drop();
                     }}
-                "));
+                "#
+                );
             }
 
             Self::Yield => {
@@ -1463,7 +1466,6 @@ impl AsyncTaskIntrinsic {
                             newSubtask.setTarget(`subtask (internal ID [${{newSubtask.id()}}], waitable [${{waitable.idx()}}], component [${{componentIdx}}])`);
                             waitable.setIdx(cstate.handles.insert(newSubtask));
                             waitable.setTarget(`waitable for subtask (waitable id [${{waitable.idx()}}], subtask internal ID [${{newSubtask.id()}}])`);
-
                             return newSubtask;
                         }}
 
@@ -1483,7 +1485,9 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         removeSubtask(subtask) {{
-                            if (this.#subtasks.length === 0) {{ throw new Error('cannot end current subtask: no current subtask'); }}
+                            if (this.#subtasks.length === 0) {{
+                                throw new Error('cannot end current subtask: no current subtask');
+                            }}
                             this.#subtasks = this.#subtasks.filter(t => t !== subtask);
                             return subtask;
                         }}
@@ -1745,6 +1749,18 @@ impl AsyncTaskIntrinsic {
 
                             this.#resolved = true;
                             this.#parentTask.removeSubtask(this);
+
+                            if (!this.isAsync) {{
+                                this.deliverResolve();
+                                const rep = this.waitableRep();
+                                if (rep) {{
+                                    const removed = this.#getComponentState().handles.remove(rep);
+                                    if (removed !== this) {{
+                                        throw new Error("unexpectedly received non-self Subtask from handle removal");
+                                    }}
+                                }}
+                                this.drop();
+                            }}
                         }}
 
                         getStateNumber() {{ return this.#state; }}

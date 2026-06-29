@@ -758,6 +758,7 @@ impl Intrinsic {
                 output.push_str(&format!(r#"
                     class {rep_table_class} {{
                         #data = [0, null];
+                        #size = 0;
                         #target;
 
                         constructor(args) {{
@@ -774,6 +775,7 @@ impl Intrinsic {
                                 this.#data.push(null);
                                 const rep = (this.#data.length >> 1) - 1;
                                 {debug_log_fn}('[{rep_table_class}#insert()] inserted', {{ val, target: this.target, rep }});
+                                this.#size += 1;
                                 return rep;
                             }}
                             this.#data[0] = this.#data[freeIdx << 1];
@@ -781,6 +783,7 @@ impl Intrinsic {
                             this.#data[placementIdx] = val;
                             this.#data[placementIdx + 1] = null;
                             {debug_log_fn}('[{rep_table_class}#insert()] inserted', {{ val, target: this.target, rep: freeIdx }});
+                            this.#size += 1;
                             return freeIdx;
                         }}
 
@@ -811,9 +814,12 @@ impl Intrinsic {
 
                             this.#data[baseIdx] = this.#data[0];
                             this.#data[0] = rep;
+                            this.#size -= 1;
 
                             return val;
                         }}
+
+                        size() {{ return this.#size; }}
 
                         clear() {{
                             {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
