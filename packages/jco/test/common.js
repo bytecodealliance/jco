@@ -34,7 +34,7 @@ export const EXTENDED_TEST_COMPONENTS_DIR = fileURLToPath(new URL("../../../test
 
 /** Path to copied component-model repo WAT tests */
 export const COMPONENT_MODEL_FIXTURES_WAST_DIR = fileURLToPath(
-    new URL("./fixtures/wat/component-model", import.meta.url),
+    new URL("./fixtures/wast/component-model", import.meta.url),
 );
 /**
  * Retrieve a list of all component fixtures
