@@ -116,6 +116,12 @@ fn convert_wast_file(
             }
             wast::WastDirective::Thread(_) => bail!("unsupported directive Thread"),
             wast::WastDirective::Wait { .. } => bail!("unsupported directive Wait"),
+            wast::WastDirective::AssertInvalidCustom { .. } => {
+                bail!("unsupported directive AssertInvalidCustom")
+            }
+            wast::WastDirective::AssertMalformedCustom { .. } => {
+                bail!("unsupported directive AssertMalformedCustom")
+            }
         }
     }
 
