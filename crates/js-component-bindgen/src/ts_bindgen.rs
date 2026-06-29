@@ -20,6 +20,22 @@ use crate::{
     uwrite, uwriteln,
 };
 
+/// TypeScript declaration for the `Option<T>` helper type alias used to
+/// represent WIT `option<T>` values that cannot be flattened to `T | undefined`.
+///
+/// This is always emitted at the top level of a module (or `.d.ts` file), never
+/// inside an `export interface { ... }` block, since a type-alias declaration is
+/// not a valid interface member
+/// (see https://github.com/bytecodealliance/jco/issues/1708).
+const TS_OPTION_TYPE_ALIAS: &str =
+    "export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n";
+
+/// TypeScript declaration for the `Result<T, E>` helper type alias used to
+/// represent WIT `result<T, E>` values. Emitted at the top level for the same
+/// reason as [`TS_OPTION_TYPE_ALIAS`].
+const TS_RESULT_TYPE_ALIAS: &str =
+    "export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };\n";
+
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
@@ -34,6 +50,15 @@ struct TsBindgen {
     import_object: Source,
     /// TypeScript definitions which will become the export object
     export_object: Source,
+
+    /// Whether the world's exported freestanding functions require the
+    /// top-level `Option<T>` / `Result<T, E>` helper type aliases.
+    ///
+    /// These helper aliases must always be emitted at the top level, never
+    /// inside the `export interface {World} { ... }` wrapper used in
+    /// instantiation mode (see https://github.com/bytecodealliance/jco/issues/1708).
+    needs_ty_option: bool,
+    needs_ty_result: bool,
 
     /// Whether to generate types for a guest module.
     ///
@@ -108,6 +133,8 @@ pub fn ts_bindgen(
         local_names: LocalNames::default(),
         import_object: Source::default(),
         export_object: Source::default(),
+        needs_ty_option: false,
+        needs_ty_result: false,
         is_guest: opts.guest,
         async_imports,
         async_exports,
@@ -354,6 +381,15 @@ pub fn ts_bindgen(
         uwriteln!(bindgen.src, "}}");
     } else {
         bindgen.src.push_str(&bindgen.export_object);
+    }
+
+    // Emitted here, after the `export interface {World}` block above, so the
+    // aliases land at the top level rather than inside that interface.
+    if bindgen.needs_ty_option {
+        bindgen.src.push_str(TS_OPTION_TYPE_ALIAS);
+    }
+    if bindgen.needs_ty_result {
+        bindgen.src.push_str(TS_RESULT_TYPE_ALIAS);
     }
 
     if opts.tla_compat && opts.instantiation_mode.is_none() {
@@ -674,7 +710,16 @@ impl TsBindgen {
             );
         }
 
-        generator.post_types();
+        // Record whether the `Option`/`Result` helper type aliases are needed,
+        // but do NOT emit them into `export_object`. In instantiation mode
+        // `export_object` is wrapped in an `export interface {World} { ... }`,
+        // and a type-alias declaration is not a valid interface member. The
+        // aliases are emitted at the top level by the world generator instead
+        // (see https://github.com/bytecodealliance/jco/issues/1708).
+        self.needs_ty_option |= generator.needs_ty_option
+            || generator.resources.iter().any(|(_, r)| r.1.needs_ty_option);
+        self.needs_ty_result |= generator.needs_ty_result
+            || generator.resources.iter().any(|(_, r)| r.1.needs_ty_result);
 
         let (src, references) = generator.finish();
         self.export_object.push_str(&src);
@@ -1180,13 +1225,10 @@ impl<'a> TsInterface<'a> {
         let needs_ty_result =
             self.needs_ty_result || self.resources.iter().any(|(_, r)| r.1.needs_ty_result);
         if needs_ty_option {
-            self.src
-                .push_str("export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n");
+            self.src.push_str(TS_OPTION_TYPE_ALIAS);
         }
         if needs_ty_result {
-            self.src.push_str(
-                "export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };\n",
-            );
+            self.src.push_str(TS_RESULT_TYPE_ALIAS);
         }
     }
 
