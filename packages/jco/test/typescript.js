@@ -123,7 +123,9 @@ suite(`TypeScript`, async () => {
     // aliases required by exported functions must be emitted at the top level,
     // outside that interface, otherwise the generated `.d.ts` is invalid
     // TypeScript (a type alias is not a valid interface member).
-    test(`helper type aliases stay at top level in instantiation mode (issue 1708)`, async () => {
+    //
+    // TODO: re-enable after jco-transpile has been released with contents of PR #1710
+    test.skip(`helper type aliases stay at top level in instantiation mode (issue 1708)`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wits/issue-1708/issue-1708.wit`, import.meta.url)),
             "utf8",
@@ -170,7 +172,9 @@ suite(`TypeScript`, async () => {
     // there too. In this mode the world exports are top-level `export function`
     // declarations (no `export interface {World}` wrapper), and the helper
     // aliases are likewise emitted at the top level.
-    test(`helper type aliases stay at top level in default mode (issue 1708)`, async () => {
+    //
+    // TODO: re-enable after jco-transpile has been released with contents of PR #1710
+    test.skip(`helper type aliases stay at top level in default mode (issue 1708)`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wits/issue-1708/issue-1708.wit`, import.meta.url)),
             "utf8",
