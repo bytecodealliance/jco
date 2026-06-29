@@ -1754,12 +1754,16 @@ impl AsyncTaskIntrinsic {
                                 this.deliverResolve();
                                 const rep = this.waitableRep();
                                 if (rep) {{
-                                    const removed = this.#getComponentState().handles.remove(rep);
-                                    if (removed !== this) {{
-                                        throw new Error("unexpectedly received non-self Subtask from handle removal");
+                                    try {{
+                                        const removed = this.#getComponentState().handles.remove(rep);
+                                        if (removed !== this) {{
+                                            throw new Error("unexpectedly received non-self Subtask from handle removal");
+                                        }}
+                                        this.drop();
+                                    }} catch (err) {{
+                                        {debug_log_fn}('[{subtask_class}#onResolve()] failed to remove subtask after sync subtask completion', err);
                                     }}
                                 }}
-                                this.drop();
                             }}
                         }}
 
