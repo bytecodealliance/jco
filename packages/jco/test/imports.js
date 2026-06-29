@@ -23,13 +23,13 @@ suite("imports", () => {
                     },
                 },
             },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                },
-            },
+            // jco: {
+            //     transpile: {
+            //         extraArgs: {
+            //             minify: false,
+            //         },
+            //     },
+            // },
         });
 
         expect(instance["jco:test-components/local-run"].run).toThrow(42);
