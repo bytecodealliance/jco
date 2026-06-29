@@ -54,11 +54,7 @@ suite("component-model", async () => {
     });
 
     for (const { wastRelPath, wasmPath, scriptPath } of metadata) {
-        // const t = TESTS_TO_SKIP.has(wastRelPath) ? test.skip : test.concurrent;
-        //
-        // TODO: re-enable WAST tests once imported tests are passing/fixes have landed
-        // to enable them.
-        //
+        const t = TESTS_TO_SKIP.has(wastRelPath) ? test.skip : test.concurrent;
         test.skip(wastRelPath, async () => {
             assert(await fileExists(wasmPath), `missing generated wasm component @ [${wasmPath}]`);
             assert(await fileExists(scriptPath), `missing generated script @ [${scriptPath}]`);
