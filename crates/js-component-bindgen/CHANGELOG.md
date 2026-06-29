@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.8] - 2026-06-29
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ catch and debug log failures for unresolved host calls by @vados-cosmonic in #1704
+
+
+
+
 ## [2.0.7] - 2026-06-29
 
 ### 🐛 Bug Fixes
