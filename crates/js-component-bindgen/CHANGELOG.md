@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.7] - 2026-06-29
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ plug subtask memory leak during sync host calls by @vados-cosmonic in #1700
+
+
+
+
 ## [2.0.6] - 2026-06-26
 
 ### 🐛 Bug Fixes
