@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.9] - 2026-06-30
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ emit Option/Result type aliases outside the world interface by @vados-cosmonic
+
+
+
+
 ## [2.0.8] - 2026-06-29
 
 ### 🐛 Bug Fixes
