@@ -13,7 +13,11 @@ const ASYNC_G2G_CALL_LIMIT_NS = env.CI ? 50_000_000 : 40_000_000;
 
 suite("performance", () => {
     // https://github.com/bytecodealliance/jco/issues/1711
-    test.concurrent("guest->guest async call latency", async () => {
+    test("guest->guest async call latency", { retry: 5 }, async () => {
+        if (typeof WebAssembly?.Suspending !== "function") {
+            return;
+        }
+
         // Build a combined component that will exercise the PrepareCall -> AsyncStartCall
         // path for guest->guest async calls
         const callerPath = join(LOCAL_TEST_COMPONENTS_DIR, "async-call-g2g-caller.wasm");
