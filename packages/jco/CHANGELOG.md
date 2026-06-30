@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.24.6] - 2026-06-30
+
+### 🧪 Testing
+
+- _(jco)_ allow retries, avoid old node versions in perf test by @vados-cosmonic in #1716
+
+- _(jco)_ enable parallelism on TS tests by @vados-cosmonic
+
+- _(jco)_ enable tests for recent transpile fixes by @vados-cosmonic
+
+- _(jco)_ add perf gate for async calls by @vados-cosmonic in #1712
+
+- _(jco)_ temporarily disable new test until jco-transpile release by @vados-cosmonic in #1710
+
+- _(jco)_ add regression test test for result/option helper types by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.3.9 by @vados-cosmonic
+
 ## [1.24.5] - 2026-06-29
 
 ### 🐛 Bug Fixes
