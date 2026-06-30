@@ -490,7 +490,14 @@ impl HostIntrinsic {
 
                             let callbackResult;
                             try {{
-                                let jspiCallee = WebAssembly.promising(callee);
+                                let jspiCallee;
+                                if (callee._cachedPromising) {{
+                                    jspiCallee = callee._cachedPromising;
+                                }} else {{
+                                    callee._cachedPromising = WebAssembly.promising(callee);
+                                    jspiCallee = callee._cachedPromising;
+                                }}
+
                                 callbackResult = await {with_global_current_task_meta_async_fn}({{
                                     taskID: preparedTask.id(),
                                     componentIdx: preparedTask.componentIdx(),
