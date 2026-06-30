@@ -9,7 +9,7 @@ import { typesComponent } from "../src/cmd/types.js";
 import { suite, test, assert } from "vitest";
 
 suite(`TypeScript`, async () => {
-    test(`TS aliasing`, async () => {
+    test.concurrent(`TS aliasing`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wits/issue-365/issue-365.wit`, import.meta.url)),
             "utf8",
@@ -28,7 +28,7 @@ suite(`TypeScript`, async () => {
         assert.ok(dtsSource.includes(`export type Bar = import('./interfaces/test-issue-types.js').Bar;`));
     });
 
-    test(`TS types`, async () => {
+    test.concurrent(`TS types`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wits/issue-480/issue-480.wit`, import.meta.url)),
             "utf8",
@@ -51,7 +51,7 @@ suite(`TypeScript`, async () => {
     // generation Disposable, because the embedder may or may not choose to make
     // the implemented resource import disposable or not.
     //
-    test(`Disposable interface generation (host-types, import) `, async () => {
+    test.concurrent(`Disposable interface generation (host-types, import) `, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wits/disposable-resources/disposable-resources.wit`, import.meta.url)),
             "utf8",
@@ -88,7 +88,7 @@ suite(`TypeScript`, async () => {
 
     // NOTE: When generating guest types, the generated import shims provided *will*
     // have automatically generated disposal code, and thus we should have Disposable implementations
-    test(`Disposable interface generation (guest-types, import) `, async () => {
+    test.concurrent(`Disposable interface generation (guest-types, import) `, async () => {
         const witPath = fileURLToPath(
             new URL(`./fixtures/wits/disposable-resources/disposable-resources.wit`, import.meta.url),
         );
@@ -209,7 +209,7 @@ suite(`TypeScript`, async () => {
 
     // Async-lifted functions that are sync lowered must return promises
     // that callers can resolve however they choose to.
-    test(`sync lowered async fn returns Promse<T> (guest-types)`, async () => {
+    test.concurrent(`sync lowered async fn returns Promse<T> (guest-types)`, async () => {
         const witPath = fileURLToPath(new URL(`./fixtures/wits/async-flat-param-adder/test.wit`, import.meta.url));
         const files = await typesComponent(witPath, { guest: true });
         const interfaceDtsSource = new TextDecoder().decode(files["interfaces/test1-test2-test3.d.ts"]);
