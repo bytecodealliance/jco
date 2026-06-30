@@ -580,7 +580,20 @@ interface tick {
     tick: func();
 }
 
+interface tick-async {
+    tick: async func();
+}
+
 world host-call-loop-sync {
     import tick;
     export local-run-n;
+}
+
+world async-call-g2g-caller {
+    import local-run-async;
+    export local-run-async;
+}
+
+world async-call-g2g-callee {
+    export local-run-async;
 }
