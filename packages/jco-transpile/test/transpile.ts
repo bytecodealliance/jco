@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
+import { writeFile } from 'node:fs/promises';
 
-import { suite, test, assert, beforeAll } from 'vitest';
+import { suite, test, assert } from 'vitest';
 
 import { transpile, transpileBytes } from '../src/transpile.js';
 
@@ -11,23 +12,19 @@ import { readComponentBytes } from './helpers.js';
 // - (2025/12/16) increased due to additional async impl
 const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 80_000;
 
-suite('Transpile', () => {
-    let flavorfulWasmBytes;
+suite('Transpile', async () => {
+    const flavorfulWasmBytes = await readComponentBytes(
+        fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
+    );
 
-    beforeAll(async () => {
-        flavorfulWasmBytes = await readComponentBytes(
-            fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
-        );
-    });
-
-    test('transpile (via API)', async () => {
+    test.concurrent('transpile (via API)', async () => {
         const { files } = await transpile(
             fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
         );
         assert.ok(files['flavorful.component.js']);
     });
 
-    test('transpilation', async () => {
+    test.concurrent('transpilation', async () => {
         const name = 'flavorful';
         const { files, imports, exports } = await transpileBytes(flavorfulWasmBytes, {
             name,
@@ -38,7 +35,7 @@ suite('Transpile', () => {
         assert.ok(files[name + '.js']);
     });
 
-    test('transpile to JS', async () => {
+    test.concurrent('transpile to JS', async () => {
         const name = 'flavorful';
         const { files, imports, exports } = await transpileBytes(flavorfulWasmBytes, {
             map: {
@@ -63,7 +60,7 @@ suite('Transpile', () => {
         }
     });
 
-    test('map imports', async () => {
+    test.concurrent('map imports', async () => {
         const name = 'flavorful';
         const { files, imports } = await transpileBytes(flavorfulWasmBytes, {
             name,
@@ -77,7 +74,7 @@ suite('Transpile', () => {
         assert.ok(source.includes("'#testimport'"));
     });
 
-    test('transpile, optimize, minify', async () => {
+    test.concurrent('transpile, optimize, minify', async () => {
         const name = 'flavorful';
         const { files, imports, exports } = await transpileBytes(flavorfulWasmBytes, {
             name,
@@ -90,6 +87,7 @@ suite('Transpile', () => {
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ['test', 'instance']);
-        assert.ok(files[name + '.js'].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
+        await writeFile('/tmp/output.min.js', files[name + '.js']);
+        assert.isAtMost(files[name + '.js'].length, FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
     });
 });

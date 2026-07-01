@@ -42,11 +42,11 @@ suite("CLI", () => {
         } catch {}
     });
 
-    test("Transcoding", async () => {
+    test.concurrent("Transcoding", async () => {
         const { stderr } = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/env-allow.composed.wasm`,
+            `test/fixtures/components/env-allow.composed.wasm`,
             ...multiMemory,
             "-o",
             outDir,
@@ -57,11 +57,11 @@ suite("CLI", () => {
         assert.deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
     });
 
-    test("Transcoding UTF8 <-> UTF16", async () => {
+    test.concurrent("Transcoding UTF8 <-> UTF16", async () => {
         const { stdout, stderr } = await exec(
             jcoPath,
             "run",
-            `test/fixtures/utf8-utf16.composed.wasm`,
+            `test/fixtures/components/utf8-utf16.composed.wasm`,
             ...multiMemory,
             "--",
             "asdf中文🀄️⏰",

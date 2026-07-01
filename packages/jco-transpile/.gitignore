@@ -1,2 +1,5 @@
 dist
 *.tgz
+
+# generated components
+test/fixtures/generated/*

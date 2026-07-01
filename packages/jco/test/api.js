@@ -41,7 +41,7 @@ suite("API", () => {
         exitCodeWasmBytes = bytes[1];
     });
 
-    test("Transpile", async () => {
+    test.concurrent("Transpile", async () => {
         const name = "flavorful";
         const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
             name,
@@ -52,7 +52,7 @@ suite("API", () => {
         assert.ok(files[name + ".js"]);
     });
 
-    test("Transpile to JS", async () => {
+    test.concurrent("Transpile to JS", async () => {
         const name = "flavorful";
         const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
             map: {
@@ -77,7 +77,7 @@ suite("API", () => {
         }
     });
 
-    test("Transpile map into package imports", async () => {
+    test.concurrent("Transpile map into package imports", async () => {
         const name = "flavorful";
         const { files, imports } = await transpile(flavorfulWasmBytes, {
             name,
@@ -91,8 +91,8 @@ suite("API", () => {
         assert.ok(source.includes("'#testimport'"));
     });
 
-    test("Type generation", async () => {
-        const files = await types("test/fixtures/wits/flavorful", {
+    test.concurrent("Type generation", async () => {
+        const files = await types("test/fixtures/wit/flavorful", {
             worldName: "test:flavorful/flavorful",
         });
         assert.strictEqual(Object.keys(files).length, 2);
@@ -106,8 +106,8 @@ suite("API", () => {
         assert.ok(Buffer.from(files[Object.keys(files)[1]]).includes("export type ListInAlias = "));
     });
 
-    test("Type generation (guest)", async () => {
-        const files = await types("test/fixtures/wits/flavorful", {
+    test.concurrent("Type generation (guest)", async () => {
+        const files = await types("test/fixtures/wit/flavorful", {
             worldName: "test:flavorful/flavorful",
             guest: true,
         });
@@ -117,7 +117,7 @@ suite("API", () => {
         assert.ok(Buffer.from(files[Object.keys(files)[1]]).includes("declare module 'test:flavorful/test' {"));
     });
 
-    test("Print & Parse", async () => {
+    test.concurrent("Print & Parse", async () => {
         const output = await print(flavorfulWasmBytes);
         assert.strictEqual(output.slice(0, 10), "(component");
 
@@ -125,8 +125,8 @@ suite("API", () => {
         assert.ok(componentParsed);
     });
 
-    test("Wit & New", async () => {
-        const wit = await readFile(`test/fixtures/wits/flavorful/flavorful.wit`, "utf8");
+    test.concurrent("Wit & New", async () => {
+        const wit = await readFile(`test/fixtures/wit/flavorful/flavorful.wit`, "utf8");
 
         const generatedComponent = await componentEmbed({
             witSource: wit,
@@ -164,12 +164,14 @@ suite("API", () => {
         ]);
     });
 
-    test("Multi-file WIT", async () => {
+    test.concurrent("Multi-file WIT", async () => {
+        const witPath =
+            (isWindows ? "//?/" : "") +
+            fileURLToPath(new URL("./fixtures/componentize/simple-resource/source.wit", import.meta.url));
+
         const generatedComponent = await componentEmbed({
             dummy: true,
-            witPath:
-                (isWindows ? "//?/" : "") +
-                fileURLToPath(new URL("./fixtures/componentize/source.wit", import.meta.url)),
+            witPath,
             metadata: [
                 ["language", [["javascript", ""]]],
                 ["processed-by", [["dummy-gen", "test"]]],
@@ -203,7 +205,7 @@ suite("API", () => {
         ]);
     });
 
-    test("Component new adapt", async () => {
+    test.concurrent("Component new adapt", async () => {
         const generatedComponent = await componentNew(exitCodeWasmBytes, [
             ["wasi_snapshot_preview1", await readComponentBytes(preview1AdapterReactorPath())],
         ]);
@@ -211,7 +213,7 @@ suite("API", () => {
         await print(generatedComponent);
     });
 
-    test("Extract metadata", async () => {
+    test.concurrent("Extract metadata", async () => {
         const meta = await metadataShow(exitCodeWasmBytes);
         assert.deepStrictEqual(meta, [
             {
@@ -224,12 +226,12 @@ suite("API", () => {
         ]);
     });
 
-    test("Optimize", async () => {
+    test.concurrent("Optimize", async () => {
         const { component: optimizedComponent } = await opt(flavorfulWasmBytes);
         assert.ok(optimizedComponent.byteLength < flavorfulWasmBytes.byteLength);
     });
 
-    test("Transpile & Optimize & Minify", async () => {
+    test.concurrent("Transpile & Optimize & Minify", async () => {
         const name = "flavorful";
         const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
             name,

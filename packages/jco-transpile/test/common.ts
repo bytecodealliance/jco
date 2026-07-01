@@ -1,0 +1,127 @@
+import { env } from 'node:process';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath, URL } from 'node:url';
+import { ReadableStream } from 'node:stream/web';
+
+import { assert } from 'vitest';
+
+/** Path to a linter as installed by npm-compatible tooling */
+export const LINTER_PATH = fileURLToPath(new URL('../../../node_modules/oxlint/bin/oxlint', import.meta.url));
+
+export const AsyncFunction = (async () => {}).constructor;
+
+/** Path to fixture components */
+export const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL('./fixtures/components', import.meta.url));
+
+/** Path to JS for fixture components */
+export const COMPONENT_JS_FIXTURES_DIR = fileURLToPath(new URL('./fixtures/componentize', import.meta.url));
+
+/** Path to WebIDL fixtures */
+export const WEBIDL_FIXTURES_DIR = fileURLToPath(new URL('./fixtures/webidl', import.meta.url));
+
+/** Path to p3 related fixture components */
+export const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
+
+/** Path to built custom rust components (i.e. output of `cargo xtask build-test-components`) */
+export const LOCAL_TEST_COMPONENTS_DIR = fileURLToPath(
+    new URL('./fixtures/generated/rust-test-components', import.meta.url),
+);
+
+/** Path to built custom JS components */
+export const LOCAL_TEST_COMPONENTS_JS_DIR = fileURLToPath(
+    new URL('./fixtures/generated/js-test-components', import.meta.url),
+);
+
+/** Path to built extended test components (i.e. output of `just build` run in `jco/test/components`) */
+export const EXTENDED_TEST_COMPONENTS_DIR = fileURLToPath(new URL('../../../test/components/output', import.meta.url));
+
+/** Path to copied component-model repo WAT tests */
+export const COMPONENT_MODEL_FIXTURES_WAST_DIR = fileURLToPath(
+    new URL('./fixtures/wast/component-model', import.meta.url),
+);
+/**
+ * Retrieve a list of all component fixtures
+ *
+ * Customize COMPONENT_FIXTURES env vars to use alternative test components
+ *
+ * COMPONENT_FIXTURES is a comma-separated list of component names ending in
+ * ".component.wasm".
+ *
+ * Each of these components will then be passed through code generation and linting.
+ *
+ * If a local runtime host.ts file is present for the component name in test/runtime/[name]/host.ts
+ * then the runtime test will be performed against that execution.
+ *
+ * When the runtime test is present, the flags in the runtime host.ts file will be used
+ * as the flags of the code generation step.
+ */
+export async function getDefaultComponentFixtures(path?: string) {
+    return env.COMPONENT_FIXTURES
+        ? env.COMPONENT_FIXTURES.split(',')
+        : (await readdir(path ?? 'test/fixtures/components', { withFileTypes: true }))
+              .filter((f) => f.isFile() && f.name !== 'dummy_reactor.component.wasm')
+              .map((f) => f.name);
+}
+
+/** Check the values of a given stream (normally returned from a component) */
+export async function checkStreamValues(args) {
+    const { expectedValues, stream, typeName, assertEqFn, partial } = args ?? {};
+    assert.isNotEmpty(expectedValues);
+
+    // Ensure the values produced match expected
+    const eq = assertEqFn ?? assert.equal;
+    let iteratorRes;
+    for (const [idx, v] of expectedValues.entries()) {
+        const expected = expectedValues[idx] ?? v;
+        iteratorRes = await stream.next();
+        assert.isFalse(iteratorRes.done);
+        eq(iteratorRes.value, expected, `${typeName} [${idx}] read is incorrect`);
+    }
+
+    // If dealing with a partial list of values from the stream, do not attempt to read the last value
+    if (partial) {
+        return;
+    }
+
+    // Ensure the next value is undefined (and the iterator is done)
+    iteratorRes = await stream.next();
+    assert.isUndefined(iteratorRes.value);
+    assert.isTrue(iteratorRes.done);
+}
+
+export function createReadableStreamFromValues(vals) {
+    return new ReadableStream({
+        start(ctrl) {
+            vals.forEach((v) => ctrl.enqueue(v));
+            ctrl.close();
+        },
+    });
+}
+
+export function toTypedArray(TypedArray, value) {
+    return value instanceof TypedArray ? value : new TypedArray(value);
+}
+
+export function toTypedArrays(TypedArray, values) {
+    return values.map((value) => toTypedArray(TypedArray, value));
+}
+
+export function toTypedArrayChunks(TypedArray, values) {
+    return values.map((value) => new TypedArray([value]));
+}
+
+/** Check the value of a given future (normally returned from a component) */
+export async function checkFutureValues(args) {
+    const { vals, func, typeName, assertEqFn } = args ?? {};
+    const expectedValues = args.expectedValues ?? [];
+    const eq = assertEqFn ?? assert.equal;
+
+    let future;
+    let res;
+    for (const [idx, v] of vals.entries()) {
+        future = await func(v);
+        res = await future;
+        await eq(res, expectedValues[idx] ?? v, `${typeName} future read is incorrect`);
+    }
+}

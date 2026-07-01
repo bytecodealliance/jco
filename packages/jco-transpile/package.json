@@ -61,18 +61,27 @@
         "build:ts": "tsc -p tsconfig.json",
         "build": "pnpm run build:vendor && pnpm run build:ts",
         "build:release": "pnpm run build:vendor:release && pnpm run build:ts",
+        "test:build:components": "pnpm run -w build:test:components",
         "test": "vitest run -c test/vitest.ts",
+        "test:lts": "vitest run -c test/vitest.lts.ts",
         "prepack": "pnpm run build:release"
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.17.5",
+        "@bytecodealliance/preview3-shim": "^0.2.0",
         "binaryen": "^130.0.0",
         "terser": "^5"
     },
     "devDependencies": {
+        "@bytecodealliance/componentize-js": "catalog:",
         "@npmcli/run-script": "^10.0.2",
         "@types/node": "^24.12.4",
+        "mime": "catalog:",
+        "puppeteer": "catalog:",
+        "smol-toml": "catalog:",
+        "typescript": "catalog:",
         "vite": "^7.1.5",
-        "vitest": "^4.0.7"
+        "vitest": "^4.0.7",
+        "which": "catalog:"
     }
 }

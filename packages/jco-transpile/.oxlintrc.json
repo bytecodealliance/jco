@@ -30,7 +30,7 @@
         "@typescript-eslint/triple-slash-reference": "error",
         "curly": ["error", "all"]
     },
-    "ignorePatterns": ["test/output/**/*.ts"],
+    "ignorePatterns": ["test/fixtures/**/*.ts"],
     "overrides": [
         {
             "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
