@@ -56,10 +56,7 @@ export async function parse(wat: string): Promise<Uint8Array> {
  * @param adapters - Adapters that should be used on the given module
  * @returns WebAssembly component bytes
  */
-export async function componentNew(
-    bytes: Uint8Array,
-    adapters: Array<[string, Uint8Array]> | undefined,
-): Promise<Uint8Array> {
+export async function componentNew(bytes: Uint8Array, adapters?: Array<[string, Uint8Array]>): Promise<Uint8Array> {
     await $init;
     return tools.componentNew(bytes, adapters);
 }

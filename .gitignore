@@ -39,3 +39,4 @@ packages/jco-transpile/vendor/*
 gh-artifacts
 /crates/test-components/target/
 /test/components/rust/target/
+/packages/jco-transpile/test/output/

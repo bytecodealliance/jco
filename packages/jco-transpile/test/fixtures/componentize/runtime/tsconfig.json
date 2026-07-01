@@ -1,0 +1,16 @@
+{
+    "exclude": ["./strings.async+js.ts", "./strings.sync+js.ts", "./strings.sync.ts"],
+    "compilerOptions": {
+        "module": "nodenext",
+        "rootDir": ".",
+        "moduleResolution": "nodenext",
+        "target": "es2020",
+        "types": ["node"],
+        "strict": true,
+        "noImplicitAny": false,
+        "strictNullChecks": true,
+        "paths": {
+            "@bytecodealliance/preview2-shim": ["./package/preview2-shim"]
+        }
+    }
+}

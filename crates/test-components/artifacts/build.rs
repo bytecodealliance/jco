@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
             .context("missing CARGO_MANIFEST_DIR env variable")?,
     );
     let p1_adapter_path = cargo_manifest_dir
-        .join("../../../packages/jco/test/fixtures/wasi_snapshot_preview1.reactor.wasm");
+        .join("../../../packages/jco-transpile/test/fixtures/wasi_snapshot_preview1.reactor.wasm");
 
     // Build p3 components
     let p3_components = build_test_p3_components(output_dir, p1_adapter_path)
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
 
     // Copy all p3 components to packages/jco/output
     let rust_test_components_dir =
-        cargo_manifest_dir.join("../../../packages/jco/test/output/rust-test-components");
+        cargo_manifest_dir.join("../../../packages/jco-transpile/test/fixtures/generated/rust-test-components");
     tokio::fs::create_dir_all(&rust_test_components_dir)
         .await
         .context("failed to create rust test component output dir")?;

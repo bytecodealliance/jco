@@ -1,0 +1,17 @@
+package test:jco;
+interface commands {
+  resource error {
+    new: func () -> string;
+    to-string: func() -> string;
+  }
+
+  get-example: func() -> result<string, error>;
+  post-example: func() -> result<string, error>;
+}
+
+world command-extended {
+  import wasi:cli/environment@0.2.3;
+  include wasi:http/proxy@0.2.3;
+  
+  export commands;
+}

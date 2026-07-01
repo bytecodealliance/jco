@@ -1,0 +1,10 @@
+import { strictEqual } from 'node:assert';
+
+// @ts-expect-error
+import * as wasm from '../js-test-components/example_guest_export/example_guest_export.js';
+
+const backend = wasm.backend;
+const scalar = new backend.Scalars();
+strictEqual(backend.Scalars.getA(), 5);
+strictEqual(scalar.getB(), 2);
+strictEqual(backend.scalarArg(scalar), 7);

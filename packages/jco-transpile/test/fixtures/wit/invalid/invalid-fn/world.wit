@@ -1,0 +1,9 @@
+package tests:invalid-wit;
+
+interface test {
+    static f: func() -> string;
+}
+
+world invalid {
+    export test;
+}

@@ -6,15 +6,27 @@ settings:
 
 catalogs:
   default:
+    '@bytecodealliance/componentize-js':
+      specifier: ^0.21.0
+      version: 0.21.0
+    mime:
+      specifier: ^4.0.7
+      version: 4.1.0
     puppeteer:
       specifier: ^25.1.0
       version: 25.1.0
+    smol-toml:
+      specifier: ^1.4.2
+      version: 1.6.1
     typescript:
       specifier: ^6.0.3
       version: 6.0.3
     vitest:
       specifier: ^4.0.8
       version: 4.1.6
+    which:
+      specifier: ^2.0.2
+      version: 2.0.2
 
 importers:
 
@@ -358,6 +370,9 @@ importers:
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.5
         version: 0.17.9
+      '@bytecodealliance/preview3-shim':
+        specifier: ^0.2.0
+        version: 0.2.0
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -365,18 +380,36 @@ importers:
         specifier: ^5
         version: 5.47.1
     devDependencies:
+      '@bytecodealliance/componentize-js':
+        specifier: 'catalog:'
+        version: 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@npmcli/run-script':
         specifier: ^10.0.2
         version: 10.0.4
       '@types/node':
         specifier: ^24.12.4
         version: 24.12.4
+      mime:
+        specifier: 'catalog:'
+        version: 4.1.0
+      puppeteer:
+        specifier: 'catalog:'
+        version: 25.1.0
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.6.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
       vite:
         specifier: ^7.1.5
         version: 7.3.3(@types/node@24.12.4)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.47.1)
       vitest:
         specifier: ^4.0.7
         version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.47.1))
+      which:
+        specifier: 'catalog:'
+        version: 2.0.2
 
   packages/preview2-shim:
     devDependencies:
@@ -488,6 +521,9 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
+
+  '@bytecodealliance/preview3-shim@0.2.0':
+    resolution: {integrity: sha512-44zSPzlOyF/hWTNK32odet+Jt/nVXgtboSvgvZqMEJKP9GuM+Ln3L6js31WAakDEe+TYgG4iNEBk39rByINZkA==}
 
   '@bytecodealliance/weval@0.4.1':
     resolution: {integrity: sha512-vJegSAkNjENhJcMUod76KUGAgQLdACDDCwB3JwyR14zDhyHVPAvArvtDDYEEi+c+ELzls62H6wxTvzRmaYTaqg==}
@@ -3989,6 +4025,10 @@ snapshots:
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.17.9
+
+  '@bytecodealliance/preview3-shim@0.2.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.19.0
 
   '@bytecodealliance/weval@0.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:

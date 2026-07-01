@@ -1,0 +1,5 @@
+package tests:invalid-wit;
+
+interface sibling-file {
+    f: func() -> string;
+}

@@ -1,0 +1,12 @@
+package test:issue;
+
+interface types {
+  record bar {
+    x: u32
+  }
+}
+
+world issue {
+  use types.{bar};
+  export foo: func() -> bar;
+}

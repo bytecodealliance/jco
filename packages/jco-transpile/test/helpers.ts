@@ -1,14 +1,33 @@
-import { fileURLToPath, URL } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { version, env, argv, execArgv } from 'node:process';
+import { createServer as createNetServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
+import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from 'node:path';
+import { cp, mkdtemp, writeFile, stat, mkdir, readFile } from 'node:fs/promises';
+import { spawn, exec as syncExec } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { URL, fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
+
+import mime from 'mime';
+import { parse } from 'smol-toml';
+import ts from 'typescript';
+import which from 'which';
+
+const exec = promisify(syncExec);
+
+import { componentize } from '@bytecodealliance/componentize-js';
+
+import { transpileBytes } from '../src/index.js';
+import type { TranspilationOptions } from '../src/transpile.js';
 
 /** Stable path to the jco's fixture directory containing WIT files */
-export const JCO_WIT_FIXTURE_DIR = fileURLToPath(new URL('../../jco/test/fixtures/wits', import.meta.url));
+export const JCO_WIT_FIXTURE_DIR = fileURLToPath(new URL('../../jco/test/fixtures/wit', import.meta.url));
 
 /** Stable path to the local (jco-transpile) fixture directory containing WIT files */
 export const WIT_FIXTURE_DIR = fileURLToPath(new URL('./fixtures/wit', import.meta.url));
 
 /** Cache of bytes that is used */
-const COMPONENT_BYTES_CACHE = {};
+const COMPONENT_BYTES_CACHE: Record<string, Buffer> = {};
 
 /**
  * Read the bytes of a component from disk (or the cache, if available) */
@@ -17,4 +36,744 @@ export async function readComponentBytes(componentPath: string): Promise<Buffer>
         COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
     }
     return COMPONENT_BYTES_CACHE[componentPath];
+}
+
+/** Ensure that the given file path exists */
+export async function ensureFile(filePath: string) {
+    if (!filePath) {
+        throw new Error('missing componentPath');
+    }
+    const meta = await stat(filePath);
+    if (!meta.isFile()) {
+        throw new Error(`non-file at [${filePath}]`);
+    }
+    return resolve(filePath);
+}
+
+// Simple debug logging for tests
+export function log(args, ..._rest) {
+    if (!env.TEST_DEBUG) {
+        return;
+    }
+    if (typeof args === 'string') {
+        args = { msg: args };
+    }
+    if (typeof args !== 'object') {
+        return;
+    }
+    if (args.extra || _rest.length > 0) {
+        console.log(`[${args.level || 'debug'}] ${args.msg}`, {
+            ...args.extra,
+            _rest,
+        });
+    } else {
+        console.log(`[${args.level || 'debug'}] ${args.msg}`);
+    }
+}
+
+// Execute a NodeJS script
+//
+// Note: argv[0] is expected to be `node` (or some incantation that spawned this process)
+export async function nodeExec(cmd: string, ...args) {
+    if (!cmd) {
+        throw new Error('cmd not specified');
+    }
+    const options = typeof args.at(-1) === 'object' && args.at(-1)?.closeStdin !== undefined ? args.pop() : {};
+    let stdout = '',
+        stderr = '';
+    await new Promise((resolve, reject) => {
+        const processCmd = argv[0];
+        const cmdArgs = ['--no-warnings', ...execArgv, cmd, ...args];
+        const cp = spawn(processCmd, cmdArgs, {
+            stdio: 'pipe',
+        });
+        if (options.closeStdin) {
+            cp.stdin.end();
+        }
+        cp.stdout.on('data', (chunk) => {
+            stdout += chunk;
+            if (env.JCO_DEBUG) {
+                console.error(`[exec] [cmd=${cmd}] [stdout] ${chunk}`);
+            }
+        });
+        cp.stderr.on('data', (chunk) => {
+            stderr += chunk;
+            if (env.JCO_DEBUG) {
+                console.error(`[exec] [cmd=${cmd}] [stderr] ${chunk}`);
+            }
+        });
+        cp.on('error', reject);
+        cp.on('exit', (code) => {
+            if (code === 0) {
+                resolve();
+                return;
+            }
+
+            const msg = [
+                `error code [${code}] while executing [${processCmd} ${cmdArgs.join(' ')}]:`,
+                'STDOUT:',
+                stdout.toString(),
+                'STDERR:',
+                stderr.toString(),
+            ].join('\n');
+            reject(new Error(msg));
+        });
+    });
+    return { stdout, stderr };
+}
+
+/**
+ * Securely creates a temporary directory and returns its path.
+ *
+ * The new directory is created using `fsPromises.mkdtemp()`.
+ */
+export async function getTmpDir() {
+    return mkdtemp(normalize(tmpdir() + sep));
+}
+
+/**
+ * Set up an async test to be run
+ *
+ * Example:
+ * ```
+ * const { instance, cleanup } = await setupAsyncTest({
+ *     component: {
+ *         path: join(
+ *             P3_COMPONENT_FIXTURES_DIR,
+ *             'async-simple-import.wasm',
+ *         ),
+ *         imports: {
+ *             ...new WASIShim().getImportObject(),
+ *             loadString: async () => "loaded",
+ *             loadU32: async () => 43,
+ *         },
+ *     },
+ *     jco: {
+ *         transpile: {
+ *             extraArgs: {
+ *                 minify: false, // for ease of debugging
+ *             }
+ *         }
+ *     }
+ * });
+ * ```
+ *
+ * @param {object} args - Arguments for running the async test
+ * @param {function} args.testFn - Arguments for running the async test
+ * @param {object} args.jco - JCO-related confguration for running the async test
+ * @param {string} [args.jcoBinPath] - path to the jco binary (or a JS script)
+ * @param {object} [args.transpile] - configuration related to transpilation
+ * @param {object} [args.transpile.extraArgs] - arguments to pass along to jco transpilation
+ * @param {object} args.component - configuration for an existing component that should be transpiled
+ * @param {string} args.component.name - name of the component
+ * @param {string} args.component.path - path to the WebAssembly binary for the existing component
+ * @param {object} args.component.imports - imports that should be provided to the module at instantiation time
+ * @param {object} args.component.build - configuration for building an ephemeral component to be tested
+ * @param {object} args.component.js.source - Javascript source code for a component
+ * @param {object} args.component.wit.source - WIT definitions (inlined) for a component
+ * @param {object[]} args.component.wit.deps - Dependencies (ex. WASI) that should be included during component build
+ */
+export async function setupAsyncTest(args) {
+    const { asyncMode, jco, component } = args;
+    let componentName = component.name;
+    let componentPath = component.path;
+    const componentImports = component.imports;
+    if (component.path && component.build) {
+        throw new Error('Both component.path and component.build should not be specified at the same time');
+    }
+    if (componentPath && componentPath.endsWith('.wasm') && !componentName) {
+        componentName = basename(componentPath).replace(/.wasm$/, '');
+    }
+
+    // If this component should be built "just in time" -- i.e. created when this test is run
+    let componentBuildCleanup;
+    if (component.build) {
+        // Optionally use a custom pre-optimized StarlingMonkey engine
+        if (env.TEST_CUSTOM_ENGINE_JIT_PATH || env.TEST_CUSTOM_ENGINE_AOT_PATH) {
+            log('detected custom engine JIT path');
+            if (component.build.componentizeOpts?.aot) {
+                log('detected AOT config');
+                component.build.engine = env.TEST_CUSTOM_ENGINE_AOT_PATH;
+            } else {
+                log('detected JIT config');
+                component.build.engine = env.TEST_CUSTOM_ENGINE_JIT_PATH;
+            }
+        }
+
+        // Build the component
+        const { name, path, cleanup } = await buildComponent({
+            name: componentName,
+            ...component.build,
+        });
+
+        componentBuildCleanup = cleanup;
+        componentName = name;
+        componentPath = path;
+    }
+
+    if (!componentName) {
+        throw new Error('invalid/missing component name');
+    }
+    if (!componentPath) {
+        throw new Error('invalid/missing component path');
+    }
+
+    // Use either a temporary directory or an subfolder in an existing directory,
+    // creating it if it doesn't already exist
+    const outputDir = component.outputDir ? component.outputDir : await getTmpDir();
+
+    // Build out the whole-test cleanup function
+    const cleanup = async () => {
+        log('[cleanup] cleaning up component...');
+        if (componentBuildCleanup) {
+            try {
+                await componentBuildCleanup();
+            } catch {}
+        }
+        try {
+            await rm(outputDir, { recursive: true });
+        } catch {}
+    };
+
+    // Return early if the test was intended to run on JSPI but JSPI is not enabled
+    if (asyncMode == 'jspi' && typeof WebAssembly?.Suspending !== 'function') {
+        const nodeMajorVersion = parseInt(version.replace('v', '').split('.')[0]);
+        if (nodeMajorVersion < 23) {
+            throw new Error('NodeJS versions <23 does not support JSPI integration, please use a NodeJS version >=23');
+        }
+        await cleanup();
+        throw new Error(
+            'JSPI async type skipped, but JSPI was not enabled -- please ensure test is run from an environment with JSPI integration (ex. node with the --experimental-wasm-jspi flag)',
+        );
+    }
+
+    // Build a directory for the transpiled component output to be put in
+    // (possibly inside the passed in outputDir)
+    const moduleOutputDir = join(outputDir, componentName);
+    try {
+        await stat(moduleOutputDir);
+    } catch (err) {
+        if (err && err.code && err.code === 'ENOENT') {
+            await mkdir(moduleOutputDir);
+        }
+    }
+
+    const transpileOpts: TranspilationOptions = {
+        name: componentName,
+        minify: true,
+        validLiftingOptimization: true,
+        tlaCompat: true,
+        optimize: false,
+        base64Cutoff: 0,
+        instantiation: 'async',
+        asyncMode,
+        wasiShim: true,
+        strict: true,
+        outDir: moduleOutputDir,
+        ...(jco?.transpile?.extraArgs || {}),
+    };
+
+    const componentBytes = await readComponentBytes(componentPath);
+
+    // Perform transpilation, write out files
+    const { files } = await transpileBytes(componentBytes, transpileOpts);
+    await Promise.all(
+        Object.entries(files).map(async ([name, file]) => {
+            await mkdir(dirname(name), { recursive: true });
+            await writeFile(name, file);
+        }),
+    );
+
+    // Write a minimal package.json
+    await writeFile(`${moduleOutputDir}/package.json`, JSON.stringify({ type: 'module' }));
+
+    // Import the transpiled JS
+    const esModuleOutputPath = join(moduleOutputDir, `${componentName}.js`);
+    const esModuleSourcePathURL = pathToFileURL(esModuleOutputPath);
+    const esModule = await import(esModuleSourcePathURL);
+
+    // Optionally instantiate the ES module
+    //
+    // It's useful to be able to skip instantiation of the instantiation should happen
+    // elsewhere (ex. in a browser window)
+    let instance = null;
+    if (!component.skipInstantiation) {
+        instance = await esModule.instantiate(undefined, componentImports || {});
+    }
+
+    return {
+        esModule,
+        esModuleOutputDir: moduleOutputDir,
+        esModuleOutputPath,
+        esModuleSourcePathURL,
+        esModuleRelativeSourcePath: relative(outputDir, esModuleOutputPath),
+        instance,
+        cleanup,
+        outputDir,
+        component: {
+            name: componentName,
+            path: componentPath,
+        },
+    };
+}
+
+/**
+ * Helper method for building a component just in time (e.g. to use in a test)
+ *
+ */
+export async function buildComponent(args) {
+    if (!args) {
+        throw new Error('missing args');
+    }
+    const name = args.name;
+    const jsSource = args.js?.source;
+    const witDeps = args.wit?.deps;
+    const witSource = args.wit?.source;
+    const witWorld = args.wit?.world;
+    if (!name) {
+        throw new Error('invalid/missing component name for in-test component build');
+    }
+    if (!jsSource) {
+        throw new Error('invalid/missing source for in-test component build');
+    }
+    if (!witSource) {
+        throw new Error('invalid/missing WIT for in-test component build');
+    }
+    if (!witWorld) {
+        throw new Error('invalid/missing WIT world for in-test component build');
+    }
+
+    // Create temporary output directory
+    const outputDir = await getTmpDir();
+
+    // Write the component's JS and WIT
+    const jsSourcePath = join(outputDir, 'component.js');
+    const witOutputPath = join(outputDir, 'wit');
+    await mkdir(join(witOutputPath, 'deps'), { recursive: true });
+    const witSourcePath = join(witOutputPath, 'component.wit');
+
+    // Write the appropriate
+    await Promise.all([await writeFile(jsSourcePath, jsSource), await writeFile(witSourcePath, witSource)]);
+
+    // Copy in additional WIT dependency files if provided
+    if (witDeps) {
+        for (const dep of witDeps) {
+            if (!dep.srcPath) {
+                throw new Error('Invalid wit dep object, missing srcPath');
+            }
+            if (!isAbsolute(dep.srcPath)) {
+                throw new Error('Only absolute source paths are allowed');
+            }
+            if (dep.destPath && isAbsolute(dep.destPath)) {
+                throw new Error('Only relative dest paths are allowed (into the wit/deps directory)');
+            }
+
+            const srcFileStats = await stat(dep.srcPath);
+            const destPath = dep.destPath || (srcFileStats.isFile() ? basename(dep.srcPath) : '.');
+            const outputPath = resolve(`${outputDir}/wit/deps/${destPath}`);
+
+            if (srcFileStats.isFile()) {
+                await writeFile(outputPath, await readFile(dep.srcPath));
+            } else if (srcFileStats.isDirectory()) {
+                await cp(dep.srcPath, outputPath, { recursive: true });
+            } else {
+                throw new Error('unrecognized file type for WIT dep, neither file nor directory');
+            }
+        }
+    }
+
+    // Build the output path to which we should write
+    const outputWasmPath = join(outputDir, 'component.wasm');
+
+    // Build options for componentizing
+    const wit = witDeps ? witOutputPath : witSourcePath;
+    const options = {
+        sourceName: 'component',
+        // If there were wit deps specified, we should use the whole wit dir
+        // otherwise we can use just the single WIT source file
+        wit,
+        worldName: witWorld,
+        out: outputWasmPath,
+        quiet: true,
+        // Add in optional raw options object to componentize
+        ...(args.componentizeOpts || {}),
+    };
+
+    // Use a custom engine if specified
+    if (args.engine) {
+        const enginePath = resolve(args.engine);
+        const engine = await stat(enginePath);
+        if (engine.isFile()) {
+            options.engine = enginePath;
+        }
+    }
+
+    // Perform componentization
+    await componentize(jsSourcePath, options);
+
+    return {
+        name,
+        path: outputWasmPath,
+        cleanup: async () => {
+            try {
+                await rm(outputDir);
+            } catch {}
+        },
+    };
+}
+
+/**
+ * Load a browser page, usually triggering test output that is written
+ * to the HTML body of the page
+ *
+ * @param {object} args
+ * @param {object} args.browser - Puppeteer browser instance
+ * @param {object} [args.path] - Path to the HTML file to use, with root at `test` (ex. `test/browser.html` would be just `browser.html`)
+ * @param {string} args.hash - Hash at which to perform tests (used to identify specific tests)
+ */
+export async function loadTestPage(args) {
+    const { browser, hash } = args;
+    if (!browser) {
+        throw new Error('missing puppeteer instance browser object');
+    }
+    if (!hash) {
+        throw new Error('missing hash for browser page');
+    }
+
+    const page = await browser.newPage();
+
+    // Pass along all output to test
+    if (env.TEST_DEBUG) {
+        page.on('console', (message) => log(`[browser] ${message.type().substr(0, 3).toUpperCase()} ${message.text()}`))
+            .on('pageerror', ({ message }) => log(`[browser] ${message}`))
+            .on('response', (response) => log(`[browser] ${response.status()} ${response.url()}`))
+            .on('requestfailed', (request) => log(`[browser] ${request.failure().errorText} ${request.url()}`));
+    }
+
+    const path = args.path ? args.path : 'test/browser.html';
+    const serverPort = args.serverPort ? args.serverPort : 8080;
+
+    const hashURL = `http://localhost:${serverPort}/${path}#${hash}`;
+    log(`[browser] attempting to navigate to [${hashURL}]`);
+    const hashTest = await page.goto(hashURL);
+    if (!hashTest.ok()) {
+        throw new Error(`failed to navigate to URL [${hashURL}]`);
+    }
+
+    const body = await page.locator('body').waitHandle();
+
+    let bodyHTML = await body.evaluate((el) => el.innerHTML);
+    // If the body HTML uses "Running" to show state, wait until it changes
+    if (bodyHTML == '<h1>Running</h1>') {
+        while (bodyHTML === '<h1>Running</h1>') {
+            bodyHTML = await body.evaluate((el) => el.innerHTML);
+        }
+    }
+
+    // Attempt to parse the HTML body content as JSON
+    const raw = bodyHTML;
+    let testOutputJSON;
+    try {
+        testOutputJSON = JSON.parse(raw);
+    } catch (err) {
+        log(`failed to parse JSON for body HTML: ${err}`);
+    }
+
+    return {
+        page,
+        body,
+        output: {
+            raw,
+            json: testOutputJSON,
+        },
+    };
+}
+
+// Utility function for getting a random port
+export async function getRandomPort(): Promise<number> {
+    return await new Promise((resolve) => {
+        const server = createNetServer();
+        server.listen(0, function () {
+            const port = this.address().port;
+            server.on('close', () => resolve(port));
+            server.close();
+        });
+    });
+}
+
+/**
+ * Start a web server that serves components and related files from a
+ * given directory.
+ *
+ * @param {{ servePaths: { basePath: string, urlPrefix: string }[] }} args
+ * @returns {Promise<{ serverPort: number, server: object }>}
+ */
+export async function startTestWebServer(args) {
+    if (!args.routes) {
+        throw new Error('missing serve paths');
+    }
+    const serverPort = await getRandomPort();
+
+    const server = createHttpServer(async (req, res) => {
+        // Build a utility function for returning an error
+        const returnError = (e) => {
+            log(`[webserver] failed to find file [${fileURL}]`);
+            res.writeHead(404);
+            res.end(e.message);
+        };
+
+        // Find route to serve incoming request
+        const route = args.routes.find((dir) => {
+            return !dir.urlPrefix || (dir.urlPrefix && req.url.startsWith(dir.urlPrefix));
+        });
+        if (!route) {
+            log(`[webserver] failed to find route to serve [${req.url.path}]`);
+            returnError(new Error(`failed to resolve url [${req.url}] with any provided routes`));
+            return;
+        }
+        if (!route.basePathURL) {
+            throw new Error('invalid/missing path in specified route');
+        }
+
+        const fileURL = new URL(`./${req.url.slice(route.urlPrefix ? route.urlPrefix.length : '')}`, route.basePathURL);
+
+        log(`[webserver] attempting to read file on disk @ [${fileURL}]`);
+
+        // Attempt to read the file
+        try {
+            const html = await readFile(fileURL);
+            res.writeHead(200, {
+                'content-type': mime.getType(extname(req.url)),
+            });
+            res.end(html);
+            log(`[webserver] served file [${fileURL}]`);
+        } catch (e) {
+            if (e.code === 'ENOENT') {
+                returnError(e);
+            } else {
+                log(`[webserver] ERROR [${e}]`);
+                res.writeHead(500);
+                res.end(e.message);
+            }
+        }
+    });
+
+    const served = new Promise((resolve) => {
+        server.on('listening', () => {
+            resolve({
+                serverPort,
+                server,
+                cleanup: async () => {
+                    log('[cleanup] cleaning up http server...');
+                    server.close(() => {
+                        log('server successfully closed');
+                    });
+                },
+            });
+        });
+    });
+
+    server.listen(serverPort);
+
+    return await served;
+}
+
+/** Read the flags that should be set before running a given codegen fixture */
+export async function readFixtureFlags(fixturePath: string): Promise<TranspilationOptions> {
+    let source;
+    try {
+        source = await readFile(fixturePath, 'utf8');
+    } catch (e) {
+        if (e && e.code === 'ENOENT') {
+            return {};
+        }
+        throw e;
+    }
+
+    const opts: TranspilationOptions = {};
+    const firstLine = source.split('\n')[0];
+    if (!firstLine.startsWith('// Flags:')) {
+        return {};
+    }
+
+    const args = firstLine.slice(9).trim().split(' ');
+
+    let idx = 0;
+    while (idx < args.length) {
+        const arg = args[idx];
+        if (arg === '--instantiation') {
+            if (args[idx + 1] === 'sync') {
+                opts.instantiation = 'async';
+                idx++; // skip ahead
+            } else {
+                opts.instantiation = 'async';
+            }
+        } else if (arg === '--map') {
+            const mapping = args[idx + 1];
+            if (!mapping || !mapping.includes('=')) {
+                throw new Error('invalid mapping');
+            }
+            if (opts.map === undefined) {
+                opts.map = {};
+            }
+            const [k, v] = mapping.split('=');
+            opts.map[k] = v;
+            idx++; // skip ahead
+        } else if (arg === '--js') {
+            opts.js = true;
+        } else if (arg === '--tla-compat') {
+            opts.tlaCompat = true;
+        } else if (arg === '--base64-cutoff') {
+            const offset = args[idx + 1];
+            opts.base64Cutoff = parseInt(offset, 10);
+            idx++; // skip ahead
+        } else if (arg.startsWith('--base64-cutoff=')) {
+            const offset = arg.replace('--base64-cutoff=', '');
+            opts.base64Cutoff = parseInt(offset, 10);
+        }
+
+        idx++;
+    }
+
+    return opts;
+}
+
+/** Perform codegen of typescript files with the given configuration */
+function tsCodegen(args) {
+    if (!args) {
+        throw new Error('missing ts codegen args');
+    }
+    if (!args.tsConfigPath) {
+        throw new Error('missing/invalid tsconfig path');
+    }
+    const configPath = args.tsConfigPath;
+
+    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (error) {
+        throw new Error(
+            ts.formatDiagnosticsWithColorAndContext([error], {
+                getCanonicalFileName: (f) => f,
+                getCurrentDirectory: ts.sys.getCurrentDirectory,
+                getNewLine: () => ts.sys.newLine,
+            }),
+        );
+    }
+
+    // Apply overrides
+    if (args.configOverrides) {
+        if (args.configOverrides.include) {
+            config.include = args.configOverrides.include;
+        }
+        if (args.configOverrides.compilerOptions?.outDir) {
+            config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
+        }
+    }
+
+    // Parse the config file with resolution relative to the tsconfig
+    // this expected that the tsconfig be placed close to the files that it must read.
+    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, dirname(configPath));
+    if (parsed.errors.length > 0) {
+        console.error('errors while parsing tsconfig file content', parsed.errors);
+        console.error('config:', config);
+        throw new Error('errors while parsing tsconfig file content');
+    }
+
+    const program = ts.createProgram({
+        rootNames: parsed.fileNames,
+        options: parsed.options,
+    });
+
+    const emitResult = program.emit();
+
+    const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
+    if (diagnostics.length > 0) {
+        console.error(
+            ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                getCanonicalFileName: (f) => f,
+                getCurrentDirectory: ts.sys.getCurrentDirectory,
+                getNewLine: () => ts.sys.newLine,
+            }),
+        );
+    }
+
+    if (emitResult.emitSkipped) {
+        throw new Error('TypeScript emit skipped, no files were emitted');
+    }
+}
+
+let TS_CODEGEN_PROMISE: Promise<void>;
+export function runTSCodegen(args) {
+    if (!args) {
+        throw new Error('missing tscodegen args');
+    }
+
+    if (TS_CODEGEN_PROMISE) {
+        return TS_CODEGEN_PROMISE;
+    }
+    tsCodegen(args);
+    TS_CODEGEN_PROMISE = Promise.resolve();
+    return TS_CODEGEN_PROMISE;
+}
+
+/** Get the current version of `wit-component` which is reflected in WAT output and used for tests */
+let CURRENT_WIT_COMPONENT_VERSION;
+export async function getCurrentWitComponentVersion() {
+    if (CURRENT_WIT_COMPONENT_VERSION) {
+        return CURRENT_WIT_COMPONENT_VERSION;
+    }
+    const cargoLockPath = fileURLToPath(new URL('../../../Cargo.lock', import.meta.url));
+    const cargoLock = parse(await readFile(cargoLockPath, 'utf8'));
+    const version = cargoLock.package.find((p) => p.name === 'wit-component')?.version;
+    if (!version) {
+        throw new Error(`Failed to find/parse wit-version in [${cargoLockPath}]`);
+    }
+    CURRENT_WIT_COMPONENT_VERSION = version;
+    return CURRENT_WIT_COMPONENT_VERSION;
+}
+
+export async function fileExists(p) {
+    return stat(p)
+        .then((f) => f.isFile())
+        .catch(() => false);
+}
+
+/**
+ * Compose two components that are a caller and callee in the style of tests in upstream wasmtime
+ * by calling out to the `wasm-tools` binary
+ *
+ * @see https://github.com/bytecodealliance/wasmtime/blob/main/crates/misc/component-async-tests/tests/scenario/util.rs
+ *
+ * @param {object} args
+ * @param {string} args.callerPath - path to the caller wasm binary
+ * @param {string} args.calleePath - path to the callee wasm binary
+ * @param {string} [args.wasmToolsBinPath] - path to wasm tools binary
+ * @param {string} [args.outputPath] - path the output component should be written to
+ * @returns {Promise<string>} A Promise that resolves to the path to the composed component in a tempdir
+ */
+export async function composeCallerCallee(args) {
+    const callerPath = await ensureFile(args.callerPath);
+    const calleePath = await ensureFile(args.calleePath);
+
+    let outputComponentPath = args.outputPath;
+    if (!outputComponentPath) {
+        const tmpDir = await getTmpDir();
+        outputComponentPath = resolve(tmpDir, 'composed.wasm');
+    }
+
+    const wasmToolsBinPath = args.wasmToolsBinPath ?? (await which('wasm-tools'));
+    await ensureFile(wasmToolsBinPath);
+
+    const cmd = [
+        wasmToolsBinPath,
+        'compose',
+        callerPath,
+        '--definitions',
+        calleePath,
+        '--output',
+        outputComponentPath,
+        '--skip-validation',
+    ].join(' ');
+    await exec(cmd);
+
+    return await ensureFile(outputComponentPath);
 }
