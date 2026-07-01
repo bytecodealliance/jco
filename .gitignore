@@ -25,7 +25,6 @@ package-lock.yaml
 crates/jco/tests/rundir
 crates/jco/tests/output
 crates/jco/tests/generated
-test/fixtures/modules/hello_stdout.component.wasm
 
 # Jco
 packages/jco/obj

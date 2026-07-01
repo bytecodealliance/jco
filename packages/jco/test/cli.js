@@ -1,53 +1,26 @@
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
 import { execArgv } from "node:process";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { exec, jcoPath, getTmpDir, readComponentBytes, getCurrentWitComponentVersion } from "./helpers.js";
+import { preview1AdapterCommandPath } from "@bytecodealliance/jco";
 import { AsyncFunction } from "./common.js";
+import { componentNew } from "@bytecodealliance/jco-transpile/wasm-tools";
 
-import { suite, test, beforeAll, afterAll, afterEach, assert } from "vitest";
+import { suite, test, assert } from "vitest";
 
 const multiMemory = execArgv.includes("--experimental-wasm-multi-memory") ? ["--multi-memory"] : [];
 
 suite("CLI", () => {
-    var tmpDir;
-    var outDir;
-    var outFile;
+    test.concurrent("Resource transfer", async () => {
+        const { outDir, cleanup } = await setupTest();
 
-    beforeAll(async function () {
-        tmpDir = await getTmpDir();
-        outDir = resolve(tmpDir, "out-component-dir");
-        outFile = resolve(tmpDir, "out-component-file");
-
-        const modulesDir = resolve(tmpDir, "node_modules", "@bytecodealliance");
-        await mkdir(modulesDir, { recursive: true });
-        await symlink(
-            fileURLToPath(new URL("../packages/preview2-shim", import.meta.url)),
-            resolve(modulesDir, "preview2-shim"),
-            "dir",
-        );
-    });
-
-    afterAll(async function () {
-        try {
-            await rm(tmpDir, { recursive: true });
-        } catch {}
-    });
-
-    afterEach(async function () {
-        try {
-            await rm(outDir, { recursive: true });
-            await rm(outFile);
-        } catch {}
-    });
-
-    test("Resource transfer", async () => {
         const { stderr } = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/stdio.composed.wasm`,
+            `test/fixtures/components/stdio.composed.wasm`,
             ...multiMemory,
             "-o",
             outDir,
@@ -56,13 +29,17 @@ suite("CLI", () => {
         await writeFile(`${outDir}/package.json`, JSON.stringify({ type: "module" }));
         const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
         m.testStdio();
+
+        await cleanup();
     });
 
-    test("Resource transfer valid lifting", async () => {
+    test.concurrent("Resource transfer valid lifting", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/stdio.composed.wasm`,
+            `test/fixtures/components/stdio.composed.wasm`,
             ...multiMemory,
             "--valid-lifting-optimization",
             "-o",
@@ -72,9 +49,13 @@ suite("CLI", () => {
         await writeFile(`${outDir}/package.json`, JSON.stringify({ type: "module" }));
         const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
         m.testStdio();
+
+        await cleanup();
     });
 
-    test("Transpile", async () => {
+    test.concurrent("Transpile", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "flavorful";
         const { stderr } = await exec(
             jcoPath,
@@ -89,12 +70,16 @@ suite("CLI", () => {
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/${name}.js`);
         assert.ok(source.toString().includes("export { test"));
+
+        await cleanup();
     });
 
-    test("Transpile with Async Mode for JSPI", async () => {
+    test.concurrent("Transpile with Async Mode for JSPI", async () => {
         if (typeof WebAssembly.Suspending !== "function") {
             return;
         }
+
+        const { outDir, cleanup } = await setupTest();
 
         const name = "async_call";
         const { stderr } = await exec(
@@ -126,9 +111,13 @@ suite("CLI", () => {
 
         assert.strictEqual(inst.runSync(), "called sync");
         assert.strictEqual(await inst.runAsync(), "called async");
+
+        await cleanup();
     });
 
-    test("Transpile & Optimize & Minify", async () => {
+    test.concurrent("Transpile & Optimize & Minify", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "flavorful";
         const { stderr } = await exec(
             jcoPath,
@@ -147,9 +136,13 @@ suite("CLI", () => {
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/${name}.js`);
         assert.ok(source.toString().includes("as test,"));
+
+        await cleanup();
     });
 
-    test("Transpile with tracing", async () => {
+    test.concurrent("Transpile with tracing", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "flavorful";
         const { stderr } = await exec(
             jcoPath,
@@ -173,13 +166,17 @@ suite("CLI", () => {
                 'console.error(`[iface="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);',
             ),
         );
+
+        await cleanup();
     });
 
-    test("Type generation", async () => {
+    test.concurrent("Type generation", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "types",
-            "test/fixtures/wits/flavorful",
+            "test/fixtures/wit/flavorful",
             "--world-name",
             "test:flavorful/flavorful",
             "-o",
@@ -193,13 +190,17 @@ suite("CLI", () => {
         assert.ok(iface.includes("export function listOfVariants(")); // function
         assert.ok(iface.includes("export type MyErrno =")); // enum
         assert.ok(iface.includes("export type ListInAlias =")); // type alias
+
+        await cleanup();
     });
 
-    test("Type generation (specific features)", async () => {
+    test.concurrent("Type generation (specific features)", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "types",
-            "test/fixtures/wits/feature-gates-unstable.wit",
+            "test/fixtures/wit/feature-gates-unstable.wit",
             "--world-name",
             "test:feature-gates-unstable/gated",
             "--feature",
@@ -212,13 +213,17 @@ suite("CLI", () => {
         assert.ok(source.includes("export function a(): void;"));
         assert.ok(!source.includes("export function b(): void;"));
         assert.ok(source.includes("export function c(): void;"));
+
+        await cleanup();
     });
 
-    test("Type generation (all features)", async () => {
+    test.concurrent("Type generation (all features)", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "types",
-            "test/fixtures/wits/feature-gates-unstable.wit",
+            "test/fixtures/wit/feature-gates-unstable.wit",
             "--world-name",
             "test:feature-gates-unstable/gated",
             "--all-features",
@@ -230,14 +235,18 @@ suite("CLI", () => {
         assert.ok(source.includes("export function a(): void;"));
         assert.ok(source.includes("export function b(): void;"));
         assert.ok(source.includes("export function c(): void;"));
+
+        await cleanup();
     });
 
     // NOTE: enabling all features and a specific feature means --all-features takes precedence
-    test("Type generation (all features + feature)", async () => {
+    test.concurrent("Type generation (all features + feature)", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "types",
-            "test/fixtures/wits/feature-gates-unstable.wit",
+            "test/fixtures/wit/feature-gates-unstable.wit",
             "--world-name",
             "test:feature-gates-unstable/gated",
             "--all-features",
@@ -251,13 +260,17 @@ suite("CLI", () => {
         assert.ok(source.includes("export function a(): void;"));
         assert.ok(source.includes("export function b(): void;"));
         assert.ok(source.includes("export function c(): void;"));
+
+        await cleanup();
     });
 
-    test("Type generation (declare imports)", async () => {
+    test.concurrent("Type generation (declare imports)", async () => {
+        const { outDir } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "guest-types",
-            "test/fixtures/wits/flavorful",
+            "test/fixtures/wit/flavorful",
             "--world-name",
             "test:flavorful/flavorful",
             "-o",
@@ -273,11 +286,13 @@ suite("CLI", () => {
         assert.ok(source.includes("declare module 'test:flavorful/test' {"));
     });
 
-    test("TypeScript naming checks", async () => {
+    test.concurrent("TypeScript naming checks", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/wits/ts-check/ts-check.wit`,
+            `test/fixtures/wit/ts-check/ts-check.wit`,
             "--stub",
             "-o",
             outDir,
@@ -293,9 +308,13 @@ suite("CLI", () => {
             assert.ok(source.toString().includes("function _class(): void"));
             assert.ok(source.toString().includes("export { _class as class }"));
         }
+
+        await cleanup();
     });
 
-    test("Transpile to JS", async () => {
+    test.concurrent("Transpile to JS", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "flavorful";
         const { stderr } = await exec(
             jcoPath,
@@ -319,9 +338,13 @@ suite("CLI", () => {
         assert.ok(source.includes("./flavorful.js"));
         assert.ok(source.includes("FUNCTION_TABLE"));
         assert.ok(source.includes("export {\n  $init"));
+
+        await cleanup();
     });
 
-    test("Transpile without namespaced exports", async () => {
+    test.concurrent("Transpile without namespaced exports", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "flavorful";
         const { stderr } = await exec(
             jcoPath,
@@ -341,9 +364,13 @@ suite("CLI", () => {
         assert.ok(finalLine.toString().includes("export {"));
         //Check that it does not contain the namespaced export
         assert.ok(!finalLine.toString().includes("test:flavorful/test"));
+
+        await cleanup();
     });
 
-    test("Transpile with namespaced exports", async () => {
+    test.concurrent("Transpile with namespaced exports", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "flavorful";
         const { stderr } = await exec(
             jcoPath,
@@ -362,9 +389,13 @@ suite("CLI", () => {
         assert.ok(finalLine.toString().includes("export {"));
         //Check that it does contain the namespaced export
         assert.ok(finalLine.toString().includes("test as 'test:flavorful/test'"));
+
+        await cleanup();
     });
 
-    test("Optimize", async () => {
+    test.concurrent("Optimize", async () => {
+        const { outFile, cleanup } = await setupTest();
+
         const wasmPath = fileURLToPath(new URL(`./fixtures/components/flavorful.component.wasm`, import.meta.url));
         const component = await readComponentBytes(wasmPath);
         const { stderr, stdout } = await exec(jcoPath, "opt", wasmPath, "-o", outFile);
@@ -372,9 +403,13 @@ suite("CLI", () => {
         assert.ok(stdout.includes("Core Module 1:"));
         const optimizedComponent = await readFile(outFile);
         assert.ok(optimizedComponent.byteLength < component.byteLength);
+
+        await cleanup();
     });
 
-    test("Optimize nested component", async () => {
+    test.concurrent("Optimize nested component", async () => {
+        const { outFile, cleanup } = await setupTest();
+
         const component = await readFile(`test/fixtures/components/simple-nested.component.wasm`);
         const { stderr, stdout } = await exec(
             jcoPath,
@@ -387,9 +422,13 @@ suite("CLI", () => {
         assert.ok(stdout.includes("Core Module 1:"));
         const optimizedComponent = await readFile(outFile);
         assert.ok(optimizedComponent.byteLength < component.byteLength);
+
+        await cleanup();
     });
 
-    test("Optimize component with Asyncify pass", async () => {
+    test.concurrent("Optimize component with Asyncify pass", async () => {
+        const { outFile, cleanup } = await setupTest();
+
         const component = await readFile(`test/fixtures/components/simple-nested-optimized.component.wasm`);
         const { stderr, stdout } = await exec(
             jcoPath,
@@ -403,9 +442,13 @@ suite("CLI", () => {
         assert.ok(stdout.includes("Core Module 1:"));
         const asyncifiedComponent = await readFile(outFile);
         assert.ok(asyncifiedComponent.byteLength > component.byteLength); // should be larger
+
+        await cleanup();
     });
 
-    test("Print & Parse", async () => {
+    test.concurrent("Print & Parse", async () => {
+        const { outFile, cleanup } = await setupTest();
+
         const { stderr, stdout } = await exec(jcoPath, "print", `test/fixtures/components/flavorful.component.wasm`);
         assert.strictEqual(stderr, "");
         assert.strictEqual(stdout.slice(0, 10), "(component");
@@ -426,16 +469,24 @@ suite("CLI", () => {
             assert.strictEqual(stdout, "");
             assert.ok(await readFile(outFile));
         }
+
+        await cleanup();
     });
 
-    test("Wit shadowing stub test", async () => {
-        const { stderr } = await exec(jcoPath, "transpile", `test/fixtures/wits/app/app.wit`, "-o", outDir, "--stub");
+    test.concurrent("Wit shadowing stub test", async () => {
+        const { outDir, cleanup } = await setupTest();
+
+        const { stderr } = await exec(jcoPath, "transpile", `test/fixtures/wit/app/app.wit`, "-o", outDir, "--stub");
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/app.js`);
         assert.ok(source.includes("class PString$1{"));
+
+        await cleanup();
     });
 
-    test("Wit & New", async () => {
+    test.concurrent("Wit & New", async () => {
+        const { outFile, cleanup } = await setupTest();
+
         const { stderr, stdout } = await exec(jcoPath, "wit", `test/fixtures/components/flavorful.component.wasm`);
         assert.strictEqual(stderr, "");
         assert.ok(stdout.includes("world root {"));
@@ -446,7 +497,7 @@ suite("CLI", () => {
                 "embed",
                 "--dummy",
                 "--wit",
-                "test/fixtures/wits/flavorful/flavorful.wit",
+                "test/fixtures/wit/flavorful/flavorful.wit",
                 "-m",
                 "language=javascript",
                 "-m",
@@ -499,9 +550,13 @@ suite("CLI", () => {
                 ["language", [["javascript", ""]]],
             ]);
         }
+
+        await cleanup();
     });
 
-    test("Component new adapt", async () => {
+    test.concurrent("Component new adapt", async () => {
+        const { outFile, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "new",
@@ -516,9 +571,13 @@ suite("CLI", () => {
             assert.strictEqual(stderr, "");
             assert.strictEqual(stdout.slice(0, 10), "(component");
         }
+
+        await cleanup();
     });
 
-    test("Extract metadata", async () => {
+    test.concurrent("Extract metadata", async () => {
+        const { cleanup } = await setupTest();
+
         const { stdout, stderr } = await exec(
             jcoPath,
             "metadata-show",
@@ -533,18 +592,22 @@ suite("CLI", () => {
                 range: [0, 262],
             },
         ]);
+
+        await cleanup();
     });
 
-    test("Componentize", async () => {
+    test.concurrent("Componentize", async () => {
+        const { outDir, outFile, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "componentize",
-            "test/fixtures/componentize/source.js",
+            "test/fixtures/componentize/simple-resource/source.js",
             "-d",
             "all",
             "--aot",
             "-w",
-            "test/fixtures/componentize/source.wit",
+            "test/fixtures/componentize/simple-resource/source.wit",
             "-o",
             outFile,
         );
@@ -568,10 +631,14 @@ suite("CLI", () => {
         const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
         assert.strictEqual(m.hello(), "world");
         // assert.strictEqual(m.consumeBar(m.createBar()), 'bar1');
+
+        await cleanup();
     });
 
     // https://github.com/bytecodealliance/jco/issues/106
-    test("transpile WASI mapping", async () => {
+    test.concurrent("transpile WASI mapping", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "transpile",
@@ -589,6 +656,8 @@ suite("CLI", () => {
         const outputJSPath = `${outDir}/transpile-wasi-mapping.js`;
         const source = await readFile(outputJSPath, "utf8");
         assert.ok(source.includes("imports['custom-wasi:filesystem/types']"));
+
+        await cleanup();
     });
 
     // NOTE: this test works because hello-stdout.component.wasm
@@ -596,12 +665,15 @@ suite("CLI", () => {
     // and this test ensures a mapping to *newer* WASI versions will not error.
     //
     // see: https://github.com/bytecodealliance/jco/pull/1252
-    test("mapping version matching", async () => {
+    test.concurrent("mapping version matching", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const name = "hello_stdout";
+        const componentPath = `test/fixtures/components/${name}.component.wasm`;
         let res = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/modules/${name}.component.wasm`,
+            componentPath,
             "--no-wasi-shim",
             // interface wildcard matched, although 0.2.0 < 0.2.3
             "--map",
@@ -629,7 +701,7 @@ suite("CLI", () => {
         res = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/modules/${name}.component.wasm`,
+            componentPath,
             "--no-wasi-shim",
             // interface without version matches
             "--map",
@@ -669,14 +741,18 @@ suite("CLI", () => {
         assert(source.includes("from './io.js'"));
         assert(!source.includes("from './filesystem-types.js'"));
         assert(source.includes("from './filesystem-preopens-higher.js'"));
+
+        await cleanup();
     });
 
     // see: https://github.com/bytecodealliance/jco/issues/1664
-    test("picking worlds for typegen", async () => {
+    test.concurrent("picking worlds for typegen", async () => {
+        const { outDir, cleanup } = await setupTest();
+
         const { stderr } = await exec(
             jcoPath,
             "guest-types",
-            "test/fixtures/wits/multiple-worlds/test.wit",
+            "test/fixtures/wit/multiple-worlds/test.wit",
             "--world-name",
             "jco:test/world1",
             "-o",
@@ -686,8 +762,58 @@ suite("CLI", () => {
         const source = await readFile(`${outDir}/interfaces/jco-test-foo1.d.ts`, "utf8");
         assert.include(source, "declare module 'jco:test/foo1' {");
         assert.notInclude(source, "declare module 'jco:test/foo2' {");
+
+        await cleanup();
+    });
+
+    test.concurrent("hello_stdout", async () => {
+        const outputDir = await getTmpDir();
+
+        const component = await readComponentBytes(
+            fileURLToPath(new URL("./fixtures/modules/hello_stdout.wasm", import.meta.url)),
+        );
+        const generatedComponent = await componentNew(component, [
+            ["wasi_snapshot_preview1", await readComponentBytes(preview1AdapterCommandPath())],
+        ]);
+
+        const outputPath = join(outputDir, "hello_stdout.component.wasm");
+        await writeFile(outputPath, generatedComponent);
+
+        const { stdout, stderr } = await exec(jcoPath, "run", outputPath);
+        assert.strictEqual(stdout, "writing to stdout: hello, world\n");
+        assert.strictEqual(stderr, "writing to stderr: hello, world\n");
+    });
+
+    // https://github.com/bytecodealliance/jco/issues/550
+    test.concurrent("pollable hang", async () => {
+        await exec(
+            jcoPath,
+            "run",
+            fileURLToPath(new URL("./fixtures/components/stdout-pollable-hang.component.wasm", import.meta.url)),
+        );
     });
 });
+
+// NOTE: we can only use asyncDispose once Node24 becomes the oldest supported version under test
+async function setupTest() {
+    const tmpDir = await getTmpDir();
+    const outDir = resolve(tmpDir, "out-component-dir");
+    const outFile = resolve(tmpDir, "out-component-file");
+
+    const modulesDir = resolve(tmpDir, "node_modules", "@bytecodealliance");
+    await mkdir(modulesDir, { recursive: true });
+    await symlink(
+        fileURLToPath(new URL("../packages/preview2-shim", import.meta.url)),
+        resolve(modulesDir, "preview2-shim"),
+        "dir",
+    );
+
+    const cleanup = async () => {
+        await rm(tmpDir, { recursive: true }).catch(() => {});
+    };
+
+    return { outDir, outFile, cleanup };
+}
 
 // Cache of componentize byte outputs
 const CACHE_COMPONENTIZE_OUTPUT = {};

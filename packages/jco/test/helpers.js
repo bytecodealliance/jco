@@ -9,7 +9,6 @@ import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
 import mime from "mime";
 import { parse } from "smol-toml";
-import ts from "typescript";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
@@ -574,77 +573,6 @@ export async function readComponentBytes(componentPath) {
     }
     componentBytes = COMPONENT_BYTES_CACHE[componentPath];
     return componentBytes;
-}
-
-function tsCodegen(args) {
-    if (!args) {
-        throw new Error("missing ts codegen args");
-    }
-    const cwd = args?.cwd ?? process.cwd();
-    if (!args.tsConfigPath) {
-        throw new Error("missing/invalid tsconfig path");
-    }
-    const configPath = args.tsConfigPath;
-
-    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
-    if (error) {
-        throw new Error(
-            ts.formatDiagnosticsWithColorAndContext([error], {
-                getCanonicalFileName: (f) => f,
-                getCurrentDirectory: ts.sys.getCurrentDirectory,
-                getNewLine: () => ts.sys.newLine,
-            }),
-        );
-    }
-
-    // Apply overrides
-    if (args.configOverrides) {
-        if (args.configOverrides.include) {
-            config.include = args.configOverrides.include;
-        }
-        if (args.configOverrides.compilerOptions?.outDir) {
-            config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
-        }
-    }
-
-    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd);
-
-    const program = ts.createProgram({
-        rootNames: parsed.fileNames,
-        options: parsed.options,
-    });
-
-    const emitResult = program.emit();
-
-    const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
-
-    if (diagnostics.length > 0) {
-        console.error(
-            ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-                getCanonicalFileName: (f) => f,
-                getCurrentDirectory: ts.sys.getCurrentDirectory,
-                getNewLine: () => ts.sys.newLine,
-            }),
-        );
-    }
-
-    if (emitResult.emitSkipped) {
-        throw new Error("TypeScript emit skipped, no files were emitted");
-    }
-}
-
-let TS_CODEGEN_PROMISE;
-export function runTSCodegen(args) {
-    if (!args) {
-        throw new Error("missing tscodegen args");
-    }
-
-    if (TS_CODEGEN_PROMISE) {
-        return TS_CODEGEN_PROMISE;
-    }
-    tsCodegen(args);
-    TS_CODEGEN_PROMISE = Promise.resolve();
-    return TS_CODEGEN_PROMISE;
 }
 
 /** Get the current version of `wit-component` which is reflected in WAT output and used for tests */

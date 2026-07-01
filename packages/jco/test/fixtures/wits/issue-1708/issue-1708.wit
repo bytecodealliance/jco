@@ -1,6 +1,0 @@
-package test:issue;
-
-world issue {
-  export parse-config: func(source: string) -> result<string, string>;
-  export lookup-config: func(key: string) -> option<string>;
-}
