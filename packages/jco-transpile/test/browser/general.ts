@@ -107,11 +107,11 @@ suite('Browser', () => {
         } catch {}
     });
 
-    test.concurrent('basic transpile', { retry: 3 }, async () => {
+    test('basic transpile', { retry: 3 }, async () => {
         await testPage({ browser, port, hash: 'transpile' });
     });
 
-    test.concurrent('IDL window', async () => {
+    test('IDL window', async () => {
         const { component } = await componentize({
             sourcePath: join(WEBIDL_FIXTURES_DIR, 'dom.test.js'),
             disableFeatures: ['clocks', 'random', 'stdio'],
@@ -127,7 +127,7 @@ suite('Browser', () => {
         await testPage({ browser, port, hash: 'test:dom.js' });
     });
 
-    test.concurrent('IDL console', async () => {
+    test('IDL console', async () => {
         const { component } = await componentize({
             sourcePath: join(WEBIDL_FIXTURES_DIR, 'console.test.js'),
             disableFeatures: ['clocks', 'random', 'stdio'],
