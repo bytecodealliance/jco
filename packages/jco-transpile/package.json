@@ -67,8 +67,8 @@
         "prepack": "pnpm run build:release"
     },
     "dependencies": {
-        "@bytecodealliance/preview2-shim": "^0.17.5",
-        "@bytecodealliance/preview3-shim": "^0.1.2",
+        "@bytecodealliance/preview2-shim": "^0.19.0",
+        "@bytecodealliance/preview3-shim": "^0.2.0",
         "binaryen": "^130.0.0",
         "terser": "^5"
     },
