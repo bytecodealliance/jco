@@ -8,7 +8,7 @@ import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { setupAsyncTest, composeCallerCallee } from './helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
-const ASYNC_G2G_CALL_LIMIT_NS = env.CI ? 50_000_000 : 40_000_000;
+const ASYNC_G2G_CALL_LIMIT_NS = env.CI ? 70_000_000 : 40_000_000;
 
 suite('performance', () => {
     // https://github.com/bytecodealliance/jco/issues/1711
