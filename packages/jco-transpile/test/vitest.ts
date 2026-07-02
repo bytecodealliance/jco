@@ -20,7 +20,7 @@ export default defineConfig({
             'test/fixtures',
             'test/vitest.ts',
             'test/vitest.lts.ts',
-            'test/p3/ported/wasmtime/component-async/common.ts'
+            'test/p3/ported/wasmtime/component-async/common.ts',
         ],
         testTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         hookTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
