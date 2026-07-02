@@ -107,7 +107,6 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
-          - 20.x
           - 22.x
           - 24.x
           - latest # 26.x
@@ -116,9 +115,6 @@ jobs:
             weval-bin-path: .weval-bin/weval
           - os: macos-latest
             weval-bin-path: .weval-bin/weval
-        exclude:
-          - os: macos-latest
-            node: 20.x
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -210,13 +206,9 @@ jobs:
           - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
           - macos-latest
         node:
-          - 20.x
           - 22.x
           - 24.x
           - latest # 26.x
-        exclude:
-          - os: macos-latest
-            node: 20.x
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -366,7 +358,6 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
-          - 20.x
           - 22.x
           - 24.x
           - latest

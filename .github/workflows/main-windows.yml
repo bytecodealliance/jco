@@ -116,7 +116,6 @@ jobs:
         os:
           - windows-2025
         node:
-          - 20.x
           - 22.x
           - 24.x
           - latest # 26.x
@@ -128,8 +127,6 @@ jobs:
           - os: macos-latest
             weval-bin-path: .weval-bin/weval
         exclude:
-          - os: macos-latest
-            node: 20.x
           - os: windows-2025
             node: latest
     steps:
@@ -244,14 +241,11 @@ jobs:
         os:
           - windows-2025
         node:
-          - 20.x
           - 22.x
           - 24.x
           - latest
         exclude:
           # TODO: windows conformance tests hang periodically
-          - os: windows-2025
-            node: 20.x
           - os: windows-2025
             node: 22.x
           - os: windows-2025

@@ -91,6 +91,11 @@ For a deeper guide on the intricacies of Jco, read the [Jco Book][jco-book].
 
 ## Installation quirks
 
+### Supported NodeJS test matrix
+
+`jco` and `jco-transpile` are tested against the current stable version (even numbered release) of NodeJS and
+two versions before that one (e.g. if the current NodeJS version is 26.x, 24.x and 22.x are covered under CI)
+
 ### Node 18.x
 
 If installing on Node 18.x with a version of `@bytecodealliance/componentize-js` 0.18.3 or above, you may need to install `oxc-parser` manually.
@@ -105,7 +110,7 @@ pnpm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
 It may be necessary to replace `@oxc-parser/binding-linux-x64-gnu` with whatever platform is appropriate.
 
 > [!NOTE]
-> If you are using pnpm *instaed* of pnpm, similar installation issues may occur when 
+> If you are using pnpm *instaed* of pnpm, similar installation issues may occur when
 > using an `npm` version older than 11.3.0, due to [`npm` bugs related to optional dependencies][npm-opt-deps-issues]
 
 [npm-opt-deps-issues]: https://github.com/npm/cli/issues/4828
