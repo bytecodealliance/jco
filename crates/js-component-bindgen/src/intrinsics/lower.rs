@@ -918,7 +918,7 @@ impl LowerIntrinsic {
                             {debug_log_fn}('[{lower_flat_option_fn}()] args', {{ ctx }});
 
                             const v = ctx.vals[0];
-                            if (v === null) {{
+                            if (v === null || v === undefined) {{
                                 ctx.vals[0] = {{ tag: 'none' }};
                             }} else {{
                                 const isNotOptionObject = typeof v !== 'object'
