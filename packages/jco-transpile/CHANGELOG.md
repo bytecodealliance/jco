@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.4.0] - 2026-07-06
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ align versions of p2-shim by @vados-cosmonic
+
+- _(transpile)_ downgrade p3-shim to v0.1.2 by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(transpile)_ move in tests from jco by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ use semantic assert for minified file length by @vados-cosmonic in #1721
+
+- _(transpile)_ fix test exclude list by @vados-cosmonic
+
+- _(transpile)_ increase limit for perf test by @vados-cosmonic
+
+- _(transpile)_ increase transpiled code limit by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ move from terser to oxc-minify by @vados-cosmonic
+
 ## [0.3.9] - 2026-06-30
 
 This release contains an update fo the underlying transpiled `js-component-bindgen`
