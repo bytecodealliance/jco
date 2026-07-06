@@ -51,7 +51,7 @@
     "scripts": {
         "setup:jco:build": "pnpm run --filter '@bytecodealliance/jco' build",
         "setup:jco:build:release": "pnpm run --filter '@bytecodealliance/jco' build:release",
-        "setup:jco:vendor": "pnpm run setup:jco:build && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
+        "setup:jco:vendor": "cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
         "build:vendor": "pnpm run setup:jco:build && pnpm run setup:jco:vendor",
         "build:vendor:release": "pnpm run setup:jco:build:release && pnpm run setup:jco:vendor",
         "fmt": "oxfmt",
