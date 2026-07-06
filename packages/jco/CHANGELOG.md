@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.25.0] - 2026-07-06
+
+### 🚜 Refactor
+
+- _(jco)_ remove transpilation focused tests by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.4.0 by @vados-cosmonic in #1730
+
+- _(jco)_ remove terser dep by @vados-cosmonic
+
 ## [1.24.6] - 2026-06-30
 
 ### 🧪 Testing
