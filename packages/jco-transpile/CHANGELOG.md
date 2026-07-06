@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.1] - 2026-07-06
+
+This release fixes a regression in package size that had drastic implications,
+reducing the NPM package size of `jco-transpile` **from ~200MB to 2.1MB**, due to
+debug builds being packaged over release builds. Tests have been added to avoid
+this sort of regression in the future.
+
+Thanks to @GamePad64 for catching this regression.
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ don't rebuild jco in debug during the vendor step by @GamePad64 in #1732
+
 ## [0.4.0] - 2026-07-06
 
 ### 🐛 Bug Fixes
