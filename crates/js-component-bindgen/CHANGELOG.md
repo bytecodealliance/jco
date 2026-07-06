@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.10] - 2026-07-06
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ treat `undefined` as `none` when lowering options by @GamePad64 in #1722
+
+
+
+
 ## [2.0.9] - 2026-06-30
 
 ### 🚀 Features
