@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.25.1] - 2026-07-07
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.4.1 by @vados-cosmonic in #1735
+
 ## [1.25.0] - 2026-07-06
 
 ### 🚜 Refactor
