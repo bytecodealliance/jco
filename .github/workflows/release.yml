@@ -94,14 +94,6 @@ jobs:
         with:
           version: 11
 
-      - name: Cache node modules
-        id: cache-node-modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          path: |
-            node_modules
-
       - name: Install debug packages
         run: |
           pnpm install -D
@@ -243,11 +235,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          shared-key: jco-${{ hashFiles('Cargo.lock') }}
-          lookup-only: true
-
       - name: Release crate (dry run)
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
@@ -283,11 +270,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          shared-key: jco-${{ hashFiles('Cargo.lock') }}
-          lookup-only: true
-
       # NOTE: we must use a node version new-enough to have --experimental-wasm-jspi
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
@@ -296,14 +278,6 @@ jobs:
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 11
-
-      - name: Cache node modules
-        id: cache-node-modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          path: |
-            node_modules
 
       - name: Install NPM packages
         run: |
@@ -478,13 +452,6 @@ jobs:
 
       # NOTE: We install node modules because the pre-pack for various projects may require
       # the cargo xtask build in release mode (even though we're using),
-      - name: Cache npm install
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          path: |
-            node_modules
-
       - name: Install node modules
         run: |
           pnpm install
@@ -576,15 +543,6 @@ jobs:
           make_latest: ${{ needs.meta.outputs.project == 'jco' && github.ref_type == 'tag' && needs.meta.outputs.is-prerelease == 'false' }}
           files: |
             ./gh-artifacts/*
-
-      - name: Cache node modules
-        continue-on-error: true
-        id: cache-node-modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          path: |
-            node_modules
 
       - name: Install debug NPM packages
         run: |
