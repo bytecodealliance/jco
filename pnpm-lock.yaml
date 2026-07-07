@@ -271,8 +271,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)'
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.4.1
+        version: 0.4.1
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.9
         version: 0.17.9
@@ -491,8 +491,8 @@ packages:
   '@bytecodealliance/jco-transpile@0.3.9':
     resolution: {integrity: sha512-UFRNTdJJdHdPU3lUdXlnVGm8XTSYY49feehzXxansUWESMeJES3VO2NuocJ8BJ1wW5r2dYBNUyR9qXgjPoBnhg==}
 
-  '@bytecodealliance/jco-transpile@0.4.0':
-    resolution: {integrity: sha512-DiPyqsaLQUQw2gFqtkehLZxs24d3Q5zcKusJyZKIqRrVfH/SM+e9lLF10sC4DXl72o13psDPtWuMbc1CbkWDIw==}
+  '@bytecodealliance/jco-transpile@0.4.1':
+    resolution: {integrity: sha512-/gEm1ZxS7VOl9KpQTN+q+DtpMC9/oasVjMN/szH1+TLGVPmjEgOvA6wAghRqJZzrxvRowsJaEyXLoQ454Y/0lw==}
 
   '@bytecodealliance/jco@1.20.0':
     resolution: {integrity: sha512-E3CNiV+yFEMIE69RnzOgN0vvCGr90+32rX7VBeerxadcAONnclFrXLba243XIuLuiUHQIa9IFcWkiq6dhF5pVw==}
@@ -4076,7 +4076,7 @@ snapshots:
       binaryen: 130.0.0
       terser: 5.48.0
 
-  '@bytecodealliance/jco-transpile@0.4.0':
+  '@bytecodealliance/jco-transpile@0.4.1':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
       '@bytecodealliance/preview3-shim': 0.2.0
@@ -4178,7 +4178,7 @@ snapshots:
     dependencies:
       '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.4.0
+      '@bytecodealliance/jco-transpile': 0.4.1
       '@bytecodealliance/preview2-shim': 0.17.9
       '@bytecodealliance/preview3-shim': 0.1.2
       binaryen: 130.0.0
