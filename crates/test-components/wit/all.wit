@@ -552,6 +552,24 @@ world pass-back-host-resolved-future-value {
     export local-run-async;
 }
 
+// Regression coverage for the "lower" side of
+// https://github.com/bytecodealliance/jco/issues/1601: the `stream`/`future`
+// return value of an async host import is lowered by the async
+// return-handling machinery (i.e. `task.resolve`); it must not *also* be
+// lowered inline, which consumes/locks the host value (e.g. `TypeError:
+// ReadableStream is locked`) before the real lowering runs.
+world return-host-async-value {
+    import compress: async func(data: stream<u8>) -> stream<u8>;
+    import delay: async func(f: future<u32>) -> future<u32>;
+
+    // Returns the imported `compress` fn's result stream directly
+    export compress-passthrough: async func(data: stream<u8>) -> stream<u8>;
+    // Reads the imported `compress` fn's result stream within the guest
+    export compress-collect: async func(data: stream<u8>) -> list<u8>;
+
+    export delay-roundtrip: async func(v: u32) -> u32;
+}
+
 
 // see: https://github.com/bytecodealliance/jco/issues/1633
 interface byte-batch-example {

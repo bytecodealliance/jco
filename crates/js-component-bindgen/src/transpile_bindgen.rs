@@ -6167,7 +6167,7 @@ pub fn gen_flat_lower_fn_js_expr(
             }
 
             format!(
-                r#"{f}.bind(null, {{
+                r#"{f}({{
                        futureTableIdx: {table_idx},
                        futureNestingLevel: {future_nesting_level},
                        componentIdx: {component_idx},

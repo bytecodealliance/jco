@@ -1039,7 +1039,7 @@ impl LowerIntrinsic {
                         return function {lower_flat_future_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_future_fn}()] args', {{ ctx }});
 
-                            const future = ctx.vals[0];
+                            let future = ctx.vals[0];
                             if (!future) {{ throw new Error("missing external future value"); }}
 
                             // As NodeJS will collapse `Promise<Promise<T>>` to `Promise<T>`, enable handling of ordinary values
@@ -1067,10 +1067,8 @@ impl LowerIntrinsic {
                                 elemMeta.stringEncoding = 'utf8';
 
                                 let outermostReadEnd;
-                                let futuresList;
-                                while (futureNestingLevel > 0) {{
-                                    futuresList.push(future);
-
+                                let nestingLevel = futureNestingLevel;
+                                while (nestingLevel >= 0) {{
                                     const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = cstate.createFuture({{
                                         tableIdx: futureTableIdx,
                                         elemMeta,
@@ -1078,7 +1076,7 @@ impl LowerIntrinsic {
 
                                     const hostInjectFn = {gen_future_host_inject_fn}({{
                                         promise: future,
-                                        stringEncoding,
+                                        stringEncoding: elemMeta.stringEncoding,
                                         hostWriteEnd: writeEnd,
                                     }});
                                     readEnd.setHostInjectFn(hostInjectFn);
@@ -1092,7 +1090,7 @@ impl LowerIntrinsic {
                                         componentIdx,
                                     }};
 
-                                    futureNestingLevel--;
+                                    nestingLevel--;
                                 }}
 
                                 waitableIdx = outermostReadEnd.waitableIdx();

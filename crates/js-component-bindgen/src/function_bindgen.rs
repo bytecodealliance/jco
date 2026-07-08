@@ -2597,6 +2597,25 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::FutureLower { ty, .. } => {
+                let future_arg = operands
+                    .first()
+                    .expect("unexpectedly missing FutureLower arg");
+
+                // Lowering is only performed inline for sync functions, and for async
+                // functions when the operand is an incoming parameter (e.g. an async
+                // export lowering a host-provided `Promise` param before `CallWasm`).
+                //
+                // For async host *imports* the operand is the host function's return
+                // value (i.e. produced by `CallInterface`): lowering of async import
+                // results is performed by the async return-handling machinery
+                // (see `AsyncTaskIntrinsic::LowerImport` and `task.resolve`), so
+                // lowering the value inline here as well would consume/settle the
+                // `Promise` and double-lower it.
+                if self.is_async && self.for_import.unwrap_or_default() {
+                    results.push(future_arg.clone());
+                    return;
+                }
+
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
@@ -2610,10 +2629,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 let nested_future_symbol = self.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::NestedFutureSymbol,
                 ));
-
-                let future_arg = operands
-                    .first()
-                    .expect("unexpectedly missing ErrorContextLower arg");
 
                 // Build the lowering function for the type produced by the future
                 let type_id = &crate::dealias(self.resolve, *ty);
@@ -2942,10 +2957,26 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::StreamLower { ty, .. } => {
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let stream_arg = operands
                     .first()
                     .expect("unexpectedly missing StreamLower arg");
+
+                // Lowering is only performed inline for sync functions, and for async
+                // functions when the operand is an incoming parameter (e.g. an async
+                // export lowering a host-provided stream param before `CallWasm`).
+                //
+                // For async host *imports* the operand is the host function's return
+                // value (i.e. produced by `CallInterface`): lowering of async import
+                // results is performed by the async return-handling machinery
+                // (see `AsyncTaskIntrinsic::LowerImport` and `task.resolve`), so
+                // lowering the value inline here as well would consume/lock the
+                // stream (e.g. a host `ReadableStream`) and double-lower it.
+                if self.is_async && self.for_import.unwrap_or_default() {
+                    results.push(stream_arg.clone());
+                    return;
+                }
+
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let async_iterator_symbol = self.intrinsic(Intrinsic::SymbolAsyncIterator);
                 let iterator_symbol = self.intrinsic(Intrinsic::SymbolIterator);
                 let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
