@@ -1485,8 +1485,20 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .intrinsics
         .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
     {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
+        args.intrinsics.extend([
+            Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8),
+            Intrinsic::String(StringIntrinsic::Utf8Encode),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16))
+    {
+        args.intrinsics.extend([
+            Intrinsic::String(StringIntrinsic::Utf16Encode),
+            Intrinsic::IsLE,
+        ]);
     }
 
     if args
