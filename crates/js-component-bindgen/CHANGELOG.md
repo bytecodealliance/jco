@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.11] - 2026-07-09
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ async host import stream/future result lowering by @lann in #1739
+
+- _(bindgen)_ render string encode intrinsics for flat string lowering by @lann in #1738
+
+
+
+
 ## [2.0.10] - 2026-07-06
 
 ### 🐛 Bug Fixes
