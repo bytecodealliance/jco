@@ -144,6 +144,13 @@ fn transpile(args: TranspileArgs) -> Result<()> {
             transpile_components(BuildType::Debug).context("transpiling all components (debug)")?;
         }
 
+        // The debug bootstrap above transpiles *all* components (including this
+        // one) into the same `obj/<name>.component.wasm` paths, overwriting the
+        // release component written earlier with the debug build. Re-write ours
+        // so that `jco opt` (and the transpile below) operates on the release
+        // component, not the debug one.
+        fs::write(&component_path, &adapted_component)?;
+
         let jco_script_path = format!(
             "{}",
             WORKSPACE_DIR.join("packages/jco/src/jco.js").display()
