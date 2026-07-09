@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.2] - 2026-07-09
+
+This release contains an update fo the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.0.11](https://crates.io/crates/js-component-bindgen/2.0.11)
+
 ## [0.4.1] - 2026-07-06
 
 This release fixes a regression in package size that had drastic implications,
