@@ -1,0 +1,66 @@
+package jco-examples:p3-stream-chat;
+
+/// Shared values passed through the streaming chat pipeline.
+interface types {
+  /// Identifies who produced a message chunk.
+  enum role {
+    /// An instruction supplied by the component.
+    system,
+    /// Input supplied by the caller.
+    user,
+    /// Output produced by an assistant.
+    assistant,
+  }
+
+  /// One increment of a streamed chat message.
+  record message-chunk {
+    /// The producer of this chunk.
+    role: role,
+    /// The chunk's textual content.
+    text: string,
+  }
+
+  /// An incremental response, terminal completion, or terminal failure.
+  variant response-event {
+    /// A newly generated fragment of response text.
+    delta(string),
+    /// The response stream completed successfully.
+    complete,
+    /// The response stream failed with the supplied message.
+    error(string),
+  }
+}
+
+/// Host-provided generation stage, which can be backed by an LLM service.
+interface chunk-generator {
+  use types.{message-chunk, response-event};
+
+  /// Consumes prompt chunks and produces response events as they become available.
+  generate: async func(input: stream<message-chunk>) -> stream<response-event>;
+}
+
+/// Host-provided stage for inspecting or transforming generated response events.
+interface response-filter {
+  use types.{response-event};
+
+  /// Filters a generated response without buffering the complete stream.
+  filter-response: async func(input: stream<response-event>) -> stream<response-event>;
+}
+
+/// Component-provided entry point for the composed chat pipeline.
+interface chat {
+  use types.{message-chunk, response-event};
+
+  /// Streams caller input through generation and filtering, returning response events.
+  chat: async func(input: stream<message-chunk>) -> stream<response-event>;
+}
+
+/// A chat agent that composes host-provided generation and filtering stages.
+world agent {
+  /// Generates response events from the augmented prompt stream.
+  import chunk-generator;
+  /// Filters generated events before they reach the caller.
+  import response-filter;
+  /// Exposes the composed streaming chat operation.
+  export chat;
+}

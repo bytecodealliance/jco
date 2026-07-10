@@ -1,0 +1,15 @@
+{
+    "include": ["demo/**/*.ts"],
+    "compilerOptions": {
+        "target": "es2024",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "types": ["node"],
+        "rootDir": "demo",
+        "outDir": "dist/demo",
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true
+    }
+}

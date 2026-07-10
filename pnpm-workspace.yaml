@@ -27,6 +27,7 @@ packages:
   - examples/components/ts-resource-import
   - examples/components/typegen-async-export
   - examples/components/webidl-book-library
+  - examples/transpile/p3-stream-chat
 
 catalog:
   '@bytecodealliance/componentize-js': ^0.21.0

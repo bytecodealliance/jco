@@ -648,6 +648,8 @@ jobs:
             workspace: examples/components/node-compat
           - name: fs-write-file
             workspace: examples/components/fs-write-file
+          - name: p3-stream-chat
+            workspace: examples/transpile/p3-stream-chat
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

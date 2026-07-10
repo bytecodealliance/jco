@@ -1,0 +1,25 @@
+{
+    "name": "p3-stream-chat-transpile",
+    "version": "0.1.0",
+    "private": true,
+    "description": "P3 streaming chat middleware transpiled for Node.js with jco",
+    "type": "module",
+    "scripts": {
+        "build:guest": "cargo build --release --target wasm32-wasip1 --manifest-path guest/Cargo.toml && jco new guest/target/wasm32-wasip1/release/p3-stream-chat.wasm --wasi-reactor -o p3-stream-chat.wasm",
+        "transpile": "jco transpile p3-stream-chat.wasm -o dist --name p3-stream-chat --instantiation async --async-mode jspi --strict",
+        "build:ts:demo": "tsc --project tsconfig.json",
+        "build": "pnpm run build:guest && pnpm run transpile && pnpm run build:ts:demo",
+        "demo": "node --experimental-wasm-jspi dist/demo/all.js",
+        "all-with-build": "pnpm build && pnpm run build:ts:demo && pnpm run demo",
+        "all": "pnpm transpile && pnpm run build:ts:demo && pnpm run demo"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco": "workspace:*",
+        "@bytecodealliance/jco-transpile": "workspace:*",
+        "@bytecodealliance/preview2-shim": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^24.12.4",
+        "typescript": "catalog:"
+    }
+}
