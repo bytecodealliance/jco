@@ -169,7 +169,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .build();
 
         let files = js_component_bindgen::generate_types(&name, resolve, world, opts)
-            .with_context(|| format!("generating types for [{}]", &name))
+            .with_context(|| format!("generating types for [{}]", name))
             .map_err(|e| e.to_string())?;
 
         Ok(files)

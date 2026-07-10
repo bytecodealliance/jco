@@ -57,9 +57,9 @@ impl EsmBindgen {
                 ImportBinding::Local(local) => {
                     panic!(
                         "Internal bindgen error: Import '{}' cannot be both an interface '{}' and a function '{}'",
-                        &path[0..i + 1].join("."),
-                        &path[i + 1..].join("."),
-                        &local[0],
+                        path[0..i + 1].join("."),
+                        path[i + 1..].join("."),
+                        local[0],
                     );
                 }
             };

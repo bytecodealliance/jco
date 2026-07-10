@@ -3056,7 +3056,7 @@ impl<'a> Instantiator<'a, '_> {
                             "import:{import}-{maybe_iface_member}-{func_name}",
                             import = import_specifier,
                             maybe_iface_member = maybe_iface_member.as_deref().unwrap_or(""),
-                            func_name = &func.name
+                            func_name = func.name
                         ),
                         &func.name,
                     )
@@ -3073,7 +3073,7 @@ impl<'a> Instantiator<'a, '_> {
                             "import:async-{import}-{maybe_iface_member}-{func_name}",
                             import = import_specifier,
                             maybe_iface_member = maybe_iface_member.as_deref().unwrap_or(""),
-                            func_name = &func.name
+                            func_name = func.name
                         ),
                         &func.name,
                     )
