@@ -16,7 +16,7 @@ import {
     preview1AdapterReactorPath,
 } from "../src/api.js";
 
-import { readComponentBytes, getCurrentWitComponentVersion } from "./helpers.js";
+import { readComponentBytes } from "./helpers.js";
 
 const isWindows = platform === "win32";
 
@@ -157,7 +157,7 @@ suite("API", () => {
             [
                 "processed-by",
                 [
-                    ["wit-component", await getCurrentWitComponentVersion()],
+                    ["wit-component", "0.251.0"],
                     ["dummy-gen", "test"],
                 ],
             ],
@@ -198,7 +198,8 @@ suite("API", () => {
             [
                 "processed-by",
                 [
-                    ["wit-component", await getCurrentWitComponentVersion()],
+                    // NOTE: this is the current version *in the released jco-transpile* jco uses
+                    ["wit-component", "0.251.0"],
                     ["dummy-gen", "test"],
                 ],
             ],

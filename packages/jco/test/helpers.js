@@ -8,7 +8,6 @@ import { tmpdir } from "node:os";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
 import mime from "mime";
-import { parse } from "smol-toml";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
@@ -573,22 +572,6 @@ export async function readComponentBytes(componentPath) {
     }
     componentBytes = COMPONENT_BYTES_CACHE[componentPath];
     return componentBytes;
-}
-
-/** Get the current version of `wit-component` which is reflected in WAT output and used for tests */
-let CURRENT_WIT_COMPONENT_VERSION;
-export async function getCurrentWitComponentVersion() {
-    if (CURRENT_WIT_COMPONENT_VERSION) {
-        return CURRENT_WIT_COMPONENT_VERSION;
-    }
-    const cargoLockPath = fileURLToPath(new URL("../../../Cargo.lock", import.meta.url));
-    const cargoLock = parse(await readFile(cargoLockPath, "utf8"));
-    const version = cargoLock.package.find((p) => p.name === "wit-component")?.version;
-    if (!version) {
-        throw new Error(`Failed to find/parse wit-version in [${cargoLockPath}]`);
-    }
-    CURRENT_WIT_COMPONENT_VERSION = version;
-    return CURRENT_WIT_COMPONENT_VERSION;
 }
 
 export async function fileExists(p) {

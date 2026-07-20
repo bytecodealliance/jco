@@ -7,14 +7,7 @@ import { preview1AdapterCommandPath } from "@bytecodealliance/jco";
 import { componentNew } from "@bytecodealliance/jco-transpile/wasm-tools";
 
 import { AsyncFunction } from "./common.js";
-import {
-    exec,
-    jcoPath,
-    getTmpDir,
-    readComponentBytes,
-    getCurrentWitComponentVersion,
-    setupTestWithLocalShims,
-} from "./helpers.js";
+import { exec, jcoPath, getTmpDir, readComponentBytes, setupTestWithLocalShims } from "./helpers.js";
 
 import { suite, test, assert } from "vitest";
 
@@ -550,7 +543,7 @@ suite("CLI", () => {
                 [
                     "processed-by",
                     [
-                        ["wit-component", await getCurrentWitComponentVersion()],
+                        ["wit-component", "0.251.0"],
                         ["dummy-gen", "test"],
                     ],
                 ],
