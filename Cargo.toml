@@ -44,21 +44,21 @@ tokio = { version = "1.50.0", default-features = false }
 webidl2wit = { version = "0.1.1", default-features = false }
 xshell = { version = "0.2.7", default-features = false }
 
-wasmtime = { version = "45.0.1", default-features = false }
-wasmtime-environ = { version = "45.0.1", features= [ "component-model", "compile" ] }
+wasmtime = { version = "46.0.1", default-features = false }
+wasmtime-environ = { version = "46.0.1", features= [ "component-model", "compile" ] }
 
-wasm-encoder = { version = "0.251.0", default-features = false }
-wasm-metadata = { version = "0.251.0", default-features = false }
-wasmparser = { version = "0.251.0", default-features = false }
-wasmprinter = { version = "0.251.0", default-features = false }
-wit-component = { version = "0.251.0", features = ["dummy-module"] }
-wit-parser = { version = "0.251.0", default-features = false }
+wasm-encoder = { version = "0.253.0", default-features = false }
+wasm-metadata = { version = "0.253.0", default-features = false }
+wasmparser = { version = "0.253.0", default-features = false }
+wasmprinter = { version = "0.253.0", default-features = false }
+wit-component = { version = "0.253.0", features = ["dummy-module"] }
+wit-parser = { version = "0.253.0", default-features = false }
 
-wat = { version = "1.251.0", default-features = false }
+wat = { version = "1.253.0", default-features = false }
 
-wit-bindgen = { version = "0.58.0", default-features = false }
-wit-bindgen-core = { version = "0.58.0", default-features = false }
+wit-bindgen = { version = "0.59.0", default-features = false }
+wit-bindgen-core = { version = "0.59.0", default-features = false }
 
-wast = { version = "251.0.0", default-features = false, features = [ "component-model" ] }
+wast = { version = "253.0.0", default-features = false, features = [ "component-model" ] }
 
 js-component-bindgen = { version = "2.0.11", path = "./crates/js-component-bindgen" }

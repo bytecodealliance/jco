@@ -9,11 +9,12 @@ use base64::engine::general_purpose;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use semver::Version;
 use wasmtime_environ::component::{
-    CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentTranslation, ComponentTypes,
-    CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule,
-    InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex, RuntimeComponentInstanceIndex,
-    RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
-    TypeDef, TypeFuncIndex, TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
+    CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentExtern, ComponentTranslation,
+    ComponentTypes, CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer,
+    InstantiateModule, InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex,
+    RuntimeComponentInstanceIndex, RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex,
+    Trampoline, TrampolineIndex, TypeDef, TypeFuncIndex, TypeFutureTableIndex,
+    TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wasmtime_environ::component::{
     ExtractCallback, NameMapNoIntern, Transcode, TypeComponentLocalErrorContextTableIndex,
@@ -358,13 +359,13 @@ pub fn transpile_bindgen(
                 } else {
                     canon_export_name.to_kebab_case()
                 };
-            let export = instantiator
+            let (export_idx, _extern_data) = instantiator
                 .component
                 .exports
                 .get(&expected_export_name, &NameMapNoIntern)
                 .unwrap_or_else(|| panic!("failed to find component export [{expected_export_name}] (original '{canon_export_name}')"));
 
-            let export_kind = match &instantiator.component.export_items[*export] {
+            let export_kind = match &instantiator.component.export_items[*export_idx] {
                 wasmtime_environ::component::Export::LiftedFunction { .. } => {
                     ExportKind::LiftedFunction
                 }
@@ -737,35 +738,48 @@ impl<'a> Instantiator<'a, '_> {
             };
             match item {
                 WorldItem::Interface { id, .. } => {
-                    let TypeDef::ComponentInstance(instance) = import else {
+                    let TypeDef::ComponentInstance(instance) = &import.ty else {
                         unreachable!("unexpectedly non-component instance import in interface")
                     };
                     let import_ty = &self.types[*instance];
                     let iface = &self.resolve.interfaces[*id];
                     for (ty_name, ty) in &iface.types {
                         match &import_ty.exports.get(ty_name) {
-                            Some(TypeDef::Resource(resource_table_idx)) => {
+                            None => {}
+                            Some(ComponentExtern {
+                                ty: TypeDef::Resource(resource_table_idx),
+                                ..
+                            }) => {
                                 let ty = crate::dealias(self.resolve, *ty);
                                 let resource_table_ty = &self.types[*resource_table_idx];
                                 let concrete_ty = resource_table_ty.unwrap_concrete_ty();
                                 self.imports_resource_types.insert(ty, concrete_ty);
                                 self.imports_resource_index_types.insert(concrete_ty, ty);
                             }
-                            Some(TypeDef::Interface(_)) | None => {}
+                            Some(ComponentExtern {
+                                ty: TypeDef::Interface(_),
+                                ..
+                            }) => {}
                             Some(_) => unreachable!("unexpected type in interface"),
                         }
                     }
                 }
                 WorldItem::Function(_) => {}
                 WorldItem::Type { id, .. } => match import {
-                    TypeDef::Resource(resource) => {
+                    ComponentExtern {
+                        ty: TypeDef::Resource(resource),
+                        ..
+                    } => {
                         let ty = crate::dealias(self.resolve, *id);
                         let resource_table_ty = &self.types[*resource];
                         let concrete_ty = resource_table_ty.unwrap_concrete_ty();
                         self.imports_resource_types.insert(ty, concrete_ty);
                         self.imports_resource_index_types.insert(concrete_ty, ty);
                     }
-                    TypeDef::Interface(_) => {}
+                    ComponentExtern {
+                        ty: TypeDef::Interface(_),
+                        ..
+                    } => {}
                     _ => unreachable!("unexpected type in import world item"),
                 },
             }
@@ -775,7 +789,7 @@ impl<'a> Instantiator<'a, '_> {
 
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
-            let (_, export_idx) = self
+            let (_, (export_idx, _extern_data)) = self
                 .component
                 .exports
                 .raw_iter()
@@ -789,9 +803,9 @@ impl<'a> Instantiator<'a, '_> {
                         unreachable!("unexpectedly non export instance item")
                     };
                     for (ty_name, ty) in &iface.types {
-                        match self.component.export_items
-                            [*exports.get(ty_name, &NameMapNoIntern).unwrap()]
-                        {
+                        let (export_idx, _exern_data) =
+                            exports.get(ty_name, &NameMapNoIntern).unwrap();
+                        match self.component.export_items[*export_idx] {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
                                 let resource_table_ty = &self.types[resource];
@@ -4311,9 +4325,14 @@ impl<'a> Instantiator<'a, '_> {
                     // relevant resources
                     for (fn_name, iface_fn) in iface.functions.iter() {
                         match import_type_def {
-                            TypeDef::ComponentInstance(instance_ty) => {
-                                if let Some(TypeDef::ComponentFunc(type_func_index)) =
-                                    &self.types[*instance_ty].exports.get(fn_name)
+                            ComponentExtern {
+                                ty: TypeDef::ComponentInstance(instance_ty),
+                                ..
+                            } => {
+                                if let Some(ComponentExtern {
+                                    ty: TypeDef::ComponentFunc(type_func_index),
+                                    ..
+                                }) = &self.types[*instance_ty].exports.get(fn_name)
                                 {
                                     self.create_resource_fn_map(
                                         iface_fn,
@@ -4322,7 +4341,10 @@ impl<'a> Instantiator<'a, '_> {
                                     );
                                 }
                             }
-                            TypeDef::ComponentFunc(type_func_idx) => {
+                            ComponentExtern {
+                                ty: TypeDef::ComponentFunc(type_func_idx),
+                                ..
+                            } => {
                                 self.create_resource_fn_map(
                                     iface_fn,
                                     *type_func_idx,
@@ -4336,8 +4358,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Process imported functions directly to build resource maps
                 WorldItem::Function(func) => {
-                    // TODO: get func type index
-                    let TypeDef::ComponentFunc(func_ty_idx) = import_type_def else {
+                    let TypeDef::ComponentFunc(func_ty_idx) = &import_type_def.ty else {
                         unreachable!("invalid fn export");
                     };
                     self.create_resource_fn_map(func, *func_ty_idx, &mut import_resource_map);
@@ -4356,7 +4377,7 @@ impl<'a> Instantiator<'a, '_> {
         self.resource_exports.extend(self.resource_imports.clone());
 
         // Process individual component exports
-        for (export_name, export_idx) in self.component.exports.raw_iter() {
+        for (export_name, (export_idx, _extern_data)) in self.component.exports.raw_iter() {
             let export_name = export_name.as_ref().to_string();
             let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[&export_name];
@@ -4447,7 +4468,7 @@ impl<'a> Instantiator<'a, '_> {
                     };
 
                     // Process exported instances
-                    for (func_name, export_idx) in exports.raw_iter() {
+                    for (func_name, (export_idx, _extern_data)) in exports.raw_iter() {
                         let func_name = func_name.as_ref().to_string();
                         let export = &self.component.export_items[*export_idx];
 

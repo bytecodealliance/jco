@@ -3560,6 +3560,7 @@ mod tests {
             stability: Default::default(),
             owner,
             span: Default::default(),
+            external_id: None,
         });
 
         let ty_ = Type::Id(ty_id);
