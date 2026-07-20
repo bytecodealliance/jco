@@ -10,7 +10,7 @@
     "all": "npm run build && npm run demo"
   },
   "dependencies": {
-    "@bytecodealliance/jco": "^1.20.0"
+    "@bytecodealliance/jco": "^1.25.2"
   },
   "devDependencies": {
     "terminate": "^2.8.0"
