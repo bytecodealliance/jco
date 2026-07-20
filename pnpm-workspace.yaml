@@ -32,7 +32,6 @@ catalog:
   '@bytecodealliance/componentize-js': ^0.21.0
   mime: ^4.0.7
   puppeteer: ^25.1.0
-  smol-toml: ^1.4.2
   typescript: ^6.0.3
   vitest: ^4.0.8
   which: ^2.0.2
