@@ -78,7 +78,6 @@
         "@types/node": "^24.12.4",
         "mime": "catalog:",
         "puppeteer": "catalog:",
-        "smol-toml": "catalog:",
         "typescript": "catalog:",
         "vite": "^7.1.5",
         "vitest": "^4.0.7",

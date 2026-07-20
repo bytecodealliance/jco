@@ -9,7 +9,6 @@ import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import mime from 'mime';
-import { parse } from 'smol-toml';
 import ts from 'typescript';
 import which from 'which';
 
@@ -713,22 +712,6 @@ export function runTSCodegen(args) {
     tsCodegen(args);
     TS_CODEGEN_PROMISE = Promise.resolve();
     return TS_CODEGEN_PROMISE;
-}
-
-/** Get the current version of `wit-component` which is reflected in WAT output and used for tests */
-let CURRENT_WIT_COMPONENT_VERSION;
-export async function getCurrentWitComponentVersion() {
-    if (CURRENT_WIT_COMPONENT_VERSION) {
-        return CURRENT_WIT_COMPONENT_VERSION;
-    }
-    const cargoLockPath = fileURLToPath(new URL('../../../Cargo.lock', import.meta.url));
-    const cargoLock = parse(await readFile(cargoLockPath, 'utf8'));
-    const version = cargoLock.package.find((p) => p.name === 'wit-component')?.version;
-    if (!version) {
-        throw new Error(`Failed to find/parse wit-version in [${cargoLockPath}]`);
-    }
-    CURRENT_WIT_COMPONENT_VERSION = version;
-    return CURRENT_WIT_COMPONENT_VERSION;
 }
 
 export async function fileExists(p) {
