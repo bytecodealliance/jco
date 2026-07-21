@@ -114,40 +114,6 @@ jco componentize app.js --wit wit -n world-name -o component.wasm
 
 Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
 
-By default, Jco passes the source module directly to ComponentizeJS, preserving the behavior of earlier releases.
-
-Use `--bundle` to bundle the entry module and its local or npm package dependencies before componentization. Package resolution starts from the entry module's project, and `wasi:*` imports remain external so they can be matched to component capabilities. The bundle is generated in memory as a single ES module:
-
-```shell
-jco componentize app.js --bundle --wit wit -o component.wasm
-```
-
-Use `--bundle-config <path>` with `--bundle` to merge a [Rolldown configuration module](https://rolldown.rs/apis/cli#configuration-files). The module can export a configuration object created with Rolldown's `defineConfig` helper:
-
-```js
-// rolldown.config.mjs
-import { defineConfig } from "rolldown";
-
-export default defineConfig({
-    resolve: {
-        alias: {
-            "virtual:config": "./src/config.js",
-        },
-    },
-    transform: {
-        define: {
-            __BUILD_MODE__: JSON.stringify("component"),
-        },
-    },
-});
-```
-
-```shell
-jco componentize app.js --bundle --bundle-config rolldown.config.mjs --wit wit -o component.wasm
-```
-
-Jco merges plugins, aliases, external rules, transforms, and output customization from the configuration. The component bundle's entry, working directory, neutral platform, ESM format, disabled code splitting, and external `wasi:*` imports remain fixed because ComponentizeJS requires that output shape. Configuration functions are supported and receive `{ bundle: true }`; configuration arrays and multiple outputs are rejected.
-
 See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 
 ## API

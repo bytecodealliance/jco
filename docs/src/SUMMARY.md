@@ -1,6 +1,7 @@
 # Summary
 
 - [Introduction](./introduction.md)
+- [Creating new JS components](./creating-new-js-components.md)
 - [Transpiling](./transpiling.md)
 - [Example Workflow](./example.md)
 - [Advanced]()
