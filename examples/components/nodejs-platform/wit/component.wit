@@ -1,0 +1,8 @@
+package example:nodejs-platform;
+
+world component {
+    // Node.js APIs declare their underlying component capabilities here.
+    // node:path uses this interface for cwd-dependent operations.
+    import wasi:cli/environment@0.2.6;
+    export wasi:cli/run@0.2.6;
+}
