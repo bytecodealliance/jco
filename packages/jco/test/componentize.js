@@ -1,7 +1,9 @@
 /* global Buffer */
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, assert, expect } from "vitest";
 import { COMPONENT_JS_FIXTURES_DIR } from "./common.js";
 import { exec, getTmpDir, jcoPath } from "./helpers.js";
 
@@ -35,5 +37,61 @@ suite("componentize", () => {
         const outputPath = join(outputDir, "component.wasm");
         const { stderr } = await exec(jcoPath, "componentize", jsPath, "-w", witPath, "-o", outputPath);
         assert.strictEqual(stderr, "");
+    });
+
+    test("uses the non-bundled compatibility path by default", async () => {
+        const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.js");
+        const witPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.wit");
+        const outputDir = await getTmpDir();
+        const outputPath = join(outputDir, "component.wasm");
+
+        const { stderr } = await exec(jcoPath, "componentize", jsPath, "-w", witPath, "-o", outputPath);
+
+        assert.strictEqual(stderr, "");
+    });
+
+    test("requires bundling when a bundle config is provided", async () => {
+        const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.js");
+        const witPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.wit");
+        const outputDir = await getTmpDir();
+        const outputPath = join(outputDir, "component.wasm");
+
+        await expect(
+            exec(
+                jcoPath,
+                "componentize",
+                jsPath,
+                "--bundle-config",
+                join(outputDir, "rolldown.config.mjs"),
+                "-w",
+                witPath,
+                "-o",
+                outputPath,
+            ),
+        ).rejects.toThrow(/--bundle-config requires --bundle/);
+    });
+
+    // TODO: Enable once this test can run Wizer reliably in constrained CI environments.
+    test.skip("bundles and executes a local dependency graph", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "local-dependency");
+        const outputDir = await getTmpDir();
+        const componentPath = join(outputDir, "component.wasm");
+        const transpiledDir = join(outputDir, "transpiled");
+
+        await exec(
+            jcoPath,
+            "componentize",
+            join(fixtureDir, "source.js"),
+            "--bundle",
+            "-w",
+            join(fixtureDir, "source.wit"),
+            "-o",
+            componentPath,
+        );
+        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "local-dependency");
+        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+
+        const component = await import(`${pathToFileURL(transpiledDir)}/local-dependency.js`);
+        assert.strictEqual(component.hello(), "world from a dependency");
     });
 });

@@ -1,0 +1,5 @@
+package local:bundling;
+
+world test {
+  export hello: func() -> string;
+}

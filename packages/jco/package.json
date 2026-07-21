@@ -79,7 +79,8 @@
         "binaryen": "^130.0.0",
         "commander": "^14",
         "mkdirp": "^3",
-        "ora": "^8"
+        "ora": "^8",
+        "rolldown": "^1.1.0"
     },
     "devDependencies": {
         "@commitlint/config-conventional": "^19.8.1",

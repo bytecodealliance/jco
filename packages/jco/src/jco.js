@@ -60,6 +60,8 @@ program
     .option("--preview2-adapter <adapter>", "provide a custom preview2 adapter path")
     .option("--debug-starlingmonkey-build", "use a debug build of StarlingMonkey")
     .option("--engine <path>", "use a specific StarlingMonkey build")
+    .option("--bundle", "bundle source and its dependencies before componentization")
+    .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
     .requiredOption("-o, --out <out>", "output component file")
     .option("--debug-bindings", "Output debug bindings and metadata during componentization (by default to stderr)")
     .option("--debug-bindings-dir <dir>", "Directory to which to output generated bindings and metadata")

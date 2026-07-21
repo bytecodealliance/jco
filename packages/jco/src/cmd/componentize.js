@@ -3,6 +3,7 @@ import { resolve, basename } from "node:path";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
+import { bundleComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
 
 /** All features that can be enabled/disabled */
@@ -45,10 +46,47 @@ async function usesOlderWasiHTTP(witPath, worldName) {
 
     return exportsOldIncomingHandler || importsOldFetch;
 }
+/**
+ * @typedef {{
+ *   wit: string,
+ *   out: string,
+ *   worldName?: string,
+ *   bundle?: boolean,
+ *   bundleConfig?: string,
+ *   aot?: boolean,
+ *   aotMinStackSizeBytes?: number,
+ *   wevalBin?: string,
+ *   disable?: string[],
+ *   enable?: string[],
+ *   debug?: boolean,
+ *   preview2Adapter?: string,
+ *   debugStarlingmonkeyBuild?: boolean,
+ *   engine?: string,
+ *   debugBindings?: boolean,
+ *   debugBindingsDir?: string,
+ *   debugBinary?: boolean,
+ *   debugBinaryPath?: string,
+ *   debugEnableWizerLogging?: boolean,
+ * }} ComponentizeOptions
+ */
+
+/**
+ * Componentize a JavaScript entry module against a WIT world.
+ *
+ * @param {string} jsSource
+ * @param {ComponentizeOptions} opts
+ */
 export async function componentize(jsSource, opts) {
     const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
 
-    const source = await readFile(jsSource, "utf8");
+    if (opts.bundleConfig && opts.bundle !== true) {
+        throw new Error("--bundle-config requires --bundle");
+    }
+    const bundleConfig = opts.bundleConfig ? await loadBundleConfig(opts.bundleConfig) : undefined;
+    const source =
+        opts.bundle === true
+            ? await bundleComponentSource(jsSource, { config: bundleConfig })
+            : await readFile(jsSource, "utf8");
     const witPath = resolve(opts.wit);
     const sourceName = basename(jsSource);
 
