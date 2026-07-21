@@ -22,6 +22,7 @@ packages:
   - examples/components/http-server-hono
   - examples/components/http-server-hono-with-bindings
   - examples/components/node-compat
+  - examples/components/nodejs-platform
   - examples/components/node-fetch
   - examples/components/string-reverse
   - examples/components/string-reverse-upper
