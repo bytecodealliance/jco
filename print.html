@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a8da8a27.js";
+            window.path_to_searchindex_js = "searchindex-c8fd4679.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-69241bbd.js"></script>
+        <script src="toc-b8337dd6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,6 +195,66 @@
 <p>To contribute to the codebase of the project, refer to the <a href="#contributing-to-the-codebase">Contributor guide</a>.</p>
 <p>To contribute to the documentation, refer to the <a href="#contributing-to-docs">Contributor guide</a>.</p>
 <p>If you find a mistake, omission, ambiguity, or other problem, please let us know via <a href="https://github.com/bytecodealliance/jco/issues">GitHub issues</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="creating-new-js-components"><a class="header" href="#creating-new-js-components">Creating new JS components</a></h1>
+<p>Jco relies on and exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> to make it easy to build components from Javascript
+ES module source code.</p>
+<p>Building JS components is as easy as calling <code>jco componentize</code>, with a few options:</p>
+<pre><code>jco componentize -w wit -o dist/component.wasm component.js
+</code></pre>
+<p>There are many examples in the <a href="https://github.com/bytecodealliance/jco/tree/main/examples/components">Jco component examples folder</a></p>
+<h2 id="bundling-optional"><a class="header" href="#bundling-optional">Bundling (optional)</a></h2>
+<p>By default, Jco passes the source module JS code directly to ComponentizeJS, with no intermediate processing.</p>
+<p>Use <code>--bundle</code> to bundle the entry module and its local or npm package dependencies before componentization.
+Package resolution starts from the entry module’s project, and <code>wasi:*</code> imports remain external so they can
+be matched to component capabilities.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Rolldown automatically treats unresolved imports (e.g. <code>wasi:http</code>, which is not a traditional import)
+as external, and prints warnings for imports it deems missing.
+By default we mark <code>wasi:*</code> imports as external, but in a future release automatic detection of import/export
+interfaces will mark all expected imports as well.</p>
+</blockquote>
+<p>The bundle itself is generated in memory as a single ES module:</p>
+<pre><code class="language-shell">jco componentize app.js --bundle --wit wit -o component.wasm
+</code></pre>
+<h3 id="customizing-bundle-configuration"><a class="header" href="#customizing-bundle-configuration">Customizing bundle configuration</a></h3>
+<p>If you need to configure the Rolldown-generated bundle and do some processing on top of the default configuration,
+use <code>--bundle-config &lt;path&gt;</code> with <code>--bundle</code> to merge a <a href="https://rolldown.rs/apis/cli#configuration-files">Rolldown configuration module</a>.</p>
+<p>The module can export a configuration object created with Rolldown’s <code>defineConfig</code> helper:</p>
+<pre><code class="language-js">// rolldown.config.mjs
+import { defineConfig } from "rolldown";
+
+export default defineConfig({
+    resolve: {
+        alias: {
+            // For example, if you wanted to hard-code/mock a certain import
+            "virtual:config": "./src/config.js",
+        },
+    },
+    transform: {
+        define: {
+            // For example, if you wanted to specify a build-time transform
+            __BUILD_MODE__: JSON.stringify("component"),
+        },
+    },
+});
+</code></pre>
+<pre><code class="language-console">jco componentize app.js --bundle --bundle-config rolldown.config.mjs --wit wit -o component.wasm
+</code></pre>
+<p><code>jco componentize</code> will merge the following configurations:</p>
+<ul>
+<li>plugins</li>
+<li>aliases</li>
+<li>external rules</li>
+<li>transforms</li>
+<li>output customization</li>
+</ul>
+<p>Other settings will remain fixed/overriden by the built-in configuration to Jco where necessary to
+ensure a component is built properly.</p>
+<p>Providing configuration functions in your supplemental config files is supported (<code>{ bundle: true }</code>
+will be provided as an input). Configuration arrays and configuration files that produce multiple outputs
+will be rejected.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="transpiling"><a class="header" href="#transpiling">Transpiling</a></h1>
 <p>Components can be transpiled in two separate modes:</p>

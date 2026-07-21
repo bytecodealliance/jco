@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Manual Wasm instantiation with WASI overrides - jco</title>
+        <title>Creating new JS components - jco</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/bytecodealliance/jco" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/bytecodealliance/jco/tree/main/docs/src/manual-wasm-instantiation-with-wasi-overrides.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/bytecodealliance/jco/tree/main/docs/src/creating-new-js-components.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,200 +180,75 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="manual-wasm-instantiation-with-wasi-overrides"><a class="header" href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI Overrides</a></h1>
-<p>When a Wasm component depends on functionality provided by WASI, the <code>jco transpile</code> produces a WebAssembly
-module that can be loaded from NodeJS or the Browser that includes usages of unresolved imports like <code>wasi:random/random</code>.</p>
+                        <h1 id="creating-new-js-components"><a class="header" href="#creating-new-js-components">Creating new JS components</a></h1>
+<p>Jco relies on and exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> to make it easy to build components from Javascript
+ES module source code.</p>
+<p>Building JS components is as easy as calling <code>jco componentize</code>, with a few options:</p>
+<pre><code>jco componentize -w wit -o dist/component.wasm component.js
+</code></pre>
+<p>There are many examples in the <a href="https://github.com/bytecodealliance/jco/tree/main/examples/components">Jco component examples folder</a></p>
+<h2 id="bundling-optional"><a class="header" href="#bundling-optional">Bundling (optional)</a></h2>
+<p>By default, Jco passes the source module JS code directly to ComponentizeJS, with no intermediate processing.</p>
+<p>Use <code>--bundle</code> to bundle the entry module and its local or npm package dependencies before componentization.
+Package resolution starts from the entry module’s project, and <code>wasi:*</code> imports remain external so they can
+be matched to component capabilities.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>Normally, WASI imports that need to be sourced from elsewhere would be <em>mapped</em>, using the
-<code>--map</code> option to <code>jco transpile</code>.</p>
-<p>These instructions are for when mapping is insufficient or implementations must be redirected
-or changed at instantiation time.</p>
+<p>Rolldown automatically treats unresolved imports (e.g. <code>wasi:http</code>, which is not a traditional import)
+as external, and prints warnings for imports it deems missing.
+By default we mark <code>wasi:*</code> imports as external, but in a future release automatic detection of import/export
+interfaces will mark all expected imports as well.</p>
 </blockquote>
-<p>A common usage of transpilation is to map the imports to a known package, like <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>:</p>
-<pre><code class="language-console">jco transpile \
-    component.wasm \
-    --output dist/transpiled \
-    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
+<p>The bundle itself is generated in memory as a single ES module:</p>
+<pre><code class="language-shell">jco componentize app.js --bundle --wit wit -o component.wasm
 </code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>For more information, see the <a href="./transpiling.html#map-configuration">Map Configuration section of the Transpiling documentation</a></p>
-</blockquote>
-<p>Sometimes you may want to use <em>your own</em> implementation of WASI interfaces (whether partial or complete),
-known/resolved only at instantiation time.</p>
-<h2 id="manual-instantiation-of-a-transpiled-component-with-no-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-no-overrides">Manual instantiation of a transpiled component with no overrides</a></h2>
-<p>To use custom instantiations, in NodeJS we must build with the <code>async</code> instantiation mode:</p>
-<pre><code class="language-console">jco transpile \
-    component.wasm \
-    --instantiation async \
-    --output dist/transpiled
-</code></pre>
-<p>We can instantiate the WebAssembly component for use with <em>no</em> custom overrides
-(i.e. the default WASI implementations provided by <code>preview2-shim</code>):</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+<h3 id="customizing-bundle-configuration"><a class="header" href="#customizing-bundle-configuration">Customizing bundle configuration</a></h3>
+<p>If you need to configure the Rolldown-generated bundle and do some processing on top of the default configuration,
+use <code>--bundle-config &lt;path&gt;</code> with <code>--bundle</code> to merge a <a href="https://rolldown.rs/apis/cli#configuration-files">Rolldown configuration module</a>.</p>
+<p>The module can export a configuration object created with Rolldown’s <code>defineConfig</code> helper:</p>
+<pre><code class="language-js">// rolldown.config.mjs
+import { defineConfig } from "rolldown";
 
-async function main() {
-    const wasmESModule = await import("path/to/transpiled/component.js");
-    const loader = async (path) =&gt; {
-      const buf = await readFile(`./dist/transpiled/${path}`);
-      return await WebAssembly.compile(buf.buffer);
-    };
-    const component = wasmESModule.instantiate(loader, new WASIShim().getImportObject());
-    // TODO: add code that utilizes the component's exports
-}
-
-await main();
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>When dealing with browser environments, the <code>loader</code> function is not necessary, and <code>null</code>/<code>undefined</code> can be used.</p>
-</blockquote>
-<p>This is identical to mapping all imports to those provided by <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>.</p>
-<h2 id="manual-instantiation-of-a-transpiled-component-with-custom-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-custom-overrides">Manual instantiation of a transpiled component with custom overrides</a></h2>
-<p>To use custom component overrides in addition to the WASI imports provided by <code>preview2-shim</code>,
-as before build the component with the <code>async</code> instantiation mode:</p>
-<pre><code class="language-console">jco transpile \
-    component.wasm \
-    --instsantiation async \
-    --output dist/transpiled \
-    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
-</code></pre>
-<p>Then write an ES Module like the following:</p>
-<pre><code class="language-js">import { readFile } from "node:fs/promises";
-
-import { random } from "@bytecodealliance/preview2-shim";
-import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-async function main() {
-  /// Load the ES module generated by `jco transpile`
-  const wasmESModule = await import("./dist/transpiled/component.js");
-
-  // Build a customized WASI shim by mizing custom implementations
-  // and the provided implementation
-  const customShim = new WASIShim({
-    random: {
-      // For these two interfaces we re-use the default provided shim
-      random: random.random,
-      "insecure-seed": random.insecureSeed,
-      // For insecure, we can supply our own custom implementation
-      // (in this case, one that is *VERY* insecure)
-      insecure: {
-        getInsecureRandomBytes: (len) =&gt; {
-          return new Uint8Array(Number(len)).fill(0);
+export default defineConfig({
+    resolve: {
+        alias: {
+            // For example, if you wanted to hard-code/mock a certain import
+            "virtual:config": "./src/config.js",
         },
-        getInsecureRandomU64: () =&gt; 42n,
-      },
     },
-  });
-
-  const loader = async (path) =&gt; {
-    const buf = await readFile(`./dist/transpiled/${path}`);
-    return await WebAssembly.compile(buf.buffer);
-  };
-
-  // Instantiate the Wasm component's ES module
-  const component = await wasmESModule.instantiate(
-    loader,
-    customShim.getImportObject(),
-  );
-
-  // TODO: add code to utilize the component exports
-}
-
-await main();
-</code></pre>
-<p>Using <code>WASIShim</code>, you can generate your own custom implementations of WASI, making use of
-the published shims where necessary.</p>
-<h2 id="versioned-imports-with-wasishim"><a class="header" href="#versioned-imports-with-wasishim">Versioned imports with <code>WASIShim</code></a></h2>
-<p>You can also use versions with the import objects produced by <code>WASIShim</code>:</p>
-<pre><code class="language-typescript">import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
-import type {
-    VersionedWASIImportObject,
-    WASIImportObject,
-} from '@bytecodealliance/preview2-shim/instantiation';
-
-const shim = new WASIShim();
-
-const unversioned: WASIImportObject = shim.getImportObject();
-// console.log('unversioned', unversioned);
-unversioned satisfies WASIImportObject;
-unversioned satisfies VersionedWASIImportObject&lt;''&gt;;
-
-const versioned: VersionedWASIImportObject&lt;'0.2.3'&gt; = shim.getImportObject({
-    asVersion: '0.2.3',
-});
-//console.log('versioned', versioned);
-versioned satisfies VersionedWASIImportObject&lt;'0.2.3'&gt;;
-</code></pre>
-<h2 id="sandboxing-with-wasishim"><a class="header" href="#sandboxing-with-wasishim">Sandboxing with <code>WASIShim</code></a></h2>
-<p>By default, the <code>preview2-shim</code> provides full access to the host filesystem, environment variables,
-and network - matching the default behavior of Node.js libraries. You can use the <code>sandbox</code> option
-to restrict what guests can access.</p>
-<p>Each <code>WASIShim</code> instance has its own isolated preopens, environment variables, and arguments.
-Multiple instances with different configurations will not affect each other:</p>
-<h3 id="fully-sandboxed-instance"><a class="header" href="#fully-sandboxed-instance">Fully sandboxed instance</a></h3>
-<p>To create a fully sandboxed instance with no filesystem, network, or environment access:</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-const sandboxedShim = new WASIShim({
-  sandbox: {
-    preopens: {},           // No filesystem access
-    env: {},                // No environment variables
-    args: ['my-program'],   // Custom arguments
-    enableNetwork: false,   // Disable network access
-  }
-});
-
-const component = await wasmESModule.instantiate(
-  loader,
-  sandboxedShim.getImportObject(),
-);
-</code></pre>
-<h3 id="limited-filesystem-access"><a class="header" href="#limited-filesystem-access">Limited filesystem access</a></h3>
-<p>To provide limited filesystem access by mapping virtual paths to host paths:</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-const limitedShim = new WASIShim({
-  sandbox: {
-    preopens: {
-      '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
-      '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+    transform: {
+        define: {
+            // For example, if you wanted to specify a build-time transform
+            __BUILD_MODE__: JSON.stringify("component"),
+        },
     },
-    env: { 'ENV1': '42' },         // Only expose specific env vars
-  }
 });
-
-const component = await wasmESModule.instantiate(
-  loader,
-  limitedShim.getImportObject(),
-);
 </code></pre>
-<h3 id="sandbox-options"><a class="header" href="#sandbox-options">Sandbox options</a></h3>
-<p>The <code>sandbox</code> configuration object supports the following options:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>preopens</code></td><td><code>Record&lt;string, string&gt;</code></td><td>Full filesystem</td><td>Map of virtual paths to host paths. Use <code>{}</code> for no filesystem access.</td></tr>
-<tr><td><code>env</code></td><td><code>Record&lt;string, string&gt;</code></td><td><code>process.env</code></td><td>Environment variables visible to the guest. Use <code>{}</code> for no env access.</td></tr>
-<tr><td><code>args</code></td><td><code>string[]</code></td><td><code>process.argv</code></td><td>Command-line arguments visible to the guest.</td></tr>
-<tr><td><code>enableNetwork</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Whether to enable network access (sockets, HTTP).</td></tr>
-</tbody>
-</table>
-</div>
+<pre><code class="language-console">jco componentize app.js --bundle --bundle-config rolldown.config.mjs --wit wit -o component.wasm
+</code></pre>
+<p><code>jco componentize</code> will merge the following configurations:</p>
+<ul>
+<li>plugins</li>
+<li>aliases</li>
+<li>external rules</li>
+<li>transforms</li>
+<li>output customization</li>
+</ul>
+<p>Other settings will remain fixed/overriden by the built-in configuration to Jco where necessary to
+ensure a component is built properly.</p>
+<p>Providing configuration functions in your supplemental config files is supported (<code>{ bundle: true }</code>
+will be provided as an input). Configuration arrays and configuration files that produce multiple outputs
+will be rejected.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="wit-type-representations.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="troubleshooting/common-issues.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="transpiling.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -383,11 +258,11 @@ const component = await wasmESModule.instantiate(
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="wit-type-representations.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="troubleshooting/common-issues.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="transpiling.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
