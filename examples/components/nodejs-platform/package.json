@@ -1,0 +1,17 @@
+{
+  "name": "nodejs-platform",
+  "version": "0.0.1",
+  "description": "Example component using Jco's Node.js platform capabilities",
+  "main": "src/component.js",
+  "type": "module",
+  "scripts": {
+    "build": "node -e \"require('node:fs').mkdirSync('dist',{recursive:true})\" && jco componentize --bundle -w wit -o dist/component.wasm src/component.js",
+    "transpile": "jco transpile dist/component.wasm -o dist/transpiled",
+    "run-transpiled": "node run-transpiled.js",
+    "all": "pnpm run build && pnpm run transpile && pnpm run run-transpiled"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@bytecodealliance/jco": "workspace:*"
+  }
+}
