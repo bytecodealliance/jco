@@ -8,9 +8,14 @@ export const _forbiddenHeaders = {
   get value() {
     return (FORBIDDEN_HEADERS ??= new Set([
       "connection",
-      "keep-alive",
+      "http2-settings",
       "host",
-      "custom-forbidden-header",
+      "keep-alive",
+      "proxy-authenticate",
+      "proxy-authorization",
+      "proxy-connection",
+      "transfer-encoding",
+      "upgrade",
     ]));
   },
 };
