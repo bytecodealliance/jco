@@ -2,7 +2,7 @@ import {
     $init,
     generate as _generate,
     generateTypes as _generateTypes,
-} from "../obj/js-component-bindgen-component.js";
+} from "@bytecodealliance/jco-transpile/component";
 
 export async function generate() {
     await $init;

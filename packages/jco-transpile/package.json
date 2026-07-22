@@ -1,6 +1,6 @@
 {
     "name": "@bytecodealliance/jco-transpile",
-    "version": "0.4.2",
+    "version": "0.4.3",
     "description": "WebAssembly Component transpilation functionality for Jco",
     "keywords": [
         "Component",
@@ -46,6 +46,10 @@
         "./wasm-tools": {
             "types": "./dist/wasm-tools.d.ts",
             "default": "./dist/wasm-tools.js"
+        },
+        "./component": {
+            "types": "./vendor/js-component-bindgen-component.d.ts",
+            "default": "./vendor/js-component-bindgen-component.js"
         }
     },
     "scripts": {

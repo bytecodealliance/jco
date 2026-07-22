@@ -51,7 +51,7 @@
             "default": "./src/api.js"
         },
         "./component": {
-            "types": "./obj/js-component-bindgen-component.d.ts",
+            "types": "./types/browser.d.ts",
             "default": "./src/browser.js"
         }
     },
