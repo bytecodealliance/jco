@@ -257,6 +257,25 @@ importers:
         specifier: 1.25.2
         version: 1.25.2
 
+  examples/transpile/p3-stream-chat:
+    dependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+      '@bytecodealliance/jco-transpile':
+        specifier: workspace:*
+        version: link:../../../packages/jco-transpile
+      '@bytecodealliance/preview2-shim':
+        specifier: workspace:*
+        version: link:../../../packages/preview2-shim
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.4
+        version: 24.12.4
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   packages/bare-jco: {}
 
   packages/jco:
