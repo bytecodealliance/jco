@@ -1,0 +1,40 @@
+package test:implements;
+
+interface logger {
+  log: func(msg: string);
+}
+
+interface store {
+  resource bucket {
+    get: func(key: string) -> option<string>;
+    set: func(key: string, value: string);
+  }
+  open: func(name: string) -> bucket;
+}
+
+/// A world exercising the component model `implements` feature 🏷️:
+/// named (labeled) imports/exports of interfaces, allowing the same
+/// interface to be imported more than once under different labels.
+world imports-labeled {
+  import primary: logger;
+  import secondary: logger;
+  import kv: store;
+  export events: logger;
+}
+
+/// Same shape with @external-id attributes attached to labeled
+/// imports/exports.
+world with-external-ids {
+  @external-id("com.example:ids/primary")
+  import primary: logger;
+  import secondary: logger;
+  @external-id("com.example:ids/events")
+  export events: logger;
+}
+
+/// The same resource-bearing interface imported under multiple labels:
+/// each label must get its own resource table and class binding.
+world multi-label-stores {
+  import a: store;
+  import b: store;
+}

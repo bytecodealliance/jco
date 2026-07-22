@@ -17,7 +17,8 @@ use wasmtime_environ::component::{
     TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wasmtime_environ::component::{
-    ExtractCallback, NameMapNoIntern, Transcode, TypeComponentLocalErrorContextTableIndex,
+    ExtractCallback, ImportIndex, NameMapNoIntern, Transcode,
+    TypeComponentLocalErrorContextTableIndex,
 };
 use wasmtime_environ::{EntityIndex, PrimaryMap};
 use wit_bindgen_core::abi::{self, LiftLower};
@@ -2991,6 +2992,90 @@ impl<'a> Instantiator<'a, '_> {
             .0
     }
 
+    /// Returns the local JS class name for an imported resource attached to
+    /// the lowered import `import_index` (as the receiver class of a
+    /// method/static or the target of a constructor).
+    ///
+    /// The same interface -- and thus the same `wit-parser` resource type --
+    /// may be imported more than once under different labels via the
+    /// component model `implements` feature, each import with its own
+    /// resource table. The class must therefore be resolved through the
+    /// specific import instance rather than through the wit type, which is
+    /// shared by all labels.
+    fn imported_resource_name(&mut self, import_index: ImportIndex, resource: TypeId) -> String {
+        let resolve = self.resolve;
+        let types = self.types;
+        let component = self.component;
+        let resource = crate::dealias(resolve, resource);
+        let resource_wit_name = resolve.types[resource].name.as_ref().unwrap();
+        if let (
+            _,
+            ComponentExtern {
+                ty: TypeDef::ComponentInstance(inst),
+                ..
+            },
+        ) = &component.import_types[import_index]
+            && let Some(ComponentExtern {
+                ty: TypeDef::Resource(rt_idx),
+                ..
+            }) = types[*inst].exports.get(resource_wit_name)
+        {
+            let rid = types[*rt_idx].unwrap_concrete_ty();
+            return self
+                .bindgen
+                .local_names
+                .get_or_create(rid, &resource_wit_name.to_upper_camel_case())
+                .0
+                .to_string();
+        }
+        // World-level resource imports (and any other shape) are uniquely
+        // identified by their wit type.
+        Instantiator::resource_name(
+            resolve,
+            &mut self.bindgen.local_names,
+            resource,
+            &self.imports_resource_types,
+        )
+        .to_string()
+    }
+
+    /// Finds the component import that provides the given resource table.
+    ///
+    /// Returns the import name along with whether the resource is provided
+    /// by an imported instance (`true`) or directly by a world-level
+    /// resource import (`false`).
+    ///
+    /// The same interface may be imported under multiple labels (component
+    /// model `implements` feature), each label with its own resource table,
+    /// so the import is identified through the wasmtime resource index
+    /// rather than through the wit type's owning interface, which is shared
+    /// by all labels.
+    fn find_import_providing_resource(
+        &self,
+        resource_idx: ResourceIndex,
+    ) -> Option<(&'a str, bool)> {
+        let component = self.component;
+        let types = self.types;
+        for (_, (imp_name, extern_)) in component.import_types.iter() {
+            match &extern_.ty {
+                TypeDef::ComponentInstance(inst) => {
+                    for (_, export) in types[*inst].exports.iter() {
+                        if let TypeDef::Resource(rt) = &export.ty
+                            && types[*rt].unwrap_concrete_ty() == resource_idx
+                        {
+                            return Some((imp_name.as_str(), true));
+                        }
+                    }
+                }
+                TypeDef::Resource(rt) if types[*rt].unwrap_concrete_ty() == resource_idx => {
+                    return Some((imp_name.as_str(), false));
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
     fn lower_import(&mut self, index: LoweredIndex, import: RuntimeImportIndex) {
         let (options, trampoline, func_ty) = self.lowering_options[index];
 
@@ -3035,8 +3120,17 @@ impl<'a> Instantiator<'a, '_> {
             &self.async_imports,
         );
 
+        // A labeled import of a named interface (the component model
+        // `implements` feature) falls back to a mapping for the implemented
+        // interface id when the label itself has no mapping, so that e.g.
+        // WASI shim mappings apply to labeled imports as well.
+        let implements = self.resolve.implements_value(
+            world_key,
+            &self.resolve.worlds[self.world].imports[world_key],
+        );
+
         // Nested interfaces only currently possible through mapping
-        let (import_specifier, maybe_iface_member) = map_import(
+        let (import_specifier, maybe_iface_member) = map_import_with_implements(
             &self.bindgen.opts.map,
             if iface_name.is_some() {
                 import_name
@@ -3064,6 +3158,7 @@ impl<'a> Instantiator<'a, '_> {
                     FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
                 }
             },
+            implements.as_deref(),
         );
 
         // Create mappings for resources
@@ -3119,12 +3214,7 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Static(resource_id) => (
                 format!(
                     "{}.{}",
-                    Instantiator::resource_name(
-                        self.resolve,
-                        &mut self.bindgen.local_names,
-                        resource_id,
-                        &self.imports_resource_types
-                    ),
+                    self.imported_resource_name(*import_index, resource_id),
                     func.item_name().to_lower_camel_case()
                 ),
                 CallType::Standard,
@@ -3133,12 +3223,7 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::AsyncStatic(resource_id) => (
                 format!(
                     "{}.{}",
-                    Instantiator::resource_name(
-                        self.resolve,
-                        &mut self.bindgen.local_names,
-                        resource_id,
-                        &self.imports_resource_types
-                    ),
+                    self.imported_resource_name(*import_index, resource_id),
                     func.item_name().to_lower_camel_case()
                 ),
                 CallType::AsyncStandard,
@@ -3147,12 +3232,7 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Constructor(resource_id) => (
                 format!(
                     "new {}",
-                    Instantiator::resource_name(
-                        self.resolve,
-                        &mut self.bindgen.local_names,
-                        resource_id,
-                        &self.imports_resource_types
-                    )
+                    self.imported_resource_name(*import_index, resource_id)
                 ),
                 CallType::Standard,
             ),
@@ -3276,12 +3356,7 @@ impl<'a> Instantiator<'a, '_> {
                 FunctionKind::Method(resource_id) | FunctionKind::AsyncMethod(resource_id) => {
                     format!(
                         "{}.prototype.{callee_name}",
-                        Instantiator::resource_name(
-                            self.resolve,
-                            &mut self.bindgen.local_names,
-                            resource_id,
-                            &self.imports_resource_types
-                        )
+                        self.imported_resource_name(*import_index, resource_id)
                     )
                 }
             };
@@ -3362,13 +3437,7 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::Constructor(tid) => {
                 let ty = &self.resolve.types[tid];
                 let class_name = ty.name.as_ref().unwrap().to_upper_camel_case();
-                let resource_name = Instantiator::resource_name(
-                    self.resolve,
-                    &mut self.bindgen.local_names,
-                    tid,
-                    &self.imports_resource_types,
-                )
-                .to_string();
+                let resource_name = self.imported_resource_name(*import_index, tid);
                 (class_name, resource_name)
             }
         };
@@ -3608,44 +3677,86 @@ impl<'a> Instantiator<'a, '_> {
         let resource_name = ty.name.as_ref().unwrap().to_upper_camel_case();
 
         let local_name = if imported {
-            let (world_key, iface_name) = match ty.owner {
-                wit_parser::TypeOwner::World(world) => (
-                    self.resolve.worlds[world]
-                        .imports
-                        .iter()
-                        .find(|&(_, item)| matches!(*item, WorldItem::Type { id, .. } if id == t))
-                        .unwrap()
-                        .0
-                        .clone(),
-                    None,
-                ),
-                wit_parser::TypeOwner::Interface(iface) => {
-                    match &self.resolve.interfaces[iface].name {
-                        Some(name) => (WorldKey::Interface(iface), Some(name.as_str())),
-                        None => {
-                            let key = self.resolve.worlds[self.world]
-                                .imports
-                                .iter()
-                                .find(|&(_, item)| match item {
-                                    WorldItem::Interface { id, .. } => *id == iface,
-                                    _ => false,
-                                })
-                                .unwrap()
-                                .0;
-                            (
-                                key.clone(),
-                                match key {
-                                    WorldKey::Name(name) => Some(name.as_str()),
-                                    WorldKey::Interface(_) => None,
-                                },
-                            )
+            // Resolve the specific import that provides this resource table:
+            // see [`Instantiator::find_import_providing_resource`].
+            let imported_resource_entry = self.find_import_providing_resource(resource_idx);
+
+            let (world_key, iface_name) = match imported_resource_entry {
+                // Resource provided by an imported instance: derive the
+                // interface member name from the world key shape.
+                Some((imp_name, _is_from_instance @ true)) => {
+                    let key = self.imports[imp_name].clone();
+                    let iface_name = match &key {
+                        WorldKey::Name(name) => Some(name.clone()),
+                        WorldKey::Interface(_) => {
+                            match &self.resolve.worlds[self.world].imports[&key] {
+                                WorldItem::Interface { id, .. } => {
+                                    self.resolve.interfaces[*id].name.clone()
+                                }
+                                _ => None,
+                            }
                         }
-                    }
+                    };
+                    (key, iface_name)
                 }
-                wit_parser::TypeOwner::None => unimplemented!(),
+                // A world-level `import x: resource` style import
+                Some((imp_name, _is_from_instance @ false)) => {
+                    (self.imports[imp_name].clone(), None)
+                }
+                // Fall back to locating the import through the wit type's
+                // owner; reachable only if the resource table doesn't appear
+                // in the component's import types.
+                None => match ty.owner {
+                    wit_parser::TypeOwner::World(world) => (
+                        self.resolve.worlds[world]
+                            .imports
+                            .iter()
+                            .find(
+                                |&(_, item)| matches!(item, WorldItem::Type { id, .. } if *id == t),
+                            )
+                            .unwrap()
+                            .0
+                            .clone(),
+                        None,
+                    ),
+                    wit_parser::TypeOwner::Interface(iface) => {
+                        let key = self.resolve.worlds[self.world]
+                            .imports
+                            .iter()
+                            .find(|&(_, item)| match item {
+                                WorldItem::Interface { id, .. } => *id == iface,
+                                _ => false,
+                            })
+                            .map(|(key, _)| key)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "unable to find world import for interface [{}]",
+                                    self.resolve.interfaces[iface]
+                                        .name
+                                        .as_deref()
+                                        .unwrap_or("<unnamed>")
+                                )
+                            });
+                        (
+                            key.clone(),
+                            match key {
+                                WorldKey::Name(name) => Some(name.clone()),
+                                WorldKey::Interface(_) => {
+                                    self.resolve.interfaces[iface].name.clone()
+                                }
+                            },
+                        )
+                    }
+                    wit_parser::TypeOwner::None => unimplemented!(),
+                },
             };
+            let iface_name = iface_name.as_deref();
 
             let import_name = self.resolve.name_world_key(&world_key);
+            let implements = self.resolve.worlds[self.world]
+                .imports
+                .get(&world_key)
+                .and_then(|item| self.resolve.implements_value(&world_key, item));
             let (local_name, _) = self
                 .bindgen
                 .local_names
@@ -3653,9 +3764,14 @@ impl<'a> Instantiator<'a, '_> {
 
             let local_name_str = local_name.to_string();
 
-            // Nested interfaces only currently possible through mapping
-            let (import_specifier, maybe_iface_member) =
-                map_import(&self.bindgen.opts.map, &import_name);
+            // Nested interfaces only currently possible through mapping; must
+            // resolve to the same specifier as the owning interface's
+            // functions, including the `implements` mapping fallback.
+            let (import_specifier, maybe_iface_member) = map_import_with_implements(
+                &self.bindgen.opts.map,
+                &import_name,
+                implements.as_deref(),
+            );
 
             // Ensure that the import exists
             self.ensure_import(
@@ -3688,7 +3804,17 @@ impl<'a> Instantiator<'a, '_> {
         // If the the resource already exists, then  ensure that it is exactly the same as the
         // value we're attempting to insert
         if let Some(existing) = resource_map.get(&resource_id) {
-            assert_eq!(*existing, entry);
+            // The same wit resource type may be imported more than once under
+            // different labels (component model `implements` feature), giving
+            // it one resource table per label. Shared type-keyed maps keep
+            // the first table encountered; maps built per lowered function
+            // only ever see the table of that function's own instance.
+            if *existing != entry {
+                assert!(
+                    imported && existing.imported,
+                    "conflicting resource tables for non-imported resource"
+                );
+            }
             return;
         }
 
@@ -4817,6 +4943,33 @@ fn resolve_wildcard_mapping(key: &str, mapping: &str, impt: &str) -> Option<Stri
     let matched_len = impt.len() - lhs.len() - rhs.len();
     let matched = &impt[lhs.len()..lhs.len() + matched_len];
     Some(mapping.replace('*', matched))
+}
+
+/// Same as [`map_import`], except that when `impt` itself has no mapping and
+/// the import is a labeled import of a named interface (the component model
+/// `implements` feature 🏷️), a mapping for the implemented interface id is
+/// consulted as a fallback.
+fn map_import_with_implements(
+    map: &Option<HashMap<String, String>>,
+    impt: &str,
+    implements: Option<&str>,
+) -> (String, Option<String>) {
+    let (specifier, iface_member) = map_import(map, impt);
+    if specifier == impt
+        && iface_member.is_none()
+        && let Some(target) = implements
+    {
+        let (mapped, member) = map_import(map, target);
+        // An unmapped name is returned with just its version stripped
+        let target_sans_version = match target.find('@') {
+            Some(version_idx) => &target[0..version_idx],
+            None => target,
+        };
+        if mapped != target_sans_version || member.is_some() {
+            return (mapped, member);
+        }
+    }
+    (specifier, iface_member)
 }
 
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {

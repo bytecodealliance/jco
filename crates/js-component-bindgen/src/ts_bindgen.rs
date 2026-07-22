@@ -547,10 +547,14 @@ impl TsBindgen {
                 files,
                 GeneratedTypeMeta { is_export: false },
             );
+            // Alias under the import's own name: a named interface may be
+            // imported under one or more plain labels via the component model
+            // `implements` feature, in which case each label gets its own
+            // alias of the shared interface module.
             uwriteln!(
                 self.src,
                 "export type * as {} from '{import_path}'; // import {}",
-                id_name.to_upper_camel_case(),
+                name.to_upper_camel_case(),
                 id_name
             );
         }

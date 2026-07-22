@@ -88,4 +88,31 @@ suite('Type Generation', () => {
         assert.include(worldDeclarationContent, 'export type Result<T, E>');
         assert.include(worldDeclarationContent, 'declare module');
     });
+
+    // Labeled imports via the component model `implements` feature alias
+    // each label to the shared interface module.
+    test('labeled imports (implements) alias each label', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/implements`, {
+            worldName: 'test:implements/imports-labeled',
+        });
+        const worldDtsKey = Object.keys(files).find((f) => f.endsWith('imports-labeled.d.ts'));
+        assert.ok(worldDtsKey, 'world d.ts was generated');
+        const worldDts = Buffer.from(files[worldDtsKey]).toString();
+        assert.include(worldDts, "export type * as Primary from './interfaces/test-implements-logger.js'");
+        assert.include(worldDts, "export type * as Secondary from './interfaces/test-implements-logger.js'");
+        assert.include(worldDts, "export type * as Kv from './interfaces/test-implements-store.js'");
+        // The shared interface module is generated once
+        assert.ok(files['interfaces/test-implements-logger.d.ts']);
+    });
+
+    test('worlds with external-ids', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/implements`, {
+            worldName: 'test:implements/with-external-ids',
+        });
+        const worldDtsKey = Object.keys(files).find((f) => f.endsWith('with-external-ids.d.ts'));
+        assert.ok(worldDtsKey, 'world d.ts was generated');
+        const worldDts = Buffer.from(files[worldDtsKey]).toString();
+        assert.include(worldDts, 'export type * as Primary');
+        assert.include(worldDts, 'export type * as Secondary');
+    });
 });

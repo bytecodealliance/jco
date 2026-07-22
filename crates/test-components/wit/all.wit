@@ -636,3 +636,14 @@ world cm-maps {
     import cm-maps-host;
     export cm-maps-api;
 }
+
+interface echoer {
+  echo: func(msg: string) -> string;
+}
+
+world implements-labels {
+  import first: echoer;
+  import second: echoer;
+  export relay: echoer;
+  export echo-both: func(msg: string) -> tuple<string, string>;
+}
