@@ -615,3 +615,24 @@ world async-call-g2g-caller {
 world async-call-g2g-callee {
     export local-run-async;
 }
+
+interface cm-maps-host {
+    roundtrip: func(values: map<string, u32>) -> map<string, u32>;
+}
+
+interface cm-maps-api {
+    record map-value {
+        count: u32,
+        label: string,
+    }
+
+    echo-strings: func(values: map<string, u32>) -> map<string, u32>;
+    bigint-keys: func() -> map<u64, string>;
+    structured-values: func(values: map<bool, map-value>) -> map<bool, map-value>;
+    host-roundtrip: func(values: map<string, u32>) -> map<string, u32>;
+}
+
+world cm-maps {
+    import cm-maps-host;
+    export cm-maps-api;
+}
