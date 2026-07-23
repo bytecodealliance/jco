@@ -269,7 +269,9 @@ pub fn ts_bindgen(
                             generator.type_resource(*id, ty, GeneratedTypeMeta { is_export: false })
                         }
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
-                        TypeDefKind::Map(_, _) => todo!("type generation for map"),
+                        TypeDefKind::Map(key, value) => {
+                            generator.type_map(*id, name, key, value, &ty.docs)
+                        }
                     }
                     let (src, references) = generator.finish();
                     bindgen.src.push_str(&src);
@@ -949,7 +951,7 @@ impl<'a> TsInterface<'a> {
                     },
                 ),
                 TypeDefKind::Handle(_) => todo!("types for handle"),
-                TypeDefKind::Map(_, _) => todo!("types for map<k,v>"),
+                TypeDefKind::Map(key, value) => self.type_map(*id, name, key, value, &ty.docs),
             }
         }
     }
@@ -1026,7 +1028,7 @@ impl<'a> TsInterface<'a> {
                         }
                         panic!("anonymous resource handle");
                     }
-                    TypeDefKind::Map(_, _) => todo!("[print_ty()] map"),
+                    TypeDefKind::Map(key, value) => self.print_map_ty(key, value),
                 }
             }
         }
@@ -1050,6 +1052,14 @@ impl<'a> TsInterface<'a> {
                 self.src.push_str(">");
             }
         }
+    }
+
+    fn print_map_ty(&mut self, key: &Type, value: &Type) {
+        self.src.push_str("Map<");
+        self.print_ty(key);
+        self.src.push_str(", ");
+        self.print_ty(value);
+        self.src.push_str(">");
     }
 
     fn print_fixed_size_list(&mut self, ty: &Type, len: &u32) {
@@ -1432,6 +1442,14 @@ impl<'a> TsInterface<'a> {
         self.src
             .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
         self.print_list_ty(element_ty);
+        self.src.push_str(";\n");
+    }
+
+    fn type_map(&mut self, _id: TypeId, name: &str, key: &Type, value: &Type, docs: &Docs) {
+        self.docs(docs);
+        self.src
+            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+        self.print_map_ty(key, value);
         self.src.push_str(";\n");
     }
 

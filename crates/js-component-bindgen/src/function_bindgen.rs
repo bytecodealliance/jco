@@ -1434,6 +1434,75 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwrite!(self.src, "}}\n");
             }
 
+            Instruction::MapLower { key, value, .. } => {
+                let (body, body_results) = self.blocks.pop().unwrap();
+                assert!(body_results.is_empty());
+
+                let tmp = self.tmp();
+                let map = format!("map{tmp}");
+                let entries = format!("entries{tmp}");
+                let result = format!("result{tmp}");
+                let len = format!("len{tmp}");
+                let entry = self.sizes.record([*key, *value]);
+                let size = entry.size.size_wasm32();
+                let align = ArchitectureSize::from(entry.align).size_wasm32();
+
+                uwriteln!(self.src, "const {map} = {};", operands[0]);
+                uwriteln!(
+                    self.src,
+                    "if (!({map} instanceof Map)) throw new TypeError('expected a Map');"
+                );
+                uwriteln!(self.src, "const {entries} = {map}.entries();");
+                uwriteln!(self.src, "const {len} = {map}.size;");
+
+                let realloc = self.realloc.as_ref().unwrap();
+                uwriteln!(
+                    self.src,
+                    "const {result} = {realloc_call}(0, 0, {align}, {len} * {size});",
+                    realloc_call = if self.is_async {
+                        format!("await {realloc}")
+                    } else {
+                        realloc.to_string()
+                    },
+                );
+
+                uwriteln!(self.src, "let i = 0;");
+                uwriteln!(self.src, "for (const [key, value] of {entries}) {{");
+                uwriteln!(self.src, "const base = {result} + i * {size};");
+                self.src.push_str(&body);
+                uwriteln!(self.src, "i++;");
+                uwrite!(self.src, "}}\n");
+
+                results.push(result);
+                results.push(len);
+            }
+
+            Instruction::MapLift { key, value, .. } => {
+                let (body, body_results) = self.blocks.pop().unwrap();
+                assert_eq!(body_results.len(), 2);
+
+                let tmp = self.tmp();
+                let entry_size = self.sizes.record([*key, *value]).size.size_wasm32();
+                let len = format!("len{tmp}");
+                uwriteln!(self.src, "const {len} = {};", operands[1]);
+                let base = format!("base{tmp}");
+                uwriteln!(self.src, "const {base} = {};", operands[0]);
+                let result = format!("result{tmp}");
+                uwriteln!(self.src, "const {result} = new Map();");
+                results.push(result.clone());
+
+                uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
+                uwriteln!(self.src, "const base = {base} + i * {entry_size};");
+                self.src.push_str(&body);
+                uwriteln!(
+                    self.src,
+                    "{result}.set({}, {});",
+                    body_results[0],
+                    body_results[1]
+                );
+                uwrite!(self.src, "}}\n");
+            }
+
             Instruction::FixedLengthListLower { size, .. } => {
                 let tmp = self.tmp();
                 let array = format!("array{tmp}");
@@ -1492,6 +1561,10 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::IterElem { .. } => results.push("e".to_string()),
+
+            Instruction::IterMapKey { .. } => results.push("key".to_string()),
+
+            Instruction::IterMapValue { .. } => results.push("value".to_string()),
 
             Instruction::IterBasePointer => results.push("base".to_string()),
 
@@ -3415,11 +3488,7 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::GuestDeallocateList { .. }
             | Instruction::GuestDeallocateVariant { .. } => unimplemented!("Guest deallocation"),
 
-            Instruction::MapLower { .. }
-            | Instruction::MapLift { .. }
-            | Instruction::IterMapKey { .. }
-            | Instruction::IterMapValue { .. }
-            | Instruction::GuestDeallocateMap { .. } => unimplemented!("map support"),
+            Instruction::GuestDeallocateMap { .. } => unimplemented!("map deallocation support"),
         }
     }
 }

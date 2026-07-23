@@ -172,6 +172,9 @@ pub enum LiftIntrinsic {
     /// Lift a list into provided storage given core type(s)
     LiftFlatList,
 
+    /// Lift a map into provided storage given core type(s)
+    LiftFlatMap,
+
     /// Lift a tuple into provided storage given core type(s)
     LiftFlatTuple,
 
@@ -235,6 +238,7 @@ impl LiftIntrinsic {
             Self::LiftFlatRecord => "_liftFlatRecord",
             Self::LiftFlatVariant => "_liftFlatVariant",
             Self::LiftFlatList => "_liftFlatList",
+            Self::LiftFlatMap => "_liftFlatMap",
             Self::LiftFlatTuple => "_liftFlatTuple",
             Self::LiftFlatFlags => "_liftFlatFlags",
             Self::LiftFlatEnum => "_liftFlatEnum",
@@ -1010,6 +1014,65 @@ impl LiftIntrinsic {
                             }}
 
                             return liftResults;
+                        }}
+                    }}
+                "#));
+            }
+
+            Self::LiftFlatMap => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_map_fn = self.name();
+                let lift_u32 = Self::LiftFlatU32.name();
+
+                output.push_str(&format!(r#"
+                    function {lift_flat_map_fn}(meta) {{
+                        const {{ keyLiftFn, valueLiftFn, entrySize32, valueOffset32 }} = meta;
+
+                        const readEntriesAndReset = (ctx, originalPtr, originalLen, dataPtr, len) => {{
+                            const val = new Map();
+                            for (let i = 0; i < len; i++) {{
+                                const entryPtr = dataPtr + i * entrySize32;
+                                ctx.storagePtr = entryPtr;
+                                const [key, keyCtx] = keyLiftFn(ctx);
+                                ctx = keyCtx;
+                                ctx.storagePtr = entryPtr + valueOffset32;
+                                const [value, valueCtx] = valueLiftFn(ctx);
+                                ctx = valueCtx;
+                                val.set(key, value);
+                            }}
+                            if (originalPtr !== null) {{ ctx.storagePtr = originalPtr; }}
+                            if (originalLen !== null) {{ ctx.storageLen = originalLen; }}
+                            return [val, ctx];
+                        }};
+
+                        return function {lift_flat_map_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_map_fn}()] args', {{ ctx }});
+
+                            let dataPtr;
+                            let len;
+                            let originalPtr = ctx.storagePtr;
+                            const originalLen = ctx.storageLen;
+                            if (ctx.useDirectParams) {{
+                                dataPtr = ctx.params[0];
+                                len = ctx.params[1];
+                                ctx.params = ctx.params.slice(2);
+                            }} else {{
+                                ctx.storageLen = 8;
+                                let lifted = {lift_u32}(ctx);
+                                dataPtr = lifted[0];
+                                ctx = lifted[1];
+                                lifted = {lift_u32}(ctx);
+                                len = lifted[0];
+                                ctx = lifted[1];
+                                originalPtr = ctx.storagePtr;
+                            }}
+
+                            const wasDirect = ctx.useDirectParams;
+                            ctx.useDirectParams = false;
+                            ctx.storageLen = len * entrySize32;
+                            const result = readEntriesAndReset(ctx, originalPtr, originalLen, dataPtr, len);
+                            result[1].useDirectParams = wasDirect;
+                            return result;
                         }}
                     }}
                 "#));

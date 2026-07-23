@@ -135,7 +135,8 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
             | WasmFeatures::CM_MORE_ASYNC_BUILTINS
             | WasmFeatures::CM_ASYNC_STACKFUL
             | WasmFeatures::CM_ERROR_CONTEXT
-            | WasmFeatures::CM_FIXED_LENGTH_LISTS,
+            | WasmFeatures::CM_FIXED_LENGTH_LISTS
+            | WasmFeatures::CM_MAP,
     );
 
     let mut types = ComponentTypesBuilder::new(&validator);

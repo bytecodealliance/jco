@@ -3775,6 +3775,17 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
 
+            // Connect map key and value types
+            (TypeDefKind::Map(key, value), InterfaceType::Map(map)) => {
+                let map = &self.types[*map];
+                if let Type::Id(id) = key {
+                    self.connect_resource_types(*id, &map.key, resource_map);
+                }
+                if let Type::Id(id) = value {
+                    self.connect_resource_types(*id, &map.value, resource_map);
+                }
+            }
+
             // Connect list<t, size> to list types
             (TypeDefKind::FixedLengthList(t1, _len), InterfaceType::FixedLengthList(t2)) => {
                 let t2 = &self.types[*t2];
@@ -5509,7 +5520,26 @@ pub fn gen_flat_lift_fn_js_expr(
             format!("{f}.bind(null, {table_idx})")
         }
 
-        InterfaceType::Map(_) => unimplemented!("map support"),
+        InterfaceType::Map(ty_idx) => {
+            instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatMap));
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatMap).name();
+            let map_ty = &component_types[*ty_idx];
+            let key_lift = gen_flat_lift_fn_js_expr(instantiator, &map_ty.key, extra_resource_map);
+            let value_lift =
+                gen_flat_lift_fn_js_expr(instantiator, &map_ty.value, extra_resource_map);
+            let entry_size32 = map_ty.entry_abi.size32;
+            let entry_align32 = map_ty.entry_abi.align32;
+            let value_offset32 = map_ty.value_offset32;
+            format!(
+                "{f}({{
+                     keyLiftFn: {key_lift},
+                     valueLiftFn: {value_lift},
+                     entrySize32: {entry_size32},
+                     entryAlign32: {entry_align32},
+                     valueOffset32: {value_offset32},
+                 }})"
+            )
+        }
     }
 }
 
@@ -6313,7 +6343,27 @@ pub fn gen_flat_lower_fn_js_expr(
             format!("{lower_flat_err_ctx_fn}.bind(null, {table_idx})")
         }
 
-        InterfaceType::Map(_) => unimplemented!("map support"),
+        InterfaceType::Map(ty_idx) => {
+            instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatMap));
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatMap).name();
+            let map_ty = &component_types[*ty_idx];
+            let key_lower =
+                gen_flat_lower_fn_js_expr(instantiator, &map_ty.key, extra_resource_map);
+            let value_lower =
+                gen_flat_lower_fn_js_expr(instantiator, &map_ty.value, extra_resource_map);
+            let entry_size32 = map_ty.entry_abi.size32;
+            let entry_align32 = map_ty.entry_abi.align32;
+            let value_offset32 = map_ty.value_offset32;
+            format!(
+                "{f}({{
+                     keyLowerFn: {key_lower},
+                     valueLowerFn: {value_lower},
+                     entrySize32: {entry_size32},
+                     entryAlign32: {entry_align32},
+                     valueOffset32: {value_offset32},
+                 }})"
+            )
+        }
     }
 }
 

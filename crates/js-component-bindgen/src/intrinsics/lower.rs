@@ -172,6 +172,9 @@ pub enum LowerIntrinsic {
     /// Lower a list into provided storage given core type(s)
     LowerFlatList,
 
+    /// Lower a map into provided storage given core type(s)
+    LowerFlatMap,
+
     /// Lower a tuple into provided storage given core type(s)
     LowerFlatTuple,
 
@@ -235,6 +238,7 @@ impl LowerIntrinsic {
             Self::LowerFlatRecord => "_lowerFlatRecord",
             Self::LowerFlatVariant => "_lowerFlatVariant",
             Self::LowerFlatList => "_lowerFlatList",
+            Self::LowerFlatMap => "_lowerFlatMap",
             Self::LowerFlatTuple => "_lowerFlatTuple",
             Self::LowerFlatFlags => "_lowerFlatFlags",
             Self::LowerFlatEnum => "_lowerFlatEnum",
@@ -795,6 +799,63 @@ impl LowerIntrinsic {
                             if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {{
                                 throw new Error('not enough storage remaining for list flat lower');
                             }}
+                        }}
+                    }}
+                "#));
+            }
+
+            Self::LowerFlatMap => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_flat_map_fn = self.name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
+
+                output.push_str(&format!(r#"
+                    function {lower_flat_map_fn}(meta) {{
+                        const {{
+                            keyLowerFn,
+                            valueLowerFn,
+                            entrySize32,
+                            entryAlign32,
+                            valueOffset32,
+                        }} = meta;
+
+                        return function {lower_flat_map_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lower_flat_map_fn}()] args', {{ ctx }});
+                            const map = ctx.vals[0];
+                            if (!(map instanceof Map)) {{ throw new TypeError('expected a Map'); }}
+
+                            let dataPtr;
+                            let restorePtr;
+                            if (ctx.useDirectParams) {{
+                                if (ctx.params.length < 2) {{ throw new Error('insufficient params left to lower map'); }}
+                                dataPtr = ctx.params[0];
+                                const expectedLen = ctx.params[1];
+                                ctx.params = ctx.params.slice(2);
+                                if (expectedLen !== map.size) {{ throw new Error('map length does not match allocated storage'); }}
+                                restorePtr = ctx.storagePtr;
+                            }} else {{
+                                if (!ctx.realloc) {{ throw new Error('missing realloc during flat map lower'); }}
+                                dataPtr = ctx.realloc(0, 0, entryAlign32, entrySize32 * map.size);
+
+                                ctx.vals[0] = dataPtr;
+                                {lower_u32_fn}(ctx);
+                                ctx.vals[0] = map.size;
+                                {lower_u32_fn}(ctx);
+                                restorePtr = ctx.storagePtr;
+                            }}
+
+                            let idx = 0;
+                            for (const [key, value] of map) {{
+                                const entryPtr = dataPtr + idx * entrySize32;
+                                ctx.storagePtr = entryPtr;
+                                ctx.vals = [key];
+                                keyLowerFn(ctx);
+                                ctx.storagePtr = entryPtr + valueOffset32;
+                                ctx.vals = [value];
+                                valueLowerFn(ctx);
+                                idx++;
+                            }}
+                            ctx.storagePtr = restorePtr;
                         }}
                     }}
                 "#));
