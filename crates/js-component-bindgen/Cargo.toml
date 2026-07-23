@@ -31,7 +31,7 @@ bon = { workspace = true, features = [ "std", "alloc" ] }
 heck = { workspace = true }
 log = { workspace = true }
 semver = { workspace = true }
-wasm-encoder = { workspace = true }
+wasm-encoder = { workspace = true, features = [ "wasmparser" ] }
 wasmparser = { workspace = true, features = [ "features", "component-model" ] }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
 wit-bindgen-core = { workspace = true }

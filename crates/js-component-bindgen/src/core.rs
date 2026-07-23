@@ -41,10 +41,9 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, bail};
 use wasm_encoder::{
     CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
-    Module, TypeSection,
+    Module, TypeSection, reencode::Reencode,
 };
 use wasmparser::collections::IndexMap;
-use wasmparser::types::TypeIdentifier as _;
 use wasmparser::{
     Export, ExternalKind, FunctionBody, Import, Parser, Payload, TypeRef, Validator, VisitOperator,
     VisitSimdOperator, WasmFeatures,
@@ -348,15 +347,23 @@ impl Augmenter<'_> {
 
     fn encode(&self) -> Result<Vec<u8>> {
         let mut module = Module::new();
+        let mut reencoder = MultiMemoryCoreReencoder { augmenter: self };
 
         // Types are all passed through as-is to retain the same type section as
         // before.
         let mut types = TypeSection::new();
         for ty in &self.types {
-            types.ty().function(
-                ty.params().iter().map(|v| valtype(*v)),
-                ty.results().iter().map(|v| valtype(*v)),
-            );
+            let params = ty
+                .params()
+                .iter()
+                .map(|ty| reencoder.val_type(*ty))
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let results = ty
+                .results()
+                .iter()
+                .map(|ty| reencoder.val_type(*ty))
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            types.ty().function(params, results);
         }
 
         // Pass through all of `self.imports` into the import section. This will
@@ -364,24 +371,7 @@ impl Augmenter<'_> {
         // at most one memory.
         let mut imports = ImportSection::new();
         for import in self.imports.iter() {
-            let ty = match import.ty {
-                TypeRef::Func(f) => EntityType::Function(f),
-                TypeRef::Global(g) => EntityType::Global(wasm_encoder::GlobalType {
-                    mutable: g.mutable,
-                    val_type: valtype(g.content_type),
-                    shared: g.shared,
-                }),
-                TypeRef::Memory(m) => EntityType::Memory(wasm_encoder::MemoryType {
-                    maximum: m.maximum,
-                    minimum: m.initial,
-                    memory64: m.memory64,
-                    shared: m.shared,
-                    page_size_log2: m.page_size_log2,
-                }),
-                TypeRef::Table(_) => unimplemented!(),
-                TypeRef::Tag(_) => unimplemented!(),
-                TypeRef::FuncExact(_) => unimplemented!(),
-            };
+            let ty = reencoder.entity_type(import.ty)?;
             imports.import(import.module, import.name, ty);
         }
 
@@ -436,17 +426,14 @@ impl Augmenter<'_> {
 
             for local in body.get_locals_reader()? {
                 let (cnt, ty) = local?;
-                locals.push((cnt, valtype(ty)));
+                locals.push((cnt, reencoder.val_type(ty)?));
             }
 
             let mut f = Function::new(locals);
 
             let mut ops = body.get_operators_reader()?;
             while !ops.eof() {
-                ops.visit_operator(&mut Translator {
-                    func: &mut f,
-                    augmenter: self,
-                })?;
+                reencoder.translate(&mut f, ops.read()?)?;
             }
 
             code.function(&f);
@@ -474,69 +461,6 @@ impl Augmenter<'_> {
         index
     }
 }
-
-fn valtype(ty: wasmparser::ValType) -> wasm_encoder::ValType {
-    match ty {
-        wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
-        wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
-        wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
-        wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
-        wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-        wasmparser::ValType::Ref(t) => wasm_encoder::ValType::Ref(wasm_encoder::RefType {
-            nullable: t.is_nullable(),
-            heap_type: match t.heap_type() {
-                wasmparser::HeapType::Abstract { shared, ty } => wasm_encoder::HeapType::Abstract {
-                    shared,
-                    ty: match ty {
-                        wasmparser::AbstractHeapType::Func => wasm_encoder::AbstractHeapType::Func,
-                        wasmparser::AbstractHeapType::Extern => {
-                            wasm_encoder::AbstractHeapType::Extern
-                        }
-                        wasmparser::AbstractHeapType::Any => wasm_encoder::AbstractHeapType::Any,
-                        wasmparser::AbstractHeapType::None => wasm_encoder::AbstractHeapType::None,
-                        wasmparser::AbstractHeapType::NoExtern => {
-                            wasm_encoder::AbstractHeapType::NoExtern
-                        }
-                        wasmparser::AbstractHeapType::NoFunc => {
-                            wasm_encoder::AbstractHeapType::NoFunc
-                        }
-                        wasmparser::AbstractHeapType::Eq => wasm_encoder::AbstractHeapType::Eq,
-                        wasmparser::AbstractHeapType::Struct => {
-                            wasm_encoder::AbstractHeapType::Struct
-                        }
-                        wasmparser::AbstractHeapType::Array => {
-                            wasm_encoder::AbstractHeapType::Array
-                        }
-                        wasmparser::AbstractHeapType::I31 => wasm_encoder::AbstractHeapType::I31,
-                        wasmparser::AbstractHeapType::Exn => wasm_encoder::AbstractHeapType::Exn,
-                        wasmparser::AbstractHeapType::NoExn => {
-                            wasm_encoder::AbstractHeapType::NoExn
-                        }
-                        wasmparser::AbstractHeapType::Cont => wasm_encoder::AbstractHeapType::Cont,
-                        wasmparser::AbstractHeapType::NoCont => {
-                            wasm_encoder::AbstractHeapType::NoCont
-                        }
-                    },
-                },
-                wasmparser::HeapType::Concrete(unpacked_idx) => match unpacked_idx {
-                    wasmparser::UnpackedIndex::Module(idx)
-                    | wasmparser::UnpackedIndex::RecGroup(idx) => {
-                        wasm_encoder::HeapType::Concrete(idx)
-                    }
-                    wasmparser::UnpackedIndex::Id(core_type_id) => {
-                        wasm_encoder::HeapType::Concrete(
-                            u32::try_from(core_type_id.index()).unwrap(),
-                        )
-                    }
-                },
-                wasmparser::HeapType::Exact(idx) => wasm_encoder::HeapType::Exact(
-                    u32::try_from(idx.as_core_type_id().unwrap().index()).unwrap(),
-                ),
-            },
-        }),
-    }
-}
-
 struct CollectMemOps<'a, 'b>(&'a mut Augmenter<'b>);
 
 macro_rules! define_visit {
@@ -670,292 +594,104 @@ impl AugmentedOp {
     }
 }
 
-struct Translator<'a, 'b> {
-    func: &'a mut wasm_encoder::Function,
+/// Re-encodes a given module to avoid multi-memory features
+///
+/// This re-encoder implements `wasm_encoder::reencode::Reencode` in order
+/// to rewrite a given multi-memory module to run in environments without multi-memory
+/// by using imports that bridge all non-0-idx memory access
+///
+/// We must generally remap functions and memories:
+///
+/// * Functions must be remapped due to injecting specialized memory-access imports (shifted by # of new imports)
+/// * Memories are remapped to ensure there are no non-0-idx memories (i.e. no multi-memory use)
+///
+struct MultiMemoryCoreReencoder<'a, 'b> {
     augmenter: &'a Augmenter<'b>,
 }
 
-// Helper macro to create a wasmparser visitor which will translate each
-// individual instruction from wasmparser to wasm-encoder.
-macro_rules! define_translate {
-    // This is the base case where all methods are defined and the body of each
-    // method delegates to a recursive invocation of this macro to hit one of
-    // the cases below.
-    ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
-        $(
-            #[allow(unreachable_code)]
-            #[allow(dropping_copy_types)]
-            #[allow(unused)]
-            fn $visit(&mut self $(, $($arg: $argty),*)?)  {
-                #[allow(unused_imports)]
-                use wasm_encoder::{
-                    Instruction::*,
-                    Ieee32, Ieee64,
-                };
+impl Reencode for MultiMemoryCoreReencoder<'_, '_> {
+    type Error = std::convert::Infallible;
 
-                define_translate!(translate self $op $($($arg)*)?)
-            }
-        )*
-    };
-
-    // Memory-related operations are translated to augmentations which are a
-    // `Call` of an imported function (or are passed through natively as the
-    // same instruction if they use memory 0).
-    (translate $self:ident I32Load $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Load, I32Load, $memarg)
-    }};
-    (translate $self:ident I32Load8U $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Load8U, I32Load8U, $memarg)
-    }};
-    (translate $self:ident I32Load8S $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Load8S, I32Load8S, $memarg)
-    }};
-    (translate $self:ident I32Load16U $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Load16U, I32Load16U, $memarg)
-    }};
-    (translate $self:ident I32Load16S $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Load16S, I32Load16S, $memarg)
-    }};
-    (translate $self:ident I64Load $memarg:ident) => {{
-        $self.augment(AugmentedOp::I64Load, I64Load, $memarg)
-    }};
-    (translate $self:ident F32Load $memarg:ident) => {{
-        $self.augment(AugmentedOp::F32Load, F32Load, $memarg)
-    }};
-    (translate $self:ident F64Load $memarg:ident) => {{
-        $self.augment(AugmentedOp::F64Load, F64Load, $memarg)
-    }};
-    (translate $self:ident I32Store $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Store, I32Store, $memarg)
-    }};
-    (translate $self:ident I32Store8 $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Store8, I32Store8, $memarg)
-    }};
-    (translate $self:ident I32Store16 $memarg:ident) => {{
-        $self.augment(AugmentedOp::I32Store16, I32Store16, $memarg)
-    }};
-    (translate $self:ident I64Store $memarg:ident) => {{
-        $self.augment(AugmentedOp::I64Store, I64Store, $memarg)
-    }};
-    (translate $self:ident F32Store $memarg:ident) => {{
-        $self.augment(AugmentedOp::F32Store, F32Store, $memarg)
-    }};
-    (translate $self:ident F64Store $memarg:ident) => {{
-        $self.augment(AugmentedOp::F64Store, F64Store, $memarg)
-    }};
-    (translate $self:ident MemorySize $mem:ident) => {{
-        if $mem < 1 {
-            $self.func.instruction(&MemorySize($mem));
-        } else {
-            let mem = MemoryIndex::from_u32($mem - 1);
-            let func = $self.augmenter.augments[&(mem, AugmentedOp::MemorySize)];
-            $self.func.instruction(&Call(func));
-        }
-    }};
-
-    // All other instructions not listed above are caught here and fall through
-    // to below cases to translate arguments/types from wasmparser to
-    // wasm-encoder and then create the new instruction.
-    (translate $self:ident $op:ident $($arg:ident)*) => {{
-        $(
-            #[allow(unused)]
-            let $arg = define_translate!(map $self $arg $arg);
-        )*
-        let insn = define_translate!(mk $op $($arg)*);
-        $self.func.instruction(&insn);
-    }};
-
-    // No-payload instructions are named the same in wasmparser as they are in
-    // wasm-encoder
-    (mk $op:ident) => ($op);
-
-    // Instructions which need "special care" to map from wasmparser to
-    // wasm-encoder
-    (mk BrTable $arg:ident) => ({
-        BrTable($arg.0, $arg.1)
-    });
-    (mk CallIndirect $ty:ident $table:ident $table_byte:ident) => ({
-        let _ = $table_byte;
-        CallIndirect { ty: $ty, table: $table }
-    });
-    (mk ReturnCallIndirect $ty:ident $table:ident) => (
-        ReturnCallIndirect { type_index: $ty, table_index: $table }
-    );
-    (mk I32Const $v:ident) => (I32Const($v));
-    (mk I64Const $v:ident) => (I64Const($v));
-    (mk F32Const $v:ident) => (F32Const(Ieee32::from(f32::from_bits($v.bits()))));
-    (mk F64Const $v:ident) => (F64Const(Ieee64::from(f64::from_bits($v.bits()))));
-    (mk V128Const $v:ident) => (V128Const($v.i128()));
-    (mk TryTable $v:ident) => (TryTable($v.0, $v.1));
-    (mk MemoryGrow $($x:tt)*) => ({
-        if true { unimplemented!() } Nop
-    });
-
-    // Catch-all for the translation of one payload argument which is typically
-    // represented as a tuple-enum in wasm-encoder.
-    (mk $op:ident $arg:ident) => ($op($arg));
-
-    // Catch-all of everything else where the wasmparser fields are simply
-    // translated to wasm-encoder fields.
-    (mk $op:ident $($arg:ident)*) => ($op { $($arg),* });
-
-    // Individual cases of mapping one argument type to another, similar to the
-    // `define_visit` macro above.
-    (map $self:ident $arg:ident memarg) => {$self.memarg($arg)};
-    (map $self:ident $arg:ident ordering) => {$self.ordering($arg)};
-    (map $self:ident $arg:ident blockty) => {$self.blockty($arg)};
-    (map $self:ident $arg:ident hty) => {$self.heapty($arg)};
-    // (map $self:ident $arg:ident tys) => {$self.tys($arg)};
-    (map $self:ident $arg:ident tys) => {$self.tys($arg)};
-    (map $self:ident $arg:ident tag_index) => {$arg};
-    (map $self:ident $arg:ident relative_depth) => {$arg};
-    (map $self:ident $arg:ident function_index) => {$self.augmenter.remap_func($arg)};
-    (map $self:ident $arg:ident global_index) => {$arg};
-    (map $self:ident $arg:ident mem) => {$self.augmenter.remap_memory($arg)};
-    (map $self:ident $arg:ident src_mem) => {$self.augmenter.remap_memory($arg)};
-    (map $self:ident $arg:ident dst_mem) => {$self.augmenter.remap_memory($arg)};
-    (map $self:ident $arg:ident table) => {$arg};
-    (map $self:ident $arg:ident table_index) => {$arg};
-    (map $self:ident $arg:ident src_table) => {$arg};
-    (map $self:ident $arg:ident dst_table) => {$arg};
-    (map $self:ident $arg:ident type_index) => {$arg};
-    (map $self:ident $arg:ident ty) => {valtype($arg)};
-    (map $self:ident $arg:ident local_index) => {$arg};
-    (map $self:ident $arg:ident lane) => {$arg};
-    (map $self:ident $arg:ident lanes) => {$arg};
-    (map $self:ident $arg:ident elem_index) => {$arg};
-    (map $self:ident $arg:ident data_index) => {$arg};
-    (map $self:ident $arg:ident table_byte) => {$arg};
-    (map $self:ident $arg:ident mem_byte) => {$arg};
-    (map $self:ident $arg:ident value) => {$arg};
-    (map $self:ident $arg:ident targets) => ((
-        $arg.targets().map(|i| i.unwrap()).collect::<Vec<_>>().into(),
-        $arg.default(),
-    ));
-    (map $self:ident $arg:ident try_table) => {$self.try_table($arg)};
-    (map $self:ident $arg:ident struct_type_index) => {$self.remap(Item::Type, $arg).unwrap()};
-    (map $self:ident $arg:ident field_index) => {$arg};
-    (map $self:ident $arg:ident array_type_index) => {$self.remap(Item::Type, $arg).unwrap()};
-    (map $self:ident $arg:ident array_size) => {$arg};
-    (map $self:ident $arg:ident array_data_index) => ($self.remap(Item::Data, $arg).unwrap());
-    (map $self:ident $arg:ident array_elem_index) => ($self.remap(Item::Element, $arg).unwrap());
-    (map $self:ident $arg:ident array_type_index_dst) => ($self.remap(Item::Type, $arg).unwrap());
-    (map $self:ident $arg:ident array_type_index_src) => ($self.remap(Item::Type, $arg).unwrap());
-    (map $self:ident $arg:ident from_ref_type) => ($self.refty(&$arg).unwrap());
-    (map $self:ident $arg:ident to_ref_type) => ($self.refty(&$arg).unwrap());
-    (map $self:ident $arg:ident cont_type_index) => ($self.remap(Item::Type, $arg).unwrap());
-    (map $self:ident $arg:ident argument_index) => ($self.remap(Item::Type, $arg).unwrap());
-    (map $self:ident $arg:ident result_index) => ($self.remap(Item::Type, $arg).unwrap());
-    (map $self:ident $arg:ident resume_table) => ((
-        unimplemented!()
-    ));
-}
-
-#[allow(clippy::diverging_sub_expression)]
-impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
-    type Output = ();
-
-    wasmparser::for_each_visit_operator!(define_translate);
-}
-
-#[allow(clippy::diverging_sub_expression)]
-impl<'a> VisitSimdOperator<'a> for Translator<'_, 'a> {
-    wasmparser::for_each_visit_simd_operator!(define_translate);
-}
-
-#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
-pub enum Item {
-    // Function,
-    // Table,
-    // Memory,
-    // Tag,
-    // Global,
-    Type,
-    Data,
-    Element,
-}
-
-impl Translator<'_, '_> {
-    fn remap(&mut self, item: Item, idx: u32) -> Result<u32> {
-        let _ = item;
-        Ok(idx)
-    }
-    fn refty(&mut self, _ty: &wasmparser::RefType) -> Result<wasm_encoder::RefType> {
-        unimplemented!()
-    }
-    fn blockty(&self, ty: wasmparser::BlockType) -> wasm_encoder::BlockType {
-        match ty {
-            wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
-            wasmparser::BlockType::Type(t) => wasm_encoder::BlockType::Result(valtype(t)),
-            wasmparser::BlockType::FuncType(i) => wasm_encoder::BlockType::FunctionType(i),
-        }
-    }
-
-    /// Re-encode a `try_table` immediate. Wasmtime's FACT-generated adapters
-    /// wrap lowerings in exception barriers (`try_table` + `catch_all`), and
-    /// tags are not remapped by augmentation, so catches pass through as-is.
-    fn try_table(
-        &self,
-        tt: wasmparser::TryTable,
-    ) -> (
-        wasm_encoder::BlockType,
-        std::borrow::Cow<'static, [wasm_encoder::Catch]>,
-    ) {
-        let catches = tt
-            .catches
-            .iter()
-            .map(|c| match *c {
-                wasmparser::Catch::One { tag, label } => wasm_encoder::Catch::One { tag, label },
-                wasmparser::Catch::OneRef { tag, label } => {
-                    wasm_encoder::Catch::OneRef { tag, label }
-                }
-                wasmparser::Catch::All { label } => wasm_encoder::Catch::All { label },
-                wasmparser::Catch::AllRef { label } => wasm_encoder::Catch::AllRef { label },
-            })
-            .collect::<Vec<_>>();
-        (self.blockty(tt.ty), catches.into())
-    }
-    fn heapty(&self, _ty: wasmparser::HeapType) -> wasm_encoder::HeapType {
-        unimplemented!()
-    }
-
-    fn tys<'a>(
-        &self,
-        _ty: Vec<wasmparser::ValType>,
-    ) -> std::borrow::Cow<'a, [wasm_encoder::ValType]> {
-        // TODO: IMPLEMENT
-        unimplemented!()
-    }
-
-    fn memarg(&self, ty: wasmparser::MemArg) -> wasm_encoder::MemArg {
-        wasm_encoder::MemArg {
-            align: ty.align.into(),
-            offset: ty.offset,
-            memory_index: self.augmenter.remap_memory(ty.memory),
-        }
-    }
-
-    fn ordering(&self, ty: wasmparser::Ordering) -> wasm_encoder::Ordering {
-        match ty {
-            wasmparser::Ordering::AcqRel => wasm_encoder::Ordering::AcqRel,
-            wasmparser::Ordering::SeqCst => wasm_encoder::Ordering::SeqCst,
-        }
-    }
-
-    fn augment(
+    fn function_index(
         &mut self,
-        op: AugmentedOp,
-        insn: fn(wasm_encoder::MemArg) -> wasm_encoder::Instruction<'static>,
-        memarg: wasmparser::MemArg,
-    ) {
-        use wasm_encoder::Instruction::{Call, I32Const};
-        if memarg.memory < 1 {
-            self.func.instruction(&insn(self.memarg(memarg)));
-            return;
+        index: u32,
+    ) -> Result<u32, wasm_encoder::reencode::Error<Self::Error>> {
+        Ok(self.augmenter.remap_func(index))
+    }
+
+    fn memory_index(
+        &mut self,
+        index: u32,
+    ) -> Result<u32, wasm_encoder::reencode::Error<Self::Error>> {
+        Ok(self.augmenter.remap_memory(index))
+    }
+}
+
+impl MultiMemoryCoreReencoder<'_, '_> {
+    fn translate(&mut self, func: &mut Function, operator: wasmparser::Operator<'_>) -> Result<()> {
+        use wasmparser::Operator::*;
+
+        match operator {
+            I32Load { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Load, memarg)
+            }
+            I32Load8U { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Load8U, memarg)
+            }
+            I32Load8S { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Load8S, memarg)
+            }
+            I32Load16U { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Load16U, memarg)
+            }
+            I32Load16S { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Load16S, memarg)
+            }
+            I64Load { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I64Load, memarg)
+            }
+            F32Load { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::F32Load, memarg)
+            }
+            F64Load { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::F64Load, memarg)
+            }
+            I32Store { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Store, memarg)
+            }
+            I32Store8 { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Store8, memarg)
+            }
+            I32Store16 { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I32Store16, memarg)
+            }
+            I64Store { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::I64Store, memarg)
+            }
+            F32Store { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::F32Store, memarg)
+            }
+            F64Store { memarg } if memarg.memory > 0 => {
+                self.augment(func, AugmentedOp::F64Store, memarg)
+            }
+            MemorySize { mem } if mem > 0 => {
+                let mem = MemoryIndex::from_u32(mem - 1);
+                let function = self.augmenter.augments[&(mem, AugmentedOp::MemorySize)];
+                func.instruction(&wasm_encoder::Instruction::Call(function));
+            }
+            operator => {
+                func.instruction(&self.instruction(operator)?);
+            }
         }
-        let idx = MemoryIndex::from_u32(memarg.memory - 1);
-        let func = self.augmenter.augments[&(idx, op)];
-        self.func.instruction(&I32Const(memarg.offset as i32));
-        self.func.instruction(&Call(func));
+        Ok(())
+    }
+
+    fn augment(&self, func: &mut Function, op: AugmentedOp, memarg: wasmparser::MemArg) {
+        use wasm_encoder::Instruction::{Call, I32Const};
+
+        let memory = MemoryIndex::from_u32(memarg.memory - 1);
+        let function = self.augmenter.augments[&(memory, op)];
+        func.instruction(&I32Const(memarg.offset as i32));
+        func.instruction(&Call(function));
     }
 }
