@@ -61,7 +61,7 @@ pub struct Transpiled {
 
 pub struct ComponentInfo {
     pub imports: Vec<String>,
-    pub exports: Vec<(String, wasmtime_environ::component::Export)>,
+    pub exports: Vec<(String, transpile_bindgen::ExportKind)>,
 }
 
 pub fn generate_types(
@@ -127,17 +127,26 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
     //
     // This does not require the correct execution of the related features post-transpilation,
     // but without the right features specified, components won't load at all.
-    let mut validator = wasmtime_environ::wasmparser::Validator::new_with_features(
-        WasmFeatures::WASM3
-            | WasmFeatures::WIDE_ARITHMETIC
-            | WasmFeatures::COMPONENT_MODEL
-            | WasmFeatures::CM_ASYNC
-            | WasmFeatures::CM_MORE_ASYNC_BUILTINS
-            | WasmFeatures::CM_ASYNC_STACKFUL
-            | WasmFeatures::CM_ERROR_CONTEXT
-            | WasmFeatures::CM_FIXED_LENGTH_LISTS
-            | WasmFeatures::CM_MAP,
-    );
+    let mut features = WasmFeatures::WASM3
+        | WasmFeatures::WIDE_ARITHMETIC
+        | WasmFeatures::COMPONENT_MODEL
+        | WasmFeatures::CM_ASYNC
+        | WasmFeatures::CM_MORE_ASYNC_BUILTINS
+        | WasmFeatures::CM_ASYNC_STACKFUL
+        | WasmFeatures::CM_ERROR_CONTEXT
+        | WasmFeatures::CM_FIXED_LENGTH_LISTS
+        | WasmFeatures::CM_MAP;
+
+    // Unless the target engine is known to support the exception handling
+    // proposal, mask exception handling off: with the feature enabled,
+    // wasmtime-environ's FACT-generated adapters wrap calls in exception
+    // barriers (`try_table`), which only runs behind a flag (e.g.
+    // --experimental-wasm-exnref) in today's JS engines.
+    if !opts.supports_wasm_exnref {
+        features = features.difference(WasmFeatures::EXCEPTIONS);
+    }
+
+    let mut validator = wasmtime_environ::wasmparser::Validator::new_with_features(features);
 
     let mut types = ComponentTypesBuilder::new(&validator);
 

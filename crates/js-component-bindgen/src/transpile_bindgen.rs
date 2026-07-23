@@ -116,6 +116,15 @@ pub struct TranspileOpts {
     /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
     #[builder(default)]
     pub asmjs: bool,
+    /// Whether the target JS engine supports the exception handling proposal
+    /// (`try_table`/exnref).
+    ///
+    /// When disabled (the default), the exceptions feature is masked off
+    /// during component validation so that wasmtime-environ's FACT-generated
+    /// adapters do not wrap calls in exception barriers, which would only run
+    /// behind a flag in today's JS engines.
+    #[builder(default)]
+    pub supports_wasm_exnref: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -1163,10 +1172,11 @@ impl<'a> Instantiator<'a, '_> {
         let mut instance_flag_defs = String::new();
         for used in self.used_instance_flags.borrow().iter() {
             let i = used.as_u32();
+            // As of wasmtime-environ 47 the per-instance flags global holds a
+            // single boolean `may_leave` flag, so initialize it to `1`.
             uwriteln!(
                 &mut instance_flag_defs,
-                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});",
-                wasmtime_environ::component::FLAG_MAY_LEAVE
+                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, 1);",
             );
         }
         self.src.js_init.prepend_str(&instance_flag_defs);

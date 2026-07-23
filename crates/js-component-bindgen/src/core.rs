@@ -52,10 +52,6 @@ use wasmparser::{
 use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
 
-fn unimplemented_try_table() -> wasm_encoder::Instruction<'static> {
-    unimplemented!()
-}
-
 pub enum Translation<'a> {
     Normal(ModuleTranslation<'a>),
     Augmented {
@@ -790,7 +786,7 @@ macro_rules! define_translate {
     (mk F32Const $v:ident) => (F32Const(Ieee32::from(f32::from_bits($v.bits()))));
     (mk F64Const $v:ident) => (F64Const(Ieee64::from(f64::from_bits($v.bits()))));
     (mk V128Const $v:ident) => (V128Const($v.i128()));
-    (mk TryTable $v:ident) => (unimplemented_try_table());
+    (mk TryTable $v:ident) => (TryTable($v.0, $v.1));
     (mk MemoryGrow $($x:tt)*) => ({
         if true { unimplemented!() } Nop
     });
@@ -836,7 +832,7 @@ macro_rules! define_translate {
         $arg.targets().map(|i| i.unwrap()).collect::<Vec<_>>().into(),
         $arg.default(),
     ));
-    (map $self:ident $arg:ident try_table) => {$arg};
+    (map $self:ident $arg:ident try_table) => {$self.try_table($arg)};
     (map $self:ident $arg:ident struct_type_index) => {$self.remap(Item::Type, $arg).unwrap()};
     (map $self:ident $arg:ident field_index) => {$arg};
     (map $self:ident $arg:ident array_type_index) => {$self.remap(Item::Type, $arg).unwrap()};
@@ -893,6 +889,31 @@ impl Translator<'_, '_> {
             wasmparser::BlockType::Type(t) => wasm_encoder::BlockType::Result(valtype(t)),
             wasmparser::BlockType::FuncType(i) => wasm_encoder::BlockType::FunctionType(i),
         }
+    }
+
+    /// Re-encode a `try_table` immediate. Wasmtime's FACT-generated adapters
+    /// wrap lowerings in exception barriers (`try_table` + `catch_all`), and
+    /// tags are not remapped by augmentation, so catches pass through as-is.
+    fn try_table(
+        &self,
+        tt: wasmparser::TryTable,
+    ) -> (
+        wasm_encoder::BlockType,
+        std::borrow::Cow<'static, [wasm_encoder::Catch]>,
+    ) {
+        let catches = tt
+            .catches
+            .iter()
+            .map(|c| match *c {
+                wasmparser::Catch::One { tag, label } => wasm_encoder::Catch::One { tag, label },
+                wasmparser::Catch::OneRef { tag, label } => {
+                    wasm_encoder::Catch::OneRef { tag, label }
+                }
+                wasmparser::Catch::All { label } => wasm_encoder::Catch::All { label },
+                wasmparser::Catch::AllRef { label } => wasm_encoder::Catch::AllRef { label },
+            })
+            .collect::<Vec<_>>();
+        (self.blockty(tt.ty), catches.into())
     }
     fn heapty(&self, _ty: wasmparser::HeapType) -> wasm_encoder::HeapType {
         unimplemented!()
