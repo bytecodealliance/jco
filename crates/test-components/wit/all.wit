@@ -647,3 +647,24 @@ world implements-labels {
   export relay: echoer;
   export echo-both: func(msg: string) -> tuple<string, string>;
 }
+
+interface stream-resources {
+  record chunk {
+    data: stream<u8>,
+  }
+
+  resource stream-summer {
+    constructor();
+    sum-stream: async func(rx: stream<chunk>) -> u32;
+  }
+}
+
+interface stream-resource-method-fns {
+  use stream-resources.{chunk};
+  sum-via-resource: async func(rx: stream<chunk>) -> u32;
+}
+
+world stream-resource-method {
+  import stream-resources;
+  export stream-resource-method-fns;
+}

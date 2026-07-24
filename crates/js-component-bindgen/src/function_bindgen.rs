@@ -2044,31 +2044,19 @@ impl Bindgen for FunctionBindgen<'_> {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
                     let cur_resource_borrows =
                         self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows));
-                    let is_host = matches!(
-                        self.resource_map.iter().nth(0).unwrap().1.data,
-                        ResourceData::Host { .. }
-                    );
-
-                    if is_host {
-                        uwriteln!(
-                            self.src,
-                            "for (const rsc of {cur_resource_borrows}) {{
-                                rsc[{symbol_resource_handle}] = undefined;
-                            }}
-                            {cur_resource_borrows} = [];"
-                        );
-                    } else {
-                        uwriteln!(
-                            self.src,
-                            "for (const {{ rsc, drop }} of {cur_resource_borrows}) {{
+                    uwriteln!(
+                        self.src,
+                        "for (const entry of {cur_resource_borrows}) {{
+                            const rsc = entry.rsc ?? entry;
+                            if (entry.drop) {{
                                 if (rsc[{symbol_resource_handle}]) {{
-                                    drop(rsc[{symbol_resource_handle}]);
-                                    rsc[{symbol_resource_handle}] = undefined;
+                                    entry.drop(rsc[{symbol_resource_handle}]);
                                 }}
                             }}
-                            {cur_resource_borrows} = [];"
-                        );
-                    }
+                            rsc[{symbol_resource_handle}] = undefined;
+                        }}
+                        {cur_resource_borrows} = [];"
+                    );
                     self.clear_resource_borrows = false;
                 }
             }

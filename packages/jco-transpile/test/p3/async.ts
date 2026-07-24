@@ -5,7 +5,7 @@ import { suite, test, assert, expect } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { setupAsyncTest } from '../helpers.js';
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues } from '../common.js';
 
 suite('Async (WASI P3)', () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
@@ -163,6 +163,52 @@ suite('Async (WASI P3)', () => {
         const resource = await exported.getResourceResult(42);
         assert.instanceOf(resource, ExampleResource);
         assert.strictEqual(resource.getId(), 42);
+
+        await cleanup();
+    });
+
+    test.concurrent('stream-taking method on imported host resource', async () => {
+        class StreamSummer {
+            async sumStream(rx) {
+                let sum = 0;
+                for await (const chunk of rx) {
+                    for (const c of Array.isArray(chunk) ? chunk : [chunk]) {
+                        for await (const value of c.data) {
+                            if (typeof value === 'number') {
+                                sum += value;
+                            } else {
+                                for (const b of value) {
+                                    sum += b;
+                                }
+                            }
+                        }
+                    }
+                }
+                return sum;
+            }
+        }
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'stream-resource-method.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/stream-resources': { StreamSummer },
+                },
+            },
+        });
+
+        const exported = instance['jco:test-components/stream-resource-method-fns'];
+        assert.instanceOf(exported.sumViaResource, AsyncFunction);
+
+        const sum = await exported.sumViaResource(
+            createReadableStreamFromValues([
+                { data: createReadableStreamFromValues(new Uint8Array([1, 2])) },
+                { data: createReadableStreamFromValues(new Uint8Array([3, 4])) },
+            ]),
+        );
+        assert.strictEqual(sum, 10);
 
         await cleanup();
     });
