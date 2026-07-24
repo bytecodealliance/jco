@@ -2,6 +2,24 @@ import { dirname, resolve } from "node:path";
 
 /** External imports that represent WebAssembly Component capabilities. */
 const WASI_EXTERNAL = /^wasi:/;
+const TYPESCRIPT_ENTRY = /\.(?:[cm]?ts|tsx)$/i;
+const TYPESCRIPT_DECLARATION_ENTRY = /\.d\.(?:[cm]?ts|tsx)$/i;
+
+/**
+ * Classify a component source path for source preparation.
+ *
+ * @param {string} sourcePath
+ * @returns {"javascript" | "typescript" | "typescript-declaration"}
+ */
+export function classifyComponentSource(sourcePath) {
+    if (TYPESCRIPT_DECLARATION_ENTRY.test(sourcePath)) {
+        return "typescript-declaration";
+    }
+    if (TYPESCRIPT_ENTRY.test(sourcePath)) {
+        return "typescript";
+    }
+    return "javascript";
+}
 
 /**
  * Load one Rolldown configuration object using Rolldown's config loader.
@@ -25,8 +43,8 @@ export async function loadBundleConfig(configPath) {
 }
 
 /**
- * Bundle a JavaScript component entry point into the single ES module expected
- * by ComponentizeJS.
+ * Bundle a JavaScript or TypeScript component entry point into the single ES
+ * module expected by ComponentizeJS.
  *
  * `aliases` and `plugins` are intentionally exposed for Jco-owned source
  * adapters, such as future runtime compatibility modules. The output shape is
@@ -38,6 +56,7 @@ export async function loadBundleConfig(configPath) {
  *   external?: Array<string | RegExp>,
  *   plugins?: Array<import("rolldown").RolldownPluginOption>,
  *   config?: import("rolldown").RolldownOptions,
+ *   typescript?: boolean,
  * }} [options]
  * @returns {Promise<string>}
  */
@@ -61,6 +80,7 @@ export async function bundleComponentSource(entryPath, options = {}) {
         input: absoluteEntryPath,
         cwd: dirname(absoluteEntryPath),
         platform: "neutral",
+        tsconfig: options.typescript ? (inputConfig.tsconfig ?? true) : inputConfig.tsconfig,
         external: mergeExternal(config.external, options.external),
         plugins: [config.plugins ?? [], options.plugins ?? []],
         resolve: {

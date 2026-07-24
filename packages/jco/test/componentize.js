@@ -1,5 +1,5 @@
 /* global Buffer */
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -69,6 +69,43 @@ suite("componentize", () => {
                 outputPath,
             ),
         ).rejects.toThrow(/--bundle-config requires --bundle/);
+    });
+
+    test("componentizes a TypeScript entry without an explicit bundle flag", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
+        const outputDir = await getTmpDir();
+        const outputPath = join(outputDir, "component.wasm");
+
+        const { stderr } = await exec(
+            jcoPath,
+            "componentize",
+            join(fixtureDir, "source.ts"),
+            "-w",
+            join(fixtureDir, "source.wit"),
+            "-o",
+            outputPath,
+        );
+        const component = await readFile(outputPath);
+
+        assert.strictEqual(stderr, "");
+        assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
+    });
+
+    test("rejects TypeScript declarations as component entries", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
+        const outputDir = await getTmpDir();
+
+        await expect(
+            exec(
+                jcoPath,
+                "componentize",
+                join(fixtureDir, "declaration.d.ts"),
+                "-w",
+                join(fixtureDir, "source.wit"),
+                "-o",
+                join(outputDir, "component.wasm"),
+            ),
+        ).rejects.toThrow(/TypeScript declaration files cannot be componentized directly/);
     });
 
     // TODO: Enable once this test can run Wizer reliably in constrained CI environments.

@@ -22,7 +22,7 @@
  * }} ComponentizeOptions
  */
 /**
- * Componentize a JavaScript entry module against a WIT world.
+ * Componentize a JavaScript or TypeScript entry module against a WIT world.
  *
  * @param {string} jsSource
  * @param {ComponentizeOptions} opts

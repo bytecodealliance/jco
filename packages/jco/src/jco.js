@@ -46,9 +46,9 @@ const FEATURE_CHOICES = ["clocks", "http", "random", "stdio", "fetch-event", "al
 
 program
     .command("componentize")
-    .description("Create a component from a JavaScript module")
-    .usage("<js-source> --wit wit-world.wit -o <component-path>")
-    .argument("<js-source>", "JS source file to build")
+    .description("Create a component from a JavaScript or TypeScript module")
+    .usage("<source> --wit wit-world.wit -o <component-path>")
+    .argument("<source>", "JavaScript or TypeScript source file to build")
     .requiredOption("-w, --wit <path>", "WIT path to build with")
     .option("-n, --world-name <name>", "WIT world to build")
     .option("--aot", "Enable Weval AOT compilation of JS")
@@ -60,7 +60,7 @@ program
     .option("--preview2-adapter <adapter>", "provide a custom preview2 adapter path")
     .option("--debug-starlingmonkey-build", "use a debug build of StarlingMonkey")
     .option("--engine <path>", "use a specific StarlingMonkey build")
-    .option("--bundle", "bundle source and its dependencies before componentization")
+    .option("--bundle", "bundle source and its dependencies before componentization (automatic for TypeScript)")
     .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
     .requiredOption("-o, --out <out>", "output component file")
     .option("--debug-bindings", "Output debug bindings and metadata during componentization (by default to stderr)")

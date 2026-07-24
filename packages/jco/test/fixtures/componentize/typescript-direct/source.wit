@@ -1,0 +1,5 @@
+package local:typescript-direct;
+
+world test {
+  export hello: func(name: string) -> string;
+}

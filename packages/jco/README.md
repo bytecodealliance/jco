@@ -57,7 +57,7 @@ Options:
   -h, --help                            display help for command
 
 Commands:
-  componentize [options] <js-source>    Create a component from a JavaScript module
+  componentize [options] <source>       Create a component from a JavaScript or TypeScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
   types [options] <wit-path>            Generate types for the given WIT
   guest-types [options] <wit-path>      (experimental) Generate guest types for the given WIT
@@ -106,13 +106,22 @@ jco serve --port 8080 server.wasm
 
 > **Note**: `jco componentize` is considered experimental, and breaking changes may be made without notice.
 
-To componentize a JS file run:
+To componentize a JavaScript file run:
 
 ```
 jco componentize app.js --wit wit -n world-name -o component.wasm
 ```
 
 Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
+
+TypeScript entry modules are transformed and bundled automatically:
+
+```
+jco componentize app.ts --wit wit -n world-name -o component.wasm
+```
+
+The TypeScript transform erases types but does not perform semantic type checking. Run `tsc --noEmit`
+separately when required.
 
 See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 

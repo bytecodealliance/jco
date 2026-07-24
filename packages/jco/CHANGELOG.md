@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### 🚀 Features
+
+- _(jco)_ support componentizing TypeScript entry modules directly
+
 ## [1.25.2] - 2026-07-09
 
 ### ⚙️ Miscellaneous Tasks

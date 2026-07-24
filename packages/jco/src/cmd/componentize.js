@@ -1,9 +1,9 @@
 import { stat, readFile, writeFile } from "node:fs/promises";
-import { resolve, basename } from "node:path";
+import { resolve, basename, extname } from "node:path";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
-import { bundleComponentSource, loadBundleConfig } from "../bundle.js";
+import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
 
 /** All features that can be enabled/disabled */
@@ -71,7 +71,7 @@ async function usesOlderWasiHTTP(witPath, worldName) {
  */
 
 /**
- * Componentize a JavaScript entry module against a WIT world.
+ * Componentize a JavaScript or TypeScript entry module against a WIT world.
  *
  * @param {string} jsSource
  * @param {ComponentizeOptions} opts
@@ -79,16 +79,24 @@ async function usesOlderWasiHTTP(witPath, worldName) {
 export async function componentize(jsSource, opts) {
     const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
 
-    if (opts.bundleConfig && opts.bundle !== true) {
+    const sourceType = classifyComponentSource(jsSource);
+    if (sourceType === "typescript-declaration") {
+        throw new Error(
+            `TypeScript declaration files cannot be componentized directly: ${jsSource}. Provide a .ts, .mts, .cts, or .tsx entry module instead.`,
+        );
+    }
+    const isTypeScript = sourceType === "typescript";
+    const shouldBundle = opts.bundle === true || isTypeScript;
+
+    if (opts.bundleConfig && !shouldBundle) {
         throw new Error("--bundle-config requires --bundle");
     }
     const bundleConfig = opts.bundleConfig ? await loadBundleConfig(opts.bundleConfig) : undefined;
-    const source =
-        opts.bundle === true
-            ? await bundleComponentSource(jsSource, { config: bundleConfig })
-            : await readFile(jsSource, "utf8");
+    const source = shouldBundle
+        ? await bundleComponentSource(jsSource, { config: bundleConfig, typescript: isTypeScript })
+        : await readFile(jsSource, "utf8");
     const witPath = resolve(opts.wit);
-    const sourceName = basename(jsSource);
+    const sourceName = isTypeScript ? `${basename(jsSource, extname(jsSource))}.js` : basename(jsSource);
 
     // Load an older version of componentize-js if we detect an older version of WASI HTTP in use
     // as the version that is usable is baked into the StarlingMonkey version provided by a given version
