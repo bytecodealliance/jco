@@ -516,59 +516,8 @@ jobs:
           name: jco-transpile-vendor
           path: packages/jco-transpile/vendor
 
-      # Build TypeScript for both packages so `types/` and `dist/` are populated
-      # in the tarballs. Order matters: jco's TS references jco-transpile/wasm-tools.
-      - name: Build TypeScript (jco-transpile, then jco)
-        run: |
-          pnpm --filter '@bytecodealliance/jco-transpile' run build:ts
-          pnpm --filter '@bytecodealliance/jco' run build:ts
-
-      - name: Pack tarballs
-        run: |
-          mkdir -p /tmp/jco-pack
-          (cd packages/jco-transpile && npm pack --pack-destination /tmp/jco-pack --ignore-scripts)
-          (cd packages/jco && npm pack --pack-destination /tmp/jco-pack --ignore-scripts)
-          ls -la /tmp/jco-pack
-
-      - name: Assert jco tarball does NOT ship obj/
-        run: |
-          if tar tzf /tmp/jco-pack/bytecodealliance-jco-*.tgz | grep -q '^package/obj/'; then
-            echo "regression: jco tarball ships obj/; browser entry should re-export from jco-transpile instead" >&2
-            tar tzf /tmp/jco-pack/bytecodealliance-jco-*.tgz | grep '^package/obj/' >&2
-            exit 1
-          fi
-
-      - name: Bundle the browser entry with esbuild against the packed tarballs
-        run: |
-          mkdir -p /tmp/jco-bundler-smoke
-          cd /tmp/jco-bundler-smoke
-          cat > package.json <<'EOF'
-          {
-            "name": "jco-bundler-smoke",
-            "private": true,
-            "type": "module"
-          }
-          EOF
-          # Install both packed tarballs; npm will accept 0.4.3 as satisfying jco's ^0.4.2 constraint.
-          npm install --no-save --no-audit --no-fund \
-            /tmp/jco-pack/bytecodealliance-jco-transpile-*.tgz \
-            /tmp/jco-pack/bytecodealliance-jco-*.tgz
-          cat > main.js <<'EOF'
-          import { generate, generateTypes, transpile } from '@bytecodealliance/jco/component';
-          if (typeof generate !== 'function') throw new Error('generate not exported');
-          if (typeof generateTypes !== 'function') throw new Error('generateTypes not exported');
-          if (typeof transpile !== 'function') throw new Error('transpile not exported');
-          EOF
-          # node:* is marked external because the vendored bindgen has runtime feature
-          # detection with a dynamic `await import("node:fs/promises")`; browsers never hit
-          # that path, and the smoke test only needs to prove import resolution succeeds.
-          npx --yes esbuild main.js \
-            --bundle \
-            --format=esm \
-            --platform=browser \
-            --outfile=out.js \
-            '--external:node:*'
-          test -s out.js
+      - name: Bundle browser entry against packed tarballs
+        run: node scripts/build-browser-bundle.mjs
 
   lint:
     runs-on: ubuntu-latest
