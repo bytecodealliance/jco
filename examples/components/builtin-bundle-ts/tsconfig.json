@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        // Jco performs the build, bundling, and final component output.
+        "noEmit": true
+    },
+    "include": ["src"]
+}

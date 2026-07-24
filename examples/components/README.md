@@ -9,6 +9,7 @@ A brief description of the examples contained in this folder:
 |------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
 | [`add`](./add)                                             | `export`s basic functionality with simple types with a bare function export (deprectaed)         |
 | [`adder`](./adder)                                         | `export`s basic functionality with simple types with an interface (recommended)                  |
+| [`builtin-bundle-ts`](./builtin-bundle-ts)                 | Componentizes a multi-file TypeScript project with Jco's built-in bundler                        |
 | [`fs-write-file`](./fs-write-file)                         | Example of using `wasi:filesystem` (p2) to write a file to disk                                  |
 | [`host-logging`](./host-logging)                           | Showcases the use of the `wasi:logging` interface with a custom embedder ("host") function       |
 | [`http-hello-world`](./http-hello-world)                   | HTTP server using the [`wasi:http/incoming-handler`][wasi-http], the hard way.                   |

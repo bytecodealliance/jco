@@ -1,0 +1,9 @@
+package examples:builtin-bundle-ts;
+
+interface greeter {
+  greet: func(name: string) -> string;
+}
+
+world component {
+  export greeter;
+}

@@ -78,6 +78,12 @@ importers:
         specifier: ^1.25.2
         version: 1.25.2
 
+  examples/components/builtin-bundle-ts:
+    dependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+
   examples/components/fs-write-file:
     dependencies:
       '@bytecodealliance/preview2-shim':

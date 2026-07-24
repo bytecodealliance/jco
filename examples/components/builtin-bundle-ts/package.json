@@ -1,0 +1,15 @@
+{
+    "name": "builtin-bundle-ts",
+    "private": true,
+    "description": "Componentize TypeScript directly with Jco's built-in bundler",
+    "type": "module",
+    "scripts": {
+        "build": "jco componentize src/component.ts --wit wit/component.wit --world-name component --out component.wasm --disable all",
+        "transpile": "jco transpile component.wasm -o dist/transpiled",
+        "run": "node run-transpiled.js",
+        "all": "pnpm run build && pnpm run transpile && pnpm run run"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco": "workspace:*"
+    }
+}

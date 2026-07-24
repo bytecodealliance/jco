@@ -13,6 +13,7 @@ packages:
   - packages/preview3-shim
   - examples/components/add
   - examples/components/adder
+  - examples/components/builtin-bundle-ts
   - examples/components/fs-write-file
   - examples/components/host-logging
   - examples/components/http-hello-world
