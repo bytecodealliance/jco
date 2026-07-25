@@ -35,6 +35,13 @@ interface async-lower-result-pointer-host {
     get-flags: async func() -> result<test-flags, string>;
 }
 
+interface async-scalar-lowers-host {
+    get-bool: async func() -> bool;
+    get-u8: async func() -> u8;
+    get-s8: async func() -> s8;
+    get-list-u8: async func() -> result<list<u8>, string>;
+}
+
 interface sync-lower-result-pointer-host {
     add-pair: func(a: u32, b: u32, c: u32, d: u32, e: u32) -> tuple<u32, u32>;
 }
@@ -263,6 +270,11 @@ world async-flat-param-adder {
 world async-lower-result-pointer {
   import async-lower-result-pointer-host;
   import sync-lower-result-pointer-host;
+  export local-run-async;
+}
+
+world async-scalar-lowers {
+  import async-scalar-lowers-host;
   export local-run-async;
 }
 
