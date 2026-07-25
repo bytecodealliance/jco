@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-484e2066.js";
+            window.path_to_searchindex_js = "searchindex-7ab4f794.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b8337dd6.js"></script>
@@ -372,7 +372,7 @@ export { test }
 </blockquote>
 <h2 id="wasi-proposals"><a class="header" href="#wasi-proposals">WASI Proposals</a></h2>
 <p><strong>Jco will always take PRs to support all open WASI proposals.</strong></p>
-<p>These PRs can be implemented by extending the <a href="https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110">default map configuration provided by Jco</a> to support the new <code>--map wasi:subsytem/*=shimpkg/subsystem#*</code> for the WASI subsystem being implemented.</p>
+<p>These PRs can be implemented by extending the <a href="https://github.com/bytecodealliance/jco/blob/main/packages/jco/src/cmd/transpile.ts">default map configuration provided by Jco</a> to support the new <code>--map wasi:subsytem/*=shimpkg/subsystem#*</code> for the WASI subsystem being implemented.</p>
 <blockquote>
 <p><code>shimpkg</code> in the above refers to a published npm package implementation to install per JS ecosystem conventions. This way, polyfill packages can be published to npm.</p>
 </blockquote>
