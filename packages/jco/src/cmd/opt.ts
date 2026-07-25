@@ -8,7 +8,26 @@ import ora from "#ora";
 
 import { styleText } from "../common.js";
 
-export async function opt(componentPath, opts, program) {
+declare const __vite_ssr_import_meta__: ImportMeta;
+declare const globalCreateRequire: typeof import("node:module").createRequire;
+
+export interface OptimizeOptions {
+    quiet: boolean;
+    asyncify?: boolean;
+    optArgs?: string[];
+    noVerify?: boolean;
+    wasmOptBin?: string;
+}
+
+export interface OptimizeResult {
+    component: Uint8Array;
+    compressionInfo: Array<{
+        beforeBytes: number;
+        afterBytes: number;
+    }>;
+}
+
+export async function opt(componentPath: string, opts: OptimizeOptions & { output: string }, program: any) {
     const varIdx = program.parent.rawArgs.indexOf("--");
     if (varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
@@ -30,14 +49,15 @@ export async function opt(componentPath, opts, program) {
         const tableContent = table(
             [
                 ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
+                    const actualAfterBytes = afterBytes!;
                     totalBeforeBytes += beforeBytes;
-                    totalAfterBytes += afterBytes;
+                    totalAfterBytes += actualAfterBytes;
                     return [
                         ` - Core Module ${i + 1}:  `,
                         sizeStr(beforeBytes),
                         " -> ",
-                        `${styleText("cyan", sizeStr(afterBytes))} `,
-                        `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
+                        `${styleText("cyan", sizeStr(actualAfterBytes))} `,
+                        `(${fixedDigitDisplay((actualAfterBytes / beforeBytes) * 100, 2)}%)`,
                     ];
                 }),
                 ["", "", "", "", ""],
@@ -64,7 +84,7 @@ ${tableContent}`);
  * @param {number} val
  * @returns {number}
  */
-function byteLengthLEB128(val) {
+function byteLengthLEB128(val: number): number {
     let len = 0;
     do {
         val >>>= 7;
@@ -79,11 +99,20 @@ function byteLengthLEB128(val) {
  * @param {{ quiet: boolean, asyncify?: boolean, optArgs?: string[], noVerify?: boolean }} opts?
  * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
-export async function optimizeComponent(componentBytes, opts) {
+export async function optimizeComponent(componentBytes: Uint8Array, opts: OptimizeOptions): Promise<OptimizeResult> {
     const showSpinner = getShowSpinner();
-    let spinner;
+    let spinner: any;
     try {
-        let componentMetadata = await metadataShow(componentBytes);
+        let componentMetadata = (await metadataShow(componentBytes)) as Array<
+            Awaited<ReturnType<typeof metadataShow>>[number] & {
+                index?: number;
+                prevLEBLen?: number;
+                optimized?: Uint8Array;
+                newLEBLen?: number;
+                sizeChange?: number;
+                children?: any[];
+            }
+        >;
         componentMetadata.forEach((metadata, index) => {
             // add index to the metadata object
             metadata.index = index;
@@ -141,19 +170,19 @@ export async function optimizeComponent(componentBytes, opts) {
 
         // organize components in modules into tree parent and children
         const nodes = componentMetadata.slice(1);
-        const getChildren = (parentIndex) => {
-            const children = [];
+        const getChildren = (parentIndex: number): any[] => {
+            const children: any[] = [];
             for (let i = 0; i < nodes.length; i++) {
                 const metadata = nodes[i];
                 if (metadata.parentIndex === parentIndex) {
                     nodes.splice(i, 1); // remove from nodes
                     i--;
-                    metadata.children = getChildren(metadata.index);
+                    metadata.children = getChildren(metadata.index!);
                     metadata.sizeChange = metadata.children.reduce((total, { prevLEBLen, newLEBLen, sizeChange }) => {
                         return sizeChange ? total + sizeChange + newLEBLen - prevLEBLen : total;
                     }, metadata.sizeChange || 0);
                     const prevSize = metadata.range[1] - metadata.range[0];
-                    metadata.newLEBLen = byteLengthLEB128(prevSize + metadata.sizeChange);
+                    metadata.newLEBLen = byteLengthLEB128(prevSize + (metadata.sizeChange ?? 0));
                     children.push(metadata);
                 }
             }
@@ -170,7 +199,7 @@ export async function optimizeComponent(componentBytes, opts) {
         let nextReadPos = 0,
             nextWritePos = 0;
 
-        const write = ({ prevLEBLen, range, optimized, children, sizeChange }) => {
+        const write = ({ prevLEBLen, range, optimized, children, sizeChange }: any) => {
             // write from the last read to the LEB byte start
             outComponentBytes.set(componentBytes.subarray(nextReadPos, range[0] - prevLEBLen), nextWritePos);
             nextWritePos += range[0] - prevLEBLen - nextReadPos;
@@ -211,7 +240,7 @@ export async function optimizeComponent(componentBytes, opts) {
             try {
                 await print(outComponentBytes);
             } catch (e) {
-                throw new Error(`Internal error performing optimization.\n${e.message}`);
+                throw new Error(`Internal error performing optimization.\n${(e as Error).message}`);
             }
         }
 
@@ -219,7 +248,7 @@ export async function optimizeComponent(componentBytes, opts) {
             component: outComponentBytes,
             compressionInfo: coreModules.map(({ range, optimized }) => ({
                 beforeBytes: range[1] - range[0],
-                afterBytes: optimized?.byteLength,
+                afterBytes: optimized!.byteLength,
             })),
         };
     } finally {
@@ -234,14 +263,14 @@ export async function optimizeComponent(componentBytes, opts) {
  * @param {Array<string>} args
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt(source, args, transpileOpts) {
+async function wasmOpt(source: Uint8Array, args: string[], transpileOpts: OptimizeOptions): Promise<Uint8Array> {
     const wasmOptBin = transpileOpts?.wasmOptBin ?? fileURLToPath(import.meta.resolve("binaryen/bin/wasm-opt"));
 
     try {
         return await spawnIOTmp(wasmOptBin, source, [...args, "-o"]);
     } catch (e) {
-        if (e.toString().includes("BasicBlock requested")) {
-            return wasmOpt(source, args);
+        if ((e as Error).toString().includes("BasicBlock requested")) {
+            return wasmOpt(source, args, transpileOpts);
         }
         throw e;
     }

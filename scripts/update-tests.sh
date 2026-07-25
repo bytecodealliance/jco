@@ -29,7 +29,7 @@ cp tests/runtime/flavorful/world.wit ../../test/fixtures/wits/flavorful/flavorfu
 cd ../..
 
 # convert the js test fixtures into a wasm component
-./src/jco.js componentize \
+./dist/jco.js componentize \
   test/fixtures/component-gen/import-fn.js \
   --wit test/fixtures/component-gen/import-fn.wit \
   -o test/fixtures/components/import-fn.component.wasm

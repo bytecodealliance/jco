@@ -157,7 +157,7 @@ suite("API", () => {
             [
                 "processed-by",
                 [
-                    ["wit-component", "0.251.0"],
+                    ["wit-component", "0.254.0"],
                     ["dummy-gen", "test"],
                 ],
             ],
@@ -199,7 +199,7 @@ suite("API", () => {
                 "processed-by",
                 [
                     // NOTE: this is the current version *in the released jco-transpile* jco uses
-                    ["wit-component", "0.251.0"],
+                    ["wit-component", "0.254.0"],
                     ["dummy-gen", "test"],
                 ],
             ],

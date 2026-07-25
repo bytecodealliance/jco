@@ -9,7 +9,7 @@ use js_component_bindgen::BindingsMode;
 use wit_component::ComponentEncoder;
 use xshell::{Shell, cmd};
 
-use crate::build::{WORKSPACE_DIR, generate_jco_type_declarations};
+use crate::build::{WORKSPACE_DIR, compile_jco_typescript};
 
 /// Type of build being performed
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -151,9 +151,11 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         // component, not the debug one.
         fs::write(&component_path, &adapted_component)?;
 
+        compile_jco_typescript()
+            .context("compiling the Jco TypeScript CLI for component optimization")?;
         let jco_script_path = format!(
             "{}",
-            WORKSPACE_DIR.join("packages/jco/src/jco.js").display()
+            WORKSPACE_DIR.join("packages/jco/dist/jco.js").display()
         );
         cmd!(
             sh,
@@ -218,6 +220,6 @@ fn transpile(args: TranspileArgs) -> Result<()> {
 pub(crate) fn run(release: bool) -> Result<()> {
     let build_type = BuildType::from_str(if release { "release" } else { "debug" })?;
     transpile_components(build_type)?;
-    generate_jco_type_declarations()?;
+    compile_jco_typescript()?;
     Ok(())
 }

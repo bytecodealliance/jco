@@ -40,8 +40,8 @@ jco is effectively a monorepo consisting of the following projects:
 * `crates/js-component-bindgen`: Rust crate for creating JS component bindgen, published under https://crates.io/crates/js-component-bindgen.
 * `crates/js-component-bindgen-component`: Component wrapper crate for the component bindgen. This allows bindgen to be self-hosted in JS.
 * `crates/wasm-tools-component`: Component wrapper crate for wasm-tools, allowing jco to invoke various Wasm toolchain functionality and also make it available through the jco API.
-* `src/api.js`: The jco API which can be used as a library dependency. Published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
-* `src/jco.js`: The jco CLI. Published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
+* `src/api.ts`: The jco API which can be used as a library dependency. It is compiled to `dist/api.js` and published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
+* `src/jco.ts`: The jco CLI. It is compiled to `dist/jco.js` and published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
 * `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as [`@bytecodealliance/preview2-shim`](https://www.npmjs.com/package/@bytecodealliance/preview2-shim).
 * `packages/preview3-shim`: The WASI Preview3 host implementations for Node.js
 

@@ -13,13 +13,13 @@ import {
 
 import { readFile, isWindows, styleText } from "../common.js";
 
-export async function parse(file, opts) {
+export async function parse(file: string, opts: any) {
     const source = (await readFile(file)).toString();
     const output = await parseFn(source);
     await writeFile(opts.output, output);
 }
 
-export async function print(file, opts) {
+export async function print(file: string, opts: any) {
     const source = await readFile(file);
     const output = await printFn(source);
     if (opts.output) {
@@ -29,9 +29,9 @@ export async function print(file, opts) {
     }
 }
 
-export async function componentWit(file, opts) {
+export async function componentWit(file: string, opts: any) {
     const source = await readFile(file);
-    const output = await componentWitFn(source, opts.document);
+    const output = await componentWitFn(source);
     if (opts.output) {
         await writeFile(opts.output, output);
     } else {
@@ -39,9 +39,9 @@ export async function componentWit(file, opts) {
     }
 }
 
-export async function componentNew(file, opts) {
+export async function componentNew(file: string | undefined, opts: any) {
     const source = file ? await readFile(file) : null;
-    let adapters = [];
+    let adapters: Array<[string, Uint8Array]> = [];
     if (opts.wasiReactor && opts.wasiCommand) {
         throw new Error("Must select one of --wasi-command or --wasi-reactor");
     }
@@ -49,40 +49,41 @@ export async function componentNew(file, opts) {
         adapters = [
             [
                 "wasi_snapshot_preview1",
-                (await readFile(new URL("../../lib/wasi_snapshot_preview1.reactor.wasm", import.meta.url))).buffer,
+                await readFile(new URL("../../lib/wasi_snapshot_preview1.reactor.wasm", import.meta.url)),
             ],
         ];
     } else if (opts.wasiCommand) {
         adapters = [
             [
                 "wasi_snapshot_preview1",
-                (await readFile(new URL("../../lib/wasi_snapshot_preview1.command.wasm", import.meta.url))).buffer,
+                await readFile(new URL("../../lib/wasi_snapshot_preview1.command.wasm", import.meta.url)),
             ],
         ];
     }
     if (opts.adapt) {
         adapters = adapters.concat(
             await Promise.all(
-                opts.adapt.map(async (adapt) => {
-                    let adapter;
+                opts.adapt.map(async (adapt: string) => {
+                    let adapter: [string, string | Uint8Array];
                     if (adapt.includes("=")) {
-                        adapter = adapt.split("=");
+                        adapter = adapt.split("=", 2) as [string, string];
                     } else {
                         adapter = [basename(adapt).slice(0, -extname(adapt).length), adapt];
                     }
-                    adapter[1] = await readFile(adapter[1]);
+                    const adapterPath = adapter[1] as string;
+                    adapter[1] = await readFile(adapterPath);
                     return adapter;
                 }),
             ),
         );
     }
-    const output = await componentNewFn(source, adapters);
+    const output = await componentNewFn(source as Uint8Array, adapters);
     await writeFile(opts.output, output);
 }
 
-export async function componentEmbed(file, opts) {
+export async function componentEmbed(file: string | undefined, opts: any) {
     if (opts.metadata) {
-        opts.metadata = opts.metadata.map((meta) => {
+        opts.metadata = opts.metadata.map((meta: string) => {
             const [field, data = ""] = meta.split("=");
             const [name, version = ""] = data.split("@");
             return [field, [[name, version]]];
@@ -95,8 +96,8 @@ export async function componentEmbed(file, opts) {
     await writeFile(opts.output, output);
 }
 
-export async function metadataAdd(file, opts) {
-    const metadata = opts.metadata.map((meta) => {
+export async function metadataAdd(file: string, opts: any) {
+    const metadata = opts.metadata.map((meta: string) => {
         const [field, data = ""] = meta.split("=");
         const [name, version = ""] = data.split("@");
         return [field, [[name, version]]];
@@ -106,7 +107,7 @@ export async function metadataAdd(file, opts) {
     await writeFile(opts.output, output);
 }
 
-export async function metadataShow(file, opts) {
+export async function metadataShow(file: string, opts: any) {
     const source = await readFile(file);
     let output = "",
         stack = [1];

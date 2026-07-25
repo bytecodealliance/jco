@@ -27,32 +27,31 @@
         "url": "git+https://github.com/bytecodealliance/jco.git"
     },
     "bin": {
-        "jco": "src/jco.js"
+        "jco": "dist/jco.js"
     },
     "files": [
-        "lib",
-        "src",
-        "types"
+        "dist",
+        "lib"
     ],
     "type": "module",
-    "main": "src/jco.js",
-    "types": "types/jco.d.ts",
+    "main": "dist/jco.js",
+    "types": "dist/jco.d.ts",
     "imports": {
         "#ora": {
-            "types": "./src/ora-shim.d.ts",
-            "browser": "./src/ora-shim.js",
+            "types": "./dist/ora-shim.d.ts",
+            "browser": "./dist/ora-shim.js",
             "default": "ora"
         }
     },
     "exports": {
         ".": {
-            "types": "./types/api.d.ts",
-            "browser": "./src/browser.js",
-            "default": "./src/api.js"
+            "types": "./dist/api.d.ts",
+            "browser": "./dist/browser.js",
+            "default": "./dist/api.js"
         },
         "./component": {
-            "types": "./types/browser.d.ts",
-            "default": "./src/browser.js"
+            "types": "./dist/browser.d.ts",
+            "default": "./dist/browser.js"
         }
     },
     "scripts": {
@@ -65,15 +64,15 @@
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
-        "test": "vitest run -c test/vitest.ts",
-        "test:lts": "vitest run -c test/vitest.lts.ts",
-        "test:extended": "vitest run -c test/vitest.extended.ts",
+        "test": "pnpm run build:ts && vitest run -c test/vitest.ts",
+        "test:lts": "pnpm run build:ts && vitest run -c test/vitest.lts.ts",
+        "test:extended": "pnpm run build:ts && vitest run -c test/vitest.extended.ts",
         "prepack": "cargo xtask build release"
     },
     "dependencies": {
         "@bytecodealliance/componentize-js": "^0.21.0",
         "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
-        "@bytecodealliance/jco-transpile": "^0.4.2",
+        "@bytecodealliance/jco-transpile": "^0.5.0",
         "@bytecodealliance/preview2-shim": "^0.17.9",
         "@bytecodealliance/preview3-shim": "^0.1.2",
         "binaryen": "^130.0.0",
