@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.0] - 2026-07-25
+
+### 🚀 Features
+
+- _(bindgen)_ support component model implements and external-id by @ricochet in #1756
+
+- _(bindgen)_ add support for map<t> by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ fix dropping multiple borrow types in one func by @lann in #1760
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ use wasm_encoder::reencode API by @vados-cosmonic in #1758
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ update upstream deps by @vados-cosmonic
+
+- _(bindgen)_ fix clippy lints by @vados-cosmonic in #1744
+
+
+
+
 ## [2.0.11] - 2026-07-09
 
 ### 🐛 Bug Fixes
