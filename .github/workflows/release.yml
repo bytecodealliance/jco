@@ -544,9 +544,11 @@ jobs:
           files: |
             ./gh-artifacts/*
 
-      - name: Install debug NPM packages
+      - name: Install NPM packages
         run: |
-          pnpm install -D
+          # NOTE: `pnpm install -D` skips both regular and optional transitive,
+          # which are needed by the git-cliff NPM package
+          pnpm install --frozen-lockfile
 
       - name: Update related PRs with release note
         continue-on-error: true
