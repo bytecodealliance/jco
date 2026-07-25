@@ -1,17 +1,26 @@
 # Creating new JavaScript and TypeScript components
 
-Jco relies on and exposes [`componentize-js`][cjs] to make it easy to build components from JavaScript
-or TypeScript ES module source code.
+Jco exposes [`componentize-js`][cjs] and [`componentize-qjs`][cqjs] to make it easy to build components
+from JavaScript or TypeScript ES module source code.
 
 Building a JavaScript component is as easy as calling `jco componentize`, with a few options:
 
-```
+```console
 jco componentize -w wit -o dist/component.wasm component.js
 ```
 
+StarlingMonkey is the default backend, but you can use [`componentize-qjs`][qjs] which is powered by [`quickjs-ng`][quickjs-ng] by passing `--backend quickjs` or `--backend qjs`:
+
+```console
+jco componentize --backend qjs -w wit -o dist/component.wasm component.js
+```
+
+The StarlingMonkey backend also accepts the aliases `starlingmonkey` and `sm`. Note that `--engine <path>`
+allows supplying a a custom StarlingMonkey build and cannot be combined with the `componentize-qjs` backend.
+
 TypeScript entry modules are transformed and bundled automatically:
 
-```shell
+```console
 jco componentize -w wit -o dist/component.wasm component.ts
 ```
 
@@ -23,12 +32,14 @@ from the entry project.
 There are many examples in the [Jco component examples folder][jco-component-examples]
 
 [cjs]: https://github.com/bytecodealliance/componentize-js
+[cqjs]: https://github.com/andreiltd/componentize-qjs
+[quickjs-ng]: https://github.com/quickjs-ng/quickjs
 [jco-component-examples]: https://github.com/bytecodealliance/jco/tree/main/examples/components
 
 ## Bundling
 
-By default, Jco passes a JavaScript source module directly to ComponentizeJS with no intermediate processing.
-TypeScript entry modules are always bundled because ComponentizeJS consumes the generated JavaScript.
+By default, Jco passes a JavaScript source module directly to the selected componentization backend with no
+intermediate processing. TypeScript entry modules are always bundled so the backend receives generated JavaScript.
 
 Use `--bundle` to bundle the entry module and its local or npm package dependencies before componentization.
 Package resolution starts from the entry module's project, and `wasi:*` imports remain external so they can

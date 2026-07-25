@@ -26,7 +26,7 @@ Jco (`jco`) provides a [Javascript][js]-native toolchain for working with [WebAs
 
 With Jco (and related projects in this repository), you can:
 
-- **Build WebAssembly components** from Javascript/Typescript with the help of [`componentize-js`][cjs]
+- **Build WebAssembly components** from Javascript/Typescript with [`componentize-js`][cjs] or [`componentize-qjs`][cqjs]
 - **"Transpile" WebAssembly components** into ES modules that can run in environments like NodeJS and the browser, combining platform-native WebAssembly core support with the advanced features of WebAssembly Components
 - **Run WebAssembly components** whether single-shot applications or web servers (similar to [`wasmtime run`][wasmtime-run]/[`wasmtime serve`][wasmtime-serve])
 - **Reuse WebAssembly component workflows** (e.g. building components, transpiling, etc) from your own JS projects
@@ -35,6 +35,7 @@ With Jco (and related projects in this repository), you can:
 [cm-book]: https://component-model.bytecodealliance.org/
 [js]: https://developer.mozilla.org/en-US/docs/Web/JavaScript
 [cjs]: https://github.com/bytecodealliance/componentize-js
+[cqjs]: https://github.com/andreiltd/componentize-qjs
 [wt]: https://github.com/bytecodealliance/wasm-tools
 [wasmtime-serve]: https://docs.wasmtime.dev/cli-options.html#serve
 [wasmtime-run]: https://docs.wasmtime.dev/cli-options.html#run
