@@ -8,6 +8,7 @@
  *   aot?: boolean,
  *   aotMinStackSizeBytes?: number,
  *   wevalBin?: string,
+ *   wizerBin?: string,
  *   disable?: string[],
  *   enable?: string[],
  *   debug?: boolean,
@@ -37,6 +38,7 @@ export type ComponentizeOptions = {
     aot?: boolean;
     aotMinStackSizeBytes?: number;
     wevalBin?: string;
+    wizerBin?: string;
     disable?: string[];
     enable?: string[];
     debug?: boolean;

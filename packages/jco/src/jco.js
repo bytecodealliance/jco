@@ -54,6 +54,7 @@ program
     .option("--aot", "Enable Weval AOT compilation of JS")
     .option("--aot-min-stack-size-bytes <number>", "Set the min stack size to be used during AOT")
     .option("--weval-bin <path>", "Specify a custom weval binary to use")
+    .option("--wizer-bin <path>", "Specify a custom wizer binary to use")
     .addOption(new Option("-d, --disable <feature...>", "disable WASI features").choices(FEATURE_CHOICES))
     .addOption(new Option("--enable <feature...>", "enable WASI features").choices(FEATURE_CHOICES))
     .option("--debug", "configure jco for debug (e.g. disable all features except stdio, etc)")
