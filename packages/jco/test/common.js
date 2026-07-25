@@ -12,7 +12,7 @@ export const LINTER_PATH = fileURLToPath(new URL("../../../node_modules/oxlint/b
 export const AsyncFunction = (async () => {}).constructor;
 
 /** Path to Jco JS script */
-export const JCO_JS_PATH = fileURLToPath(new URL("../src/jco.js", import.meta.url));
+export const JCO_JS_PATH = fileURLToPath(new URL("../dist/jco.js", import.meta.url));
 
 /** Path to test/tsconfig.json */
 export const TEST_TS_CONFIG_PATH = fileURLToPath(new URL("./tsconfig.json", import.meta.url));

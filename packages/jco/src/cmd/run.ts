@@ -9,7 +9,7 @@ import { transpileCmd } from "./transpile.js";
 
 const DEFAULT_SERVE_HOST = "localhost";
 
-export async function run(componentPath, args, opts) {
+export async function run(componentPath: string, args: string[], opts: any) {
     // Ensure that `args` is an array
     args = [...args];
     return runComponent(
@@ -35,7 +35,7 @@ export async function run(componentPath, args, opts) {
     );
 }
 
-export async function serve(componentPath, args, opts) {
+export async function serve(componentPath: string, args: string[], opts: any) {
     let tryFindPort = false;
     let { port, host } = opts;
     if (port === undefined) {
@@ -74,7 +74,7 @@ export async function serve(componentPath, args, opts) {
     );
 }
 
-async function runComponent(componentPath, args, opts, executor) {
+async function runComponent(componentPath: string, args: string[], opts: any, executor: string) {
     const jcoImport = opts.jcoImport ? resolve(opts.jcoImport) : null;
 
     const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
@@ -110,8 +110,9 @@ async function runComponent(componentPath, args, opts, executor) {
                 "../../../",
             );
         } catch (err) {
+            const error = err as Error;
             let msg = `${styleText(["red", "bold"], "error")} Failed to resolve ${styleText("bold", "@bytecodealliance/preview2-shim")}, ensure it is installed.`;
-            msg += `\nERROR:\n${err.toString()}`;
+            msg += `\nERROR:\n${error.toString()}`;
             throw new Error(msg);
         }
 
@@ -121,7 +122,7 @@ async function runComponent(componentPath, args, opts, executor) {
         try {
             await symlink(preview2ShimPath, resolve(modulesDir, "preview2-shim"), "dir");
         } catch (e) {
-            if (e.code !== "EEXIST") {
+            if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
                 throw e;
             }
         }

@@ -1,4 +1,13 @@
 import { dirname, resolve } from "node:path";
+import type { ExternalOption, RolldownOptions, RolldownPluginOption } from "rolldown";
+
+export interface BundleComponentSourceOptions {
+    aliases?: Record<string, string | false | string[]>;
+    external?: ExternalOption[];
+    plugins?: RolldownPluginOption[];
+    config?: RolldownOptions;
+    typescript?: boolean;
+}
 
 /** External imports that represent WebAssembly Component capabilities. */
 const WASI_EXTERNAL = /^wasi:/;
@@ -11,7 +20,7 @@ const TYPESCRIPT_DECLARATION_ENTRY = /\.d\.(?:[cm]?ts|tsx)$/i;
  * @param {string} sourcePath
  * @returns {"javascript" | "typescript" | "typescript-declaration"}
  */
-export function classifyComponentSource(sourcePath) {
+export function classifyComponentSource(sourcePath: string): "javascript" | "typescript" | "typescript-declaration" {
     if (TYPESCRIPT_DECLARATION_ENTRY.test(sourcePath)) {
         return "typescript-declaration";
     }
@@ -27,7 +36,7 @@ export function classifyComponentSource(sourcePath) {
  * @param {string} configPath
  * @returns {Promise<import("rolldown").RolldownOptions>}
  */
-export async function loadBundleConfig(configPath) {
+export async function loadBundleConfig(configPath: string): Promise<RolldownOptions> {
     const { loadConfig } = await import("rolldown/config");
     let config = await loadConfig(resolve(configPath));
     if (typeof config === "function") {
@@ -60,7 +69,10 @@ export async function loadBundleConfig(configPath) {
  * }} [options]
  * @returns {Promise<string>}
  */
-export async function bundleComponentSource(entryPath, options = {}) {
+export async function bundleComponentSource(
+    entryPath: string,
+    options: BundleComponentSourceOptions = {},
+): Promise<string> {
     const { rolldown } = await import("rolldown");
     const absoluteEntryPath = resolve(entryPath);
     const config = options.config ?? {};
@@ -69,12 +81,18 @@ export async function bundleComponentSource(entryPath, options = {}) {
     }
     const { output: configOutput, ...inputConfig } = config;
     const configAlias = config.resolve?.alias;
-    const aliases = Array.isArray(configAlias)
-        ? [
-              ...configAlias,
-              ...Object.entries(options.aliases ?? {}).map(([find, replacement]) => ({ find, replacement })),
-          ]
-        : { ...(configAlias ?? {}), ...(options.aliases ?? {}) };
+    const aliases = (
+        Array.isArray(configAlias)
+            ? [
+                  ...configAlias,
+                  ...Object.entries(options.aliases ?? {}).map(([find, replacement]) => ({ find, replacement })),
+              ]
+            : { ...(configAlias ?? {}), ...(options.aliases ?? {}) }
+    ) as RolldownOptions["resolve"] extends {
+        alias?: infer Alias;
+    }
+        ? Alias
+        : never;
     const build = await rolldown({
         ...inputConfig,
         input: absoluteEntryPath,
@@ -115,12 +133,20 @@ export async function bundleComponentSource(entryPath, options = {}) {
     }
 }
 
-function mergeExternal(configExternal, jcoExternal = []) {
-    const external = [WASI_EXTERNAL, configExternal, ...jcoExternal].filter(Boolean);
-    return (id, parentId, isResolved) => external.some((option) => matchesExternal(option, id, parentId, isResolved));
+function mergeExternal(configExternal: ExternalOption | undefined, jcoExternal: ExternalOption[] = []) {
+    const external = [WASI_EXTERNAL, configExternal, ...jcoExternal].filter(
+        (option): option is Exclude<ExternalOption, undefined> => option !== undefined,
+    );
+    return (id: string, parentId: string | undefined, isResolved: boolean) =>
+        external.some((option) => matchesExternal(option, id, parentId, isResolved));
 }
 
-function matchesExternal(option, id, parentId, isResolved) {
+function matchesExternal(
+    option: Exclude<ExternalOption, undefined>,
+    id: string,
+    parentId: string | undefined,
+    isResolved: boolean,
+): boolean {
     if (typeof option === "function") {
         return option(id, parentId, isResolved) === true;
     }

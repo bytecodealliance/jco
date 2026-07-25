@@ -4,14 +4,14 @@ import {
     generateTypes as _generateTypes,
 } from "@bytecodealliance/jco-transpile/component";
 
-export async function generate() {
+export async function generate(...args: Parameters<typeof _generate>) {
     await $init;
-    return _generate.apply(this, arguments);
+    return _generate(...args);
 }
 
-export async function generateTypes() {
+export async function generateTypes(...args: Parameters<typeof _generateTypes>) {
     await $init;
-    return _generateTypes.apply(this, arguments);
+    return _generateTypes(...args);
 }
 
 // for backwards compat

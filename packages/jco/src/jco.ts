@@ -27,7 +27,7 @@ program
     .enablePositionalOptions()
     .version("1.25.2");
 
-function myParseInt(value) {
+function myParseInt(value: string): number {
     return parseInt(value, 10);
 }
 
@@ -37,7 +37,7 @@ function myParseInt(value) {
  * @param {string} value - the new value that is added
  * @param {string[]} previous - the existing list of values
  */
-function collectOptions(value, previous) {
+function collectOptions(value: string, previous: string[]): string[] {
     return previous.concat([value]);
 }
 
@@ -225,7 +225,7 @@ program
     )
     .argument("[args...]", "Any CLI arguments for the component")
     .action(
-        asyncAction(async function run(cmd, args, opts, command) {
+        asyncAction(async function run(cmd: string, args: string[], opts: any, command: any) {
             // specially only allow help option in first position
             if (cmd === "--help" || cmd === "-h") {
                 command.help();
@@ -259,7 +259,7 @@ program
     .option("--jco-map <mappings...>", "specifier=./output custom mappings for the component imports")
     .argument("[args...]", "Any CLI arguments for the component")
     .action(
-        asyncAction(async function serve(cmd, args, opts, command) {
+        asyncAction(async function serve(cmd: string, args: string[], opts: any, command: any) {
             // specially only allow help option in first position
             if (cmd === "--help" || cmd === "-h") {
                 command.help();
@@ -345,9 +345,9 @@ program.showHelpAfterError();
 
 program.parse();
 
-function asyncAction(cmd) {
-    return function () {
-        const args = [...arguments];
+function asyncAction(cmd: (...args: any[]) => unknown) {
+    return function (...actionArgs: any[]) {
+        const args = actionArgs;
         (async () => {
             try {
                 await cmd.apply(null, args);

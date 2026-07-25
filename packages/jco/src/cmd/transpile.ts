@@ -4,34 +4,38 @@ import { transpile, transpileBytes } from "@bytecodealliance/jco-transpile";
 
 import { setShowSpinner, writeFiles } from "../common.js";
 
+declare const __vite_ssr_import_meta__: ImportMeta;
+declare const globalCreateRequire: typeof import("node:module").createRequire;
+
+export interface TranspileOpts {
+    name?: string;
+    instantiation?: "async" | "sync";
+    importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
+    map?: Record<string, string>;
+    asyncMode?: string;
+    asyncImports?: string[];
+    asyncExports?: string[];
+    validLiftingOptimization?: boolean;
+    tracing?: boolean;
+    nodejsCompat?: boolean;
+    tlaCompat?: boolean;
+    base64Cutoff?: number;
+    js?: boolean;
+    minify?: boolean;
+    optimize?: boolean;
+    namespacedExports?: boolean;
+    outDir?: string;
+    multiMemory?: boolean;
+    experimentalIdlImports?: boolean;
+    optArgs?: string[];
+    wasmOptBin?: string[];
+    quiet?: boolean;
+    noTypescript?: boolean;
+    wasiShim?: boolean;
+}
+
 // These re-exports exist to avoid breaking backwards compatibility
 export { types, guestTypes, typesComponent } from "./types.js";
-
-/**
- * @typedef {{
- *   name: string,
- *   instantiation?: 'async' | 'sync',
- *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
- *   map?: Record<string, string>,
- *   asyncMode?: string,
- *   asyncImports?: string[],
- *   asyncExports?: string[],
- *   validLiftingOptimization?: bool,
- *   tracing?: bool,
- *   nodejsCompat?: bool,
- *   tlaCompat?: bool,
- *   base64Cutoff?: bool,
- *   js?: bool,
- *   minify?: bool,
- *   optimize?: bool,
- *   namespacedExports?: bool,
- *   outDir?: string,
- *   multiMemory?: bool,
- *   experimentalIdlImports?: bool,
- *   optArgs?: string[],
- *   wasmOptBin?: string[],
- * }} TranspileOpts
- */
 
 /**
  * Transpile a component, given a path.
@@ -40,7 +44,7 @@ export { types, guestTypes, typesComponent } from "./types.js";
  * @param {TranspileOpts} opts
  * @param {object} comander `Program` object
  */
-export async function transpileCmd(componentPath, opts, program) {
+export async function transpileCmd(componentPath: string, opts: TranspileOpts, program?: any): Promise<void> {
     const { files } = await transpile(componentPath, prepOpts(opts, program));
     await writeFiles(files, opts.quiet ? false : "Transpiled JS Component Files");
 }
@@ -52,11 +56,15 @@ export async function transpileCmd(componentPath, opts, program) {
  * @param {TranspileOpts} [opts]
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
-export async function transpileComponent(component, opts = {}) {
-    return transpileBytes(component, prepOpts(opts));
+export async function transpileComponent(component: Uint8Array, opts: TranspileOpts = {}) {
+    return transpileBytes(component, prepOpts(opts)) as Promise<{
+        files: Record<string, Uint8Array>;
+        imports: string[];
+        exports: [string, "function" | "instance"][];
+    }>;
 }
 
-function prepOpts(opts, program) {
+function prepOpts(opts: any, program?: any) {
     const varIdx = program?.parent.rawArgs.indexOf("--");
     if (varIdx !== undefined && varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
@@ -71,7 +79,7 @@ function prepOpts(opts, program) {
             opts.map = opts.map.split(",");
         }
         if (Array.isArray(opts.map)) {
-            opts.map = Object.fromEntries(opts.map.map((s) => s.split("=")));
+            opts.map = Object.fromEntries(opts.map.map((s: string) => s.split("=")));
         }
     }
 

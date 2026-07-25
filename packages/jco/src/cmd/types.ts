@@ -12,13 +12,35 @@ import {
     DEFAULT_ASYNC_MODE,
 } from "../common.js";
 
+declare const __vite_ssr_import_meta__: ImportMeta;
+declare const globalCreateRequire: typeof import("node:module").createRequire;
+
 /** Default relative path for guest type declaration generation */
 const DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH = "./types/generated/wit/guest";
 
 /** Default relative path for host type declaration generation */
 const DEFAULT_HOST_TYPES_OUTPUT_DIR_PATH = "./types/generated/wit/host";
 
-export async function types(witPath, opts) {
+export interface TypesOptions {
+    name?: string;
+    worldName?: string;
+    instantiation?: "async" | "sync";
+    tlaCompat?: boolean;
+    asyncMode?: string;
+    asyncImports?: string[];
+    asyncExports?: string[];
+    outDir?: string;
+    allFeatures?: boolean;
+    feature?: string[] | "all";
+    features?: string[] | "all";
+    asyncWasiImports?: string[];
+    asyncWasiExports?: string[];
+    guest?: boolean;
+    quiet?: boolean;
+    strict?: boolean;
+}
+
+export async function types(witPath: string | undefined, opts: TypesOptions) {
     witPath = await resolveDefaultWITPath(witPath);
 
     // Use the default output directory if one was not provided
@@ -35,7 +57,7 @@ export async function types(witPath, opts) {
     await writeFiles(files, opts.quiet ? false : "Generated Type Files");
 }
 
-export async function guestTypes(witPath, opts) {
+export async function guestTypes(witPath: string | undefined, opts: TypesOptions) {
     witPath = await resolveDefaultWITPath(witPath);
 
     // Use the default output directory if one was not provided
@@ -73,11 +95,11 @@ export async function guestTypes(witPath, opts) {
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
-export async function typesComponent(witPath, opts) {
+export async function typesComponent(witPath: string, opts: TypesOptions): Promise<Record<string, Uint8Array>> {
     const name =
         opts.name ||
         (opts.worldName
-            ? opts.worldName.split(":").pop().split("/").pop()
+            ? opts.worldName.split(":").pop()!.split("/").pop()
             : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
 
     let instantiation;
@@ -97,7 +119,7 @@ export async function typesComponent(witPath, opts) {
     }
 
     // Bulid list of enabled features
-    let features = null;
+    let features: any = undefined;
     if (opts.allFeatures) {
         features = { tag: "all" };
     } else if (Array.isArray(opts.feature)) {
@@ -120,7 +142,7 @@ export async function typesComponent(witPath, opts) {
     // even though it is not relevant here (JSPI may not be used, as types may
     // be used to generate a guest that is never transpiled).
     let asyncMode = opts.asyncMode ?? DEFAULT_ASYNC_MODE;
-    let asyncModeObj;
+    let asyncModeObj: any;
     if (asyncMode === "jspi" || asyncExports.size > 0) {
         asyncModeObj = {
             tag: "jspi",
@@ -130,7 +152,7 @@ export async function typesComponent(witPath, opts) {
             },
         };
     } else if (asyncMode === "sync") {
-        asyncModeObj = null;
+        asyncModeObj = undefined;
     } else {
         throw new Error(`invalid/unrecognized async mode [${asyncMode}]`);
     }
@@ -150,17 +172,18 @@ export async function typesComponent(witPath, opts) {
             guest,
             strict: opts.strict === true,
             asyncMode: asyncModeObj,
-        });
+        } as any);
         types = Object.entries(generated).map(([name, bytes]) => [`${outDir}${name}`, bytes]);
     } catch (err) {
-        if (err.toString().includes("does not match previous package name")) {
+        const error = err as Error;
+        if (error.toString().includes("does not match previous package name")) {
             const hint = await printWITLayoutHint(absWitPath);
-            if (err.message) {
-                err.message += `\n${hint}`;
+            if (error.message) {
+                error.message += `\n${hint}`;
             }
-            throw err;
+            throw error;
         }
-        throw err;
+        throw error;
     }
 
     return Object.fromEntries(types);
@@ -171,7 +194,7 @@ export async function typesComponent(witPath, opts) {
  *
  * @param {(string, any) => void} consoleFn
  */
-async function printWITLayoutHint(witPath) {
+async function printWITLayoutHint(witPath: string): Promise<string> {
     const warningPrefix = styleText(["yellow", "bold"], "warning");
     const pathMeta = await stat(witPath);
     let output = "\n";

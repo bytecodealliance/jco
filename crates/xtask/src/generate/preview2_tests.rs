@@ -204,7 +204,7 @@ pub fn run() -> Result<()> {
     );
 
     let output_module_path = jco_crate_dir.join("tests/generated/mod.rs");
-    let jco_script_path = project_dir.join("packages/jco/src/jco.js");
+    let jco_script_path = project_dir.join("packages/jco/dist/jco.js");
 
     // Perform the tests
     let all_names = Arc::new(Mutex::new(Vec::new()));
@@ -325,9 +325,9 @@ struct GenerateTestArgs<'a> {
     windows_skip: bool,
     /// Whether it's a deno test
     deno: bool,
-    /// Path to Jco script (packages/jco/src/jco.js)
+    /// Path to Jco script (packages/jco/dist/jco.js)
     jco_script_path: &'a Path,
-    /// Path to Jco script (packages/jco/src/jco.js)
+    /// Path to Jco script (packages/jco/dist/jco.js)
     jco_crate_dir: &'a Path,
 }
 
@@ -534,7 +534,7 @@ fn {test_name}() -> anyhow::Result<()> {{
 struct GenerateCommandArgs<'a> {
     /// Command name
     cmd_name: &'a str,
-    /// Path to JCO script (i.e. packages/jco/src/jco.js)
+    /// Path to JCO script (i.e. packages/jco/dist/jco.js)
     jco_script_path: &'a Path,
     /// Path to the jco crate (i.e. crates/jco)
     jco_crate_dir: &'a Path,

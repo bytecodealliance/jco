@@ -14,12 +14,12 @@ pub(crate) static WORKSPACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     xtask_manifest_dir.join("../../")
 });
 
-/// Generate TypeScript type declarations for the `@bytecodealliance/jco` package.
+/// Compile the TypeScript runtime and declarations for the `@bytecodealliance/jco` package.
 ///
-/// This must run after [transpile_components] (or `npm run build`) because `src/api.js`
+/// This must run after [transpile_components] (or `npm run build`) because `src/api.ts`
 /// uses types from `obj/wasm-tools.js`.
 ///
-pub(crate) fn generate_jco_type_declarations() -> Result<()> {
+pub(crate) fn compile_jco_typescript() -> Result<()> {
     let sh = Shell::new()?;
     cmd!(sh, "pnpm run --filter '@bytecodealliance/jco' build:ts").read()?;
     Ok(())

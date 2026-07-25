@@ -27,16 +27,16 @@ export const DEFAULT_ASYNC_MODE = "sync";
 export const DEFAULT_WIT_PATH = "./wit";
 
 let _showSpinner = false;
-export function setShowSpinner(val) {
+export function setShowSpinner(val: boolean): void {
     _showSpinner = val;
 }
-export function getShowSpinner() {
+export function getShowSpinner(): boolean {
     const showSpinner = _showSpinner;
     _showSpinner = false;
     return showSpinner;
 }
 
-export function sizeStr(num) {
+export function sizeStr(num: number): string {
     num /= 1024;
     if (num < 1000) {
         return `${fixedDigitDisplay(num, 4)} KiB`;
@@ -45,9 +45,11 @@ export function sizeStr(num) {
     if (num < 1000) {
         return `${fixedDigitDisplay(num, 4)} MiB`;
     }
+    num /= 1024;
+    return `${fixedDigitDisplay(num, 4)} GiB`;
 }
 
-export function fixedDigitDisplay(num, maxChars) {
+export function fixedDigitDisplay(num: number, maxChars: number): string {
     const significantDigits = String(num).split(".")[0].length;
     let str;
     if (significantDigits >= maxChars - 1) {
@@ -70,7 +72,7 @@ export function fixedDigitDisplay(num, maxChars) {
  * @param {string[]} align - alignment of columns
  * @returns string
  */
-export function table(rows, align = []) {
+export function table(rows: string[][], align: Array<string | undefined> = []): string {
     if (rows.length === 0) {
         return "";
     }
@@ -99,7 +101,7 @@ export function table(rows, align = []) {
  *
  * @returns {Promise<string>} A `Promise` that resovles to a created temporary directory path
  */
-export async function getTmpDir() {
+export async function getTmpDir(): Promise<string> {
     return await mkdtemp(normalize(tmpdir() + sep));
 }
 
@@ -110,11 +112,13 @@ export async function getTmpDir() {
  * @param {encoding} encoding - file encoding
  * @returns {Promise<Buffer>} A promise that resolves to the contents of the file
  */
-async function readFileCli(filePath, encoding) {
+async function readFileCli(filePath: string | URL): Promise<Buffer>;
+async function readFileCli(filePath: string | URL, encoding: BufferEncoding): Promise<string>;
+async function readFileCli(filePath: string | URL, encoding?: BufferEncoding): Promise<Buffer | string> {
     try {
         return await readFile(filePath, encoding);
     } catch {
-        throw `Unable to read file ${styleText("bold", filePath)}`;
+        throw `Unable to read file ${styleText("bold", String(filePath))}`;
     }
 }
 export { readFileCli as readFile };
@@ -135,7 +139,7 @@ export { readFileCli as readFile };
  * @param {string[]} args - arguments to pass to the command (after the input file and before the output file)
  * @returns {Promise<Buffer<ArrayBufferLike>>} A `Promise` that resolves when the command has exited
  */
-export async function spawnIOTmp(cmd, inputWasmBytes, args) {
+export async function spawnIOTmp(cmd: string, inputWasmBytes: Uint8Array, args: string[]): Promise<Buffer> {
     const tmpDir = await getTmpDir();
     try {
         const inFile = resolve(tmpDir, "in.wasm");
@@ -148,7 +152,7 @@ export async function spawnIOTmp(cmd, inputWasmBytes, args) {
         });
 
         let stderr = "";
-        const p = new Promise((resolve, reject) => {
+        const p = new Promise<void>((resolve, reject) => {
             cp.stderr.on("data", (data) => (stderr += data.toString()));
             cp.on("error", (e) => {
                 reject(e);
@@ -181,7 +185,10 @@ export async function spawnIOTmp(cmd, inputWasmBytes, args) {
  * @returns {Promise<void>>} A `Promise` that resolves when the fiels are all written
  *
  */
-export async function writeFiles(files, summaryTitle) {
+export async function writeFiles(
+    files: Record<string, string | Uint8Array>,
+    summaryTitle: string | false,
+): Promise<void> {
     await Promise.all(
         Object.entries(files).map(async ([filePath, contents]) => {
             await mkdir(dirname(filePath), { recursive: true });
@@ -208,7 +215,7 @@ ${table(rows)}`);
  * @param {string | undefined} [witPath]
  * @returns {Promise<string>}
  */
-export async function resolveDefaultWITPath(witPath) {
+export async function resolveDefaultWITPath(witPath?: string): Promise<string> {
     if (witPath) {
         return witPath;
     }
@@ -232,7 +239,7 @@ export async function resolveDefaultWITPath(witPath) {
  * @param {string} text - text that should be styled
  * @returns {string} The styled string
  */
-export function styleText(styles, text) {
+export function styleText(styles: Parameters<typeof nodeUtils.styleText>[0], text: string): string {
     if (nodeUtils.styleText) {
         return nodeUtils.styleText(styles, text);
     }

@@ -12,14 +12,50 @@ const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
 /** Features that should be used for --debug mode */
 const DEBUG_FEATURES = ["stdio"];
 
-const COMPONENTIZE_BACKENDS = {
+type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm";
+
+export interface ComponentizeOptions {
+    wit: string;
+    out: string;
+    worldName?: string;
+    bundle?: boolean;
+    bundleConfig?: string;
+    backend?: ComponentizeJSBackend;
+    backendQjsDisableAysnc: boolean;
+    aot?: boolean;
+    aotMinStackSizeBytes?: number;
+    wevalBin?: string;
+    wizerBin?: string;
+    disable?: string[];
+    enable?: string[];
+    debug?: boolean;
+    preview2Adapter?: string;
+    debugStarlingmonkeyBuild?: boolean;
+    engine?: string;
+    debugBindings?: boolean;
+    debugBindingsDir?: string;
+    debugBinary?: boolean;
+    debugBinaryPath?: string;
+    debugEnableWizerLogging?: boolean;
+}
+
+/** Arguments to a componentize backend */
+interface BackendComponentizeArgs {
+    opts: ComponentizeOptions;
+    sourceName: string;
+    jsSource: string;
+    source: string;
+    witPath: string;
+}
+
+const COMPONENTIZE_BACKENDS: Record<string, ComponentizeJSBackend> = {
     starlingmonkey: "starlingmonkey",
     sm: "starlingmonkey",
     quickjs: "quickjs",
     qjs: "quickjs",
 };
 
-const STARLINGMONKEY_OPTIONS = [
+const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
     "aot",
     "aotMinStackSizeBytes",
     "wevalBin",
@@ -35,6 +71,7 @@ const STARLINGMONKEY_OPTIONS = [
     "debugBinaryPath",
     "debugEnableWizerLogging",
 ];
+
 /**
  * Detect whether the WIT of a given component contains an older version of
  * `wasi:http` which necessitates an older version of `componentize-js`
@@ -42,15 +79,15 @@ const STARLINGMONKEY_OPTIONS = [
  * @param {string} witPath
  * @returns bool
  */
-async function usesOlderWasiHTTP(witPath, worldName) {
+async function usesOlderWasiHTTP(witPath: string, worldName?: string) {
     witPath = (isWindows ? "//?/" : "") + resolve(witPath);
-    const worldMetadata = await componentWitMetadataForWorld({ tag: "path", val: witPath }, worldName ?? null);
+    const worldMetadata = await componentWitMetadataForWorld({ tag: "path", val: witPath }, worldName);
 
     // Check if the an old `wasi:http/incoming-handler` version is exported
     const exportsOldIncomingHandler = worldMetadata.exports.some((iface) => {
         return (
             iface.namespace === "wasi" &&
-            iface.version !== null &&
+            iface.version != null &&
             iface.version.major === 0n &&
             iface.version.minor < 3n &&
             iface.version.patch < 10n
@@ -60,7 +97,7 @@ async function usesOlderWasiHTTP(witPath, worldName) {
     const importsOldFetch = worldMetadata.imports.some((iface) => {
         return (
             iface.namespace === "wasi" &&
-            iface.version !== null &&
+            iface.version != null &&
             iface.version.major === 0n &&
             iface.version.minor < 3n &&
             iface.version.patch < 10n
@@ -69,31 +106,6 @@ async function usesOlderWasiHTTP(witPath, worldName) {
 
     return exportsOldIncomingHandler || importsOldFetch;
 }
-/**
- * @typedef {{
- *   wit: string,
- *   out: string,
- *   worldName?: string,
- *   bundle?: boolean,
- *   bundleConfig?: string,
- *   backend?: "starlingmonkey" | "sm" | "quickjs" | "qjs",
- *   aot?: boolean,
- *   aotMinStackSizeBytes?: number,
- *   wevalBin?: string,
- *   wizerBin?: string,
- *   disable?: string[],
- *   enable?: string[],
- *   debug?: boolean,
- *   preview2Adapter?: string,
- *   debugStarlingmonkeyBuild?: boolean,
- *   engine?: string,
- *   debugBindings?: boolean,
- *   debugBindingsDir?: string,
- *   debugBinary?: boolean,
- *   debugBinaryPath?: string,
- *   debugEnableWizerLogging?: boolean,
- * }} ComponentizeOptions
- */
 
 /**
  * Componentize a JavaScript or TypeScript entry module against a WIT world.
@@ -101,7 +113,7 @@ async function usesOlderWasiHTTP(witPath, worldName) {
  * @param {string} jsSource
  * @param {ComponentizeOptions} opts
  */
-export async function componentize(jsSource, opts) {
+export async function componentize(jsSource: string, opts: ComponentizeOptions): Promise<void> {
     // normalize the backend option
     const backend = normalizeBackend(opts.backend);
     validateBackendOptions(backend, opts);
@@ -129,20 +141,21 @@ export async function componentize(jsSource, opts) {
 
     // Build the component
     let component;
+    const backendArgs = { source, sourceName, jsSource, witPath, opts };
     try {
         switch (backend) {
             case "quickjs":
-                component = await componentizeQJS({ source, jsSource, witPath, opts });
+                component = await componentizeQJS(backendArgs);
                 break;
             case "starlingmonkey":
-                component = await componentizeCJS({ source, sourceName, witPath, opts });
+                component = await componentizeCJS(backendArgs);
                 break;
             default:
                 throw new Error(`unrecognized componentization backend [${backend}]`);
         }
     } catch (err) {
         // Detect package resolution issues that usually mean a misconfigured "witPath"
-        if (err.toString().includes("no known packages")) {
+        if (err instanceof Error && err.toString().includes("no known packages")) {
             const isFile = await stat(witPath).then((s) => s.isFile());
             if (isFile) {
                 const hint = await printWITPathHint(witPath);
@@ -170,7 +183,7 @@ function normalizeBackend(backend = "starlingmonkey") {
     return normalized;
 }
 
-function validateBackendOptions(backend, opts) {
+function validateBackendOptions(backend: ComponentizeJSBackend, opts: ComponentizeOptions) {
     if (backend === "starlingmonkey") {
         return;
     }
@@ -188,7 +201,7 @@ function validateBackendOptions(backend, opts) {
  * @param {string} witPath - witPath option that was used (which is a path that resolves to a file or directory)
  * @returns {string} user-visible, highlighted output that can be printed
  */
-async function printWITPathHint(witPath) {
+async function printWITPathHint(witPath: string): Promise<string> {
     const warningPrefix = styleText(["yellow", "bold"], "warning");
     const pathMeta = await stat(witPath);
     let output = "\n";
@@ -211,7 +224,7 @@ async function printWITPathHint(witPath) {
  * @param {{ debug: boolean, disable: string[], enable: string[] }} opts
  * @returns {{ disableFeatures: string[], enableFeatures: string[] }}
  */
-function calculateFeatureSet(opts) {
+function calculateFeatureSet(opts: ComponentizeOptions) {
     const disableFeatures = new Set(opts?.debug ? DEBUG_FEATURES : []);
     const disable = opts?.disable ?? [];
     const enable = opts?.enable ?? [];
@@ -237,7 +250,7 @@ function calculateFeatureSet(opts) {
 }
 
 /** Componentize with componentize-qjs (QuickJS) */
-async function componentizeQJS(args) {
+async function componentizeQJS(args: BackendComponentizeArgs) {
     const { source, jsSource, opts, witPath } = args;
     const componentizeQJSModule = await eval('import("componentize-qjs")');
     const result = await componentizeQJSModule.componentize({
@@ -251,7 +264,7 @@ async function componentizeQJS(args) {
 }
 
 /** Componentize with componentize-js (StarlingMonkey) */
-async function componentizeCJS(args) {
+async function componentizeCJS(args: BackendComponentizeArgs) {
     const { opts, sourceName, source, witPath } = args;
     const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
     // Load an older version of componentize-js if we detect an older version of WASI HTTP in use

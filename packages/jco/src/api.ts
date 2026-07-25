@@ -1,4 +1,3 @@
-// @ts-check
 export { optimizeComponent as opt } from "./cmd/opt.js";
 export { transpileComponent as transpile, typesComponent as types } from "./cmd/transpile.js";
 

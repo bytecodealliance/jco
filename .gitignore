@@ -28,6 +28,7 @@ crates/jco/tests/generated
 
 # Jco
 packages/jco/obj
+packages/jco/dist
 packages/jco/test/output
 
 # Pre-compiled output used by subprojects

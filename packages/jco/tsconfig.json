@@ -1,14 +1,16 @@
 {
-    "include": ["src"],
+    "include": ["src/**/*"],
     "compilerOptions": {
-        "outDir": "types",
+        "outDir": "dist",
         "rootDir": "src",
+        "types": ["node"],
+        "lib": ["esnext", "dom"],
         "module": "nodenext",
         "moduleResolution": "nodenext",
-        "allowJs": true,
+        "strict": true,
         "declaration": true,
-        "emitDeclarationOnly": true,
         "declarationMap": true,
+        "sourceMap": true,
         "skipLibCheck": true
     }
 }
