@@ -5,6 +5,7 @@
  *   worldName?: string,
  *   bundle?: boolean,
  *   bundleConfig?: string,
+ *   backend?: "starlingmonkey" | "sm" | "quickjs" | "qjs",
  *   aot?: boolean,
  *   aotMinStackSizeBytes?: number,
  *   wevalBin?: string,
@@ -35,6 +36,7 @@ export type ComponentizeOptions = {
     worldName?: string;
     bundle?: boolean;
     bundleConfig?: string;
+    backend?: "starlingmonkey" | "sm" | "quickjs" | "qjs";
     aot?: boolean;
     aotMinStackSizeBytes?: number;
     wevalBin?: string;
