@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0] - 2026-07-25
+
+### 🧪 Testing
+
+- _(transpile)_ add rust component that uses maps by @vados-cosmonic in #1757
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ remove wit-component detection utility by @vados-cosmonic
+
+## New Contributors
+
+- @zacharywhitley made their first contribution
+
 ## [0.4.2] - 2026-07-09
 
 This release contains an update fo the underlying transpiled `js-component-bindgen`
