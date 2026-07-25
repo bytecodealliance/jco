@@ -1,8 +1,9 @@
+import { dirname, join, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import process from "node:process";
+import { tmpdir } from 'node:os';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workDir = mkdtempSync(join(tmpdir(), 'jco-browser-bundle-'));
@@ -26,63 +27,107 @@ function findTarball(pattern) {
     return join(packDir, matches[0]);
 }
 
-try {
-    for (const project of ['@bytecodealliance/jco-transpile', '@bytecodealliance/jco']) {
-        run('pnpm', ['--filter', project, 'pack', '--pack-destination', packDir]);
-    }
+async function main() {
+    try {
+        // Pack the tarballs for current versions of jco-transpile and jco
+        for (const project of ['@bytecodealliance/jco-transpile', '@bytecodealliance/jco']) {
+            run('pnpm', ['--filter', project, 'pack', '--pack-destination', packDir]);
+        }
 
-    const jcoTranspileTarball = findTarball(/^bytecodealliance-jco-transpile-.+\.tgz$/);
-    const jcoTarball = findTarball(/^bytecodealliance-jco-\d.+\.tgz$/);
-    const tarContents = execFileSync('tar', ['tzf', jcoTarball], {
-        encoding: 'utf8',
-    });
-    const objFiles = tarContents.split('\n').filter((entry) => entry.startsWith('package/obj/'));
-    if (objFiles.length > 0) {
-        throw new Error(
-            `jco tarball ships obj/; browser entry should re-export from jco-transpile instead:\n${objFiles.join('\n')}`,
+        const jcoTranspileTarball = findTarball(/^bytecodealliance-jco-transpile-.+\.tgz$/);
+        const jcoTarball = findTarball(/^bytecodealliance-jco-\d.+\.tgz$/);
+
+        // Ensure the jco tarball does not ship obj/
+        const tarContents = execFileSync('tar', ['tzf', jcoTarball], {
+            encoding: 'utf8',
+        });
+        const objFiles = tarContents.split('\n').filter((entry) => entry.startsWith('package/obj/'));
+        if (objFiles.length > 0) {
+            throw new Error(
+                `jco tarball ships obj/; browser entry should re-export from jco-transpile instead:\n${objFiles.join('\n')}`,
+            );
+        }
+
+        // Unzip the packed tarballs, since we need to install overriden dependencies
+        for (const tarballPath of [jcoTarball, jcoTranspileTarball]) {
+            const pkgDir = basename(tarballPath).replace(/.tgz$/,'');
+            mkdirSync(join(packDir, pkgDir));
+            execFileSync('tar', ['xzf', tarballPath, '--strip-components=1', '-C', pkgDir ], {
+                encoding: 'utf8',
+                cwd: packDir,
+            });
+        }
+        // Remove the tarballs
+        rmSync(jcoTarball);
+        rmSync(jcoTranspileTarball);
+
+        // Install the latest jco-transpile into Jco, so we're dealing with the freshest code
+        const jcoPkgDir = jcoTarball.replace(/.tgz$/,'');
+        const jcoTranspilePkgDir = jcoTranspileTarball.replace(/.tgz$/,'');
+        try {
+            // NOTE: pnpm add will *seem* to fail due to ignored build scripts,
+            // but we can generally ignore this failure
+            run('pnpm', ['add', jcoTranspilePkgDir], {
+                cwd: jcoPkgDir,
+            });
+        } catch (err) {}
+
+        // Create a project directory that we will use to test out the browser build
+        mkdirSync(projectDir);
+        writeFileSync(
+            join(projectDir, 'package.json'),
+            JSON.stringify({
+                name: 'jco-browser-bundle-smoke',
+                private: true,
+                type: 'module',
+            }),
         );
-    }
 
-    mkdirSync(projectDir);
-    writeFileSync(
-        join(projectDir, 'package.json'),
-        JSON.stringify({
-            name: 'jco-browser-bundle-smoke',
-            private: true,
-            type: 'module',
-        }),
-    );
-    writeFileSync(
-        join(projectDir, 'main.js'),
-        `
+        // Create a basic main.js which we will use
+        const mainJsPath = join(projectDir, 'main.js');
+        writeFileSync(
+            mainJsPath,
+            `
 import { generate, generateTypes, transpile } from "@bytecodealliance/jco/component";
 if (typeof generate !== "function") throw new Error("generate not exported");
 if (typeof generateTypes !== "function") throw new Error("generateTypes not exported");
 if (typeof transpile !== "function") throw new Error("transpile not exported");
 `,
-    );
+        );
 
-    run('npm', ['install', '--no-save', '--no-audit', '--no-fund', jcoTranspileTarball, jcoTarball], {
-        cwd: projectDir,
-    });
-    run(
-        'npx',
-        [
-            '--yes',
-            'esbuild',
-            'main.js',
-            '--bundle',
-            '--format=esm',
-            '--platform=browser',
-            '--outfile=out.js',
-            '--external:node:*',
-        ],
-        { cwd: projectDir },
-    );
+        // Install Jco (and correspondingly the latest jco-transpile)
+        run('pnpm', ['install', jcoPkgDir], {
+            cwd: projectDir,
+        });
 
-    if (statSync(join(projectDir, 'out.js')).size === 0) {
-        throw new Error('browser bundle is empty');
+        // Install & run rolldown to build for the browser
+        run('pnpm', ['add', '-D', 'rolldown'], {
+            cwd: projectDir,
+        });
+        run(
+            'pnpm',
+            [
+                'exec',
+                'rolldown',
+                'main.js',
+                '--format=esm',
+                '--platform=browser',
+                '--file=out.js',
+                '--external=node:*',
+            ],
+            { cwd: projectDir },
+        );
+
+        if (statSync(join(projectDir, 'out.js')).size === 0) {
+            throw new Error('browser bundle is empty');
+        }
+    } finally {
+        rmSync(workDir, { recursive: true, force: true });
     }
-} finally {
-    rmSync(workDir, { recursive: true, force: true });
 }
+
+main()
+    .catch(err => {
+        console.error(`ERROR: ${err}`);
+        process.exitCode = 1;
+    });
