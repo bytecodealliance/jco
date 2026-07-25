@@ -12,6 +12,29 @@ const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
 /** Features that should be used for --debug mode */
 const DEBUG_FEATURES = ["stdio"];
 
+const COMPONENTIZE_BACKENDS = {
+    starlingmonkey: "starlingmonkey",
+    sm: "starlingmonkey",
+    quickjs: "quickjs",
+    qjs: "quickjs",
+};
+
+const STARLINGMONKEY_OPTIONS = [
+    "aot",
+    "aotMinStackSizeBytes",
+    "wevalBin",
+    "disable",
+    "enable",
+    "debug",
+    "preview2Adapter",
+    "debugStarlingmonkeyBuild",
+    "engine",
+    "debugBindings",
+    "debugBindingsDir",
+    "debugBinary",
+    "debugBinaryPath",
+    "debugEnableWizerLogging",
+];
 /**
  * Detect whether the WIT of a given component contains an older version of
  * `wasi:http` which necessitates an older version of `componentize-js`
@@ -53,6 +76,7 @@ async function usesOlderWasiHTTP(witPath, worldName) {
  *   worldName?: string,
  *   bundle?: boolean,
  *   bundleConfig?: string,
+ *   backend?: "starlingmonkey" | "sm" | "quickjs" | "qjs",
  *   aot?: boolean,
  *   aotMinStackSizeBytes?: number,
  *   wevalBin?: string,
@@ -78,8 +102,11 @@ async function usesOlderWasiHTTP(witPath, worldName) {
  * @param {ComponentizeOptions} opts
  */
 export async function componentize(jsSource, opts) {
-    const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
+    // normalize the backend option
+    const backend = normalizeBackend(opts.backend);
+    validateBackendOptions(backend, opts);
 
+    // Detect source code type
     const sourceType = classifyComponentSource(jsSource);
     if (sourceType === "typescript-declaration") {
         throw new Error(
@@ -89,6 +116,7 @@ export async function componentize(jsSource, opts) {
     const isTypeScript = sourceType === "typescript";
     const shouldBundle = opts.bundle === true || isTypeScript;
 
+    // Perform bundling
     if (opts.bundleConfig && !shouldBundle) {
         throw new Error("--bundle-config requires --bundle");
     }
@@ -99,51 +127,19 @@ export async function componentize(jsSource, opts) {
     const witPath = resolve(opts.wit);
     const sourceName = isTypeScript ? `${basename(jsSource, extname(jsSource))}.js` : basename(jsSource);
 
-    // Load an older version of componentize-js if we detect an older version of WASI HTTP in use
-    // as the version that is usable is baked into the StarlingMonkey version provided by a given version
-    // of componentize-js
-    let componentizeJSModule;
-    const useOldComponentizeJS = await usesOlderWasiHTTP(witPath, opts.worldName);
-    if (useOldComponentizeJS) {
-        // NOTE: if we were to use a version of componentize-js 0.20.0 or newer here,
-        // the build would fail, as newer versions do not support wasi:http < 0.2.10
-        // for fetch.
-        console.error(
-            `${styleText(["yellow", "bold"], "warning")} Falling back to componentize-js 0.19.3 because this component requests Preview 2 WASI packages older than 0.2.10. See https://bytecodealliance.github.io/jco/troubleshooting/common-issues.html#componentize-js-0193-fallback for details and upgrade steps.`,
-        );
-        componentizeJSModule = await eval('import("@bytecodealliance/componentize-js-0-19-3")');
-    } else {
-        componentizeJSModule = await eval('import("@bytecodealliance/componentize-js")');
-    }
-
+    // Build the component
     let component;
     try {
-        const result = await componentizeJSModule.componentize(source, {
-            enableAot: opts.aot,
-            aotMinStackSizeBytes: opts.aotMinStackSizeBytes,
-            wevalBin: opts.wevalBin,
-            wizerBin: opts.wizerBin,
-            sourceName,
-            witPath,
-            worldName: opts.worldName,
-            disableFeatures,
-            enableFeatures,
-            preview2Adapter: opts.preview2Adapter,
-            debugBuild: opts.debugStarlingmonkeyBuild,
-            engine: opts.engine,
-            debug: {
-                bindings: opts.debugBindings,
-                bindingsDir: opts.debugBindingsDir,
-                binary: opts.debugBinary,
-                binaryPath: opts.debugBinaryPath,
-                enableWizerLogging: opts.debugEnableWizerLogging,
-            },
-        });
-        if (result.debug) {
-            console.error(`${styleText("cyan", "DEBUG")} Debug output\n${JSON.stringify(result.debug, null, 2)}\n`);
+        switch (backend) {
+            case "quickjs":
+                component = await componentizeQJS({ source, jsSource, witPath, opts });
+                break;
+            case "starlingmonkey":
+                component = await componentizeCJS({ source, sourceName, witPath, opts });
+                break;
+            default:
+                throw new Error(`unrecognized componentization backend [${backend}]`);
         }
-
-        component = result.component;
     } catch (err) {
         // Detect package resolution issues that usually mean a misconfigured "witPath"
         if (err.toString().includes("no known packages")) {
@@ -158,11 +154,34 @@ export async function componentize(jsSource, opts) {
         throw err;
     }
 
+    // Write out the component
     await writeFile(opts.out, component);
 
     console.log(`${styleText("green", "OK")} Successfully written ${styleText("bold", opts.out)}.`);
 }
 
+function normalizeBackend(backend = "starlingmonkey") {
+    const normalized = COMPONENTIZE_BACKENDS[backend];
+    if (!normalized) {
+        throw new Error(
+            `Unknown componentization backend "${backend}". Expected one of: starlingmonkey, sm, quickjs, qjs.`,
+        );
+    }
+    return normalized;
+}
+
+function validateBackendOptions(backend, opts) {
+    if (backend === "starlingmonkey") {
+        return;
+    }
+
+    const incompatible = STARLINGMONKEY_OPTIONS.filter((option) => opts[option] !== undefined);
+    if (incompatible.length > 0) {
+        throw new Error(
+            `The ${incompatible.map((option) => `--${option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`).join(", ")} option${incompatible.length === 1 ? " is" : "s are"} only supported by the starlingmonkey backend.`,
+        );
+    }
+}
 /**
  * Print a hint about the witPath option that may be incorrect
  *
@@ -215,4 +234,67 @@ function calculateFeatureSet(opts) {
         disableFeatures: [...disableFeatures],
         enableFeatures: ALL_FEATURES.filter((v) => !disableFeatures.has(v)),
     };
+}
+
+/** Componentize with componentize-qjs (QuickJS) */
+async function componentizeQJS(args) {
+    const { source, jsSource, opts, witPath } = args;
+    const componentizeQJSModule = await eval('import("componentize-qjs")');
+    const result = await componentizeQJSModule.componentize({
+        witPath,
+        jsSource: source,
+        jsPath: resolve(jsSource),
+        world: opts.worldName,
+        sync: opts.backendQjsDisableAysnc,
+    });
+    return result.component;
+}
+
+/** Componentize with componentize-js (StarlingMonkey) */
+async function componentizeCJS(args) {
+    const { opts, sourceName, source, witPath } = args;
+    const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
+    // Load an older version of componentize-js if we detect an older version of WASI HTTP in use
+    // as the version that is usable is baked into the StarlingMonkey version provided by a given version
+    // of componentize-js
+    let componentizeJSModule;
+    const useOldComponentizeJS = await usesOlderWasiHTTP(witPath, opts.worldName);
+    if (useOldComponentizeJS) {
+        // NOTE: if we were to use a version of componentize-js 0.20.0 or newer here,
+        // the build would fail, as newer versions do not support wasi:http < 0.2.10
+        // for fetch.
+        console.error(
+            `${styleText(["yellow", "bold"], "warning")} Falling back to componentize-js 0.19.3 because this component requests Preview 2 WASI packages older than 0.2.10. See https://bytecodealliance.github.io/jco/troubleshooting/common-issues.html#componentize-js-0193-fallback for details and upgrade steps.`,
+        );
+        componentizeJSModule = await eval('import("@bytecodealliance/componentize-js-0-19-3")');
+    } else {
+        componentizeJSModule = await eval('import("@bytecodealliance/componentize-js")');
+    }
+
+    const result = await componentizeJSModule.componentize(source, {
+        enableAot: opts.aot,
+        aotMinStackSizeBytes: opts.aotMinStackSizeBytes,
+        wevalBin: opts.wevalBin,
+        wizerBin: opts.wizerBin,
+        sourceName,
+        witPath,
+        worldName: opts.worldName,
+        disableFeatures,
+        enableFeatures,
+        preview2Adapter: opts.preview2Adapter,
+        debugBuild: opts.debugStarlingmonkeyBuild,
+        engine: opts.engine,
+        debug: {
+            bindings: opts.debugBindings,
+            bindingsDir: opts.debugBindingsDir,
+            binary: opts.debugBinary,
+            binaryPath: opts.debugBinaryPath,
+            enableWizerLogging: opts.debugEnableWizerLogging,
+        },
+    });
+    if (result.debug) {
+        console.error(`${styleText("cyan", "DEBUG")} Debug output\n${JSON.stringify(result.debug, null, 2)}\n`);
+    }
+
+    return result.component;
 }

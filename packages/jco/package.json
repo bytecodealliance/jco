@@ -78,6 +78,7 @@
         "@bytecodealliance/preview3-shim": "^0.1.2",
         "binaryen": "^130.0.0",
         "commander": "^14",
+        "componentize-qjs": "^0.4.2",
         "mkdirp": "^3",
         "ora": "^8",
         "rolldown": "^1.1.0"

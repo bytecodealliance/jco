@@ -59,8 +59,17 @@ program
     .addOption(new Option("--enable <feature...>", "enable WASI features").choices(FEATURE_CHOICES))
     .option("--debug", "configure jco for debug (e.g. disable all features except stdio, etc)")
     .option("--preview2-adapter <adapter>", "provide a custom preview2 adapter path")
+    .addOption(
+        new Option("--backend <backend>", "componentization backend")
+            .choices(["starlingmonkey", "sm", "quickjs", "qjs"])
+            .default("starlingmonkey"),
+    )
+    .option(
+        "--backend-qjs-disable-async",
+        "disable async (enable the 'sync' option) when buliding with componentize-qjs",
+    )
     .option("--debug-starlingmonkey-build", "use a debug build of StarlingMonkey")
-    .option("--engine <path>", "use a specific StarlingMonkey build")
+    .option("--engine <path>", "use a specific StarlingMonkey build (StarlingMonkey backend only)")
     .option("--bundle", "bundle source and its dependencies before componentization (automatic for TypeScript)")
     .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
     .requiredOption("-o, --out <out>", "output component file")

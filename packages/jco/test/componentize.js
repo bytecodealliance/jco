@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { suite, test, assert, expect } from "vitest";
+import { componentize } from "../src/cmd/componentize.js";
 import { COMPONENT_JS_FIXTURES_DIR } from "./common.js";
 import { exec, getTmpDir, jcoPath } from "./helpers.js";
 
@@ -14,6 +15,36 @@ import { exec, getTmpDir, jcoPath } from "./helpers.js";
 // used widely, we can switch to regular dynamic imports, as componentize-js
 // versions are real dependencies now.
 suite("componentize", () => {
+    test("rejects a custom StarlingMonkey engine with the QuickJS backend", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
+        const outputDir = await getTmpDir();
+
+        await expect(
+            exec(
+                jcoPath,
+                "componentize",
+                join(fixtureDir, "source.ts"),
+                "--backend",
+                "qjs",
+                "--engine",
+                "custom-engine.wasm",
+                "-w",
+                join(fixtureDir, "source.wit"),
+                "-o",
+                join(outputDir, "component.wasm"),
+            ),
+        ).rejects.toThrow();
+
+        await expect(
+            componentize("unused.js", {
+                backend: "quickjs",
+                engine: "custom-engine.wasm",
+                wit: "unused.wit",
+                out: "unused.wasm",
+            }),
+        ).rejects.toThrow(/--engine option is only supported by the starlingmonkey backend/);
+    });
+
     test.concurrent("detect older wasi:http", async () => {
         const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "wasi-http-detection-old/component.js");
         const witPath = join(COMPONENT_JS_FIXTURES_DIR, "wasi-http-detection-old/wit");
@@ -89,6 +120,34 @@ suite("componentize", () => {
 
         assert.strictEqual(stderr, "");
         assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
+    });
+
+    test("componentizes with the QuickJS backend alias", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
+        const outputDir = await getTmpDir();
+        const outputPath = join(outputDir, "component.wasm");
+        const transpiledDir = join(outputDir, "transpiled");
+
+        const { stderr } = await exec(
+            jcoPath,
+            "componentize",
+            join(fixtureDir, "source.ts"),
+            "--backend",
+            "qjs",
+            "-w",
+            join(fixtureDir, "source.wit"),
+            "-o",
+            outputPath,
+        );
+        const component = await readFile(outputPath);
+
+        assert.strictEqual(stderr, "");
+        assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
+
+        await exec(jcoPath, "transpile", outputPath, "-o", transpiledDir, "--name", "quickjs");
+        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+        const transpiled = await import(`${pathToFileURL(transpiledDir)}/quickjs.js`);
+        assert.strictEqual(transpiled.hello("world"), "hello, world");
     });
 
     test("rejects TypeScript declarations as component entries", async () => {

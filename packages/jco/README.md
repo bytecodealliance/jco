@@ -112,7 +112,15 @@ To componentize a JavaScript file run:
 jco componentize app.js --wit wit -n world-name -o component.wasm
 ```
 
-Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
+Creates a component from a JS module implementing a WIT world definition. StarlingMonkey is the default
+componentization backend. QuickJS can be selected with `--backend quickjs` (or its `qjs` alias):
+
+```
+jco componentize app.js --wit wit -n world-name -o component.wasm --backend qjs
+```
+
+The accepted backend names are `starlingmonkey`/`sm` and `quickjs`/`qjs`. The existing `--engine <path>`
+option supplies a custom StarlingMonkey build and is valid only with the StarlingMonkey backend.
 
 TypeScript entry modules are transformed and bundled automatically:
 
@@ -123,7 +131,8 @@ jco componentize app.ts --wit wit -n world-name -o component.wasm
 The TypeScript transform erases types but does not perform semantic type checking. Run `tsc --noEmit`
 separately when required.
 
-See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
+See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) and
+[componentize-qjs](https://github.com/andreiltd/componentize-qjs) for backend-specific details.
 
 ## API
 
