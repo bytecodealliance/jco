@@ -5,7 +5,6 @@
 ### 🚀 Features
 
 - _(jco)_ support componentizing TypeScript entry modules directly
-- _(jco)_ add QuickJS as an alternate componentization backend
 
 ## [1.25.2] - 2026-07-09
 
