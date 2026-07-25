@@ -55,8 +55,8 @@
         }
     },
     "scripts": {
-        "build": "cargo xtask build debug",
-        "build:release": "cargo xtask build release",
+        "build": "cargo xtask build debug && npm run build:ts",
+        "build:release": "cargo xtask build release && npm run build:ts",
         "build:ts": "tsc -p tsconfig.json",
         "build:types:preview2-shim": "pnpm run build:types:preview2-shim --include-workspace-root",
         "build:test:components": "cargo xtask build-test-components",
