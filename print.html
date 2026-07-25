@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-419bda38.js";
+            window.path_to_searchindex_js = "searchindex-484e2066.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b8337dd6.js"></script>
@@ -197,13 +197,18 @@
 <p>If you find a mistake, omission, ambiguity, or other problem, please let us know via <a href="https://github.com/bytecodealliance/jco/issues">GitHub issues</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="creating-new-javascript-and-typescript-components"><a class="header" href="#creating-new-javascript-and-typescript-components">Creating new JavaScript and TypeScript components</a></h1>
-<p>Jco relies on and exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> to make it easy to build components from JavaScript
-or TypeScript ES module source code.</p>
+<p>Jco exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> and <a href="https://github.com/andreiltd/componentize-qjs"><code>componentize-qjs</code></a> to make it easy to build components
+from JavaScript or TypeScript ES module source code.</p>
 <p>Building a JavaScript component is as easy as calling <code>jco componentize</code>, with a few options:</p>
-<pre><code>jco componentize -w wit -o dist/component.wasm component.js
+<pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.js
 </code></pre>
+<p>StarlingMonkey is the default backend, but you can use [<code>componentize-qjs</code>][qjs] which is powered by <a href="https://github.com/quickjs-ng/quickjs"><code>quickjs-ng</code></a> by passing <code>--backend quickjs</code> or <code>--backend qjs</code>:</p>
+<pre><code class="language-console">jco componentize --backend qjs -w wit -o dist/component.wasm component.js
+</code></pre>
+<p>The StarlingMonkey backend also accepts the aliases <code>starlingmonkey</code> and <code>sm</code>. Note that <code>--engine &lt;path&gt;</code>
+allows supplying a a custom StarlingMonkey build and cannot be combined with the <code>componentize-qjs</code> backend.</p>
 <p>TypeScript entry modules are transformed and bundled automatically:</p>
-<pre><code class="language-shell">jco componentize -w wit -o dist/component.wasm component.ts
+<pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.ts
 </code></pre>
 <p>Jco uses Rolldown’s native TypeScript support to erase type syntax. This does not perform semantic type
 checking; run <code>tsc --noEmit</code> separately when type checking is part of your build. TypeScript component
@@ -211,8 +216,8 @@ projects can import local modules and npm dependencies, and Jco discovers the ne
 from the entry project.</p>
 <p>There are many examples in the <a href="https://github.com/bytecodealliance/jco/tree/main/examples/components">Jco component examples folder</a></p>
 <h2 id="bundling"><a class="header" href="#bundling">Bundling</a></h2>
-<p>By default, Jco passes a JavaScript source module directly to ComponentizeJS with no intermediate processing.
-TypeScript entry modules are always bundled because ComponentizeJS consumes the generated JavaScript.</p>
+<p>By default, Jco passes a JavaScript source module directly to the selected componentization backend with no
+intermediate processing. TypeScript entry modules are always bundled so the backend receives generated JavaScript.</p>
 <p>Use <code>--bundle</code> to bundle the entry module and its local or npm package dependencies before componentization.
 Package resolution starts from the entry module’s project, and <code>wasi:*</code> imports remain external so they can
 be matched to component capabilities.</p>
