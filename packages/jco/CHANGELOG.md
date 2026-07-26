@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.26.0] - 2026-07-26
+
+### 🚀 Features
+
+- _(jco)_ convert jco to typescript by @vados-cosmonic
+
+- _(jco)_ add custom backends, support for componentize-qjs by @vados-cosmonic
+
+- _(jco)_ add --wizer-bin option to componentize command by @Sorixelle in #1761
+
+- _(jco)_ support direct bundling of typescript components by @vados-cosmonic
+
+- _(jco)_ enable pre-componentize bundling by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ browser entry re-exports bindgen from jco-transpile by @zacharywhitley
+
+### 🧪 Testing
+
+- _(jco)_ remove use of wit-component version detection by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.5.1 by @vados-cosmonic in #1771
+
+- _(jco)_ update jco-transpile to v0.5.0 by @vados-cosmonic in #1767
+
+## New Contributors
+
+- @Sorixelle made their first contribution in [#1761](https://github.com/bytecodealliance/jco/pull/1761)
+- @zacharywhitley made their first contribution
+
 ## Unreleased
 
 ### 🚀 Features
