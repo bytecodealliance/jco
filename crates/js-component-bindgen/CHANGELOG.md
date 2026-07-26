@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.1] - 2026-07-26
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ lowered 8-bit writes actually write 8 bits by @lann in #1768
+
+
+
+
 ## [2.1.0] - 2026-07-25
 
 ### 🚀 Features
