@@ -1,9 +1,9 @@
 import * as wasi from "@bytecodealliance/preview2-shim";
 import { types, _createPreopenDescriptor } from "@bytecodealliance/preview2-shim/filesystem";
 import type {
-  WASIShimConfig,
-  GetImportObjectArgs,
-  WASIImportObject,
+    WASIShimConfig,
+    GetImportObjectArgs,
+    WASIImportObject,
 } from "../../types/instantiation.js";
 
 /**
@@ -85,121 +85,122 @@ import type {
  * @class WASIShim
  */
 export class WASIShim {
-  /** Object that confirms to the shim interface for `wasi:cli` */
-  #cli: any;
-  /** Object that confirms to the shim interface for `wasi:filesystem` */
-  #filesystem: any;
-  /** Object that confirms to the shim interface for `wasi:io` */
-  #io: any;
-  /** Object that confirms to the shim interface for `wasi:random` */
-  #random: any;
-  /** Object that confirms to the shim interface for `wasi:clocks` */
-  #clocks: any;
-  /** Object that confirms to the shim interface for `wasi:sockets` */
-  #sockets: any;
-  /** Object that confirms to the shim interface for `wasi:http` */
-  #http: any;
-  /** Isolated preopens for this instance */
-  #preopens: any;
-  /** Isolated environment for this instance */
-  #environment: any;
+    /** Object that confirms to the shim interface for `wasi:cli` */
+    #cli: any;
+    /** Object that confirms to the shim interface for `wasi:filesystem` */
+    #filesystem: any;
+    /** Object that confirms to the shim interface for `wasi:io` */
+    #io: any;
+    /** Object that confirms to the shim interface for `wasi:random` */
+    #random: any;
+    /** Object that confirms to the shim interface for `wasi:clocks` */
+    #clocks: any;
+    /** Object that confirms to the shim interface for `wasi:sockets` */
+    #sockets: any;
+    /** Object that confirms to the shim interface for `wasi:http` */
+    #http: any;
+    /** Isolated preopens for this instance */
+    #preopens: any;
+    /** Isolated environment for this instance */
+    #environment: any;
 
-  /**
-   * Create a new WASIShim instance.
-   *
-   * @param config - Configuration options
-   */
-  constructor(config?: WASIShimConfig) {
-    // Support both old 'shims' parameter name and new 'config' style
-    const shims = config;
+    /**
+     * Create a new WASIShim instance.
+     *
+     * @param config - Configuration options
+     */
+    constructor(config?: WASIShimConfig) {
+        // Support both old 'shims' parameter name and new 'config' style
+        const shims = config;
 
-    this.#cli = shims?.cli ?? wasi.cli;
-    this.#filesystem = shims?.filesystem ?? wasi.filesystem;
-    this.#io = shims?.io ?? wasi.io;
-    this.#random = shims?.random ?? wasi.random;
-    this.#clocks = shims?.clocks ?? wasi.clocks;
-    this.#sockets = shims?.sockets ?? wasi.sockets;
-    this.#http = shims?.http ?? wasi.http;
+        this.#cli = shims?.cli ?? wasi.cli;
+        this.#filesystem = shims?.filesystem ?? wasi.filesystem;
+        this.#io = shims?.io ?? wasi.io;
+        this.#random = shims?.random ?? wasi.random;
+        this.#clocks = shims?.clocks ?? wasi.clocks;
+        this.#sockets = shims?.sockets ?? wasi.sockets;
+        this.#http = shims?.http ?? wasi.http;
 
-    // Extract sandbox options
-    const sandbox = shims?.sandbox;
+        // Extract sandbox options
+        const sandbox = shims?.sandbox;
 
-    // Create isolated preopens if configured
-    if (sandbox?.preopens !== undefined) {
-      this.#preopens = createIsolatedPreopens(sandbox.preopens);
+        // Create isolated preopens if configured
+        if (sandbox?.preopens !== undefined) {
+            this.#preopens = createIsolatedPreopens(sandbox.preopens);
+        }
+
+        // Create isolated environment if env or args are configured
+        if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
+            this.#environment = createIsolatedEnvironment(sandbox?.env, sandbox?.args, this.#cli);
+        }
+
+        // Apply network restrictions if disabled
+        if (sandbox?.enableNetwork === false) {
+            // Use the sockets module's built-in deny functions
+            if (this.#sockets._denyTcp) {
+                this.#sockets._denyTcp();
+            }
+            if (this.#sockets._denyUdp) {
+                this.#sockets._denyUdp();
+            }
+            if (this.#sockets._denyDnsLookup) {
+                this.#sockets._denyDnsLookup();
+            }
+        }
     }
 
-    // Create isolated environment if env or args are configured
-    if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
-      this.#environment = createIsolatedEnvironment(sandbox?.env, sandbox?.args, this.#cli);
+    /**
+     * Generate an import object for the shim that can be used with
+     * functions like `instantiate` that are exposed from a transpiled
+     * WebAssembly component.
+     *
+     * @param opts - options for import object generation
+     * @returns WASIImportObject
+     */
+    getImportObject(opts?: GetImportObjectArgs) {
+        const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : "";
+
+        const obj = {};
+
+        obj[`wasi:cli/environment${versionSuffix}`] = this.#environment ?? this.#cli.environment;
+        obj[`wasi:cli/exit${versionSuffix}`] = this.#cli.exit;
+        obj[`wasi:cli/stderr${versionSuffix}`] = this.#cli.stderr;
+        obj[`wasi:cli/stdin${versionSuffix}`] = this.#cli.stdin;
+        obj[`wasi:cli/stdout${versionSuffix}`] = this.#cli.stdout;
+        obj[`wasi:cli/terminal-input${versionSuffix}`] = this.#cli.terminalInput;
+        obj[`wasi:cli/terminal-output${versionSuffix}`] = this.#cli.terminalOutput;
+        obj[`wasi:cli/terminal-stderr${versionSuffix}`] = this.#cli.terminalStderr;
+        obj[`wasi:cli/terminal-stdin${versionSuffix}`] = this.#cli.terminalStdin;
+        obj[`wasi:cli/terminal-stdout${versionSuffix}`] = this.#cli.terminalStdout;
+
+        obj[`wasi:sockets/instance-network${versionSuffix}`] = this.#sockets.instanceNetwork;
+        obj[`wasi:sockets/ip-name-lookup${versionSuffix}`] = this.#sockets.ipNameLookup;
+        obj[`wasi:sockets/network${versionSuffix}`] = this.#sockets.network;
+        obj[`wasi:sockets/tcp${versionSuffix}`] = this.#sockets.tcp;
+        obj[`wasi:sockets/tcp-create-socket${versionSuffix}`] = this.#sockets.tcpCreateSocket;
+        obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
+        obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
+
+        obj[`wasi:filesystem/preopens${versionSuffix}`] =
+            this.#preopens ?? this.#filesystem.preopens;
+        obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.types;
+
+        obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
+        obj[`wasi:io/poll${versionSuffix}`] = this.#io.poll;
+        obj[`wasi:io/streams${versionSuffix}`] = this.#io.streams;
+
+        obj[`wasi:random/random${versionSuffix}`] = this.#random.random;
+        obj[`wasi:random/insecure${versionSuffix}`] = this.#random.insecure;
+        obj[`wasi:random/insecure-seed${versionSuffix}`] = this.#random.insecureSeed;
+
+        obj[`wasi:clocks/monotonic-clock${versionSuffix}`] = this.#clocks.monotonicClock;
+        obj[`wasi:clocks/wall-clock${versionSuffix}`] = this.#clocks.wallClock;
+
+        obj[`wasi:http/types${versionSuffix}`] = this.#http.types;
+        obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
+
+        return obj as WASIImportObject;
     }
-
-    // Apply network restrictions if disabled
-    if (sandbox?.enableNetwork === false) {
-      // Use the sockets module's built-in deny functions
-      if (this.#sockets._denyTcp) {
-        this.#sockets._denyTcp();
-      }
-      if (this.#sockets._denyUdp) {
-        this.#sockets._denyUdp();
-      }
-      if (this.#sockets._denyDnsLookup) {
-        this.#sockets._denyDnsLookup();
-      }
-    }
-  }
-
-  /**
-   * Generate an import object for the shim that can be used with
-   * functions like `instantiate` that are exposed from a transpiled
-   * WebAssembly component.
-   *
-   * @param opts - options for import object generation
-   * @returns WASIImportObject
-   */
-  getImportObject(opts?: GetImportObjectArgs) {
-    const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : "";
-
-    const obj = {};
-
-    obj[`wasi:cli/environment${versionSuffix}`] = this.#environment ?? this.#cli.environment;
-    obj[`wasi:cli/exit${versionSuffix}`] = this.#cli.exit;
-    obj[`wasi:cli/stderr${versionSuffix}`] = this.#cli.stderr;
-    obj[`wasi:cli/stdin${versionSuffix}`] = this.#cli.stdin;
-    obj[`wasi:cli/stdout${versionSuffix}`] = this.#cli.stdout;
-    obj[`wasi:cli/terminal-input${versionSuffix}`] = this.#cli.terminalInput;
-    obj[`wasi:cli/terminal-output${versionSuffix}`] = this.#cli.terminalOutput;
-    obj[`wasi:cli/terminal-stderr${versionSuffix}`] = this.#cli.terminalStderr;
-    obj[`wasi:cli/terminal-stdin${versionSuffix}`] = this.#cli.terminalStdin;
-    obj[`wasi:cli/terminal-stdout${versionSuffix}`] = this.#cli.terminalStdout;
-
-    obj[`wasi:sockets/instance-network${versionSuffix}`] = this.#sockets.instanceNetwork;
-    obj[`wasi:sockets/ip-name-lookup${versionSuffix}`] = this.#sockets.ipNameLookup;
-    obj[`wasi:sockets/network${versionSuffix}`] = this.#sockets.network;
-    obj[`wasi:sockets/tcp${versionSuffix}`] = this.#sockets.tcp;
-    obj[`wasi:sockets/tcp-create-socket${versionSuffix}`] = this.#sockets.tcpCreateSocket;
-    obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
-    obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
-
-    obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#preopens ?? this.#filesystem.preopens;
-    obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.types;
-
-    obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
-    obj[`wasi:io/poll${versionSuffix}`] = this.#io.poll;
-    obj[`wasi:io/streams${versionSuffix}`] = this.#io.streams;
-
-    obj[`wasi:random/random${versionSuffix}`] = this.#random.random;
-    obj[`wasi:random/insecure${versionSuffix}`] = this.#random.insecure;
-    obj[`wasi:random/insecure-seed${versionSuffix}`] = this.#random.insecureSeed;
-
-    obj[`wasi:clocks/monotonic-clock${versionSuffix}`] = this.#clocks.monotonicClock;
-    obj[`wasi:clocks/wall-clock${versionSuffix}`] = this.#clocks.wallClock;
-
-    obj[`wasi:http/types${versionSuffix}`] = this.#http.types;
-    obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
-
-    return obj as WASIImportObject;
-  }
 }
 
 /**
@@ -209,22 +210,22 @@ export class WASIShim {
  * @returns A preopens object with Descriptor and getDirectories()
  */
 function createIsolatedPreopens(preopensConfig: Record<string, string>) {
-  const entries: any[] = [];
+    const entries: any[] = [];
 
-  // Populate entries using the filesystem's descriptor creation
-  if (_createPreopenDescriptor) {
-    for (const [virtualPath, hostPath] of Object.entries(preopensConfig)) {
-      const descriptor = _createPreopenDescriptor(hostPath);
-      entries.push([descriptor, virtualPath]);
+    // Populate entries using the filesystem's descriptor creation
+    if (_createPreopenDescriptor) {
+        for (const [virtualPath, hostPath] of Object.entries(preopensConfig)) {
+            const descriptor = _createPreopenDescriptor(hostPath);
+            entries.push([descriptor, virtualPath]);
+        }
     }
-  }
 
-  return {
-    Descriptor: types.Descriptor,
-    getDirectories() {
-      return entries;
-    },
-  };
+    return {
+        Descriptor: types.Descriptor,
+        getDirectories() {
+            return entries;
+        },
+    };
 }
 
 /**
@@ -236,23 +237,23 @@ function createIsolatedPreopens(preopensConfig: Record<string, string>) {
  * @returns An isolated CLI environment object
  */
 function createIsolatedEnvironment(
-  env: Record<string, string> | undefined,
-  args: string[] | undefined,
-  baseCli: any,
+    env: Record<string, string> | undefined,
+    args: string[] | undefined,
+    baseCli: any,
 ) {
-  const envEntries = env ? Object.entries(env) : null;
-  const argsArray = args || null;
+    const envEntries = env ? Object.entries(env) : null;
+    const argsArray = args || null;
 
-  return {
-    ...baseCli.environment,
-    getEnvironment() {
-      return envEntries ?? baseCli.environment.getEnvironment();
-    },
-    getArguments() {
-      return argsArray ?? baseCli.environment.getArguments();
-    },
-    initialCwd() {
-      return baseCli.environment.initialCwd();
-    },
-  };
+    return {
+        ...baseCli.environment,
+        getEnvironment() {
+            return envEntries ?? baseCli.environment.getEnvironment();
+        },
+        getArguments() {
+            return argsArray ?? baseCli.environment.getArguments();
+        },
+        initialCwd() {
+            return baseCli.environment.initialCwd();
+        },
+    };
 }

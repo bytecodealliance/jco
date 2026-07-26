@@ -6,25 +6,25 @@ let _args: string[] = [];
 let _cwd = "/";
 
 export function _setEnv(envObj: Record<string, string>): void {
-  _env = Object.entries(envObj);
+    _env = Object.entries(envObj);
 }
 
 export function _setArgs(args: string[]): void {
-  _args = args;
+    _args = args;
 }
 
 export function _setCwd(cwd: string): void {
-  fsSetCwd((_cwd = cwd));
+    fsSetCwd((_cwd = cwd));
 }
 
 export const environment: typeof EnvironmentNamespace = {
-  getEnvironment() {
-    return _env;
-  },
-  getArguments() {
-    return _args;
-  },
-  initialCwd() {
-    return _cwd;
-  },
+    getEnvironment() {
+        return _env;
+    },
+    getArguments() {
+        return _args;
+    },
+    initialCwd() {
+        return _cwd;
+    },
 };

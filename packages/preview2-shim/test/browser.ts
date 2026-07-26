@@ -10,46 +10,46 @@ import { getTmpDir, FIXTURES_WIT_DIR, startTestServer, runBasicHarnessPageTest }
 type TranspileOutput = { files: { [filename: string]: Uint8Array } };
 
 suite("browser", () => {
-  test("native-fetch", async () => {
-    const outDir = await getTmpDir();
+    test("native-fetch", async () => {
+        const outDir = await getTmpDir();
 
-    const { baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
+
+        const page = await browser.newPage();
+        await page.goto(`${baseURL}/index.html`);
+
+        const result = await page.evaluate(async () => {
+            const res = await fetch("/api/test-echo");
+            return {
+                status: res.status,
+                text: await res.clone().text(),
+                json: await res.clone().json(),
+            };
+        });
+
+        assert.strictEqual(result.status, 200);
+        assert.strictEqual(typeof result.text, "string");
+        assert.ok(result.text.includes("hello from test server"));
+        assert.strictEqual(result.json.message, "hello from test server");
+
+        await page.close();
+        await cleanup();
     });
 
-    const page = await browser.newPage();
-    await page.goto(`${baseURL}/index.html`);
+    test("http-fetch", async () => {
+        const outDir = await getTmpDir();
 
-    const result = await page.evaluate(async () => {
-      const res = await fetch("/api/test-echo");
-      return {
-        status: res.status,
-        text: await res.clone().text(),
-        json: await res.clone().json(),
-      };
-    });
+        // Start the server first to get the port (outDir exists but is empty;
+        // files are served dynamically so we can write them after)
+        const { port, baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
 
-    assert.strictEqual(result.status, 200);
-    assert.strictEqual(typeof result.text, "string");
-    assert.ok(result.text.includes("hello from test server"));
-    assert.strictEqual(result.json.message, "hello from test server");
-
-    await page.close();
-    await cleanup();
-  });
-
-  test("http-fetch", async () => {
-    const outDir = await getTmpDir();
-
-    // Start the server first to get the port (outDir exists but is empty;
-    // files are served dynamically so we can write them after)
-    const { port, baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
-
-    // Build a component that makes an HTTP request using WASI HTTP
-    const { component } = await componentize(
-      `
+        // Build a component that makes an HTTP request using WASI HTTP
+        const { component } = await componentize(
+            `
 import { Fields } from "wasi:http/types@0.2.8";
 import { handle } from "wasi:http/outgoing-handler@0.2.8";
 import { OutgoingRequest, OutgoingBody, IncomingBody } from "wasi:http/types@0.2.8";
@@ -104,48 +104,48 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-http-fetch",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-http-fetch",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:io/streams#[method]input-stream.blocking-read",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:io/streams#[method]input-stream.blocking-read",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("hello from test server"));
+        assert.ok(statusJSON.msg?.includes("hello from test server"));
 
-    await cleanup();
-  }, 120_000);
+        await cleanup();
+    }, 120_000);
 
-  test("http-fetch-with-options", async () => {
-    const outDir = await getTmpDir();
+    test("http-fetch-with-options", async () => {
+        const outDir = await getTmpDir();
 
-    const { port, baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
+        const { port, baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
 
-    const { component } = await componentize(
-      `
+        const { component } = await componentize(
+            `
 import { Fields, RequestOptions } from "wasi:http/types@0.2.8";
 import { handle } from "wasi:http/outgoing-handler@0.2.8";
 import { OutgoingRequest, OutgoingBody, IncomingBody } from "wasi:http/types@0.2.8";
@@ -205,50 +205,50 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-http-fetch",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-http-fetch",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:io/streams#[method]input-stream.blocking-read",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:io/streams#[method]input-stream.blocking-read",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("hello from test server"));
+        assert.ok(statusJSON.msg?.includes("hello from test server"));
 
-    await cleanup();
-  }, 120_000);
+        await cleanup();
+    }, 120_000);
 
-  test("http-poll-fetch", async () => {
-    const outDir = await getTmpDir();
+    test("http-poll-fetch", async () => {
+        const outDir = await getTmpDir();
 
-    const { port, baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
+        const { port, baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
 
-    // This component mimics the wstd reactor pattern:
-    // poll with subscribe-duration(0) in a loop until future.get() returns
-    const { component } = await componentize(
-      `
+        // This component mimics the wstd reactor pattern:
+        // poll with subscribe-duration(0) in a loop until future.get() returns
+        const { component } = await componentize(
+            `
 import { Fields } from "wasi:http/types@0.2.8";
 import { handle } from "wasi:http/outgoing-handler@0.2.8";
 import { OutgoingRequest, OutgoingBody, IncomingBody } from "wasi:http/types@0.2.8";
@@ -315,52 +315,52 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-http-poll-fetch",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-http-poll-fetch",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:io/streams#[method]input-stream.blocking-read",
-        "wasi:clocks/monotonic-clock#subscribe-duration",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:io/streams#[method]input-stream.blocking-read",
+                "wasi:clocks/monotonic-clock#subscribe-duration",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("hello from test server"));
+        assert.ok(statusJSON.msg?.includes("hello from test server"));
 
-    await cleanup();
-  }, 120_000);
+        await cleanup();
+    }, 120_000);
 
-  test("http-blocking-read", async () => {
-    const outDir = await getTmpDir();
+    test("http-blocking-read", async () => {
+        const outDir = await getTmpDir();
 
-    const { port, baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
+        const { port, baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
 
-    // This component uses blocking-read instead of subscribe+block+read
-    // to read the response body — matching how QuickJS and other sync
-    // runtimes consume streams via JSPI
-    const { component } = await componentize(
-      `
+        // This component uses blocking-read instead of subscribe+block+read
+        // to read the response body — matching how QuickJS and other sync
+        // runtimes consume streams via JSPI
+        const { component } = await componentize(
+            `
 import { Fields } from "wasi:http/types@0.2.8";
 import { handle } from "wasi:http/outgoing-handler@0.2.8";
 import { OutgoingRequest, OutgoingBody, IncomingBody } from "wasi:http/types@0.2.8";
@@ -416,49 +416,49 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-http-fetch",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-http-fetch",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:io/streams#[method]input-stream.blocking-read",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:io/streams#[method]input-stream.blocking-read",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("hello from test server"));
+        assert.ok(statusJSON.msg?.includes("hello from test server"));
 
-    await cleanup();
-  }, 120_000);
+        await cleanup();
+    }, 120_000);
 
-  // Ported from wasmtime p2_sleep.rs
-  test("clocks-sleep", async () => {
-    const outDir = await getTmpDir();
+    // Ported from wasmtime p2_sleep.rs
+    test("clocks-sleep", async () => {
+        const outDir = await getTmpDir();
 
-    const { baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
 
-    const { component } = await componentize(
-      `
+        const { component } = await componentize(
+            `
 import { now, subscribeDuration, subscribeInstant } from "wasi:clocks/monotonic-clock@0.2.8";
 
 export const test = {
@@ -484,49 +484,49 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-clocks-poll",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-clocks-poll",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:clocks/monotonic-clock#subscribe-duration",
-        "wasi:clocks/monotonic-clock#subscribe-instant",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:clocks/monotonic-clock#subscribe-duration",
+                "wasi:clocks/monotonic-clock#subscribe-instant",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("all passed"));
+        assert.ok(statusJSON.msg?.includes("all passed"));
 
-    await cleanup();
-  });
-
-  // Ported from wasmtime p2_pollable_correct.rs
-  test("pollable-correct", async () => {
-    const outDir = await getTmpDir();
-
-    const { baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
+        await cleanup();
     });
 
-    const { component } = await componentize(
-      `
+    // Ported from wasmtime p2_pollable_correct.rs
+    test("pollable-correct", async () => {
+        const outDir = await getTmpDir();
+
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
+
+        const { component } = await componentize(
+            `
 import { subscribeDuration } from "wasi:clocks/monotonic-clock@0.2.8";
 import { poll } from "wasi:io/poll@0.2.8";
 
@@ -560,50 +560,50 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-clocks-poll",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-clocks-poll",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:clocks/monotonic-clock#subscribe-duration",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:clocks/monotonic-clock#subscribe-duration",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("all passed"));
+        assert.ok(statusJSON.msg?.includes("all passed"));
 
-    await cleanup();
-  });
-
-  // Ported from wasmtime p2_stream_pollable_correct.rs
-  // Tests that pollables can be reused across multiple block() calls
-  test("pollable-reuse", async () => {
-    const outDir = await getTmpDir();
-
-    const { baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
+        await cleanup();
     });
 
-    const { component } = await componentize(
-      `
+    // Ported from wasmtime p2_stream_pollable_correct.rs
+    // Tests that pollables can be reused across multiple block() calls
+    test("pollable-reuse", async () => {
+        const outDir = await getTmpDir();
+
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
+
+        const { component } = await componentize(
+            `
 import { subscribeDuration } from "wasi:clocks/monotonic-clock@0.2.8";
 
 export const test = {
@@ -622,48 +622,48 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-clocks-poll",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-clocks-poll",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:clocks/monotonic-clock#subscribe-duration",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:clocks/monotonic-clock#subscribe-duration",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("all passed"));
+        assert.ok(statusJSON.msg?.includes("all passed"));
 
-    await cleanup();
-  });
-
-  // Ported from wasmtime p2_http_outbound_request_{get,post,put}.rs
-  test("http-methods", async () => {
-    const outDir = await getTmpDir();
-
-    const { port, baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
+        await cleanup();
     });
 
-    const { component } = await componentize(
-      `
+    // Ported from wasmtime p2_http_outbound_request_{get,post,put}.rs
+    test("http-methods", async () => {
+        const outDir = await getTmpDir();
+
+        const { port, baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
+
+        const { component } = await componentize(
+            `
 import { Fields, OutgoingRequest, OutgoingBody } from "wasi:http/types@0.2.8";
 import { handle } from "wasi:http/outgoing-handler@0.2.8";
 
@@ -772,50 +772,50 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-http-fetch",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-http-fetch",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:io/streams#[method]input-stream.blocking-read",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:io/streams#[method]input-stream.blocking-read",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("all passed"));
+        assert.ok(statusJSON.msg?.includes("all passed"));
 
-    await cleanup();
-  }, 120_000);
+        await cleanup();
+    }, 120_000);
 
-  // Ported from wasmtime p2_http_outbound_request_{invalid_header,response_build,
-  // unknown_method,invalid_port,missing_path_and_query}.rs
-  test("http-validation", async () => {
-    const outDir = await getTmpDir();
+    // Ported from wasmtime p2_http_outbound_request_{invalid_header,response_build,
+    // unknown_method,invalid_port,missing_path_and_query}.rs
+    test("http-validation", async () => {
+        const outDir = await getTmpDir();
 
-    const { baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
 
-    const { component } = await componentize(
-      `
+        const { component } = await componentize(
+            `
 import { Fields, OutgoingRequest, OutgoingBody } from "wasi:http/types@0.2.8";
 import { handle } from "wasi:http/outgoing-handler@0.2.8";
 
@@ -967,49 +967,49 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-http-fetch",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-http-fetch",
+            } as ComponentizeOptions,
+        );
 
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      asyncImports: [
-        "wasi:io/poll#[method]pollable.block",
-        "wasi:io/poll#poll",
-        "wasi:io/streams#[method]input-stream.blocking-read",
-      ],
-      asyncExports: ["tests:p2-shim/test#run"],
-      outDir,
-    });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            asyncImports: [
+                "wasi:io/poll#[method]pollable.block",
+                "wasi:io/poll#poll",
+                "wasi:io/streams#[method]input-stream.blocking-read",
+            ],
+            asyncExports: ["tests:p2-shim/test#run"],
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
 
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
 
-    assert.ok(statusJSON.msg?.includes("all passed"));
+        assert.ok(statusJSON.msg?.includes("all passed"));
 
-    await cleanup();
-  }, 120_000);
+        await cleanup();
+    }, 120_000);
 
-  test("fs-open", async () => {
-    const outDir = await getTmpDir();
+    test("fs-open", async () => {
+        const outDir = await getTmpDir();
 
-    // Create a component that does a basic filesystem operation
-    // This component complies with the component world for the basic-harness fixture
-    //
-    // TODO: we can pre-compile and cache components like this locally for faster runs
-    const successMsg = "SUCCESS: opened file";
-    const { component } = await componentize(
-      `
+        // Create a component that does a basic filesystem operation
+        // This component complies with the component world for the basic-harness fixture
+        //
+        // TODO: we can pre-compile and cache components like this locally for faster runs
+        const successMsg = "SUCCESS: opened file";
+        const { component } = await componentize(
+            `
 import { getDirectories } from "wasi:filesystem/preopens@0.2.8";
 
 export const test = {
@@ -1031,37 +1031,37 @@ export const test = {
     }
 }
 `,
-      {
-        witPath: FIXTURES_WIT_DIR,
-        worldName: "browser-fs-write",
-      } as ComponentizeOptions,
-    );
+            {
+                witPath: FIXTURES_WIT_DIR,
+                worldName: "browser-fs-write",
+            } as ComponentizeOptions,
+        );
 
-    // Transpile the component, write all output files to a temporary directory
-    const { files }: TranspileOutput = await transpile(component, {
-      name: "component",
-      optimize: false,
-      asyncMode: "jspi",
-      outDir,
+        // Transpile the component, write all output files to a temporary directory
+        const { files }: TranspileOutput = await transpile(component, {
+            name: "component",
+            optimize: false,
+            asyncMode: "jspi",
+            outDir,
+        });
+        for (const [outPath, source] of Object.entries(files)) {
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeFile(outPath, source);
+        }
+
+        // Start a test server
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
+
+        // Run the test based on the basic harness code
+        const { statusJSON } = await runBasicHarnessPageTest({
+            browser,
+            url: `${baseURL}/index.html#transpiled:component.js`,
+        });
+
+        assert.strictEqual(statusJSON.msg, successMsg);
+
+        await cleanup();
     });
-    for (const [outPath, source] of Object.entries(files)) {
-      await mkdir(dirname(outPath), { recursive: true });
-      await writeFile(outPath, source);
-    }
-
-    // Start a test server
-    const { baseURL, browser, cleanup } = await startTestServer({
-      transpiledOutputDir: outDir,
-    });
-
-    // Run the test based on the basic harness code
-    const { statusJSON } = await runBasicHarnessPageTest({
-      browser,
-      url: `${baseURL}/index.html#transpiled:component.js`,
-    });
-
-    assert.strictEqual(statusJSON.msg, successMsg);
-
-    await cleanup();
-  });
 });
