@@ -2072,6 +2072,8 @@ impl AsyncTaskIntrinsic {
                                 }},
                                 err,
                             }});
+                            task.setErrored(err);
+                            task.reject(err);
                         }}
                     }}
                 "#,
