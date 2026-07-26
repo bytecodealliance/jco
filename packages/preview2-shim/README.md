@@ -15,8 +15,8 @@ An default instantiation object can be used via the `WASIShim` class in `@byteco
 ```typescript
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import type {
-  VersionedWASIImportObject,
-  WASIImportObject,
+    VersionedWASIImportObject,
+    WASIImportObject,
 } from "@bytecodealliance/preview2-shim/instantiation";
 
 const shim = new WASIShim();
@@ -27,7 +27,7 @@ unversioned satisfies WASIImportObject;
 unversioned satisfies VersionedWASIImportObject<"">;
 
 const versioned: VersionedWASIImportObject<"0.2.3"> = shim.getImportObject({
-  asVersion: "0.2.3",
+    asVersion: "0.2.3",
 });
 //console.log('versioned', versioned);
 versioned satisfies VersionedWASIImportObject<"0.2.3">;
@@ -66,23 +66,23 @@ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 // Fully sandboxed - no filesystem, network, or env access
 const sandboxedShim = new WASIShim({
-  sandbox: {
-    preopens: {}, // No filesystem access
-    env: {}, // No environment variables
-    args: ["arg1"], // Custom arguments
-    enableNetwork: false, // Disable network access
-  },
+    sandbox: {
+        preopens: {}, // No filesystem access
+        env: {}, // No environment variables
+        args: ["arg1"], // Custom arguments
+        enableNetwork: false, // Disable network access
+    },
 });
 
 // Limited filesystem access - map virtual paths to host paths
 const limitedShim = new WASIShim({
-  sandbox: {
-    preopens: {
-      "/data": "/tmp/guest-data", // Guest sees /data, maps to /tmp/guest-data
-      "/config": "/etc/app", // Guest sees /config, maps to /etc/app
+    sandbox: {
+        preopens: {
+            "/data": "/tmp/guest-data", // Guest sees /data, maps to /tmp/guest-data
+            "/config": "/etc/app", // Guest sees /config, maps to /etc/app
+        },
+        env: { ENV1: "42" }, // Only expose specific env vars
     },
-    env: { ENV1: "42" }, // Only expose specific env vars
-  },
 });
 
 const component = await instantiate(loader, sandboxedShim.getImportObject());

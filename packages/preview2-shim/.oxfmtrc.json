@@ -1,3 +1,4 @@
 {
-  "ignorePatterns": ["types/**/*"]
+    "ignorePatterns": ["types/**/*"],
+    "tabWidth": 4
 }
