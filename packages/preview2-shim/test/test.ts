@@ -298,6 +298,25 @@ suite("Node.js Preview2", () => {
                 responseBody = new TextDecoder().decode(buf);
             }
 
+            const futureTrailers = http.types.IncomingBody.finish(incomingBody);
+            const trailersPollable = futureTrailers.subscribe();
+            trailersPollable.block();
+            assert.ok(trailersPollable.ready());
+            const trailersResult = futureTrailers.get();
+            if (!trailersResult || trailersResult.tag !== "ok" || trailersResult.val.tag !== "ok") {
+                throw new Error("expected successful trailers result");
+            }
+            const trailers = trailersResult.val.val;
+            if (!trailers) {
+                throw new Error("expected present trailers");
+            }
+            assert.deepStrictEqual(trailers.entries(), []);
+            throws(
+                () => trailers.append("x-test", encoder.encode("value")),
+                (err: any) => err?.tag === "immutable",
+            );
+            assert.strictEqual(futureTrailers.get()?.tag, "err");
+
             assert.strictEqual(status, 200);
             assert.ok(headers["content-type"].startsWith("text/html"));
             assert.ok(responseBody.includes("WebAssembly"));
