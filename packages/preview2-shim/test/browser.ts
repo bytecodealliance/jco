@@ -100,6 +100,32 @@ export const test = {
         }
 
         const bodyText = new TextDecoder().decode(bodyBytes);
+
+        const futureTrailers = IncomingBody.finish(incomingBody);
+        const trailersPollable = futureTrailers.subscribe();
+        if (!trailersPollable.ready()) { throw "ERROR: trailers future was not ready"; }
+
+        const trailersResult = futureTrailers.get();
+        if (!trailersResult || trailersResult.tag !== "ok" || trailersResult.val.tag !== "ok") {
+            throw "ERROR: trailers future failed: " + JSON.stringify(trailersResult);
+        }
+        const trailers = trailersResult.val.val;
+        if (!trailers || trailers.entries().length !== 0) {
+            throw "ERROR: expected present, empty trailers";
+        }
+        let immutable = false;
+        try {
+            trailers.append("x-test", new TextEncoder().encode("value"));
+        } catch (e) {
+            immutable = e.tag === "immutable" || (e.payload && e.payload.tag === "immutable");
+        }
+        if (!immutable) { throw "ERROR: trailers must be immutable"; }
+
+        const secondGet = futureTrailers.get();
+        if (!secondGet || secondGet.tag !== "err") {
+            throw "ERROR: trailers future must only be consumed once";
+        }
+
         return bodyText;
     }
 }

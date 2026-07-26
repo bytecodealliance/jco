@@ -20,10 +20,11 @@ import {
     ioCall,
     outputStreamCreate,
     pollableCreate,
+    createPoll,
     registerDispose,
     registerIncomingHttpHandler,
 } from "../io/worker-io.js";
-import { HTTP } from "../io/calls.js";
+import { CLOCKS_DURATION_SUBSCRIBE, HTTP } from "../io/calls.js";
 
 import * as http from "node:http";
 import { InputStream, OutputStream, Pollable } from "../../types/interfaces/wasi-io-streams.js";
@@ -107,7 +108,7 @@ delete IncomingRequest._create;
 class FutureTrailers implements TypesNamespace.FutureTrailers {
     #requested = false;
     subscribe() {
-        return pollableCreate(0, this);
+        return createPoll(CLOCKS_DURATION_SUBSCRIBE, null, 0n);
     }
     get():
         | Result<Result<TypesNamespace.Trailers | undefined, TypesNamespace.ErrorCode>, void>
@@ -120,7 +121,7 @@ class FutureTrailers implements TypesNamespace.FutureTrailers {
             tag: "ok",
             val: {
                 tag: "ok",
-                val: undefined,
+                val: fieldsLock(fieldsFromEntriesChecked([])),
             },
         };
     }

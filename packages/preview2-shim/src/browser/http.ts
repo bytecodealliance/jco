@@ -600,7 +600,7 @@ class FutureTrailers implements TypesNamespace.FutureTrailers {
             tag: "ok",
             val: {
                 tag: "ok",
-                val: undefined,
+                val: fieldsLock(fieldsFromEntriesChecked([])),
             },
         };
     }
