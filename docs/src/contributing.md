@@ -44,6 +44,7 @@ jco is effectively a monorepo consisting of the following projects:
 * `src/jco.ts`: The jco CLI. It is compiled to `dist/jco.js` and published as [`@bytecodealliance/jco`](https://npmjs.org/package/@bytecodealliance/jco).
 * `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as [`@bytecodealliance/preview2-shim`](https://www.npmjs.com/package/@bytecodealliance/preview2-shim).
 * `packages/preview3-shim`: The WASI Preview3 host implementations for Node.js
+* `packages/rolldown-plugin-jco`: Rolldown and Rollup plugin for importing WebAssembly Components through Jco.
 
 ### Files that should be checked in
 
@@ -69,6 +70,7 @@ There are three test suites in jco:
 * `pnpm run test`: Project-level transpilation, CLI & API tests.
 * `pnpm run --filter 'packages/preview2-shim' test`: `preview2-shim` unit tests.
 * `pnpm run --filter 'packages/preview3-shim' test`: `preview3-shim` unit tests.
+* `pnpm run --filter 'packages/rolldown-plugin-jco' test`: Rolldown and Rollup plugin tests.
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
 

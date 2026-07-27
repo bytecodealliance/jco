@@ -51,6 +51,7 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 | `jco-std`                        | Javascript | `packages/jco-std`                      | A "standard library" for Jco which provides integrations for popular JS frameworks/paradigms    |
 | `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview 2][wasi-p2] for NodeJS and Browsers            |
 | `preview3-shim`                  | Javascript | `packages/preview3-shim`                | Library that provides a mapping of WASI Preview 3 for NodeJS                                    |
+| `rolldown-plugin-jco`            | Javascript | `packages/rolldown-plugin-jco`          | Rolldown and Rollup plugin for importing WebAssembly Components through Jco                     |
 | `js-component-bindgen`           | Rust       | `crates/js-component-bindgen`           | Enables `jco transpile` and other features, reusing the Rust WebAssembly ecosystem              |
 | `js-component-bindgen-component` | Rust       | `crates/js-component-bindgen-component` | WebAssembly component that (when transpiled) makes `js-component-bindgen` available in JS `jco` |
 | `wasm-tools-component`           | Rust       | `crates/wasm-tools-component`           | WebAssembly component containing pieces of [`wasm-tools`][wt] used by `jco`                     |

@@ -1,0 +1,79 @@
+{
+    "name": "@bytecodealliance/rolldown-plugin-jco",
+    "version": "0.0.0",
+    "description": "Rolldown and Rollup plugin for using the Jco WebAssembly component toolkit",
+    "keywords": [
+        "Component",
+        "Rolldown",
+        "Rollup",
+        "Wasm",
+        "WebAssembly"
+    ],
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
+    },
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "contributors": [
+        {
+            "name": "Victor Adossi",
+            "email": "vadossi@cosmonic.com"
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git",
+        "directory": "packages/rolldown-plugin-jco"
+    },
+    "files": [
+        "dist",
+        "wasm.d.ts"
+    ],
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        },
+        "./wasm": {
+            "types": "./wasm.d.ts"
+        }
+    },
+    "scripts": {
+        "fmt": "oxfmt",
+        "fmt:check": "oxfmt --check",
+        "lint": "oxlint",
+        "lint:fix": "oxlint --fix",
+        "types:check": "tsc --noEmit",
+        "build:ts": "tsc -p tsconfig.build.json",
+        "build": "pnpm run build:ts",
+        "test": "pnpm run build:ts && vitest run -c test/vitest.ts",
+        "prepack": "pnpm run build"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco": "^1.26.1",
+        "@rollup/pluginutils": "^5.3.0"
+    },
+    "devDependencies": {
+        "@types/node": "^24.12.0",
+        "rolldown": "catalog:",
+        "rollup": "^4.50.0",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    },
+    "peerDependencies": {
+        "rolldown": ">=1.0.0",
+        "rollup": ">=4.0.0"
+    },
+    "peerDependenciesMeta": {
+        "rolldown": {
+            "optional": true
+        },
+        "rollup": {
+            "optional": true
+        }
+    }
+}

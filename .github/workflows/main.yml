@@ -633,12 +633,13 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
 
-  test-jco-std:
+  test-js-workspace-packages:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         workspace:
           - jco-std
+          - rolldown-plugin-jco
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -670,10 +671,14 @@ jobs:
         run: |
           pnpm install
 
-      - name: Build jco-transpile, jco-std
+      - name: Build workspace dependencies and package
         run: |
-          pnpm --filter "packages/jco-transpile" run build
-          pnpm --filter "packages/${{ matrix.workspace }}" run build
+          if [ "${{ matrix.workspace }}" = "jco-std" ]; then
+            pnpm --filter "packages/jco-transpile" run build
+            pnpm --filter "packages/${{ matrix.workspace }}" run build
+          else
+            pnpm --filter "packages/${{ matrix.workspace }}" run build
+          fi
 
       - name: run test on workspace
         run: |

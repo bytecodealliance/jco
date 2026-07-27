@@ -12,6 +12,7 @@ updates:
       - '/'
       - '/packages/preview2-shim'
       - '/packages/preview3-shim'
+      - '/packages/rolldown-plugin-jco'
       - '/examples/components/*'
     groups:
       example-dependencies:

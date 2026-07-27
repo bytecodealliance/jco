@@ -17,6 +17,8 @@ on:
       - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "preview3-shim-v[0-9]+.[0-9]+.[0-9]+*"
       - "preview3-shim-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "rolldown-plugin-jco-v[0-9]+.[0-9]+.[0-9]+*"
+      - "rolldown-plugin-jco-v[0-9]+.[0-9]+.[0-9]+-*"
       - "js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
       - "js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
     branches:
@@ -32,6 +34,8 @@ on:
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-preview3-shim-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-preview3-shim-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "prep-release-rolldown-plugin-jco-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-rolldown-plugin-jco-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
 
@@ -49,6 +53,7 @@ on:
           - js-component-bindgen
           - preview2-shim
           - preview3-shim
+          - rolldown-plugin-jco
         description: |
           Project to tag for release (ex. `0.1.0`)
 
@@ -188,6 +193,15 @@ jobs:
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="packages/preview3-shim/bytecodealliance-preview3-shim-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-preview3-shim-$NEXT_VERSION.tgz";
+              ;;
+            rolldown-plugin-jco)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export PROJECT_PACKAGE_NAME="@bytecodealliance/rolldown-plugin-jco";
+              CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export CURRENT_VERSION;
+              export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="packages/rolldown-plugin/bytecodealliance-rolldown-plugin-jco-*.tgz";
+              export ARTIFACT_NAME="bytecodealliance-rolldown-plugin-jco-$NEXT_VERSION.tgz";
               ;;
             js-component-bindgen)
               export PROJECT_DIR="$PWD/crates/$PROJECT";
