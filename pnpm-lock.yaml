@@ -127,7 +127,7 @@ importers:
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.25.2
-        version: 1.25.2(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+        version: 1.25.2
       rolldown:
         specifier: ^1.1.0
         version: 1.1.0
@@ -291,10 +291,10 @@ importers:
         version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
-        version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
+        version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.5.1
-        version: 0.5.1
+        specifier: ^0.5.2
+        version: 0.5.2
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.9
         version: 0.17.9
@@ -364,7 +364,7 @@ importers:
         version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
-        version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
+        version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile':
         specifier: ^0.5.1
         version: 0.5.1
@@ -437,7 +437,7 @@ importers:
         version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/jco':
         specifier: 1.25.2
-        version: 1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        version: 1.25.2
       '@types/node':
         specifier: ^24.12.4
         version: 24.12.4
@@ -564,6 +564,9 @@ packages:
 
   '@bytecodealliance/jco-transpile@0.5.1':
     resolution: {integrity: sha512-vETdOMg/JGfR+GWw014xHY/IRgBxZZ3HXW+rtro7rfktZy4V9cuZ5iMy8KH5jUu+X1d03DHXykflZJFS5ksuQQ==}
+
+  '@bytecodealliance/jco-transpile@0.5.2':
+    resolution: {integrity: sha512-zXrPtrJkn5jq6MBAOLZUlPnmgdLa8RDER9T4gCclgbAPHWIZSWEjDzv4MrrO3sz6Tvh1eJK1ou2SrrNnJxdTfA==}
 
   '@bytecodealliance/jco@1.25.2':
     resolution: {integrity: sha512-r9ch8vqtDkBxXtN5KzAEYpz+hjGCW+cQhc2b71U21DMuewE5HrTCI7X826gfL/1oU0ibsSpGodJV5YkwolH9Jg==}
@@ -4200,23 +4203,10 @@ snapshots:
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
-  '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
-    dependencies:
-      '@bytecodealliance/jco': 1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
-      '@bytecodealliance/wizer': 10.0.0
-      es-module-lexer: 1.7.0
-      oxc-parser: 0.76.0
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
 
   '@bytecodealliance/componentize-js@0.20.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
     dependencies:
-      '@bytecodealliance/jco': 1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/jco': 1.25.2
       '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4236,20 +4226,9 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@bytecodealliance/componentize-js@0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
-    dependencies:
-      '@bytecodealliance/jco': 1.25.2(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
-      '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
-      '@bytecodealliance/wizer': 10.0.0
-      es-module-lexer: 1.7.0
-      oxc-parser: 0.76.0
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
   '@bytecodealliance/componentize-js@0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
     dependencies:
-      '@bytecodealliance/jco': 1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/jco': 1.25.2
       '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4274,39 +4253,16 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
+  '@bytecodealliance/jco-transpile@0.5.2':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.19.0
+      '@bytecodealliance/preview3-shim': 0.2.0
+      binaryen: 130.0.0
+      oxc-minify: 0.136.0
+
   '@bytecodealliance/jco@1.25.2':
     dependencies:
       '@bytecodealliance/componentize-js': 0.21.0
-      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.4.2
-      '@bytecodealliance/preview2-shim': 0.17.9
-      '@bytecodealliance/preview3-shim': 0.1.2
-      binaryen: 130.0.0
-      commander: 14.0.3
-      mkdirp: 3.0.1
-      ora: 8.2.0
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
-  '@bytecodealliance/jco@1.25.2(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
-    dependencies:
-      '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
-      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.4.2
-      '@bytecodealliance/preview2-shim': 0.17.9
-      '@bytecodealliance/preview3-shim': 0.1.2
-      binaryen: 130.0.0
-      commander: 14.0.3
-      mkdirp: 3.0.1
-      ora: 8.2.0
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
-  '@bytecodealliance/jco@1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
-    dependencies:
-      '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.4.2
       '@bytecodealliance/preview2-shim': 0.17.9
@@ -4323,7 +4279,7 @@ snapshots:
     dependencies:
       '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.5.1
+      '@bytecodealliance/jco-transpile': 0.5.2
       '@bytecodealliance/preview2-shim': 0.17.9
       '@bytecodealliance/preview3-shim': 0.1.2
       binaryen: 130.0.0
@@ -4351,16 +4307,6 @@ snapshots:
   '@bytecodealliance/weval@0.4.1':
     dependencies:
       '@napi-rs/lzma': 1.4.5
-      decompress: 4.2.1
-      decompress-tar: 4.1.1
-      decompress-unzip: 4.0.1
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
-  '@bytecodealliance/weval@0.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
-    dependencies:
-      '@napi-rs/lzma': 1.4.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       decompress: 4.2.1
       decompress-tar: 4.1.1
       decompress-unzip: 4.0.1
@@ -4805,14 +4751,6 @@ snapshots:
       - '@emnapi/runtime'
     optional: true
 
-  '@napi-rs/lzma-wasm32-wasi@1.4.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
-    dependencies:
-      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-    optional: true
-
   '@napi-rs/lzma-wasm32-wasi@1.4.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
     dependencies:
       '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
@@ -4846,29 +4784,6 @@ snapshots:
       '@napi-rs/lzma-linux-x64-gnu': 1.4.5
       '@napi-rs/lzma-linux-x64-musl': 1.4.5
       '@napi-rs/lzma-wasm32-wasi': 1.4.5
-      '@napi-rs/lzma-win32-arm64-msvc': 1.4.5
-      '@napi-rs/lzma-win32-ia32-msvc': 1.4.5
-      '@napi-rs/lzma-win32-x64-msvc': 1.4.5
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
-  '@napi-rs/lzma@1.4.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
-    optionalDependencies:
-      '@napi-rs/lzma-android-arm-eabi': 1.4.5
-      '@napi-rs/lzma-android-arm64': 1.4.5
-      '@napi-rs/lzma-darwin-arm64': 1.4.5
-      '@napi-rs/lzma-darwin-x64': 1.4.5
-      '@napi-rs/lzma-freebsd-x64': 1.4.5
-      '@napi-rs/lzma-linux-arm-gnueabihf': 1.4.5
-      '@napi-rs/lzma-linux-arm64-gnu': 1.4.5
-      '@napi-rs/lzma-linux-arm64-musl': 1.4.5
-      '@napi-rs/lzma-linux-ppc64-gnu': 1.4.5
-      '@napi-rs/lzma-linux-riscv64-gnu': 1.4.5
-      '@napi-rs/lzma-linux-s390x-gnu': 1.4.5
-      '@napi-rs/lzma-linux-x64-gnu': 1.4.5
-      '@napi-rs/lzma-linux-x64-musl': 1.4.5
-      '@napi-rs/lzma-wasm32-wasi': 1.4.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@napi-rs/lzma-win32-arm64-msvc': 1.4.5
       '@napi-rs/lzma-win32-ia32-msvc': 1.4.5
       '@napi-rs/lzma-win32-x64-msvc': 1.4.5
