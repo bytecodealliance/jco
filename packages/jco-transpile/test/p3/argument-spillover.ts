@@ -35,6 +35,7 @@ function spilloverHost(overrides: Record<string, (...args: number[]) => number |
         sync16: unexpected('sync-16'),
         sync18: unexpected('sync-18'),
         async4: unexpected('async-4'),
+        async5: unexpected('async-5'),
         ...overrides,
     };
 }
@@ -99,6 +100,28 @@ suite('Canonical ABI argument spillover', () => {
         try {
             assert.instanceOf(instance.async4, AsyncFunction);
             assert.strictEqual(await instance.async4(...expected), checksum(expected));
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('async calls preserve 5 parameters when the lower spills', async () => {
+        const expected = args(5);
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: componentPath,
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/argument-spillover-host': spilloverHost({
+                        async5: async (...actual) => validatingHost(expected)(...actual),
+                    }),
+                },
+            },
+        });
+
+        try {
+            assert.instanceOf(instance.async5, AsyncFunction);
+            assert.strictEqual(await instance.async5(...expected), checksum(expected));
         } finally {
             await cleanup();
         }
