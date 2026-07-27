@@ -59,6 +59,10 @@ impl bindings::Guest for Component {
             p18,
         )
     }
+
+    async fn async_4(p01: u32, p02: u32, p03: u32, p04: u32) -> u32 {
+        host::async_4(p01, p02, p03, p04).await
+    }
 }
 
 fn main() {}
