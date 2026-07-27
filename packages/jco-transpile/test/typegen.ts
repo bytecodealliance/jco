@@ -115,4 +115,29 @@ suite('Type Generation', () => {
         assert.include(worldDts, 'export type * as Primary');
         assert.include(worldDts, 'export type * as Secondary');
     });
+
+    test('named stream and future types', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/named-async-types.wit`, {
+            worldName: 'test:named-async-types/named-async-types',
+        });
+
+        const worldDts = Buffer.from(files['named-async-types.d.ts']).toString();
+        const typesDts = Buffer.from(files['interfaces/test-named-async-types-types.d.ts']).toString();
+        const pipelineDts = Buffer.from(files['interfaces/test-named-async-types-pipeline.d.ts']).toString();
+
+        assert.include(worldDts, 'export type ByteStream = AsyncIterable<number>;');
+        assert.include(worldDts, 'export type Ready = PromiseLike<void>;');
+        assert.include(typesDts, 'export type MessageStream = AsyncIterable<Message>;');
+        assert.include(typesDts, 'export type MessageFuture = PromiseLike<Message>;');
+        assert.include(typesDts, 'export type SignalStream = AsyncIterable<void>;');
+        assert.include(typesDts, 'export type SignalFuture = PromiseLike<void>;');
+        assert.include(
+            pipelineDts,
+            "export type MessageStream = import('./test-named-async-types-types.js').MessageStream;",
+        );
+        assert.include(
+            pipelineDts,
+            "export type MessageFuture = import('./test-named-async-types-types.js').MessageFuture;",
+        );
+    });
 });

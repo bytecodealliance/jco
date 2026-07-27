@@ -262,8 +262,8 @@ pub fn ts_bindgen(
                             generator.type_fixed_size_list(*id, name, t, len, &ty.docs)
                         }
                         TypeDefKind::Type(t) => generator.type_alias(*id, name, t, None, &ty.docs),
-                        TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
-                        TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
+                        TypeDefKind::Future(t) => generator.type_future(name, t, &ty.docs),
+                        TypeDefKind::Stream(t) => generator.type_stream(name, t, &ty.docs),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
                         TypeDefKind::Resource => {
                             generator.type_resource(*id, ty, GeneratedTypeMeta { is_export: false })
@@ -944,8 +944,8 @@ impl<'a> TsInterface<'a> {
                     self.type_fixed_size_list(*id, name, t, len, &ty.docs)
                 }
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
-                TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
-                TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
+                TypeDefKind::Future(t) => self.type_future(name, t, &ty.docs),
+                TypeDefKind::Stream(t) => self.type_stream(name, t, &ty.docs),
                 TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
                 TypeDefKind::Resource => self.type_resource(
                     *id,
@@ -1010,12 +1010,12 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::List(v) => self.print_list_ty(v),
                     TypeDefKind::FixedLengthList(v, len) => self.print_fixed_size_list(v, len),
                     TypeDefKind::Future(maybe_ty) => {
-                        self.src.push_str("Promise<");
+                        self.src.push_str("PromiseLike<");
                         self.print_optional_ty(maybe_ty.as_ref());
                         self.src.push_str(">");
                     }
                     TypeDefKind::Stream(maybe_ty) => {
-                        self.src.push_str("ReadableStream<");
+                        self.src.push_str("AsyncIterable<");
                         self.print_optional_ty(maybe_ty.as_ref());
                         self.src.push_str(">");
                     }
@@ -1439,6 +1439,26 @@ impl<'a> TsInterface<'a> {
                 self.src.push_str(";\n");
             }
         }
+    }
+
+    fn type_future(&mut self, name: &str, element_ty: &Option<Type>, docs: &Docs) {
+        self.docs(docs);
+        self.src.push_str(&format!(
+            "export type {} = PromiseLike<",
+            name.to_upper_camel_case()
+        ));
+        self.print_optional_ty(element_ty.as_ref());
+        self.src.push_str(">;\n");
+    }
+
+    fn type_stream(&mut self, name: &str, element_ty: &Option<Type>, docs: &Docs) {
+        self.docs(docs);
+        self.src.push_str(&format!(
+            "export type {} = AsyncIterable<",
+            name.to_upper_camel_case()
+        ));
+        self.print_optional_ty(element_ty.as_ref());
+        self.src.push_str(">;\n");
     }
 
     fn type_list(&mut self, _id: TypeId, name: &str, element_ty: &Type, docs: &Docs) {
