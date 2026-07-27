@@ -11,6 +11,7 @@ packages:
   - packages/jco-std
   - packages/preview2-shim
   - packages/preview3-shim
+  - packages/rolldown-plugin-jco
   - examples/components/add
   - examples/components/adder
   - examples/components/builtin-bundle-ts
@@ -81,3 +82,4 @@ minimumReleaseAgeExclude:
   - puppeteer-core@25.1.0
   - puppeteer@25.1.0
   - ws@8.21.0
+  - '@bytecodealliance/jco@1.26.0 || 1.26.1'

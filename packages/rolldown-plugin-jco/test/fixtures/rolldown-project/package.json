@@ -1,0 +1,16 @@
+{
+    "name": "rolldown-plugin-jco-fixture",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "node build.mjs",
+        "verify": "node verify.mjs",
+        "test": "pnpm run build && pnpm run verify"
+    },
+    "dependencies": {
+        "@bytecodealliance/rolldown-plugin-jco": "file:../../.."
+    },
+    "devDependencies": {
+        "rolldown": "1.2.0"
+    }
+}
