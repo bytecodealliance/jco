@@ -24,6 +24,12 @@ function validatingHost(expected: number[]) {
     };
 }
 
+function unexpected(name: string) {
+    return () => {
+        throw new Error(`unexpected ${name} call`);
+    };
+}
+
 suite('Canonical ABI argument spillover', () => {
     test('sync calls preserve 16 flat parameters', async () => {
         const expected = args(16);
@@ -34,6 +40,7 @@ suite('Canonical ABI argument spillover', () => {
                     ...new WASIShim().getImportObject(),
                     'jco:test-components/argument-spillover-host': {
                         sync16: validatingHost(expected),
+                        sync18: unexpected('sync-18'),
                     },
                 },
             },
@@ -41,6 +48,28 @@ suite('Canonical ABI argument spillover', () => {
 
         try {
             assert.strictEqual(instance.sync16(...expected), checksum(expected));
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('sync calls preserve 18 spilled parameters', async () => {
+        const expected = args(18);
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: componentPath,
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/argument-spillover-host': {
+                        sync16: unexpected('sync-16'),
+                        sync18: validatingHost(expected),
+                    },
+                },
+            },
+        });
+
+        try {
+            assert.strictEqual(instance.sync18(...expected), checksum(expected));
         } finally {
             await cleanup();
         }
