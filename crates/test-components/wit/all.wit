@@ -57,6 +57,7 @@ interface argument-spillover-host {
         p17: u32, p18: u32,
     ) -> u32;
     async-4: async func(p01: u32, p02: u32, p03: u32, p04: u32) -> u32;
+    async-5: async func(p01: u32, p02: u32, p03: u32, p04: u32, p05: u32) -> u32;
 }
 
 interface sync-lower-result-pointer-host {
@@ -312,6 +313,7 @@ world argument-spillover {
     p17: u32, p18: u32,
   ) -> u32;
   export async-4: async func(p01: u32, p02: u32, p03: u32, p04: u32) -> u32;
+  export async-5: async func(p01: u32, p02: u32, p03: u32, p04: u32, p05: u32) -> u32;
 }
 
 world async-simple-return {
