@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.2] - 2026-07-27
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ reject task on driver loop exception by @lann in #1775
+
+
+
+
 ## [2.1.1] - 2026-07-26
 
 ### 🐛 Bug Fixes
