@@ -49,6 +49,13 @@ interface argument-spillover-host {
         p09: u32, p10: u32, p11: u32, p12: u32,
         p13: u32, p14: u32, p15: u32, p16: u32,
     ) -> u32;
+    sync-18: func(
+        p01: u32, p02: u32, p03: u32, p04: u32,
+        p05: u32, p06: u32, p07: u32, p08: u32,
+        p09: u32, p10: u32, p11: u32, p12: u32,
+        p13: u32, p14: u32, p15: u32, p16: u32,
+        p17: u32, p18: u32,
+    ) -> u32;
 }
 
 interface sync-lower-result-pointer-host {
@@ -295,6 +302,13 @@ world argument-spillover {
     p05: u32, p06: u32, p07: u32, p08: u32,
     p09: u32, p10: u32, p11: u32, p12: u32,
     p13: u32, p14: u32, p15: u32, p16: u32,
+  ) -> u32;
+  export sync-18: func(
+    p01: u32, p02: u32, p03: u32, p04: u32,
+    p05: u32, p06: u32, p07: u32, p08: u32,
+    p09: u32, p10: u32, p11: u32, p12: u32,
+    p13: u32, p14: u32, p15: u32, p16: u32,
+    p17: u32, p18: u32,
   ) -> u32;
 }
 
