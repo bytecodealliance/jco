@@ -1,0 +1,30 @@
+package test:named-async-types;
+
+interface types {
+  record message {
+    text: string,
+  }
+
+  /// Messages delivered incrementally.
+  type message-stream = stream<message>;
+
+  /// Completion of asynchronous message processing.
+  type message-future = future<message>;
+
+  type signal-stream = stream;
+  type signal-future = future;
+}
+
+interface pipeline {
+  use types.{message-future, message-stream};
+
+  transform: func(input: message-stream) -> tuple<message-stream, message-future>;
+}
+
+world named-async-types {
+  type byte-stream = stream<u8>;
+  type ready = future;
+
+  import pipeline;
+  export types;
+}
