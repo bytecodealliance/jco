@@ -470,6 +470,7 @@ impl FunctionBindgen<'_> {
     fn start_current_task(&mut self, instr: &Instruction) {
         let is_async = self.is_async;
         let is_manual_async = self.requires_async_porcelain;
+        let preserve_future_result = self.wrap_async_future_result;
         let fn_name = self.callee;
         let err_handling = self.err.to_js_string();
 
@@ -504,6 +505,7 @@ impl FunctionBindgen<'_> {
                   componentIdx: {component_idx_expr},
                   isAsync: {is_async},
                   isManualAsync: {is_manual_async},
+                  preserveFutureResult: {preserve_future_result},
                   entryFnName: '{fn_name}',
                   getCallbackFn: {get_callback_fn_expr},
                   callbackFnName: {callback_fn_name},
