@@ -1104,6 +1104,40 @@ suite("Sandboxing", () => {
         }),
     );
 });
+suite("Browser filesystem", () => {
+    test("writeViaStream reuses file capacity", async () => {
+        const { _setFileData, preopens } = await import("../src/browser/filesystem.js");
+        const file = { source: new Uint8Array([1, 2, 3]) };
+        _setFileData({ dir: { file } });
+
+        const [[rootDescriptor]] = preopens.getDirectories();
+        const descriptor = rootDescriptor.openAt({}, "file", {}, { write: true });
+        const stream = descriptor.writeViaStream(3n);
+
+        stream.write(new Uint8Array([4, 5]));
+        const buffer = file.source.buffer;
+        stream.write(new Uint8Array([6]));
+
+        assert.strictEqual(file.source.buffer, buffer);
+        assert.deepStrictEqual(file.source, new Uint8Array([1, 2, 3, 4, 5, 6]));
+    });
+
+    test("writeViaStream preserves overwrite and sparse-write semantics", async () => {
+        const { _setFileData, preopens } = await import("../src/browser/filesystem.js");
+        const file = { source: new Uint8Array([1, 2, 3, 4]) };
+        _setFileData({ dir: { file } });
+
+        const [[rootDescriptor]] = preopens.getDirectories();
+        const descriptor = rootDescriptor.openAt({}, "file", {}, { write: true });
+
+        descriptor.writeViaStream(1n).write(new Uint8Array([8, 9]));
+        assert.deepStrictEqual(file.source, new Uint8Array([1, 8, 9, 4]));
+
+        descriptor.writeViaStream(6n).write(new Uint8Array([7]));
+        assert.deepStrictEqual(file.source, new Uint8Array([1, 8, 9, 4, 0, 0, 7]));
+    });
+});
+
 suite("Browser shim guards", () => {
     test("pollList throws on empty list", async () => {
         const { poll } = await import("../src/browser/io.js");

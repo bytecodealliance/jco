@@ -113,6 +113,28 @@ function getSource(fileEntry: FileDataEntry): Uint8Array {
     return fileEntry.source!;
 }
 
+// Keep spare capacity separate so FileDataEntry.source always reflects the logical file size.
+const fileWriteBuffers = new WeakMap<FileDataEntry, Uint8Array>();
+
+function getFileWriteBuffer(
+    entry: FileDataEntry,
+    source: Uint8Array,
+    requiredLength: number,
+): Uint8Array {
+    let buffer = fileWriteBuffers.get(entry);
+    if (!buffer || buffer.buffer !== source.buffer || buffer.byteOffset !== source.byteOffset) {
+        buffer = source;
+    }
+    if (requiredLength <= buffer.byteLength) {
+        return buffer;
+    }
+
+    const newBuffer = new Uint8Array(Math.max(requiredLength, source.byteLength * 2));
+    newBuffer.set(source);
+    fileWriteBuffers.set(entry, newBuffer);
+    return newBuffer;
+}
+
 class DirectoryEntryStream implements TypesNamespace.DirectoryEntryStream {
     idx = 0;
     entries: [string, FileDataEntry][] = [];
@@ -176,15 +198,24 @@ class Descriptor implements TypesNamespace.Descriptor {
 
     writeViaStream(_offset: bigint) {
         const entry = this.#entry;
-        let offset = Number(_offset);
+        let offset = coerceToSafeIntegerNumber(_offset);
         return outputStreamCreate({
             write(buf: Uint8Array): void {
-                const src = entry.source as Uint8Array;
-                const newSource = new Uint8Array(buf.byteLength + src.byteLength);
-                newSource.set(src, 0);
-                newSource.set(buf, offset);
-                offset += buf.byteLength;
-                entry.source = newSource;
+                if (buf.byteLength === 0) {
+                    return;
+                }
+                const source = getSource(entry);
+                const end = offset + buf.byteLength;
+                if (!Number.isSafeInteger(end)) {
+                    throw new TypeError(`excessively large number: ${end}`);
+                }
+                const buffer = getFileWriteBuffer(entry, source, end);
+                if (offset > source.byteLength) {
+                    buffer.fill(0, source.byteLength, offset);
+                }
+                buffer.set(buf, offset);
+                entry.source = buffer.subarray(0, Math.max(source.byteLength, end));
+                offset = end;
             },
         }) as IOutputStream;
     }
