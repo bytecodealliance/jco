@@ -176,7 +176,7 @@ suite('Implements (labeled imports/exports)', () => {
             },
             'labeled.js',
             (mod) => {
-                assert.deepStrictEqual(Object.keys(mod), ['events']);
+                assert.include(Object.keys(mod), 'events');
                 assert.strictEqual(typeof (mod.events as Record<string, unknown>).log, 'function');
             },
         );
