@@ -677,6 +677,7 @@ impl AsyncTaskIntrinsic {
                             componentIdx,
                             isAsync,
                             isManualAsync,
+                            preserveFutureResult,
                             entryFnName,
                             parentSubtaskID,
                             callbackFnName,
@@ -698,6 +699,7 @@ impl AsyncTaskIntrinsic {
                             componentIdx,
                             isAsync,
                             isManualAsync,
+                            preserveFutureResult,
                             entryFnName,
                             callbackFn,
                             callbackFnName,
@@ -844,6 +846,7 @@ impl AsyncTaskIntrinsic {
                         #state;
                         #isAsync;
                         #isManualAsync;
+                        #preserveFutureResult;
                         #entryFnName = null;
 
                         #onResolveHandlers = [];
@@ -901,6 +904,7 @@ impl AsyncTaskIntrinsic {
                            this.#state = {task_class}.State.INITIAL;
                            this.#isAsync = opts?.isAsync ?? false;
                            this.#isManualAsync = opts?.isManualAsync ?? false;
+                           this.#preserveFutureResult = opts?.preserveFutureResult ?? false;
                            this.#entryFnName = opts.entryFnName;
 
                            const {{
@@ -922,7 +926,7 @@ impl AsyncTaskIntrinsic {
                                    return;
                                }}
 
-                               if (results instanceof {future_value_class}) {{
+                               if (this.#preserveFutureResult && results instanceof {future_value_class}) {{
                                    results.resolveAsValue(resolveCompletionPromise);
                                }} else {{
                                    resolveCompletionPromise(results);
