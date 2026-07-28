@@ -222,6 +222,8 @@ struct JsFunctionBindgenArgs<'a> {
     requires_async_porcelain: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
+    /// Whether an async export must preserve its future result as an awaitable layer.
+    wrap_async_future_result: bool,
     /// Whether the function in question is being generated for an import
     /// (false implies generation is happening for an export)
     for_import: bool,
@@ -476,6 +478,7 @@ impl JsBindgen<'_> {
             .build();
         let js_intrinsics = render_intrinsics(render_args);
 
+        // Write out instantiation
         if let Some(instantiation) = &self.opts.instantiation_mode {
             uwrite!(
                 output,
@@ -618,6 +621,11 @@ impl JsBindgen<'_> {
             );
         }
 
+        // The generated ES module will have a `util` member that can be used,
+        // (but may be empty), which hosts can use to perform special functionality
+        // like nesting futures where necessary.
+        self.write_util_export(&mut output);
+
         let mut bytes = output.as_bytes();
         // strip leading newline
         if bytes[0] == b'\n' {
@@ -629,6 +637,58 @@ impl JsBindgen<'_> {
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
         intrinsic.name().to_string()
+    }
+
+    /// Write out utility helpers/objects (available via esModule._util)
+    fn write_util_export(&mut self, output: &mut source::Source) {
+        // Future` class that can be used by external consumers (e.g. host code) to build nested future values
+        //
+        // This class is exposed via module._util, always
+        let maybe_ext_future_class = if self.all_intrinsics.contains(&Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::HostFutureClass,
+        )) {
+            r#"
+                  Future: class Future {
+                      #value;
+                      #hidden = 0;
+                      constructor(value) {
+                          this.#value = value;
+                      }
+                      get then() {
+                          if (this.#hidden !== 0) {
+                              return undefined;
+                          }
+                          return (resolve) => {
+                              if (this.#value instanceof Future) {
+                                  this.#value.resolveAsValue(resolve);
+                              } else {
+                                  resolve(this.#value);
+                              }
+                          };
+                      }
+                      resolveAsValue(resolve) {
+                          this.#hidden++;
+                          try {
+                              resolve(this);
+                          } finally {
+                              this.#hidden--;
+                          }
+                      }
+                  },
+                "#
+            .to_string()
+        } else {
+            "".into()
+        };
+
+        uwriteln!(
+            output,
+            r#"
+              export const _util = {{
+                  {maybe_ext_future_class}
+              }}
+            "#,
+        );
     }
 }
 
@@ -3285,6 +3345,7 @@ impl<'a> Instantiator<'a, '_> {
                     abi,
                     requires_async_porcelain,
                     is_async,
+                    wrap_async_future_result: false,
                     for_import: true,
                 });
                 uwriteln!(self.src.js, "");
@@ -4073,6 +4134,7 @@ impl<'a> Instantiator<'a, '_> {
             abi,
             requires_async_porcelain,
             is_async,
+            wrap_async_future_result,
             for_import,
         } = args;
 
@@ -4144,6 +4206,15 @@ impl<'a> Instantiator<'a, '_> {
             params.push(param);
         }
         uwriteln!(self.src.js, ") {{");
+        if wrap_async_future_result {
+            let future_value = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
+                AsyncFutureIntrinsic::FutureValueClass,
+            ));
+            uwriteln!(
+                self.src.js,
+                "return new {future_value}(() => (async () => {{"
+            );
+        }
 
         // If tracing is enabled, output a function entry tracing message
         if self.bindgen.opts.tracing {
@@ -4218,6 +4289,7 @@ impl<'a> Instantiator<'a, '_> {
             resolve: self.resolve,
             requires_async_porcelain,
             is_async,
+            wrap_async_future_result,
             iface_name,
             asmjs: self.bindgen.opts.asmjs,
             component_state: Some(FunctionBindgenComponentState {
@@ -4256,6 +4328,9 @@ impl<'a> Instantiator<'a, '_> {
 
         // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
         self.src.js(&f.src);
+        if wrap_async_future_result {
+            self.src.js("})());");
+        }
 
         // Close function body
         self.src.js("}");
@@ -4735,11 +4810,34 @@ impl<'a> Instantiator<'a, '_> {
 
         let is_async = is_async_fn(func, options);
 
-        let maybe_async = if requires_async_porcelain || is_async {
+        let wrap_async_future_result = (requires_async_porcelain || is_async)
+            && matches!(
+                func.result.as_ref(),
+                Some(Type::Id(id))
+                    if matches!(
+                        self.resolve.types[crate::dealias(self.resolve, *id)].kind,
+                        TypeDefKind::Future(_)
+                    )
+            );
+
+        let maybe_async = if (requires_async_porcelain || is_async) && !wrap_async_future_result {
             "async "
         } else {
             ""
         };
+        let wrapped_function_target = wrap_async_future_result.then(|| match func.kind {
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => local_name.to_string(),
+            FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => format!(
+                "{local_name}.prototype.{}",
+                func.item_name().to_lower_camel_case()
+            ),
+            FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
+                format!("{local_name}.{}", func.item_name().to_lower_camel_case())
+            }
+            FunctionKind::Constructor(_) => {
+                unreachable!("constructors cannot return futures")
+            }
+        });
 
         // Start building early variable declarations
         let core_export_fn = self.core_def(def);
@@ -4815,7 +4913,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.defined_resource_classes.insert(local_name.to_string());
             }
             FunctionKind::AsyncFreestanding => {
-                uwrite!(self.src.js, "\nasync function {local_name}")
+                uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
             }
             FunctionKind::AsyncMethod(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
@@ -4827,7 +4925,7 @@ impl<'a> Instantiator<'a, '_> {
                 };
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.prototype.{method_name} = async function {fn_name}",
+                    "\n{local_name}.prototype.{method_name} = {maybe_async}function {fn_name}",
                 );
             }
             FunctionKind::AsyncStatic(_) => {
@@ -4840,7 +4938,7 @@ impl<'a> Instantiator<'a, '_> {
                 };
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.{method_name} = async function {fn_name}",
+                    "\n{local_name}.{method_name} = {maybe_async}function {fn_name}",
                 );
             }
         };
@@ -4866,8 +4964,16 @@ impl<'a> Instantiator<'a, '_> {
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
             is_async,
+            wrap_async_future_result,
             for_import: false,
         });
+        if let Some(target) = wrapped_function_target {
+            let async_fn_ctor = self.bindgen.intrinsic(Intrinsic::AsyncFunctionCtor);
+            uwriteln!(
+                self.src.js,
+                "\nObject.setPrototypeOf({target}, {async_fn_ctor}.prototype);"
+            );
+        }
 
         // End the function
         match func.kind {

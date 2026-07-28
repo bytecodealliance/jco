@@ -1311,6 +1311,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::RepTableClass,
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
             &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass),
         ]);
     }
 
@@ -1626,6 +1627,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     )) {
         args.intrinsics.extend([
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
+            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
             &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass),
             &Intrinsic::AsyncEventCodeEnum,
