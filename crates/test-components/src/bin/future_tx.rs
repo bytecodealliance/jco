@@ -192,6 +192,24 @@ impl get_future_async::Guest for Component {
         rx
     }
 
+    async fn get_future_5_string(
+        v: String,
+    ) -> FutureReader<FutureReader<FutureReader<FutureReader<FutureReader<String>>>>> {
+        let (tx1, rx1) = wit_future::new(|| unreachable!());
+        wit_bindgen::spawn_local(async move {
+            let (tx2, rx2) = wit_future::new(|| unreachable!());
+            let (tx3, rx3) = wit_future::new(|| unreachable!());
+            let (tx4, rx4) = wit_future::new(|| unreachable!());
+            let (tx5, rx5) = wit_future::new(|| unreachable!());
+            let _ = tx1.write(rx2).await;
+            let _ = tx2.write(rx3).await;
+            let _ = tx3.write(rx4).await;
+            let _ = tx4.write(rx5).await;
+            let _ = tx5.write(v).await;
+        });
+        rx1
+    }
+
     async fn get_future_example_resource_own_attr(v: ExampleResource) -> FutureReader<u32> {
         let (tx, rx) = wit_future::new(|| unreachable!());
         wit_bindgen::spawn_local(async move {
