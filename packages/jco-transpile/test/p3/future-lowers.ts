@@ -100,10 +100,10 @@ suite('future<T> lowers', () => {
 
             const vals = [10, 5, 0];
             for (const [idx, v] of vals.entries()) {
-                assert.strictEqual(
-                    await instance['jco:test-components/future-lower-async'].futurePassthrough(Promise.resolve(v)),
-                    vals[idx],
+                const future = await instance['jco:test-components/future-lower-async'].futurePassthrough(
+                    Promise.resolve(v),
                 );
+                assert.strictEqual(await future, vals[idx]);
             }
         });
 
@@ -112,7 +112,8 @@ suite('future<T> lowers', () => {
             assert.instanceOf(instance['jco:test-components/future-lower-async'].futurePassthrough, AsyncFunction);
 
             const delayed = new Promise((resolve) => setTimeout(() => resolve(42), 300));
-            assert.strictEqual(await instance['jco:test-components/future-lower-async'].futurePassthrough(delayed), 42);
+            const future = await instance['jco:test-components/future-lower-async'].futurePassthrough(delayed);
+            assert.strictEqual(await future, 42);
         });
 
         test.concurrent('bool', async () => {
@@ -549,33 +550,45 @@ suite('future<T> lowers', () => {
             assert.deepEqual(returnedVals, [2, 1, 0]);
         });
 
-        // NOTE: NodeJS will *collapse* a future<future<t>> -- Promise<Promise<T>> is turned into Promise<T>
-        // TODO: implement flat lower for (inner) future<t>
-        test.skip('future<string>', async () => {
+        test.concurrent('future<future<string>>', async () => {
             const instance = await getInstance();
             assert.instanceOf(
                 instance['jco:test-components/future-lower-async'].readFutureValueFutureString,
                 AsyncFunction,
             );
 
-            const vals = [
-                Promise.resolve(['first', 'future', 'values']),
-                Promise.resolve(['second', 'future', 'here']),
-                Promise.resolve(['third', 'values', 'in future']),
-            ];
+            // To send nested futures, we need to use the generated Future helper
+            // which will allow us to nest otherwise auto-collapsed thenables
+            const { Future } = esModule._util;
+
+            const vals = ['first future value', 'second future value', 'third future value'];
             const returnedVals = [];
             for (const v of vals) {
                 returnedVals.push(
                     await instance['jco:test-components/future-lower-async'].readFutureValueFutureString(
-                        Promise.resolve(v),
+                        new Future(new Future(v)),
                     ),
                 );
             }
-            assert.deepEqual(returnedVals, [
-                ['first', 'future', 'values'],
-                ['second', 'future', 'here'],
-                ['third', 'values', 'in future'],
-            ]);
+            assert.deepEqual(returnedVals, vals);
+        });
+
+        test.concurrent('five nested futures', async () => {
+            const instance = await getInstance();
+
+            // To send nested futures, we need to use the generated Future helper
+            // which will allow us to nest otherwise auto-collapsed thenables
+            const { Future } = esModule._util;
+
+            let value = 'deeply nested';
+            for (let depth = 0; depth < 5; depth++) {
+                value = new Future(value);
+            }
+
+            assert.strictEqual(
+                await instance['jco:test-components/future-lower-async'].readFutureValue5String(value),
+                'deeply nested',
+            );
         });
     });
 });

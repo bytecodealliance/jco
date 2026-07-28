@@ -614,8 +614,7 @@ suite('stream<T> lowers', () => {
             ]);
         });
 
-        // TODO(fix): needs flat lower for futures
-        test.skip('stream<future<string>>', async () => {
+        test.concurrent('stream<future<string>>', async () => {
             const instance = await getInstance();
             assert.instanceOf(
                 instance['jco:test-components/stream-lower-async'].readStreamValuesFutureString,

@@ -274,6 +274,7 @@ interface get-future-async {
     get-future-example-resource-own-attr: async func(vals: example-resource) -> future<u32>;
 
     get-future-future-string: async func(vals: string) -> future<future<string>>;
+    get-future-5-string: async func(vals: string) -> future<future<future<future<future<string>>>>>;
 
     // The unspooled version should take advantage of host->host optimizations
     get-future-stream-string: async func(vals: stream<string>) -> future<stream<string>>;
@@ -590,6 +591,7 @@ interface future-lower-async {
     read-future-value-example-resource-own-attr: async func(s: future<example-resource>) -> u32;
 
     read-future-value-future-string: async func(f: future<future<string>>) -> string;
+    read-future-value-5-string: async func(f: future<future<future<future<future<string>>>>>) -> string;
 
     read-future-value-stream-string: async func(vals: future<stream<string>>) -> list<string>;
 }

@@ -455,20 +455,26 @@ suite('future<T> lifts', () => {
         });
     });
 
-    test.concurrent('future<string>', async () => {
+    test.concurrent('future<future<string>> preserves each awaitable layer', async () => {
         assert.instanceOf(instance['jco:test-components/get-future-async'].getFutureFutureString, AsyncFunction);
 
-        const vals = ['first', 'third', 'second'];
-        await checkFutureValues({
-            vals,
-            func: instance['jco:test-components/get-future-async'].getFutureFutureString,
-            assertEqFn: async (v, expected) => {
-                // NOTE: nested Promises are automatically resolved together/collapsed in JS.
-                // by the time this assert eq function runs, the future will have been awaited
-                // and nested inner future will *also* have been resolved.
-                assert.strictEqual(v, expected);
-            },
-        });
+        const outer = await instance['jco:test-components/get-future-async'].getFutureFutureString('nested');
+        assert.strictEqual(typeof outer.then, 'function');
+
+        const [inner, repeatedInner] = await Promise.all([outer, outer]);
+        assert.strictEqual(repeatedInner, inner);
+        assert.strictEqual(typeof inner.then, 'function');
+
+        assert.deepEqual(await Promise.all([inner, inner]), ['nested', 'nested']);
+    });
+
+    test.concurrent('five nested futures preserve every awaitable layer', async () => {
+        let value = await instance['jco:test-components/get-future-async'].getFuture5String('deeply nested');
+        for (let depth = 0; depth < 5; depth++) {
+            assert.strictEqual(typeof value.then, 'function');
+            value = await value;
+        }
+        assert.strictEqual(value, 'deeply nested');
     });
 
     test.concurrent('future<stream<string>> (spooled)', async () => {

@@ -140,6 +140,12 @@ impl future_lower_async::Guest for Component {
         rx.await.await
     }
 
+    async fn read_future_value_5_string(
+        rx: FutureReader<FutureReader<FutureReader<FutureReader<FutureReader<String>>>>>,
+    ) -> String {
+        rx.await.await.await.await.await
+    }
+
     async fn read_future_value_stream_string(
         rx: FutureReader<StreamReader<String>>,
     ) -> Vec<String> {
