@@ -1071,7 +1071,6 @@ impl LowerIntrinsic {
                 ));
             }
 
-            // NOTE: Promise<Promise<T>> is collapsed to Promise<T> by JS runtimes automagically
             Self::LowerFlatFuture => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_future_fn = self.name();
@@ -1103,11 +1102,11 @@ impl LowerIntrinsic {
                             let future = ctx.vals[0];
                             if (!future) {{ throw new Error("missing external future value"); }}
 
-                            // As NodeJS will collapse `Promise<Promise<T>>` to `Promise<T>`, enable handling of ordinary values
-                            // by converting them NodeJS will collapse futures, enable handling of `future<future<t>>`
-                            let wasRawValue = false;
                             if (!{is_future_lowerable_object}(future)) {{
-                                wasRawValue = true;
+                                // A native async host function cannot return a thenable
+                                // without assimilating it. Preserve compatibility for a
+                                // single lowered layer by treating that result as already
+                                // settled; nested layers still arrive as FutureValue.
                                 future = Promise.resolve(future);
                             }}
 
@@ -1128,7 +1127,9 @@ impl LowerIntrinsic {
                                 elemMeta.stringEncoding = 'utf8';
 
                                 let outermostReadEnd;
-                                let nestingLevel = futureNestingLevel;
+                                // Lower one layer. A future-valued payload is lowered
+                                // recursively by elemMeta.lowerFn when this layer settles.
+                                let nestingLevel = 0;
                                 while (nestingLevel >= 0) {{
                                     const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = cstate.createFuture({{
                                         tableIdx: futureTableIdx,

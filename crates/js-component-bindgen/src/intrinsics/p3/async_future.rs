@@ -24,6 +24,9 @@ pub enum AsyncFutureIntrinsic {
     /// Symbol that is used to delineate futures that are nested
     NestedFutureSymbol,
 
+    /// A lazy, one-layer awaitable used for lifted WIT futures.
+    FutureValueClass,
+
     /// Map of future tables to component indices
     GlobalFutureTableMap,
 
@@ -238,6 +241,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureTransfer.name(),
             Self::FutureWritableEndClass.name(),
             Self::FutureWrite.name(),
+            Self::FutureValueClass.name(),
             Self::GlobalFutureMap.name(),
             Self::GlobalFutureTableMap.name(),
             Self::InternalFutureClass.name(),
@@ -264,6 +268,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureWrite => "futureWrite",
             Self::GlobalFutureMap => "FUTURES",
             Self::NestedFutureSymbol => "NESTED_FUTURE_SYMBOL",
+            Self::FutureValueClass => "FutureValue",
             Self::GlobalFutureTableMap => "FUTURE_TABLES",
             Self::HostFutureClass => "HostFuture",
             Self::InternalFutureClass => "InternalFuture",
@@ -290,6 +295,68 @@ impl AsyncFutureIntrinsic {
                 output.push_str(&format!(
                     r#"
                     const {nested_future_symbol} = Symbol.for('nested-future');
+                    "#
+                ));
+            }
+
+            Self::FutureValueClass => {
+                let future_value_class = self.name();
+                output.push_str(&format!(
+                    r#"
+                    class {future_value_class} {{
+                        #start;
+                        #settled;
+                        #hideThen = 0;
+                        #thenFn;
+
+                        constructor(start) {{
+                            if (typeof start !== 'function') {{
+                                throw new TypeError('future start operation must be a function');
+                            }}
+                            this.#start = start;
+                            this.#thenFn = this.#then.bind(this);
+                        }}
+
+                        get then() {{
+                            return this.#hideThen === 0 ? this.#thenFn : undefined;
+                        }}
+
+                        #read() {{
+                            if (!this.#settled) {{
+                                // The start operation resolves to a non-thenable box so a
+                                // future-valued payload cannot be assimilated by this Promise.
+                                this.#settled = Promise.resolve().then(this.#start);
+                            }}
+                            return this.#settled;
+                        }}
+
+                        resolveAsValue(resolve) {{
+                            this.#hideThen++;
+                            try {{
+                                resolve(this);
+                            }} finally {{
+                                this.#hideThen--;
+                            }}
+                        }}
+
+                        #deliver(resolve, value) {{
+                            if (value instanceof {future_value_class}) {{
+                                // Promise resolution reads `then` synchronously. Hide it only
+                                // for that lookup so resolving this layer yields the inner
+                                // FutureValue instead of recursively awaiting it.
+                                value.resolveAsValue(resolve);
+                                return;
+                            }}
+                            resolve(value);
+                        }}
+
+                        #then(resolve, reject) {{
+                            return this.#read().then(
+                                box => this.#deliver(resolve, box.value),
+                                reject,
+                            );
+                        }}
+                    }}
                     "#
                 ));
             }
@@ -519,6 +586,7 @@ impl AsyncFutureIntrinsic {
                     _ => unreachable!(),
                 };
                 let future_end_class = Self::FutureEndClass.name();
+                let future_value_class = AsyncFutureIntrinsic::FutureValueClass.name();
                 let global_buffer_mgr = Intrinsic::GlobalBufferManager.name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
 
@@ -830,7 +898,7 @@ impl AsyncFutureIntrinsic {
                                   const vs = buffer.read(1);
                                   if (vs.length !== 1) {{ throw new Error('multiple results from future'); }}
 
-                                  return vs[0];
+                                  return {{ value: vs[0] }};
                               }}
                             "#
                         ),
@@ -965,17 +1033,9 @@ impl AsyncFutureIntrinsic {
                             // NOTE: we return a "thenable" here to ensure that simply lifting the future does
                             // not trigger a host read.
 
-                            let readPromise = null;
-                            this.#promise = {{
-                                then: (resolve, reject) => {{
-                                    if (readPromise) {{
-                                        readPromise.then(resolve, reject);
-                                        return;
-                                    }}
-                                    readPromise = this.hostRead({{ stringEncoding: 'utf8' }});
-                                    readPromise.then(resolve, reject);
-                                 }}
-                             }};
+                            this.#promise = new {future_value_class}(
+                                () => this.hostRead({{ stringEncoding: 'utf8' }})
+                            );
                             return this.#promise;
                         }}
 

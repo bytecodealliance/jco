@@ -205,6 +205,10 @@ pub struct FunctionBindgen<'a> {
     /// Whether the function is guest async lifted (i.e. WASI P3)
     pub is_async: bool,
 
+    /// Whether an async export returning a future needs a non-async outer
+    /// function to preserve the future as a distinct awaitable layer.
+    pub wrap_async_future_result: bool,
+
     /// Interface name
     pub iface_name: Option<&'a str>,
 
@@ -2818,7 +2822,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         let future{tmp} = {future_arg};
                         let nextFuture{tmp};
                         let openedCount = -1;
-                        let futureNestingLevel{tmp} = {nesting_level};
+                        // Lower exactly this future layer. If its payload is another
+                        // future, elemMeta.lowerFn recursively creates that endpoint.
+                        let futureNestingLevel{tmp} = 0;
 
                         while (futureNestingLevel{tmp} >= 0) {{
                             const {{
@@ -3433,7 +3439,7 @@ impl Bindgen for FunctionBindgen<'_> {
                           }})
                           task.resolve([ret]);
                           task.exit();
-                          return task.completionPromise();
+                          return {return_awaited_completion_promise};
                       }}
 
                       const componentState = {get_or_create_async_state_fn}({component_idx_expr});
@@ -3461,13 +3467,30 @@ impl Bindgen for FunctionBindgen<'_> {
 
                       let taskRes = await task.completionPromise();
                       if (task.getErrHandling() === 'throw-result-err') {{
-                          if (typeof taskRes !== 'object') {{ return taskRes; }}
+                          if (typeof taskRes !== 'object') {{
+                              return {return_task_res};
+                          }}
                           if (taskRes.tag === 'err') {{ throw taskRes.val; }}
                           if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
                       }}
 
-                      return taskRes;
+                      return {return_task_res};
                       "#,
+                    // If we are returning the awaited task completion promise directly
+                    // that contains a future<t>, we must wrap the result so we can deal
+                    // with nesting if present
+                    return_awaited_completion_promise = if self.wrap_async_future_result {
+                        "{ value: await task.completionPromise() }"
+                    } else {
+                        "await task.completionPromise()"
+                    },
+                    // If we are returning the task result post-resolution, and it contains a future<t>,
+                    // we must wrap the result so we can deal with nesting if present
+                    return_task_res = if self.wrap_async_future_result {
+                        "{ value: taskRes }"
+                    } else {
+                        "taskRes"
+                    }
                 );
             }
 

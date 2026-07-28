@@ -4,6 +4,7 @@ use std::fmt::Write;
 
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
+use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
@@ -818,6 +819,8 @@ impl AsyncTaskIntrinsic {
                 let with_global_current_task_meta_async_fn =
                     Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
                 let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                let future_value_class =
+                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass).name();
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -919,7 +922,11 @@ impl AsyncTaskIntrinsic {
                                    return;
                                }}
 
-                               resolveCompletionPromise(results);
+                               if (results instanceof {future_value_class}) {{
+                                   results.resolveAsValue(resolveCompletionPromise);
+                               }} else {{
+                                   resolveCompletionPromise(results);
+                               }}
                            }});
 
                            const {{
