@@ -18,8 +18,17 @@ interface resources {
   create-connection: func(url: string) -> connection;
 }
 
+interface exported-resources {
+  /// A component-defined resource consumed by the host.
+  resource transaction {
+    constructor();
+    commit: func();
+  }
+}
+
 world disposable-world {
   import resources;
+  export exported-resources;
 
   /// Also test a world-level resource
   resource database {
