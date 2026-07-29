@@ -436,6 +436,17 @@ suite('future<T> lifts', () => {
                 instance['jco:test-components/get-future-async'].getExampleResourceOwnDisposes(),
                 numDisposed,
             );
+            assert.doesNotThrow(() => resource[disposeSymbol](), 'resource disposal should be idempotent');
+            assert.strictEqual(
+                instance['jco:test-components/get-future-async'].getExampleResourceOwnDisposes(),
+                numDisposed,
+                'disposing the same handle twice must not run the guest destructor twice',
+            );
+            assert.throws(
+                () => resource.getId(),
+                /not a valid .* resource/i,
+                'a disposed resource wrapper must no longer be usable',
+            );
         }
     });
 

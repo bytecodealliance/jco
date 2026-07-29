@@ -47,11 +47,7 @@ suite(`TypeScript`, async () => {
         assert.ok(dtsSource.includes(`export function foobarbaz(): Array<Value | undefined>;`));
     });
 
-    // NOTE: somewhat confusingly, host generation of resources should *not*
-    // generation Disposable, because the embedder may or may not choose to make
-    // the implemented resource import disposable or not.
-    //
-    test.concurrent(`Disposable interface generation (host-types, import) `, async () => {
+    test.concurrent(`Disposable interface generation (host types)`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wit/disposable-resources/disposable-resources.wit`, import.meta.url)),
             'utf8',
@@ -70,7 +66,7 @@ suite(`TypeScript`, async () => {
             [`export class Database implements Disposable {`, `[Symbol.dispose](): void;`].every(
                 (s) => !mainDtsSource.includes(s),
             ),
-            'Database resource should not implement Disposable interface',
+            'host-provided world-level Database resource should not require Disposable',
         );
 
         const interfaceDtsSource = new TextDecoder().decode(
@@ -82,7 +78,17 @@ suite(`TypeScript`, async () => {
                 `export class Connection implements Disposable {`,
                 `[Symbol.dispose](): void;`,
             ].every((s) => !interfaceDtsSource.includes(s)),
-            'FileHandle/Connection resources should not implement Disposable interface',
+            'host-provided FileHandle/Connection resource imports should not require Disposable',
+        );
+
+        const exportedInterfaceDtsSource = new TextDecoder().decode(
+            files['interfaces/test-disposable-resources-exported-resources.d.ts'],
+        );
+        assert(
+            [`export class Transaction implements Disposable {`, `[Symbol.dispose](): void;`].every((s) =>
+                exportedInterfaceDtsSource.includes(s),
+            ),
+            'component-exported Transaction resource should implement Disposable',
         );
     });
 
@@ -112,6 +118,16 @@ suite(`TypeScript`, async () => {
                 `[Symbol.dispose](): void;`,
             ].every((s) => interfaceDtsSource.includes(s)),
             'FileHandle/Connection resources should implement Disposable interface',
+        );
+
+        const exportedInterfaceDtsSource = new TextDecoder().decode(
+            files['interfaces/test-disposable-resources-exported-resources.d.ts'],
+        );
+        assert(
+            [`export class Transaction implements Disposable {`, `[Symbol.dispose](): void;`].every(
+                (s) => !exportedInterfaceDtsSource.includes(s),
+            ),
+            'guest-provided Transaction implementation should not require Disposable',
         );
     });
 
