@@ -876,9 +876,11 @@ impl<'a> TsInterface<'a> {
 
     fn finish(mut self) -> (Source, BTreeSet<String>) {
         for (resource, (meta, source)) in self.resources {
-            let (impl_phrase, extra_members) = if self.is_guest && meta.is_import() {
-                // Resources types imported in the guest  will have generated [Symbol.dispose]()
-                // for resource cleanup, but this is not the case for any other scenario.
+            let generates_disposable_resource =
+                (self.is_guest && meta.is_import()) || (!self.is_guest && meta.is_export());
+            let (impl_phrase, extra_members) = if generates_disposable_resource {
+                // Guest imports and host exports are resource consumers. Their generated
+                // wrappers own component-model handles and support deterministic cleanup.
                 (" implements Disposable", vec!["[Symbol.dispose](): void;"])
             } else {
                 ("", vec![])
