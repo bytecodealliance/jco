@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9e8edb4c.js";
+            window.path_to_searchindex_js = "searchindex-c09b07a4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b8337dd6.js"></script>
@@ -848,9 +848,9 @@ Alternative variant members may hold <em>different</em> types to represent diffe
 <p>Jco represents records as the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">Javascript Object basic data type</a>:</p>
 <p>Given the WIT record above, you can expect to deal with an object similar to the following Typescript:</p>
 <pre><code class="language-ts">interface Person {
-  person: string;
-  age: number;
-  favoriteColor?: number;
+    person: string;
+    age: number;
+    favoriteColor?: number;
 }
 </code></pre>
 <blockquote class="blockquote-tag blockquote-tag-note">
@@ -893,8 +893,10 @@ doubly-nested (or more) <code>option</code>s are encoded with the object encodin
 </code></pre>
 <p>An implementation of the function <code>optional.f</code> would look like the following Typescript:</p>
 <pre><code class="language-ts">function f(n?: number): string {
-  if (n === undefined) { return "no n provided"; }
-  return "n was provided";
+    if (n === undefined) {
+        return 'no n provided';
+    }
+    return 'n was provided';
 }
 </code></pre>
 <h2 id="result-result"><a class="header" href="#result-result">Result (<code>result</code>)</a></h2>
@@ -919,9 +921,9 @@ the <code>result</code> is used, Jco adheres to that representations.</p>
 <pre><code class="language-js">function addOverflow(lhs, rhs) {
     let sum = lhs + rhs;
     if (Nan.isNan(sum)) {
-      throw "ERROR: addition produced non-number value";
+        throw 'ERROR: addition produced non-number value';
     } else if (sum &gt; 4294967295) {
-      throw "ERROR: u32 overflow";
+        throw 'ERROR: u32 overflow';
     }
     return sum;
 }
@@ -946,8 +948,10 @@ while any direct return value is treated as the result success type.</p>
 </code></pre>
 <p>An implementation of the function <code>fallible.f</code> would look like the following Typescript:</p>
 <pre><code class="language-ts">function f(n: number): string {
-  if (n == 42) { return "correct"; }
-  throw "not correct";
+    if (n == 42) {
+        return 'correct';
+    }
+    throw 'not correct';
 }
 </code></pre>
 <h3 id="results-in-context-container-types-record-optional-etc"><a class="header" href="#results-in-context-container-types-record-optional-etc"><code>result</code>s in context: Container types (<code>record</code>, <code>optional</code>, etc)</a></h3>
@@ -985,9 +989,9 @@ interface only-throws {
 <p>Consider the following <strong>host</strong> function adhering to the interface, and making use of idiomatic JS errors:</p>
 <pre><code class="language-js">// The below code assumes interaction with a WIT which looks like a
 function justThrow() {
-  const plainError = new Error("Error for JS users");
-  const errorWithPayload = Object.assign(plainError, { payload: 1111 });
-  throw errorWithPayload;
+    const plainError = new Error('Error for JS users');
+    const errorWithPayload = Object.assign(plainError, { payload: 1111 });
+    throw errorWithPayload;
 }
 </code></pre>
 <h2 id="tuples-tuple"><a class="header" href="#tuples-tuple">Tuples (<code>tuple</code>)</a></h2>
@@ -1052,27 +1056,255 @@ list&lt;string&gt;
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-resource">WIT IDL description of Resources</a> for more information</p>
 </blockquote>
-<p>Resources represent objects that can not be trivially serialized and send copied to another component or the host. Components or host expose resources almost as a reference to internal state that methods can be called on – without providing the actual internals of the resource in question.</p>
+<p>Resources represent values that cannot be copied across a component boundary. A resource
+handle refers to state owned by the resource’s provider, without exposing that state to its
+consumer. In JavaScript, Jco represents the handle as an object whose methods call back into
+the provider.</p>
+<p>Resources are useful for stateful or platform-specific values such as files, sockets, and HTTP
+bodies. Unlike a WIT <code>record</code>, passing a resource does not serialize all of its fields.</p>
+<p>The examples below use a <code>blob</code> resource:</p>
 <h3 id="wit-syntax-6"><a class="header" href="#wit-syntax-6">WIT Syntax</a></h3>
-<pre><code class="language-wit">resource blob {
-    constructor(init: list&lt;u8&gt;);
-    write: func(bytes: list&lt;u8&gt;);
-    read: func(n: u32) -&gt; list&lt;u8&gt;;
-    merge: static func(lhs: borrow&lt;blob&gt;, rhs: borrow&lt;blob&gt;) -&gt; blob;
+<pre><code class="language-wit">package docs:resources;
+
+interface blobs {
+    resource blob {
+        constructor(init: list&lt;u8&gt;);
+        write: func(bytes: list&lt;u8&gt;);
+        read: func() -&gt; list&lt;u8&gt;;
+        merge: static func(lhs: borrow&lt;blob&gt;, rhs: borrow&lt;blob&gt;) -&gt; blob;
+    }
+}
+
+world imports-blobs {
+    import blobs;
+}
+
+world exports-blobs {
+    export blobs;
 }
 </code></pre>
 <h3 id="jco-representation-6"><a class="header" href="#jco-representation-6">Jco representation</a></h3>
-<p>The example above could be represented with the following class in Typescript pseudo-code:</p>
-<pre><code class="language-ts">class Blob {
-    constructor(init: Uint8Array);
+<p>The resource is represented as a class. WIT kebab-case names become JavaScript camelCase
+for functions and PascalCase for classes. The <code>blob</code> resource above therefore has the
+following approximate TypeScript shape:</p>
+<pre><code class="language-ts">class Blob implements Disposable {
+    constructor(init: Uint8Array) {}
 
-    write(bytes: Uint8Array);
+    write(bytes: Uint8Array): void {}
 
-    read(n: number): UInt8Array;
+    read(): Uint8Array {}
 
-    static merge(lhs: Uint8Array, rhs: Uint8Array): Blob;
+    static merge(lhs: Blob, rhs: Blob): Blob {}
+
+    [Symbol.dispose](): void {}
 }
 </code></pre>
+<p>The exact declaration depends on whether the resource is imported or exported. Run
+<code>jco guest-types</code> when implementing a JavaScript guest, or inspect the declarations emitted
+by <code>jco transpile</code> when using a component from a JavaScript host. The generated types are
+the source of truth for the binding being used.</p>
+<h3 id="imports-and-exports-are-from-the-guests-perspective"><a class="header" href="#imports-and-exports-are-from-the-guests-perspective">Imports and exports are from the guest’s perspective</a></h3>
+<p>It is useful to identify the provider and consumer before writing any JavaScript:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>WIT world item</th><th>Resource provider</th><th>Resource consumer</th></tr>
+</thead>
+<tbody>
+<tr><td><code>import blobs</code></td><td>Host</td><td>Guest component</td></tr>
+<tr><td><code>export blobs</code></td><td>Guest component</td><td>Host</td></tr>
+</tbody>
+</table>
+</div>
+<p>An imported resource is implemented by the host and passed to the component during
+instantiation. An exported resource is implemented by the guest and returned to the host
+as part of the component’s exports.</p>
+<h3 id="ownership-and-borrowing"><a class="header" href="#ownership-and-borrowing">Ownership and borrowing</a></h3>
+<p>A resource value is a handle with an associated lifetime. WIT uses two handle modes:</p>
+<ul>
+<li><code>own&lt;blob&gt;</code> transfers ownership to the callee. The receiving side is then responsible for
+eventually dropping the handle.</li>
+<li><code>borrow&lt;blob&gt;</code> temporarily makes the handle available to the callee. Ownership remains
+with the caller, and the callee must not keep using the handle after the call returns.</li>
+</ul>
+<p>Writing <code>blob</code> in a result or parameter is shorthand for an owned handle where WIT permits
+that shorthand. Resource methods implicitly borrow <code>self</code>, so calling <code>blob.read()</code> does not
+consume <code>blob</code>. In the example, <code>merge</code> borrows both arguments and returns a new owned
+resource.</p>
+<p>When a generated resource class implements <code>Disposable</code>, release it deterministically with
+a <code>using</code> declaration:</p>
+<pre><code class="language-ts">{
+    using blob = new Blob(new Uint8Array([1, 2, 3]));
+    blob.write(new Uint8Array([4]));
+    console.log(blob.read());
+} // blob[Symbol.dispose]() is called here
+</code></pre>
+<p>The equivalent JavaScript without a <code>using</code> declaration is:</p>
+<pre><code class="language-js">const blob = new Blob(new Uint8Array([1, 2, 3]));
+try {
+    console.log(blob.read());
+} finally {
+    blob[Symbol.dispose]();
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Do not use a resource after disposing it or after passing it to a parameter that takes
+<code>own&lt;blob&gt;</code>. JavaScript garbage collection is not a substitute for deterministic cleanup
+when the underlying resource holds files, sockets, or other limited host state.</p>
+</blockquote>
+<p>Whether <code>[Symbol.dispose]()</code> appears on a particular binding is recorded in its generated
+declaration. A provider may also implement <code>[Symbol.dispose]()</code> as a cleanup hook; Jco calls
+that hook when the corresponding owned handle is dropped.</p>
+<h3 id="importing-a-host-resource-into-a-guest"><a class="header" href="#importing-a-host-resource-into-a-guest">Importing a host resource into a guest</a></h3>
+<p>The <code>imports-blobs</code> world declares that the guest needs the host to provide the <code>blobs</code>
+interface. Generate types for the guest implementation with:</p>
+<pre><code class="language-console">jco guest-types wit --world-name imports-blobs -o generated
+</code></pre>
+<p>The generated ambient module uses the WIT package and interface name. Guest TypeScript can
+import the resource class, construct it, and call its methods:</p>
+<pre><code class="language-ts">/// &lt;reference path="./generated/imports-blobs.d.ts" /&gt;
+import { Blob } from 'docs:resources/blobs';
+
+export function processBytes(): Uint8Array {
+    using left = new Blob(new Uint8Array([1, 2]));
+    using right = new Blob(new Uint8Array([3, 4]));
+    using merged = Blob.merge(left, right);
+
+    merged.write(new Uint8Array([5]));
+    return merged.read();
+}
+</code></pre>
+<p><code>Blob</code> is supplied by the host even though it looks like a normal class to the guest. The
+guest can only observe the operations described by WIT.</p>
+<h4 id="providing-the-imported-resource-from-the-host"><a class="header" href="#providing-the-imported-resource-from-the-host">Providing the imported resource from the host</a></h4>
+<p>The host implements the resource with a JavaScript class. Its private fields remain entirely
+on the host:</p>
+<pre><code class="language-ts">class HostBlob {
+    #bytes: number[];
+
+    constructor(init: Uint8Array) {
+        this.#bytes = Array.from(init);
+    }
+
+    write(bytes: Uint8Array): void {
+        this.#bytes.push(...bytes);
+    }
+
+    read(): Uint8Array {
+        return Uint8Array.from(this.#bytes);
+    }
+
+    static merge(lhs: HostBlob, rhs: HostBlob): HostBlob {
+        return new HostBlob(Uint8Array.from([...lhs.#bytes, ...rhs.#bytes]));
+    }
+
+    [Symbol.dispose](): void {
+        this.#bytes.length = 0;
+    }
+}
+</code></pre>
+<p>Transpile the component with explicit instantiation support:</p>
+<pre><code class="language-console">jco transpile component.wasm -o transpiled --instantiation=async
+</code></pre>
+<p>Then provide the class under the WIT interface’s fully qualified name:</p>
+<pre><code class="language-ts">import { readFile } from 'node:fs/promises';
+import { instantiate } from './transpiled/component.js';
+
+const loader = async (path: string) =&gt; WebAssembly.compile(await readFile(new URL(path, import.meta.url)));
+
+const instance = await instantiate(loader, {
+    'docs:resources/blobs': {
+        Blob: HostBlob,
+    },
+});
+</code></pre>
+<p>The property names match the generated JavaScript names: the WIT resource <code>blob</code> becomes
+<code>Blob</code>. Jco invokes methods with the original resource object as <code>this</code>, so private and
+per-instance state work as they do on an ordinary class.</p>
+<p>Real components often have additional imports, such as WASI interfaces. Those implementations
+must be included in the same import object; they are omitted here to keep the resource wiring
+visible.</p>
+<h3 id="exporting-a-guest-resource-to-the-host"><a class="header" href="#exporting-a-guest-resource-to-the-host">Exporting a guest resource to the host</a></h3>
+<p>The <code>exports-blobs</code> world reverses the direction: the guest provides the implementation and
+the host consumes it. First generate the guest declarations:</p>
+<pre><code class="language-console">jco guest-types wit --world-name exports-blobs -o generated
+</code></pre>
+<p>Use the generated resource type as the contract for the guest class, then export the class
+inside an object named after the WIT interface:</p>
+<pre><code class="language-ts">/// &lt;reference path="./generated/exports-blobs.d.ts" /&gt;
+import type { Blob } from 'docs:resources/blobs';
+
+class GuestBlob implements Blob {
+    #bytes: number[];
+
+    constructor(init: Uint8Array) {
+        this.#bytes = Array.from(init);
+    }
+
+    write(bytes: Uint8Array): void {
+        this.#bytes.push(...bytes);
+    }
+
+    read(): Uint8Array {
+        return Uint8Array.from(this.#bytes);
+    }
+
+    static merge(lhs: GuestBlob, rhs: GuestBlob): GuestBlob {
+        return new GuestBlob(Uint8Array.from([...lhs.#bytes, ...rhs.#bytes]));
+    }
+
+    [Symbol.dispose](): void {
+        this.#bytes.length = 0;
+    }
+}
+
+export const blobs = {
+    Blob: GuestBlob,
+};
+</code></pre>
+<p>The interface export is an object rather than a top-level <code>Blob</code> export because the WIT world
+exports the complete <code>blobs</code> interface. The shape of this object can be checked against the
+world module emitted by <code>jco guest-types</code>.</p>
+<h4 id="using-the-exported-resource-from-the-host"><a class="header" href="#using-the-exported-resource-from-the-host">Using the exported resource from the host</a></h4>
+<p>After componentizing and transpiling the guest, instantiate it from the host:</p>
+<pre><code class="language-console">jco componentize guest.js --wit wit --world-name exports-blobs \
+    -o component.wasm
+jco transpile component.wasm -o transpiled --instantiation=async
+</code></pre>
+<p>The instantiated component returns the exported interface. Its resource constructor and
+methods can be used like an ordinary JavaScript class:</p>
+<pre><code class="language-ts">import { readFile } from 'node:fs/promises';
+import { instantiate } from './transpiled/component.js';
+
+const loader = async (path: string) =&gt; WebAssembly.compile(await readFile(new URL(path, import.meta.url)));
+
+const { blobs } = await instantiate(loader, {});
+
+const left = new blobs.Blob(new Uint8Array([1, 2]));
+const right = new blobs.Blob(new Uint8Array([3, 4]));
+const merged = blobs.Blob.merge(left, right);
+
+console.log(merged.read());
+</code></pre>
+<p>The host owns all three handles returned by their constructors and <code>merge</code>. If their generated
+declarations expose <code>[Symbol.dispose]()</code>, the host should dispose each handle when it is no
+longer needed, preferably with <code>using</code>. Check the declarations generated by the Jco version in
+use: disposal support can differ between binding directions and component-model features.</p>
+<p>The important distinction is where the classes originate:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Use case</th><th>Class implementation</th><th>Connection at instantiation</th><th>Calls the resource</th></tr>
+</thead>
+<tbody>
+<tr><td>Guest imports resource</td><td>Host</td><td>Host passes <code>{ Blob: HostBlob }</code></td><td>Guest</td></tr>
+<tr><td>Guest exports resource</td><td>Guest</td><td>Host receives <code>{ blobs }</code></td><td>Host</td></tr>
+</tbody>
+</table>
+</div>
+<p>These are the same WIT resource semantics in opposite directions. In both cases, Jco preserves
+the resource’s identity and routes method calls to the side that owns its underlying state.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="manual-wasm-instantiation-with-wasi-overrides"><a class="header" href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI Overrides</a></h1>
 <p>When a Wasm component depends on functionality provided by WASI, the <code>jco transpile</code> produces a WebAssembly
