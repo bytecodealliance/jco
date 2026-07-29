@@ -2300,25 +2300,26 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(self.src,
                                             "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                     finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});");
-                                if let Some(dtor) = dtor_name {
-                                    // The Symbol.dispose function gets disabled on drop, so we can rely on the own handle remaining valid.
-                                    uwriteln!(
-                                                self.src,
-                                                "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
-                                            finalizationRegistry{tid}.unregister({rsc});
-                                            {rsc_table_remove}(handleTable{tid}, {handle});
-                                            {rsc}[{symbol_dispose}] = {empty_func};
-                                            {rsc}[{symbol_resource_handle}] = undefined;
-                                            {dtor}(handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag});
-                                        }}}});"
-                                            );
-                                } else {
-                                    // Set up Symbol.dispose for borrows to allow its call, even though it does nothing.
-                                    uwriteln!(
-                                        self.src,
-                                        "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: {empty_func} }});",
-                                    );
-                                }
+                                let dtor_call = dtor_name
+                                    .as_ref()
+                                    .map(|dtor| format!("{dtor}(handleEntry.rep);"))
+                                    .unwrap_or_default();
+                                // Explicitly dropping an own handle must always release the host-side
+                                // handle and finalizer registration. A component-defined destructor is
+                                // an additional callback, not a prerequisite for resource cleanup.
+                                //
+                                // Disable Symbol.dispose and clear the handle before calling the
+                                // component destructor so repeated or re-entrant disposal is a no-op.
+                                uwriteln!(
+                                            self.src,
+                                            "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
+                                        finalizationRegistry{tid}.unregister({rsc});
+                                        const handleEntry = {rsc_table_remove}(handleTable{tid}, {handle});
+                                        {rsc}[{symbol_dispose}] = {empty_func};
+                                        {rsc}[{symbol_resource_handle}] = undefined;
+                                        {dtor_call}
+                                    }}}});"
+                                        );
                             } else {
                                 // Borrow handles of local resources have rep handles, which we carry through here.
                                 uwriteln!(
