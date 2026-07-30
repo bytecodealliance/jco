@@ -16,9 +16,10 @@ or `wasm-bindgen`. You can read more about WebAssembly components in the
 
 [component-book]: https://component-model.bytecodealliance.org/
 [rolldown]: https://rolldown.rs/
-[rolldown]: https://rolldownjs.org/
+[rollup]: https://rollupjs.org/
 [bca]: https://bytecodealliance.org/
 [unwasm]: https://github.com/unjs/unwasm
+[jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
 ## Install
 
