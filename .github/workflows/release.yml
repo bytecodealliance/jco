@@ -200,7 +200,7 @@ jobs:
               CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
-              export ARTIFACTS_GLOB="packages/rolldown-plugin/bytecodealliance-rolldown-plugin-jco-*.tgz";
+              export ARTIFACTS_GLOB="packages/rolldown-plugin-jco/bytecodealliance-rolldown-plugin-jco-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-rolldown-plugin-jco-$NEXT_VERSION.tgz";
               ;;
             js-component-bindgen)
