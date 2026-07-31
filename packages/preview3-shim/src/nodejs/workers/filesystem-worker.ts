@@ -28,8 +28,15 @@ async function handleRead({ fd, offset, stream }) {
   }
 
   const writer = stream.getWriter();
+  let pos = BigInt(offset);
   try {
-    let pos = BigInt(offset);
+    filePosition(pos);
+  } catch (err) {
+    await writer.close();
+    throw err;
+  }
+
+  try {
     const start = pos;
 
     while (true) {
