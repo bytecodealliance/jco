@@ -6,6 +6,6 @@
         "build": "componentize-js -w wit -o component.wasm src/component.js"
     },
     "devDependencies": {
-        "@bytecodealliance/componentize-js": "^0.21.0"
+        "@bytecodealliance/componentize-js": "^0.22.0"
     }
 }

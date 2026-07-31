@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@bytecodealliance/componentize-js':
-      specifier: ^0.21.0
-      version: 0.21.0
+      specifier: ^0.22.0
+      version: 0.22.0
     mime:
       specifier: ^4.0.7
       version: 4.1.0
@@ -202,8 +202,8 @@ importers:
   examples/components/ts-resource-export:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.20.0
-        version: 0.20.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        specifier: ^0.22.0
+        version: 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/jco':
         specifier: file:../../../packages/jco
         version: file:packages/jco(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
@@ -226,8 +226,8 @@ importers:
   examples/components/ts-resource-import:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.21.0
-        version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        specifier: ^0.22.0
+        version: 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/jco':
         specifier: workspace:*
         version: link:../../../packages/jco
@@ -296,8 +296,8 @@ importers:
   packages/jco:
     dependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.21.0
-        version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        specifier: ^0.22.0
+        version: 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
@@ -369,8 +369,8 @@ importers:
   packages/jco-std:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.21.0
-        version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        specifier: ^0.22.0
+        version: 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
@@ -413,7 +413,7 @@ importers:
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: 'catalog:'
-        version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        version: 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@npmcli/run-script':
         specifier: ^10.0.2
         version: 10.0.4
@@ -442,8 +442,8 @@ importers:
   packages/preview2-shim:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: 0.21.0
-        version: 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        specifier: 0.22.0
+        version: 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/jco':
         specifier: 1.25.2
         version: 1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
@@ -582,12 +582,12 @@ packages:
     resolution: {integrity: sha512-ju7Y4WeF0B9uMkSPHJgmT6ouEfSwbe9M1uR/YOnYZjBpxJjH9qzxIkJg/kf8NycVDyFJ2/lscmJ1E1uPiDQVRQ==}
     hasBin: true
 
-  '@bytecodealliance/componentize-js@0.20.0':
-    resolution: {integrity: sha512-JPRYUTD8v1QUsZ5eqhCtQR7amOTugjV2ofSjFv1/zAGksf4AZUoCFYiKTQ61E+hKUVNJKIdYLOw+stGqAL9qAg==}
-    hasBin: true
-
   '@bytecodealliance/componentize-js@0.21.0':
     resolution: {integrity: sha512-Av/XS3bJXE812P/bff3qtrJmehpgD0niK2A0fF3YIdM+jOD6E+mFrxOmuAgaIR0GNkpnm03+GE3ttt/+muqyCQ==}
+    hasBin: true
+
+  '@bytecodealliance/componentize-js@0.22.0':
+    resolution: {integrity: sha512-sscwKDazGgMWZkS6azvY66tY3X09nzl58jn9j6X0E9/V4B5hCXTI+v7PFUyLowKYgu8MG4FJsSvCpq64lSXsIA==}
     hasBin: true
 
   '@bytecodealliance/jco-std@0.2.0':
@@ -604,10 +604,6 @@ packages:
 
   '@bytecodealliance/jco@1.25.2':
     resolution: {integrity: sha512-r9ch8vqtDkBxXtN5KzAEYpz+hjGCW+cQhc2b71U21DMuewE5HrTCI7X826gfL/1oU0ibsSpGodJV5YkwolH9Jg==}
-    hasBin: true
-
-  '@bytecodealliance/jco@1.26.0':
-    resolution: {integrity: sha512-ddqwWuIsFi6fsqf9P8RhKUHBfMUZejSbI7y9uckNqC8u7CaCYSSPeYxqkgsXmU8I/R9ZME1pDUFMW5V10S15wQ==}
     hasBin: true
 
   '@bytecodealliance/jco@1.26.1':
@@ -4259,20 +4255,9 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@bytecodealliance/componentize-js@0.20.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
-    dependencies:
-      '@bytecodealliance/jco': 1.26.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
-      '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
-      '@bytecodealliance/wizer': 10.0.0
-      es-module-lexer: 1.7.0
-      oxc-parser: 0.76.0
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
   '@bytecodealliance/componentize-js@0.21.0':
     dependencies:
-      '@bytecodealliance/jco': 1.25.2
+      '@bytecodealliance/jco': 1.26.1
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4283,7 +4268,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
-      '@bytecodealliance/jco': 1.25.2(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+      '@bytecodealliance/jco': 1.26.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4294,7 +4279,18 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
     dependencies:
-      '@bytecodealliance/jco': 1.25.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/jco': 1.26.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/wizer': 10.0.0
+      es-module-lexer: 1.7.0
+      oxc-parser: 0.76.0
+    transitivePeerDependencies:
+      - '@emnapi/core'
+      - '@emnapi/runtime'
+
+  '@bytecodealliance/componentize-js@0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+    dependencies:
+      '@bytecodealliance/jco': 1.26.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4371,9 +4367,26 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@bytecodealliance/jco@1.26.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+  '@bytecodealliance/jco@1.26.1':
     dependencies:
-      '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/componentize-js': 0.21.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.5.2
+      '@bytecodealliance/preview2-shim': 0.17.9
+      '@bytecodealliance/preview3-shim': 0.1.2
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.2
+      mkdirp: 3.0.1
+      ora: 8.2.0
+      rolldown: 1.2.0
+    transitivePeerDependencies:
+      - '@emnapi/core'
+      - '@emnapi/runtime'
+
+  '@bytecodealliance/jco@1.26.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.5.2
       '@bytecodealliance/preview2-shim': 0.17.9
@@ -4407,7 +4420,7 @@ snapshots:
 
   '@bytecodealliance/jco@file:packages/jco(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
     dependencies:
-      '@bytecodealliance/componentize-js': 0.21.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@bytecodealliance/componentize-js': 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.5.2
       '@bytecodealliance/preview2-shim': 0.17.9
@@ -4989,7 +5002,7 @@ snapshots:
     dependencies:
       '@emnapi/core': 1.11.2
       '@emnapi/runtime': 1.11.2
-      '@tybys/wasm-util': 0.10.2
+      '@tybys/wasm-util': 0.10.3
     optional: true
 
   '@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':

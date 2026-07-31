@@ -9,8 +9,8 @@ importers:
   jco-issue-1390/callee:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.21.0
-        version: 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+        specifier: ^0.22.0
+        version: 0.22.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
 
 packages:
 
@@ -22,8 +22,8 @@ packages:
     resolution: {integrity: sha512-JPRYUTD8v1QUsZ5eqhCtQR7amOTugjV2ofSjFv1/zAGksf4AZUoCFYiKTQ61E+hKUVNJKIdYLOw+stGqAL9qAg==}
     hasBin: true
 
-  '@bytecodealliance/componentize-js@0.21.0':
-    resolution: {integrity: sha512-Av/XS3bJXE812P/bff3qtrJmehpgD0niK2A0fF3YIdM+jOD6E+mFrxOmuAgaIR0GNkpnm03+GE3ttt/+muqyCQ==}
+  '@bytecodealliance/componentize-js@0.22.0':
+    resolution: {integrity: sha512-sscwKDazGgMWZkS6azvY66tY3X09nzl58jn9j6X0E9/V4B5hCXTI+v7PFUyLowKYgu8MG4FJsSvCpq64lSXsIA==}
     hasBin: true
 
   '@bytecodealliance/jco@1.19.0':
@@ -733,7 +733,7 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@bytecodealliance/componentize-js@0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
+  '@bytecodealliance/componentize-js@0.22.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
       '@bytecodealliance/jco': 1.19.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
       '@bytecodealliance/weval': 0.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
