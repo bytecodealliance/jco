@@ -117,6 +117,25 @@ describe("Descriptor with os.tmpdir()", () => {
     child[Symbol.dispose]?.();
   });
 
+  test("readViaStream reports invalid offsets through its future", async () => {
+    const sub = `${relBase}/file-read-invalid-offset.txt`;
+    const child = await rootDescriptor.openAt(
+      {},
+      sub,
+      { create: true },
+      { read: true, write: true },
+    );
+
+    const [sr, fr] = child.readViaStream(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
+
+    await expect(sr.readAll()).resolves.toEqual(Buffer.alloc(0));
+    await expect(fr.read()).rejects.toMatchObject({
+      payload: { tag: "invalid" },
+    });
+
+    child[Symbol.dispose]?.();
+  });
+
   test("writeViaStream rejects read-only descriptors before consuming data", async () => {
     const sub = `${relBase}/file-read-only-write.txt`;
     const writable = await rootDescriptor.openAt(
@@ -162,6 +181,8 @@ describe("Descriptor with os.tmpdir()", () => {
 
       await child.appendViaStream(rx);
     }
+
+    expect((await child.stat()).size).toBe(2n);
 
     const [sr, fr] = child.readViaStream(0n);
     const buf = await sr.readAll();
