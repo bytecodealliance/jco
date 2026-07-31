@@ -3,3 +3,5 @@ output/*
 
 # wasm files should not be checked in, generally
 *.wasm
+
+**/wit/deps/
