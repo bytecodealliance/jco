@@ -68,7 +68,7 @@
         "prepack": "pnpm run build"
     },
     "devDependencies": {
-        "@bytecodealliance/componentize-js": "0.21.0",
+        "@bytecodealliance/componentize-js": "0.22.0",
         "@bytecodealliance/jco": "1.25.2",
         "@types/node": "^24.12.4",
         "mime": "^4.0.7",
