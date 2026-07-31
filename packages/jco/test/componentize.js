@@ -15,12 +15,7 @@ import { exec, getTmpDir, jcoPath } from "./helpers.js";
 // used widely, we can switch to regular dynamic imports, as componentize-js
 // versions are real dependencies now.
 suite("componentize", () => {
-    // ComponentizeJS currently omits the component-model destructor metadata for
-    // a JS-exported resource.
-    //
-    // TODO: flip this test once componentize-js is fixed
-    // see: https://github.com/bytecodealliance/jco/issues/989#issuecomment-4550236825
-    test.fails("componentized exported resource invokes its guest destructor", async () => {
+    test("componentized exported resource invokes its guest destructor", async () => {
         const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "resource-disposal");
         const outputDir = await getTmpDir();
         const componentPath = join(outputDir, "component.wasm");
