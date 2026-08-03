@@ -66,6 +66,9 @@ world js-component-bindgen {
     /// this handling.
     multi-memory: option<bool>,
 
+    /// Whether bindgen may emit Wasm exception references (`exnref`).
+    bindgen-enable-wasm-exnref: option<bool>,
+
     /// Configure whether to use `async` imports or exports with
     /// JavaScript Promise Integration (JSPI).
     async-mode: option<async-mode>,

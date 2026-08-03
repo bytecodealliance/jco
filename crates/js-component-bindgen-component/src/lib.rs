@@ -68,6 +68,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .tracing(options.tracing.unwrap_or(false))
             .no_namespaced_exports(options.no_namespaced_exports.unwrap_or(false))
             .multi_memory(options.multi_memory.unwrap_or(false))
+            .supports_wasm_exnref(options.bindgen_enable_wasm_exnref.unwrap_or(false))
             .maybe_import_bindings(options.import_bindings.map(Into::into))
             .guest(options.guest.unwrap_or(false))
             .maybe_async_mode(options.async_mode.map(Into::into))
