@@ -10,6 +10,55 @@ The Node.js implementation owns its worker artifact. Direct package use and supp
 bundlers should resolve it through the public shim imports; applications do not need to import or
 copy files from `dist/io`.
 
+
+## Browser support matrix
+
+Browser defaults are capability-safe: clocks and secure randomness use Web APIs, stdout and stderr
+write to the console, stdin is closed, outbound HTTP uses `fetch`, filesystem preopens must be
+configured explicitly, and raw sockets are unavailable unless an embedding supplies an adapter.
+
+| WASI area                     | Browser status                                                              | Default capability                                                |
+| ----------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| CLI environment and arguments | Configurable per `WASIShim`; compatibility setters are global               | Empty snapshots unless configured                                 |
+| CLI stdin                     | Adapter-backed                                                              | Closed stream                                                     |
+| CLI stdout and stderr         | Web API                                                                     | Console-backed, preserving split UTF-8 writes until flush/newline |
+| CLI terminals                 | Adapter-backed                                                              | No terminal resource                                              |
+| Clocks                        | Web API                                                                     | `performance.now`, `Date.now`, and timer-backed pollables         |
+| Random                        | Web API                                                                     | `crypto.getRandomValues`, including requests larger than 64 KiB   |
+| I/O streams and poll          | Implemented browser resources                                               | Non-blocking streams depend on their injected handlers            |
+| Filesystem                    | Adapter-backed; in-memory compatibility implementation remains experimental | No persistent storage is selected implicitly                      |
+| Outbound HTTP                 | Web API                                                                     | Delegates to `fetch`                                              |
+| Incoming HTTP                 | Host adapter required                                                       | Browsers cannot listen for arbitrary inbound HTTP                 |
+| TCP, UDP, and DNS             | Host adapter required                                                       | Raw sockets are not exposed by standard browsers                  |
+| `WASIShim` instantiation      | Implemented                                                                 | Interface namespaces can be overridden per instance               |
+
+An operation is not considered supported merely because its interface shape exists. Adapter-backed
+rows require the embedding application to provide that capability; unavailable operations fail with
+a WASI-domain error instead of logging or returning a placeholder resource.
+
+Browser applications select storage explicitly. The bundled in-memory adapter is ephemeral; durable
+adapters can implement `BrowserFilesystemAdapter` around application-owned storage:
+
+```js
+import { filesystem } from "@bytecodealliance/preview2-shim";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const shim = new WASIShim({
+    environment: { MODE: "browser" },
+    arguments: ["component"],
+    stdout: { write: (bytes) => terminal.write(bytes) },
+    browserFilesystem: {
+        adapter: new filesystem.InMemoryFilesystemAdapter(),
+        preopens: { "/data": { dir: {} } },
+    },
+    sandbox: { enableNetwork: false },
+});
+```
+
+The browser shim does not request File System Access permissions or choose IndexedDB/OPFS on an
+application's behalf. Acquire capabilities in application code and pass them to a custom adapter.
+Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate `fetch` capability.
+
 # Features
 
 ## WASI Shim object for easy instantiation

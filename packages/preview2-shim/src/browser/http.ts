@@ -5,7 +5,7 @@ import type {
 } from "../../types/http.js";
 import type { Error as IoError } from "../../types/interfaces/wasi-io-error.js";
 import type { Pollable } from "../../types/interfaces/wasi-io-poll.js";
-import { inputStreamCreate, outputStreamCreate, pollableCreate } from "./io.js";
+import { inputStreamCreate, ioErrorCreate, outputStreamCreate, pollableCreate } from "./io.js";
 
 type Result<T, E> = TypesNamespace.Result<T, E>;
 
@@ -425,6 +425,7 @@ class IncomingBody implements TypesNamespace.IncomingBody {
         let done = false;
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         let readPromise: Promise<void> | null = null;
+        let readError: IoError | null = null;
 
         function ensureReader() {
             if (!reader && fetchResponse.body) {
@@ -451,15 +452,25 @@ class IncomingBody implements TypesNamespace.IncomingBody {
                         bufferOffset = 0;
                     }
                 },
-                () => {
+                (cause) => {
                     readPromise = null;
                     done = true;
+                    readError = ioErrorCreate(
+                        cause instanceof Error ? cause.message : String(cause),
+                    );
                 },
             );
         }
 
+        function checkReadError() {
+            if (readError) {
+                throw { tag: "last-operation-failed", val: readError };
+            }
+        }
+
         incomingBody.#stream = inputStreamCreate({
             read(len: bigint) {
+                checkReadError();
                 if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
                     throw { tag: "closed" };
                 }
@@ -480,6 +491,7 @@ class IncomingBody implements TypesNamespace.IncomingBody {
                 throw { tag: "would-block" };
             },
             blockingRead(len: bigint): any {
+                checkReadError();
                 if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
                     throw { tag: "closed" };
                 }
@@ -500,6 +512,7 @@ class IncomingBody implements TypesNamespace.IncomingBody {
                 startRead();
                 const waitFor = readPromise || Promise.resolve();
                 return waitFor.then(() => {
+                    checkReadError();
                     if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
                         throw { tag: "closed" };
                     }
@@ -521,14 +534,20 @@ class IncomingBody implements TypesNamespace.IncomingBody {
                 });
             },
             subscribe() {
-                if (done || (buffer !== null && bufferOffset < buffer.byteLength)) {
-                    return pollableCreate();
-                }
-                startRead();
-                if (readPromise) {
-                    return pollableCreate(readPromise);
-                }
-                return pollableCreate();
+                return pollableCreate({
+                    ready: () =>
+                        readError !== null ||
+                        done ||
+                        (buffer !== null && bufferOffset < buffer.byteLength),
+                    wait: () => {
+                        startRead();
+                        return readPromise ?? Promise.resolve();
+                    },
+                });
+            },
+            drop() {
+                done = true;
+                void reader?.cancel();
             },
         });
 
@@ -582,6 +601,136 @@ const incomingResponseCreate = IncomingResponse._create;
 // @ts-expect-error - Deleting static method
 delete IncomingResponse._create;
 
+class IncomingRequest implements TypesNamespace.IncomingRequest {
+    #request!: Request;
+    #headers!: Fields;
+    #body: IncomingBody | undefined;
+
+    method(): TypesNamespace.Method {
+        const method = this.#request.method.toLowerCase();
+        return { tag: method } as TypesNamespace.Method;
+    }
+    pathWithQuery() {
+        const url = new URL(this.#request.url);
+        return `${url.pathname}${url.search}`;
+    }
+    scheme(): TypesNamespace.Scheme {
+        const protocol = new URL(this.#request.url).protocol;
+        if (protocol === "http:") {
+            return { tag: "HTTP" };
+        }
+        if (protocol === "https:") {
+            return { tag: "HTTPS" };
+        }
+        return { tag: "other", val: protocol.slice(0, -1) };
+    }
+    authority() {
+        return new URL(this.#request.url).host;
+    }
+    headers() {
+        return this.#headers;
+    }
+    consume() {
+        if (!this.#body) {
+            throw new Error("incoming request body already consumed");
+        }
+        const body = this.#body;
+        this.#body = undefined;
+        return body;
+    }
+    static _create(request: Request) {
+        const incoming = new IncomingRequest();
+        incoming.#request = request;
+        const encoder = new TextEncoder();
+        incoming.#headers = fieldsLock(
+            fieldsFromEntriesChecked(
+                [...request.headers.entries()].map(([name, value]) => [
+                    name,
+                    encoder.encode(value),
+                ]),
+            ),
+        );
+        incoming.#body = incomingBodyCreate(new Response(request.body));
+        return incoming;
+    }
+}
+const incomingRequestCreate = IncomingRequest._create;
+// @ts-expect-error - Deleting static method
+delete IncomingRequest._create;
+
+class OutgoingResponse implements TypesNamespace.OutgoingResponse {
+    #headers: Fields;
+    #status = 200;
+    #body = outgoingBodyCreate();
+    #bodyRequested = false;
+
+    constructor(headers: Fields) {
+        fieldsLock(headers);
+        this.#headers = headers;
+    }
+    statusCode() {
+        return this.#status;
+    }
+    setStatusCode(statusCode: number) {
+        if (!Number.isInteger(statusCode) || statusCode < 100 || statusCode > 999) {
+            throw new TypeError("invalid HTTP status code");
+        }
+        this.#status = statusCode;
+    }
+    headers() {
+        return this.#headers;
+    }
+    body() {
+        if (this.#bodyRequested) {
+            throw new Error("outgoing response body already requested");
+        }
+        this.#bodyRequested = true;
+        return this.#body;
+    }
+    static _toResponse(response: OutgoingResponse) {
+        const headers = new Headers();
+        for (const [name, value] of response.#headers.entries()) {
+            headers.append(name, utf8Decoder.decode(value));
+        }
+        return new Response(outgoingBodyData(response.#body) as BodyInit | null, {
+            status: response.#status,
+            headers,
+        });
+    }
+}
+const outgoingResponseToResponse = OutgoingResponse._toResponse;
+// @ts-expect-error - Deleting static method
+delete OutgoingResponse._toResponse;
+
+class ResponseOutparam implements TypesNamespace.ResponseOutparam {
+    #used = false;
+    #resolve!: (response: Response) => void;
+
+    static set(
+        param: ResponseOutparam,
+        response: Result<TypesNamespace.OutgoingResponse, TypesNamespace.ErrorCode>,
+    ) {
+        if (param.#used) {
+            throw new Error("response outparam already set");
+        }
+        param.#used = true;
+        if (response.tag === "ok") {
+            param.#resolve(outgoingResponseToResponse(response.val as OutgoingResponse));
+        } else {
+            param.#resolve(new Response("WASI HTTP handler error", { status: 500 }));
+        }
+    }
+
+    static _create(): [ResponseOutparam, Promise<Response>] {
+        const param = new ResponseOutparam();
+        const response = new Promise<Response>((resolve) => (param.#resolve = resolve));
+        return [param, response];
+    }
+}
+const responseOutparamCreate = ResponseOutparam._create;
+// @ts-expect-error - Deleting static method
+delete ResponseOutparam._create;
+
 class FutureTrailers implements TypesNamespace.FutureTrailers {
     #requested = false;
 
@@ -617,15 +766,13 @@ function mapFetchError(err: Error) {
     if (err.name === "AbortError") {
         return { tag: "connection-timeout" };
     }
-    if (err.name === "TypeError") {
-        return { tag: "connection-refused" };
-    }
     return { tag: "internal-error", val: err.message };
 }
 
 class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
     #result: any = undefined;
     #promise: Promise<void> | null = null;
+    #controller: AbortController | null = null;
 
     subscribe(): Pollable {
         return pollableCreate(this.#promise!);
@@ -641,6 +788,8 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
     }
 
     [symbolDispose]() {
+        this.#controller?.abort();
+        this.#controller = null;
         this.#promise = null;
     }
 
@@ -654,6 +803,7 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
         const future = new FutureIncomingResponse();
 
         const controller = new AbortController();
+        future.#controller = controller;
         let timer: ReturnType<typeof setTimeout> | undefined;
         if (timeoutMs < Infinity) {
             timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -733,24 +883,37 @@ export const outgoingHandler: typeof OutgoingHandlerNamespace = {
 };
 
 export const incomingHandler: typeof IncomingHandlerNamespace = {
-    // Not implemented
-    handle() {},
+    handle() {
+        throw "not-supported";
+    },
 };
+
+export type BrowserIncomingHandler = (
+    request: TypesNamespace.IncomingRequest,
+    responseOut: TypesNamespace.ResponseOutparam,
+) => void | Promise<void>;
+
+/** Translate a browser Request through a host-provided WASI incoming handler. */
+export async function handleIncomingRequest(
+    request: Request,
+    handler: BrowserIncomingHandler,
+): Promise<Response> {
+    const [responseOut, response] = responseOutparamCreate();
+    await handler(incomingRequestCreate(request), responseOut);
+    return response;
+}
 
 export const types: typeof TypesNamespace = {
     Fields,
     FutureIncomingResponse,
     FutureTrailers,
     IncomingBody,
-    // @ts-expect-error Not implemented
-    IncomingRequest: class IncomingRequest {},
+    IncomingRequest,
     IncomingResponse,
     OutgoingBody,
     OutgoingRequest,
-    // @ts-expect-error Not implemented
-    OutgoingResponse: class OutgoingResponse {},
-    // @ts-expect-error Not implemented
-    ResponseOutparam: class ResponseOutparam {},
+    OutgoingResponse,
+    ResponseOutparam,
     RequestOptions,
     httpErrorCode,
 };

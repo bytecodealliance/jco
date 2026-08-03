@@ -1,4 +1,5 @@
 import type {
+    environment as EnvironmentNamespace,
     exit as ExitNamespace,
     stderr as StderrNamespace,
     stdin as StdinNamespace,
@@ -52,45 +53,61 @@ export function _setStdout(handler: OutputStreamHandler): void {
     stdoutStream.handler = handler;
 }
 
+export interface BrowserCliConfig {
+    environment?: Record<string, string>;
+    arguments?: string[];
+    initialCwd?: string;
+    stdin?: InputStreamHandler;
+    stdout?: OutputStreamHandler;
+    stderr?: OutputStreamHandler;
+}
+
 const stdinStream = inputStreamCreate({
-    blockingRead(_len: bigint) {
-        // TODO
-        return new Uint8Array(0);
+    blockingRead() {
+        throw { tag: "closed" };
     },
     subscribe() {
-        // TODO
         return pollableCreate();
     },
-    [symbolDispose]() {
-        // TODO
-    },
-});
-
-const textDecoder = new TextDecoder();
-
-const stdoutStream = outputStreamCreate({
-    write(contents: Uint8Array): void {
-        if (contents.at(-1) == 10) {
-            // console.log already appends a new line
-            contents = contents.subarray(0, -1);
-        }
-        console.log(textDecoder.decode(contents));
-    },
-    blockingFlush() {},
     [symbolDispose]() {},
 });
 
-const stderrStream = outputStreamCreate({
-    write(contents: Uint8Array): void {
-        if (contents.at(-1) == 10) {
-            // console.error already appends a new line
-            contents = contents.subarray(0, -1);
+function consoleStream(writeLine: (line: string) => void): OutputStreamHandler {
+    const decoder = new TextDecoder();
+    let pending = "";
+
+    const emitCompleteLines = () => {
+        const lines = pending.split("\n");
+        pending = lines.pop()!;
+        for (const line of lines) {
+            writeLine(line.endsWith("\r") ? line.slice(0, -1) : line);
         }
-        console.error(textDecoder.decode(contents));
-    },
-    blockingFlush() {},
-    [symbolDispose]() {},
-});
+    };
+
+    return {
+        write(contents: Uint8Array) {
+            pending += decoder.decode(contents, { stream: true });
+            emitCompleteLines();
+        },
+        flush() {
+            pending += decoder.decode();
+            if (pending) {
+                writeLine(pending);
+            }
+            pending = "";
+        },
+        blockingFlush() {
+            this.flush?.();
+        },
+        drop() {
+            this.flush?.();
+        },
+    };
+}
+
+const stdoutStream = outputStreamCreate(consoleStream((line) => console.log(line)));
+
+const stderrStream = outputStreamCreate(consoleStream((line) => console.error(line)));
 
 export const stdin: typeof StdinNamespace = {
     getStdin() {
@@ -113,10 +130,6 @@ export const stderr: typeof StderrNamespace = {
 class TerminalInput implements TerminalInputNamespace.TerminalInput {}
 class TerminalOutput implements TerminalOutputNamespace.TerminalOutput {}
 
-const terminalStdoutInstance = new TerminalOutput();
-const terminalStderrInstance = new TerminalOutput();
-const terminalStdinInstance = new TerminalInput();
-
 export const terminalInput: typeof TerminalInputNamespace = {
     TerminalInput,
 };
@@ -127,18 +140,67 @@ export const terminalOutput: typeof TerminalOutputNamespace = {
 
 export const terminalStderr: typeof TerminalStderrNamespace = {
     getTerminalStderr() {
-        return terminalStderrInstance;
+        return undefined;
     },
 };
 
 export const terminalStdin: typeof TerminalStdinNamespace = {
     getTerminalStdin() {
-        return terminalStdinInstance;
+        return undefined;
     },
 };
 
 export const terminalStdout: typeof TerminalStdoutNamespace = {
     getTerminalStdout() {
-        return terminalStdoutInstance;
+        return undefined;
     },
 };
+
+/** Create isolated browser CLI interfaces without changing compatibility globals. */
+export function createCli(config: BrowserCliConfig = {}): {
+    environment: typeof EnvironmentNamespace;
+    exit: typeof ExitNamespace;
+    stdin: typeof StdinNamespace;
+    stdout: typeof StdoutNamespace;
+    stderr: typeof StderrNamespace;
+    terminalInput: typeof TerminalInputNamespace;
+    terminalOutput: typeof TerminalOutputNamespace;
+    terminalStdin: typeof TerminalStdinNamespace;
+    terminalStdout: typeof TerminalStdoutNamespace;
+    terminalStderr: typeof TerminalStderrNamespace;
+} {
+    const stdinInstance = inputStreamCreate(
+        config.stdin ?? {
+            blockingRead() {
+                throw { tag: "closed" };
+            },
+            subscribe: () => pollableCreate(),
+        },
+    );
+    const stdoutInstance = outputStreamCreate(
+        config.stdout ?? consoleStream((line) => console.log(line)),
+    );
+    const stderrInstance = outputStreamCreate(
+        config.stderr ?? consoleStream((line) => console.error(line)),
+    );
+    const env = Object.entries(config.environment ?? {});
+    const args = [...(config.arguments ?? [])];
+    const cwd = config.initialCwd ?? "/";
+
+    return {
+        environment: {
+            getEnvironment: () => env.map(([key, value]) => [key, value] as [string, string]),
+            getArguments: () => [...args],
+            initialCwd: () => cwd,
+        },
+        exit,
+        stdin: { getStdin: () => stdinInstance },
+        stdout: { getStdout: () => stdoutInstance },
+        stderr: { getStderr: () => stderrInstance },
+        terminalInput,
+        terminalOutput,
+        terminalStdin,
+        terminalStdout,
+        terminalStderr,
+    };
+}

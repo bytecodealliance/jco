@@ -34,9 +34,34 @@ export interface FileDataEntry {
  */
 export type FileData = FileDataEntry;
 
+export interface BrowserFilesystemAdapter<Capability = unknown> {
+    getRoot(capability: Capability): FileData;
+    dispose?(): void;
+}
+
+export interface BrowserFilesystemConfig<Capability> {
+    adapter: BrowserFilesystemAdapter<Capability>;
+    preopens: Record<string, Capability>;
+}
+
+/** Explicit ephemeral storage adapter for browser applications and tests. */
+export class InMemoryFilesystemAdapter implements BrowserFilesystemAdapter<FileData> {
+    getRoot(capability: FileData): FileData {
+        if (!capability.dir) {
+            throw new TypeError("an in-memory preopen root must be a directory");
+        }
+        return capability;
+    }
+}
+
 export function _setFileData(fileData: FileData): void {
     _fileData = fileData;
-    _rootPreopen![0] = descriptorCreate(fileData);
+    if (_rootPreopen) {
+        const descriptor = descriptorCreate(fileData);
+        _rootPreopen[0] = descriptor;
+    } else {
+        _setPreopens({ "/": fileData });
+    }
     const cwd = environment.initialCwd();
     _setCwd(cwd || "/");
 }
@@ -106,6 +131,29 @@ function getChildEntry(
     return entry;
 }
 
+function getParentEntry(root: FileDataEntry, path: string): [FileDataEntry, string] {
+    const segments = path.split("/").filter((segment) => segment !== "" && segment !== ".");
+    if (segments.length === 0 || segments.some((segment) => segment === "..")) {
+        throw "invalid";
+    }
+    const name = segments.pop()!;
+    let parent = root;
+    for (const segment of segments) {
+        const child = parent.dir?.[segment];
+        if (!child) {
+            throw "no-entry";
+        }
+        if (!child.dir) {
+            throw "not-directory";
+        }
+        parent = child;
+    }
+    if (!parent.dir) {
+        throw "not-directory";
+    }
+    return [parent, name];
+}
+
 function getSource(fileEntry: FileDataEntry): Uint8Array {
     if (typeof fileEntry.source === "string") {
         fileEntry.source = new TextEncoder().encode(fileEntry.source);
@@ -166,6 +214,11 @@ class Descriptor implements TypesNamespace.Descriptor {
     #stream: any;
     #entry!: FileDataEntry;
     #mtime = 0;
+    #flags: TypesNamespace.DescriptorFlags = {
+        read: true,
+        write: true,
+        mutateDirectory: true,
+    };
 
     _getEntry(descriptor: Descriptor): FileDataEntry {
         return descriptor.#entry;
@@ -221,21 +274,19 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
 
     appendViaStream() {
-        console.log(`[filesystem] APPEND STREAM`);
-        return {} as IOutputStream;
+        return this.writeViaStream(this.stat().size);
     }
 
-    advise(offset: Filesize, length: Filesize, advice: TypesNamespace.Advice) {
-        console.log(`[filesystem] ADVISE`, offset, length, advice);
+    advise(_offset: Filesize, _length: Filesize, _advice: TypesNamespace.Advice) {
+        if (this.getType() === "directory") {
+            throw "bad-descriptor";
+        }
     }
 
-    syncData() {
-        console.log(`[filesystem] SYNC DATA`);
-    }
+    syncData() {}
 
     getFlags() {
-        console.log(`[filesystem] FLAGS FOR`);
-        return {} as TypesNamespace.DescriptorFlags;
+        return { ...this.#flags };
     }
 
     getType() {
@@ -252,11 +303,21 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
 
     setSize(size: bigint) {
-        console.log(`[filesystem] SET SIZE`, size);
+        if (this.getType() === "directory") {
+            throw "is-directory";
+        }
+        const length = coerceToSafeIntegerNumber(size);
+        const source = getSource(this.#entry);
+        const resized = new Uint8Array(length);
+        resized.set(source.subarray(0, length));
+        this.#entry.source = resized;
+        this.#mtime++;
     }
 
-    setTimes(dataAccessTimestamp: any, dataModificationTimestamp: any) {
-        console.log(`[filesystem] SET TIMES`, dataAccessTimestamp, dataModificationTimestamp);
+    setTimes(_dataAccessTimestamp: any, dataModificationTimestamp: any) {
+        if (dataModificationTimestamp?.tag !== "no-change") {
+            this.#mtime++;
+        }
     }
 
     read(length: bigint, offset: bigint) {
@@ -271,10 +332,20 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
 
     write(buffer: Uint8Array, offset: Filesize) {
-        if (offset !== 0n) {
-            throw "invalid-seek";
+        if (this.getType() === "directory") {
+            throw "is-directory";
         }
-        this.#entry.source = buffer;
+        const off = coerceToSafeIntegerNumber(offset);
+        const source = getSource(this.#entry);
+        const end = off + buffer.byteLength;
+        if (!Number.isSafeInteger(end)) {
+            throw "file-too-large";
+        }
+        const target = new Uint8Array(Math.max(source.byteLength, end));
+        target.set(source);
+        target.set(buffer, off);
+        this.#entry.source = target;
+        this.#mtime++;
         return BigInt(buffer.byteLength);
     }
 
@@ -287,9 +358,7 @@ class Descriptor implements TypesNamespace.Descriptor {
         );
     }
 
-    sync() {
-        console.log(`[filesystem] SYNC`);
-    }
+    sync() {}
 
     createDirectoryAt(path: string) {
         const entry = getChildEntry(this.#entry, path, {
@@ -345,12 +414,34 @@ class Descriptor implements TypesNamespace.Descriptor {
         };
     }
 
-    setTimesAt() {
-        console.log(`[filesystem] SET TIMES AT`);
+    setTimesAt(_pathFlags: PathFlags, path: string, _atime: any, mtime: any) {
+        const entry = getChildEntry(this.#entry, path, { create: false, directory: false });
+        if (mtime?.tag !== "no-change") {
+            // Metadata is currently descriptor-local; touching the entry makes
+            // the mutation visible through metadata hashes on newly opened handles.
+            fileWriteBuffers.delete(entry);
+            this.#mtime++;
+        }
     }
 
-    linkAt() {
-        console.log(`[filesystem] LINK AT`);
+    linkAt(
+        _pathFlags: PathFlags,
+        oldPath: string,
+        newDescriptor: TypesNamespace.Descriptor,
+        newPath: string,
+    ) {
+        const entry = getChildEntry(this.#entry, oldPath, { create: false, directory: false });
+        if (entry.dir) {
+            throw "not-permitted";
+        }
+        const [newParent, newName] = getParentEntry(
+            descriptorGetEntry(newDescriptor as Descriptor),
+            newPath,
+        );
+        if (newParent.dir![newName]) {
+            throw "exist";
+        }
+        newParent.dir![newName] = entry;
     }
 
     openAt(
@@ -359,29 +450,80 @@ class Descriptor implements TypesNamespace.Descriptor {
         openFlags: OpenFlags,
         _flags: TypesNamespace.DescriptorFlags,
     ) {
-        const childEntry = getChildEntry(this.#entry, path, openFlags);
+        let childEntry: FileDataEntry;
+        try {
+            childEntry = getChildEntry(this.#entry, path, {
+                create: false,
+                directory: false,
+            });
+            if (openFlags.create && openFlags.exclusive) {
+                throw "exist";
+            }
+        } catch (error) {
+            if (error !== "no-entry" || !openFlags.create) {
+                throw error;
+            }
+            childEntry = getChildEntry(this.#entry, path, openFlags);
+        }
+        if (openFlags.directory && !childEntry.dir) {
+            throw "not-directory";
+        }
+        if (openFlags.truncate) {
+            if (childEntry.dir) {
+                throw "is-directory";
+            }
+            childEntry.source = new Uint8Array();
+        }
         return descriptorCreate(childEntry);
     }
 
-    readlinkAt(_path: string) {
-        console.log(`[filesystem] READLINK AT`);
-        return "";
+    readlinkAt(_path: string): string {
+        throw "unsupported";
     }
 
-    removeDirectoryAt() {
-        console.log(`[filesystem] REMOVE DIR AT`);
+    removeDirectoryAt(path: string) {
+        const [parent, name] = getParentEntry(this.#entry, path);
+        const entry = parent.dir?.[name];
+        if (!entry) {
+            throw "no-entry";
+        }
+        if (!entry.dir) {
+            throw "not-directory";
+        }
+        if (Object.keys(entry.dir).length) {
+            throw "not-empty";
+        }
+        delete parent.dir![name];
     }
 
-    renameAt() {
-        console.log(`[filesystem] RENAME AT`);
+    renameAt(oldPath: string, newDescriptor: TypesNamespace.Descriptor, newPath: string) {
+        const [oldParent, oldName] = getParentEntry(this.#entry, oldPath);
+        const entry = oldParent.dir?.[oldName];
+        if (!entry) {
+            throw "no-entry";
+        }
+        const [newParent, newName] = getParentEntry(
+            descriptorGetEntry(newDescriptor as Descriptor),
+            newPath,
+        );
+        newParent.dir![newName] = entry;
+        delete oldParent.dir![oldName];
     }
 
     symlinkAt() {
-        console.log(`[filesystem] SYMLINK AT`);
+        throw "unsupported";
     }
 
-    unlinkFileAt() {
-        console.log(`[filesystem] UNLINK FILE AT`);
+    unlinkFileAt(path: string) {
+        const [parent, name] = getParentEntry(this.#entry, path);
+        const entry = parent.dir?.[name];
+        if (!entry) {
+            throw "no-entry";
+        }
+        if (entry.dir) {
+            throw "is-directory";
+        }
+        delete parent.dir![name];
     }
 
     isSameObject(other: TypesNamespace.Descriptor) {
@@ -406,14 +548,43 @@ const descriptorCreate = Descriptor._create;
 // @ts-expect-error - Deleting static method
 delete Descriptor._create;
 
-let _preopens: [Descriptor, string][] = [[descriptorCreate(_fileData), "/"]];
-let _rootPreopen: [Descriptor, string] | null = _preopens[0];
+let _preopens: [Descriptor, string][] = [];
+let _rootPreopen: [Descriptor, string] | null = null;
 
 export const preopens: typeof PreopensNamespace = {
     getDirectories() {
         return _preopens;
     },
 };
+
+/** Create isolated filesystem namespaces backed by an application-selected adapter. */
+export function createFilesystem<Capability>({
+    adapter,
+    preopens: configuredPreopens,
+}: BrowserFilesystemConfig<Capability>) {
+    const entries: [Descriptor, string][] = Object.entries(configuredPreopens).map(
+        ([guestPath, capability]) => [descriptorCreate(adapter.getRoot(capability)), guestPath],
+    );
+    let disposed = false;
+    return {
+        types,
+        preopens: {
+            getDirectories() {
+                if (disposed) {
+                    throw new Error("filesystem adapter has been disposed");
+                }
+                return [...entries];
+            },
+        } as typeof PreopensNamespace,
+        dispose() {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+            adapter.dispose?.();
+        },
+    };
+}
 
 /**
  * Replace all preopens with the given set.
@@ -433,9 +604,10 @@ export function _setPreopens(preopensConfig: Record<string, FileData>): void {
  */
 export function _addPreopen(virtualPath: string, fileData: FileData): void {
     const descriptor = descriptorCreate(fileData);
-    _preopens.push([descriptor, virtualPath]);
+    const entry: [Descriptor, string] = [descriptor, virtualPath];
+    _preopens.push(entry);
     if (virtualPath === "/") {
-        _rootPreopen = [descriptor, virtualPath];
+        _rootPreopen = entry;
     }
 }
 
@@ -465,10 +637,9 @@ export function _getPreopens(): [Descriptor, string][] {
  * @returns A preopen descriptor
  */
 export function _createPreopenDescriptor(hostPreopen: string) {
-    _fileData.dir = {
-        [hostPreopen]: {},
-    };
-    return descriptorCreate(_fileData);
+    throw new TypeError(
+        `browser preopen ${JSON.stringify(hostPreopen)} is a host path; configure browser file data or an adapter instead`,
+    );
 }
 
 export const types: typeof TypesNamespace = {

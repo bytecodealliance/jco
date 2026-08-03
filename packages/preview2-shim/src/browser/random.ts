@@ -5,6 +5,17 @@ import type {
 } from "../../types/random.js";
 
 const MAX_BYTES = 65536;
+const MAX_U64 = (1n << 64n) - 1n;
+
+function checkedByteLength(len: bigint): number {
+    if (typeof len !== "bigint" || len < 0n || len > MAX_U64) {
+        throw new TypeError("random byte length must be a valid u64");
+    }
+    if (len > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new RangeError("random byte length exceeds JavaScript's safe integer range");
+    }
+    return Number(len);
+}
 
 let insecureRandomValue1: bigint | undefined, insecureRandomValue2: bigint | undefined;
 
@@ -31,12 +42,13 @@ export const insecureSeed: typeof InsecureSeedNamespace = {
 
 export const random: typeof RandomNamespace = {
     getRandomBytes(len: bigint) {
-        const bytes = new Uint8Array(Number(len));
+        const byteLength = checkedByteLength(len);
+        const bytes = new Uint8Array(byteLength);
 
-        if (len > MAX_BYTES) {
+        if (byteLength > MAX_BYTES) {
             // this is the max bytes crypto.getRandomValues
             // can do at once see https://developer.mozilla.org/en-US/docs/Web/API/window.crypto.getRandomValues
-            for (var generated = 0; generated < len; generated += MAX_BYTES) {
+            for (let generated = 0; generated < byteLength; generated += MAX_BYTES) {
                 // buffer.slice automatically checks if the end is past the end of
                 // the buffer so we don't have to here
                 crypto.getRandomValues(bytes.subarray(generated, generated + MAX_BYTES));
