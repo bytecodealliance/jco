@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0] - 2026-08-03
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ report invalid read offsets through future by @andreiltd in #1804
+
+- _(p3-shim)_ update p3 forbidden header list by @andreiltd in #1749
+
 ## [0.2.0] - 2026-06-24
 
 ### 🚜 Refactor
