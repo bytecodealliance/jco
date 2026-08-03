@@ -125,6 +125,9 @@ export interface TranspilationOptions {
     /** Whether to use multi memory support */
     multiMemory?: boolean;
 
+    /** Whether bindgen may emit Wasm exception references (`exnref`) */
+    bindgenEnableWasmExnref?: boolean;
+
     /** Whether to enable WebIDL imports */
     experimentalIdlImports?: boolean;
 
@@ -302,6 +305,7 @@ export async function transpileBytes(
         base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
         noNamespacedExports: opts.namespacedExports === false,
         multiMemory: opts.multiMemory === true,
+        bindgenEnableWasmExnref: opts.bindgenEnableWasmExnref === true,
         strict: opts.strict === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
