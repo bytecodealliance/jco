@@ -113,8 +113,31 @@ export class WASIShim {
         // Support both old 'shims' parameter name and new 'config' style
         const shims = config;
 
-        this.#cli = shims?.cli ?? wasi.cli;
-        this.#filesystem = shims?.filesystem ?? wasi.filesystem;
+        const defaultCli = wasi.cli as any;
+        this.#cli =
+            shims?.cli ??
+            (defaultCli.createCli &&
+            (shims?.environment !== undefined ||
+                shims?.arguments !== undefined ||
+                shims?.initialCwd !== undefined ||
+                shims?.stdin !== undefined ||
+                shims?.stdout !== undefined ||
+                shims?.stderr !== undefined)
+                ? defaultCli.createCli({
+                      environment: shims?.environment,
+                      arguments: shims?.arguments,
+                      initialCwd: shims?.initialCwd,
+                      stdin: shims?.stdin,
+                      stdout: shims?.stdout,
+                      stderr: shims?.stderr,
+                  })
+                : defaultCli);
+        const defaultFilesystem = wasi.filesystem as any;
+        this.#filesystem =
+            shims?.filesystem ??
+            (shims?.browserFilesystem && defaultFilesystem.createFilesystem
+                ? defaultFilesystem.createFilesystem(shims.browserFilesystem)
+                : defaultFilesystem);
         this.#io = shims?.io ?? wasi.io;
         this.#random = shims?.random ?? wasi.random;
         this.#clocks = shims?.clocks ?? wasi.clocks;

@@ -86,6 +86,11 @@ interface WASIShimConfig {
     cli?: object;
     /** Custom filesystem shim */
     filesystem?: object;
+    /** Browser filesystem adapter and guest-path capability mappings. */
+    browserFilesystem?: {
+        adapter: object;
+        preopens: Record<string, unknown>;
+    };
     /** Custom I/O shim */
     io?: object;
     /** Custom random shim */
@@ -96,6 +101,18 @@ interface WASIShimConfig {
     sockets?: object;
     /** Custom HTTP shim */
     http?: object;
+    /** Browser-only isolated environment variables. */
+    environment?: Record<string, string>;
+    /** Browser-only isolated command-line arguments. */
+    arguments?: string[];
+    /** Browser-only initial working directory. */
+    initialCwd?: string;
+    /** Browser input stream handler. */
+    stdin?: object;
+    /** Browser output stream handler. */
+    stdout?: object;
+    /** Browser error stream handler. */
+    stderr?: object;
     /** Sandbox configuration for restricting guest capabilities */
     sandbox?: SandboxConfig;
 }

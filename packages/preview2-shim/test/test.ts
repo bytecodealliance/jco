@@ -1188,8 +1188,10 @@ suite("Browser filesystem", () => {
         const descriptor = rootDescriptor.openAt({}, "file", {}, { write: true });
         const stream = descriptor.writeViaStream(3n);
 
+        stream.checkWrite();
         stream.write(new Uint8Array([4, 5]));
         const buffer = file.source.buffer;
+        stream.checkWrite();
         stream.write(new Uint8Array([6]));
 
         assert.strictEqual(file.source.buffer, buffer);
@@ -1204,11 +1206,56 @@ suite("Browser filesystem", () => {
         const [[rootDescriptor]] = preopens.getDirectories();
         const descriptor = rootDescriptor.openAt({}, "file", {}, { write: true });
 
-        descriptor.writeViaStream(1n).write(new Uint8Array([8, 9]));
+        const overwrite = descriptor.writeViaStream(1n);
+        overwrite.checkWrite();
+        overwrite.write(new Uint8Array([8, 9]));
         assert.deepStrictEqual(file.source, new Uint8Array([1, 8, 9, 4]));
 
-        descriptor.writeViaStream(6n).write(new Uint8Array([7]));
+        const sparse = descriptor.writeViaStream(6n);
+        sparse.checkWrite();
+        sparse.write(new Uint8Array([7]));
         assert.deepStrictEqual(file.source, new Uint8Array([1, 8, 9, 4, 0, 0, 7]));
+    });
+
+    test("supports append, resize, rename, and removal", async () => {
+        const { _setFileData, preopens } = await import("../src/browser/filesystem.js");
+        const file = { source: new Uint8Array([1, 2]) };
+        _setFileData({ dir: { file, empty: { dir: {} } } });
+
+        const [[root]] = preopens.getDirectories();
+        const descriptor = root.openAt({}, "file", {}, { read: true, write: true });
+        const append = descriptor.appendViaStream();
+        append.checkWrite();
+        append.write(new Uint8Array([3]));
+        assert.deepStrictEqual(file.source, new Uint8Array([1, 2, 3]));
+
+        descriptor.setSize(5n);
+        assert.deepStrictEqual(file.source, new Uint8Array([1, 2, 3, 0, 0]));
+        root.renameAt("file", root, "renamed");
+        assert.strictEqual(root.statAt({}, "renamed").size, 5n);
+        root.unlinkFileAt("renamed");
+        assert.throws(() => root.statAt({}, "renamed"));
+        root.removeDirectoryAt("empty");
+        assert.throws(() => root.statAt({}, "empty"));
+    });
+
+    test("createFilesystem isolates explicitly selected in-memory roots", async () => {
+        const { createFilesystem, InMemoryFilesystemAdapter } =
+            await import("../src/browser/filesystem.js");
+        const first = createFilesystem({
+            adapter: new InMemoryFilesystemAdapter(),
+            preopens: { "/first": { dir: { value: { source: "one" } } } },
+        });
+        const second = createFilesystem({
+            adapter: new InMemoryFilesystemAdapter(),
+            preopens: { "/second": { dir: { value: { source: "two" } } } },
+        });
+
+        assert.strictEqual(first.preopens.getDirectories()[0][1], "/first");
+        assert.strictEqual(second.preopens.getDirectories()[0][1], "/second");
+        first.dispose();
+        assert.throws(() => first.preopens.getDirectories(), /disposed/);
+        assert.strictEqual(second.preopens.getDirectories().length, 1);
     });
 });
 
@@ -1222,6 +1269,133 @@ suite("Browser shim guards", () => {
         const { poll } = await import("../src/browser/io.js");
         const fakeList = { length: 0x100000000 } as any;
         assert.throws(() => poll.poll(fakeList), /u32/);
+    });
+
+    test("pollables can be reused across readiness generations", async () => {
+        const { pollableCreate } = await import("../src/browser/io.js");
+        let ready = false;
+        let waits = 0;
+        let resolve!: () => void;
+        const pollable = pollableCreate({
+            ready: () => ready,
+            wait: () => {
+                waits++;
+                return new Promise<void>((r) => (resolve = r));
+            },
+        });
+
+        const first = pollable.block();
+        const simultaneous = pollable.block();
+        assert.strictEqual(waits, 1);
+        ready = true;
+        resolve();
+        await Promise.all([first, simultaneous]);
+        assert.strictEqual(pollable.ready(), true);
+
+        ready = false;
+        const second = pollable.block();
+        assert.strictEqual(waits, 2);
+        ready = true;
+        resolve();
+        await second;
+    });
+
+    test("browser streams validate u64 lengths and write permits", async () => {
+        const { inputStreamCreate, outputStreamCreate } = await import("../src/browser/io.js");
+        const input = inputStreamCreate({ blockingRead: () => new Uint8Array() });
+        assert.throws(() => input.read(-1n), /valid u64/);
+        assert.throws(() => input.read(BigInt(Number.MAX_SAFE_INTEGER) + 1n), /safe integer/);
+
+        const output = outputStreamCreate({
+            checkWrite: () => 2n,
+            write() {},
+        });
+        assert.strictEqual(output.checkWrite(), 2n);
+        assert.throws(() => output.write(new Uint8Array(3)), /exceeds the permit/);
+    });
+
+    test("dropping browser streams disposes handlers exactly once", async () => {
+        const { outputStreamCreate } = await import("../src/browser/io.js");
+        let drops = 0;
+        const output = outputStreamCreate({ write() {}, drop: () => drops++ });
+        (output as any)[symbolDispose]();
+        (output as any)[symbolDispose]();
+        assert.strictEqual(drops, 1);
+        try {
+            output.checkWrite();
+            assert.fail("closed output stream should reject checkWrite");
+        } catch (error) {
+            assert.deepStrictEqual(error, { tag: "closed" });
+        }
+    });
+
+    test("browser random rejects invalid allocation lengths", async () => {
+        const { random } = await import("../src/browser/random.js");
+        assert.throws(() => random.getRandomBytes(-1n), /valid u64/);
+        assert.throws(
+            () => random.getRandomBytes(BigInt(Number.MAX_SAFE_INTEGER) + 1n),
+            /safe integer/,
+        );
+    });
+
+    test("browser raw sockets fail with not-supported", async () => {
+        const sockets = await import("../src/browser/sockets.js");
+        assert.strictEqual(
+            sockets.instanceNetwork.instanceNetwork(),
+            sockets.instanceNetwork.instanceNetwork(),
+        );
+        assert.throws(() => sockets.tcpCreateSocket.createTcpSocket("ipv4"), /not-supported/);
+        assert.throws(() => sockets.udpCreateSocket.createUdpSocket("ipv4"), /not-supported/);
+        assert.throws(
+            () => sockets.ipNameLookup.resolveAddresses({} as any, "example.com"),
+            /not-supported/,
+        );
+    });
+
+    test("host-driven browser incoming HTTP round trips a response", async () => {
+        const { handleIncomingRequest, types } = await import("../src/browser/http.js");
+        const response = await handleIncomingRequest(
+            new Request("https://example.com/test?value=1", { method: "POST", body: "request" }),
+            (request, responseOut) => {
+                assert.deepStrictEqual(request.method(), { tag: "post" });
+                assert.strictEqual(request.pathWithQuery(), "/test?value=1");
+                const outgoing = new types.OutgoingResponse(new types.Fields());
+                outgoing.setStatusCode(201);
+                const body = outgoing.body();
+                const stream = body.write();
+                stream.checkWrite();
+                stream.write(new TextEncoder().encode("created"));
+                types.OutgoingBody.finish(body, undefined);
+                types.ResponseOutparam.set(responseOut, { tag: "ok", val: outgoing });
+            },
+        );
+        assert.strictEqual(response.status, 201);
+        assert.strictEqual(await response.text(), "created");
+    });
+
+    test("browser CLI factories isolate configuration and streams", async () => {
+        const { createCli } = await import("../src/browser/cli.js");
+        const firstWrites: number[] = [];
+        const secondWrites: number[] = [];
+        const first = createCli({
+            environment: { INSTANCE: "first" },
+            arguments: ["one"],
+            stdout: { write: (bytes) => firstWrites.push(...bytes) },
+        });
+        const second = createCli({
+            environment: { INSTANCE: "second" },
+            arguments: ["two"],
+            stdout: { write: (bytes) => secondWrites.push(...bytes) },
+        });
+
+        assert.deepStrictEqual(first.environment.getEnvironment(), [["INSTANCE", "first"]]);
+        assert.deepStrictEqual(second.environment.getEnvironment(), [["INSTANCE", "second"]]);
+        const firstStdout = first.stdout.getStdout();
+        firstStdout.checkWrite();
+        firstStdout.write(new Uint8Array([1, 2]));
+        assert.deepStrictEqual(firstWrites, [1, 2]);
+        assert.deepStrictEqual(secondWrites, []);
+        assert.strictEqual(first.terminalStdout.getTerminalStdout(), undefined);
     });
 
     test("RequestOptions rejects negative connect timeout", async () => {

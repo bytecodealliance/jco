@@ -6,6 +6,8 @@ import type {
 
 let id = 0;
 
+const MAX_U64 = (1n << 64n) - 1n;
+
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 type IInputStream = StreamsNamespace.InputStream;
@@ -18,6 +20,25 @@ export type InputStreamHandler = Partial<IInputStream> &
     Required<Pick<IInputStream, "blockingRead">> & {
         drop?: () => void;
     };
+
+export interface PollableSource {
+    ready(): boolean;
+    wait(): Promise<void>;
+}
+
+function checkedLength(len: bigint, name = "length"): number {
+    if (typeof len !== "bigint" || len < 0n || len > MAX_U64) {
+        throw new TypeError(`${name} must be a valid u64`);
+    }
+    if (len > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new RangeError(`${name} exceeds JavaScript's safe integer range`);
+    }
+    return Number(len);
+}
+
+function closed(): never {
+    throw { tag: "closed" } satisfies StreamsNamespace.StreamError;
+}
 
 /**
  * Handler interface for creating custom output streams
@@ -33,9 +54,13 @@ class IoError extends Error implements ErrorNamespace.Error {
     }
 }
 
+export const ioErrorCreate = (message: string): ErrorNamespace.Error => new IoError(message);
+
 class InputStream implements IInputStream {
     id!: number;
     handler!: InputStreamHandler;
+    #open = true;
+    #children = new Set<Pollable>();
 
     static _create(handler: InputStreamHandler) {
         const stream = new InputStream();
@@ -48,6 +73,10 @@ class InputStream implements IInputStream {
     }
 
     read(len: bigint) {
+        checkedLength(len);
+        if (!this.#open) {
+            closed();
+        }
         if (this.handler.read) {
             return this.handler.read(len);
         }
@@ -55,10 +84,18 @@ class InputStream implements IInputStream {
     }
 
     blockingRead(len: bigint) {
+        checkedLength(len);
+        if (!this.#open) {
+            closed();
+        }
         return this.handler.blockingRead.call(this, len);
     }
 
     skip(len: bigint) {
+        checkedLength(len);
+        if (!this.#open) {
+            closed();
+        }
         if (this.handler.skip) {
             return this.handler.skip.call(this, len);
         }
@@ -70,6 +107,10 @@ class InputStream implements IInputStream {
     }
 
     blockingSkip(len: bigint) {
+        checkedLength(len);
+        if (!this.#open) {
+            closed();
+        }
         if (this.handler.blockingSkip) {
             return this.handler.blockingSkip.call(this, len);
         }
@@ -78,13 +119,26 @@ class InputStream implements IInputStream {
     }
 
     subscribe() {
-        if (this.handler.subscribe) {
-            return this.handler.subscribe();
+        if (!this.#open) {
+            return pollableCreate();
         }
-        return new Pollable();
+        const pollable = this.handler.subscribe
+            ? (this.handler.subscribe() as Pollable)
+            : pollableCreate();
+        this.#children.add(pollable);
+        pollable._onDispose(() => this.#children.delete(pollable));
+        return pollable;
     }
 
     [symbolDispose]() {
+        if (!this.#open) {
+            return;
+        }
+        this.#open = false;
+        for (const child of this.#children) {
+            child._invalidate();
+        }
+        this.#children.clear();
         if (this.handler.drop) {
             this.handler.drop.call(this);
         }
@@ -99,6 +153,8 @@ class OutputStream implements IOutputStream {
     id!: number;
     open!: boolean;
     handler!: OutputStreamHandler;
+    #permit = 0n;
+    #children = new Set<Pollable>();
 
     static _create(handler: OutputStreamHandler) {
         const stream = new OutputStream();
@@ -113,19 +169,36 @@ class OutputStream implements IOutputStream {
 
     checkWrite() {
         if (!this.open) {
-            return 0n;
+            closed();
         }
         if (this.handler.checkWrite) {
-            return this.handler.checkWrite.call(this);
+            const permit = this.handler.checkWrite.call(this);
+            checkedLength(permit, "write permit");
+            this.#permit = permit;
+            return permit;
         }
-        return 1_000_000n;
+        this.#permit = 1_000_000n;
+        return this.#permit;
     }
 
     write(buf: Uint8Array) {
+        if (!this.open) {
+            closed();
+        }
+        if (BigInt(buf.byteLength) > this.#permit) {
+            throw new Error("write exceeds the permit returned by checkWrite");
+        }
+        this.#permit -= BigInt(buf.byteLength);
         this.handler.write.call(this, buf);
     }
 
     blockingWriteAndFlush(buf: Uint8Array) {
+        if (!this.open) {
+            closed();
+        }
+        if (buf.byteLength > 4096) {
+            throw new RangeError("blockingWriteAndFlush accepts at most 4096 bytes");
+        }
         if (this.handler.blockingWriteAndFlush) {
             return this.handler.blockingWriteAndFlush.call(this, buf);
         }
@@ -133,46 +206,70 @@ class OutputStream implements IOutputStream {
     }
 
     flush() {
+        if (!this.open) {
+            closed();
+        }
+        this.#permit = 0n;
         if (this.handler.flush) {
             this.handler.flush.call(this);
         }
     }
 
     blockingFlush() {
-        this.open = true;
+        if (!this.open) {
+            closed();
+        }
         if (this.handler.blockingFlush) {
             this.handler.blockingFlush.call(this);
         }
     }
 
     writeZeroes(len: bigint) {
-        this.write.call(this, new Uint8Array(Number(len)));
+        this.write.call(this, new Uint8Array(checkedLength(len)));
     }
 
     blockingWriteZeroesAndFlush(len: bigint) {
-        this.blockingWriteAndFlush.call(this, new Uint8Array(Number(len)));
+        this.blockingWriteAndFlush.call(this, new Uint8Array(checkedLength(len)));
     }
 
     splice(src: InputStream, len: bigint) {
-        const spliceLen = Math.min(Number(len), Number(this.checkWrite.call(this)));
+        const spliceLen = Math.min(checkedLength(len), Number(this.checkWrite.call(this)));
         const bytes = src.read(BigInt(spliceLen));
         this.write.call(this, bytes);
         return BigInt(bytes.byteLength);
     }
 
-    blockingSplice(_src: InputStream, _len: bigint) {
-        console.log(`[streams] Blocking splice ${this.id}`);
-        return 0n;
+    blockingSplice(src: InputStream, len: bigint) {
+        const spliceLen = Math.min(checkedLength(len), Number(this.checkWrite.call(this)));
+        const bytes = src.blockingRead(BigInt(spliceLen));
+        this.write.call(this, bytes);
+        return BigInt(bytes.byteLength);
     }
 
     subscribe() {
-        if (this.handler.subscribe) {
-            return this.handler.subscribe();
+        if (!this.open) {
+            return pollableCreate();
         }
-        return new Pollable();
+        const pollable = this.handler.subscribe
+            ? (this.handler.subscribe() as Pollable)
+            : pollableCreate();
+        this.#children.add(pollable);
+        pollable._onDispose(() => this.#children.delete(pollable));
+        return pollable;
     }
 
-    [symbolDispose]() {}
+    [symbolDispose]() {
+        if (!this.open) {
+            return;
+        }
+        this.open = false;
+        this.#permit = 0n;
+        for (const child of this.#children) {
+            child._invalidate();
+        }
+        this.#children.clear();
+        this.handler.drop?.call(this);
+    }
 }
 
 export const outputStreamCreate = OutputStream._create;
@@ -186,39 +283,82 @@ export const error: typeof ErrorNamespace = {
 export const streams: typeof StreamsNamespace = { InputStream, OutputStream };
 
 class Pollable implements PollNamespace.Pollable {
-    #ready = false;
-    #promise: Promise<void> | null = null;
+    #source: PollableSource = { ready: () => true, wait: () => Promise.resolve() };
+    #invalid = false;
+    #disposed = false;
+    #wait: Promise<void> | null = null;
+    #disposeCallbacks: (() => void)[] = [];
 
-    static _create(promise?: Promise<void>) {
+    static _create(source?: Promise<void> | PollableSource) {
         const pollable = new Pollable();
-        if (!promise) {
-            pollable.#ready = true;
-        } else {
-            pollable.#promise = promise.then(
+        if (source instanceof Promise) {
+            let ready = false;
+            const wait = source.then(
                 () => {
-                    pollable.#ready = true;
+                    ready = true;
                 },
                 () => {
-                    pollable.#ready = true;
+                    ready = true;
                 },
             );
+            pollable.#source = { ready: () => ready, wait: () => wait };
+        } else if (source) {
+            pollable.#source = source;
         }
         return pollable;
     }
 
     ready() {
-        return this.#ready;
+        this.#assertUsable();
+        return this.#source.ready();
     }
 
     block() {
-        if (this.#ready) {
+        this.#assertUsable();
+        if (this.#source.ready()) {
             return Promise.resolve();
         }
-        return this.#promise || Promise.resolve();
+        // Deduplicate simultaneous waiters, but discard a completed wait so a
+        // level-triggered source can be polled again after its event is consumed.
+        if (!this.#wait) {
+            this.#wait = Promise.resolve(this.#source.wait()).finally(() => {
+                this.#wait = null;
+            });
+        }
+        return this.#wait;
+    }
+
+    _onDispose(callback: () => void) {
+        if (this.#disposed) {
+            callback();
+        } else {
+            this.#disposeCallbacks.push(callback);
+        }
+    }
+
+    _invalidate() {
+        this.#invalid = true;
+        this.#wait = null;
+    }
+
+    #assertUsable() {
+        if (this.#disposed) {
+            throw new Error("pollable has been disposed");
+        }
+        if (this.#invalid) {
+            throw new Error("pollable's parent resource has been disposed");
+        }
     }
 
     [symbolDispose]() {
-        this.#promise = null;
+        if (this.#disposed) {
+            return;
+        }
+        this.#disposed = true;
+        this.#wait = null;
+        for (const callback of this.#disposeCallbacks.splice(0)) {
+            callback();
+        }
     }
 }
 
@@ -244,19 +384,15 @@ function pollList(list: Pollable[]): Uint32Array | Promise<Uint32Array> {
     }
     // None ready synchronously. Wait for the first to resolve via Promise.race,
     // then sweep for any others that became ready concurrently.
-    return Promise.race(
-        list.map((p, i) =>
-            p.block().then(() => {
-                const result = [i];
-                for (let j = 0; j < list.length; j++) {
-                    if (j !== i && list[j].ready()) {
-                        result.push(j);
-                    }
-                }
-                return new Uint32Array(result);
-            }),
-        ),
-    );
+    return Promise.race(list.map((pollable) => pollable.block())).then(() => {
+        const result: number[] = [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].ready()) {
+                result.push(i);
+            }
+        }
+        return new Uint32Array(result);
+    });
 }
 
 function pollOne(poll: Pollable): Promise<void> {

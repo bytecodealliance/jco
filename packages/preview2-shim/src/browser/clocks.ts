@@ -4,6 +4,24 @@ import type {
 } from "../../types/clocks.js";
 import { pollableCreate } from "./io.js";
 
+const MAX_TIMEOUT_MS = 0x7fffffff;
+
+function timeout(durationNs: bigint): Promise<void> {
+    let remainingMs = Number((durationNs + 999_999n) / 1_000_000n);
+    return new Promise((resolve) => {
+        const next = () => {
+            if (remainingMs <= 0) {
+                resolve();
+                return;
+            }
+            const delay = Math.min(remainingMs, MAX_TIMEOUT_MS);
+            remainingMs -= delay;
+            setTimeout(next, delay);
+        };
+        next();
+    });
+}
+
 export const monotonicClock: typeof MonotonicClockNamespace = {
     resolution(): bigint {
         // usually we dont get sub-millisecond accuracy in the browser
@@ -24,8 +42,10 @@ export const monotonicClock: typeof MonotonicClockNamespace = {
     },
     subscribeDuration(duration: bigint) {
         duration = BigInt(duration);
-        const ms = duration <= 0n ? 0 : Number(duration / 1_000_000n);
-        return pollableCreate(new Promise((resolve) => setTimeout(resolve, ms)));
+        if (duration <= 0n) {
+            return pollableCreate(new Promise((resolve) => setTimeout(resolve, 0)));
+        }
+        return pollableCreate(timeout(duration));
     },
 };
 

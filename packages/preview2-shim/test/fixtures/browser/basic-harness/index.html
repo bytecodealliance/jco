@@ -47,11 +47,15 @@ At the end of the test, the document body will be updated with the state of exec
 <script type="module">
     import "@bytecodealliance/preview2-shim/cli";
     import "@bytecodealliance/preview2-shim/clocks";
-    import "@bytecodealliance/preview2-shim/filesystem";
+    import * as browserFilesystem from "@bytecodealliance/preview2-shim/filesystem";
     import "@bytecodealliance/preview2-shim/http";
     import "@bytecodealliance/preview2-shim/io";
     import "@bytecodealliance/preview2-shim/random";
     import "@bytecodealliance/preview2-shim/sockets";
+
+    // Browser storage is capability-safe by default. Tests explicitly opt in
+    // to the ephemeral compatibility filesystem when a component needs it.
+    browserFilesystem._setFileData({ dir: {} });
 
     function updateOutput(msg) {
         const obj = typeof msg === "object" ? msg : { status: "error", msg };
