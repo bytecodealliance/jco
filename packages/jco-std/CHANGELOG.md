@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0] - 2026-08-03
+
+### 🚀 Features
+
+- _(std)_ add NodeJS shim for 'node:path' by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(std)_ invalid ts typings by @vados-cosmonic in #1581
+
+- _(std)_ specify root dir for tsconfig by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(std)_ update vitest config by @vados-cosmonic in #1602
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update componentize-js to v0.22.0 by @vados-cosmonic in #1802
+
+- _(std)_ update jco-transpile to 0.5.1 by @vados-cosmonic
+
 ## [jco-std-v0.2.0] - 2026-05-22
 
 ### 🚀 Features
