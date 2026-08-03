@@ -302,8 +302,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.6.0
+        version: 0.6.0
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.9
         version: 0.17.9
@@ -604,6 +604,9 @@ packages:
 
   '@bytecodealliance/jco-transpile@0.5.2':
     resolution: {integrity: sha512-zXrPtrJkn5jq6MBAOLZUlPnmgdLa8RDER9T4gCclgbAPHWIZSWEjDzv4MrrO3sz6Tvh1eJK1ou2SrrNnJxdTfA==}
+
+  '@bytecodealliance/jco-transpile@0.6.0':
+    resolution: {integrity: sha512-BDTTpg7SOQuQPphpjEqYaRaSiBplXb5P1psDKYQsx3PxYlvtRnQUPSl5GWMV0JSzGlLsHor61igxgtngfprFtA==}
 
   '@bytecodealliance/jco@1.25.2':
     resolution: {integrity: sha512-r9ch8vqtDkBxXtN5KzAEYpz+hjGCW+cQhc2b71U21DMuewE5HrTCI7X826gfL/1oU0ibsSpGodJV5YkwolH9Jg==}
@@ -4318,6 +4321,13 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
+  '@bytecodealliance/jco-transpile@0.6.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.19.0
+      '@bytecodealliance/preview3-shim': 0.2.0
+      binaryen: 130.0.0
+      oxc-minify: 0.136.0
+
   '@bytecodealliance/jco@1.25.2':
     dependencies:
       '@bytecodealliance/componentize-js': 0.21.0
@@ -4418,7 +4428,7 @@ snapshots:
     dependencies:
       '@bytecodealliance/componentize-js': 0.22.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.5.2
+      '@bytecodealliance/jco-transpile': 0.6.0
       '@bytecodealliance/preview2-shim': 0.17.9
       '@bytecodealliance/preview3-shim': 0.1.2
       binaryen: 130.0.0
