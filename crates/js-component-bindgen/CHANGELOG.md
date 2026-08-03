@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.2.0] - 2026-08-03
+
+### 🚀 Features
+
+- _(bindgen)_ expose the wasm exnref support switch by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ dispose component resources correctly by @vados-cosmonic
+
+- _(bindgen)_ scope nested future task completion by @vados-cosmonic
+
+- _(bindgen)_ nested futures implementation by @vados-cosmonic
+
+- _(bindgen)_ generate named stream and future types by @andreiltd in #1785
+
+
+
+
 ## [2.1.2] - 2026-07-27
 
 ### 🐛 Bug Fixes
