@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.19.1] - 2026-08-03
+
+### 🚀 Features
+
+- _(p2-shim)_ add empty HTTP trailers by @vados-cosmonic in #1774
+
+### ⚡ Performance
+
+- _(p2-shim)_ reuse browser filesystem buffers by @subotac in #1795
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ update componentize-js to v0.22.0 by @vados-cosmonic
+
+- _(p2-shim)_ fmt by @vados-cosmonic in #1773
+
+- _(p2-shim)_ update jco to v1.25.2 by @vados-cosmonic
+
+## New Contributors
+
+- @subotac made their first contribution in [#1795](https://github.com/bytecodealliance/jco/pull/1795)
+
 ## [0.19.0] - 2026-06-19
 
 ### 🚀 Features
