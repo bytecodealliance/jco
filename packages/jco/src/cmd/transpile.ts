@@ -26,6 +26,7 @@ export interface TranspileOpts {
     namespacedExports?: boolean;
     outDir?: string;
     multiMemory?: boolean;
+    bindgenEnableWasmExnref?: boolean;
     experimentalIdlImports?: boolean;
     optArgs?: string[];
     wasmOptBin?: string[];

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { execArgv } from "node:process";
+import { execArgv, versions } from "node:process";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -12,6 +12,7 @@ import { exec, jcoPath, getTmpDir, readComponentBytes, setupTestWithLocalShims }
 import { suite, test, assert } from "vitest";
 
 const multiMemory = execArgv.includes("--experimental-wasm-multi-memory") ? ["--multi-memory"] : [];
+const nodeMajorVersion = Number.parseInt(versions.node, 10);
 
 suite("CLI", () => {
     test.concurrent("Resource transfer", async () => {
@@ -42,6 +43,26 @@ suite("CLI", () => {
             `test/fixtures/components/stdio.composed.wasm`,
             ...multiMemory,
             "--valid-lifting-optimization",
+            "-o",
+            outDir,
+        );
+        assert.strictEqual(stderr, "");
+        await writeFile(`${outDir}/package.json`, JSON.stringify({ type: "module" }));
+        const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
+        m.testStdio();
+
+        await cleanup();
+    });
+
+    test.concurrent.skipIf(nodeMajorVersion <= 22)("Transpile with Wasm exnref support", async () => {
+        const { outDir, cleanup } = await setupTestWithLocalShims();
+
+        const { stderr } = await exec(
+            jcoPath,
+            "transpile",
+            `test/fixtures/components/stdio.composed.wasm`,
+            ...multiMemory,
+            "--bindgen-enable-wasm-exnref",
             "-o",
             outDir,
         );

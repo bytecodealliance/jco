@@ -140,6 +140,7 @@ program
     .option("-q, --quiet", "disable output summary")
     .option("--no-namespaced-exports", "disable namespaced exports for typescript compatibility")
     .option("--multi-memory", "optimized output for Wasm multi-memory")
+    .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
     .allowExcessArguments(true)
     .action(asyncAction(transpileCmd));
