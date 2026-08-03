@@ -61,27 +61,49 @@ export default {
 
 ## Importing and using WebAssembly Components
 
-A default import is a namespace containing all exports in the component transpiled by Jco:
+Given an WebAssembly component `calculator.wasm` with the following interface:
+
+```wit
+package jco:examples;
+
+interface calculator {
+    /// Errors that may occur during the course of using `add()`
+    variant add-error {
+        overflow,
+        underflow,
+        other(string),
+    }
+
+    /// Addition of two signed integers
+    add: func(a: s32, b: s32) -> result<s32, add-error>;
+}
+
+world component {
+    export calculator;
+}
+```
+
+The default import is a namespace containing all exports in the component transpiled by Jco:
 
 ```js
-import component from "./adder.wasm";
+import component from "./calculator.wasm";
 
-console.log(component.add.add(1, 2));
+console.log(component.calculator.add(1, 2));
 ```
 
 Jco's named exports are also re-exported, so they can be destructured:
 
 ```js
-import { add } from "./adder.wasm";
+import { calculator } from "./calculator.wasm";
 
-console.log(add.add(1, 2));
+console.log(calculator.add(1, 2));
 ```
 
 Dynamic imports can also be used:
 
 ```js
-const component = await import("./adder.wasm");
-console.log(component.default.add.add(1, 2));
+const component = await import("./calculator.wasm");
+console.log(component.default.calculator.add(1, 2));
 ```
 
 TypeScript projects can opt into a generic default-import declaration:
@@ -101,7 +123,7 @@ TypeScript projects can opt into a generic default-import declaration:
 component imports:
 
 ```js
-import component from "./adder.wasm?component";
+import component from "./calculator.wasm?component";
 ```
 
 Other Wasm query conventions such as `?url` and `?module` are left to other plugins (e.g. [`unwasm`][unwasm]).
