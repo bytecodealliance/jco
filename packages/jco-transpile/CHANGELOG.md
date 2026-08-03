@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.6.0] - 2026-08-03
+
+### 🚀 Features
+
+- _(transpile)_ enable wasm enxref support switch by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ add a test for component resource disposal by @vados-cosmonic
+
+- _(transpile)_ update test to allow for '\_util' export by @vados-cosmonic in #1788
+
+- _(transpile)_ re-enable tests that use nested futures by @vados-cosmonic
+
+- _(transpile)_ test full async parameter spillover by @vados-cosmonic in #1786
+
+- _(transpile)_ test mixed async parameter boundaries by @vados-cosmonic
+
+- _(transpile)_ test async parameter spillover by @vados-cosmonic
+
+- _(transpile)_ test async flat parameter boundary by @vados-cosmonic
+
+- _(transpile)_ test sync parameter spillover by @vados-cosmonic
+
+- _(transpile)_ test sync flat parameter boundary by @vados-cosmonic
+
 ## [0.5.2] - 2026-07-27
 
 This release contains an update fo the underlying transpiled `js-component-bindgen`
