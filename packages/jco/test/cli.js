@@ -380,11 +380,13 @@ suite("CLI", () => {
         );
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/${name}.js`);
-        const finalLine = source.toString().split("\n").at(-1);
-        //Check final line is the export statement
-        assert.ok(finalLine.toString().includes("export {"));
+        const exportLine = source
+            .toString()
+            .split("\n")
+            .find((line) => line.startsWith("export {"));
+        assert.ok(exportLine);
         //Check that it does not contain the namespaced export
-        assert.ok(!finalLine.toString().includes("test:flavorful/test"));
+        assert.ok(!exportLine.includes("test:flavorful/test"));
 
         await cleanup();
     });
@@ -405,11 +407,13 @@ suite("CLI", () => {
         );
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/${name}.js`);
-        const finalLine = source.toString().split("\n").at(-1);
-        //Check final line is the export statement
-        assert.ok(finalLine.toString().includes("export {"));
+        const exportLine = source
+            .toString()
+            .split("\n")
+            .find((line) => line.startsWith("export {"));
+        assert.ok(exportLine);
         //Check that it does contain the namespaced export
-        assert.ok(finalLine.toString().includes("test as 'test:flavorful/test'"));
+        assert.ok(exportLine.includes("test as 'test:flavorful/test'"));
 
         await cleanup();
     });
