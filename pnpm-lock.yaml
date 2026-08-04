@@ -378,8 +378,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.17.5
-        version: 0.17.9
+        specifier: ^0.20.1
+        version: 0.20.1
       '@types/which':
         specifier: ^3.0.4
         version: 3.0.4
@@ -621,6 +621,9 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.19.0':
     resolution: {integrity: sha512-OSUlcM62fXLuzYP0DjBn/SwjKMZ/y/2PMXZ8v5cRiiFcroauntlPRl/oCnx0xYjYiqdYvE0PY50VCNutll0xOw==}
+
+  '@bytecodealliance/preview2-shim@0.20.1':
+    resolution: {integrity: sha512-gvQP6DWfeQIYKHBb+nPykku1DRtfXQjM685+e75YYr8ZF2ZxisE4+nWrpwf84+NaWJRfuL5HvoLKQFbup1iwkQ==}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -3921,6 +3924,8 @@ snapshots:
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
   '@bytecodealliance/preview2-shim@0.19.0': {}
+
+  '@bytecodealliance/preview2-shim@0.20.1': {}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
