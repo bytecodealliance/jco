@@ -57,7 +57,7 @@
         }
     },
     "scripts": {
-        "build": "tsc --project tsconfig.build.json",
+        "build": "tsc --project tsconfig.build.json && node scripts/build-worker.mjs",
         "build:watch": "tsc --watch",
         "types:check": "tsc --noEmit",
         "fmt": "oxfmt",
@@ -73,6 +73,7 @@
         "@types/node": "^24.12.4",
         "mime": "^4.0.7",
         "puppeteer": "catalog:",
+        "rolldown": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }

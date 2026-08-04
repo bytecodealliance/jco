@@ -23,14 +23,7 @@
   SOFTWARE.
 */
 
-import path from "node:path";
-import {
-    MessageChannel,
-    Worker,
-    receiveMessageOnPort,
-    workerData,
-    parentPort,
-} from "node:worker_threads";
+import { MessageChannel, receiveMessageOnPort, workerData, parentPort } from "node:worker_threads";
 
 const DEFAULT_WORKER_BUFFER_SIZE = 1024;
 
@@ -46,12 +39,9 @@ function extractProperties(object) {
 
 const CALL_TIMEOUT = undefined;
 
-export function createSyncFn(workerPath, debug, callbackHandler) {
-    if (!path.isAbsolute(workerPath)) {
-        throw new Error("`workerPath` must be absolute");
-    }
+export function createSyncFn(createWorker, debug, callbackHandler) {
     const { port1: mainPort, port2: workerPort } = new MessageChannel();
-    const worker = new Worker(workerPath, {
+    const worker = createWorker({
         workerData: { workerPort, debug },
         transferList: [workerPort],
         execArgv: [],

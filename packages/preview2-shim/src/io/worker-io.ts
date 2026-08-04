@@ -1,4 +1,4 @@
-import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import { createSyncFn } from "../synckit/index.js";
 import {
     CALL_MASK,
@@ -47,8 +47,6 @@ const _rawDebug =
         ? (nodeProcess._rawDebug as (...args: unknown[]) => void)
         : console.error.bind(console);
 
-const workerPath = fileURLToPath(new URL("./worker-thread.js", import.meta.url));
-
 const httpIncomingHandlers = new Map();
 export function registerIncomingHttpHandler(id, handler) {
     httpIncomingHandlers.set(id, handler);
@@ -66,18 +64,22 @@ const DEBUG =
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}
  */
-export let ioCall = createSyncFn(workerPath, DEBUG, (type, id, payload) => {
-    // 'callbacks' from the worker
-    // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
-    if (type !== HTTP_SERVER_INCOMING_HANDLER) {
-        throw new Error("Internal error: only incoming handler callback is permitted");
-    }
-    const handler = httpIncomingHandlers.get(id);
-    if (!handler) {
-        throw new Error(`Internal error: no incoming handler registered for server ${id}`);
-    }
-    handler(payload);
-});
+export let ioCall = createSyncFn(
+    (options) => new Worker(new URL("./worker-thread.bundle.js", import.meta.url), options),
+    DEBUG,
+    (type, id, payload) => {
+        // 'callbacks' from the worker
+        // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
+        if (type !== HTTP_SERVER_INCOMING_HANDLER) {
+            throw new Error("Internal error: only incoming handler callback is permitted");
+        }
+        const handler = httpIncomingHandlers.get(id);
+        if (!handler) {
+            throw new Error(`Internal error: no incoming handler registered for server ${id}`);
+        }
+        handler(payload);
+    },
+);
 if (DEBUG) {
     const _ioCall = ioCall;
     ioCall = function ioCall(num, id, payload) {
