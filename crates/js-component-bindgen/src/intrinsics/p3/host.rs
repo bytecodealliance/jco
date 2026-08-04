@@ -360,6 +360,9 @@ impl HostIntrinsic {
                         subtask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{async_start_call_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
 
+                            // Cancelled resolutions carry no value; there is nothing to lower
+                            if (!subtask.isReturned()) {{ return; }}
+
                             let subtaskCallMeta = subtask.getCallMetadata();
 
                             // NOTE: in the case of guest -> guest async calls, there may be no memory/realloc present,
@@ -455,6 +458,17 @@ impl HostIntrinsic {
                         // Start the (event) driver loop that will resolve the subtask
                         // in a new JS task
                         setTimeout(async () => {{
+                            // The subtask may have been resolved before this deferred start ran
+                            // (e.g. cancelled while still STARTING via `subtask.cancel`) -- in
+                            // that case the callee must never be started
+                            if (subtask.isResolved()) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] subtask resolved before deferred start, skipping', {{
+                                    taskID: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                }});
+                                return;
+                            }}
+
                             {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
                                 taskID: preparedTask.id(),
                                 subtaskID: subtask.id(),
@@ -484,8 +498,9 @@ impl HostIntrinsic {
                                     taskID: preparedTask.id(),
                                     subtaskID: subtask.id(),
                                 }});
+                                // A cancellation-before-start is a valid resolution, not a failure
+                                if (preparedTask.isCancelled()) {{ return; }}
                                 throw new Error("task failed to start");
-                                return;
                             }}
 
                             let callbackResult;
