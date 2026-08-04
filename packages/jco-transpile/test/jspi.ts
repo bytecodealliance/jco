@@ -145,4 +145,63 @@ suite('Host Import Async (JSPI)', () => {
             await rm(outFile);
         } catch {}
     });
+
+    // Regression test for https://github.com/lann/jco/issues/5 -- async imports whose
+    // promise settles without ever yielding to the macrotask queue must still resume
+    // the suspended guest, on every call (not just the first).
+    test.concurrent('Transpile async, import settles without macrotask yield, repeated calls (NodeJS, JSPI)', async () => {
+        if (typeof WebAssembly?.Suspending !== 'function') {
+            return;
+        }
+        const tmpDir = await getTmpDir();
+        const outDir = resolve(tmpDir, 'out-component-dir');
+        const outFile = resolve(tmpDir, 'out-component-file');
+
+        const modulesDir = resolve(tmpDir, 'node_modules', '@bytecodealliance');
+        await mkdir(modulesDir, { recursive: true });
+        await symlink(
+            fileURLToPath(new URL('../packages/preview2-shim', import.meta.url)),
+            resolve(modulesDir, 'preview2-shim'),
+            'dir',
+        );
+
+        let calls = 0;
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'async_call',
+                path: resolve('test/fixtures/components/runtime/async_call.component.wasm'),
+                imports: {
+                    'something:test/test-interface': {
+                        // NOTE: intentionally an already-settled promise with no
+                        // intervening macrotask hop
+                        callAsync: () => {
+                            calls += 1;
+                            return Promise.resolve(`called async ${calls}`);
+                        },
+                        callSync: () => 'called sync',
+                    },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncImports: ['something:test/test-interface#call-async'],
+                        asyncExports: ['run-async'],
+                    },
+                },
+            },
+        });
+
+        for (let i = 1; i <= 3; i++) {
+            assert.strictEqual(await instance.runAsync(), `called async ${i}`);
+        }
+
+        await cleanup();
+
+        try {
+            await rm(outDir, { recursive: true });
+            await rm(outFile);
+        } catch {}
+    });
 });

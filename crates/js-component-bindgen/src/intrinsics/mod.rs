@@ -757,6 +757,11 @@ impl Intrinsic {
                 let rep_table_class = Intrinsic::RepTableClass.name();
                 output.push_str(&format!(r#"
                     class {rep_table_class} {{
+                        // Sentinel marking a freed slot; the freelist link for a freed slot
+                        // lives in the odd cell. This keeps get()/contains()/remove() on freed
+                        // reps well-defined (previously they returned/corrupted freelist links).
+                        static FREE = Symbol('{rep_table_class}.free');
+
                         #data = [0, null];
                         #size = 0;
                         #target;
@@ -778,8 +783,11 @@ impl Intrinsic {
                                 this.#size += 1;
                                 return rep;
                             }}
-                            this.#data[0] = this.#data[freeIdx << 1];
                             const placementIdx = freeIdx << 1;
+                            if (this.#data[placementIdx] !== {rep_table_class}.FREE) {{
+                                throw new Error('corrupt rep table freelist: head does not point at a freed slot');
+                            }}
+                            this.#data[0] = this.#data[placementIdx + 1];
                             this.#data[placementIdx] = val;
                             this.#data[placementIdx + 1] = null;
                             {debug_log_fn}('[{rep_table_class}#insert()] inserted', {{ val, target: this.target, rep: freeIdx }});
@@ -793,6 +801,7 @@ impl Intrinsic {
 
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
+                            if (val === {rep_table_class}.FREE) {{ return undefined; }}
                             return val;
                         }}
 
@@ -801,7 +810,8 @@ impl Intrinsic {
                             if (rep === 0) {{ throw new Error('invalid resource rep during contains, (cannot be 0)'); }}
 
                             const baseIdx = rep << 1;
-                            return !!this.#data[baseIdx];
+                            const val = this.#data[baseIdx];
+                            return val !== {rep_table_class}.FREE && !!val;
                         }}
 
                         remove(rep) {{
@@ -810,9 +820,16 @@ impl Intrinsic {
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
                             const baseIdx = rep << 1;
+                            if (baseIdx >= this.#data.length) {{
+                                throw new Error(`invalid rep [${{rep}}] during remove, out of range`);
+                            }}
                             const val = this.#data[baseIdx];
+                            if (val === {rep_table_class}.FREE) {{
+                                throw new Error(`double removal of rep [${{rep}}] (already freed)`);
+                            }}
 
-                            this.#data[baseIdx] = this.#data[0];
+                            this.#data[baseIdx] = {rep_table_class}.FREE;
+                            this.#data[baseIdx + 1] = this.#data[0];
                             this.#data[0] = rep;
                             this.#size -= 1;
 
