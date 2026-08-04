@@ -14,7 +14,7 @@ members = [
 ]
 [dependencies]
 futures = { workspace = true, features = ["alloc", "async-await"] }
-wit-bindgen = { workspace = true, features = [ "macros", "async-spawn"] }
+wit-bindgen = { workspace = true, features = [ "macros", "async-spawn", "inter-task-wakeup"] }
 
 [build-dependencies]
 anyhow = { workspace = true }
