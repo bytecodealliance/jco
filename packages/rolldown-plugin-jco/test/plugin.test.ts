@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -6,6 +6,7 @@ import { rolldown } from "rolldown";
 import { rollup } from "rollup";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+import { startTestServer } from "../../preview2-shim/test/common.js";
 import jcoPlugin from "../src/index.js";
 
 type Builder = "rolldown" | "rollup";
@@ -15,6 +16,11 @@ const importedComponentPath = resolve(
     import.meta.dirname,
     "../../jco-transpile/test/fixtures/components/runtime/example_guest_import.wasm",
 );
+const pollableComponentPath = resolve(
+    import.meta.dirname,
+    "../../jco/test/fixtures/components/stdout-pollable-hang.component.wasm",
+);
+const preview2ShimDir = resolve(import.meta.dirname, "../../preview2-shim");
 let tempDir: string;
 
 beforeAll(async () => {
@@ -29,6 +35,49 @@ afterAll(async () => {
 
 for (const builder of ["rolldown", "rollup"] as const) {
     describe(builder, () => {
+        test("emits and deduplicates self-contained worker assets", async () => {
+            const root = resolve(tempDir, `${builder}-workers`);
+            const input = resolve(root, "entry.mjs");
+            await writeSource(
+                input,
+                `
+          import { Worker } from "node:worker_threads";
+          const first = new Worker(new URL("./fixture-worker.bundle.js", import.meta.url));
+          const second = new Worker(new URL("./fixture-worker.bundle.js", import.meta.url));
+          first.unref();
+          second.unref();
+        `,
+            );
+            await writeSource(
+                resolve(root, "fixture-worker.bundle.js"),
+                `import { parentPort } from "node:worker_threads"; parentPort?.postMessage("ready");`,
+            );
+
+            const outputDir = resolve(root, "out");
+            const options = {
+                input,
+                external: (id: string) => id.startsWith("node:"),
+                plugins: [jcoPlugin()],
+            };
+            const bundle = builder === "rolldown" ? await rolldown(options) : await rollup(options);
+            const result = await bundle.write({
+                dir: outputDir,
+                format: "esm",
+                entryFileNames: "chunks/index.mjs",
+                assetFileNames: "assets/[name]-[hash][extname]",
+            });
+            await bundle.close();
+
+            const workers = result.output.filter(
+                (item) => item.type === "asset" && item.fileName.includes("fixture-worker.bundle"),
+            );
+            expect(workers).toHaveLength(1);
+            const entry = await readFile(resolve(outputDir, "chunks/index.mjs"), "utf8");
+            expect(entry).not.toContain("./fixture-worker.bundle.js");
+            expect(entry).toContain("../assets/fixture-worker.bundle-");
+            await import(`${pathToFileURL(resolve(outputDir, "chunks/index.mjs")).href}?test=worker`);
+        });
+
         test("supports lifecycle, named, namespace, and dynamic component imports", async () => {
             const input = resolve(tempDir, `${builder}-imports/entry.mjs`);
             await writeSource(
@@ -115,6 +164,90 @@ for (const builder of ["rolldown", "rollup"] as const) {
     });
 }
 
+test("a worker-backed Preview 2 component runs from isolated Rolldown output", async () => {
+    const root = resolve(tempDir, "preview2-worker-component");
+    const input = resolve(root, "entry.mjs");
+    await writeSource(
+        input,
+        `
+      import { run } from ${JSON.stringify(relativeImport(input, pollableComponentPath))};
+      run.run();
+      export const result = "worker-backed-run-completed";
+    `,
+    );
+
+    const outputDir = resolve(root, "out");
+    await build("rolldown", input, outputDir);
+    const isolatedDir = resolve(root, "isolated");
+    await cp(outputDir, isolatedDir, { recursive: true });
+
+    const outputFiles = await readdir(resolve(isolatedDir, "assets"));
+    const entry = await readFile(resolve(isolatedDir, "index.mjs"), "utf8");
+    expect(
+        outputFiles.filter((file) => file.includes("worker-thread.bundle")),
+        entry,
+    ).toHaveLength(1);
+    expect(entry).not.toMatch(/worker-thread\.js|node_modules|\/home\/agent/);
+
+    const module = await import(`${pathToFileURL(resolve(isolatedDir, "index.mjs")).href}?test=preview2-worker`);
+    expect(module.result).toBe("worker-backed-run-completed");
+});
+
+test("a downstream Preview 2 component bundles and runs in the browser", async () => {
+    const root = resolve(tempDir, "preview2-browser-component");
+    const input = resolve(root, "entry.mjs");
+    await writeSource(
+        input,
+        `
+      import { run } from ${JSON.stringify(relativeImport(input, pollableComponentPath))};
+      run.run();
+      document.body.dataset.result = "browser-run-completed";
+    `,
+    );
+
+    const outputDir = resolve(root, "out");
+    const bundle = await rolldown({
+        input,
+        platform: "browser",
+        plugins: [
+            workspacePreview2Shim("browser"),
+            jcoPlugin({ transpile: { base64Cutoff: Number.MAX_SAFE_INTEGER } }),
+        ],
+    });
+    await bundle.write({
+        dir: outputDir,
+        format: "esm",
+        entryFileNames: "chunks/index.mjs",
+        assetFileNames: "assets/[name]-[hash][extname]",
+    });
+    await bundle.close();
+
+    const outputFiles = await readdir(outputDir, { recursive: true });
+    expect(outputFiles.some((file) => file.includes("worker-thread"))).toBe(false);
+    const entry = await readFile(resolve(outputDir, "chunks/index.mjs"), "utf8");
+    expect(entry).not.toMatch(/node:|worker-thread|node_modules|\/home\/agent/);
+
+    const htmlDir = resolve(root, "html");
+    await writeSource(
+        resolve(htmlDir, "index.html"),
+        '<!doctype html><body><script type="module" src="/transpiled/chunks/index.mjs"></script></body>',
+    );
+    const { baseURL, browser, cleanup } = await startTestServer({
+        transpiledOutputDir: outputDir,
+        htmlDir,
+    });
+    try {
+        const page = await browser.newPage();
+        await page.goto(baseURL);
+        await page.waitForFunction(() => document.body.dataset.result === "browser-run-completed");
+        expect(await page.evaluate(() => document.body.dataset.result)).toBe("browser-run-completed");
+        await page.close();
+    } finally {
+        await browser.close();
+        await cleanup();
+    }
+});
+
 async function createImporterGraph(builder: Builder, count: number) {
     const root = resolve(tempDir, `${builder}-${count}-importers`);
     const imports: string[] = [];
@@ -144,6 +277,7 @@ async function build(builder: Builder, input: string, outputDir: string, instant
         input,
         external: (id: string) => id.startsWith("node:"),
         plugins: [
+            workspacePreview2Shim("nodejs"),
             jcoPlugin({
                 transpile: {
                     base64Cutoff: 0,
@@ -162,7 +296,7 @@ async function build(builder: Builder, input: string, outputDir: string, instant
 
     const bundle =
         builder === "rolldown"
-            ? await rolldown(options)
+            ? await rolldown({ ...options, platform: "node" })
             : await rollup({
                   ...options,
                   onwarn(warning, warn) {
@@ -184,6 +318,20 @@ async function build(builder: Builder, input: string, outputDir: string, instant
                   ]
                 : [],
         ),
+    };
+}
+
+function workspacePreview2Shim(target: "browser" | "nodejs") {
+    return {
+        name: `workspace-preview2-shim-${target}`,
+        resolveId(source: string) {
+            const prefix = "@bytecodealliance/preview2-shim";
+            if (source !== prefix && !source.startsWith(`${prefix}/`)) {
+                return null;
+            }
+            const subpath = source === prefix ? "index" : source.slice(prefix.length + 1);
+            return resolve(preview2ShimDir, "dist", target, `${subpath}.js`);
+        },
     };
 }
 

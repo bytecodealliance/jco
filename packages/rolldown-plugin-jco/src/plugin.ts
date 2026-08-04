@@ -36,6 +36,7 @@ export function jcoPlugin(options: JcoPluginOptions = {}): Plugin {
     let components = new Map<string, Promise<GeneratedComponent>>();
     let generated = new Map<string, Promise<GeneratedComponent>>();
     let coreAssets = new Map<string, string>();
+    let workerAssets = new Map<string, string>();
 
     async function generate(context: PluginContext, canonicalId: string): Promise<GeneratedComponent> {
         const existing = components.get(canonicalId);
@@ -62,6 +63,11 @@ export function jcoPlugin(options: JcoPluginOptions = {}): Plugin {
             components = new Map();
             generated = new Map();
             coreAssets = new Map();
+            workerAssets = new Map();
+        },
+
+        async transform(source, id) {
+            return rewriteWorkerUrls(this, source, id, workerAssets);
         },
 
         async resolveId(source, importer, resolveOptions) {
@@ -134,6 +140,59 @@ export function jcoPlugin(options: JcoPluginOptions = {}): Plugin {
             return null;
         },
     };
+}
+
+/** Emit self-contained workers referenced by canonical Worker URL expressions. */
+async function rewriteWorkerUrls(
+    context: PluginContext,
+    source: string,
+    importer: string,
+    workerAssets: Map<string, string>,
+): Promise<{ code: string; map: null } | null> {
+    const pattern =
+        /new\s+Worker\(\s*new\s+URL\(\s*(["'])(\.\.?(?:\/[^"']+)+\.bundle\.js)\1\s*,\s*import\.meta\.url\s*\)/g;
+    const matches = [...source.matchAll(pattern)];
+    if (matches.length === 0) {
+        return null;
+    }
+
+    let rewritten = source;
+    for (const match of matches) {
+        const workerSpecifier = match[2]!;
+        const resolved = await context.resolve(workerSpecifier, importer, { skipSelf: true });
+        if (!resolved || resolved.external) {
+            return context.error({
+                id: importer,
+                message: `Unable to resolve bundled worker ${workerSpecifier} from ${importer}`,
+            });
+        }
+
+        let referenceId = workerAssets.get(resolved.id);
+        if (!referenceId) {
+            let workerSource: Uint8Array;
+            try {
+                workerSource = await readFile(resolved.id);
+            } catch (cause) {
+                return context.error({
+                    id: importer,
+                    message: `Unable to read bundled worker ${resolved.id}`,
+                    cause: cause as Error,
+                });
+            }
+            referenceId = context.emitFile({
+                type: "asset",
+                name: basename(resolved.id),
+                source: workerSource,
+            });
+            workerAssets.set(resolved.id, referenceId);
+        }
+
+        const workerUrl = match[0].slice(match[0].indexOf("new URL"));
+        const rewrittenUrl = `new URL(import.meta.ROLLUP_FILE_URL_${referenceId})`;
+        rewritten = rewritten.replace(workerUrl, rewrittenUrl);
+    }
+
+    return { code: rewritten, map: null };
 }
 
 /** Generate outputs for a single component, given it's canonical ID */
