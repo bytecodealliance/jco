@@ -746,3 +746,13 @@ world stream-resource-method {
   import stream-resources;
   export stream-resource-method-fns;
 }
+
+interface async-export-future-result-api {
+  prove-future: func(value: u32) -> future<u32>;
+  prove-async-func: async func(value: u32) -> u32;
+  prove-stream: func(label: string) -> stream<u8>;
+}
+
+world async-export-future-result {
+  export async-export-future-result-api;
+}
