@@ -375,8 +375,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.5.1
-        version: 0.5.2
+        specifier: ^0.6.0
+        version: 0.6.0
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.5
         version: 0.17.9
