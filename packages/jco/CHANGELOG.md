@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.27.0] - 2026-08-04
+
+### 🚀 Features
+
+- _(jco)_ enable exnref support switch by @vados-cosmonic in #1806
+
+- _(jco)_ add shimming to componentize for 'node:path' by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ fix export line seaching in test by @vados-cosmonic
+
+- _(jco)_ re-enable resource guest destructor componentize-js test by @vados-cosmonic
+
+- _(jco)_ add test for CM destructor metadata fix by @vados-cosmonic in #1797
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update p3-shim to v0.2.2 by @vados-cosmonic
+
+- _(jco)_ update p2-shim to v0.20.1 by @vados-cosmonic
+
+- _(jco)_ update jco-transpile to v0.6.1 by @vados-cosmonic
+
+- _(jco)_ update jco-transpile to v0.6.0 by @vados-cosmonic
+
+- _(jco)_ update componentize-js to v0.22.0 by @vados-cosmonic
+
 ## [1.26.1] - 2026-07-27
 
 ### ⚙️ Miscellaneous Tasks
