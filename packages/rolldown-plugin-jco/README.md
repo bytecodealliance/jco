@@ -61,6 +61,8 @@ export default {
 
 ## Importing and using WebAssembly Components
 
+// hint: Structural and logic conflict. Both design and behavior differ.
+
 ```wit
 package jco:examples;
 
@@ -126,6 +128,33 @@ import component from "./calculator.wasm?component";
 
 Other Wasm query conventions such as `?url` and `?module` are left to other plugins (e.g. [`unwasm`][unwasm]).
 
+Component-model exports are available as named imports. The default export is an `instantiate`
+function; for an eager component it returns the already-instantiated component namespace:
+
+```js
+import instantiate, { calculator } from "./adder.wasm";
+
+console.log(calculator.add(1, 2));
+// assert(instantiate().add === add);
+```
+
+Namespace imports are useful when accessing many exports:
+
+```js
+import * as component from "./adder.wasm";
+
+console.log(component.calculator.add(1, 2));
+// assert(component.default().add === component.add);
+```
+
+Dynamic imports can also be used:
+
+```js
+const component = await import("./adder.wasm");
+// assert(component.default().add === component.add);
+console.log(component.calculator.add(1, 2));
+```
+
 ### Custom instantiation
 
 Components with imports can use Jco's custom instantiation API. Enable async or sync instantiation in
@@ -139,12 +168,11 @@ jco({
 });
 ```
 
-The imported component namespace is initially empty and is populated when `instantiate` succeeds.
-The first argument loads a bundler-emitted core Wasm asset, the second supplies the component-model
-imports, and the optional third argument overrides core Wasm instantiation:
+The default function's first argument loads a bundler-emitted core Wasm asset, the second supplies the
+component-model imports, and the optional third argument overrides core Wasm instantiation:
 
 ```js
-import component, { instantiate } from "./hosted.wasm";
+import instantiate, { run } from "./hosted.wasm";
 
 const instance = await instantiate(async (url) => WebAssembly.compile(await (await fetch(url)).arrayBuffer()), {
     "example:host/api": {
@@ -154,26 +182,37 @@ const instance = await instantiate(async (url) => WebAssembly.compile(await (awa
     },
 });
 
-console.log(instance === component); // true
-console.log(component.run());
+console.log(instance.run === run); // true
+console.log(run());
 ```
 
-The default and named `component` exports refer to one stable object. A failed instantiation leaves it
-empty and can be retried; after a successful instantiation, another call throws because one module
-namespace cannot represent multiple component instances.
-
-The top-level `instantiate` name is reserved for this lifecycle function. If the component itself
-exports a function named `instantiate`, it remains unambiguous:
+In custom mode, named component exports are live ESM bindings. They are `undefined` until
+instantiation succeeds and update automatically afterwards. Do not destructure a namespace object
+before instantiation, because ordinary object destructuring captures the initial value rather than the
+live binding. The default function also returns the complete component instance for convenient local
+destructuring:
 
 ```js
-import component, { instantiate } from "./component.wasm";
+const { run: localRun } = await instantiate(loadCoreModule, imports);
+```
 
-await instantiate(loadCoreModule, imports);
-component.instantiate(); // the component-model export
+A failed instantiation leaves every named binding unset and can be retried. After a successful
+instantiation, another call throws because one imported module cannot represent multiple component
+instances.
+
+Because lifecycle instantiation is the default export, a component-model export named `instantiate`
+does not collide with it:
+
+```js
+import instantiateComponent, { instantiate } from "./component.wasm";
+
+await instantiateComponent(loadCoreModule, imports);
+instantiate(); // the component-model export
 ```
 
 In eager mode (when `transpile.instantiation` is not set), components are instantiated as the module
-loads and no top-level lifecycle `instantiate` export is emitted.
+loads, named exports are immediately available, and calling the default function simply returns the
+component namespace.
 
 TypeScript projects can opt into a generic default-import declaration:
 
@@ -186,13 +225,14 @@ TypeScript projects can opt into a generic default-import declaration:
 ```
 
 > [!WARN]
-> Precise component TypeScript declarations are not yet supported, but will be in a future version
+> Precise component TypeScript declarations, including their named exports, are not yet supported,
+> but will be in a future version
 
 `?component` is accepted as an explicit marker when it is useful to distinguish
 component imports:
 
 ```js
-import component from "./adder.wasm?component";
+import instantiate, { add } from "./adder.wasm?component";
 ```
 
 Other Wasm query conventions such as `?url` and `?module` are left to other plugins (e.g. [`unwasm`][unwasm]).
