@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.1] - 2026-08-04
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ single future wrapping for manuall-async exports by @vados-cosmonic
+
+
+
+
 ## [2.2.0] - 2026-08-03
 
 ### 🚀 Features
