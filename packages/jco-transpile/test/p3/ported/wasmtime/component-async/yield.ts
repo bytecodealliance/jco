@@ -143,6 +143,14 @@ suite('yield scenario', () => {
         }
     });
 
+    // NOTE: the `cancel synchronous` / `cancel stackless` tests below are
+    // skipped because the `async-yield-caller-cancel` fixture is hand-rolled
+    // ABI code that asserts wasmtime's *eager-start* scheduling: it expects a
+    // freshly async-lowered guest->guest call to already be in the STARTED
+    // state (wasmtime runs the callee synchronously up to its first suspension
+    // point), while jco defers the callee start to a JS task and reports
+    // STARTING. The `subtask.cancel`/`task.cancel` semantics themselves are
+    // covered by test/p3/cancellation.ts.
     test.skip('cancel synchronous', async () => {
         let cleanup;
         try {
@@ -182,6 +190,7 @@ suite('yield scenario', () => {
         }
     });
 
+    // See the note on `cancel synchronous` above
     test.skip('cancel stackless', async () => {
         let cleanup;
         try {

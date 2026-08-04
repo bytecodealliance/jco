@@ -596,36 +596,66 @@ impl AsyncTaskIntrinsic {
 
             Self::SubtaskCancel => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let task_cancel_fn = Self::SubtaskCancel.name();
+                let subtask_cancel_fn = Self::SubtaskCancel.name();
+                let subtask_class = Self::AsyncSubtaskClass.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
 
+                // Implements `canon subtask.cancel` -- the *supertask*-side request to
+                // cancel a pending subtask (in contrast to `canon task.cancel`, which is
+                // the *callee*-side acknowledgement that cancellation was delivered).
+                //
+                // See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskcancel
                 output.push_str(&format!("
-                    function {task_cancel_fn}(componentIdx, isAsync) {{
-                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx, isAsync }});
+                    async function {subtask_cancel_fn}(componentIdx, isAsync, subtaskRep) {{
+                        {debug_log_fn}('[{subtask_cancel_fn}()] args', {{ componentIdx, isAsync, subtaskRep }});
 
                         const state = {get_or_create_async_state_fn}(componentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot cancel subtask'); }}
 
-                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
-
-                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
-
-                        const task = taskMeta.task;
-                        if (!task) {{ throw new Error('invalid/missing async task'); }}
-
-                        if (task.sync && !task.alwaysTaskReturn) {{
-                            throw new Error('cannot cancel sync tasks without always task return set');
+                        const subtask = state.handles.get(subtaskRep);
+                        if (!(subtask instanceof {subtask_class})) {{
+                            throw new Error('missing/invalid subtask [' + subtaskRep + '] specified for cancel in component instance');
                         }}
-                        if (!task.cancelRequested) {{ throw new Error('task cancellation has not been requested'); }}
-                        if (task.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
-                        if (task.returnCalls > 0) {{ throw new Error('cannot cancel task that has already returned a value'); }}
-                        if (task.cancelled) {{ throw new Error('cannot cancel task that has already been cancelled'); }}
+                        if (subtask.resolveDelivered()) {{
+                            throw new Error('cannot cancel subtask whose resolution has already been delivered');
+                        }}
+                        if (subtask.cancellationRequested()) {{
+                            throw new Error('cancellation has already been requested for this subtask');
+                        }}
+                        if (!isAsync && subtask.waitable().isInSet()) {{
+                            throw new Error('cannot synchronously cancel a subtask that is in a waitable set');
+                        }}
 
-                        task.cancelled = true;
+                        if (!subtask.isResolved()) {{
+                            subtask.requestCancellation();
+
+                            if (!subtask.isResolved()) {{
+                                // The callee did not resolve synchronously: async-lowered cancels
+                                // report BLOCKED (resolution will arrive via a later SUBTASK event),
+                                // while sync-lowered cancels block the current task until the
+                                // subtask resolves.
+                                if (isAsync) {{ return 0xFFFFFFFF; }}
+
+                                const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+                                const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                                if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
+                                await taskMeta.task.waitUntil({{
+                                    cancellable: false,
+                                    readyFn: () => subtask.isResolved(),
+                                }});
+                            }}
+                        }}
+
+                        // Consume the subtask's pending resolution event (which also marks the
+                        // resolution as delivered), then hand the final state back to core wasm.
+                        // Legal states here: RETURNED, CANCELLED_BEFORE_STARTED, CANCELLED_BEFORE_RETURNED.
+                        if (subtask.hasPendingEvent()) {{ subtask.getPendingEvent(); }}
+                        if (!subtask.resolveDelivered()) {{ subtask.deliverResolve(); }}
+
+                        return subtask.getStateNumber();
                     }}
                 "));
             }
@@ -640,7 +670,7 @@ impl AsyncTaskIntrinsic {
 
                 output.push_str(&format!("
                     function {task_cancel_fn}(componentIdx) {{
-                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx, isAsync }});
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx }});
 
                         const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
@@ -1085,6 +1115,13 @@ impl AsyncTaskIntrinsic {
                                 throw new Error(`task with ID [${{this.#id}}] should not be entered twice`);
                             }}
 
+                            // If cancellation was requested before the task was entered, resolve
+                            // as cancelled without ever running guest code
+                            if (this.deliverPendingCancel({{ cancellable: true }})) {{
+                                this.cancel();
+                                return false;
+                            }}
+
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
                             if (opts?.isHost) {{
@@ -1254,7 +1291,17 @@ impl AsyncTaskIntrinsic {
                             if (pendingCancelled) {{ return false; }}
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            const keepGoing = await cstate.suspendTask({{ task: this, readyFn }});
+                            const keepGoing = await cstate.suspendTask({{
+                                task: this,
+                                readyFn: () => {{
+                                    // A pending cancellation request wakes cancellable waits
+                                    if (cancellable && this.#state === {task_class}.State.CANCEL_PENDING) {{
+                                        return true;
+                                    }}
+                                    return readyFn();
+                                }},
+                            }});
+                            if (keepGoing && this.deliverPendingCancel({{ cancellable }})) {{ return false; }}
                             return keepGoing;
                         }}
 
@@ -1266,7 +1313,7 @@ impl AsyncTaskIntrinsic {
                                 componentIdx: this.#componentIdx,
                             }});
 
-                            if (cancellable && this.#state === {task_class}.State.PENDING_CANCEL) {{
+                            if (cancellable && this.#state === {task_class}.State.CANCEL_PENDING) {{
                                 this.#state = {task_class}.State.CANCEL_DELIVERED;
                                 return true;
                             }}
@@ -1276,6 +1323,29 @@ impl AsyncTaskIntrinsic {
 
                         isCancelled() {{ return this.cancelled }}
 
+                        // Request cooperative cancellation of this task, called on behalf of a
+                        // supertask performing `subtask.cancel` on the subtask this task backs.
+                        //
+                        // The request is delivered at this task's next cancellable wait
+                        // (see suspendUntil/immediateSuspend), at which point the task is
+                        // expected to acknowledge via `task.cancel` or still resolve via
+                        // `task.return`.
+                        requestCancellation() {{
+                            {debug_log_fn}('[{task_class}#requestCancellation()] args', {{
+                                taskID: this.#id,
+                                componentIdx: this.#componentIdx,
+                                state: this.#state,
+                            }});
+                            if (this.isResolvedState() || this.cancelRequested) {{ return; }}
+                            this.cancelRequested = true;
+                            if (this.#state === {task_class}.State.INITIAL) {{
+                                this.#state = {task_class}.State.CANCEL_PENDING;
+                            }}
+                            // Nudge the component's tick loop so that any suspended cancellable
+                            // wait observes the pending cancellation promptly
+                            {get_or_create_async_state_fn}(this.#componentIdx).runTickLoop();
+                        }}
+
                         cancel(args) {{
                             {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
                             if (this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
@@ -1283,7 +1353,10 @@ impl AsyncTaskIntrinsic {
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             this.cancelled = true;
-                            this.onResolve(args?.error ?? new Error('task cancelled'));
+                            // Cancelled tasks resolve with no value (spec: `Task.cancel` calls
+                            // `on_resolve(None)`); an explicit error is only present on the
+                            // host-driven rejection path (see `reject()`).
+                            this.onResolve(args?.error ?? null);
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
@@ -1299,7 +1372,12 @@ impl AsyncTaskIntrinsic {
                                 }}
                             }}
 
-                            if (this.#parentSubtask) {{
+                            // NOTE: if the parent subtask has already been resolved (e.g. it was
+                            // cancelled via `subtask.cancel` while this task was still pending),
+                            // this task's resolution must be discarded rather than delivered.
+                            const parentSubtaskPending = this.#parentSubtask && !this.#parentSubtask.isResolved();
+
+                            if (parentSubtaskPending) {{
                                 const meta = this.#parentSubtask.getCallMetadata();
                                 // Run the rturn fn if it has not already been called -- this *should* have happened in
                                 // `task.return`, but some paths do not go through task.return (e.g. async lower of sync fn
@@ -1329,7 +1407,7 @@ impl AsyncTaskIntrinsic {
                                 }}
                             }}
 
-                            if (this.#parentSubtask) {{
+                            if (parentSubtaskPending) {{
                                 this.#parentSubtask.onResolve(taskValue);
                             }}
                         }}
@@ -1358,7 +1436,7 @@ impl AsyncTaskIntrinsic {
 
                             this.#rejected = true;
                             this.cancelRequested = true;
-                            this.#state = {task_class}.State.PENDING_CANCEL;
+                            this.#state = {task_class}.State.CANCEL_PENDING;
                             const cancelled = this.deliverPendingCancel({{ cancellable: true }});
 
                             // TODO: do cleanup here to reset the machinery so we can run again?
@@ -1653,6 +1731,42 @@ impl AsyncTaskIntrinsic {
                             return this.#state == {subtask_class}.State.STARTING;
                         }}
 
+                        cancellationRequested() {{ return this.#cancelRequested; }}
+
+                        // Request cooperative cancellation of this subtask, on behalf of the
+                        // supertask (i.e. `canon subtask.cancel`).
+                        //
+                        // If the callee is another guest task, the request is delivered to it and
+                        // the callee confirms via `task.cancel` (or still resolves via `task.return`).
+                        //
+                        // If the callee is a host function there is (currently) no host-side
+                        // cancellation hook, so the pending call is treated as immediately
+                        // cancelled -- consistent with hosts being expected to resolve
+                        // cancellation promptly -- and any later host resolution is discarded
+                        // (see `AsyncTask#onResolve`).
+                        requestCancellation() {{
+                            {debug_log_fn}('[{subtask_class}#requestCancellation()] args', {{
+                                componentIdx: this.#componentIdx,
+                                subtaskID: this.#id,
+                                state: this.#state,
+                                childTaskID: this.childTaskID(),
+                                fnName: this.fnName,
+                            }});
+                            if (this.#cancelRequested) {{
+                                throw new Error('cancellation has already been requested for this subtask');
+                            }}
+                            this.#cancelRequested = true;
+
+                            if (this.#resolved) {{ return; }}
+
+                            if (this.#childTask) {{
+                                this.#childTask.requestCancellation();
+                                return;
+                            }}
+
+                            this.onResolve(null);
+                        }}
+
                         registerOnStartHandler(f) {{
                             this.#onStartHandlers.push(f);
                         }}
@@ -1743,7 +1857,9 @@ impl AsyncTaskIntrinsic {
                             // TODO(fix): we should be able to easily have the caller's meomry
                             // to lower into here, but it's not present in PrepareCall
                             const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}({{ componentIdx: this.#parentTask?.componentIdx() }})[0];
-                            if (callMetadata && !callMetadata.returnFn && this.isAsync && callMetadata.resultPtr && memory) {{
+                            // NOTE: cancelled resolutions carry no value, so nothing is lowered
+                            const returned = this.#state === {subtask_class}.State.RETURNED;
+                            if (returned && callMetadata && !callMetadata.returnFn && this.isAsync && callMetadata.resultPtr && memory) {{
                                 const {{ resultPtr, realloc }} = callMetadata;
                                 const lowers = callMetadata.lowers; // may have been updated in task.return of the child
                                 if (lowers && lowers.length > 0) {{

@@ -1311,12 +1311,15 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let task_cancel_fn = self
+                let subtask_cancel_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
+                // NOTE: core wasm passes the subtask handle as the remaining argument.
+                // The intrinsic is async (a sync-lowered cancel may need to block until
+                // the subtask resolves), so it must be JSPI-wrapped.
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {task_cancel_fn}.bind(null, {instance_idx}, {async_});\n",
+                    "const trampoline{i} = new WebAssembly.Suspending({subtask_cancel_fn}.bind(null, {instance_idx}, {async_}));\n",
                     instance_idx = instance.as_u32(),
                 );
             }

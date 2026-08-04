@@ -416,6 +416,42 @@ world host-import-concurrency {
   export local-run-async;
 }
 
+interface subtask-cancel-drop-host {
+  /// A call that the host never resolves; the guest drops it mid-flight
+  pending-call: async func() -> u32;
+  /// Resolved by the host once `pending-call` has been received
+  wait-until-blocked: async func();
+  /// Called by the guest after successfully dropping the pending call
+  completed: func();
+}
+
+world subtask-cancel-drop {
+  import subtask-cancel-drop-host;
+  export local-run-async;
+}
+
+interface subtask-cancel-g2g {
+  /// Blocks until cancelled (the callee awaits a host import that never resolves)
+  blocked-call: async func() -> u32;
+}
+
+world subtask-cancel-g2g-caller {
+  import subtask-cancel-g2g;
+  import subtask-cancel-drop-host;
+  export local-run-async;
+}
+
+world subtask-cancel-g2g-starting-caller {
+  import subtask-cancel-g2g;
+  import subtask-cancel-drop-host;
+  export local-run-async;
+}
+
+world subtask-cancel-g2g-callee {
+  import subtask-cancel-drop-host;
+  export subtask-cancel-g2g;
+}
+
 interface stream-concurrency-host {
   signal: func();
   zero-read-complete: func();
