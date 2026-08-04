@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-08-04
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ downstream worker bundling by @vados-cosmonic
+
 ## [0.2.1] - 2026-08-03
 
 ### 🐛 Bug Fixes
