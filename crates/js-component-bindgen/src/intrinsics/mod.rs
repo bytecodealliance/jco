@@ -1437,6 +1437,29 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ));
     }
 
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::IsStreamLowerableObject),
+            &Intrinsic::SymbolAsyncIterator,
+            &Intrinsic::SymbolIterator,
+            &Intrinsic::SymbolDispose,
+            &Intrinsic::PlatformReadableStreamClass,
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::IsStreamLowerableObject,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
+            &Intrinsic::SymbolAsyncIterator,
+            &Intrinsic::SymbolIterator,
+            &Intrinsic::PlatformReadableStreamClass,
+        ]);
+    }
+
     if args
         .intrinsics
         .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture))

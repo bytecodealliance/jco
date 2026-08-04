@@ -186,6 +186,29 @@ suite('stream<T> lowers', () => {
             assert.deepEqual(returnedVals, toTypedArray(Int8Array, vals));
         });
 
+        // Regression test for host->guest pumping of synchronous iterables:
+        // sync sources must be drained eagerly up to the guest's requested
+        // count instead of one item per canonical write.
+        //
+        // The guest reads with count=4096 and reports each canonical read's
+        // values as a separate chunk; pre-fix every chunk contained a single
+        // element (500 canonical writes at ~12ms each).
+        test.concurrent('u8 sync iterable is drained in batches', async () => {
+            const instance = await getInstance();
+            assert.instanceOf(
+                instance['jco:test-components/stream-lower-async'].readStreamValuesU8BulkChunks,
+                AsyncFunction,
+            );
+            const vals = Array.from({ length: 500 }, (_, i) => i % 256);
+            const chunks = await instance['jco:test-components/stream-lower-async'].readStreamValuesU8BulkChunks(vals);
+            assert.isBelow(chunks.length, 4, 'sync iterable was pumped one element per canonical write');
+            assert.isAtLeast(chunks[0].length, 100, 'first chunk unexpectedly small');
+            assert.deepEqual(
+                toTypedArray(Uint8Array, chunks.flatMap((c) => [...c])),
+                toTypedArray(Uint8Array, vals),
+            );
+        });
+
         test.concurrent('u16/s16', async () => {
             const instance = await getInstance();
             assert.instanceOf(instance['jco:test-components/stream-lower-async'].readStreamValuesU16, AsyncFunction);

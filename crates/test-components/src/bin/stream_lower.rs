@@ -38,6 +38,21 @@ impl stream_lower_async::Guest for Component {
         read_async_values(rx).await
     }
 
+    async fn read_stream_values_u8_bulk_chunks(mut rx: StreamReader<u8>) -> Vec<Vec<u8>> {
+        let mut chunks = Vec::new();
+        loop {
+            let (result, vals) = rx.read(Vec::with_capacity(4096)).await;
+            if !vals.is_empty() {
+                chunks.push(vals);
+            }
+            match result {
+                StreamResult::Complete(_) => {}
+                StreamResult::Dropped | StreamResult::Cancelled => break,
+            }
+        }
+        chunks
+    }
+
     async fn read_stream_values_s8(rx: StreamReader<i8>) -> Vec<i8> {
         read_async_values(rx).await
     }
