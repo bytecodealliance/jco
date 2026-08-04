@@ -29,19 +29,19 @@ afterAll(async () => {
 
 for (const builder of ["rolldown", "rollup"] as const) {
     describe(builder, () => {
-        test("supports default, component, and dynamic component imports", async () => {
+        test("supports lifecycle, named, namespace, and dynamic component imports", async () => {
             const input = resolve(tempDir, `${builder}-imports/entry.mjs`);
             await writeSource(
                 input,
                 `
-          import component from ${JSON.stringify(relativeImport(input, componentPath))};
-          import { component as namedComponent } from ${JSON.stringify(`${relativeImport(input, componentPath)}?component`)};
-          export const defaultResult = component.add.add(2, 3);
-          export const namedResult = namedComponent.add.add(4, 5);
-          export const sameComponent = component === namedComponent;
+          import instantiate, { add } from ${JSON.stringify(relativeImport(input, componentPath))};
+          import { add as markedAdd } from ${JSON.stringify(`${relativeImport(input, componentPath)}?component`)};
+          export const defaultResult = instantiate().add.add(2, 3);
+          export const namedResult = add.add(4, 5);
+          export const sameExport = add === markedAdd;
           export async function dynamicResult() {
             const loaded = await import(${JSON.stringify(relativeImport(input, componentPath))});
-            return [loaded.default === loaded.component, loaded.default.add.add(6, 7)];
+            return [loaded.default().add === loaded.add, loaded.add.add(6, 7)];
           }
         `,
             );
@@ -53,7 +53,7 @@ for (const builder of ["rolldown", "rollup"] as const) {
             const module = await import(`${pathToFileURL(resolve(outputDir, "index.mjs")).href}?test=imports`);
             expect(module.defaultResult).toBe(5);
             expect(module.namedResult).toBe(9);
-            expect(module.sameComponent).toBe(true);
+            expect(module.sameExport).toBe(true);
             await expect(module.dynamicResult()).resolves.toEqual([true, 13]);
         });
 
@@ -62,9 +62,8 @@ for (const builder of ["rolldown", "rollup"] as const) {
             await writeSource(
                 input,
                 `
-          import component, { component as namedComponent, instantiate } from ${JSON.stringify(relativeImport(input, importedComponentPath))};
-          export { component, namedComponent, instantiate };
-          export default component;
+          import instantiate, { front } from ${JSON.stringify(relativeImport(input, importedComponentPath))};
+          export { instantiate as default, front };
         `,
             );
 
@@ -73,9 +72,7 @@ for (const builder of ["rolldown", "rollup"] as const) {
             expect(output.assets.length).toBeGreaterThan(0);
 
             const module = await import(`${pathToFileURL(resolve(outputDir, "index.mjs")).href}?test=instantiation`);
-            expect(module.default).toBe(module.component);
-            expect(module.namedComponent).toBe(module.component);
-            expect(Object.keys(module.component)).toEqual([]);
+            expect(module.front).toBeUndefined();
 
             let nextScalar = 0;
             let fetchCalls = 0;
@@ -85,7 +82,7 @@ for (const builder of ["rolldown", "rollup"] as const) {
                     return this.value;
                 }
             }
-            const instance = await module.instantiate(async (url: URL) => WebAssembly.compile(await readFile(url)), {
+            const instance = await module.default(async (url: URL) => WebAssembly.compile(await readFile(url)), {
                 "example2:component/backend": {
                     Scalars,
                     fetch() {
@@ -95,10 +92,10 @@ for (const builder of ["rolldown", "rollup"] as const) {
                 },
             });
 
-            expect(instance).toBe(module.component);
-            expect(module.component.front.handle(new Scalars())).toBeTypeOf("number");
+            expect(module.front).toBe(instance.front);
+            expect(module.front.handle(new Scalars())).toBeTypeOf("number");
             expect(fetchCalls).toBe(1);
-            expect(() => module.instantiate()).toThrow(/already been instantiated/);
+            expect(() => module.default()).toThrow(/already been instantiated/);
         });
 
         test("deduplicates one component imported by ten source modules", async () => {
@@ -126,8 +123,8 @@ async function createImporterGraph(builder: Builder, count: number) {
         await writeSource(
             importer,
             `
-        import component from ${JSON.stringify(relativeImport(importer, componentPath))};
-        export const result = component.add.add(${index}, ${index + 1});
+        import { add } from ${JSON.stringify(relativeImport(importer, componentPath))};
+        export const result = add.add(${index}, ${index + 1});
       `,
         );
         imports.push(`import { result as result${index} } from "./importer-${index}.mjs";`);

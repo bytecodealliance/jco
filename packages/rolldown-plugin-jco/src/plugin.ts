@@ -23,6 +23,7 @@ import type { JcoPluginOptions } from "./types.js";
 /** Metadata for generated components */
 interface GeneratedComponent {
     canonicalId: string;
+    exports: string[];
     generatedId: string;
     instantiation: "async" | "sync" | undefined;
     source: string;
@@ -114,7 +115,7 @@ export function jcoPlugin(options: JcoPluginOptions = {}): Plugin {
                 const component = await generate(this, canonicalId);
                 const generatedId = JSON.stringify(component.generatedId);
                 return {
-                    code: createProxySource(generatedId, component.instantiation),
+                    code: createProxySource(generatedId, component.instantiation, component.exports),
                     map: { mappings: "" },
                 };
             }
@@ -155,6 +156,7 @@ async function generateComponent(
     }
 
     const name = options.name?.(canonicalId) ?? componentName(input.path, canonicalId);
+    let exports: string[];
     let files: Record<string, Uint8Array>;
     try {
         const result = await transpile(bytes, {
@@ -163,6 +165,7 @@ async function generateComponent(
             outDir: undefined,
         });
         files = result.files;
+        exports = [...new Set(result.exports.map(([name]) => name))].filter((name) => name !== "default");
     } catch (cause) {
         return context.error({
             id: input.path,
@@ -199,6 +202,7 @@ async function generateComponent(
 
     return {
         canonicalId,
+        exports,
         generatedId: createGeneratedId(canonicalId),
         instantiation: options.transpile?.instantiation,
         source,
@@ -206,33 +210,42 @@ async function generateComponent(
 }
 
 /** Create the public module facade around Jco's generated bindings. */
-export function createProxySource(generatedId: string, instantiation: "async" | "sync" | undefined): string {
+export function createProxySource(
+    generatedId: string,
+    instantiation: "async" | "sync" | undefined,
+    exports: string[],
+): string {
     if (!instantiation) {
         return [
             `import * as component from ${generatedId};`,
-            "export { component };",
-            "export default component;",
+            `export * from ${generatedId};`,
+            "export default function instantiate() {",
+            "  return component;",
+            "}",
         ].join("\n");
     }
 
     const invoke = "generatedInstantiate(getCoreModule, imports, instantiateCore)";
+    const bindings = exports.map((name, index) => ({
+        exported: JSON.stringify(name),
+        local: `componentExport${index}`,
+    }));
     const common = [
         `import { instantiate as generatedInstantiate } from ${generatedId};`,
-        "const component = {};",
+        ...bindings.map(({ local }) => `let ${local};`),
+        ...bindings.map(({ exported, local }) => `export { ${local} as ${exported} };`),
         'let state = "idle";',
         "function finish(exports) {",
-        "  Object.defineProperties(component, Object.getOwnPropertyDescriptors(exports));",
+        ...bindings.map(({ exported, local }) => `  ${local} = exports[${exported}];`),
         '  state = "done";',
-        "  return component;",
+        "  return exports;",
         "}",
-        "export { component };",
-        "export default component;",
     ];
 
     if (instantiation === "async") {
         return [
             ...common,
-            "export function instantiate(getCoreModule, imports, instantiateCore) {",
+            "export default function instantiate(getCoreModule, imports, instantiateCore) {",
             '  if (state !== "idle") throw new Error("This WebAssembly Component has already been instantiated");',
             '  state = "pending";',
             "  let pending;",
@@ -252,7 +265,7 @@ export function createProxySource(generatedId: string, instantiation: "async" | 
 
     return [
         ...common,
-        "export function instantiate(getCoreModule, imports, instantiateCore) {",
+        "export default function instantiate(getCoreModule, imports, instantiateCore) {",
         '  if (state !== "idle") throw new Error("This WebAssembly Component has already been instantiated");',
         '  state = "pending";',
         "  try {",

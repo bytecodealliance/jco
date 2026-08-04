@@ -1,4 +1,4 @@
-import component, { component as namedComponent } from "./adder.wasm";
+import instantiate, { add } from "./adder.wasm";
 
-export const defaultResult = component.add.add(20, 22);
-export const namedResult = namedComponent.add.add(19, 23);
+export const defaultResult = instantiate().add.add(20, 22);
+export const namedResult = add.add(19, 23);
