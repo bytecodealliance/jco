@@ -40,9 +40,14 @@ import jco from "@bytecodealliance/rolldown-plugin-jco";
 
 export default defineConfig({
     input: "src/main.js",
+    platform: "node",
     plugins: [jco()],
 });
 ```
+
+For Node.js WASI components, the plugin also emits self-contained worker artifacts owned by the
+Preview 2 and Preview 3 shims. No shim-internal worker entry or copy step is required in application
+configuration.
 
 ### Rollup
 
@@ -83,7 +88,7 @@ world component {
 }
 ```
 
-The default export is a way to *instantiate* the component, providing it all the imports it needs.
+The default export is a way to _instantiate_ the component, providing it all the imports it needs.
 
 ```js
 import instantiate from "./calculator.wasm";
@@ -144,7 +149,6 @@ TypeScript projects can opt into a generic default-import declaration:
 > [!WARN]
 > Precise component TypeScript declarations are not yet supported, but will be in a future version
 
-
 ### Custom instantiation
 
 Components with imports can use Jco's custom instantiation API. Enable async or sync instantiation in
@@ -177,10 +181,10 @@ console.log(run());
 ```
 
 In custom mode, named component exports are live ESM bindings. They are `undefined` until
-instantiation succeeds and update automatically afterwards. 
+instantiation succeeds and update automatically afterwards.
 
-Avoid destructuring a namespace object before instantiation, because ordinary object destructuring 
-captures the initial value rather than the live binding. 
+Avoid destructuring a namespace object before instantiation, because ordinary object destructuring
+captures the initial value rather than the live binding.
 
 The default function also returns the complete component instance for convenient local destructuring:
 
@@ -188,9 +192,9 @@ The default function also returns the complete component instance for convenient
 const { run: localRun } = await instantiate(loadCoreModule, imports);
 ```
 
-A failed instantiation leaves every named binding unset and can be retried. 
+A failed instantiation leaves every named binding unset and can be retried.
 
-After a successful instantiation, another call throws because one imported module 
+After a successful instantiation, another call throws because one imported module
 cannot represent multiple component instances.
 
 Because lifecycle instantiation is the default export, a component-model export named `instantiate`
