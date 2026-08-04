@@ -376,7 +376,7 @@ importers:
         version: '@bytecodealliance/componentize-js@0.19.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)'
       '@bytecodealliance/jco-transpile':
         specifier: ^0.5.1
-        version: 0.5.1
+        version: 0.5.2
       '@bytecodealliance/preview2-shim':
         specifier: ^0.17.5
         version: 0.17.9
@@ -456,6 +456,9 @@ importers:
       puppeteer:
         specifier: 'catalog:'
         version: 25.1.0
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -475,6 +478,9 @@ importers:
       globals:
         specifier: ^17.6.0
         version: 17.6.0
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -489,7 +495,7 @@ importers:
     dependencies:
       '@bytecodealliance/jco':
         specifier: ^1.26.1
-        version: 1.26.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+        version: 1.26.1
       '@rollup/pluginutils':
         specifier: ^5.3.0
         version: 5.3.0(rollup@4.61.1)
@@ -595,9 +601,6 @@ packages:
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
-
-  '@bytecodealliance/jco-transpile@0.5.1':
-    resolution: {integrity: sha512-vETdOMg/JGfR+GWw014xHY/IRgBxZZ3HXW+rtro7rfktZy4V9cuZ5iMy8KH5jUu+X1d03DHXykflZJFS5ksuQQ==}
 
   '@bytecodealliance/jco-transpile@0.5.2':
     resolution: {integrity: sha512-zXrPtrJkn5jq6MBAOLZUlPnmgdLa8RDER9T4gCclgbAPHWIZSWEjDzv4MrrO3sz6Tvh1eJK1ou2SrrNnJxdTfA==}
@@ -4302,13 +4305,6 @@ snapshots:
   '@bytecodealliance/jco-std@0.2.0': {}
 
   '@bytecodealliance/jco-transpile@0.4.2':
-    dependencies:
-      '@bytecodealliance/preview2-shim': 0.19.0
-      '@bytecodealliance/preview3-shim': 0.2.0
-      binaryen: 130.0.0
-      oxc-minify: 0.136.0
-
-  '@bytecodealliance/jco-transpile@0.5.1':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
       '@bytecodealliance/preview3-shim': 0.2.0
