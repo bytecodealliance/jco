@@ -1,6 +1,6 @@
 {
     "name": "@bytecodealliance/rolldown-plugin-jco",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "Rolldown and Rollup plugin for using the Jco WebAssembly component toolkit",
     "keywords": [
         "Component",
