@@ -24,6 +24,7 @@ import type { JcoPluginOptions } from "./types.js";
 interface GeneratedComponent {
     canonicalId: string;
     generatedId: string;
+    instantiation: "async" | "sync" | undefined;
     source: string;
 }
 
@@ -113,11 +114,7 @@ export function jcoPlugin(options: JcoPluginOptions = {}): Plugin {
                 const component = await generate(this, canonicalId);
                 const generatedId = JSON.stringify(component.generatedId);
                 return {
-                    code: [
-                        `import * as component from ${generatedId};`,
-                        `export * from ${generatedId};`,
-                        "export default component;",
-                    ].join("\n"),
+                    code: createProxySource(generatedId, component.instantiation),
                     map: { mappings: "" },
                 };
             }
@@ -203,6 +200,67 @@ async function generateComponent(
     return {
         canonicalId,
         generatedId: createGeneratedId(canonicalId),
+        instantiation: options.transpile?.instantiation,
         source,
     };
+}
+
+/** Create the public module facade around Jco's generated bindings. */
+export function createProxySource(generatedId: string, instantiation: "async" | "sync" | undefined): string {
+    if (!instantiation) {
+        return [
+            `import * as component from ${generatedId};`,
+            "export { component };",
+            "export default component;",
+        ].join("\n");
+    }
+
+    const invoke = "generatedInstantiate(getCoreModule, imports, instantiateCore)";
+    const common = [
+        `import { instantiate as generatedInstantiate } from ${generatedId};`,
+        "const component = {};",
+        'let state = "idle";',
+        "function finish(exports) {",
+        "  Object.defineProperties(component, Object.getOwnPropertyDescriptors(exports));",
+        '  state = "done";',
+        "  return component;",
+        "}",
+        "export { component };",
+        "export default component;",
+    ];
+
+    if (instantiation === "async") {
+        return [
+            ...common,
+            "export function instantiate(getCoreModule, imports, instantiateCore) {",
+            '  if (state !== "idle") throw new Error("This WebAssembly Component has already been instantiated");',
+            '  state = "pending";',
+            "  let pending;",
+            "  try {",
+            `    pending = ${invoke};`,
+            "  } catch (error) {",
+            '    state = "idle";',
+            "    throw error;",
+            "  }",
+            "  return Promise.resolve(pending).then(finish, error => {",
+            '    state = "idle";',
+            "    throw error;",
+            "  });",
+            "}",
+        ].join("\n");
+    }
+
+    return [
+        ...common,
+        "export function instantiate(getCoreModule, imports, instantiateCore) {",
+        '  if (state !== "idle") throw new Error("This WebAssembly Component has already been instantiated");',
+        '  state = "pending";',
+        "  try {",
+        `    return finish(${invoke});`,
+        "  } catch (error) {",
+        '    state = "idle";',
+        "    throw error;",
+        "  }",
+        "}",
+    ].join("\n");
 }

@@ -10,11 +10,21 @@ export function rewriteCoreUrl(
 ): string {
     const relativeFile = file.startsWith("./") ? file : `./${file}`;
     const escapedFile = escapeRegExp(relativeFile);
-    const pattern = new RegExp(`new\\s+URL\\(\\s*(['"])${escapedFile}\\1\\s*,\\s*import\\.meta\\.url\\s*\\)`, "g");
     let replacements = 0;
-    const rewritten = source.replace(pattern, () => {
+    const assetUrl = `new URL(import.meta.ROLLUP_FILE_URL_${referenceId})`;
+    const urlPattern = new RegExp(`new\\s+URL\\(\\s*(['"])${escapedFile}\\1\\s*,\\s*import\\.meta\\.url\\s*\\)`, "g");
+    let rewritten = source.replace(urlPattern, () => {
         replacements++;
-        return `new URL(import.meta.ROLLUP_FILE_URL_${referenceId})`;
+        return assetUrl;
+    });
+
+    // In custom-instantiation mode Jco passes core filenames to the caller's
+    // loader instead of constructing the URL itself.
+    const bareFile = relativeFile.slice(2);
+    const loaderPattern = new RegExp(`getCoreModule\\(\\s*(['"])${escapeRegExp(bareFile)}\\1\\s*\\)`, "g");
+    rewritten = rewritten.replace(loaderPattern, () => {
+        replacements++;
+        return `getCoreModule(${assetUrl})`;
     });
     if (replacements === 0) {
         return context.error({

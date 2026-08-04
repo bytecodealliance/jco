@@ -23,7 +23,7 @@ or `wasm-bindgen`. You can read more about WebAssembly components in the
 
 ## Install
 
-After intalling your bundler of choice (`rolldown`/`rollup`), you can install the plugin via NPM
+After installing your bundler of choice (`rolldown`/`rollup`), you can install the plugin via NPM
 
 ```sh
 pnpm add -D @bytecodealliance/rolldown-plugin-jco
@@ -60,8 +60,6 @@ export default {
 ```
 
 ## Importing and using WebAssembly Components
-
-Given an WebAssembly component `calculator.wasm` with the following interface:
 
 ```wit
 package jco:examples;
@@ -128,6 +126,77 @@ import component from "./calculator.wasm?component";
 
 Other Wasm query conventions such as `?url` and `?module` are left to other plugins (e.g. [`unwasm`][unwasm]).
 
+### Custom instantiation
+
+Components with imports can use Jco's custom instantiation API. Enable async or sync instantiation in
+the plugin configuration:
+
+```js
+jco({
+    transpile: {
+        instantiation: "async",
+    },
+});
+```
+
+The imported component namespace is initially empty and is populated when `instantiate` succeeds.
+The first argument loads a bundler-emitted core Wasm asset, the second supplies the component-model
+imports, and the optional third argument overrides core Wasm instantiation:
+
+```js
+import component, { instantiate } from "./hosted.wasm";
+
+const instance = await instantiate(async (url) => WebAssembly.compile(await (await fetch(url)).arrayBuffer()), {
+    "example:host/api": {
+        getValue() {
+            return 42;
+        },
+    },
+});
+
+console.log(instance === component); // true
+console.log(component.run());
+```
+
+The default and named `component` exports refer to one stable object. A failed instantiation leaves it
+empty and can be retried; after a successful instantiation, another call throws because one module
+namespace cannot represent multiple component instances.
+
+The top-level `instantiate` name is reserved for this lifecycle function. If the component itself
+exports a function named `instantiate`, it remains unambiguous:
+
+```js
+import component, { instantiate } from "./component.wasm";
+
+await instantiate(loadCoreModule, imports);
+component.instantiate(); // the component-model export
+```
+
+In eager mode (when `transpile.instantiation` is not set), components are instantiated as the module
+loads and no top-level lifecycle `instantiate` export is emitted.
+
+TypeScript projects can opt into a generic default-import declaration:
+
+```json
+{
+    "compilerOptions": {
+        "types": ["@bytecodealliance/rolldown-plugin-jco/wasm"]
+    }
+}
+```
+
+> [!WARN]
+> Precise component TypeScript declarations are not yet supported, but will be in a future version
+
+`?component` is accepted as an explicit marker when it is useful to distinguish
+component imports:
+
+```js
+import component from "./adder.wasm?component";
+```
+
+Other Wasm query conventions such as `?url` and `?module` are left to other plugins (e.g. [`unwasm`][unwasm]).
+
 ## Options
 
 Here are the options that are accepted by this plugin:
@@ -153,6 +222,7 @@ Some things to keep in mind, when using this plugin:
 - `include` and `exclude` use the standard Rollup plugin filter syntax.
 - `transpile` is forwarded to Jco. The plugin owns `name` and `outDir` because
   generated files are managed inside the bundler graph.
+- `transpile.instantiation` selects Jco's `"async"` or `"sync"` custom-instantiation mode.
 - `name` optionally controls the name passed to Jco. By default the plugin
   combines the input basename with a stable path hash to avoid collisions.
 - Input files must be local WebAssembly Component files available at build time.

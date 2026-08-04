@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -11,6 +11,10 @@ import jcoPlugin from "../src/index.js";
 type Builder = "rolldown" | "rollup";
 
 const componentPath = resolve(import.meta.dirname, "../../../examples/transpile/adder/adder.wasm");
+const importedComponentPath = resolve(
+    import.meta.dirname,
+    "../../jco-transpile/test/fixtures/components/runtime/example_guest_import.wasm",
+);
 let tempDir: string;
 
 beforeAll(async () => {
@@ -25,18 +29,19 @@ afterAll(async () => {
 
 for (const builder of ["rolldown", "rollup"] as const) {
     describe(builder, () => {
-        test("supports default, named, and dynamic component imports", async () => {
+        test("supports default, component, and dynamic component imports", async () => {
             const input = resolve(tempDir, `${builder}-imports/entry.mjs`);
             await writeSource(
                 input,
                 `
           import component from ${JSON.stringify(relativeImport(input, componentPath))};
-          import { add } from ${JSON.stringify(`${relativeImport(input, componentPath)}?component`)};
+          import { component as namedComponent } from ${JSON.stringify(`${relativeImport(input, componentPath)}?component`)};
           export const defaultResult = component.add.add(2, 3);
-          export const namedResult = add.add(4, 5);
+          export const namedResult = namedComponent.add.add(4, 5);
+          export const sameComponent = component === namedComponent;
           export async function dynamicResult() {
             const loaded = await import(${JSON.stringify(relativeImport(input, componentPath))});
-            return loaded.default.add.add(6, 7);
+            return [loaded.default === loaded.component, loaded.default.add.add(6, 7)];
           }
         `,
             );
@@ -48,7 +53,52 @@ for (const builder of ["rolldown", "rollup"] as const) {
             const module = await import(`${pathToFileURL(resolve(outputDir, "index.mjs")).href}?test=imports`);
             expect(module.defaultResult).toBe(5);
             expect(module.namedResult).toBe(9);
-            await expect(module.dynamicResult()).resolves.toBe(13);
+            expect(module.sameComponent).toBe(true);
+            await expect(module.dynamicResult()).resolves.toEqual([true, 13]);
+        });
+
+        test("supports supplying component imports through custom instantiation", async () => {
+            const input = resolve(tempDir, `${builder}-instantiation/entry.mjs`);
+            await writeSource(
+                input,
+                `
+          import component, { component as namedComponent, instantiate } from ${JSON.stringify(relativeImport(input, importedComponentPath))};
+          export { component, namedComponent, instantiate };
+          export default component;
+        `,
+            );
+
+            const outputDir = resolve(tempDir, `${builder}-instantiation/out`);
+            const output = await build(builder, input, outputDir, "async");
+            expect(output.assets.length).toBeGreaterThan(0);
+
+            const module = await import(`${pathToFileURL(resolve(outputDir, "index.mjs")).href}?test=instantiation`);
+            expect(module.default).toBe(module.component);
+            expect(module.namedComponent).toBe(module.component);
+            expect(Object.keys(module.component)).toEqual([]);
+
+            let nextScalar = 0;
+            let fetchCalls = 0;
+            class Scalars {
+                value = nextScalar++;
+                getB() {
+                    return this.value;
+                }
+            }
+            const instance = await module.instantiate(async (url: URL) => WebAssembly.compile(await readFile(url)), {
+                "example2:component/backend": {
+                    Scalars,
+                    fetch() {
+                        fetchCalls++;
+                        return new Scalars();
+                    },
+                },
+            });
+
+            expect(instance).toBe(module.component);
+            expect(module.component.front.handle(new Scalars())).toBeTypeOf("number");
+            expect(fetchCalls).toBe(1);
+            expect(() => module.instantiate()).toThrow(/already been instantiated/);
         });
 
         test("deduplicates one component imported by ten source modules", async () => {
@@ -92,7 +142,7 @@ async function createImporterGraph(builder: Builder, count: number) {
     return { input, outputDir: resolve(root, "out") };
 }
 
-async function build(builder: Builder, input: string, outputDir: string) {
+async function build(builder: Builder, input: string, outputDir: string, instantiation?: "async" | "sync") {
     const options = {
         input,
         external: (id: string) => id.startsWith("node:"),
@@ -100,6 +150,7 @@ async function build(builder: Builder, input: string, outputDir: string) {
             jcoPlugin({
                 transpile: {
                     base64Cutoff: 0,
+                    instantiation,
                 },
             }),
         ],
