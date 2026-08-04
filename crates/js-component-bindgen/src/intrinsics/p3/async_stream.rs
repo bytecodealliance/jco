@@ -1494,6 +1494,7 @@ impl AsyncStreamIntrinsic {
 
                           get length() {{ return this.#length; }}
                           get done() {{ return this.#done; }}
+                          get sourceIsSync() {{ return !!this.#readFn.sourceIsSync; }}
 
                           push(source) {{
                               if (source.length === 0) {{ return 0; }}
@@ -2090,6 +2091,9 @@ impl AsyncStreamIntrinsic {
                               let iterator = stream[{iterator_symbol}]();
                               readFn = async () => iterator.next();
                               readFn.drop = (reason) => iterator.return?.(reason) ?? stream[{symbol_dispose}]?.();
+                              // Synchronous sources can be drained eagerly (up to a
+                              // requested count) without risking an indefinite wait
+                              readFn.sourceIsSync = true;
                           }} else if (stream instanceof {external_readable_stream_class}) {{
                               // At this point we're dealing with a readable stream that *somehow *does not*
                               // implement the async iterator protocol.
@@ -2196,7 +2200,11 @@ impl AsyncStreamIntrinsic {
                                   if (readEnd.hasPendingEvent()) {{ return bail(); }}
                                   if (!hasPendingReadBuffer()) {{ return bail(); }}
                                   drainPendingValues();
-                                  if (values.length > 0) {{ break; }}
+                                  // Deliver data as soon as any is available rather than
+                                  // waiting on the source for a full count -- except for
+                                  // synchronous sources, which can be drained eagerly
+                                  // without waiting
+                                  if (values.length > 0 && !pendingValues.sourceIsSync) {{ break; }}
                                   if (appended === 0 && !pendingValues.done) {{ count -= 1; }}
                                   if (pendingValues.done) {{ break; }}
                               }}

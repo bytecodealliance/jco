@@ -508,6 +508,9 @@ interface stream-lower-async {
     read-stream-values-bool: async func(s: stream<bool>) -> list<bool>;
 
     read-stream-values-u8: async func(s: stream<u8>) -> list<u8>;
+    // Reads with a large per-read count and returns each canonical read's
+    // values as a separate chunk
+    read-stream-values-u8-bulk-chunks: async func(s: stream<u8>) -> list<list<u8>>;
     read-stream-values-s8: async func(s: stream<s8>) -> list<s8>;
 
     read-stream-values-u16: async func(s: stream<u16>) -> list<u16>;

@@ -126,6 +126,31 @@ suite('stream<T> lifts', () => {
         assert.deepEqual(await stream.next(), { value: undefined, done: true });
     });
 
+    // Regression test for stream read batching: a read with an explicit count
+    // must transfer up to that many elements per canonical read, not one
+    // element at a time
+    test.concurrent('u8 reads are batched up to the requested count', async () => {
+        const instance = await getInstance();
+        const vals = Array.from({ length: 5000 }, (_, i) => i % 256);
+        const stream = await instance['jco:test-components/get-stream-async'].getStreamU8(vals);
+
+        const chunks = [];
+        let total = 0;
+        while (total < vals.length) {
+            const { value, done } = await stream.read({ count: 4096 });
+            if (done) { break; }
+            assert.instanceOf(value, Uint8Array);
+            chunks.push(value);
+            total += value.length;
+            // The guest writes all 5000 elements in a single write; reads of
+            // count=4096 must complete in a small number of large chunks
+            assert.isBelow(chunks.length, 10, 'too many reads: stream reads are not batching');
+        }
+        assert.strictEqual(total, vals.length);
+        assert.isAtLeast(chunks[0].length, 1000, 'first read returned a small chunk despite count=4096');
+        assert.deepEqual(new Uint8Array(chunks.flatMap((c) => [...c])), new Uint8Array(vals));
+    });
+
     test.concurrent('u16/s16', async () => {
         const instance = await getInstance();
         assert.instanceOf(instance['jco:test-components/get-stream-async'].getStreamU16, AsyncFunction);

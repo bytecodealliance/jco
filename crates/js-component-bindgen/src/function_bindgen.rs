@@ -3062,7 +3062,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let async_iterator_symbol = self.intrinsic(Intrinsic::SymbolAsyncIterator);
                 let iterator_symbol = self.intrinsic(Intrinsic::SymbolIterator);
-                let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                 let external_readable_stream_class =
                     self.intrinsic(Intrinsic::PlatformReadableStreamClass);
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
@@ -3070,6 +3069,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
                 let gen_stream_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GenStreamHostInjectFn,
+                ));
+                let gen_read_fn_from_lowerable_stream_fn = self.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
                 ));
 
                 // TODO(???): A component could end up receiving a stream that it outputted,
@@ -3212,22 +3214,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             }},
                         }});
 
-                        let readFn{tmp};
-                        if ({async_iterator_symbol} in {stream_arg}) {{
-                            let asyncIterator = {stream_arg}[{async_iterator_symbol}]();
-                            readFn{tmp} = () => asyncIterator.next();
-                            readFn{tmp}.drop = (reason) => asyncIterator.return?.(reason) ?? {stream_arg}[{symbol_dispose}]?.();
-                        }} else if ({iterator_symbol} in {stream_arg}) {{
-                            let iterator = {stream_arg}[{iterator_symbol}]();
-                            readFn{tmp} = async () => iterator.next();
-                            readFn{tmp}.drop = (reason) => iterator.return?.(reason) ?? {stream_arg}[{symbol_dispose}]?.();
-                        }} else if ({stream_arg} instanceof {external_readable_stream_class}) {{
-                            // At this point we're dealing with a readable stream that *somehow *does not*
-                            // implement the async iterator protocol.
-                            const lockedReader = {stream_arg}.getReader();
-                            readFn{tmp} = () => lockedReader.read();
-                            readFn{tmp}.drop = (reason) => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock());
-                        }}
+                        const readFn{tmp} = {gen_read_fn_from_lowerable_stream_fn}({stream_arg});
 
                         const hostInjectFn = {gen_stream_host_inject_fn}({{
                             readFn: readFn{tmp},
