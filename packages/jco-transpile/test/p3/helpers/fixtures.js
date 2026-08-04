@@ -15,7 +15,6 @@ export const P3_CLI_RUN_FIXTURES = [
     {
         path: 'cli/p3-cli-much-stdout.wasm',
         args: ['p3_cli_much_stdout.component', 'hello, world\n', '1'],
-        failing: process.versions.node.startsWith('26'),
     },
     { path: 'cli/p3-cli.wasm', args: ['p3_cli.component', '.'] },
     { path: 'clocks/p3-clocks-sleep.wasm' },
@@ -25,7 +24,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: 'http/p3-http-outbound-request-content-length.wasm', retry: 3 },
     { path: 'http/p3-http-outbound-request-get.wasm' },
     { path: 'http/p3-http-outbound-request-invalid-dnsname.wasm' },
-    { path: 'http/p3-http-outbound-request-invalid-header.wasm', failing: process.versions.node.startsWith('26') },
+    { path: 'http/p3-http-outbound-request-invalid-header.wasm' },
     { path: 'http/p3-http-outbound-request-invalid-port.wasm' },
     { path: 'http/p3-http-outbound-request-invalid-version.wasm' },
     { path: 'http/p3-http-outbound-request-large-post.wasm' },

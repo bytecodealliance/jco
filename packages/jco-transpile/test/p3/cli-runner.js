@@ -1,11 +1,13 @@
 import { argv } from 'node:process';
 
 import { _setPreopens as _setP3Preopens } from '@bytecodealliance/preview3-shim/filesystem';
+import { _forbiddenHeaders } from '@bytecodealliance/preview3-shim/http';
 import { _setPreopens as _setP2Preopens } from '@bytecodealliance/preview2-shim/filesystem';
+import { _setArgs as _setP2Args, _setCwd as _setP2Cwd } from '@bytecodealliance/preview2-shim/cli';
 
 import {
-    _setArgs,
-    _setCwd,
+    _setArgs as _setP3Args,
+    _setCwd as _setP3Cwd,
     _setTerminalStdin,
     _setTerminalStdout,
     _setTerminalStderr,
@@ -18,13 +20,17 @@ if (!esModuleHref || !preopenDir || !argsJson) {
     throw new Error('usage: cli-runner.mjs <esModuleHref> <preopenDir> <argsJson>');
 }
 
-_setArgs(JSON.parse(argsJson));
-_setCwd(null);
+const args = JSON.parse(argsJson);
+_setP2Args(args);
+_setP3Args(args);
+_setP2Cwd(null);
+_setP3Cwd(null);
 _setTerminalStdin(null);
 _setTerminalStdout(null);
 _setTerminalStderr(null);
 _setP3Preopens({ '/': preopenDir });
 _setP2Preopens({ '/': preopenDir });
+_forbiddenHeaders.value.add('custom-forbidden-header');
 
 const esModule = await import(esModuleHref);
 if (esModule.$init) {
