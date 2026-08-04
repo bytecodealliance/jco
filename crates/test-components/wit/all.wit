@@ -817,3 +817,13 @@ world future-transfer-g2g-caller {
   import future-transfer-source;
   export future-transfer-runner;
 }
+
+// wit-bindgen inter-task-wakeup (guest-internal unit stream): one export
+// spawns a detached pump task that parks on a host import; a second export
+// parks on a purely Rust-originating waker that the pump fires when the
+// import resolves (see lann/jco#13, lann/jco#11)
+world inter-task-wakeup {
+  import wakeup-tick: async func() -> u32;
+  export start-pump: async func();
+  export await-wake: async func() -> u32;
+}
