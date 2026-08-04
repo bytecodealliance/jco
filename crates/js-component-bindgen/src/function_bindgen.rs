@@ -2174,6 +2174,14 @@ impl Bindgen for FunctionBindgen<'_> {
                             1 => operands[0].to_string(),
                             _ => format!("[{}]", operands.join(", ")),
                         };
+                        // The surrounding FutureValue represents the future returned by the WIT
+                        // function, so the manual async transport must consume the lifted future
+                        // before boxing its payload for FutureValue's start operation.
+                        let return_val = if self.wrap_async_future_result {
+                            format!("{{ value: await {ret_val} }}")
+                        } else {
+                            ret_val.clone()
+                        };
 
                         uwriteln!(self.src, "task.resolve([{ret_val}]);");
 
@@ -2184,17 +2192,22 @@ impl Bindgen for FunctionBindgen<'_> {
 
                             // Write out the assignment for the given return value
                             uwriteln!(self.src, "const retCopy = {ret_val};");
+                            let post_return_val = if self.wrap_async_future_result {
+                                "{ value: await retCopy }"
+                            } else {
+                                "retCopy"
+                            };
 
                             // Generate the JS that should perform the post return w/ the result
                             // and pass a copy fo the result to the actual caller
                             let post_return_js = gen_post_return_js((
                                 format!("{post_return_fn}(ret);"),
-                                Some(["return retCopy;"].join("\n")),
+                                Some([format!("return {post_return_val};")].join("\n")),
                             ));
                             uwriteln!(self.src, "{post_return_js}");
                         } else {
                             uwriteln!(self.src, "task.exit();");
-                            uwriteln!(self.src, "return {ret_val};")
+                            uwriteln!(self.src, "return {return_val};")
                         }
                     }
                 }
