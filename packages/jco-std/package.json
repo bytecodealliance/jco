@@ -96,7 +96,7 @@
     "@bytecodealliance/componentize-js": "^0.22.0",
     "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
     "@bytecodealliance/jco-transpile": "^0.6.0",
-    "@bytecodealliance/preview2-shim": "^0.17.5",
+    "@bytecodealliance/preview2-shim": "^0.20.1",
     "@types/which": "^3.0.4",
     "hono": "^4.12.34",
     "rolldown": "^1.0.0-beta.46",
