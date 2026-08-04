@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.2] - 2026-08-04
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ restore p3 CLI tests on Node 26 by @vados-cosmonic in #1827
+
+### 🧪 Testing
+
+- _(transpile)_ add regression test for manual async future return by @vados-cosmonic in #1831
+
 ## [0.6.1] - 2026-08-04
 
 ### ⚙️ Miscellaneous Tasks
