@@ -2397,28 +2397,57 @@ impl AsyncTaskIntrinsic {
 
                         return new Promise((resolve, reject) => {{
                             setTimeout(() => {{
-                                const subtaskState = subtask.getStateNumber();
-                                if (subtaskState < 0 || subtaskState >= 2**4) {{
-                                    // throw new Error('invalid subtask state, out of valid range');
-                                    reject(new Error('invalid subtask state, out of valid range'));
-                                }}
-                                let res;
-                                // An async-lowered import whose callee resolved synchronously returns
-                                // [Subtask.State.RETURNED] only an no subtask handle is exposed.
-                                if (subtask.isReturned()) {{
-                                    if (!subtask.resolveDelivered()) {{
-                                        subtask.deliverResolve();
+                                // NOTE: whether the import settled before this timer fires is a race
+                                // between the import's settlement (microtask + any host timers), this
+                                // setTimeout(0), and JSPI resume scheduling -- engines order these
+                                // differently (e.g. V8 13.6 vs 14.x). Either outcome is CABI-legal,
+                                // but the invariants of each branch must hold independently, and this
+                                // promise must *always* settle (an unhandled throw here would leave a
+                                // JSPI-suspended guest suspended forever).
+                                try {{
+                                    const subtaskState = subtask.getStateNumber();
+                                    if (subtaskState < 0 || subtaskState >= 2**4) {{
+                                        reject(new Error('invalid subtask state, out of valid range'));
+                                        return;
                                     }}
-                                    const removed = cstate.handles.remove(subtask.waitableRep());
-                                    if (removed !== subtask) {{
-                                        throw new Error('subtask handle cleanup removed unexpected entry');
-                                        reject(new Error('subtask handle cleanup removed unexpected entry'));
+                                    let res;
+                                    // An async-lowered import whose callee resolved synchronously returns
+                                    // [Subtask.State.RETURNED] only and no subtask handle is exposed.
+                                    if (subtask.isReturned()) {{
+                                        // The on-progress handler parked a pending SUBTASK event on the
+                                        // waitable when the import settled. The guest never learns this
+                                        // waitable's rep (we return a bare RETURNED state), so consume the
+                                        // event now -- otherwise a stale event is left parked forever (and
+                                        // the waitable can never be dropped).
+                                        if (subtask.hasPendingEvent()) {{
+                                            subtask.getPendingEvent();
+                                        }}
+                                        if (!subtask.resolveDelivered()) {{
+                                            subtask.deliverResolve();
+                                        }}
+                                        const removed = cstate.handles.remove(subtask.waitableRep());
+                                        if (removed !== subtask) {{
+                                            reject(new Error('subtask handle cleanup removed unexpected entry'));
+                                            return;
+                                        }}
+                                        subtask.drop();
+                                        res = subtaskState;
+                                    }} else {{
+                                        res = Number(subtask.waitableRep()) << 4 | subtaskState;
                                     }}
-                                    res = subtaskState;
-                                }} else {{
-                                    res = Number(subtask.waitableRep()) << 4 | subtaskState;
-                                }}
+                                    {debug_log_fn}('[{lower_import_fn}()] async-lowered import return', {{
+                                        fnName: importFn.fnName,
+                                        componentIdx,
+                                        subtaskID: subtask.id(),
+                                        waitableRep: subtask.waitableRep(),
+                                        subtaskState,
+                                        eagerReturn: subtask.isReturned(),
+                                        packedResult: res,
+                                    }});
                                     resolve(res);
+                                }} catch (err) {{
+                                    reject(err);
+                                }}
                             }}, 0);
                         }});
                     }}
@@ -2666,6 +2695,15 @@ impl AsyncTaskIntrinsic {
                         }});
 
                         if (requiresManualAsyncResult) {{ return manualAsyncResult.promise; }}
+
+                        {debug_log_fn}('[{lower_import_backwards_compat_fn}()] async-lowered import return', {{
+                            fnName: importFn.fnName,
+                            componentIdx,
+                            subtaskID: subtask.id(),
+                            waitableRep: subtask.waitableRep(),
+                            subtaskState,
+                            packedResult: Number(subtask.waitableRep()) << 4 | subtaskState,
+                        }});
 
                         return Number(subtask.waitableRep()) << 4 | subtaskState;
                     }}
