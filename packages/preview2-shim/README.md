@@ -6,6 +6,10 @@ Node.js support is fully tested and conformant against the Wasmtime test suite.
 
 Browser support is considered experimental, and not currently suitable for production applications.
 
+The Node.js implementation owns its worker artifact. Direct package use and supported downstream
+bundlers should resolve it through the public shim imports; applications do not need to import or
+copy files from `dist/io`.
+
 # Features
 
 ## WASI Shim object for easy instantiation
