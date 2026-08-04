@@ -494,8 +494,8 @@ importers:
   packages/rolldown-plugin-jco:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.26.1
-        version: 1.26.1
+        specifier: ^1.27.0
+        version: 1.27.0
       '@rollup/pluginutils':
         specifier: ^5.3.0
         version: 5.4.0(rollup@4.62.3)
@@ -608,12 +608,19 @@ packages:
   '@bytecodealliance/jco-transpile@0.6.0':
     resolution: {integrity: sha512-BDTTpg7SOQuQPphpjEqYaRaSiBplXb5P1psDKYQsx3PxYlvtRnQUPSl5GWMV0JSzGlLsHor61igxgtngfprFtA==}
 
+  '@bytecodealliance/jco-transpile@0.6.1':
+    resolution: {integrity: sha512-MFE+2u2MhTOkN2Yg6qDuIeC1tgtxTFl7JFeY3uAuNGST5/skov17Dbnlnf4O0nJuroKlDXguUzq/El8Gx9YFpw==}
+
   '@bytecodealliance/jco@1.25.2':
     resolution: {integrity: sha512-r9ch8vqtDkBxXtN5KzAEYpz+hjGCW+cQhc2b71U21DMuewE5HrTCI7X826gfL/1oU0ibsSpGodJV5YkwolH9Jg==}
     hasBin: true
 
   '@bytecodealliance/jco@1.26.1':
     resolution: {integrity: sha512-IY9l/jm0A/w3nr7uzyBV3pkxLNQ8AeLGOCiZG1vvjsuQW5ft05Y0THNULzjd9hpuMNpXOfFuvN4cXCPlCHNY8w==}
+    hasBin: true
+
+  '@bytecodealliance/jco@1.27.0':
+    resolution: {integrity: sha512-MG3875pStjkVZt6hxm/2rszf9EgOR2VGIostrpliTyYLyx+3u6W6U3fWpGVmRwXcS8VW1pUolQl9kHO5RKeIbA==}
     hasBin: true
 
   '@bytecodealliance/preview2-shim@0.17.9':
@@ -3854,14 +3861,14 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.19.3':
     dependencies:
-      '@bytecodealliance/jco': 1.26.1
+      '@bytecodealliance/jco': 1.25.2
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
 
   '@bytecodealliance/componentize-js@0.21.0':
     dependencies:
-      '@bytecodealliance/jco': 1.26.1
+      '@bytecodealliance/jco': 1.25.2
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -3869,7 +3876,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.22.0':
     dependencies:
-      '@bytecodealliance/jco': 1.26.1
+      '@bytecodealliance/jco': 1.25.2
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -3880,14 +3887,14 @@ snapshots:
   '@bytecodealliance/jco-transpile@0.4.2':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
-      '@bytecodealliance/preview3-shim': 0.2.0
+      '@bytecodealliance/preview3-shim': 0.2.2
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
   '@bytecodealliance/jco-transpile@0.5.2':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
-      '@bytecodealliance/preview3-shim': 0.2.0
+      '@bytecodealliance/preview3-shim': 0.2.2
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
@@ -3895,6 +3902,13 @@ snapshots:
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
       '@bytecodealliance/preview3-shim': 0.2.0
+      binaryen: 130.0.0
+      oxc-minify: 0.136.0
+
+  '@bytecodealliance/jco-transpile@0.6.1':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.20.1
+      '@bytecodealliance/preview3-shim': 0.2.2
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
@@ -3917,6 +3931,20 @@ snapshots:
       '@bytecodealliance/jco-transpile': 0.5.2
       '@bytecodealliance/preview2-shim': 0.17.9
       '@bytecodealliance/preview3-shim': 0.1.2
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.3
+      mkdirp: 3.0.1
+      ora: 8.2.0
+      rolldown: 1.2.0
+
+  '@bytecodealliance/jco@1.27.0':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.22.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.6.1
+      '@bytecodealliance/preview2-shim': 0.20.1
+      '@bytecodealliance/preview3-shim': 0.2.2
       binaryen: 130.0.0
       commander: 14.0.3
       componentize-qjs: 0.4.3
