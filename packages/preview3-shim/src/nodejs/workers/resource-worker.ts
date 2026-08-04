@@ -1,18 +1,12 @@
-import {
-  Worker,
-  parentPort,
-  isMainThread,
-  MessageChannel,
-  receiveMessageOnPort,
-} from "worker_threads";
+import { parentPort, isMainThread, MessageChannel, receiveMessageOnPort } from "worker_threads";
 
 export class ResourceWorker {
   #worker = null;
-  #workerUrl = null;
+  #createWorker = null;
   #pending = new Map();
 
-  constructor(workerUrl) {
-    this.#workerUrl = workerUrl;
+  constructor(createWorker) {
+    this.#createWorker = createWorker;
   }
 
   #getWorker() {
@@ -20,7 +14,7 @@ export class ResourceWorker {
       return this.#worker;
     }
 
-    this.#worker = new Worker(this.#workerUrl);
+    this.#worker = this.#createWorker();
     this.#worker.unref();
     return this.#worker;
   }

@@ -10,7 +10,9 @@ import {
 
 let WORKER = null;
 function worker() {
-  return (WORKER ??= new ResourceWorker(new URL("../workers/udp-worker.js", import.meta.url)));
+  return (WORKER ??= new ResourceWorker(
+    () => new Worker(new URL("../workers/udp-worker.bundle.js", import.meta.url)),
+  ));
 }
 
 let UDP_CREATE_TOKEN = null;
@@ -514,3 +516,4 @@ export class UdpSocket {
 }
 
 export const udpCreateSocket = {};
+import { Worker } from "node:worker_threads";

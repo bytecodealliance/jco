@@ -14,7 +14,9 @@ import {
 
 let WORKER = null;
 function worker() {
-  return (WORKER ??= new ResourceWorker(new URL("../workers/http-worker.js", import.meta.url)));
+  return (WORKER ??= new ResourceWorker(
+    () => new Worker(new URL("../workers/http-worker.bundle.js", import.meta.url)),
+  ));
 }
 
 /**
@@ -161,3 +163,4 @@ class TrailerFutureReader extends FutureReader {
     super.close();
   }
 }
+import { Worker } from "node:worker_threads";

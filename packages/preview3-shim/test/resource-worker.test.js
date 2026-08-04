@@ -1,7 +1,8 @@
 import { describe, test, expect } from "vitest";
+import { Worker } from "node:worker_threads";
 import { ResourceWorker } from "../dist/nodejs/workers/resource-worker.js";
 
-const _worker = new ResourceWorker(new URL("./nop-worker.js", import.meta.url));
+const _worker = new ResourceWorker(() => new Worker(new URL("./nop-worker.js", import.meta.url)));
 
 describe("ResourceWorker round-trip", () => {
   test("async run nop", async () => {
