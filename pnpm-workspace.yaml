@@ -78,7 +78,7 @@ minimumReleaseAgeExclude:
   - '@rolldown/binding-wasm32-wasi@1.2.0'
   - '@rolldown/binding-win32-arm64-msvc@1.2.0'
   - '@rolldown/binding-win32-x64-msvc@1.2.0'
-  - hono@4.12.27
+  - hono@4.12.27 || 4.12.34
   - rolldown@1.2.0
   - puppeteer-core@25.1.0
   - puppeteer@25.1.0
