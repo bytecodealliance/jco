@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1] - 2026-08-04
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update p2-shim to v0.20.2, p3-shim to 0.2.2 by @vados-cosmonic in #1819
+
 ## [0.6.0] - 2026-08-03
 
 ### 🚀 Features
