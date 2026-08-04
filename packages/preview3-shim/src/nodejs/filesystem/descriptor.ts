@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import nodePath from "node:path";
 import process from "node:process";
+import { Worker } from "node:worker_threads";
 
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader } from "../future.js";
@@ -15,7 +16,7 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 let WORKER = null;
 function worker() {
   return (WORKER ??= new ResourceWorker(
-    new URL("../workers/filesystem-worker.js", import.meta.url),
+    () => new Worker(new URL("../workers/filesystem-worker.bundle.js", import.meta.url)),
   ));
 }
 

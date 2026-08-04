@@ -1,5 +1,6 @@
 import process from "node:process";
 import { Readable } from "node:stream";
+import { Worker } from "node:worker_threads";
 
 import { ResourceWorker } from "./workers/resource-worker.js";
 import { StreamReader, readableByteStreamFromReader } from "./stream.js";
@@ -43,7 +44,9 @@ export const environment = {
 
 let WORKER = null;
 function worker() {
-  return (WORKER ??= new ResourceWorker(new URL("./workers/cli-worker.js", import.meta.url)));
+  return (WORKER ??= new ResourceWorker(
+    () => new Worker(new URL("./workers/cli-worker.bundle.js", import.meta.url)),
+  ));
 }
 
 /**

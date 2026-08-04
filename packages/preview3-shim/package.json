@@ -40,7 +40,7 @@
     }
   },
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "tsc --project tsconfig.build.json && node scripts/build-workers.mjs",
     "build:watch": "tsc --watch",
     "types:check": "tsc --noEmit",
     "fmt": "oxfmt",
@@ -59,6 +59,7 @@
   "devDependencies": {
     "@types/node": "^24.12.4",
     "globals": "^17.6.0",
+    "rolldown": "catalog:",
     "typescript": "catalog:",
     "vite": "^8.0.16",
     "vitest": "catalog:"

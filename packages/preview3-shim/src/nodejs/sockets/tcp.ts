@@ -15,7 +15,9 @@ import {
 let WORKER = null;
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 function worker() {
-  return (WORKER ??= new ResourceWorker(new URL("../workers/tcp-worker.js", import.meta.url)));
+  return (WORKER ??= new ResourceWorker(
+    () => new Worker(new URL("../workers/tcp-worker.bundle.js", import.meta.url)),
+  ));
 }
 
 let TCP_CREATE_TOKEN = null;
@@ -800,3 +802,4 @@ export class TcpSocket {
     );
   }
 }
+import { Worker } from "node:worker_threads";
