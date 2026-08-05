@@ -279,7 +279,7 @@ suite('stream<T> lowers', () => {
             const instance = await getInstance();
             assert.instanceOf(instance['jco:test-components/stream-lower-async'].readStreamValuesString, AsyncFunction);
 
-            const vals = ['hello', 'world', '!', '☃☃'];
+            const vals = ['hello', 'world', '!', 'utf-8 multibyte: ☃☃', 'utf-16 multiunit: 😀😀'];
             const returnedVals = await instance['jco:test-components/stream-lower-async'].readStreamValuesString(
                 createReadableStreamFromValues(vals),
             );

@@ -565,23 +565,13 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[{lower_flat_string_utf16_fn}()] args', {{ ctx }});
                         if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
-                        const s = ctx.vals[0];
-                        const {{ ptr, len, codepoints }} = {utf16_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
+                        const {{ ptr, len }} = {utf16_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
 
                         const view = new DataView(ctx.memory.buffer);
                         view.setUint32(ctx.storagePtr, ptr, true);
-                        view.setUint32(ctx.storagePtr + 4, codepoints, true);
+                        view.setUint32(ctx.storagePtr + 4, len, true);
 
-                        const bytes = new Uint16Array(ctx.memory.buffer, start, codeUnits);
-                        if (ctx.memory.buffer.byteLength < start + bytes.byteLength) {{
-                            throw new Error('memory out of bounds');
-                        }}
-                        if (ctx.storageLen !== undefined && ctx.storageLen !== bytes.byteLength) {{
-                            throw new Error(`storage length [${{ctx.storageLen}}] != [${{bytes.byteLength}}])`);
-                        }}
-                        new Uint16Array(ctx.memory.buffer, ctx.storagePtr).set(bytes);
-
-                        ctx.storagePtr += len;
+                        ctx.storagePtr += 8;
                     }}
                 "));
             }
