@@ -411,6 +411,43 @@ suite('stream<T> lowers', () => {
             assert.deepEqual(returnedVals, vals);
         });
 
+        // Regression test for multi-byte flags lowering endianness: flags with
+        // more than 8 members are stored as u16/u32 and must be written
+        // little-endian to match the lift
+        test.concurrent('flags (more than 8 members)', async () => {
+            const instance = await getInstance();
+            assert.instanceOf(
+                instance['jco:test-components/stream-lower-async'].readStreamValuesWideFlags,
+                AsyncFunction,
+            );
+
+            const allUnset = {
+                f00: false,
+                f01: false,
+                f02: false,
+                f03: false,
+                f04: false,
+                f05: false,
+                f06: false,
+                f07: false,
+                f08: false,
+                f09: false,
+                f10: false,
+                f11: false,
+            };
+            const vals = [
+                // bits within both bytes: byte-swapped stores flip f00<->f08, f09<->f01
+                { ...allUnset, f00: true, f09: true },
+                { ...allUnset, f08: true },
+                { ...allUnset, f01: true },
+                { ...allUnset, f11: true },
+            ];
+            const returnedVals = await instance['jco:test-components/stream-lower-async'].readStreamValuesWideFlags(
+                createReadableStreamFromValues(vals),
+            );
+            assert.deepEqual(returnedVals, vals);
+        });
+
         test.concurrent('enum', async () => {
             const instance = await getInstance();
             assert.instanceOf(instance['jco:test-components/stream-lower-async'].readStreamValuesEnum, AsyncFunction);

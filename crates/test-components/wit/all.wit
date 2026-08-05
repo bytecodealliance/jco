@@ -125,6 +125,12 @@ interface example-types {
         second,
         third,
     }
+
+    /// Flags with more than 8 members to use a wider repr (u16)
+    flags wide-flags {
+        f00, f01, f02, f03, f04, f05, f06, f07,
+        f08, f09, f10, f11,
+    }
 }
 
 interface get-stream-async {
@@ -455,6 +461,7 @@ interface stream-lower-async {
         example-enum,
         example-record,
         example-flags,
+        wide-flags,
         layout-variant,
         variant-string-record,
         padded-record,
@@ -493,6 +500,7 @@ interface stream-lower-async {
     read-stream-values-tight-tuple: async func(s: stream<tuple<u8, u8, u32>>) -> list<tuple<u8, u8, u32>>;
 
     read-stream-values-flags: async func(s: stream<example-flags>) -> list<example-flags>;
+    read-stream-values-wide-flags: async func(s: stream<wide-flags>) -> list<wide-flags>;
 
     read-stream-values-enum: async func(s: stream<example-enum>) -> list<example-enum>;
 
