@@ -2208,7 +2208,7 @@ impl AsyncTaskIntrinsic {
                         // TODO(breaking): remove checking for manual async specification here, once we can go p3-only
                         //
                         if (!isManualAsync && !isAsync && funcTypeIsAsync) {{
-                            const {{ promise, resolve }} = new Promise();
+                            const {{ promise, resolve }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
                                 if (!subtask.isResolvedState()) {{
                                     await task.suspendUntil({{ readyFn: () => task.isResolvedState() }});
@@ -2471,7 +2471,7 @@ impl AsyncTaskIntrinsic {
                         // TODO(breaking): remove checking for manual async specification here, once we can go p3-only
                         //
                         if (!isManualAsync && !isAsync && funcTypeIsAsync) {{
-                            const {{ promise, resolve }} = new Promise();
+                            const {{ promise, resolve }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
                                 if (!subtask.isResolvedState()) {{
                                     await task.suspendUntil({{ readyFn: () => task.isResolvedState() }});
