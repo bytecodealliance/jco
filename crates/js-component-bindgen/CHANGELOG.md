@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.2] - 2026-08-05
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ flags lowered little-endianly by @lann in #1834
+
+
+
+
 ## [2.2.1] - 2026-08-04
 
 ### 🐛 Bug Fixes
