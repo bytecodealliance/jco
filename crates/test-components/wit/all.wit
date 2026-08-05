@@ -827,3 +827,27 @@ world inter-task-wakeup {
   export start-pump: async func();
   export await-wake: async func() -> u32;
 }
+
+// Guest->guest async calls whose flat param count exceeds
+// MAX_FLAT_ASYNC_PARAMS (4), forcing the caller side to spill params to
+// memory while the callee still receives them flat (see lann/jco#14)
+interface spillover-g2g-api {
+  add5: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
+  concat3: async func(a: string, b: string, c: u8) -> string;
+  // Parks (awaits a host import) before returning, so the callee task
+  // needs more than one slice and its result is delivered through the
+  // driver loop rather than the initial synchronous slice
+  add5-parked: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
+}
+
+world async-g2g-spillover-callee {
+  import pause: async func();
+  export spillover-g2g-api;
+}
+
+world async-g2g-spillover-caller {
+  import spillover-g2g-api;
+  export run-add5: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
+  export run-concat3: async func(a: string, b: string, c: u8) -> string;
+  export run-add5-parked: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
+}
