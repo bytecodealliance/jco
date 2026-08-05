@@ -596,12 +596,11 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[{lower_flat_string_utf8_fn}()] args', ctx);
                         if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
-                        const s = ctx.vals[0];
-                        const {{ ptr, codepoints }} = {utf8_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
+                        const {{ ptr, len }} = {utf8_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
 
                         const view = new DataView(ctx.memory.buffer);
                         view.setUint32(ctx.storagePtr, ptr, true);
-                        view.setUint32(ctx.storagePtr + 4, codepoints, true);
+                        view.setUint32(ctx.storagePtr + 4, len, true);
 
                         ctx.storagePtr += 8;
                     }}
