@@ -2462,12 +2462,12 @@ impl<'a> Instantiator<'a, '_> {
                               function trampoline{i} (from_ptr, len, to_ptr) {{
                                   const decoder = new TextDecoder();
                                   const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
-                                  const strlen = content.length
-                                  const view = new Uint16Array(memory{to}.buffer, to_ptr, strlen * 2)
-                                  for (var i = 0; i < strlen; i++) {{
+                                  const codeUnits = content.length;
+                                  const view = new Uint16Array(memory{to}.buffer, to_ptr, codeUnits);
+                                  for (var i = 0; i < codeUnits; i++) {{
                                       view[i] = content.charCodeAt(i);
                                   }}
-                                  return strlen;
+                                  return codeUnits;
                               }}
                             "#,
                         );
