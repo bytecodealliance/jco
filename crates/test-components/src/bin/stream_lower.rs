@@ -14,7 +14,7 @@ use bindings::jco::test_components::resources;
 
 use bindings::exports::jco::test_components::stream_lower_async::{
     ExampleEnum, ExampleFlags, ExampleRecord, ExampleVariant, LayoutVariant, PaddedRecord,
-    VariantStringRecord,
+    VariantStringRecord, WideFlags,
 };
 
 struct Component;
@@ -127,6 +127,10 @@ impl stream_lower_async::Guest for Component {
     }
 
     async fn read_stream_values_flags(rx: StreamReader<ExampleFlags>) -> Vec<ExampleFlags> {
+        read_async_values(rx).await
+    }
+
+    async fn read_stream_values_wide_flags(rx: StreamReader<WideFlags>) -> Vec<WideFlags> {
         read_async_values(rx).await
     }
 

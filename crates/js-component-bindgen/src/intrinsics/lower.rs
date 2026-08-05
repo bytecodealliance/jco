@@ -926,9 +926,9 @@ impl LowerIntrinsic {
                             if (intSizeBytes === 1) {{
                                 dv.setUint8(ctx.storagePtr, flagValue);
                             }} else if (intSizeBytes === 2) {{
-                                dv.setUint16(ctx.storagePtr, flagValue);
+                                dv.setUint16(ctx.storagePtr, flagValue, true);
                             }} else if (intSizeBytes === 4) {{
-                                dv.setUint32(ctx.storagePtr, flagValue);
+                                dv.setUint32(ctx.storagePtr, flagValue, true);
                             }} else {{
                                 throw new Error(`unrecognized flag size [${{intSizeBytes}} bytes]`);
                             }}
