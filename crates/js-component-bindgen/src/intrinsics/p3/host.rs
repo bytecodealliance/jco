@@ -574,8 +574,6 @@ impl HostIntrinsic {
                                     fnName,
                                     isAsync: true,
                                     callbackResult,
-                                    resolve,
-                                    reject
                                 }});
                             }} catch (err) {{
                                 {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
