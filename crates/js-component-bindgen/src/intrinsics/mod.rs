@@ -159,6 +159,10 @@ pub enum Intrinsic {
 
     /// Clear the global task meta
     ClearGlobalCurrentTaskMetaFn,
+
+    /// Wrap the JS payload of a `WebAssembly.Suspending` import so the
+    /// importing component's current-task register survives suspension
+    SuspendingImportWrapperFn,
 }
 
 impl Intrinsic {
@@ -1065,6 +1069,33 @@ impl Intrinsic {
                 ));
             }
 
+            // Under JSPI a wasm stack suspends inside a task's callback
+            // slice; other tasks then set the per-component current-task
+            // register. Restoring the captured entry when the awaited
+            // import settles is the last JS to run before the suspended
+            // stack resumes, so the resumed continuation's context.get /
+            // context.set (and task-exit bookkeeping) address the task
+            // that is actually executing.
+            Self::SuspendingImportWrapperFn => {
+                let suspending_import_wrapper_fn = Self::SuspendingImportWrapperFn.name();
+                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+
+                output.push_str(&format!(
+                    r#"
+                      function {suspending_import_wrapper_fn}(componentIdx, fn) {{
+                          return async function (...args) {{
+                              const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
+                              try {{
+                                  return await fn.apply(null, args);
+                              }} finally {{
+                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                              }}
+                          }};
+                      }}
+                    "#,
+                ));
+            }
+
             // TODO(feat): customizable stream classes
             Intrinsic::PlatformReadableStreamClass => {
                 let name = self.name();
@@ -1124,7 +1155,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 43] = [
+const EARLY_INTRINSICS: [Intrinsic; 44] = [
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
     Intrinsic::SymbolAsyncIterator,
@@ -1138,6 +1169,7 @@ const EARLY_INTRINSICS: [Intrinsic; 43] = [
     Intrinsic::WithGlobalCurrentTaskMetaFn,
     Intrinsic::WithGlobalCurrentTaskMetaFnAsync,
     Intrinsic::ClearGlobalCurrentTaskMetaFn,
+    Intrinsic::SuspendingImportWrapperFn,
     Intrinsic::LookupMemoriesForComponent,
     Intrinsic::RegisterGlobalMemoryForComponent,
     Intrinsic::RepTableClass,
@@ -1829,6 +1861,7 @@ impl Intrinsic {
             Self::WithGlobalCurrentTaskMetaFn => "_withGlobalCurrentTaskMeta",
             Self::WithGlobalCurrentTaskMetaFnAsync => "_withGlobalCurrentTaskMetaAsync",
             Self::ClearGlobalCurrentTaskMetaFn => "_clearCurrentTask",
+            Self::SuspendingImportWrapperFn => "_suspendingImport",
 
             // Iteratively saved metadata
             Intrinsic::GlobalComponentMemoryMap => "GLOBAL_COMPONENT_MEMORY_MAP",
