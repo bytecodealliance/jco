@@ -18,6 +18,7 @@ impl Guest for Component {
     // NOTE: this export is *sync-lifted*: when composed with a caller, the
     // returned stream end crosses the component boundary on the return path
     // of the fused call, *after* this component's task has been torn down
+    // (see lann/jco#35).
     fn make_stream(seed: u8) -> StreamReader<u8> {
         let (mut tx, rx) = wit_stream::new();
         start_task(async move {

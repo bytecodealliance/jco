@@ -15,6 +15,7 @@ impl Guest for Component {
     async fn run_stream_transfer(seed: u8) -> u32 {
         // Sync-lowered call to the composed callee; the returned stream end
         // is transferred into this component on the fused return path
+        // (see lann/jco#35).
         let mut rx = stream_transfer_source::make_stream(seed);
 
         // NOTE: read exactly the three values the callee writes, rather than
