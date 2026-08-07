@@ -70,4 +70,22 @@ suite('guest->guest stream transfer', () => {
         // callee writes [seed, seed+1, seed+2] then closes; caller sums them
         assert.strictEqual(await instance[EXPORT_NAME].runStreamTransferAll(7), 7 + 8 + 9);
     });
+
+    // When round-tripped read ends go back to the callee in argument
+    // position, completing the stream needs *two* live tasks on the
+    // callee instance — make-stream-async (alive until its spawned
+    // writer finishes) and sum-stream (whose read is the only thing
+    // that can finish that writer).
+    //
+    // Previously when one task was created per instance, the second
+    // task (sum-stream) would enter but could not be driven.
+    //
+    // To fix this we added concurrent task lifetimes that coordinate reads
+    // with pending writes so the stream can close.
+    // See: wasmtime 47's `--invoke run-stream-transfer-roundtrip(7)`
+    test('async call: round-tripped stream read to close across a composition', async () => {
+        assert.instanceOf(instance[EXPORT_NAME].runStreamTransferRoundtrip, AsyncFunction);
+        // callee writes [seed, seed+1, seed+2] then closes; callee sums them
+        assert.strictEqual(await instance[EXPORT_NAME].runStreamTransferRoundtrip(7), 7 + 8 + 9);
+    });
 });
