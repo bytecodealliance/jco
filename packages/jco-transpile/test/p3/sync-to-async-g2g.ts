@@ -9,7 +9,7 @@ import { composeCallerCallee, setupAsyncTest } from '../helpers.js';
 const EXPORT_NAME = 'jco:test-components/sync-lower-runner';
 
 suite('guest->guest sync-lowered call to async-lifted callee', () => {
-    // Regression test for the fused [sync-start] path (lann/jco#45): a
+    // Regression test for the fused [sync-start] path: a
     // sync-lowered import of an async-lifted export goes through
     // PrepareCall + SyncStartCall, and the SyncStartCall intrinsic must
     // block the caller (JSPI) until the callee resolves via task.return,

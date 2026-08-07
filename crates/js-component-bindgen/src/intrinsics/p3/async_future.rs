@@ -1009,6 +1009,7 @@ impl AsyncFutureIntrinsic {
 
                         getElemMeta() {{ return {{...this.#elemMeta}}; }}
                         futureTableIdx() {{ return this.#futureTableIdx; }}
+                        setFutureTableIdx(idx) {{ this.#futureTableIdx = idx; }}
 
                         globalFutureMapRep() {{ return this.#globalFutureMapRep; }}
                         setGlobalFutureMapRep(rep) {{ this.#globalFutureMapRep = rep; }}
@@ -1415,14 +1416,61 @@ impl AsyncFutureIntrinsic {
             Self::FutureTransfer => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_transfer_fn = self.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let global_future_table_map = Self::GlobalFutureTableMap.name();
+
                 output.push_str(&format!(
                     r#"
-                      function {future_transfer_fn}(ctx) {{
-                        const params = [...arguments];
+                    function {future_transfer_fn}(
+                        srcFutureWaitableIdx,
+                        srcTableIdx,
+                        destTableIdx,
+                    ) {{
                         {debug_log_fn}('[{future_transfer_fn}()] args', {{
-                            ctx,
-                            params,
+                            srcFutureWaitableIdx,
+                            srcTableIdx,
+                            destTableIdx,
                         }});
+
+                        const futureMeta = {global_future_table_map}[srcTableIdx];
+                        if (!futureMeta) {{ throw new Error('missing future meta during transfer'); }}
+                        const componentIdx = futureMeta.componentIdx;
+
+                        // NOTE: no current-task lookup here: per the Canonical ABI the
+                        // transfer is a pure table operation between the source and
+                        // destination components' waitable tables, and the
+                        // return-position transfer of a fused *sync* call runs after
+                        // the callee task's teardown (same as stream.transfer).
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
+
+                        const futureEnd = cstate.removeFutureEndFromTable({{ tableIdx: srcTableIdx, futureWaitableIdx: srcFutureWaitableIdx }});
+                        if (!futureEnd.isReadable()) {{
+                            throw new Error("writable future ends cannot be moved");
+                        }}
+                        if (futureEnd.isDoneState()) {{
+                            throw new Error('future read ends cannot be moved once the value has been delivered');
+                        }}
+
+                        const {{ handle, waitableIdx }} = cstate.addFutureEndToTable({{ tableIdx: destTableIdx, futureEnd }});
+                        futureEnd.setTarget(`future read end (waitable [${{waitableIdx}}])`);
+
+                        {debug_log_fn}('[{future_transfer_fn}()] successfully transferred', {{
+                            dest: {{
+                                futureEndHandle: handle,
+                                futureEndWaitableIdx: waitableIdx,
+                                tableIdx: destTableIdx,
+                            }},
+                            src: {{
+                                futureEndWaitableIdx: srcFutureWaitableIdx,
+                                tableIdx: srcTableIdx,
+                            }},
+                            componentIdx,
+                        }});
+
+                        return waitableIdx;
                     }}
                     "#
                 ));

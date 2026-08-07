@@ -13,7 +13,7 @@ struct Component;
 impl Guest for Component {
     // WIT-async export: async-lifted with the callback protocol. A composed
     // caller that *sync-lowers* this import reaches it through the fused
-    // [sync-start] path (see lann/jco#45).
+    // [sync-start] pathk.
     async fn compute(x: u32) -> u32 {
         x + 3
     }

@@ -877,9 +877,37 @@ impl ComponentIntrinsic {
                             return futureEnd;
                         }}
 
+                        addFutureEndToTable(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#addFutureEndToTable()] args', args);
+                            const {{ tableIdx, futureEnd }} = args;
+                            if (typeof futureEnd === 'number') {{ throw new Error("INSERTING BAD FUTUREEND"); }}
+
+                            let {{ table, componentIdx }} = {global_future_table_map}[tableIdx];
+                            if (componentIdx === undefined || !table) {{
+                                throw new Error(`invalid global future table state for table [${{tableIdx}}]`);
+                            }}
+
+                            const handle = table.insert(futureEnd);
+                            futureEnd.setHandle(handle);
+                            futureEnd.setFutureTableIdx(tableIdx);
+
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            const waitableIdx = cstate.handles.insert(futureEnd);
+                            futureEnd.setWaitableIdx(waitableIdx);
+
+                            {debug_log_fn}('[{component_async_state_class}#addFutureEndToTable()] added future end', {{
+                                tableIdx,
+                                table,
+                                handle,
+                                futureEnd,
+                                destComponentIdx: componentIdx,
+                            }});
+
+                            return {{ handle, waitableIdx }};
+                        }}
+
                         removeFutureEndFromTable(args) {{
                             {debug_log_fn}('[{component_async_state_class}#removeFutureEndFromTable()] args', args);
-
                             const {{ tableIdx, futureWaitableIdx }} = args;
                             if (tableIdx === undefined) {{ throw new Error("missing table idx while removing future end"); }}
                             if (futureWaitableIdx === undefined) {{
