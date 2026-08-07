@@ -808,6 +808,26 @@ interface future-transfer-source {
   make-future: func(value: u32) -> future<u32>;
 }
 
+interface sync-lower-compute {
+  compute: async func(x: u32) -> u32;
+  // results wider than one flat value: the sync lowering spills them
+  // through a trailing return pointer
+  compute-list: async func(x: u32) -> list<u32>;
+}
+
+interface sync-lower-runner {
+  run-compute: async func(x: u32) -> u32;
+}
+
+world sync-to-async-callee {
+  export sync-lower-compute;
+}
+
+world sync-to-async-caller {
+  import sync-lower-compute;
+  export sync-lower-runner;
+}
+
 interface future-transfer-runner {
   run-future-transfer: async func(value: u32) -> u32;
 }
