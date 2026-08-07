@@ -923,3 +923,28 @@ world stream-transfer-g2g-caller {
   import stream-transfer-source;
   export stream-transfer-runner;
 }
+
+interface stream-echo-source {
+  // echoes each input value +1 into the returned stream, closing it when
+  // the input closes
+  make-echo: async func(input: stream<u8>) -> stream<u8>;
+  // produces [seed, seed+1, seed+2] then closes
+  make-source: async func(seed: u8) -> stream<u8>;
+}
+
+interface stream-echo-runner {
+  run-stream-echo: async func(seed: u8) -> u32;
+  // wires make-source's output back into make-echo: the source stream's
+  // read end is transferred out of the callee (return position) and back
+  // in (argument position), leaving both ends inside the callee
+  run-stream-relay: async func(seed: u8) -> u32;
+}
+
+world stream-echo-g2g-callee {
+  export stream-echo-source;
+}
+
+world stream-echo-g2g-caller {
+  import stream-echo-source;
+  export stream-echo-runner;
+}
