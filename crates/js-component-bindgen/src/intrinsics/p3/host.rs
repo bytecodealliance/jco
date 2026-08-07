@@ -171,6 +171,14 @@ impl HostIntrinsic {
                             // prepare async with result (u32::MAX - 1)
                             isAsync = true;
                             hasResultPointer = true;
+                        }} else if (resultCountOrAsync > 1) {{
+                            // Sync lowering whose flattened results exceed
+                            // MAX_FLAT_RESULTS (1): the results are spilled via a
+                            // return pointer, passed as the caller's trailing core
+                            // argument (the fused [return-call] helper writes
+                            // through it). An unflattenable result count arrives
+                            // as the i32::MAX sentinel and takes this path too.
+                            hasResultPointer = true;
                         }}
 
                         const currentCallerTaskMeta = {current_task_get_fn}(callerComponentIdx);
