@@ -800,3 +800,20 @@ interface async-export-future-result-api {
 world async-export-future-result {
   export async-export-future-result-api;
 }
+
+interface future-transfer-source {
+  make-future: func(value: u32) -> future<u32>;
+}
+
+interface future-transfer-runner {
+  run-future-transfer: async func(value: u32) -> u32;
+}
+
+world future-transfer-g2g-callee {
+  export future-transfer-source;
+}
+
+world future-transfer-g2g-caller {
+  import future-transfer-source;
+  export future-transfer-runner;
+}

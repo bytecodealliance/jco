@@ -1265,6 +1265,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::FutureDropWritable { .. }
                 | Trampoline::FutureNew { .. }
                 | Trampoline::FutureRead { .. }
+                | Trampoline::FutureTransfer
                 | Trampoline::FutureWrite { .. }
                 | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
