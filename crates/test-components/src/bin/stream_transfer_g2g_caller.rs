@@ -18,18 +18,25 @@ impl Guest for Component {
         // (see lann/jco#35).
         let mut rx = stream_transfer_source::make_stream(seed);
 
-        // NOTE: read exactly the three values the callee writes, rather than
-        // collecting to stream close: the callee's detached writer task is
-        // never driven again after its sync-lifted export returns, so the
-        // writable end is never dropped and waiting for stream close would
-        // park forever (a separate defect from the return-position transfer
-        // exercised here).
+        // Read exactly the three values the callee writes without waiting
+        // for stream close (a bounded read that stays deterministic even if
+        // the callee's writer never runs again).
         let mut sum = 0u32;
         for _ in 0..3 {
             let v = rx.next().await.expect("stream should yield a value");
             sum += u32::from(v);
         }
         sum
+    }
+
+    async fn run_stream_transfer_all(seed: u8) -> u32 {
+        // Async-lowered call to the async-lifted callee export: the callee
+        // task stays alive until its spawned writer completes, so the
+        // transferred stream reaches close and collect() terminates
+        // (see lann/jco#39).
+        let rx = stream_transfer_source::make_stream_async(seed).await;
+        let vals: Vec<u8> = rx.collect().await;
+        vals.into_iter().map(u32::from).sum()
     }
 }
 

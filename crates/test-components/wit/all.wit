@@ -903,10 +903,16 @@ world resource-reexport-caller {
 
 interface stream-transfer-source {
   make-stream: func(seed: u8) -> stream<u8>;
+  // async-lifted variant: the exporting task stays alive (callback protocol)
+  // until its spawned writer completes, so the stream reaches close
+  make-stream-async: async func(seed: u8) -> stream<u8>;
 }
 
 interface stream-transfer-runner {
   run-stream-transfer: async func(seed: u8) -> u32;
+  // reads the composed stream to close (callee task must outlive its
+  // return to drive the spawned writer -- async-lifted callee export)
+  run-stream-transfer-all: async func(seed: u8) -> u32;
 }
 
 world stream-transfer-g2g-callee {
