@@ -900,3 +900,20 @@ world resource-reexport-caller {
   export reexport-runner;
   export reexport-handoff;
 }
+
+interface stream-transfer-source {
+  make-stream: func(seed: u8) -> stream<u8>;
+}
+
+interface stream-transfer-runner {
+  run-stream-transfer: async func(seed: u8) -> u32;
+}
+
+world stream-transfer-g2g-callee {
+  export stream-transfer-source;
+}
+
+world stream-transfer-g2g-caller {
+  import stream-transfer-source;
+  export stream-transfer-runner;
+}
