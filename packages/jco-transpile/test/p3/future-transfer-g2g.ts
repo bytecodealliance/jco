@@ -18,13 +18,13 @@ suite('guest->guest future transfer', () => {
     // setupAsyncTest) throws:
     //   ReferenceError: Cannot access 'trampolineN' before initialization
     //
-    // NOTE: this test only asserts successful instantiation and export
-    // shape. Actually *calling* runFutureTransfer does not work yet: the
-    // futureTransfer intrinsic is currently a stub that returns undefined
-    // (the receiving component then traps on future rep [0]). Once future
-    // transfer is implemented, this test should be extended to assert
-    // `await instance[EXPORT_NAME].runFutureTransfer(41) === 42`.
-    test('composed component with cross-component future instantiates', async () => {
+    // The value assertion covers the futureTransfer intrinsic itself
+    // (formerly an unimplemented stub that handed the receiving component
+    // future rep [0]): the callee's sync-lifted
+    // `make-future` returns a future written by a spawned task, the read
+    // end is transferred to the caller on the fused return path, and the
+    // caller awaits the value (seed + 1).
+    test('composed component with cross-component future round trip', async () => {
         const componentPath = await composeCallerCallee({
             callerPath: join(LOCAL_TEST_COMPONENTS_DIR, 'future-transfer-g2g-caller.wasm'),
             calleePath: join(LOCAL_TEST_COMPONENTS_DIR, 'future-transfer-g2g-callee.wasm'),
@@ -46,6 +46,7 @@ suite('guest->guest future transfer', () => {
         });
         try {
             assert.instanceOf(instance[EXPORT_NAME].runFutureTransfer, AsyncFunction);
+            assert.strictEqual(await instance[EXPORT_NAME].runFutureTransfer(41), 42);
         } finally {
             await cleanup();
         }
