@@ -824,7 +824,7 @@ world future-transfer-g2g-caller {
 // wit-bindgen inter-task-wakeup (guest-internal unit stream): one export
 // spawns a detached pump task that parks on a host import; a second export
 // parks on a purely Rust-originating waker that the pump fires when the
-// import resolves (see lann/jco#13, lann/jco#11)
+// import resolves
 world inter-task-wakeup {
   import wakeup-tick: async func() -> u32;
   export start-pump: async func();
@@ -833,7 +833,7 @@ world inter-task-wakeup {
 
 // Guest->guest async calls whose flat param count exceeds
 // MAX_FLAT_ASYNC_PARAMS (4), forcing the caller side to spill params to
-// memory while the callee still receives them flat (see lann/jco#14)
+// memory while the callee still receives them flat
 interface spillover-g2g-api {
   add5: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
   concat3: async func(a: string, b: string, c: u8) -> string;
@@ -866,10 +866,6 @@ interface reexport-runner {
   run-reexport: async func() -> result<u32, string>;
 }
 
-// Naming the fused component's resource type in an exported interface is
-// the lann/jco#51 trigger: the composition's taskReturn lift metadata for
-// make-widget then references the resource class generated for this
-// export, above its declaration.
 interface reexport-handoff {
   use reexport-source.{widget};
   poke-widget: async func(w: widget) -> u32;

@@ -1,4 +1,4 @@
-//! Caller for the composed resource-reexport regression (lann/jco#51):
+//! Caller for the composed resource-reexport regression:
 //! calls the callee's async widget constructor across the fused boundary
 //! and re-exports the callee's resource type in its own exported
 //! interface (`reexport-handoff`) — the combination that makes the

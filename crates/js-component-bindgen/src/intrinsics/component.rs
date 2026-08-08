@@ -145,7 +145,8 @@ impl ComponentIntrinsic {
                         #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = {promise_with_resolvers_fn}();
-                        #locked = false;
+                        #lockHolderTaskID = null;
+                        #lockWaiters = [];
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
@@ -298,25 +299,92 @@ impl ComponentIntrinsic {
                             }}
                         }}
 
-                        isExclusivelyLocked() {{ return this.#locked === true; }}
-                        setLocked(locked) {{
-                            this.#locked = locked;
-                        }}
+                        // The per-slice mutual-exclusion lock for guest execution in this
+                        // component instance. Guest slices (callback invocations and
+                        // sync-lifted bodies) must be atomic per component even across the
+                        // JSPI suspensions jco introduces for host imports: wit-bindgen's
+                        // executors publish per-task state in single linear-memory cells
+                        // (the wasip3-task pointer, context-local storage discipline) that
+                        // an interleaved slice of the same component corrupts
+                        //
+                        // The lock is *owned*: acquisition records the holder task and
+                        // release is a no-op for anyone else, so a task exiting can no
+                        // longer drop a hold it does not own (blind acquire/release-any
+                        // was the previous discipline). Contended acquisition queues
+                        // FIFO; release hands the lock to the next waiter directly.
+                        isExclusivelyLocked() {{ return this.#lockHolderTaskID !== null; }}
+                        exclusivelyLockedBy(taskID) {{ return this.#lockHolderTaskID === taskID; }}
 
-                        exclusiveLock() {{
+                        exclusiveLock(taskID) {{
                             {debug_log_fn}('[{component_async_state_class}#exclusiveLock()]', {{
-                                locked: this.#locked,
+                                holder: this.#lockHolderTaskID,
+                                requester: taskID,
                                 componentIdx: this.#componentIdx,
                             }});
-                            this.setLocked(true);
+                            if (taskID === undefined || taskID === null) {{
+                                throw new Error('exclusive lock requires the acquiring task id');
+                            }}
+                            if (this.#lockHolderTaskID !== null) {{
+                                throw new Error(`component [${{this.#componentIdx}}] exclusive lock held by task [${{this.#lockHolderTaskID}}], requested by [${{taskID}}]`);
+                            }}
+                            this.#lockHolderTaskID = taskID;
                         }}
 
-                        exclusiveRelease() {{
+                        // Awaitable acquisition: takes the lock immediately when free,
+                        // otherwise queues FIFO behind the current holder and earlier
+                        // waiters. The resolved promise implies ownership.
+                        async acquireExclusiveLock(taskID) {{
+                            if (taskID === undefined || taskID === null) {{
+                                throw new Error('exclusive lock requires the acquiring task id');
+                            }}
+                            if (this.#lockHolderTaskID === null) {{
+                                this.#lockHolderTaskID = taskID;
+                                {debug_log_fn}('[{component_async_state_class}#acquireExclusiveLock()] acquired', {{
+                                    holder: taskID,
+                                    componentIdx: this.#componentIdx,
+                                }});
+                                return;
+                            }}
+                            if (this.#lockHolderTaskID === taskID) {{
+                                throw new Error(`task [${{taskID}}] already holds the lock for component [${{this.#componentIdx}}]`);
+                            }}
+                            {debug_log_fn}('[{component_async_state_class}#acquireExclusiveLock()] waiting', {{
+                                holder: this.#lockHolderTaskID,
+                                requester: taskID,
+                                componentIdx: this.#componentIdx,
+                                queued: this.#lockWaiters.length,
+                            }});
+                            await new Promise((resolve) => {{
+                                this.#lockWaiters.push({{ taskID, resolve }});
+                            }});
+                        }}
+
+                        exclusiveRelease(taskID) {{
                             {debug_log_fn}('[{component_async_state_class}#exclusiveRelease()] args', {{
-                                locked: this.#locked,
+                                holder: this.#lockHolderTaskID,
+                                releaser: taskID,
                                 componentIdx: this.#componentIdx,
                             }});
-                            this.setLocked(false);
+                            if (this.#lockHolderTaskID !== taskID) {{
+                                // Ownerless releases were the historical behavior; a foreign
+                                // release now leaves the hold intact
+                                {debug_log_fn}('[{component_async_state_class}#exclusiveRelease()] ignoring foreign release', {{
+                                    holder: this.#lockHolderTaskID,
+                                    releaser: taskID,
+                                    componentIdx: this.#componentIdx,
+                                }});
+                                return false;
+                            }}
+
+                            const next = this.#lockWaiters.shift();
+                            if (next) {{
+                                // Direct FIFO handoff: the waiter owns the lock as of now;
+                                // its continuation runs as a microtask.
+                                this.#lockHolderTaskID = next.taskID;
+                                next.resolve();
+                            }} else {{
+                                this.#lockHolderTaskID = null;
+                            }}
 
                             this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
                             for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {{
@@ -328,6 +396,7 @@ impl ComponentIntrinsic {
                                     throw err;
                                 }}
                             }}
+                            return true;
                         }}
 
                         onNextExclusiveRelease(fn) {{

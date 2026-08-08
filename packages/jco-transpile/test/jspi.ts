@@ -146,9 +146,9 @@ suite('Host Import Async (JSPI)', () => {
         } catch {}
     });
 
-    // Regression test for https://github.com/lann/jco/issues/5 -- async imports whose
-    // promise settles without ever yielding to the macrotask queue must still resume
-    // the suspended guest, on every call (not just the first).
+    // Ensure async imports whose promises settle without ever yielding to 
+    // the macrotask queue must still resume the suspended guest,
+    // on every call (not just the first).
     test.concurrent('Transpile async, import settles without macrotask yield, repeated calls (NodeJS, JSPI)', async () => {
         if (typeof WebAssembly?.Suspending !== 'function') {
             return;

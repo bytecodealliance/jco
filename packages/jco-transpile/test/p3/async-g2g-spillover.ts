@@ -7,14 +7,16 @@ import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 // Regression tests for guest->guest async calls through a composition whose
-// flat param count exceeds MAX_FLAT_ASYNC_PARAMS (4): the caller's async
-// lower spills its arguments to memory (passing a single pointer), while
-// the async-lifted callee still receives up to MAX_FLAT_PARAMS (16) flat
-// params. The fused [async-start] adapter converts between the two;
+// flat param count exceeds different thresholds:
+//
+// MAX_FLAT_ASYNC_PARAMS (4): the caller's async
+// lower spills its arguments to memory (passing a single pointer).
+// The async-lifted callee still receives up to MAX_FLAT_PARAMS (16) flat
+// params.
+//
+// The fused [async-start] adapter converts between the two;
 // _asyncStartCall previously asserted the two counts were equal and threw
 // 'unexpected callee param count [1], expected [5]'.
-//
-// See lann/jco#14
 suite('guest->guest async calls with spilled params', () => {
     test('5 x u32 params through a composition', async () => {
         const componentPath = await composeCallerCallee({
