@@ -1246,13 +1246,18 @@ impl LiftIntrinsic {
                 let lift_flat_own_fn = self.name();
                 let lift_flat_u32_fn = Self::LiftFlatU32.name();
 
+                // NOTE: meta carries the resource class behind a thunk
+                // (`classNameFn`), never as a direct reference: lift metadata
+                // is evaluated eagerly at module top level (e.g. inside
+                // taskReturn trampoline binds), which may run before the
+                // resource class declaration and TDZ-throw (lann/jco#51).
                 output.push_str(&format!(
                     r#"
                     function {lift_flat_own_fn}(meta) {{
-                        const {{ className, createResourceFn, componentIdx }} = meta;
+                        const {{ classNameFn, createResourceFn, componentIdx }} = meta;
 
                         return function {lift_flat_own_fn}Inner(ctx) {{
-                            {debug_log_fn}('[{lift_flat_own_fn}()] args', {{ ctx, className }});
+                            {debug_log_fn}('[{lift_flat_own_fn}()] args', {{ ctx, className: classNameFn() }});
 
                             if (ctx.componentIdx !== componentIdx) {{
                                 throw new Error('invalid component for resource lift');
