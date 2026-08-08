@@ -24,7 +24,6 @@ function withTimeout(promise, ms, label) {
 // import across an export-call boundary, with a subsequent export call on
 // the same instance.
 //
-// See lann/jco#13 and lann/jco#11
 suite('guest inter-task wakeup', () => {
     test('detached pump task wakes a parked Rust waker across CM tasks', async () => {
         let resolveTick;

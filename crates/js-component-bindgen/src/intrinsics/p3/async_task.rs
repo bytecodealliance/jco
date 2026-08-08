@@ -737,6 +737,7 @@ impl AsyncTaskIntrinsic {
                             getCalleeParamsFn,
                             resultPtr,
                             errHandling,
+                            callingWasmExport,
                         }});
 
                         const newTaskID = newTask.id();
@@ -876,6 +877,8 @@ impl AsyncTaskIntrinsic {
                         #state;
                         #isAsync;
                         #isManualAsync;
+                        #callingWasmExport = true;
+                        #lockFreeEntry = false;
                         #preserveFutureResult;
                         #entryFnName = null;
 
@@ -936,6 +939,11 @@ impl AsyncTaskIntrinsic {
                            this.#isManualAsync = opts?.isManualAsync ?? false;
                            this.#preserveFutureResult = opts?.preserveFutureResult ?? false;
                            this.#entryFnName = opts.entryFnName;
+                           // Tasks that execute guest slices (export calls, fused
+                           // callees) default to true; import-handler tasks pass false
+                           // explicitly (they run host code nested inside the caller's
+                           // already-locked slice).
+                           this.#callingWasmExport = opts?.callingWasmExport !== false;
 
                            const {{
                                promise: completionPromise,
@@ -1092,12 +1100,21 @@ impl AsyncTaskIntrinsic {
                         enterSync() {{
                             if (this.needsExclusiveLock()) {{
                                 const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                                // TODO(???): it is *very possible* for a the line below to fail if
-                                // an async function is already running (and holding the exclusive lock)
-                                //
-                                // It's not really possible to fix this unless we turn every sync export into
-                                // an async export that will use the regular async enabled `enter()`.
-                                cstate.exclusiveLock();
+                                if (!cstate.isExclusivelyLocked()) {{
+                                    cstate.exclusiveLock(this.#id);
+                                }} else {{
+                                    // A host-called sync export arriving while another
+                                    // task's slice holds the lock: synchronous entry
+                                    // cannot wait, and historically this entry silently
+                                    // stole the hold. Run without the lock instead --
+                                    // the holder's bookkeeping stays intact and its
+                                    // release still pairs
+                                    this.#lockFreeEntry = true;
+                                    {debug_log_fn}('[{task_class}#enterSync()] entering without exclusive lock', {{
+                                        taskID: this.#id,
+                                        componentIdx: this.#componentIdx,
+                                    }});
+                                }}
                             }}
                             return true;
                         }}
@@ -1140,20 +1157,19 @@ impl AsyncTaskIntrinsic {
                                 // It is currently possible for an actually sync export to be specified
                                 // as async via JSPI
                                 if (this.#isManualAsync) {{
-                                    if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
+                                    if (this.needsExclusiveLock()) {{ await cstate.acquireExclusiveLock(this.#id); }}
                                 }}
 
                                 return this.#entered;
                             }}
 
                             // Perform intial backpressure check
-                            if (cstate.hasBackpressure() || this.needsExclusiveLock() && cstate.isExclusivelyLocked()) {{
+                            if (cstate.hasBackpressure()) {{
                                 cstate.addBackpressureWaiter();
 
                                 const result = await this.waitUntil({{
                                     readyFn: () => {{
-                                        return !(cstate.hasBackpressure()
-                                                 || this.needsExclusiveLock() && cstate.isExclusivelyLocked());
+                                        return !cstate.hasBackpressure();
                                     }},
                                     cancellable: true,
                                 }});
@@ -1166,31 +1182,11 @@ impl AsyncTaskIntrinsic {
                                 }}
                             }}
 
-                            // Lock the component state or keep trying until we can/do
-                            try {{
-                                if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
-                            }} catch {{
-                                // Continuously attempt to lock until we can
-                                while (cstate.hasBackpressure() || this.needsExclusiveLock() && cstate.isExclusivelyLocked()) {{
-                                    try {{
-                                        if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
-                                        break;
-                                    }} catch(err) {{
-                                        cstate.addBackpressureWaiter();
-                                        const result = await this.waitUntil({{
-                                            readyFn: () => {{
-                                                return !(cstate.hasBackpressure()
-                                                         || this.needsExclusiveLock() && cstate.isExclusivelyLocked());
-                                            }},
-                                            cancellable: true,
-                                        }});
-                                        cstate.removeBackpressureWaiter();
-                                        if (result === {task_class}.BlockResult.CANCELLED) {{
-                                            this.cancel();
-                                            return false;
-                                        }}
-                                    }}
-                                }}
+                            // Acquire the per-slice exclusive lock (FIFO-queued when
+                            // contended); the first slice runs under this hold and the
+                            // driver loop releases/re-acquires it per slice thereafter.
+                            if (this.needsExclusiveLock()) {{
+                                await cstate.acquireExclusiveLock(this.#id);
                             }}
 
                             this.#entered = true;
@@ -1502,13 +1498,16 @@ impl AsyncTaskIntrinsic {
                             if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
 
                             // Exempt the host from exclusive lock check
-                            if (this.#componentIdx !== -1 && !args?.skipExclusiveLockCheck) {{
-                                if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
-                                    throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked`);
+                            if (this.#componentIdx !== -1 && !args?.skipExclusiveLockCheck && !this.#lockFreeEntry) {{
+                                if (this.needsExclusiveLock() && !state.exclusivelyLockedBy(this.#id)) {{
+                                    throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked by it`);
                                 }}
                             }}
 
-                            state.exclusiveRelease();
+                            // Ownership-checked: releases only this task's own hold (a
+                            // task exiting while another task's slice holds the lock no
+                            // longer clears the foreign hold).
+                            state.exclusiveRelease(this.#id);
 
                             for (const f of this.#onExitHandlers) {{
                                 try {{
@@ -1524,6 +1523,14 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         needsExclusiveLock() {{
+                            // Host (-1) tasks model host-side import handling: there is no
+                            // guest linear memory or executor state to protect, and host
+                            // calls from unrelated guest components would contend spuriously.
+                            if (this.#componentIdx === -1) {{ return false; }}
+                            // Import-handler tasks (CallInterface) run host code nested
+                            // inside the calling guest slice, which already holds the
+                            // lock; only tasks that execute guest slices need it.
+                            if (!this.#callingWasmExport) {{ return false; }}
                             return !this.#isAsync || this.hasCallback();
                         }}
 
@@ -2069,7 +2076,7 @@ impl AsyncTaskIntrinsic {
                         let wset;
                         try {{
                             while (true) {{
-                                if (callbackCode !== 0) {{ componentState.exclusiveRelease(); }}
+                                if (callbackCode !== 0) {{ componentState.exclusiveRelease(task.id()); }}
 
                                 switch (callbackCode) {{
                                     case 0: // EXIT
@@ -2091,7 +2098,7 @@ impl AsyncTaskIntrinsic {
                                         }});
                                         asyncRes = await task.yieldUntil({{
                                             cancellable: true,
-                                            readyFn: () => !componentState.isExclusivelyLocked(),
+                                            readyFn: () => true,
                                         }});
                                         {debug_log_fn}('[{driver_loop_fn}()] finished yield', {{
                                             fnName,
@@ -2118,7 +2125,7 @@ impl AsyncTaskIntrinsic {
                                         }}
 
                                         asyncRes = await wset.waitUntil({{
-                                            readyFn: () => !componentState.isExclusivelyLocked(),
+                                            readyFn: () => true,
                                             task,
                                             cancellable: true,
                                         }});
@@ -2138,11 +2145,16 @@ impl AsyncTaskIntrinsic {
                                         throw new Error(`Unrecognized async function result [${{ret}}]`);
                                 }}
 
-                                componentState.exclusiveLock();
+                                // Own the per-slice lock before delivering the event into
+                                // the next callback slice (FIFO-queued when another task's
+                                // slice is mid-flight, including across its JSPI
+                                // suspensions.
+                                await componentState.acquireExclusiveLock(task.id());
 
                                 // If the task failed via any means, leave early and reject.
                                 if (task.isRejected()) {{
                                     {debug_log_fn}('[{driver_loop_fn}()] detected task rejection, leaving early');
+                                    componentState.exclusiveRelease(task.id());
                                     return;
                                 }}
 
@@ -2777,21 +2789,41 @@ impl AsyncTaskIntrinsic {
                         newTask.setParentSubtask(subtask);
 
                         subtask.onStart();
-                        newTask.enterSync();
-                        {set_global_current_task_meta_fn}({{
-                            taskID: newTask.id(),
-                            componentIdx: newTask.componentIdx(),
-                        }});
-                        {symmetric_sync_guest_call_stack}.push({{
-                            componentIdx: newTask.componentIdx(),
-                        }});
 
-                        {debug_log_fn}('[{enter_symmetric_sync_guest_call_fn}()] finished preparing', {{
-                            callerComponentIdx,
-                            calleeComponentIdx,
-                            subtaskID: subtask.id(),
-                            newTaskID: newTask.id(),
-                        }});
+                        const finishEnter = () => {{
+                            {set_global_current_task_meta_fn}({{
+                                taskID: newTask.id(),
+                                componentIdx: newTask.componentIdx(),
+                            }});
+                            {symmetric_sync_guest_call_stack}.push({{
+                                componentIdx: newTask.componentIdx(),
+                            }});
+
+                            {debug_log_fn}('[{enter_symmetric_sync_guest_call_fn}()] finished preparing', {{
+                                callerComponentIdx,
+                                calleeComponentIdx,
+                                subtaskID: subtask.id(),
+                                newTaskID: newTask.id(),
+                            }});
+                        }};
+
+                        // Take the callee's per-slice exclusive lock. Uncontended entry
+                        // stays fully synchronous (returning a non-promise means the
+                        // Suspending-wrapped trampoline does not suspend, so pure-sync
+                        // compositions keep working without WebAssembly.promising).
+                        // Contended entry queues FIFO on the holder instead of silently
+                        // stealing the hold; the returned
+                        // promise suspends the caller's (JSPI) stack until ownership.
+                        if (!newTask.needsExclusiveLock()) {{
+                            finishEnter();
+                            return;
+                        }}
+                        if (!cstate.isExclusivelyLocked()) {{
+                            cstate.exclusiveLock(newTask.id());
+                            finishEnter();
+                            return;
+                        }}
+                        return cstate.acquireExclusiveLock(newTask.id()).then(finishEnter);
                     }}
                     "#,
                 ));

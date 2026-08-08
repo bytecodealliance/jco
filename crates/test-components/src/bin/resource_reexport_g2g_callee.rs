@@ -1,4 +1,4 @@
-//! Callee for the composed resource-reexport regression (lann/jco#51):
+//! Callee for the composed resource-reexport regression:
 //! exports a resource together with an async function that returns an
 //! owned instance of it across the (to-be-fused) component boundary.
 

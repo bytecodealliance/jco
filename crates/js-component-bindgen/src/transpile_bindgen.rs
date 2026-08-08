@@ -2788,12 +2788,33 @@ impl<'a> Instantiator<'a, '_> {
                 let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
                 );
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
-                    "#,
+                // Under JSPI, contended entry queues for the callee's per-slice
+                // exclusive lock by returning a promise, which requires the
+                // trampoline to be Suspending (fused sync calls then run inside
+                // promising activations). Outside JSPI a Suspending import
+                // would trap on every call from the plain (non-promising)
+                // stacks such transpiles use, so the trampoline stays plain
+                // and contended entry traps (uncontended entry is fully
+                // synchronous either way).
+                let uses_jspi = matches!(
+                    self.bindgen.opts.async_mode,
+                    Some(AsyncMode::JavaScriptPromiseIntegration { .. })
                 );
+                if uses_jspi {
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                          const trampoline{i} = new WebAssembly.Suspending({enter_symmetric_sync_guest_call_fn});
+                        "#,
+                    );
+                } else {
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                          const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
+                        "#,
+                    );
+                }
             }
 
             Trampoline::ExitSyncCall => {

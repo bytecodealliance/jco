@@ -1250,7 +1250,7 @@ impl LiftIntrinsic {
                 // (`classNameFn`), never as a direct reference: lift metadata
                 // is evaluated eagerly at module top level (e.g. inside
                 // taskReturn trampoline binds), which may run before the
-                // resource class declaration and TDZ-throw (lann/jco#51).
+                // resource class declaration and TDZ-throw.
                 output.push_str(&format!(
                     r#"
                     function {lift_flat_own_fn}(meta) {{
