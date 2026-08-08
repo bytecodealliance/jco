@@ -854,3 +854,33 @@ world async-g2g-spillover-caller {
   export run-concat3: async func(a: string, b: string, c: u8) -> string;
   export run-add5-parked: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
 }
+
+interface reexport-source {
+  resource widget {
+    poke: func() -> u32;
+  }
+  make-widget: async func() -> result<widget, string>;
+}
+
+interface reexport-runner {
+  run-reexport: async func() -> result<u32, string>;
+}
+
+// Naming the fused component's resource type in an exported interface is
+// the lann/jco#51 trigger: the composition's taskReturn lift metadata for
+// make-widget then references the resource class generated for this
+// export, above its declaration.
+interface reexport-handoff {
+  use reexport-source.{widget};
+  poke-widget: async func(w: widget) -> u32;
+}
+
+world resource-reexport-callee {
+  export reexport-source;
+}
+
+world resource-reexport-caller {
+  import reexport-source;
+  export reexport-runner;
+  export reexport-handoff;
+}

@@ -5639,7 +5639,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 None => format!(
                     r#"{f}({{
                        componentIdx: {component_idx},
-                       className: null,
+                       classNameFn: () => null,
                        createResourceFn: () => {{ throw new Error('invalid/missing resource type data'); }},
                     }})
                 "#,
@@ -5752,7 +5752,7 @@ pub fn gen_flat_lift_fn_js_expr(
                     format!(
                         r#"{f}({{
                        componentIdx: {component_idx},
-                       className: {resource_class_name},
+                       classNameFn: () => {resource_class_name},
                        createResourceFn: {create_resource_fn_js},
                     }})
                 "#,
