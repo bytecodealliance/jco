@@ -413,6 +413,12 @@ impl ComponentIntrinsic {
                             this.#onExclusiveReleaseHandlers.push(fn);
                         }}
 
+                        async waitForExclusiveRelease() {{
+                            while (this.isExclusivelyLocked()) {{
+                                await new Promise(resolve => this.onNextExclusiveRelease(resolve));
+                            }}
+                        }}
+
                         #getSuspendedTaskMeta(taskID) {{
                             return this.#suspendedTasksByTaskID.get(taskID);
                         }}
