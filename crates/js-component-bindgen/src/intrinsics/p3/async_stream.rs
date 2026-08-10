@@ -444,6 +444,8 @@ impl AsyncStreamIntrinsic {
                 let stream_end_class = Self::StreamEndClass.name();
                 let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
                 let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
                 // Internal helper fn that sets up for a `copy()` call
                 let copy_setup_impl = format!(
@@ -1123,6 +1125,16 @@ impl AsyncStreamIntrinsic {
 
                                 const resultKind = packedResult & 0xF;
                                 const transferred = packedResult >> 4;
+
+                                // The copy event is published from inside the guest's current
+                                // callback slice. Do not expose lifted values to host code until
+                                // that slice has returned and released the instance lock: the
+                                // consumer may immediately make a synchronous call on a lifted
+                                // resource, which cannot itself wait for a contended lock.
+                                const componentIdx = this.getWaitable().componentIdx();
+                                if (componentIdx !== -1) {{
+                                    await {get_or_create_async_state_fn}(componentIdx).waitForExclusiveRelease();
+                                }}
 
                                 if (resultKind === {stream_end_class}.CopyResult.DROPPED) {{
                                     this.#endOfStream = true;
