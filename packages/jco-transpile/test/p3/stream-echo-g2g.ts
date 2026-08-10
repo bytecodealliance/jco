@@ -48,18 +48,21 @@ suite('guest->guest stream echo pumps', () => {
         assert.strictEqual(await instance[EXPORT_NAME].runStreamEcho(7), 8 + 9 + 10);
     });
 
-    // Regression test for the execution-slot deadlock (lann/jco#40,
-    // lann/jco#11): make-source's task legally outlives its return (its
-    // adopted writer pump stays parked), and make-echo then enters the same
-    // component while it is still live. Task entry must be governed by
-    // backpressure + the per-slice exclusive lock, not serialized on the
-    // previous task's exit -- otherwise make-echo never runs, the source's
-    // writer never finds a reader, and both components poll their waitable
-    // sets forever. The source stream's read end is also transferred out of
-    // the callee (return position) and straight back in (argument position),
-    // leaving both of its ends inside the callee, matching the wedged-stream
-    // topology from lann/jco#40. Verified to match wasmtime 47
-    // (`--invoke run-stream-relay(7)` returns 27).
+    // Regression test for execution-slot deadlock
+    //
+    // make-source's task legally outlives its return (its adopted writer
+    // pump stays parked), and  make-echo then enters the same component
+    // while it is still live.
+    //
+    // Task entry must be governed by backpressure + the per-slice exclusive lock,
+    // not serialized on the previous task's exit -- otherwise make-echo never runs,
+    // the source's writer never finds a reader, and both components poll their waitable
+    // sets forever.
+    //
+    // The source stream's read end is also transferred out of the callee (return position)
+    // and straight back in (argument position), leaving both of its ends inside the callee.,
+    //
+    // Verified to match wasmtime 47 (`--invoke run-stream-relay(7)` returns 27).
     test('relay through two live callee tasks', async () => {
         assert.instanceOf(instance[EXPORT_NAME].runStreamRelay, AsyncFunction);
         assert.strictEqual(await instance[EXPORT_NAME].runStreamRelay(7), 8 + 9 + 10);

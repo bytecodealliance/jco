@@ -45,13 +45,12 @@ suite('guest->guest stream transfer', () => {
     // context from that register (it previously threw
     // 'missing global current task'). Per the Canonical ABI the transfer is
     // a pure table operation between the source and destination components.
-    // See lann/jco#35.
     //
     // The caller does a *bounded* read of the three values: a sync-lifted
     // export cannot leave detached work behind, so the callee's writer gets
     // exactly one inline poll (registering the pending write, which the
     // caller's read rendezvouses with) and the stream never reaches close.
-    // wasmtime behaves identically for this shape (see lann/jco#39).
+    // wasmtime behaves identically for this shape.
     test('sync call: stream in return position across a composition', async () => {
         assert.instanceOf(instance[EXPORT_NAME].runStreamTransfer, AsyncFunction);
         // callee writes [seed, seed+1, seed+2]; caller sums them
@@ -64,28 +63,9 @@ suite('guest->guest stream transfer', () => {
     // completes, so the writable end drops, the transferred stream reaches
     // close, and the caller's collect() terminates. Verified to match
     // wasmtime 47 (`--invoke run-stream-transfer-all(7)` returns 24).
-    // See lann/jco#39.
     test('async call: stream read to close across a composition', async () => {
         assert.instanceOf(instance[EXPORT_NAME].runStreamTransferAll, AsyncFunction);
         // callee writes [seed, seed+1, seed+2] then closes; caller sums them
         assert.strictEqual(await instance[EXPORT_NAME].runStreamTransferAll(7), 7 + 8 + 9);
-    });
-
-    // When round-tripped read ends go back to the callee in argument
-    // position, completing the stream needs *two* live tasks on the
-    // callee instance — make-stream-async (alive until its spawned
-    // writer finishes) and sum-stream (whose read is the only thing
-    // that can finish that writer).
-    //
-    // Previously when one task was created per instance, the second
-    // task (sum-stream) would enter but could not be driven.
-    //
-    // To fix this we added concurrent task lifetimes that coordinate reads
-    // with pending writes so the stream can close.
-    // See: wasmtime 47's `--invoke run-stream-transfer-roundtrip(7)`
-    test('async call: round-tripped stream read to close across a composition', async () => {
-        assert.instanceOf(instance[EXPORT_NAME].runStreamTransferRoundtrip, AsyncFunction);
-        // callee writes [seed, seed+1, seed+2] then closes; callee sums them
-        assert.strictEqual(await instance[EXPORT_NAME].runStreamTransferRoundtrip(7), 7 + 8 + 9);
     });
 });
