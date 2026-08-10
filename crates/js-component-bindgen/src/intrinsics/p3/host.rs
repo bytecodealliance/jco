@@ -344,9 +344,6 @@ impl HostIntrinsic {
                         }}
 
                         const params = preparedTask.getCalleeParams();
-                        if (paramCount !== params.length) {{
-                            throw new Error(`unexpected callee param count [${{ params.length }}], {async_start_call_fn} invocation expected [${{ paramCount }}]`);
-                        }}
 
                         const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
 
