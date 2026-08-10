@@ -1382,1497 +1382,6 @@ impl<'a> Instantiator<'a, '_> {
                 let waitable_set_wait_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                    const trampoline{i} = new WebAssembly.Suspending({waitable_set_wait_fn}.bind(null, {{
-                        componentIdx: {instance_idx},
-                        isAsync: {async_},
-                        memoryIdx: {memory_idx},
-                        getMemoryFn: () => memory{memory_idx},
-                    }}));
-                    "#,
-                );
-            }
-
-            Trampoline::WaitableSetPoll { options, .. } => {
-                let CanonicalOptions {
-                    instance,
-                    async_,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
-                    cancellable,
-                    ..
-                } = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options")
-                else {
-                    panic!("unexpected memory data model during waitable-set.poll");
-                };
-
-                let instance_idx = instance.as_u32();
-                let memory_idx = memory
-                    .expect("missing memory idx for waitable-set.poll")
-                    .as_u32();
-                let waitable_set_poll_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                    const trampoline{i} = {waitable_set_poll_fn}.bind(
-                        null,
-                        {{
-                            componentIdx: {instance_idx},
-                            isAsync: {async_},
-                            isCancellable: {cancellable},
-                            memoryIdx: {memory_idx},
-                            getMemoryFn: () => memory{memory_idx},
-                        }}
-                    );
-                    "#,
-                );
-            }
-
-            Trampoline::WaitableSetDrop { instance } => {
-                let waitable_set_drop_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {waitable_set_drop_fn}.bind(null, {instance_idx});\n",
-                    instance_idx = instance.as_u32(),
-                );
-            }
-
-            Trampoline::WaitableJoin { instance } => {
-                let waitable_join_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableJoin));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {waitable_join_fn}.bind(null, {instance_idx});\n",
-                    instance_idx = instance.as_u32(),
-                );
-            }
-
-            Trampoline::StreamNew { ty, instance } => {
-                let stream_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
-                let instance_idx = instance.as_u32();
-                let stream_table_idx = ty.as_u32();
-
-                // Get to the payload type for the given stream table idx
-                let table_ty = &self.types[*ty];
-                let stream_ty_idx = table_ty.ty;
-                let stream_ty = &self.types[stream_ty_idx];
-
-                // TODO(???): do we have no way to go from interface type to in-component type idx?
-                // TODO(???): does this work under type aliases?? we need the type def?
-                // TODO(???): can the stream type be treated as a unique indicator of the payload type? maybe not?
-                // need a way to go from iface type + stream type -> payload type idx?
-                let payload_ty_name_js = stream_ty
-                    .payload
-                    .map(|iface_ty| format!("'{iface_ty:?}'"))
-                    .unwrap_or_else(|| "null".into());
-
-                // Gather type metadata
-                let (
-                    align_32_js,
-                    size_32_js,
-                    flat_count_js,
-                    lift_fn_js,
-                    lower_fn_js,
-                    is_none_js,
-                    is_numeric_type_js,
-                    is_borrow_js,
-                    is_async_value_js,
-                    typed_array_js,
-                ) = match stream_ty.payload {
-                    // If there is no payload for the stream, we know the values
-                    None => (
-                        "0".into(),
-                        "0".into(),
-                        "0".into(),
-                        "null".into(),
-                        "null".into(),
-                        "true",
-                        "false".into(),
-                        "false".into(),
-                        "false".into(),
-                        "undefined",
-                    ),
-                    // If there is a payload, generate relevant lift/lower and other metadata
-                    Some(ty) => (
-                        self.types.canonical_abi(&ty).align32.to_string(),
-                        self.types.canonical_abi(&ty).size32.to_string(),
-                        self.types
-                            .canonical_abi(&ty)
-                            .flat_count
-                            .map(|v| v.to_string())
-                            .unwrap_or_else(|| "null".into()),
-                        gen_flat_lift_fn_js_expr(self, &ty, &None),
-                        gen_flat_lower_fn_js_expr(self, &ty, &None),
-                        "false",
-                        format!(
-                            "{}",
-                            matches!(
-                                ty,
-                                InterfaceType::U8
-                                    | InterfaceType::U16
-                                    | InterfaceType::U32
-                                    | InterfaceType::U64
-                                    | InterfaceType::S8
-                                    | InterfaceType::S16
-                                    | InterfaceType::S32
-                                    | InterfaceType::S64
-                                    | InterfaceType::Float32
-                                    | InterfaceType::Float64
-                            )
-                        ),
-                        format!("{}", matches!(ty, InterfaceType::Borrow(_))),
-                        format!(
-                            "{}",
-                            matches!(ty, InterfaceType::Stream(_) | InterfaceType::Future(_))
-                        ),
-                        js_typed_array_ctor(&ty).unwrap_or("undefined"),
-                    ),
-                };
-
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {stream_new_fn}.bind(null, {{
-                        streamTableIdx: {stream_table_idx},
-                        callerComponentIdx: {instance_idx},
-                        elemMeta: {{
-                            liftFn: {lift_fn_js},
-                            lowerFn: {lower_fn_js},
-                            payloadTypeName: {payload_ty_name_js},
-                            isNone: {is_none_js},
-                            isNumeric: {is_numeric_type_js},
-                            isBorrowed: {is_borrow_js},
-                            isAsyncValue: {is_async_value_js},
-                            typedArray: {typed_array_js},
-                            flatCount: {flat_count_js},
-                            align32: {align_32_js},
-                            size32: {size_32_js},
-                        }},
-                    }});\n",
-                );
-            }
-
-            Trampoline::StreamRead {
-                instance,
-                ty,
-                options,
-            } => {
-                let options = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-                assert_eq!(
-                    instance.as_u32(),
-                    options.instance.as_u32(),
-                    "options index instance must match trampoline"
-                );
-
-                let CanonicalOptions {
-                    instance,
-                    string_encoding,
-                    async_,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    ..
-                } = options
-                else {
-                    unreachable!("missing/invalid data model for options during stream.read")
-                };
-                let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
-                let (realloc_idx, get_realloc_fn_js) = match realloc {
-                    Some(v) => {
-                        let v = v.as_u32().to_string();
-                        (v.to_string(), format!("() => realloc{v}"))
-                    }
-                    None => ("undefined".into(), "undefined".into()),
-                };
-
-                let component_instance_id = instance.as_u32();
-                let string_encoding = string_encoding_js_literal(string_encoding);
-                let stream_table_idx = ty.as_u32();
-                let stream_read_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
-
-                // PrepareCall for an async call is sometimes missing memories,
-                // so we augment and save here, knowing that any stream.write/read operation
-                // that uses a memory is indicative of that component's memory
-                //
-                let register_global_memory_for_component_fn =
-                    Intrinsic::RegisterGlobalMemoryForComponent.name();
-                uwriteln!(
-                    self.src.js_init,
-                    r#"{register_global_memory_for_component_fn}({{
-                         componentIdx: {component_instance_id},
-                         memoryIdx: {memory_idx},
-                         memory: memory{memory_idx},
-                     }});"#
-                );
-
-                uwriteln!(
-                    self.src.js,
-                    r#"const trampoline{i} = new WebAssembly.Suspending({stream_read_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_instance_id},
-                             memoryIdx: {memory_idx},
-                             getMemoryFn: () => memory{memory_idx},
-                             reallocIdx: {realloc_idx},
-                             getReallocFn: {get_realloc_fn_js},
-                             stringEncoding: {string_encoding},
-                             isAsync: {async_},
-                             streamTableIdx: {stream_table_idx},
-                         }}
-                     ));
-                    "#,
-                );
-            }
-
-            Trampoline::StreamWrite {
-                instance,
-                ty,
-                options,
-            } => {
-                let options = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-                assert_eq!(
-                    instance.as_u32(),
-                    options.instance.as_u32(),
-                    "options index instance must match trampoline"
-                );
-
-                let CanonicalOptions {
-                    instance,
-                    string_encoding,
-                    async_,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    ..
-                } = options
-                else {
-                    unreachable!("unexpected memory data model during stream.write");
-                };
-                let component_instance_id = instance.as_u32();
-                let memory_idx = memory
-                    .expect("missing memory idx for stream.write")
-                    .as_u32();
-                let (realloc_idx, get_realloc_fn_js) = match realloc {
-                    Some(v) => {
-                        let v = v.as_u32().to_string();
-                        (v.to_string(), format!("() => realloc{v}"))
-                    }
-                    None => ("undefined".into(), "undefined".into()),
-                };
-
-                let string_encoding = string_encoding_js_literal(string_encoding);
-                let stream_table_idx = ty.as_u32();
-                let stream_write_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
-
-                // PrepareCall for an async call is sometimes missing memories,
-                // so we augment and save here, knowing that any stream.write/read operation
-                // that uses a memory is indicative of that component's memory
-                let register_global_memory_for_component_fn =
-                    Intrinsic::RegisterGlobalMemoryForComponent.name();
-                uwriteln!(
-                    self.src.js_init,
-                    r#"{register_global_memory_for_component_fn}({{
-                         componentIdx: {component_instance_id},
-                         memoryIdx: {memory_idx},
-                         memory: memory{memory_idx},
-                     }});"#
-                );
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                     const trampoline{i} = new WebAssembly.Suspending({stream_write_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_instance_id},
-                             memoryIdx: {memory_idx},
-                             getMemoryFn: () => memory{memory_idx},
-                             reallocIdx: {realloc_idx},
-                             getReallocFn: {get_realloc_fn_js},
-                             stringEncoding: {string_encoding},
-                             isAsync: {async_},
-                             streamTableIdx: {stream_table_idx},
-                         }}
-                     ));
-                    "#,
-                );
-            }
-
-            Trampoline::StreamCancelRead {
-                instance,
-                ty,
-                async_,
-            }
-            | Trampoline::StreamCancelWrite {
-                instance,
-                ty,
-                async_,
-            } => {
-                let stream_cancel_fn = match trampoline {
-                    Trampoline::StreamCancelRead { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelRead),
-                    ),
-                    Trampoline::StreamCancelWrite { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelWrite),
-                    ),
-                    _ => unreachable!("unexpected trampoline"),
-                };
-
-                let stream_table_idx = ty.as_u32();
-                let component_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = new WebAssembly.Suspending({stream_cancel_fn}.bind(null, {{
-                          streamTableIdx: {stream_table_idx},
-                          isAsync: {async_},
-                          componentIdx: {component_idx},
-                      }}));
-                    "#,
-                );
-            }
-
-            Trampoline::StreamDropReadable { ty, instance }
-            | Trampoline::StreamDropWritable { ty, instance } => {
-                let intrinsic_fn = match trampoline {
-                    Trampoline::StreamDropReadable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamDropReadable),
-                    ),
-                    Trampoline::StreamDropWritable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamDropWritable),
-                    ),
-                    _ => unreachable!("unexpected trampoline"),
-                };
-                let stream_idx = ty.as_u32();
-                let instance_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {intrinsic_fn}.bind(null, {{
-                        streamTableIdx: {stream_idx},
-                        componentIdx: {instance_idx},
-                    }});\n",
-                );
-            }
-
-            Trampoline::StreamTransfer => {
-                let stream_transfer_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamTransfer));
-                uwriteln!(self.src.js, "const trampoline{i} = {stream_transfer_fn};\n",);
-            }
-
-            Trampoline::FutureNew { instance, ty } => {
-                let future_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
-                let future_table_idx = ty.as_u32();
-                let component_idx = instance.as_u32();
-
-                // Build element metadata
-                let future_table_ty = &self.types[*ty];
-                let future_ty = &self.types[future_table_ty.ty];
-                let (
-                    payload_size32,
-                    payload_align32,
-                    payload_flat_count_js,
-                    payload_lift_fn_js,
-                    payload_lower_fn_js,
-                    is_borrowed,
-                    is_none_type,
-                    is_numeric_type,
-                    is_async_value,
-                ) = match future_ty.payload {
-                    None => (
-                        0,
-                        0,
-                        "0".into(),
-                        "() => {{ throw new Error('empty future payload'); }}".into(),
-                        "() => {{ throw new Error('empty future payload'); }}".into(),
-                        false,
-                        true,
-                        false,
-                        false,
-                    ),
-                    Some(payload_ty) => {
-                        let cabi = self.types.canonical_abi(&payload_ty);
-                        (
-                            cabi.size32,
-                            cabi.align32,
-                            cabi.flat_count
-                                .map(|v| format!("{v}"))
-                                .unwrap_or_else(|| "null".into()),
-                            gen_flat_lift_fn_js_expr(self, &payload_ty, &None),
-                            gen_flat_lower_fn_js_expr(self, &payload_ty, &None),
-                            matches!(payload_ty, InterfaceType::Borrow(_)),
-                            false,
-                            matches!(
-                                payload_ty,
-                                InterfaceType::U8
-                                    | InterfaceType::U16
-                                    | InterfaceType::U32
-                                    | InterfaceType::U64
-                                    | InterfaceType::S8
-                                    | InterfaceType::S16
-                                    | InterfaceType::S32
-                                    | InterfaceType::S64
-                                    | InterfaceType::Float32
-                                    | InterfaceType::Float64
-                            ),
-                            matches!(
-                                payload_ty,
-                                InterfaceType::Stream(_) | InterfaceType::Future(_)
-                            ),
-                        )
-                    }
-                };
-                let payload_ty_name_js = future_ty
-                    .payload
-                    .map(|iface_ty| format!("'{iface_ty:?}'"))
-                    .unwrap_or_else(|| "null".into());
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = {future_new_fn}.bind(null, {{
-                          componentIdx: {component_idx},
-                          futureTableIdx: {future_table_idx},
-                          elemMeta: {{
-                              liftFn: {payload_lift_fn_js},
-                              lowerFn: {payload_lower_fn_js},
-                              payloadTypeName: {payload_ty_name_js},
-                              isNone: {is_none_type},
-                              isNumeric: {is_numeric_type},
-                              isBorrowed: {is_borrowed},
-                              isAsyncValue: {is_async_value},
-                              flatCount: {payload_flat_count_js},
-                              align32: {payload_align32},
-                              size32: {payload_size32},
-                          }},
-                      }});
-                    "#,
-                );
-            }
-
-            Trampoline::FutureWrite {
-                instance,
-                ty,
-                options,
-            }
-            | Trampoline::FutureRead {
-                instance,
-                ty,
-                options,
-            } => {
-                let intrinsic_fn = match trampoline {
-                    Trampoline::FutureRead { .. } => self
-                        .bindgen
-                        .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead)),
-                    Trampoline::FutureWrite { .. } => self
-                        .bindgen
-                        .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite)),
-                    _ => unreachable!("invalid trampoline"),
-                };
-
-                let options = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-                let CanonicalOptions {
-                    async_,
-                    string_encoding,
-                    callback,
-                    post_return,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    ..
-                } = options
-                else {
-                    unreachable!("unexpected memory data model during future intrinsic");
-                };
-
-                assert_eq!(
-                    *instance, options.instance,
-                    "component instances should match"
-                );
-                assert!(
-                    callback.is_none(),
-                    "callback should not be present for future intrinsic"
-                );
-                assert!(
-                    post_return.is_none(),
-                    "post_return should not be present for future intrinsic"
-                );
-
-                let future_table_idx = ty.as_u32();
-                let component_idx = instance.as_u32();
-                let memory_idx = memory
-                    .expect("missing memory idx for future intrinsic")
-                    .as_u32();
-                let (realloc_idx, get_realloc_fn_js) = match realloc {
-                    Some(idx) => (
-                        idx.as_u32().to_string(),
-                        format!("() => realloc{}", idx.as_u32()),
-                    ),
-                    None => ("undefined".into(), "undefined".to_string()),
-                };
-                let string_encoding = string_encoding_js_literal(string_encoding);
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = new WebAssembly.Suspending({intrinsic_fn}.bind(
-                          null,
-                          {{
-                              componentIdx: {component_idx},
-                              memoryIdx: {memory_idx},
-                              getMemoryFn: () => memory{memory_idx},
-                              reallocIdx: {realloc_idx},
-                              getReallocFn: {get_realloc_fn_js},
-                              stringEncoding: {string_encoding},
-                              futureTableIdx: {future_table_idx},
-                              isAsync: {async_},
-                          }},
-                      ));
-                    "#,
-                );
-            }
-
-            Trampoline::FutureCancelRead {
-                instance,
-                ty,
-                async_,
-            }
-            | Trampoline::FutureCancelWrite {
-                instance,
-                ty,
-                async_,
-            } => {
-                let future_cancel_op_fn = match trampoline {
-                    Trampoline::FutureCancelRead { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelRead),
-                    ),
-                    Trampoline::FutureCancelWrite { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelWrite),
-                    ),
-                    _ => unreachable!(),
-                };
-
-                let component_idx = instance.as_u32();
-                let future_table_idx = ty.as_u32();
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = new WebAssembly.Suspending({future_cancel_op_fn}.bind(
-                          null,
-                          {{
-                              futureTableIdx: {future_table_idx},
-                              componentIdx: {component_idx},
-                              isAsync: {async_},
-                          }},
-                      ));
-                    "#,
-                );
-            }
-
-            Trampoline::FutureDropReadable { instance, ty }
-            | Trampoline::FutureDropWritable { instance, ty } => {
-                let future_drop_op_fn = match trampoline {
-                    Trampoline::FutureDropReadable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropReadable),
-                    ),
-                    Trampoline::FutureDropWritable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropWritable),
-                    ),
-                    _ => unreachable!(),
-                };
-
-                let component_idx = instance.as_u32();
-                let future_table_idx = ty.as_u32();
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = new WebAssembly.Suspending({future_drop_op_fn}.bind(
-                          null,
-                          {{
-                              futureTableIdx: {future_table_idx},
-                              componentIdx: {component_idx},
-                          }},
-                      ));
-                "#
-                );
-            }
-
-            Trampoline::FutureTransfer => {
-                let future_drop_writable_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureTransfer));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {future_drop_writable_fn};"
-                );
-            }
-
-            Trampoline::ErrorContextNew { ty, options, .. } => {
-                let CanonicalOptions {
-                    instance,
-                    string_encoding,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
-                    ..
-                } = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options")
-                else {
-                    panic!("unexpected memory data model during error-context.new");
-                };
-
-                self.ensure_error_context_local_table(*instance, *ty);
-
-                let local_err_tbl_idx = ty.as_u32();
-                let component_idx = instance.as_u32();
-
-                let memory_idx = memory
-                    .expect("missing realloc fn idx for error-context.debug-message")
-                    .as_u32();
-
-                // Generate a string decoding function to match this trampoline that does appropriate encoding
-                let decoder = match string_encoding {
-                    wasmtime_environ::component::StringEncoding::Utf8 => self
-                        .bindgen
-                        .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8)),
-                    wasmtime_environ::component::StringEncoding::Utf16 => self
-                        .bindgen
-                        .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
-                    enc => panic!(
-                        "unsupported string encoding [{enc:?}] for error-context.debug-message"
-                    ),
-                };
-                uwriteln!(
-                    self.src.js,
-                    "function trampoline{i}InputStr(ptr, len) {{
-                         return {decoder}.decode(new DataView(memory{memory_idx}.buffer, ptr, len));
-                    }}"
-                );
-
-                let err_ctx_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew));
-                // Store the options associated with this new error context for later use in the global array
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {err_ctx_new_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_idx},
-                             localTableIdx: {local_err_tbl_idx},
-                             readStrFn: trampoline{i}InputStr,
-                         }}
-                     );
-                    "
-                );
-            }
-
-            Trampoline::ErrorContextDebugMessage {
-                instance, options, ..
-            } => {
-                let CanonicalOptions {
-                    async_,
-                    callback,
-                    post_return,
-                    string_encoding,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    ..
-                } = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options")
-                else {
-                    panic!("unexpected memory data model during error-context.debug-message");
-                };
-
-                let debug_message_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDebugMessage));
-
-                let realloc_fn_idx = realloc
-                    .expect("missing realloc fn idx for error-context.debug-message")
-                    .as_u32();
-                let memory_idx = memory
-                    .expect("missing realloc fn idx for error-context.debug-message")
-                    .as_u32();
-
-                // Generate a string encoding function to match this trampoline that does appropriate encoding
-                match string_encoding {
-                    wasmtime_environ::component::StringEncoding::Utf8 => {
-                        let encode_fn = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
-                        uwriteln!(
-                            self.src.js,
-                            "function trampoline{i}OutputStr(s, outputPtr) {{
-                                 const memory = memory{memory_idx};
-                                 const reallocFn = realloc{realloc_fn_idx};
-                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
-                                 new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
-                                 new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
-                             }}"
-                        );
-                    }
-                    wasmtime_environ::component::StringEncoding::Utf16 => {
-                        let encode_fn = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
-                        uwriteln!(
-                            self.src.js,
-                            "function trampoline{i}OutputStr(s, outputPtr) {{
-                                 const memory = memory{memory_idx};
-                                 const reallocFn = realloc{realloc_fn_idx};
-                                 let ptr = {encode_fn}(s, reallocFn, memory);
-                                 let len = s.length;
-                                 new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
-                                 new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
-                             }}"
-                        );
-                    }
-                    enc => panic!(
-                        "unsupported string encoding [{enc:?}] for error-context.debug-message"
-                    ),
-                };
-
-                let options_obj = format!(
-                    "{{callback:{callback}, postReturn: {post_return}, async: {async_}}}",
-                    callback = callback
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
-                    post_return = post_return
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
-                );
-
-                let component_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {debug_message_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_idx},
-                             options: {options_obj},
-                             writeStrFn: trampoline{i}OutputStr,
-                         }}
-                     );"
-                );
-            }
-
-            Trampoline::ErrorContextDrop { instance, ty } => {
-                let drop_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop));
-                let local_err_tbl_idx = ty.as_u32();
-                let component_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = {drop_fn}.bind(
-                          null,
-                          {{ componentIdx: {component_idx}, localTableIdx: {local_err_tbl_idx} }},
-                      );
-                    "#
-                );
-            }
-
-            Trampoline::ErrorContextTransfer => {
-                let transfer_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextTransfer));
-                uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
-            }
-
-            // This sets up a subtask (sets parent, etc) for guest -> guest calls
-            Trampoline::PrepareCall { memory } => {
-                let prepare_call_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
-                let (memory_idx_js, memory_fn_js) = memory
-                    .map(|v| {
-                        (
-                            v.as_u32().to_string(),
-                            format!("() => memory{}", v.as_u32()),
-                        )
-                    })
-                    .unwrap_or_else(|| ("null".into(), "() => null".into()));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory_idx_js}, {memory_fn_js});",
-                )
-            }
-
-            Trampoline::SyncStartCall { callback } => {
-                let sync_start_call_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Host(HostIntrinsic::SyncStartCall));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {sync_start_call_fn}.bind(null, {});",
-                    callback
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
-                );
-            }
-
-            // This actually starts a Task (whose parent is a subtask generated during PrepareCall)
-            // for a from-component async import call
-            Trampoline::AsyncStartCall {
-                callback,
-                post_return,
-            } => {
-                let async_start_call_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
-                let (callback_idx, callback_fn) = callback
-                    .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
-                    .unwrap_or_else(|| ("null".into(), "null".into()));
-                let (post_return_idx, post_return_fn) = post_return
-                    .map(|v| (v.as_u32().to_string(), format!("postReturn{}", v.as_u32())))
-                    .unwrap_or_else(|| ("null".into(), "null".into()));
-
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {async_start_call_fn}.bind(
-                         null,
-                         {{
-                             postReturnIdx: {post_return_idx},
-                             getPostReturnFn: () => {post_return_fn},
-                             callbackIdx: {callback_idx},
-                             getCallbackFn: () => {callback_fn},
-                         }},
-                     );",
-                );
-            }
-
-            Trampoline::LowerImport {
-                index: _,
-                lower_ty,
-                options,
-            } => {
-                let canon_opts = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-
-                // TODO(fix): remove Global lowers, should enable using just exports[x] to export[y] call
-                // TODO(fix): promising for the run (*as well as exports*)
-                // TODO(fix): delete all asyncImports/exports
-                // TODO(opt): opt-in sync import
-
-                let component_idx = canon_opts.instance.as_u32();
-                let is_async = canon_opts.async_;
-
-                let cancellable = canon_opts.cancellable;
-
-                let func_ty = self.types.index(*lower_ty);
-
-                // Build list of lift functions for the params of the lowered import
-                let param_types = &self.types.index(func_ty.params).types;
-                let param_lift_fns_js =
-                    gen_flat_lift_fn_list_js_expr(self, param_types.iter().as_slice(), &None);
-
-                // Build list of lower functions for the results of the lowered import
-                let result_types = &self.types.index(func_ty.results).types;
-                let result_lower_fns_js =
-                    gen_flat_lower_fn_list_js_expr(self, result_types.iter().as_slice(), &None);
-                let result_flat_count = result_types.iter().try_fold(0usize, |count, ty| {
-                    self.types
-                        .canonical_abi(ty)
-                        .flat_count
-                        .map(|flat_count| count + usize::from(flat_count))
-                });
-
-                let get_callback_fn_js = canon_opts
-                    .callback
-                    .map(|idx| format!("() => callback_{}", idx.as_u32()))
-                    .unwrap_or_else(|| "() => null".into());
-                let get_post_return_fn_js = canon_opts
-                    .post_return
-                    .map(|idx| format!("() => postReturn{}", idx.as_u32()))
-                    .unwrap_or_else(|| "() => null".into());
-
-                // Build the memory and realloc js expressions, retrieving the memory index and getter functions
-                let (memory_exprs, realloc_expr_js) =
-                    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
-                        memory,
-                        realloc,
-                    }) = canon_opts.data_model
-                    {
-                        (
-                            memory.map(|idx| {
-                                (
-                                    idx.as_u32().to_string(),
-                                    format!("() => memory{}", idx.as_u32()),
-                                )
-                            }),
-                            realloc.map(|idx| format!("() => realloc{}", idx.as_u32())),
-                        )
-                    } else {
-                        (None, None)
-                    };
-                let (memory_idx_js, memory_expr_js) =
-                    memory_exprs.unwrap_or_else(|| ("null".into(), "() => null".into()));
-                let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "undefined".into());
-                let string_encoding_js = string_encoding_js_literal(&canon_opts.string_encoding);
-
-                // Build the lower import call that will wrap the actual trampoline
-                let func_ty_async = func_ty.async_;
-                let max_direct_results = if is_async || func_ty_async {
-                    0
-                } else {
-                    MAX_FLAT_RESULTS
-                };
-                let has_result_pointer = result_flat_count
-                    .map(|count| count > max_direct_results)
-                    .unwrap_or(true);
-                let call = format!(
-                    r#"{lower_import_intrinsic}.bind(
-                        null,
-                        {{
-                            trampolineIdx: {i},
-                            componentIdx: {component_idx},
-                            isAsync: {is_async},
-                            isManualAsync: _trampoline{i}.manuallyAsync,
-                            paramLiftFns: {param_lift_fns_js},
-                            resultLowerFns: {result_lower_fns_js},
-                            hasResultPointer: {has_result_pointer},
-                            funcTypeIsAsync: {func_ty_async},
-                            getCallbackFn: {get_callback_fn_js},
-                            getPostReturnFn: {get_post_return_fn_js},
-                            isCancellable: {cancellable},
-                            memoryIdx: {memory_idx_js},
-                            stringEncoding: {string_encoding_js},
-                            getMemoryFn: {memory_expr_js},
-                            getReallocFn: {realloc_expr_js},
-                            importFn: _trampoline{i},
-                        }},
-                    )"#,
-                    lower_import_intrinsic = if is_async || func_ty_async {
-                        self.bindgen
-                            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport))
-                    } else {
-                        self.bindgen.intrinsic(Intrinsic::AsyncTask(
-                            AsyncTaskIntrinsic::LowerImportBackwardsCompat,
-                        ))
-                    }
-                );
-
-                // NOTE: For Trampoline::LowerImport, the trampoline index is actually already defined,
-                // but we *redefine* it to call the lower import function first.
-                if is_async || func_ty_async {
-                    uwriteln!(
-                        self.src.js,
-                        "let trampoline{i} = new WebAssembly.Suspending({call});"
-                    );
-                } else {
-                    // TODO(breaking): once manually specifying async imports is removed,
-                    // we can avoid the second check below.
-                    uwriteln!(
-                        self.src.js,
-                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({call}) : {call};"
-                    );
-                }
-            }
-
-            Trampoline::Transcoder {
-                op,
-                from,
-                from64,
-                to,
-                to64,
-            } => {
-                if *from64 || *to64 {
-                    unimplemented!("memory 64 transcoder");
-                }
-                let from = from.as_u32();
-                let to = to.as_u32();
-                match op {
-                    Transcode::Copy(FixedEncoding::Utf8) => {
-                        uwriteln!(
-                            self.src.js,
-                            r#"
-                              function trampoline{i} (from_ptr, len, to_ptr) {{
-                                  new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
-                              }}
-                            "#
-                        );
-                    }
-                    Transcode::Copy(FixedEncoding::Utf16) => unimplemented!("utf16 copier"),
-                    Transcode::Copy(FixedEncoding::Latin1) => unimplemented!("latin1 copier"),
-                    Transcode::Latin1ToUtf16 => unimplemented!("latin to utf16 transcoder"),
-                    Transcode::Latin1ToUtf8 => unimplemented!("latin to utf8 transcoder"),
-                    Transcode::Utf16ToCompactProbablyUtf16 => {
-                        unimplemented!("utf16 to compact wtf16 transcoder")
-                    }
-                    Transcode::Utf16ToCompactUtf16 => {
-                        unimplemented!("utf16 to compact utf16 transcoder")
-                    }
-                    Transcode::Utf16ToLatin1 => unimplemented!("utf16 to latin1 transcoder"),
-                    Transcode::Utf16ToUtf8 => {
-                        uwriteln!(
-                            self.src.js,
-                            r#"
-                              function trampoline{i} (src, src_len, dst, dst_len) {{
-                                  const encoder = new TextEncoder();
-                                  const {{ read, written }} = encoder.encodeInto(String.fromCharCode.apply(null, new Uint16Array(memory{from}.buffer, src, src_len)), new Uint8Array(memory{to}.buffer, dst, dst_len));
-                                  return [read, written];
-                              }}
-                            "#,
-                        );
-                    }
-                    Transcode::Utf8ToCompactUtf16 => {
-                        unimplemented!("utf8 to compact utf16 transcoder")
-                    }
-                    Transcode::Utf8ToLatin1 => unimplemented!("utf8 to latin1 transcoder"),
-                    Transcode::Utf8ToUtf16 => {
-                        uwriteln!(
-                            self.src.js,
-                            r#"
-                              function trampoline{i} (from_ptr, len, to_ptr) {{
-                                  const decoder = new TextDecoder();
-                                  const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
-                                  const codeUnits = content.length;
-                                  const view = new Uint16Array(memory{to}.buffer, to_ptr, codeUnits);
-                                  for (var i = 0; i < codeUnits; i++) {{
-                                      view[i] = content.charCodeAt(i);
-                                  }}
-                                  return codeUnits;
-                              }}
-                            "#,
-                        );
-                    }
-                };
-            }
-
-            Trampoline::ResourceNew {
-                ty: resource_ty_idx,
-                ..
-            } => {
-                self.ensure_resource_table(*resource_ty_idx);
-                let rid = resource_ty_idx.as_u32();
-                let rsc_table_create_own = self.bindgen.intrinsic(Intrinsic::Resource(
-                    ResourceIntrinsic::ResourceTableCreateOwn,
-                ));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {rsc_table_create_own}.bind(null, handleTable{rid});"
-                );
-            }
-
-            Trampoline::ResourceRep {
-                ty: resource_ty_idx,
-                ..
-            } => {
-                self.ensure_resource_table(*resource_ty_idx);
-                let rid = resource_ty_idx.as_u32();
-                let rsc_flag = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
-                uwriteln!(
-                    self.src.js,
-                    "function trampoline{i} (handle) {{
-                        return handleTable{rid}[(handle << 1) + 1] & ~{rsc_flag};
-                    }}"
-                );
-            }
-
-            Trampoline::ResourceDrop {
-                ty: resource_table_ty_idx,
-                ..
-            } => {
-                self.ensure_resource_table(*resource_table_ty_idx);
-                let tid = resource_table_ty_idx.as_u32();
-                let resource_table_ty = &self.types[*resource_table_ty_idx];
-                let resource_ty = resource_table_ty.unwrap_concrete_ty();
-                let rid = resource_ty.as_u32();
-
-                // Build the code fragment that encapsulates calling the destructor
-                let dtor = if let Some(resource_idx) =
-                    self.component.defined_resource_index(resource_ty)
-                {
-                    let resource_def = self
-                        .component
-                        .initializers
-                        .iter()
-                        .find_map(|i| match i {
-                            GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
-                            _ => None,
-                        })
-                        .unwrap();
-
-                    // If a destructor index is defined for the resource, call it
-                    if let Some(dtor) = &resource_def.dtor {
-                        format!(
-                            "
-                            {}(handleEntry.rep);",
-                            self.core_def(dtor)
-                        )
-                    } else {
-                        "".into()
-                    }
-                } else {
-                    // Imported resource is one without a defined resource index.
-                    // If it is a captured instance (class instance was created externally so had to
-                    // be assigned a rep), and there is a Symbol.dispose handler, call it explicitly
-                    // for imported resources when the resource is dropped.
-                    // Otherwise if it is an instance without a captured class definition, then
-                    // call the low-level bindgen destructor.
-                    let symbol_dispose = self.bindgen.intrinsic(Intrinsic::SymbolDispose);
-                    let symbol_cabi_dispose = self.bindgen.intrinsic(Intrinsic::SymbolCabiDispose);
-
-                    // previous imports walk should define all imported resources which are accessible
-                    if let Some(imported_resource_local_name) =
-                        self.bindgen.local_names.try_get(resource_ty)
-                    {
-                        format!(
-                                            "
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
-                            if (rsc) {{
-                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                                captureTable{rid}.delete(handleEntry.rep);
-                            }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
-                                {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
-                            }}"
-                                        )
-                    } else {
-                        // If not, then capture / disposal paths are never called
-                        format!(
-                            "throw new TypeError('unreachable trampoline for resource [{:?}]')",
-                            resource_ty
-                        )
-                    }
-                };
-
-                let rsc_table_remove = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(handle) {{
-                        const handleEntry = {rsc_table_remove}(handleTable{tid}, handle);
-                        if (handleEntry.own) {{
-                            {dtor}
-                        }}
-                    }}
-                    ",
-                );
-            }
-
-            Trampoline::ResourceTransferOwn => {
-                let resource_transfer = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTransferOwn));
-                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
-            }
-
-            Trampoline::ResourceTransferBorrow => {
-                let resource_transfer =
-                    self.bindgen
-                        .intrinsic(if self.bindgen.opts.valid_lifting_optimization {
-                            Intrinsic::Resource(
-                                ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-                            )
-                        } else {
-                            Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow)
-                        });
-                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
-            }
-
-            Trampoline::TaskReturn {
-                results, options, ..
-            } => {
-                let canon_opts = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-                let CanonicalOptions {
-                    instance,
-                    async_,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    callback,
-                    post_return,
-                    string_encoding,
-                    ..
-                } = canon_opts
-                else {
-                    unreachable!("unexpected memory data model during task.return");
-                };
-
-                // Validate canonopts
-                if realloc.is_some() && memory.is_none() {
-                    panic!("memory must be present if realloc is");
-                }
-                if *async_ && post_return.is_some() {
-                    panic!("async and post return must not be specified together");
-                }
-                if *async_ && callback.is_none() {
-                    panic!("callback must be specified for async");
-                }
-                if let Some(cb_idx) = callback {
-                    let cb_fn = &self.types[TypeFuncIndex::from_u32(cb_idx.as_u32())];
-                    match self.types[cb_fn.params].types[..] {
-                        [InterfaceType::S32, InterfaceType::S32, InterfaceType::S32] => {}
-                        _ => panic!("unexpected params for async callback fn"),
-                    }
-                    match self.types[cb_fn.results].types[..] {
-                        [InterfaceType::S32] => {}
-                        _ => panic!("unexpected results for async callback fn"),
-                    }
-                }
-
-                let result_types = &self.types[*results].types;
-
-                // Calculate the number of parameters required to represent the results,
-                // and whether they'll be stored in memory
-                let result_flat_param_total: usize = result_types
-                    .iter()
-                    .map(|t| {
-                        self.types
-                            .canonical_abi(t)
-                            .flat_count
-                            .map(usize::from)
-                            .unwrap_or(0)
-                    })
-                    .sum();
-                let use_direct_params = result_flat_param_total < MAX_FLAT_PARAMS;
-
-                // Build up a list of all the lifting functions that will be needed for the types
-                // that are actually being passed through task.return
-                let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
-                for result_ty in result_types {
-                    lift_fns.push(gen_flat_lift_fn_js_expr(self, result_ty, &None));
-                }
-                let lift_fns_js = format!("[{}]", lift_fns.join(","));
-
-                // Build up a list of all the lowering functions that will be needed for the types
-                // that are actually being passed through task.return
-                //
-                // This is usually only necessary if this task is part of a guest->guest async call
-                // (i.e. via prepare & async start call)
-                let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
-                for result_ty in result_types {
-                    lower_fns.push(gen_flat_lower_fn_js_expr(self, result_ty, &None));
-                }
-                let lower_fns_js = format!("[{}]", lower_fns.join(","));
-
-                let get_memory_fn_js = memory
-                    .map(|idx| format!("() => memory{}", idx.as_u32()))
-                    .unwrap_or_else(|| "() => null".into());
-                let memory_idx_js = memory
-                    .map(|idx| idx.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
-                let component_idx = instance.as_u32();
-                let task_return_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
-                let callback_fn_idx = callback
-                    .map(|v| v.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
-                let string_encoding_js = string_encoding_js_literal(string_encoding);
-
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {task_return_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_idx},
-                             useDirectParams: {use_direct_params},
-                             getMemoryFn: {get_memory_fn_js},
-                             memoryIdx: {memory_idx_js},
-                             callbackFnIdx: {callback_fn_idx},
-                             liftFns: {lift_fns_js},
-                             lowerFns: {lower_fns_js},
-                             stringEncoding: {string_encoding_js},
-                         }},
-                     );",
-                );
-            }
-
-            Trampoline::BackpressureInc { instance } => {
-                let backpressure_inc_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureInc));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {backpressure_inc_fn}.bind(null, {instance});\n",
-                    instance = instance.as_u32(),
-                );
-            }
-
-            Trampoline::BackpressureDec { instance } => {
-                let backpressure_dec_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureDec));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {backpressure_dec_fn}.bind(null, {instance});\n",
-                    instance = instance.as_u32(),
-                );
-            }
-
-            Trampoline::ThreadYield {
-                cancellable,
-                instance,
-            } => {
-                let yield_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
-                let component_instance_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = new WebAssembly.Suspending({yield_fn}.bind(null, {{
-                          isCancellable: {cancellable},
-                          componentIdx: {component_instance_idx},
-                      }}));
-                    "#,
-                );
-            }
-            Trampoline::ThreadIndex => todo!("Trampoline::ThreadIndex"),
-            Trampoline::ThreadNewIndirect { .. } => todo!("Trampoline::ThreadNewIndirect"),
-            Trampoline::ThreadSuspend { .. } => todo!("Trampoline::ThreadSuspend"),
-            Trampoline::ThreadSuspendTo { .. } => todo!("Trampoline::ThreadSuspendTo"),
-            Trampoline::ThreadUnsuspend { .. } => todo!("Trampoline::ThreadUnsuspend"),
-            Trampoline::ThreadYieldToSuspended { .. } => {
-                todo!("Trampoline::ThreadYieldToSuspended")
-            }
-            Trampoline::ThreadSuspendToSuspended { .. } => {
-                todo!("Trampoline::ThreadYieldToSuspended")
-            }
-
-            Trampoline::Trap => {
-                uwriteln!(
-                    self.src.js,
-                    "function trampoline{i}(rep) {{ throw new TypeError('Trap'); }}"
-                );
-            }
-
-            Trampoline::EnterSyncCall => {
-                let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
-                );
-                // Under JSPI, contended entry queues for the callee's per-slice
-                // exclusive lock by returning a promise, which requires the
-                // trampoline to be Suspending (fused sync calls then run inside
-                // promising activations). Outside JSPI a Suspending import
-                // would trap on every call from the plain (non-promising)
-                // stacks such transpiles use, so the trampoline stays plain
-                // and contended entry traps (uncontended entry is fully
-                // synchronous either way).
-                let uses_jspi = matches!(
-                    self.bindgen.opts.async_mode,
-                    Some(AsyncMode::JavaScriptPromiseIntegration { .. })
-                );
-                if uses_jspi {
-                    uwriteln!(
-                        self.src.js,
-                        r#"
-                          const trampoline{i} = new WebAssembly.Suspending({enter_symmetric_sync_guest_call_fn});
-                        "#,
-                    );
-                } else {
-                    uwriteln!(
-                        self.src.js,
-                        r#"
-                          const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
-                        "#,
-                    );
-                }
-
-            Trampoline::SubtaskDrop { instance } => {
-                let component_idx = instance.as_u32();
-                let subtask_drop_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskDrop));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {subtask_drop_fn}.bind(
-                         null,
-                         {component_idx},
-                     );"
-                );
-            }
-
-            Trampoline::WaitableSetNew { instance } => {
-                let waitable_set_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {waitable_set_new_fn}.bind(null, {});\n",
-                    instance.as_u32(),
-                );
-            }
-
-            Trampoline::WaitableSetWait { instance, options } => {
-                let options = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options");
-                assert_eq!(
-                    instance.as_u32(),
-                    options.instance.as_u32(),
-                    "options index instance must match trampoline"
-                );
-
-                let CanonicalOptions {
-                    instance,
-                    async_,
-                    data_model:
-                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
-                    ..
-                } = options
-                else {
-                    panic!("unexpected/missing memory data model during waitable-set.wait");
-                };
-
-                let instance_idx = instance.as_u32();
-                let memory_idx = memory
-                    .expect("missing memory idx for waitable-set.wait")
-                    .as_u32();
-                let waitable_set_wait_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
                 let suspending_wrap_fn =
                     self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
 
@@ -3535,13 +2044,10 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureTransfer => {
-                let future_drop_writable_fn = self
+                let future_transfer_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureTransfer));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {future_drop_writable_fn};"
-                );
+                uwriteln!(self.src.js, "const trampoline{i} = {future_transfer_fn};");
             }
 
             Trampoline::ErrorContextNew { ty, options, .. } => {
@@ -3746,12 +2252,22 @@ impl<'a> Instantiator<'a, '_> {
                 let sync_start_call_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::SyncStartCall));
+                let (callback_idx, callback_fn) = callback
+                    .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
+                    .unwrap_or_else(|| ("null".into(), "null".into()));
+
+                // NOTE: the intrinsic blocks the (sync-lowered) caller until the
+                // async-lifted callee resolves via task.return, so it must be
+                // JSPI-wrapped.
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {sync_start_call_fn}.bind(null, {});",
-                    callback
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
+                    "const trampoline{i} = new WebAssembly.Suspending({sync_start_call_fn}.bind(
+                         null,
+                         {{
+                             callbackIdx: {callback_idx},
+                             getCallbackFn: () => {callback_fn},
+                         }},
+                     ));",
                 );
             }
 
@@ -3975,12 +2491,12 @@ impl<'a> Instantiator<'a, '_> {
                               function trampoline{i} (from_ptr, len, to_ptr) {{
                                   const decoder = new TextDecoder();
                                   const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
-                                  const strlen = content.length
-                                  const view = new Uint16Array(memory{to}.buffer, to_ptr, strlen * 2)
-                                  for (var i = 0; i < strlen; i++) {{
+                                  const codeUnits = content.length;
+                                  const view = new Uint16Array(memory{to}.buffer, to_ptr, codeUnits);
+                                  for (var i = 0; i < codeUnits; i++) {{
                                       view[i] = content.charCodeAt(i);
                                   }}
-                                  return strlen;
+                                  return codeUnits;
                               }}
                             "#,
                         );
@@ -4299,13 +2815,33 @@ impl<'a> Instantiator<'a, '_> {
                 let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
                 );
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
-                    "#,
+                // Under JSPI, contended entry queues for the callee's per-slice
+                // exclusive lock by returning a promise, which requires the
+                // trampoline to be Suspending (fused sync calls then run inside
+                // promising activations). Outside JSPI a Suspending import
+                // would trap on every call from the plain (non-promising)
+                // stacks such transpiles use, so the trampoline stays plain
+                // and contended entry traps (uncontended entry is fully
+                // synchronous either way).
+                let uses_jspi = matches!(
+                    self.bindgen.opts.async_mode,
+                    Some(AsyncMode::JavaScriptPromiseIntegration { .. })
                 );
->>>>>>> theirs (trampoline)
+                if uses_jspi {
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                          const trampoline{i} = new WebAssembly.Suspending({enter_symmetric_sync_guest_call_fn});
+                        "#,
+                    );
+                } else {
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                          const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
+                        "#,
+                    );
+                }
             }
 
             Trampoline::ExitSyncCall => {
@@ -6751,6 +5287,153 @@ fn flat_count_js_expr(flat_count: &Option<u8>) -> String {
         .unwrap_or_else(|| "null".into())
 }
 
+/// The Canonical ABI `join` operation over flat core types, used when
+/// computing the flat representation of variant payloads.
+fn join_flat_core_types(a: &'static str, b: &'static str) -> &'static str {
+    if a == b {
+        a
+    } else if (a == "i32" && b == "f32") || (a == "f32" && b == "i32") {
+        "i32"
+    } else {
+        "i64"
+    }
+}
+
+/// Compute the flat core types of a type per the Canonical ABI's
+/// `flatten_type` (32-bit memories), for use in lift/lower metadata.
+///
+/// Returns `None` when the type has no flat representation of at most
+/// [`MAX_FLAT_PARAMS`] core values (such types are passed via memory).
+fn flat_core_types(
+    component_types: &ComponentTypes,
+    ty: &InterfaceType,
+) -> Option<Vec<&'static str>> {
+    component_types
+        .canonical_abi(ty)
+        .flat_count(MAX_FLAT_PARAMS)?;
+    let mut flat = Vec::new();
+    push_flat_core_types(component_types, ty, &mut flat);
+    Some(flat)
+}
+
+/// Compute the join of the flat core types of a group of variant case
+/// payloads, per the Canonical ABI's `flatten_variant` (excluding the
+/// discriminant).
+fn flat_core_types_variant_payload_join<'a>(
+    component_types: &ComponentTypes,
+    cases: impl Iterator<Item = Option<&'a InterfaceType>>,
+) -> Vec<&'static str> {
+    let mut joined: Vec<&'static str> = Vec::new();
+    for maybe_ty in cases {
+        let Some(ty) = maybe_ty else { continue };
+        let mut case_flat = Vec::new();
+        push_flat_core_types(component_types, ty, &mut case_flat);
+        for (idx, flat_ty) in case_flat.into_iter().enumerate() {
+            match joined.get_mut(idx) {
+                Some(existing) => {
+                    *existing = join_flat_core_types(existing, flat_ty);
+                }
+                None => joined.push(flat_ty),
+            }
+        }
+    }
+    joined
+}
+
+fn push_flat_core_types(
+    component_types: &ComponentTypes,
+    ty: &InterfaceType,
+    flat: &mut Vec<&'static str>,
+) {
+    match ty {
+        InterfaceType::Bool
+        | InterfaceType::S8
+        | InterfaceType::U8
+        | InterfaceType::S16
+        | InterfaceType::U16
+        | InterfaceType::S32
+        | InterfaceType::U32
+        | InterfaceType::Char
+        | InterfaceType::Flags(_)
+        | InterfaceType::Enum(_)
+        | InterfaceType::Own(_)
+        | InterfaceType::Borrow(_)
+        | InterfaceType::Future(_)
+        | InterfaceType::Stream(_)
+        | InterfaceType::ErrorContext(_) => flat.push("i32"),
+
+        InterfaceType::S64 | InterfaceType::U64 => flat.push("i64"),
+
+        InterfaceType::Float32 => flat.push("f32"),
+        InterfaceType::Float64 => flat.push("f64"),
+
+        InterfaceType::String | InterfaceType::List(_) | InterfaceType::Map(_) => {
+            flat.push("i32");
+            flat.push("i32");
+        }
+
+        InterfaceType::Record(ty_idx) => {
+            for field in &component_types[*ty_idx].fields {
+                push_flat_core_types(component_types, &field.ty, flat);
+            }
+        }
+
+        InterfaceType::Tuple(ty_idx) => {
+            for ty in &component_types[*ty_idx].types {
+                push_flat_core_types(component_types, ty, flat);
+            }
+        }
+
+        InterfaceType::FixedLengthList(ty_idx) => {
+            let list_ty = &component_types[*ty_idx];
+            for _ in 0..list_ty.size {
+                push_flat_core_types(component_types, &list_ty.element, flat);
+            }
+        }
+
+        InterfaceType::Variant(ty_idx) => {
+            let variant_ty = &component_types[*ty_idx];
+            flat.push("i32");
+            flat.extend(flat_core_types_variant_payload_join(
+                component_types,
+                variant_ty.cases.iter().map(|(_, ty)| ty.as_ref()),
+            ));
+        }
+
+        InterfaceType::Option(ty_idx) => {
+            let option_ty = &component_types[*ty_idx];
+            flat.push("i32");
+            flat.extend(flat_core_types_variant_payload_join(
+                component_types,
+                [None, Some(&option_ty.ty)].into_iter(),
+            ));
+        }
+
+        InterfaceType::Result(ty_idx) => {
+            let result_ty = &component_types[*ty_idx];
+            flat.push("i32");
+            flat.extend(flat_core_types_variant_payload_join(
+                component_types,
+                [result_ty.ok.as_ref(), result_ty.err.as_ref()].into_iter(),
+            ));
+        }
+    }
+}
+
+/// Render a (possibly missing) flat core type list as a JS expression
+fn flat_core_types_js_expr(flat: &Option<Vec<&'static str>>) -> String {
+    match flat {
+        Some(flat) => format!(
+            "[{}]",
+            flat.iter()
+                .map(|t| format!("'{t}'"))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        None => "null".into(),
+    }
+}
+
 /// Generate the javascript lifting function for a given type
 ///
 /// This function will a function object that can be executed with the right
@@ -6886,27 +5569,38 @@ pub fn gen_flat_lift_fn_js_expr(
             let variant_size32 = variant_ty.abi.size32;
             let variant_align32 = variant_ty.abi.align32;
             let variant_payload_offset32 = variant_ty.info.payload_offset32;
+            let variant_payload_flat_types = flat_core_types_js_expr(
+                &flat_core_types(component_types, ty).map(|flat| flat[1..].to_vec()),
+            );
 
             let mut lift_metas_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
-                let (lift_fn_js, case_size32, case_align32, case_flat_count) = match maybe_ty {
-                    Some(ty) => {
-                        let cabi_info = component_types.canonical_abi(ty);
-                        (
-                            gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
-                            cabi_info.size32.to_string(),
-                            cabi_info.align32.to_string(),
-                            cabi_info
-                                .flat_count(MAX_FLAT_PARAMS)
-                                .map(|v| v.to_string())
-                                .unwrap_or_else(|| "null".into()),
-                        )
-                    }
-                    None => ("null".into(), "0".into(), "0".into(), "0".into()),
-                };
+                let (lift_fn_js, case_size32, case_align32, case_flat_count, case_flat_types) =
+                    match maybe_ty {
+                        Some(ty) => {
+                            let cabi_info = component_types.canonical_abi(ty);
+                            (
+                                gen_flat_lift_fn_js_expr(instantiator, ty, extra_resource_map),
+                                cabi_info.size32.to_string(),
+                                cabi_info.align32.to_string(),
+                                cabi_info
+                                    .flat_count(MAX_FLAT_PARAMS)
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_else(|| "null".into()),
+                                flat_core_types_js_expr(&flat_core_types(component_types, ty)),
+                            )
+                        }
+                        None => (
+                            "null".into(),
+                            "0".into(),
+                            "0".into(),
+                            "0".into(),
+                            "[]".into(),
+                        ),
+                    };
 
                 lift_metas_expr.push_str(&format!(
-                    "['{name}', {lift_fn_js}, {case_size32}, {case_align32}, {case_flat_count}],",
+                    "['{name}', {lift_fn_js}, {case_size32}, {case_align32}, {case_flat_count}, {case_flat_types}],",
                 ));
             }
             lift_metas_expr.push(']');
@@ -6918,6 +5612,7 @@ pub fn gen_flat_lift_fn_js_expr(
                      variantAlign32: {variant_align32},
                      variantPayloadOffset32: {variant_payload_offset32},
                      variantFlatCount: {variant_flat_count},
+                     variantPayloadFlatTypes: {variant_payload_flat_types},
                  }} )"
             )
         }
@@ -7056,11 +5751,16 @@ pub fn gen_flat_lift_fn_js_expr(
             let option_align32 = option_ty.abi.align32;
             let option_size32 = option_ty.abi.size32;
             let option_flat_count = flat_count_js_expr(&option_ty.abi.flat_count);
+            let option_payload_flat_types = flat_core_types_js_expr(
+                &flat_core_types(component_types, ty).map(|flat| flat[1..].to_vec()),
+            );
 
             let some_ty_abi = component_types.canonical_abi(&option_ty.ty);
             let some_ty_flat_count = flat_count_js_expr(&some_ty_abi.flat_count);
             let some_ty_size32 = some_ty_abi.size32;
             let some_ty_align32 = some_ty_abi.align32;
+            let some_ty_flat_types =
+                flat_core_types_js_expr(&flat_core_types(component_types, &option_ty.ty));
             let some_ty_lift_fn_js =
                 gen_flat_lift_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
 
@@ -7068,13 +5768,14 @@ pub fn gen_flat_lift_fn_js_expr(
                 r#"
                 {f}({{
                     caseMetas: [
-                        ['none', null, 0, 0, 0 ],
-                        ['some', {some_ty_lift_fn_js}, {some_ty_size32}, {some_ty_align32}, {some_ty_flat_count} ],
+                        ['none', null, 0, 0, 0, [] ],
+                        ['some', {some_ty_lift_fn_js}, {some_ty_size32}, {some_ty_align32}, {some_ty_flat_count}, {some_ty_flat_types} ],
                     ],
                     variantSize32: {option_size32},
                     variantAlign32: {option_align32},
                     variantPayloadOffset32: {option_payload_offset32},
                     variantFlatCount: {option_flat_count},
+                    variantPayloadFlatTypes: {option_payload_flat_types},
                 }})
                 "#
             )
@@ -7088,6 +5789,9 @@ pub fn gen_flat_lift_fn_js_expr(
             let result_align32 = result_ty.abi.align32;
             let result_payload_offset32 = result_ty.info.payload_offset32;
             let result_flat_count = flat_count_js_expr(&result_ty.abi.flat_count);
+            let result_payload_flat_types = flat_core_types_js_expr(
+                &flat_core_types(component_types, ty).map(|flat| flat[1..].to_vec()),
+            );
 
             let mut cases_and_lifts_expr = String::from("[");
             if let Some(ok_ty) = result_ty.ok {
@@ -7095,13 +5799,15 @@ pub fn gen_flat_lift_fn_js_expr(
                 let ok_ty_size32 = ok_ty_abi.size32;
                 let ok_ty_align32 = ok_ty_abi.align32;
                 let ok_flat_count = flat_count_js_expr(&ok_ty_abi.flat_count);
+                let ok_ty_flat_types =
+                    flat_core_types_js_expr(&flat_core_types(component_types, &ok_ty));
                 let ok_ty_lift_fn =
                     gen_flat_lift_fn_js_expr(instantiator, &ok_ty, extra_resource_map);
                 cases_and_lifts_expr.push_str(&format!(
-                    "['ok', {ok_ty_lift_fn}, {ok_ty_size32}, {ok_ty_align32}, {ok_flat_count}],",
+                    "['ok', {ok_ty_lift_fn}, {ok_ty_size32}, {ok_ty_align32}, {ok_flat_count}, {ok_ty_flat_types}],",
                 ))
             } else {
-                cases_and_lifts_expr.push_str("['ok', null, 0, 0, 0],");
+                cases_and_lifts_expr.push_str("['ok', null, 0, 0, 0, []],");
             }
 
             if let Some(err_ty) = &result_ty.err {
@@ -7109,13 +5815,15 @@ pub fn gen_flat_lift_fn_js_expr(
                 let err_ty_size32 = err_ty_abi.size32;
                 let err_ty_align32 = err_ty_abi.align32;
                 let err_ty_flat_count = flat_count_js_expr(&err_ty_abi.flat_count);
+                let err_ty_flat_types =
+                    flat_core_types_js_expr(&flat_core_types(component_types, err_ty));
                 let err_ty_lift_fn =
                     gen_flat_lift_fn_js_expr(instantiator, err_ty, extra_resource_map);
                 cases_and_lifts_expr.push_str(&format!(
-                    "['err', {err_ty_lift_fn}, {err_ty_size32}, {err_ty_align32}, {err_ty_flat_count}],",
+                    "['err', {err_ty_lift_fn}, {err_ty_size32}, {err_ty_align32}, {err_ty_flat_count}, {err_ty_flat_types}],",
                 ))
             } else {
-                cases_and_lifts_expr.push_str("['err', null, 0, 0, 0],");
+                cases_and_lifts_expr.push_str("['err', null, 0, 0, 0, []],");
             }
             cases_and_lifts_expr.push(']');
 
@@ -7127,6 +5835,7 @@ pub fn gen_flat_lift_fn_js_expr(
                       variantAlign32: {result_align32},
                       variantPayloadOffset32: {result_payload_offset32},
                       variantFlatCount: {result_flat_count},
+                      variantPayloadFlatTypes: {result_payload_flat_types},
                   }})
                 "#
             )
