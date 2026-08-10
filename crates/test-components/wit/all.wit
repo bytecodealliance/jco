@@ -804,51 +804,26 @@ world async-export-future-result {
   export async-export-future-result-api;
 }
 
-interface future-transfer-source {
-  make-future: func(value: u32) -> future<u32>;
+interface result-scalars-api {
+  get-u64-ok: async func(v: u64) -> result<u64, string>;
+  get-u64-err: async func(msg: string) -> result<u64, string>;
+  get-s64-ok: async func(v: s64) -> result<s64, string>;
+  get-f64-ok: async func(v: f64) -> result<f64, string>;
+  get-f64-only: async func(v: f64) -> result<f64, f64>;
+  get-f32-only: async func(v: f32) -> result<f32, f32>;
+  get-option-u64: async func(v: u64) -> option<u64>;
+  get-option-f64: async func(v: f64) -> option<f64>;
+  get-option-f32: async func(v: f32) -> option<f32>;
+  get-record-u64: async func(v: u64) -> result<nested-u64, string>;
+
+  record nested-u64 {
+    val: u64,
+    tag: u32,
+  }
 }
 
-interface sync-lower-compute {
-  compute: async func(x: u32) -> u32;
-  // results wider than one flat value: the sync lowering spills them
-  // through a trailing return pointer
-  compute-list: async func(x: u32) -> list<u32>;
-}
-
-interface sync-lower-runner {
-  run-compute: async func(x: u32) -> u32;
-}
-
-world sync-to-async-callee {
-  export sync-lower-compute;
-}
-
-world sync-to-async-caller {
-  import sync-lower-compute;
-  export sync-lower-runner;
-}
-
-interface future-transfer-runner {
-  run-future-transfer: async func(value: u32) -> u32;
-}
-
-world future-transfer-g2g-callee {
-  export future-transfer-source;
-}
-
-world future-transfer-g2g-caller {
-  import future-transfer-source;
-  export future-transfer-runner;
-}
-
-// wit-bindgen inter-task-wakeup (guest-internal unit stream): one export
-// spawns a detached pump task that parks on a host import; a second export
-// parks on a purely Rust-originating waker that the pump fires when the
-// import resolves
-world inter-task-wakeup {
-  import wakeup-tick: async func() -> u32;
-  export start-pump: async func();
-  export await-wake: async func() -> u32;
+world async-result-scalars {
+  export result-scalars-api;
 }
 
 // Guest->guest async calls whose flat param count exceeds
@@ -875,30 +850,31 @@ world async-g2g-spillover-caller {
   export run-add5-parked: async func(p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32;
 }
 
-interface reexport-source {
-  resource widget {
-    poke: func() -> u32;
-  }
-  make-widget: async func() -> result<widget, string>;
+// wit-bindgen inter-task-wakeup (guest-internal unit stream): one export
+// spawns a detached pump task that parks on a host import; a second export
+// parks on a purely Rust-originating waker that the pump fires when the
+// import resolves.
+world inter-task-wakeup {
+  import wakeup-tick: async func() -> u32;
+  export start-pump: async func();
+  export await-wake: async func() -> u32;
 }
 
-interface reexport-runner {
-  run-reexport: async func() -> result<u32, string>;
+interface future-transfer-source {
+  make-future: func(value: u32) -> future<u32>;
 }
 
-interface reexport-handoff {
-  use reexport-source.{widget};
-  poke-widget: async func(w: widget) -> u32;
+interface future-transfer-runner {
+  run-future-transfer: async func(value: u32) -> u32;
 }
 
-world resource-reexport-callee {
-  export reexport-source;
+world future-transfer-g2g-callee {
+  export future-transfer-source;
 }
 
-world resource-reexport-caller {
-  import reexport-source;
-  export reexport-runner;
-  export reexport-handoff;
+world future-transfer-g2g-caller {
+  import future-transfer-source;
+  export future-transfer-runner;
 }
 
 interface stream-transfer-source {
@@ -947,4 +923,50 @@ world stream-echo-g2g-callee {
 world stream-echo-g2g-caller {
   import stream-echo-source;
   export stream-echo-runner;
+}
+
+interface sync-lower-compute {
+  compute: async func(x: u32) -> u32;
+  // results wider than one flat value: the sync lowering spills them
+  // through a trailing return pointer
+  compute-list: async func(x: u32) -> list<u32>;
+}
+
+interface sync-lower-runner {
+  run-compute: async func(x: u32) -> u32;
+}
+
+world sync-to-async-callee {
+  export sync-lower-compute;
+}
+
+world sync-to-async-caller {
+  import sync-lower-compute;
+  export sync-lower-runner;
+}
+
+interface reexport-source {
+  resource widget {
+    poke: func() -> u32;
+  }
+  make-widget: async func() -> result<widget, string>;
+}
+
+interface reexport-runner {
+  run-reexport: async func() -> result<u32, string>;
+}
+
+interface reexport-handoff {
+  use reexport-source.{widget};
+  poke-widget: async func(w: widget) -> u32;
+}
+
+world resource-reexport-callee {
+  export reexport-source;
+}
+
+world resource-reexport-caller {
+  import reexport-source;
+  export reexport-runner;
+  export reexport-handoff;
 }

@@ -14,8 +14,7 @@ struct Component;
 impl Guest for Component {
     async fn run_stream_transfer(seed: u8) -> u32 {
         // Sync-lowered call to the composed callee; the returned stream end
-        // is transferred into this component on the fused return path
-        // (see lann/jco#35).
+        // is transferred into this component on the fused return path.
         let mut rx = stream_transfer_source::make_stream(seed);
 
         // Read exactly the three values the callee writes without waiting
@@ -32,8 +31,7 @@ impl Guest for Component {
     async fn run_stream_transfer_all(seed: u8) -> u32 {
         // Async-lowered call to the async-lifted callee export: the callee
         // task stays alive until its spawned writer completes, so the
-        // transferred stream reaches close and collect() terminates
-        // (see lann/jco#39).
+        // transferred stream reaches close and collect() terminates.
         let rx = stream_transfer_source::make_stream_async(seed).await;
         let vals: Vec<u8> = rx.collect().await;
         vals.into_iter().map(u32::from).sum()

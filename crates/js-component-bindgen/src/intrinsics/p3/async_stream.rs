@@ -1977,8 +1977,6 @@ impl AsyncStreamIntrinsic {
             Self::StreamTransfer => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_transfer_fn = self.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
-                let current_task_get_fn = AsyncTaskIntrinsic::GetCurrentTask.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
@@ -2000,18 +1998,15 @@ impl AsyncStreamIntrinsic {
                         if (!streamMeta) {{ throw new Error('missing stream meta during transfer'); }}
                         const componentIdx = streamMeta.componentIdx;
 
-                        const globalTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
-                        if (!globalTaskMeta) {{ throw new Error('missing global current task globalTaskMeta'); }}
-                        const taskID = globalTaskMeta.taskID;
-
-                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                        if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
-
-                        const task = taskMeta.task;
-                        if (!task) {{ throw new Error('missing task while doing stream transfer'); }}
-                        if (componentIdx !== task.componentIdx()) {{
-                            throw new Error("task component ID should match current component ID");
-                        }}
+                        // NOTE: no current-task lookup here: per the Canonical ABI the
+                        // transfer is a pure table operation between the source and
+                        // destination components' waitable tables. 
+                        // 
+                        // In particular, the return-position transfer of a fused *sync* guest->guest 
+                        // call runs after the callee task's teardown has already cleared the
+                        // per-component current-task register, so deriving task context
+                        // from the source stream's owning component is unsatisfiable
+                        // there.
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}

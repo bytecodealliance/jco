@@ -18,7 +18,7 @@ impl Guest for Component {
     // input stream before the caller performs its first write, echoing each
     // value +1 into the returned stream. The exporting task stays alive
     // (callback protocol) until the pump completes, which happens when the
-    // input stream closes. See lann/jco#40.
+    // input stream closes.
     async fn make_echo(mut input: StreamReader<u8>) -> StreamReader<u8> {
         let (mut tx, rx) = wit_stream::new();
         wit_bindgen::spawn_local(async move {
@@ -31,7 +31,7 @@ impl Guest for Component {
         rx
     }
 
-    // Producer for the relay shape (lann/jco#40): the returned read end is
+    // Producer for the relay shape: the returned read end is
     // transferred out to the caller and then handed straight back into
     // make-echo, so both ends of this stream live inside this component
     // while the writer pump runs.
