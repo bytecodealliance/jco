@@ -28,12 +28,20 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/nodejs/index.d.ts",
-      "node": "./dist/nodejs/index.js"
+      "types": "./dist/browser/index.d.ts",
+      "node": {
+        "types": "./dist/nodejs/index.d.ts",
+        "default": "./dist/nodejs/index.js"
+      },
+      "default": "./dist/browser/index.js"
     },
     "./*": {
-      "types": "./dist/nodejs/*.d.ts",
-      "node": "./dist/nodejs/*.js"
+      "types": "./dist/browser/*.d.ts",
+      "node": {
+        "types": "./dist/nodejs/*.d.ts",
+        "default": "./dist/nodejs/*.js"
+      },
+      "default": "./dist/browser/*.js"
     },
     "./interfaces/*": {
       "types": "./types/interfaces/*.d.ts"

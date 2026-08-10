@@ -21,5 +21,17 @@
       "error",
       "all"
     ]
-  }
+  },
+  "overrides": [
+    {
+      // Allow unused vars since most of the browser shims just throw for now.
+      // TODO: remove once browser shims are mostly covered.
+      "files": [
+        "packages/preview3-shim/src/browser/**"
+      ],
+      "rules": {
+        "no-unused-vars": "off"
+      }
+    }
+  ]
 }
