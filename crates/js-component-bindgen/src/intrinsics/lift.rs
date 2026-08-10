@@ -466,7 +466,8 @@ impl LiftIntrinsic {
 
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i34 argument'); }}
-                            val = ctx.params[0];
+                            // core i32 values arrive as signed numbers
+                            val = ctx.params[0] >>> 0;
                             ctx.params = ctx.params.slice(1);
                             return [val, ctx];
                         }}
@@ -532,7 +533,8 @@ impl LiftIntrinsic {
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single i64 argument'); }}
                             if (typeof ctx.params[0] !== 'bigint') {{ throw new Error('expected bigint'); }}
-                            val = ctx.params[0];
+                            // core i64 values arrive as signed BigInts
+                            val = BigInt.asUintN(64, ctx.params[0]);
                             ctx.params = ctx.params.slice(1);
                             return [val, ctx];
                         }}
@@ -566,12 +568,6 @@ impl LiftIntrinsic {
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single f32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-
-                            if (ctx.inVariant) {{
-                                const dv = new DataView(new ArrayBuffer(4));
-                                dv.setInt32(0, val);
-                                val = dv.getFloat32(0);
-                            }}
 
                             return [val, ctx];
                         }}
@@ -607,12 +603,6 @@ impl LiftIntrinsic {
                               }}
                               val = ctx.params[0];
                               ctx.params = ctx.params.slice(1);
-
-                              if (ctx.inVariant) {{
-                                  const dv = new DataView(new ArrayBuffer(8));
-                                  dv.setBigInt64(0, val);
-                                  val = dv.getFloat64(0);
-                              }}
 
                               return [val, ctx];
                           }}
@@ -815,9 +805,10 @@ impl LiftIntrinsic {
                 let lift_u8 = Self::LiftFlatU8.name();
                 let lift_u16 = Self::LiftFlatU16.name();
                 let lift_u32 = Self::LiftFlatU32.name();
-                let lift_f64 = Self::LiftFlatFloat64.name();
 
                 output.push_str(&format!(r#"
+                    const {lift_flat_variant_fn}Scratch = new DataView(new ArrayBuffer(8));
+
                     function {lift_flat_variant_fn}(meta) {{
                         const {{
                             caseMetas,
@@ -825,17 +816,13 @@ impl LiftIntrinsic {
                             variantAlign32,
                             variantPayloadOffset32,
                             variantFlatCount,
+                            variantPayloadFlatTypes,
                             isEnum,
                         }} = meta;
 
                         return function {lift_flat_variant_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_variant_fn}()] args', {{ ctx }});
                             const origUseParams = ctx.useDirectParams;
-
-                            // If we're in the process of lifting a variant, we note
-                            // we are during any lifting that happens (e.g. to accomodate f32/f64 mechanics)
-                            const wasInVariant = ctx.inVariant;
-                            ctx.inVariant = true;
 
                             let caseIdx;
                             let liftRes;
@@ -859,6 +846,7 @@ impl LiftIntrinsic {
                                 caseSize32,
                                 caseAlign32,
                                 caseFlatCount,
+                                caseFlatTypes,
                             ] = caseMetas[caseIdx];
 
                             if (variantPayloadOffset32 === undefined) {{
@@ -878,11 +866,36 @@ impl LiftIntrinsic {
                                     ctx.storagePtr = originalPtr + variantSize32;
                                 }}
                             }} else {{
-                                if (ctx.useDirectParams && ctx.params && liftFn !== {lift_f64} && typeof ctx.params[0] === 'bigint') {{
-                                    if (ctx.params[0] > BigInt(Number.MAX_SAFE_INTEGER)) {{
-                                        throw new Error(`invalid value, reinterpreted i32/f32 too large: [${{ctx.params[0]}}]`);
+                                // When lifting from direct params, the payload arrives as the
+                                // *join* of all case flat representations: each slot whose
+                                // joined core type differs from the selected case's core type
+                                // must be reinterpreted before the payload lift
+                                // (see CanonicalABI `lift_flat_variant`)
+                                if (ctx.useDirectParams) {{
+                                    if (!variantPayloadFlatTypes || !caseFlatTypes) {{
+                                        throw new Error('missing variant flat type metadata during direct-param lift');
                                     }}
-                                    ctx.params[0] = Number(ctx.params[0]);
+                                    const scratch = {lift_flat_variant_fn}Scratch;
+                                    for (let i = 0; i < caseFlatTypes.length; i++) {{
+                                        const have = variantPayloadFlatTypes[i];
+                                        const want = caseFlatTypes[i];
+                                        if (have === want) {{ continue; }}
+                                        const val = ctx.params[i];
+                                        if (have === 'i64' && want === 'i32') {{
+                                            ctx.params[i] = Number(BigInt.asIntN(32, val));
+                                        }} else if (have === 'i64' && want === 'f32') {{
+                                            scratch.setInt32(0, Number(BigInt.asIntN(32, val)), true);
+                                            ctx.params[i] = scratch.getFloat32(0, true);
+                                        }} else if (have === 'i64' && want === 'f64') {{
+                                            scratch.setBigInt64(0, val, true);
+                                            ctx.params[i] = scratch.getFloat64(0, true);
+                                        }} else if (have === 'i32' && want === 'f32') {{
+                                            scratch.setInt32(0, val, true);
+                                            ctx.params[i] = scratch.getFloat32(0, true);
+                                        }} else {{
+                                            throw new Error(`invalid variant payload coercion [${{have}}] -> [${{want}}]`);
+                                        }}
+                                    }}
                                 }}
 
                                 const [newVal, newCtx] = liftFn(ctx);
@@ -914,8 +927,6 @@ impl LiftIntrinsic {
                                 const rem = ctx.storagePtr % variantAlign32;
                                 if (rem !== 0) {{ ctx.storagePtr += variantAlign32 - rem; }}
                             }}
-
-                            ctx.inVariant = wasInVariant;
 
                             return [val, ctx];
                         }}

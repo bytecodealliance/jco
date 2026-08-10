@@ -17,16 +17,14 @@ struct Component;
 impl Guest for Component {
     // NOTE: this export is *sync-lifted*: when composed with a caller, the
     // returned stream end crosses the component boundary on the return path
-    // of the fused call, *after* this component's task has been torn down
-    // (see lann/jco#35).
+    // of the fused call, *after* this component's task has been torn down.
     //
     // A sync-lifted export cannot leave detached work behind (there is no
-    // async computation scope to adopt it -- see lann/jco#39): the
-    // `start_task` here gets exactly one inline poll (registering the
-    // pending stream write, which later rendezvouses with the caller's
-    // read), and is never polled again, so the writable end is never
-    // dropped. Callers must therefore do bounded reads, not read to close.
-    // wasmtime behaves identically for this shape.
+    // async computation scope to adopt it): the `start_task` here gets exactly 
+    // one inline poll (registering the pending stream write, which later 
+    // rendezvouses with the caller's read), and is never polled again, so 
+    // the writable end is never dropped. Callers must therefore do bounded 
+    // reads, not read to close.
     fn make_stream(seed: u8) -> StreamReader<u8> {
         let (mut tx, rx) = wit_stream::new();
         start_task(async move {

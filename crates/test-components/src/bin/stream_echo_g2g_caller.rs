@@ -19,7 +19,7 @@ impl Guest for Component {
         // The callee's echo pump parks a read on `input_rx` (transferred in
         // argument position) during this call, before our first write below:
         // the write must rendezvous with that parked cross-component read
-        // and wake it (see lann/jco#40).
+        // and wake it.
         let echoed = stream_echo_source::make_echo(input_rx).await;
 
         // Write and read concurrently: the pump only reads the next input
@@ -43,7 +43,7 @@ impl Guest for Component {
         // The source stream's read end is transferred out of the callee
         // (return position) and straight back in (argument position of
         // make-echo), so both of its ends end up inside the callee while
-        // the source's writer pump runs (see lann/jco#40).
+        // the source's writer pump runs.
         let src = stream_echo_source::make_source(seed).await;
         let echoed = stream_echo_source::make_echo(src).await;
         let vals: Vec<u8> = echoed.collect().await;

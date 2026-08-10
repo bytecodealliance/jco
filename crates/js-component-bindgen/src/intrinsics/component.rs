@@ -142,6 +142,15 @@ impl ComponentIntrinsic {
                     class {component_async_state_class} {{
                         static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
 
+                        static TickResult = {{
+                            // no suspended tasks remain
+                            DONE: 'done',
+                            // a suspended task was resumed (more may be ready)
+                            RESUMED: 'resumed',
+                            // suspended tasks remain but none were ready
+                            IDLE: 'idle',
+                        }};
+
                         #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = {promise_with_resolvers_fn}();
@@ -404,54 +413,6 @@ impl ComponentIntrinsic {
                             this.#onExclusiveReleaseHandlers.push(fn);
                         }}
 
-                        // nextTaskPromise & nextTaskQueue are used to await current task completion and queues
-                        // any tasks attempting to enter() and complete.
-                        //
-                        // see: nextTaskExecutionSlot()
-                        //
-                        // TODO(threads): this should be unnecessary once threads are properly implemented,
-                        // as the task.enter() logic should suffice (it should be guaranteed that we cannot re-enter
-                        // unless the task in question is the current task in the thread execution, and only one can
-                        // run at a time)
-                        #nextTaskPromise = Promise.resolve(true);
-                        #nextTaskQueue = [];
-
-                        async nextTaskExecutionSlot(args) {{
-                            const {{ task }} = args;
-
-                            const placeholder = {{
-                                completed: false,
-                                task,
-                                promise: task.exitPromise().then(() => {{
-                                    placeholder.completed = true;
-                                }}),
-                            }};
-                            this.#nextTaskQueue.push(placeholder);
-
-                            let next;
-                            while (true) {{
-                                await this.#nextTaskPromise;
-
-                                next = this.#nextTaskQueue.find(placeholder => !placeholder.completed);
-
-                                // This task is next in the queue, we can continue
-                                if (next === undefined || next === placeholder) {{
-                                    this.#nextTaskPromise = next.promise;
-                                    if (this.#nextTaskQueue.length > 1000) {{
-                                        this.#nextTaskQueue = this.#nextTaskQueue.filter(p => !p.completed);
-                                        if (this.#nextTaskQueue.length > 1000) {{
-                                            {debug_log_fn}('[{component_async_state_class}#()nextTaskExecutionSlot] next task queue length > 1000 even after cleanup, tasks may be leaking');
-                                        }}
-                                    }}
-                                    break;
-                                }}
-
-                                // If we get here, this task was *not* next in the queue, continue waiting
-                                // (at this point the task that *is* next will likely have already set itself
-                                // as this.#nextTaskPromise)
-                            }}
-                        }}
-
                         #getSuspendedTaskMeta(taskID) {{
                             return this.#suspendedTasksByTaskID.get(taskID);
                         }}
@@ -529,10 +490,15 @@ impl ComponentIntrinsic {
                             if (this.#tickLoop !== null) {{ return; }}
                             this.#tickLoop = 1;
                             setTimeout(async () => {{
-                                let done = this.tick();
-                                while (!done) {{
-                                    await new Promise((resolve) => setTimeout(resolve, 30));
-                                    done = this.tick();
+                                let result = this.tick();
+                                while (result !== {component_async_state_class}.TickResult.DONE) {{
+                                    // After resuming a task, re-tick as soon as the resumed
+                                    // slice's microtask continuations have drained (timeout 0)
+                                    // so queued sibling resumptions aren't charged the idle
+                                    // polling interval; otherwise poll at the idle cadence.
+                                    const delay = result === {component_async_state_class}.TickResult.RESUMED ? 0 : 10;
+                                    await new Promise((resolve) => setTimeout(resolve, delay));
+                                    result = this.tick();
                                 }}
                                 this.#tickLoop = null;
                             }}, 10);
@@ -553,7 +519,7 @@ impl ComponentIntrinsic {
                                 if (meta.task.isRejected()) {{
                                     {debug_log_fn}('[{component_async_state_class}#tick()] detected task rejection, leaving early', {{ meta }});
                                     this.resumeTaskByID(taskID);
-                                    return;
+                                    return {component_async_state_class}.TickResult.RESUMED;
                                 }}
 
                                 const isReady = meta.readyFn();
@@ -564,9 +530,27 @@ impl ComponentIntrinsic {
                                     componentIdx: this.#componentIdx,
                                 }});
                                 this.resumeTaskByID(taskID);
+
+                                // NOTE: during single-flight resumption, we should resume at most one task per
+                                // tick so that the resumed slice (a microtask continuation)
+                                // runs -- and its current-task register window opens and
+                                // closes -- before any sibling task of this component is
+                                // resumed. 
+                                // 
+                                // Resuming multiple suspended tasks in one synchronous
+                                // cascade interleaves their register save/restore windows
+                                // ([restoreA, restoreB, resumeA, resumeB]), re-entering wasm
+                                // with the register naming the wrong task, and the 
+                                // 'known residual' of the JSPI current-task register
+                                // fix); with concurrent task lifetimes per component this
+                                // corrupts guest context-local storage.
+                                return {component_async_state_class}.TickResult.RESUMED;
                             }}
 
-                            return this.#suspendedTaskIDs.filter(t => t !== null).length === 0;
+                            const idle = this.#suspendedTaskIDs.filter(t => t !== null).length > 0;
+                            return idle
+                                ? {component_async_state_class}.TickResult.IDLE
+                                : {component_async_state_class}.TickResult.DONE;
                         }}
 
                         addStreamEndToTable(args) {{
