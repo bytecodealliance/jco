@@ -204,7 +204,10 @@ suite('stream<T> lowers', () => {
             assert.isBelow(chunks.length, 4, 'sync iterable was pumped one element per canonical write');
             assert.isAtLeast(chunks[0].length, 100, 'first chunk unexpectedly small');
             assert.deepEqual(
-                toTypedArray(Uint8Array, chunks.flatMap((c) => [...c])),
+                toTypedArray(
+                    Uint8Array,
+                    chunks.flatMap((c) => [...c]),
+                ),
                 toTypedArray(Uint8Array, vals),
             );
         });

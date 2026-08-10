@@ -138,7 +138,9 @@ suite('stream<T> lifts', () => {
         let total = 0;
         while (total < vals.length) {
             const { value, done } = await stream.read({ count: 4096 });
-            if (done) { break; }
+            if (done) {
+                break;
+            }
             assert.instanceOf(value, Uint8Array);
             chunks.push(value);
             total += value.length;
