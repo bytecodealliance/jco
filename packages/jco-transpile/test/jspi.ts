@@ -146,7 +146,7 @@ suite('Host Import Async (JSPI)', () => {
         } catch {}
     });
 
-    // Ensure async imports whose promises settle without ever yielding to 
+    // Ensure async imports whose promises settle without ever yielding to
     // the macrotask queue must still resume the suspended guest,
     // on every call (not just the first).
     test.concurrent('Transpile async, import settles without macrotask yield, repeated calls (NodeJS, JSPI)', async () => {

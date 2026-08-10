@@ -10,13 +10,13 @@ const RUNNER_EXPORT = 'jco:test-components/reexport-runner';
 const HANDOFF_EXPORT = 'jco:test-components/reexport-handoff';
 
 suite('composed component re-exporting a fused resource type', () => {
-    // When an async cross-component call returns an owned resource across the fused 
+    // When an async cross-component call returns an owned resource across the fused
     // boundary AND the same resource type is re-exported by one of the composition's
     // exported interfaces, the taskReturn trampoline's lift metadata used to
     // reference the resource class directly (`className: Widget`) above
-    // the `class Widget { ... }` declaration. 
+    // the `class Widget { ... }` declaration.
     //
-    // Trampoline binds were previously evaluated at the module top level rather than the 
+    // Trampoline binds were previously evaluated at the module top level rather than the
     // call site, the class was not available for creation. With the fix in,
     // the class is referred to at the time of creation (not at bind time).
     test('instantiates and returns the owned resource across the boundary', async () => {

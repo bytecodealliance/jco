@@ -10,11 +10,11 @@ const EXPORT_NAME = 'jco:test-components/stream-transfer-runner';
 
 suite('guest->guest stream transfer', () => {
     // When streams are returned from fused sync guest->guest calls,
-    // the callee task's teardown has already cleared the per-component 
+    // the callee task's teardown has already cleared the per-component
     // current-task register (`_symmetricSyncGuestCallExit`).
     //
     // This means stream.transfer cannot get its context from that register,
-    // and should match the Canonical ABI in being a pure table operation 
+    // and should match the Canonical ABI in being a pure table operation
     // between the source and destination components.
     test('stream in return position across a composition', async () => {
         const componentPath = await composeCallerCallee({
