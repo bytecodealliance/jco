@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.3.0] - 2026-08-10
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ defer lifted stream values until unlock by @vados-cosmonic in #1848
+
+- _(bindgen)_ task locking, i32 lifting, sync-lowered async by @vados-cosmonic
+
+- _(bindgen)_ future transfer, guest call jspi, flat type join by @vados-cosmonic
+
+- _(bindgen)_ keep the current-task register correct across JSPI suspensions by @lann
+
+- _(bindgen)_ implement future.transfer by @lann
+
+- _(bindgen)_ extract the sync lowering's spilled-result return pointer in prepare-call by @lann
+
+- _(bindgen)_ make the per-slice exclusive lock owned and waited by @lann
+
+- _(bindgen)_ defer resource class references in own-lift metadata by @lann
+
+- _(bindgen)_ harden async-lowered import return handshake by @lann
+
+- _(bindgen)_ batch stream element copies in both directions by @lann
+
+- _(bindgen)_ allow spilled async call parameters by @vados-cosmonic in #1847
+
+- _(bindgen)_ drop stray resolve/reject from _asyncStartCall driver-loop call by @lann
+
+- _(bindgen)_ implement subtask.cancel per the Canonical ABI by @lann
+
+- _(bindgen)_ fix utf-16 string lowering by @lann in #1838
+
+- _(bindgen)_ lower string length as bytes, not codepoints by @lann
+
+- _(bindgen)_ fix TypeError from sync-lowered async funcs by @lann in #1839
+
+- _(bindgen)_ fix utf-8 to utf-16 transcode length calculation by @lann in #1840
+
+
+
+
 ## [2.2.2] - 2026-08-05
 
 ### 🐛 Bug Fixes
