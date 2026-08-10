@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.3.1] - 2026-08-10
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ prevent lifted future call races by @vados-cosmonic in #1852
+
+
+
+
 ## [2.3.0] - 2026-08-10
 
 ### 🐛 Bug Fixes
