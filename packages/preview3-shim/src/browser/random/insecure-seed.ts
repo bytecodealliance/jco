@@ -1,7 +1,7 @@
-import { Todo } from "../../common/errors.js";
+import { insecureSeed } from "@bytecodealliance/preview2-shim/random";
 
 function getInsecureSeed(): [bigint, bigint] {
-  throw new Todo();
+  return insecureSeed.insecureSeed();
 }
 
 export default {
