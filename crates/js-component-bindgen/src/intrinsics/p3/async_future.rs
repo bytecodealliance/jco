@@ -589,6 +589,8 @@ impl AsyncFutureIntrinsic {
                 let future_value_class = AsyncFutureIntrinsic::FutureValueClass.name();
                 let global_buffer_mgr = Intrinsic::GlobalBufferManager.name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
                 // Generate the inner read/write logic necessary for eitther kind of write end
                 // this will be called internally (usually during guest reads), via places like
@@ -897,6 +899,18 @@ impl AsyncFutureIntrinsic {
 
                                   const vs = buffer.read(1);
                                   if (vs.length !== 1) {{ throw new Error('multiple results from future'); }}
+
+                                  // The copy event is published from inside the guest's current
+                                  // callback slice.
+                                  //
+                                  // Here we avoid exposing the lifted value to host code
+                                  // until that slice has returned and released the instance lock, because
+                                  // the consumer could immediately make a synchronous call on the lifted value
+                                  // (e.g. if it's a resource)
+                                  const componentIdx = this.getWaitable().componentIdx();
+                                  if (componentIdx !== -1) {{
+                                      await {get_or_create_async_state_fn}(componentIdx).waitForExclusiveRelease();
+                                  }}
 
                                   return {{ value: vs[0] }};
                               }}
