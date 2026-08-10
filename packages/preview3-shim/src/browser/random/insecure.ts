@@ -1,11 +1,11 @@
-import { Todo } from "../../common/errors.js";
+import { insecure } from "@bytecodealliance/preview2-shim/random";
 
 function getInsecureRandomBytes(maxLen: bigint): Uint8Array {
-  throw new Todo();
+  return insecure.getInsecureRandomBytes(maxLen);
 }
 
 function getInsecureRandomU64(): bigint {
-  throw new Todo();
+  return insecure.getInsecureRandomU64();
 }
 
 export default {

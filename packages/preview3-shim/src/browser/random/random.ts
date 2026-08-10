@@ -1,11 +1,11 @@
-import { Todo } from "../../common/errors.js";
+import { random } from "@bytecodealliance/preview2-shim/random";
 
 function getRandomBytes(maxLen: bigint): Uint8Array {
-  throw new Todo();
+  return random.getRandomBytes(maxLen);
 }
 
 function getRandomU64(): bigint {
-  throw new Todo();
+  return random.getRandomU64();
 }
 
 export default {
