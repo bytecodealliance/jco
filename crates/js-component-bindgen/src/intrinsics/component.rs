@@ -156,6 +156,7 @@ impl ComponentIntrinsic {
                         #syncImportWait = {promise_with_resolvers_fn}();
                         #lockHolderTaskID = null;
                         #lockWaiters = [];
+                        #lockHandoffScheduled = false;
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
@@ -385,15 +386,14 @@ impl ComponentIntrinsic {
                                 return false;
                             }}
 
-                            const next = this.#lockWaiters.shift();
-                            if (next) {{
-                                // Direct FIFO handoff: the waiter owns the lock as of now;
-                                // its continuation runs as a microtask.
-                                this.#lockHolderTaskID = next.taskID;
-                                next.resolve();
-                            }} else {{
-                                this.#lockHolderTaskID = null;
-                            }}
+                            // Make the release observable before handing the lock to the next
+                            // asynchronous guest slice.
+                            //
+                            // Release handlers may expose a lifted value whose consumer immediately
+                            // performs a synchronous call on the same component; that call must run
+                            // while the instance is genuinely unlocked, not via enterSync's
+                            // lock-free fallback code.
+                            this.#lockHolderTaskID = null;
 
                             this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
                             for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {{
@@ -405,7 +405,28 @@ impl ComponentIntrinsic {
                                     throw err;
                                 }}
                             }}
+                            this.#scheduleLockHandoff();
                             return true;
+                        }}
+
+                        #scheduleLockHandoff() {{
+                            if (this.#lockHandoffScheduled || this.#lockWaiters.length === 0) {{ return; }}
+                            this.#lockHandoffScheduled = true;
+                            queueMicrotask(() => {{
+                                this.#lockHandoffScheduled = false;
+                                // A synchronous call triggered by a release handler gets the
+                                // first opportunity to use the unlocked component.
+                                //
+                                // Its release will leave this queued handoff in place.
+                                if (this.#lockHolderTaskID !== null) {{
+                                    this.#scheduleLockHandoff();
+                                    return;
+                                }}
+                                const next = this.#lockWaiters.shift();
+                                if (!next) {{ return; }}
+                                this.#lockHolderTaskID = next.taskID;
+                                next.resolve();
+                            }});
                         }}
 
                         onNextExclusiveRelease(fn) {{
@@ -541,12 +562,12 @@ impl ComponentIntrinsic {
                                 // tick so that the resumed slice (a microtask continuation)
                                 // runs -- and its current-task register window opens and
                                 // closes -- before any sibling task of this component is
-                                // resumed. 
-                                // 
+                                // resumed.
+                                //
                                 // Resuming multiple suspended tasks in one synchronous
                                 // cascade interleaves their register save/restore windows
                                 // ([restoreA, restoreB, resumeA, resumeB]), re-entering wasm
-                                // with the register naming the wrong task, and the 
+                                // with the register naming the wrong task, and the
                                 // 'known residual' of the JSPI current-task register
                                 // fix); with concurrent task lifetimes per component this
                                 // corrupts guest context-local storage.
