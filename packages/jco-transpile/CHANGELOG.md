@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.7.0] - 2026-08-10
+
+This release contains an update of the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.3.1](https://crates.io/crates/js-component-bindgen/2.3.1)
+
+### 🧪 Testing
+
+- _(transpile)_ add regressions tests for async result args by @vados-cosmonic
+
+- _(transpile)_ flip the roundtrip reproducer to a live regression gate by @lann
+
+- _(transpile)_ add composed stream echo/relay pump regression tests by @lann
+
+- _(transpile)_ cover async-lifted composed stream read-to-close by @lann
+
+- _(transpile)_ add composed return-position stream-transfer regression test by @lann
+
+- _(transpile)_ add composed return-position stream-transfer regression test by @lann
+
+- _(transpile)_ cover wit-bindgen inter-task wakeup across CM tasks by @lann
+
+- _(transpile)_ add composed cross-component future-transfer regression test by @lann
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ lint by @vados-cosmonic
+
 ## [0.6.3] - 2026-08-05
 
 This release contains an update of the underlying transpiled `js-component-bindgen`
