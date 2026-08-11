@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0] - 2026-08-11
+
+### 🚀 Features
+
+- _(p3-shim)_ impl browser p3 random by @MendyBerger in #1849
+
+- _(p3-shim)_ add p3 browser shim skeleton by @MendyBerger in #1842
+
 ## [0.2.2] - 2026-08-04
 
 ### 🐛 Bug Fixes
