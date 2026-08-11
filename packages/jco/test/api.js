@@ -27,7 +27,8 @@ const isWindows = platform === "win32";
 // - (2026/05/15) increased due to addition of _FN_LOCALS
 // - (2026/06/17) increased due to updated binaryen
 // - (2026/07/06) increased due to updated jco-transpile (terser -> oxc-minify)
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 180_000;
+// - (2026/08/11) increased due to transpile fixes
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 190_000;
 
 suite("API", () => {
     let flavorfulWasmBytes;
