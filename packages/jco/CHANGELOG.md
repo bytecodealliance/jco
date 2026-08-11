@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.28.1] - 2026-08-11
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update preview3-shim to v0.3.0 by @vados-cosmonic in #1857
+
 ## [1.28.0] - 2026-08-11
 
 ### 🧪 Testing
