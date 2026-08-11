@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.28.0] - 2026-08-11
+
+### 🧪 Testing
+
+- _(jco)_ increase transpiled test code limit by @vados-cosmonic in #1837
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.7.0 by @vados-cosmonic
+
 ## [1.27.0] - 2026-08-04
 
 ### 🚀 Features
