@@ -2438,8 +2438,10 @@ impl AsyncTaskIntrinsic {
                                 {debug_log_fn}("[{lower_import_fn}()] import fn error:", err);
                                 if (requiresManualAsyncResult) {{
                                     manualAsyncResult.reject(err);
+                                    return;
                                 }}
-                                throw err;
+                                task.setErrored(err);
+                                task.reject(err);
                             }}
                         }});
 
@@ -2739,8 +2741,10 @@ impl AsyncTaskIntrinsic {
                                 {debug_log_fn}("[{lower_import_backwards_compat_fn}()] import fn error:", err);
                                 if (requiresManualAsyncResult) {{
                                     manualAsyncResult.reject(err);
+                                    return;
                                 }}
-                                throw err;
+                                task.setErrored(err);
+                                task.reject(err);
                             }}
                         }});
 
