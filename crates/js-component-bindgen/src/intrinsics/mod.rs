@@ -104,6 +104,7 @@ pub enum Intrinsic {
 
     // Global classes
     ComponentError,
+    TrapError,
 
     // WASI object helpers
     GetErrorPayload,
@@ -295,6 +296,10 @@ impl Intrinsic {
                 }
             ",
             ),
+
+            // Declared at module scope so the same class is available both to
+            // instantiation-mode internals and the public `_util` export.
+            Intrinsic::TrapError => {}
 
             Intrinsic::FinalizationRegistryCreate => output.push_str(
                 "
@@ -1155,7 +1160,8 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 44] = [
+const EARLY_INTRINSICS: [Intrinsic; 45] = [
+    Intrinsic::TrapError,
     Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::SymbolDispose,
     Intrinsic::SymbolAsyncIterator,
@@ -1750,6 +1756,7 @@ impl Intrinsic {
                 "base64Compile",
                 "clampGuest",
                 "ComponentError",
+                "TrapError",
                 "fetchCompile",
                 "finalizationRegistryCreate",
                 "getErrorPayload",
@@ -1815,6 +1822,7 @@ impl Intrinsic {
             Intrinsic::Base64Compile => "base64Compile",
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",
+            Intrinsic::TrapError => "TrapError",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::FinalizationRegistryCreate => "finalizationRegistryCreate",
             Intrinsic::GetErrorPayload => "getErrorPayload",

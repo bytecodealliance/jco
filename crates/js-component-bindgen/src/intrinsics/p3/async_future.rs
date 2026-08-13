@@ -386,6 +386,7 @@ impl AsyncFutureIntrinsic {
                 let host_future_class_name = self.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let trap_error_class = Intrinsic::TrapError.name();
 
                 output.push_str(&format!(
                     r#"
@@ -435,7 +436,7 @@ impl AsyncFutureIntrinsic {
                            if (!futureEnd) {{
                                throw new Error(`missing future [${{this.#futureEndWaitableIdx}}] (table [${{this.#futureTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
-                           if (futureEnd.isInSet()) {{ throw new Error('trap: futures in waitable sets cannot be lifted'); }}
+                           if (futureEnd.isInSet()) {{ throw new {trap_error_class}('futures in waitable sets cannot be lifted'); }}
 
                             return futureEnd.promise();
                         }}
@@ -978,13 +979,16 @@ impl AsyncFutureIntrinsic {
                 };
 
                 let drop_check = match self {
-                    Self::FutureReadableEndClass => "",
+                    Self::FutureReadableEndClass => "".into(),
                     Self::FutureWritableEndClass => {
-                        r#"
-                          if (this.isWritable() && !this.isDoneState()) {{
-                              throw new Error('trap: futures must not be dropped before being completed');
-                          }}
-                        "#
+                        let trap_error_class = Intrinsic::TrapError.name();
+                        format!(
+                            r#"
+                              if (this.isWritable() && !this.isDoneState()) {{
+                                  throw new {trap_error_class}('futures must not be dropped before being completed');
+                              }}
+                            "#
+                        )
                     }
                     _ => unreachable!(),
                 };
