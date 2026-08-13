@@ -955,6 +955,11 @@ impl AsyncTaskIntrinsic {
                                reject: rejectCompletionPromise,
                            }} = {promise_with_resolvers_fn}();
                            this.#completionPromise = completionPromise;
+                           // A nested rejection can reach the root task while its Wasm
+                           // entrypoint is still suspended, before the export wrapper awaits
+                           // this promise. Mark it handled immediately while preserving the
+                           // original rejected promise for the eventual caller.
+                           completionPromise.catch(() => {{}});
 
                            this.#onResolveHandlers.push((results) => {{
                                if (this.#parentSubtask !== null) {{ return; }}
@@ -1377,6 +1382,14 @@ impl AsyncTaskIntrinsic {
                                     {debug_log_fn}("[{task_class}#onResolve] error during task resolve handler", err);
                                     throw err;
                                 }}
+                            }}
+
+                            // Rejections are control-flow failures, not canonical ABI results.
+                            // Propagate them through the subtask chain without running return
+                            // lowering or post-return hooks for a successful result.
+                            if (this.#rejected) {{
+                                this.#parentSubtask?.reject(taskValue);
+                                return;
                             }}
 
                             // NOTE: if the parent subtask has already been resolved (e.g. it was
@@ -1823,7 +1836,21 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         reject(subtaskErr) {{
-                            this.#childTask?.reject(subtaskErr);
+                            if (this.#resolved) {{ return; }}
+
+                            if (this.#onProgressFn) {{ this.#onProgressFn(); }}
+
+                            if (this.#state === {subtask_class}.State.STARTING) {{
+                                this.#state = {subtask_class}.State.CANCELLED_BEFORE_STARTED;
+                            }} else if (this.#state === {subtask_class}.State.STARTED) {{
+                                this.#state = {subtask_class}.State.CANCELLED_BEFORE_RETURNED;
+                            }} else {{
+                                throw new Error('cannot reject a completed subtask');
+                            }}
+
+                            this.#resolved = true;
+                            this.#parentTask.removeSubtask(this);
+                            this.#parentTask.reject(subtaskErr);
                         }}
 
                         onResolve(subtaskValue) {{
