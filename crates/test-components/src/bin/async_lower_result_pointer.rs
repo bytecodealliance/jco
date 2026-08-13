@@ -6,7 +6,7 @@ mod bindings {
     export!(Component);
 }
 
-use bindings::exports::jco::test_components::local_run_async;
+use bindings::exports::jco::test_components::{async_import_rejection_test, local_run_async};
 use bindings::jco::test_components::async_lower_result_pointer_host;
 use bindings::jco::test_components::sync_lower_result_pointer_host;
 
@@ -26,6 +26,12 @@ impl local_run_async::Guest for Component {
             Ok(async_lower_result_pointer_host::TestFlags::FIRST
                 | async_lower_result_pointer_host::TestFlags::THIRD_FLAG,),
         );
+    }
+}
+
+impl async_import_rejection_test::Guest for Component {
+    async fn run() {
+        let _ = async_lower_result_pointer_host::get_outcome().await;
     }
 }
 
