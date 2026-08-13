@@ -682,7 +682,7 @@ impl LowerIntrinsic {
                             ctx.storagePtr = Math.max(ctx.storagePtr, originalPtr + variantSize32);
 
                             const rem = ctx.storagePtr % variantAlign32;
-                            if (rem !== 0) {{ ctx.storagePtr += varianttAlign32 - rem; }}
+                            if (rem !== 0) {{ ctx.storagePtr += variantAlign32 - rem; }}
                         }}
                     }}
                 "#));
