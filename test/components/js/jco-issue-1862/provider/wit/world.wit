@@ -1,0 +1,15 @@
+package test:resource-reptable;
+
+interface resources {
+    resource named-resource {
+        constructor(name: string);
+        get-name: func() -> string;
+    }
+
+    roundtrip-owned: func(value: own<named-resource>) -> own<named-resource>;
+}
+
+world provider {
+    export resources;
+    export wasi:cli/run@0.2.6;
+}

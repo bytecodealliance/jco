@@ -1,0 +1,8 @@
+[project]
+name = "jco-issue-1862-consumer"
+version = "0.1.0"
+description = "Python consumer reproducing jco issue 1862"
+requires-python = ">=3.14"
+dependencies = [
+    "componentize-py>=0.23.0",
+]

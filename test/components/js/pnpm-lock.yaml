@@ -12,6 +12,12 @@ importers:
         specifier: ^0.22.0
         version: 0.22.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
 
+  jco-issue-1862/provider:
+    devDependencies:
+      '@bytecodealliance/componentize-js':
+        specifier: ^0.22.0
+        version: 0.22.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+
 packages:
 
   '@bytecodealliance/componentize-js@0.19.3':

@@ -4,6 +4,7 @@ allowBuilds: []
 
 packages:
   - jco-issue-1390/callee
+  - jco-issue-1862/provider
 
 catalog:
   puppeteer: ^25.1.0

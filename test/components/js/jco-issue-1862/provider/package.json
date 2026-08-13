@@ -1,0 +1,11 @@
+{
+    "name": "extended-jco-issue-1862-provider",
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "build": "componentize-js -w wit -o component.wasm src/component.js"
+    },
+    "devDependencies": {
+        "@bytecodealliance/componentize-js": "^0.22.0"
+    }
+}

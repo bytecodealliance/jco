@@ -1,0 +1,18 @@
+uv := env_var_or_default("UV", "uv")
+wkg := env_var_or_default("WKG", "wkg")
+
+@_default:
+    just --list
+
+setup:
+    {{uv}} sync
+
+wit-fetch:
+    {{wkg}} wit fetch
+
+gen-bindings: wit-fetch
+    rm -rf bindings
+    {{uv}} run componentize-py -d wit bindings bindings
+
+build: setup gen-bindings
+    {{uv}} run componentize-py -d wit componentize -o component.wasm component

@@ -1,0 +1,12 @@
+pnpm := env_var_or_default("PNPM", "pnpm")
+wkg := env_var_or_default("WKG", "wkg")
+
+@_default:
+    just --list
+
+wit-fetch:
+    {{wkg}} wit fetch
+
+build: wit-fetch
+    {{pnpm}} --dir ../.. install --no-frozen-lockfile
+    {{pnpm}} run build
