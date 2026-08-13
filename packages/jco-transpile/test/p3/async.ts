@@ -46,6 +46,7 @@ suite('Async (WASI P3)', () => {
                     'jco:test-components/async-lower-result-pointer-host': {
                         addFive: async (a, b, c, d, e) => a + b + c + d + e,
                         getFlags: async () => ({ first: true, thirdFlag: true }),
+                        getOutcome: async () => ({ tag: 'denied' }),
                     },
                     'jco:test-components/sync-lower-result-pointer-host': {
                         addPair: (a, b, c, d, e) => [a + b + c + d + e, a * b * c * d * e],
@@ -63,6 +64,36 @@ suite('Async (WASI P3)', () => {
 
         try {
             await instance['jco:test-components/local-run-async'].run();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // https://github.com/bytecodealliance/jco/issues/1859
+    test.concurrent('rejected async imports are not lowered as successful results', async () => {
+        const inducedError = new Error('induced host rejection');
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-lower-result-pointer.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/async-lower-result-pointer-host': {
+                        addFive: async () => 0,
+                        getFlags: async () => ({}),
+                        getOutcome: async () => {
+                            throw inducedError;
+                        },
+                    },
+                    'jco:test-components/sync-lower-result-pointer-host': {
+                        addPair: () => [0, 0],
+                    },
+                },
+            },
+        });
+
+        try {
+            await expect(instance['jco:test-components/async-import-rejection-test'].run()).rejects.toBe(inducedError);
         } finally {
             await cleanup();
         }

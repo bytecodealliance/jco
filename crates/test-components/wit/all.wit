@@ -31,8 +31,19 @@ interface async-lower-result-pointer-host {
         third-flag,
     }
 
+    variant outcome {
+        answered(u16),
+        transport-failed(string),
+        denied,
+    }
+
     add-five: async func(a: u32, b: u32, c: u32, d: u32, e: u32) -> result<u32, string>;
     get-flags: async func() -> result<test-flags, string>;
+    get-outcome: async func() -> outcome;
+}
+
+interface async-import-rejection-test {
+    run: async func();
 }
 
 interface async-scalar-lowers-host {
@@ -309,6 +320,7 @@ world async-lower-result-pointer {
   import async-lower-result-pointer-host;
   import sync-lower-result-pointer-host;
   export local-run-async;
+  export async-import-rejection-test;
 }
 
 world async-scalar-lowers {
