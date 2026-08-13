@@ -1305,6 +1305,7 @@ impl LiftIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let global_future_table_map = AsyncFutureIntrinsic::GlobalFutureTableMap.name();
                 let lift_u32 = Self::LiftFlatU32.name();
+                let trap_error_class = Intrinsic::TrapError.name();
 
                 uwriteln!(
                     output,
@@ -1350,7 +1351,7 @@ impl LiftIntrinsic {
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat future of borrowed type'); }}
                             if (futureEnd.isWritable()) {{ throw new Error('only readable futures can be lifted'); }}
                             if (!futureEnd.isIdleState()) {{ throw new Error('futures must be in idle state'); }}
-                            if (futureEnd.isInSet()) {{ throw new Error('trap: futures in waitable sets cannot be lifted'); }}
+                            if (futureEnd.isInSet()) {{ throw new {trap_error_class}('futures in waitable sets cannot be lifted'); }}
 
                             return [ futureEnd.promise(), ctx ];
                         }};
@@ -1368,6 +1369,7 @@ impl LiftIntrinsic {
                 let lift_flat_stream_fn = self.name();
                 let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
                 let lift_u32 = Self::LiftFlatU32.name();
+                let trap_error_class = Intrinsic::TrapError.name();
 
                 output.push_str(&format!(r#"
                     function {lift_flat_stream_fn}(meta) {{
@@ -1411,7 +1413,7 @@ impl LiftIntrinsic {
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat stream of borrowed type'); }}
                             if (streamEnd.isWritable()) {{ throw new Error('only readable streams can be lifted'); }}
                             if (!streamEnd.isIdleState()) {{ throw new Error('streams must be in idle state'); }}
-                            if (streamEnd.isInSet()) {{ throw new Error('trap: streams in waitable sets cannot be lifted'); }}
+                            if (streamEnd.isInSet()) {{ throw new {trap_error_class}('streams in waitable sets cannot be lifted'); }}
 
                             const stream = new {external_stream_class}({{
                                 globalRep: streamEnd.globalStreamMapRep(),
