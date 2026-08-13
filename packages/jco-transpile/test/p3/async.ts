@@ -5,7 +5,7 @@ import { suite, test, assert, expect } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { setupAsyncTest } from '../helpers.js';
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues } from '../common.js';
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues, timeoutMs } from '../common.js';
 
 suite('Async (WASI P3)', () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
@@ -94,6 +94,36 @@ suite('Async (WASI P3)', () => {
 
         try {
             await expect(instance['jco:test-components/async-import-rejection-test'].run()).rejects.toBe(inducedError);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // https://github.com/bytecodealliance/jco/issues/1860
+    test.concurrent('async import result lowering errors reject the export', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-lower-result-pointer.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/async-lower-result-pointer-host': {
+                        addFive: async () => 0,
+                        getFlags: async () => ({}),
+                        getOutcome: async () => ({ tag: 'invalid-outcome' }),
+                    },
+                    'jco:test-components/sync-lower-result-pointer-host': {
+                        addPair: () => [0, 0],
+                    },
+                },
+            },
+        });
+
+        try {
+            const exportCall = instance['jco:test-components/async-import-rejection-test'].run();
+            await expect(Promise.race([exportCall, timeoutMs(5_000, 'export call timed out')])).rejects.toThrow(
+                /invalid-outcome/,
+            );
         } finally {
             await cleanup();
         }

@@ -1,4 +1,5 @@
 import { env } from 'node:process';
+import { setTimeout } from 'node:timers';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
@@ -124,4 +125,10 @@ export async function checkFutureValues(args) {
         res = await future;
         await eq(res, expectedValues[idx] ?? v, `${typeName} future read is incorrect`);
     }
+}
+
+// Helper for creating timeouts
+export async function timeoutMs(ms: number, errMsg: string): Promise<void> {
+    const err = new Error(errMsg ?? `timeout after {ms}ms`);
+    return new Promise((_, reject) => setTimeout(() => reject(err), ms));
 }
