@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3c6af41c.js";
+            window.path_to_searchindex_js = "../searchindex-03209bdf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1f53c7bb.js"></script>
@@ -184,8 +184,8 @@
 <p>While some errors are represented at the WIT type level and expected, some internal errors
 may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
 component-model traps they detect with the exported <code>_util.TrapError</code> class.</p>
-<p><strong>After an instance has trapped, the component instance should no longer be used,
-and any subsequent use (successful or otherwise) is undefined behavior</strong>.</p>
+<p>After an instance has trapped, Jco marks the component instance as unusable. Any subsequent
+call throws the original trap without re-entering the component.</p>
 <p>To detect these traps, use the <code>_util.TrapError</code> class:</p>
 <pre><code class="language-js">import { instantiate, _util } from "./dist/transpiled/component.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
@@ -198,7 +198,7 @@ try {
 } catch (err) {
     if (err instanceof _util.TrapError) {
         console.error(`TRAP: ${err}`);
-        // avoid continuing to use the instance
+        // The instance is now disabled and cannot be called again.
     } else {
         // Other exceptions are unexpected and should be handled separately.
         throw err;
