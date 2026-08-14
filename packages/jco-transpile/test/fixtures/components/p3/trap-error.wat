@@ -11,6 +11,12 @@
         (i32.wrap_i64
           (i64.shr_u (local.get $handles) (i64.const 32))))
     )
+
+    (func (export "ok") (result i32)
+      (i32.const 42)
+    )
+
+    (func (export "take-u32") (param i32))
   )
 
   (type $future-u8 (future u8))
@@ -28,5 +34,12 @@
 
   (func (export "trap") async
     (canon lift (core func $instance "trap"))
+  )
+
+  (func (export "ok") (result u32)
+    (canon lift (core func $instance "ok"))
+  )
+  (func (export "take-u32") (param "value" u32)
+    (canon lift (core func $instance "take-u32"))
   )
 )
