@@ -110,6 +110,7 @@ suite('Trap detection', () => {
                 outDir,
                 instantiation: 'async',
                 asyncMode: 'jspi',
+                strict: true,
             });
 
             try {
@@ -118,6 +119,9 @@ suite('Trap detection', () => {
 
                 const esModule = await import(pathToFileURL(join(outDir, 'trap-error.js')).href);
                 const instance = await esModule.instantiate(undefined, {});
+
+                assert.throws(() => instance.takeU32(-1), TypeError);
+                assert.strictEqual(instance.ok(), 42, 'argument validation must not trap the instance');
 
                 let trap;
                 try {
@@ -128,6 +132,18 @@ suite('Trap detection', () => {
 
                 assert.instanceOf(trap, esModule._util.TrapError);
                 assert.match(trap.message, /futures must not be dropped before being completed/);
+
+                let subsequentCallError;
+                try {
+                    instance.ok();
+                } catch (err) {
+                    subsequentCallError = err;
+                }
+                assert.strictEqual(
+                    subsequentCallError,
+                    trap,
+                    'a trapped component instance must reject subsequent calls',
+                );
             } finally {
                 await rm(outDir, { recursive: true });
             }
