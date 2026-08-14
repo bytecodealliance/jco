@@ -9,7 +9,7 @@ import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 
 import { suite, test, assert, describe } from 'vitest';
 
-import { readFixtureFlags, getTmpDir, getRandomPort } from './helpers.js';
+import { readFixtureFlags, getTmpDir, getRandomPort, setupAsyncTest } from './helpers.js';
 
 import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR } from './common.js';
 
@@ -95,6 +95,34 @@ suite('Directive Prologue', () => {
         const { files } = await transpileBytes(bytes, { name: 'adder' });
         const bindingsSource = new TextDecoder().decode(files['adder.js']);
         assert.isOk(bindingsSource.includes('"use components";'));
+    });
+});
+
+suite('Trap detection', () => {
+    test('exports the documented TrapError class', async () => {
+        const { esModule, cleanup } = await setupAsyncTest({
+            component: {
+                name: 'adder',
+                path: join(COMPONENT_FIXTURES_DIR, 'adder.component.wasm'),
+            },
+        });
+
+        try {
+            let detectedTrap = false;
+            try {
+                throw new esModule._util.TrapError('test trap');
+            } catch (err) {
+                if (err instanceof esModule._util.TrapError) {
+                    detectedTrap = true;
+                } else {
+                    throw err;
+                }
+            }
+
+            assert.isTrue(detectedTrap);
+        } finally {
+            await cleanup();
+        }
     });
 });
 
