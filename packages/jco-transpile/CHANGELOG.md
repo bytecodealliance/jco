@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.1] - 2026-08-14
+
+This release contains an update of the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.4.0](https://crates.io/crates/js-component-bindgen/2.4.0)
+
+### 🚜 Refactor
+
+- _(transpile)_ use WebAssembly.RuntimeError for traps by @vados-cosmonic in #1873
+
+### 🧪 Testing
+
+- _(transpile)_ increase transpile code char limit by @vados-cosmonic in #1872
+
+- _(transpile)_ increase call overhead budget in CI by @vados-cosmonic in #1868
+
+- _(transpile)_ add trap detection regression test by @vados-cosmonic
+
+- _(transpile)_ skip call overhead without JSPI by @vados-cosmonic in #1870
+
+- _(transpile)_ add regression test for component call overhead by @vados-cosmonic
+
+- _(transpile)_ cover async result lowering failures by @vados-cosmonic
+
+- _(transpile)_ add regression test for async import rejection by @vados-cosmonic
+
 ## [0.7.0] - 2026-08-10
 
 This release contains an update of the underlying transpiled `js-component-bindgen`
