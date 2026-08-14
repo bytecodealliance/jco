@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.3.2] - 2026-08-14
+
+### 🚀 Features
+
+- _(bindgen)_ detect and disable component after trap by @vados-cosmonic
+
+- _(bindgen)_ expose explicit TrapError by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ trap on invalid resource handles by @vados-cosmonic in #1874
+
+- _(bindgen)_ propagate async result lowering errors by @vados-cosmonic in #1866
+
+- _(bindgen)_ propagate async import rejections by @vados-cosmonic in #1865
+
+- _(bindgen)_ fix typo in var name for variant alignment by @vados-cosmonic in #1864
+
+
+
+
 ## [2.3.1] - 2026-08-10
 
 ### 🐛 Bug Fixes
