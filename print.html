@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c09b07a4.js";
+            window.path_to_searchindex_js = "searchindex-3c6af41c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b8337dd6.js"></script>
+        <script src="toc-1f53c7bb.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1324,7 +1324,7 @@ or changed at instantiation time.</p>
 </code></pre>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>For more information, see the <a href="#map-configuration">Map Configuration section of the Transpiling documentation</a></p>
+<p>For more information, see the <a href="advanced/transpiling.html#map-configuration">Map Configuration section of the Transpiling documentation</a></p>
 </blockquote>
 <p>Sometimes you may want to use <em>your own</em> implementation of WASI interfaces (whether partial or complete),
 known/resolved only at instantiation time.</p>
@@ -1490,6 +1490,34 @@ const component = await wasmESModule.instantiate(
 </tbody>
 </table>
 </div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="detecting-traps"><a class="header" href="#detecting-traps">Detecting Traps</a></h1>
+<p>While some errors are represented at the WIT type level and expected, some internal errors
+may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
+component-model traps they detect with the exported <code>_util.TrapError</code> class.</p>
+<p><strong>After an instance has trapped, the component instance should no longer be used,
+and any subsequent use (successful or otherwise) is undefined behavior</strong>.</p>
+<p>To detect these traps, use the <code>_util.TrapError</code> class:</p>
+<pre><code class="language-js">import { instantiate, _util } from "./dist/transpiled/component.js";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const shim = new WASIShim().getImportObject();
+const instance = await instantiate(undefined, shim);
+
+try {
+    instance['ns:pkg/iface'].someFunction();
+} catch (err) {
+    if (err instanceof _util.TrapError) {
+        console.error(`TRAP: ${err}`);
+        // avoid continuing to use the instance
+    } else {
+        // Other exceptions are unexpected and should be handled separately.
+        throw err;
+    }
+}
+</code></pre>
+<p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
+thrown as <code>TrapError</code> instances.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
