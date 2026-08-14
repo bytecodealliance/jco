@@ -1576,6 +1576,14 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let get_component_state = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let component_idx_expr = self
+                    .component_state
+                    .as_ref()
+                    .map(|state| state.get_js_exprs().component_idx)
+                    .unwrap_or_else(|| "-1".into());
                 let has_post_return = self.post_return.is_some();
                 let is_async = self.is_async;
                 uwriteln!(
@@ -1593,6 +1601,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Write out whether the callee was host provided
                 // (if we're calling into wasm then we know it was not)
                 uwriteln!(self.src, "const hostProvided = false;");
+
+                // Argument validation and lowering happen before this instruction. Only
+                // disable the instance once execution is about to enter the component.
+                uwriteln!(
+                    self.src,
+                    "{get_component_state}({component_idx_expr}).throwIfTrapped();"
+                );
 
                 // Inject machinery for starting a 'current' task
                 // (this will define the 'task' variable)
@@ -1689,6 +1704,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   taskID: task.id(),
                                   err,
                               }});
+                              {get_component_state}({component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -1706,6 +1722,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   taskID: task.id(),
                                   err,
                               }});
+                              {get_component_state}({component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -1791,6 +1808,9 @@ impl Bindgen for FunctionBindgen<'_> {
             // Call to an imported interface (normally provided by the host)
             Instruction::CallInterface { func, async_ } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let get_component_state = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
                 let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentTask,
                 ));
@@ -1935,6 +1955,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   subtaskID: task.getParentSubtask()?.id(),
                                   err,
                               }});
+                              {get_component_state}({component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -1953,6 +1974,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   subtaskID: task.getParentSubtask()?.id(),
                                   err,
                               }});
+                              {get_component_state}({component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2016,6 +2038,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             try {{
                                 ret = {{ tag: 'ok', val: {call} }};
                             }} catch (e) {{
+                                if ({get_component_state}({component_idx_expr}).markTrapped(e)) {{ throw e; }}
                                 ret = {{ tag: 'err', val: {err_payload}(e) }};
                             }}
                             "#,

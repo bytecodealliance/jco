@@ -4,8 +4,8 @@ While some errors are represented at the WIT type level and expected, some inter
 may cause a component instance to [trap][wiki-trap]. Jco-generated bindings report the
 component-model traps they detect with the exported `_util.TrapError` class.
 
-**After an instance has trapped, the component instance should no longer be used,
-and any subsequent use (successful or otherwise) is undefined behavior**.
+After an instance has trapped, Jco marks the component instance as unusable. Any subsequent
+call throws the original trap without re-entering the component.
 
 To detect these traps, use the `_util.TrapError` class:
 
@@ -21,7 +21,7 @@ try {
 } catch (err) {
     if (err instanceof _util.TrapError) {
         console.error(`TRAP: ${err}`);
-        // avoid continuing to use the instance
+        // The instance is now disabled and cannot be called again.
     } else {
         // Other exceptions are unexpected and should be handled separately.
         throw err;

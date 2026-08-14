@@ -1409,9 +1409,10 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     if args.intrinsics.contains(&Intrinsic::Component(
         ComponentIntrinsic::ComponentAsyncStateClass,
     )) {
-        args.intrinsics.extend([&Intrinsic::AsyncStream(
-            AsyncStreamIntrinsic::GlobalStreamMap,
-        )]);
+        args.intrinsics.extend([
+            &Intrinsic::TrapError,
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+        ]);
     }
 
     if args
