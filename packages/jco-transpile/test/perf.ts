@@ -59,55 +59,58 @@ async function measureAsyncCall(call: (a: number, b: number) => Promise<number>,
 
 suite('performance', () => {
     // https://github.com/bytecodealliance/jco/issues/1717
-    test('native/module/component export call overhead', async () => {
-        const moduleBytes = await parse(await readFile(ADDER_MODULE_PATH, 'utf8'));
-        const module = await WebAssembly.instantiate(moduleBytes);
-        const moduleAdd = module.instance.exports.add as (a: number, b: number) => number;
-        const sync = await setupAsyncTest({ component: { path: ADDER_COMPONENT_PATH } });
-        const async = await setupAsyncTest({
-            component: {
-                path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-flat-param-adder.wasm'),
-                imports: new WASIShim().getImportObject(),
-            },
-        });
+    test.skipIf(typeof WebAssembly?.Suspending !== 'function')(
+        'native/module/component export call overhead',
+        async () => {
+            const moduleBytes = await parse(await readFile(ADDER_MODULE_PATH, 'utf8'));
+            const module = await WebAssembly.instantiate(moduleBytes);
+            const moduleAdd = module.instance.exports.add as (a: number, b: number) => number;
+            const sync = await setupAsyncTest({ component: { path: ADDER_COMPONENT_PATH } });
+            const async = await setupAsyncTest({
+                component: {
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-flat-param-adder.wasm'),
+                    imports: new WASIShim().getImportObject(),
+                },
+            });
 
-        try {
-            const syncAdd = sync.instance.add.add;
-            const asyncAdd = async.instance.asyncAddS32.add;
+            try {
+                const syncAdd = sync.instance.add.add;
+                const asyncAdd = async.instance.asyncAddS32.add;
 
-            // Warm all four paths before sampling so compilation does not count as call overhead.
-            measureSyncCall(nativeAdd, 10_000);
-            measureSyncCall(moduleAdd, 10_000);
-            measureSyncCall(syncAdd, 10_000);
-            await measureAsyncCall(asyncAdd, 100);
+                // Warm all four paths before sampling so compilation does not count as call overhead.
+                measureSyncCall(nativeAdd, 10_000);
+                measureSyncCall(moduleAdd, 10_000);
+                measureSyncCall(syncAdd, 10_000);
+                await measureAsyncCall(asyncAdd, 100);
 
-            const nativeNs = measureSyncCall(nativeAdd, 1_000_000);
-            const moduleNs = measureSyncCall(moduleAdd, 1_000_000);
-            const syncComponentNs = measureSyncCall(syncAdd, 100_000);
-            const asyncComponentNs = await measureAsyncCall(asyncAdd, 1_000);
-            const moduleRatio = moduleNs / nativeNs;
-            const syncComponentRatio = syncComponentNs / nativeNs;
-            const asyncComponentRatio = asyncComponentNs / nativeNs;
+                const nativeNs = measureSyncCall(nativeAdd, 1_000_000);
+                const moduleNs = measureSyncCall(moduleAdd, 1_000_000);
+                const syncComponentNs = measureSyncCall(syncAdd, 100_000);
+                const asyncComponentNs = await measureAsyncCall(asyncAdd, 1_000);
+                const moduleRatio = moduleNs / nativeNs;
+                const syncComponentRatio = syncComponentNs / nativeNs;
+                const asyncComponentRatio = asyncComponentNs / nativeNs;
 
-            assert.isBelow(
-                moduleRatio,
-                WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT,
-                `sync Wasm module call overhead should remain below ${WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT}x native`,
-            );
-            assert.isBelow(
-                syncComponentRatio,
-                SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT,
-                `sync component call overhead should remain below ${SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native`,
-            );
-            assert.isBelow(
-                asyncComponentRatio,
-                ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT,
-                `async component call overhead should remain below ${ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native`,
-            );
-        } finally {
-            await Promise.all([sync.cleanup(), async.cleanup()]);
-        }
-    });
+                assert.isBelow(
+                    moduleRatio,
+                    WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT,
+                    `sync Wasm module call overhead should remain below ${WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT}x native`,
+                );
+                assert.isBelow(
+                    syncComponentRatio,
+                    SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT,
+                    `sync component call overhead should remain below ${SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native`,
+                );
+                assert.isBelow(
+                    asyncComponentRatio,
+                    ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT,
+                    `async component call overhead should remain below ${ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native`,
+                );
+            } finally {
+                await Promise.all([sync.cleanup(), async.cleanup()]);
+            }
+        },
+    );
 
     // https://github.com/bytecodealliance/jco/issues/1711
     test('guest->guest async call latency', { retry: 5 }, async () => {
