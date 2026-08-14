@@ -101,7 +101,7 @@ suite('Directive Prologue', () => {
 
 suite('Trap detection', () => {
     test.concurrent.skipIf(typeof WebAssembly.Suspending !== 'function')(
-        'identifies a bindgen trap with the documented TrapError class',
+        'identifies a bindgen trap as a WebAssembly.RuntimeError',
         async () => {
             const outDir = await getTmpDir();
             const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'p3', 'trap-error.wat'), 'utf8');
@@ -130,7 +130,7 @@ suite('Trap detection', () => {
                     trap = err;
                 }
 
-                assert.instanceOf(trap, esModule._util.TrapError);
+                assert.instanceOf(trap, WebAssembly.RuntimeError);
                 assert.match(trap.message, /futures must not be dropped before being completed/);
 
                 let subsequentCallError;

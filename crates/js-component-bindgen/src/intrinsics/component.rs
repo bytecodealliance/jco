@@ -136,7 +136,7 @@ impl ComponentIntrinsic {
                 let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
                 let stream_readable_end_class =
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass).name();
-                let trap_error_class = Intrinsic::TrapError.name();
+                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
 
                 output.push_str(&format!(
                     r#"
@@ -200,7 +200,7 @@ impl ComponentIntrinsic {
                         }}
 
                         markTrapped(err) {{
-                            if (!(err instanceof {trap_error_class} || err instanceof WebAssembly.RuntimeError)) {{
+                            if (!(err instanceof {runtime_error_class})) {{
                                 return false;
                             }}
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});

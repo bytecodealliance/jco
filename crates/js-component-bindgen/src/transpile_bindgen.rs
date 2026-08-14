@@ -469,16 +469,6 @@ impl JsBindgen<'_> {
 
         // Render the telemery directive
         uwriteln!(output, r#""use components";"#);
-        output.push_str(
-            "
-            class TrapError extends Error {
-                constructor (message) {
-                    super(message);
-                    this.name = 'TrapError';
-                }
-            }
-        ",
-        );
 
         let render_args = RenderIntrinsicsArgs::builder()
             .intrinsics(&mut self.all_intrinsics)
@@ -695,7 +685,6 @@ impl JsBindgen<'_> {
             output,
             r#"
               export const _util = {{
-                  TrapError,
                   {maybe_ext_future_class}
               }}
             "#,

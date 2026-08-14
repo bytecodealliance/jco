@@ -543,7 +543,7 @@ impl AsyncStreamIntrinsic {
                     "#
                 );
 
-                let trap_error_class = Intrinsic::TrapError.name();
+                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
 
                 let (rw_fn_name, inner_rw_impl) = match self {
                     // Internal implementation for writing to internal buffer after reading from a provided managed buffers
@@ -571,14 +571,14 @@ impl AsyncStreamIntrinsic {
                                 const pendingElemMeta = this.#pendingBufferMeta.buffer.getElemMeta();
                                 const newBufferElemMeta = buffer.getElemMeta();
                                 if (pendingElemMeta.payloadTypeName !== newBufferElemMeta.payloadTypeName) {{
-                                    throw new {trap_error_class}("stream end type does not match internal buffer");
+                                    throw new {runtime_error_class}("stream end type does not match internal buffer");
                                 }}
 
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component write, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
                                 if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
-                                    throw new {trap_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}], send)`);
+                                    throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}], send)`);
                                 }}
 
                                 // If original capacities were zero, we're dealing with a unit stream,
@@ -650,7 +650,7 @@ impl AsyncStreamIntrinsic {
                                 const pendingElemMeta = this.#pendingBufferMeta.buffer.getElemMeta();
                                 const newBufferElemMeta = buffer.getElemMeta();
                                 if (pendingElemMeta.payloadTypeName !== newBufferElemMeta.payloadTypeName) {{
-                                    throw new {trap_error_class}("stream end type does not match internal buffer");
+                                    throw new {runtime_error_class}("stream end type does not match internal buffer");
                                 }}
 
                                 // Since we do not know the string encoding until a write is performed, it is possible that
@@ -667,7 +667,7 @@ impl AsyncStreamIntrinsic {
                                 // we're doing a inter-component read, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
                                 if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
-                                    throw new {trap_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}] read)`);
+                                    throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}] read)`);
                                 }}
 
                                 const pendingRemaining = this.#pendingBufferMeta.buffer.remaining();
@@ -1418,7 +1418,7 @@ impl AsyncStreamIntrinsic {
                 let external_stream_class = Self::ExternalStreamClass.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let trap_error_class = Intrinsic::TrapError.name();
+                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
 
                 output.push_str(&format!(
                     r#"
@@ -1468,7 +1468,7 @@ impl AsyncStreamIntrinsic {
                            if (!streamEnd) {{
                                throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
-                           if (streamEnd.isInSet()) {{ throw new {trap_error_class}('streams in waitable sets cannot be lifted'); }}
+                           if (streamEnd.isInSet()) {{ throw new {runtime_error_class}('streams in waitable sets cannot be lifted'); }}
 
                             return new {external_stream_class}({{
                                 isReadable: streamEnd.isReadable(),
@@ -1819,7 +1819,7 @@ impl AsyncStreamIntrinsic {
                     ),
                     _ => unreachable!("unexpected stream operation"),
                 };
-                let trap_error_class = Intrinsic::TrapError.name();
+                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
 
                 output.push_str(&format!(r#"
                     async function {stream_op_fn}(
@@ -1851,7 +1851,7 @@ impl AsyncStreamIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         if (!{may_block} && !isAsync) {{
-                            throw new {trap_error_class}('only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
+                            throw new {runtime_error_class}('only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
                         }}
 
                         const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
