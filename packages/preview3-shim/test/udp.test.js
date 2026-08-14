@@ -20,7 +20,15 @@ describe("UDP Socket Creation", () => {
     expect(sock).toBeInstanceOf(UdpSocket);
     expect(sock.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
 
+    // The first worker resource has ID 0n. Ensure it is not mistaken for an
+    // absent resource during disposal.
+    sock.bind(ipv4LocalAddress);
+    const localAddress = sock.getLocalAddress();
     sock[Symbol.dispose]();
+
+    const replacement = createIpv4Socket();
+    expect(() => replacement.bind(localAddress)).not.toThrow();
+    replacement[Symbol.dispose]();
   });
 
   test("creates an IPv6 UDP socket", async () => {
