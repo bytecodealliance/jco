@@ -1,15 +1,16 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
 import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
 
 import { transpile, transpileBytes, writeFiles } from '../src/index.js';
+import { parse } from '../src/wasm-tools.js';
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 
 import { suite, test, assert, describe } from 'vitest';
 
-import { readFixtureFlags, getTmpDir, getRandomPort, setupAsyncTest } from './helpers.js';
+import { readFixtureFlags, getTmpDir, getRandomPort } from './helpers.js';
 
 import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR } from './common.js';
 
@@ -99,31 +100,39 @@ suite('Directive Prologue', () => {
 });
 
 suite('Trap detection', () => {
-    test('exports the documented TrapError class', async () => {
-        const { esModule, cleanup } = await setupAsyncTest({
-            component: {
-                name: 'adder',
-                path: join(COMPONENT_FIXTURES_DIR, 'adder.component.wasm'),
-            },
-        });
+    test.concurrent.skipIf(typeof WebAssembly.Suspending !== 'function')(
+        'identifies a bindgen trap with the documented TrapError class',
+        async () => {
+            const outDir = await getTmpDir();
+            const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'p3', 'trap-error.wat'), 'utf8');
+            const { files } = await transpileBytes(await parse(wat), {
+                name: 'trap-error',
+                outDir,
+                instantiation: 'async',
+                asyncMode: 'jspi',
+            });
 
-        try {
-            let detectedTrap = false;
             try {
-                throw new esModule._util.TrapError('test trap');
-            } catch (err) {
-                if (err instanceof esModule._util.TrapError) {
-                    detectedTrap = true;
-                } else {
-                    throw err;
-                }
-            }
+                await writeFiles(files);
+                await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
 
-            assert.isTrue(detectedTrap);
-        } finally {
-            await cleanup();
-        }
-    });
+                const esModule = await import(pathToFileURL(join(outDir, 'trap-error.js')).href);
+                const instance = await esModule.instantiate(undefined, {});
+
+                let trap;
+                try {
+                    await instance.trap();
+                } catch (err) {
+                    trap = err;
+                }
+
+                assert.instanceOf(trap, esModule._util.TrapError);
+                assert.match(trap.message, /futures must not be dropped before being completed/);
+            } finally {
+                await rm(outDir, { recursive: true });
+            }
+        },
+    );
 });
 
 // see: https://github.com/bytecodealliance/jco/issues/1400
