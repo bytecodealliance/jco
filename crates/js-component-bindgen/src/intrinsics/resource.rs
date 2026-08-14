@@ -206,6 +206,7 @@ impl ResourceIntrinsic {
                 let resource_transfer_borrow_fn = self.name();
                 let handle_tables = Intrinsic::HandleTables.name();
                 let resource_borrows = Self::ResourceCallBorrows.name();
+                let rsc_table_get = Self::ResourceTableGet.name();
                 let rsc_table_remove = Self::ResourceTableRemove.name();
                 let rsc_table_create_borrow = Self::ResourceTableCreateBorrow.name();
                 let scope_id = Intrinsic::ScopeId.name();
@@ -215,9 +216,8 @@ impl ResourceIntrinsic {
                     r#"
                     function {resource_transfer_borrow_fn}(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const fromHandle = fromTable[(handle << 1) + 1];
-                        const isOwn = (fromHandle & T_FLAG) !== 0;
-                        const rep = isOwn ? fromHandle & ~T_FLAG : {rsc_table_remove}(fromTable, fromHandle).rep;
+                        const {{ rep, own }} = {rsc_table_get}(fromTable, handle);
+                        if (!own) {rsc_table_remove}(fromTable, handle);
 
                         let toTable = {handle_tables}[toTid];
                         if (!toTable) {{

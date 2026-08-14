@@ -1118,6 +1118,30 @@ impl Intrinsic {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_transfer_borrow_checks_source_handle() {
+        let mut intrinsics = BTreeSet::from([Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTransferBorrow,
+        )]);
+        let opts = TranspileOpts::default();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+
+        assert!(source.contains("function rscTableGet(table, handle)"));
+        assert!(source.contains("function rscTableRemove(table, handle)"));
+        assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
+        assert!(source.contains("if (!own) rscTableRemove(fromTable, handle);"));
+    }
+}
+
 /// Profile for determinism to be used by async implementation
 #[derive(Debug, Default, PartialEq, Eq)]
 pub enum AsyncDeterminismProfile {
@@ -1274,7 +1298,13 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args.intrinsics.contains(&Intrinsic::Resource(
         ResourceIntrinsic::ResourceTransferBorrow,
-    )) || args.intrinsics.contains(&Intrinsic::Resource(
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
+            &Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+            &Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+        ]);
+    } else if args.intrinsics.contains(&Intrinsic::Resource(
         ResourceIntrinsic::ResourceTransferBorrowValidLifting,
     )) {
         args.intrinsics.insert(Intrinsic::Resource(

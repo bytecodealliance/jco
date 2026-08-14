@@ -2536,13 +2536,13 @@ impl<'a> Instantiator<'a, '_> {
             } => {
                 self.ensure_resource_table(*resource_ty_idx);
                 let rid = resource_ty_idx.as_u32();
-                let rsc_flag = self
+                let rsc_table_get = self
                     .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
+                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet));
                 uwriteln!(
                     self.src.js,
                     "function trampoline{i} (handle) {{
-                        return handleTable{rid}[(handle << 1) + 1] & ~{rsc_flag};
+                        return {rsc_table_get}(handleTable{rid}, handle).rep;
                     }}"
                 );
             }
