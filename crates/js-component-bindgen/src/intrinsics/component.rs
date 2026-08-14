@@ -136,6 +136,7 @@ impl ComponentIntrinsic {
                 let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
                 let stream_readable_end_class =
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass).name();
+                let trap_error_class = Intrinsic::TrapError.name();
 
                 output.push_str(&format!(
                     r#"
@@ -161,6 +162,7 @@ impl ComponentIntrinsic {
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
                         #errored = null;
+                        #trapped = null;
 
                         #backpressure = 0;
                         #backpressureWaiters = 0n;
@@ -195,6 +197,19 @@ impl ComponentIntrinsic {
                                 err.componentIdx = this.#componentIdx;
                             }}
                             this.#errored = err;
+                        }}
+
+                        markTrapped(err) {{
+                            if (!(err instanceof {trap_error_class} || err instanceof WebAssembly.RuntimeError)) {{
+                                return false;
+                            }}
+                            {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
+                            if (this.#trapped === null) {{ this.#trapped = err; }}
+                            return true;
+                        }}
+
+                        throwIfTrapped() {{
+                            if (this.#trapped !== null) {{ throw this.#trapped; }}
                         }}
 
                         callingSyncImport(val) {{
