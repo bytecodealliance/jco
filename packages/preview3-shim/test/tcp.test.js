@@ -22,6 +22,16 @@ describe("TCP Socket Creation", () => {
 
     expect(socket).toBeInstanceOf(TcpSocket);
     expect(socket.getAddressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
+
+    // The first worker resource has ID 0n. Ensure it is not mistaken for an
+    // absent resource during disposal.
+    socket.bind(ipv4LocalAddress);
+    const localAddress = socket.getLocalAddress();
+    socket[Symbol.dispose]();
+
+    const replacement = createIpv4Socket();
+    expect(() => replacement.bind(localAddress)).not.toThrow();
+    replacement[Symbol.dispose]();
   });
 
   test("should create an IPv6 socket", async () => {

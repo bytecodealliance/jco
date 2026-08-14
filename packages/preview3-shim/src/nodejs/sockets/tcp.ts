@@ -760,7 +760,7 @@ export class TcpSocket {
    * Disposes the socket
    */
   [Symbol.dispose]() {
-    if (this.#socketId) {
+    if (this.#socketId !== null) {
       worker().runSync({
         op: "tcp-dispose",
         socketId: this.#socketId,

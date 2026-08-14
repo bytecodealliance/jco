@@ -504,7 +504,7 @@ export class UdpSocket {
    * Releases native resources and marks the socket as closed.
    */
   [Symbol.dispose]() {
-    if (this.#socketId) {
+    if (this.#socketId !== null) {
       worker().runSync({
         op: "udp-dispose",
         socketId: this.#socketId,
