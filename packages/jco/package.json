@@ -80,7 +80,8 @@
         "componentize-qjs": "^0.4.2",
         "mkdirp": "^3",
         "ora": "^8",
-        "rolldown": "^1.1.0"
+        "rolldown": "^1.1.0",
+        "typescript": "catalog:"
     },
     "devDependencies": {
         "@commitlint/config-conventional": "^19.8.1",
@@ -91,7 +92,6 @@
         "oxfmt": "^0.28.0",
         "puppeteer": "catalog:",
         "semver": "^7.7.1",
-        "typescript": "^5.9.2",
         "vite": "^7.1.5",
         "vitest": "^4.1.0",
         "which": "^2.0.2"

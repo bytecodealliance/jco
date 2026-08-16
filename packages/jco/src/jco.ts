@@ -16,6 +16,7 @@ import {
     componentWit,
 } from "./cmd/wasm-tools.js";
 import { componentize } from "./cmd/componentize.js";
+import { createProject } from "./cmd/new.js";
 import { styleText } from "./common.js";
 
 program
@@ -318,6 +319,49 @@ program
     .argument("<input>", "input file to process")
     .requiredOption("-o, --output <output-file>", "output binary file path")
     .action(asyncAction(parse));
+
+program
+    .command("new")
+    .description("Create a JavaScript or TypeScript WebAssembly component project")
+    .argument("<project-directory>", "directory to create")
+    .option("--wit <path>", "WIT file or package directory")
+    .option("--world <world>", "WIT world to implement")
+    .addOption(
+        new Option("--language <language>", "component source language")
+            .choices(["typescript", "javascript", "ts", "js"])
+            .default("typescript"),
+    )
+    .addOption(
+        new Option("--package-manager <manager>", "package manager used by generated instructions")
+            .choices(["pnpm", "npm", "yarn"])
+            .default("pnpm"),
+    )
+    .addOption(
+        new Option("--target <target>", "target platform; repeat for multiple targets")
+            .choices(["nodejs", "web"])
+            .argParser(collectOptions)
+            .default([]),
+    )
+    // Retain these options only to give the former command a focused error.
+    .option("-o, --output <output-file>", "legacy component-new output")
+    .option("--adapt <adapter...>", "legacy component-new adapter")
+    .option("--wasi-reactor", "legacy component-new WASI Reactor adapter")
+    .option("--wasi-command", "legacy component-new WASI Command adapter")
+    .action(
+        asyncAction(async (projectDirectory: string, opts: any) => {
+            if (opts.output || opts.adapt || opts.wasiReactor || opts.wasiCommand) {
+                throw new Error("The former `jco new` command is now `jco component-new`");
+            }
+            if (!opts.wit) throw new Error("required option '--wit <path>' not specified");
+            await createProject(projectDirectory, {
+                wit: opts.wit,
+                world: opts.world,
+                language: opts.language,
+                packageManager: opts.packageManager,
+                targets: opts.target,
+            });
+        }),
+    );
 
 program
     .command("component-new")
