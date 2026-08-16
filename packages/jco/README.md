@@ -57,6 +57,7 @@ Options:
   -h, --help                            display help for command
 
 Commands:
+  new [options] <project-directory>     Create a JavaScript or TypeScript WebAssembly component project
   componentize [options] <source>       Create a component from a JavaScript or TypeScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
   types [options] <wit-path>            Generate types for the given WIT
@@ -75,6 +76,33 @@ Commands:
 ```
 
 For help with individual command options, use `jco <cmd> --help`.
+
+### Create a component project
+
+`jco new` creates a regular Node.js project whose source skeleton matches an existing WIT world. TypeScript, pnpm,
+and both Node.js and web targets are the defaults:
+
+```console
+jco new my-component --wit path/to/wit
+cd my-component
+pnpm install
+pnpm check
+pnpm test
+pnpm build
+```
+
+Use `--language javascript` for checked JavaScript, `--package-manager npm` or `--package-manager yarn` to render
+instructions for another package manager, and repeat `--target nodejs` or `--target web` to select an explicit target
+subset. A single target produces conventional `tsconfig.json`, `rolldown.config.mjs`, and `dist/component.wasm`
+paths. The default dual-target project produces separate Node.js/web configs and output components.
+
+`--wit` accepts a self-contained `.wit` file or WIT package directory and copies it into the project. When the package
+has one world, Jco selects it automatically. Multiple worlds require the long-form `--world <world>` option. The
+generated README explains how to edit TODO bodies, regenerate guest declarations, type-check, test, customize
+Rolldown, and build each selected target.
+
+The former low-level `jco new` wrapper for `wasm-tools component new` is now `jco component-new`; the programmatic
+`componentNew` API is unchanged.
 
 ### Transpile
 
