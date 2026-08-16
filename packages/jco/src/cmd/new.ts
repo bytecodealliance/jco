@@ -59,7 +59,9 @@ export async function createProject(projectDirectory: string, options: NewProjec
             await writeFile(output, contents);
         }
         await copyWit(witSource, join(temporary, "wit"));
-        if (await exists(destination)) await rm(destination, { recursive: false });
+        if (await exists(destination)) {
+            await rm(destination, { recursive: false });
+        }
         await rename(temporary, destination);
     } catch (error) {
         await rm(temporary, { recursive: true, force: true });
@@ -86,7 +88,9 @@ async function scaffoldFiles(input: {
         [`src/component.${extension}`]: input.source,
         [`test/component.test.${extension}`]: input.testSource,
     };
-    for (const [name, contents] of Object.entries(input.generatedTypes)) files[`types/generated/${name}`] = contents;
+    for (const [name, contents] of Object.entries(input.generatedTypes)) {
+        files[`types/generated/${name}`] = contents;
+    }
     const packageJson = await generatedPackageJson(input);
     files["package.json"] = `${JSON.stringify(packageJson, null, 2)}\n`;
     files["README.md"] = readme(input, extension);
@@ -208,15 +212,19 @@ function readme(
 
 async function validatePaths(destination: string, witSource: string): Promise<void> {
     const witStat = await stat(witSource).catch(() => undefined);
-    if (!witStat || (!witStat.isFile() && !witStat.isDirectory()))
+    if (!witStat || (!witStat.isFile() && !witStat.isDirectory())) {
         throw new Error(`WIT path does not exist: ${witSource}`);
-    if (witStat.isFile() && extname(witSource) !== ".wit") throw new Error("--wit must name a .wit file or directory");
+    }
+    if (witStat.isFile() && extname(witSource) !== ".wit") {
+        throw new Error("--wit must name a .wit file or directory");
+    }
     if (destination === witSource || witSource.startsWith(destination + sep)) {
         throw new Error("The project destination cannot contain the WIT source");
     }
     const destinationStat = await stat(destination).catch(() => undefined);
-    if (destinationStat && !destinationStat.isDirectory())
+    if (destinationStat && !destinationStat.isDirectory()) {
         throw new Error(`Destination is not a directory: ${destination}`);
+    }
     if (destinationStat && (await readdir(destination)).length !== 0) {
         throw new Error(`Destination is not empty: ${destination}`);
     }
@@ -224,7 +232,9 @@ async function validatePaths(destination: string, witSource: string): Promise<vo
 
 async function copyWit(source: string, destination: string): Promise<void> {
     const sourceStat = await lstat(source);
-    if (sourceStat.isSymbolicLink()) throw new Error("Symbolic WIT inputs are not supported");
+    if (sourceStat.isSymbolicLink()) {
+        throw new Error("Symbolic WIT inputs are not supported");
+    }
     if (sourceStat.isFile()) {
         await mkdir(destination, { recursive: true });
         await cp(source, join(destination, basename(source)));
@@ -233,8 +243,9 @@ async function copyWit(source: string, destination: string): Promise<void> {
             recursive: true,
             filter: async (path) => {
                 const rel = relative(source, path);
-                if (rel.split(sep).some((part) => ["node_modules", "target", ".git", ".DS_Store"].includes(part)))
+                if (rel.split(sep).some((part) => ["node_modules", "target", ".git", ".DS_Store"].includes(part))) {
                     return false;
+                }
                 return !(await lstat(path)).isSymbolicLink();
             },
         });
@@ -242,13 +253,19 @@ async function copyWit(source: string, destination: string): Promise<void> {
 }
 
 function normalizeLanguage(language: NewProjectOptions["language"]): NewLanguage {
-    if (language === undefined || language === "typescript" || language === "ts") return "typescript";
-    if (language === "javascript" || language === "js") return "javascript";
+    if (language === undefined || language === "typescript" || language === "ts") {
+        return "typescript";
+    }
+    if (language === "javascript" || language === "js") {
+        return "javascript";
+    }
     throw new Error(`Unknown language: ${language}`);
 }
 
 function normalizeTargets(targets: NewTarget[] | undefined): NewTarget[] {
-    if (!targets?.length) return ["nodejs", "web"];
+    if (!targets?.length) {
+        return ["nodejs", "web"];
+    }
     return ["nodejs", "web"].filter((target): target is NewTarget => targets.includes(target as NewTarget));
 }
 
@@ -257,12 +274,16 @@ function npmPackageName(name: string): string {
         .toLowerCase()
         .replace(/[^a-z0-9._-]+/g, "-")
         .replace(/^[._-]+|[._-]+$/g, "");
-    if (!normalized) throw new Error(`Cannot derive an npm package name from ${JSON.stringify(name)}`);
+    if (!normalized) {
+        throw new Error(`Cannot derive an npm package name from ${JSON.stringify(name)}`);
+    }
     return normalized;
 }
 
 function shellArgument(value: string): string {
-    if (!/^[a-zA-Z0-9:@/._-]+$/.test(value)) throw new Error(`Unsupported world name: ${value}`);
+    if (!/^[a-zA-Z0-9:@/._-]+$/.test(value)) {
+        throw new Error(`Unsupported world name: ${value}`);
+    }
     return value;
 }
 
