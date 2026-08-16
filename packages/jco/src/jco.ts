@@ -320,7 +320,7 @@ program
     .action(asyncAction(parse));
 
 program
-    .command("new")
+    .command("component-new")
     .description("create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]")
     .argument("<core-module>", "Wasm core module filepath")
     .requiredOption("-o, --output <output-file>", "Wasm component output filepath")

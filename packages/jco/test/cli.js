@@ -584,7 +584,7 @@ suite("CLI", () => {
 
         const { stderr } = await exec(
             jcoPath,
-            "new",
+            "component-new",
             "test/fixtures/modules/exitcode.wasm",
             "--wasi-reactor",
             "-o",

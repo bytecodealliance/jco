@@ -69,7 +69,7 @@ Commands:
   metadata-show [options] [module]      extract the producer metadata for a Wasm binary [wasm-tools metadata show]
   metadata-add [options] [module]       add producer metadata for a Wasm binary [wasm-tools metadata add]
   parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
-  new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  component-new [options] <core-module> create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
   embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]
   help [command]                        display help for command
 ```
