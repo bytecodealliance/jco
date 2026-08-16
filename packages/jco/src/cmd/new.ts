@@ -2,7 +2,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFi
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 
 import { typesComponent } from "./types.js";
-import { declarationModel } from "./new-declarations.js";
+import { declarationModel, validateComponentSource } from "./new-declarations.js";
 import { renderComponent } from "./new-render.js";
 
 export type NewLanguage = "typescript" | "javascript";
@@ -36,6 +36,7 @@ export async function createProject(projectDirectory: string, options: NewProjec
     });
     const model = declarationModel(typescript, generatedTypes);
     const source = renderComponent(typescript, model, language);
+    validateComponentSource(typescript, generatedTypes, source, language);
     const files = await scaffoldFiles({
         projectName: npmPackageName(basename(destination)),
         language,

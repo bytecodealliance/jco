@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, assert, expect, suite, test } from "vitest";
 
 import { createProject } from "../dist/cmd/new.js";
+import { validateComponentSource } from "../dist/cmd/new-declarations.js";
 import { renderComponent } from "../dist/cmd/new-render.js";
 import typescript from "typescript-compiler-api";
 
@@ -27,6 +28,24 @@ suite("jco new", () => {
         assert.include(source, "export { _class as class }");
         const parsed = typescript.createSourceFile("component.ts", source, typescript.ScriptTarget.Latest, true);
         assert.lengthOf(parsed.parseDiagnostics, 0);
+    });
+
+    test("rejects a generated implementation that does not match its world", () => {
+        const declarations = {
+            "world.d.ts": new TextEncoder().encode(
+                "declare module 'test:validation/world' { export function required(): string; }",
+            ),
+        };
+        assert.throws(
+            () =>
+                validateComponentSource(
+                    typescript,
+                    declarations,
+                    "export const required: typeof import('test:validation/world').required = () => 1;",
+                    "typescript",
+                ),
+            /failed type checking/,
+        );
     });
 
     test("creates a type-checkable single-target TypeScript scaffold", async () => {
