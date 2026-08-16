@@ -26,7 +26,7 @@ Jco (`jco`) provides a [Javascript][js]-native toolchain for working with [WebAs
 
 With Jco (and related projects in this repository), you can:
 
-- **Scaffold a new JavaScript or TypeScript component project** from a WIT world with `jco new`
+- **Scaffold a new JavaScript or TypeScript component project** from a WIT world with `jco scaffold`
 - **Build WebAssembly components** from Javascript/Typescript with [`componentize-js`][cjs] or [`componentize-qjs`][cqjs]
 - **"Transpile" WebAssembly components** into ES modules that can run in environments like NodeJS and the browser, combining platform-native WebAssembly core support with the advanced features of WebAssembly Components
 - **Run WebAssembly components** whether single-shot applications or web servers (similar to [`wasmtime run`][wasmtime-run]/[`wasmtime serve`][wasmtime-serve])
@@ -83,7 +83,7 @@ pnpm install @bytecodealliance/jco
 Create a TypeScript component project from a WIT file or package directory:
 
 ```console
-jco new my-component --wit path/to/wit
+jco scaffold my-component --wit path/to/wit
 cd my-component
 pnpm install
 pnpm check

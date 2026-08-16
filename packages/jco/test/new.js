@@ -18,7 +18,7 @@ afterEach(async () => {
     await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-suite("jco new", () => {
+suite("jco scaffold", () => {
     test.each([
         ["pnpm", "pnpm@11.0.0", "pnpm-lock.yaml", "pnpm run check"],
         ["npm", "npm@11.0.0", "package-lock.json", "npm run check"],

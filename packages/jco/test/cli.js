@@ -581,21 +581,32 @@ suite("CLI", () => {
 
     test.concurrent("Component new adapt", async () => {
         const { outFile, cleanup } = await setupTestWithLocalShims();
+        const aliasOutFile = `${outFile}.alias.wasm`;
 
         const { stderr } = await exec(
             jcoPath,
-            "component-new",
+            "new",
             "test/fixtures/modules/exitcode.wasm",
             "--wasi-reactor",
             "-o",
             outFile,
         );
         assert.strictEqual(stderr, "");
-        {
-            const { stderr, stdout } = await exec(jcoPath, "print", outFile);
-            assert.strictEqual(stderr, "");
-            assert.strictEqual(stdout.slice(0, 10), "(component");
-        }
+        const { stderr: aliasStderr } = await exec(
+            jcoPath,
+            "tool",
+            "core-to-component",
+            "test/fixtures/modules/exitcode.wasm",
+            "--wasi-reactor",
+            "-o",
+            aliasOutFile,
+        );
+        assert.strictEqual(aliasStderr, "");
+
+        const output = await readFile(outFile);
+        const aliasOutput = await readFile(aliasOutFile);
+        assert.deepStrictEqual(aliasOutput, output);
+        assert.deepStrictEqual([...output.subarray(0, 8)], [0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00]);
 
         await cleanup();
     });

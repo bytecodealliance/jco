@@ -57,7 +57,7 @@ Options:
   -h, --help                            display help for command
 
 Commands:
-  new [options] <project-directory>     Create a JavaScript or TypeScript WebAssembly component project
+  scaffold [options] <project-directory> Create a JavaScript or TypeScript WebAssembly component project
   componentize [options] <source>       Create a component from a JavaScript or TypeScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
   types [options] <wit-path>            Generate types for the given WIT
@@ -70,7 +70,8 @@ Commands:
   metadata-show [options] [module]      extract the producer metadata for a Wasm binary [wasm-tools metadata show]
   metadata-add [options] [module]       add producer metadata for a Wasm binary [wasm-tools metadata add]
   parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
-  component-new [options] <core-module> create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  tool                                 Low-level WebAssembly conversion utilities
   embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]
   help [command]                        display help for command
 ```
@@ -79,11 +80,11 @@ For help with individual command options, use `jco <cmd> --help`.
 
 ### Create a component project
 
-`jco new` creates a regular Node.js project whose source skeleton matches an existing WIT world. TypeScript, pnpm,
+`jco scaffold` creates a regular Node.js project whose source skeleton matches an existing WIT world. TypeScript, pnpm,
 and both Node.js and web targets are the defaults:
 
 ```console
-jco new my-component --wit path/to/wit
+jco scaffold my-component --wit path/to/wit
 cd my-component
 pnpm install
 pnpm check
@@ -101,7 +102,8 @@ has one world, Jco selects it automatically. Multiple worlds require the long-fo
 generated README explains how to edit TODO bodies, regenerate guest declarations, type-check, test, customize
 Rolldown, and build each selected target.
 
-The former low-level `jco new` wrapper for `wasm-tools component new` is now `jco component-new`; the programmatic
+The low-level `jco new` command remains a wrapper for `wasm-tools component new`. The explicit
+`jco tool core-to-component` spelling is an alias with the same arguments and behavior; the programmatic
 `componentNew` API is unchanged.
 
 ### Transpile
