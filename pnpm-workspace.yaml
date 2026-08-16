@@ -35,51 +35,52 @@ packages:
 catalog:
   '@bytecodealliance/componentize-js': ^0.22.0
   'componentize-qjs': ^0.4.2
-  '@rolldown/binding-android-arm64': ^1.2.0
-  '@rolldown/binding-darwin-arm64': ^1.2.0
-  '@rolldown/binding-darwin-x64': ^1.2.0
-  '@rolldown/binding-freebsd-x64': ^1.2.0
-  '@rolldown/binding-linux-arm-gnueabihf': ^1.2.0
-  '@rolldown/binding-linux-arm64-gnu': ^1.2.0
-  '@rolldown/binding-linux-arm64-musl': ^1.2.0
-  '@rolldown/binding-linux-ppc64-gnu': ^1.2.0
-  '@rolldown/binding-linux-s390x-gnu': ^1.2.0
-  '@rolldown/binding-linux-x64-gnu': ^1.2.0
-  '@rolldown/binding-linux-x64-musl': ^1.2.0
-  '@rolldown/binding-openharmony-arm64': ^1.2.0
-  '@rolldown/binding-wasm32-wasi': ^1.2.0
-  '@rolldown/binding-win32-arm64-msvc': ^1.2.0
-  '@rolldown/binding-win32-x64-msvc': ^1.2.0
+  '@rolldown/binding-android-arm64': ^1.2.4
+  '@rolldown/binding-darwin-arm64': ^1.2.4
+  '@rolldown/binding-darwin-x64': ^1.2.4
+  '@rolldown/binding-freebsd-x64': ^1.2.4
+  '@rolldown/binding-linux-arm-gnueabihf': ^1.2.4
+  '@rolldown/binding-linux-arm64-gnu': ^1.2.4
+  '@rolldown/binding-linux-arm64-musl': ^1.2.4
+  '@rolldown/binding-linux-ppc64-gnu': ^1.2.4
+  '@rolldown/binding-linux-s390x-gnu': ^1.2.4
+  '@rolldown/binding-linux-x64-gnu': ^1.2.4
+  '@rolldown/binding-linux-x64-musl': ^1.2.4
+  '@rolldown/binding-openharmony-arm64': ^1.2.4
+  '@rolldown/binding-wasm32-wasi': ^1.2.4
+  '@rolldown/binding-win32-arm64-msvc': ^1.2.4
+  '@rolldown/binding-win32-x64-msvc': ^1.2.4
   mime: ^4.0.7
   puppeteer: ^25.1.0
-  rolldown: ^1.2.0
-  typescript: ^6.0.3
-  vitest: ^4.0.8
+  rolldown: ^1.2.4
+  typescript: 7.0.2
+  vitest: ^4.1.10
   which: ^2.0.2
 
 minimumReleaseAgeExclude:
+  - '@oxc-project/types@0.144.0'
   - '@bytecodealliance/componentize-js@0.22.0'
   - '@bytecodealliance/jco-transpile@0.3.7 || 0.3.8 || 0.3.9 || 0.4.0 || 0.4.1 || 0.4.2 || 0.5.0 || 0.5.1 || 0.5.2 || 0.6.0 || 0.6.1 || 0.7.0 || 0.8.0'
   - '@bytecodealliance/preview2-shim@0.19.0 || 0.20.1'
   - '@bytecodealliance/preview3-shim@0.1.2 || 0.2.0 || 0.2.2 || 0.3.0'
   - '@puppeteer/browsers@3.0.4'
-  - '@rolldown/binding-android-arm64@1.2.0'
-  - '@rolldown/binding-darwin-arm64@1.2.0'
-  - '@rolldown/binding-darwin-x64@1.2.0'
-  - '@rolldown/binding-freebsd-x64@1.2.0'
-  - '@rolldown/binding-linux-arm-gnueabihf@1.2.0'
-  - '@rolldown/binding-linux-arm64-gnu@1.2.0'
-  - '@rolldown/binding-linux-arm64-musl@1.2.0'
-  - '@rolldown/binding-linux-ppc64-gnu@1.2.0'
-  - '@rolldown/binding-linux-s390x-gnu@1.2.0'
-  - '@rolldown/binding-linux-x64-gnu@1.2.0'
-  - '@rolldown/binding-linux-x64-musl@1.2.0'
-  - '@rolldown/binding-openharmony-arm64@1.2.0'
-  - '@rolldown/binding-wasm32-wasi@1.2.0'
-  - '@rolldown/binding-win32-arm64-msvc@1.2.0'
-  - '@rolldown/binding-win32-x64-msvc@1.2.0'
+  - '@rolldown/binding-android-arm64@1.2.0 || 1.2.4'
+  - '@rolldown/binding-darwin-arm64@1.2.0 || 1.2.4'
+  - '@rolldown/binding-darwin-x64@1.2.0 || 1.2.4'
+  - '@rolldown/binding-freebsd-x64@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-arm-gnueabihf@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-arm64-gnu@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-arm64-musl@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-ppc64-gnu@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-s390x-gnu@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-x64-gnu@1.2.0 || 1.2.4'
+  - '@rolldown/binding-linux-x64-musl@1.2.0 || 1.2.4'
+  - '@rolldown/binding-openharmony-arm64@1.2.0 || 1.2.4'
+  - '@rolldown/binding-wasm32-wasi@1.2.0 || 1.2.4'
+  - '@rolldown/binding-win32-arm64-msvc@1.2.0 || 1.2.4'
+  - '@rolldown/binding-win32-x64-msvc@1.2.0 || 1.2.4'
   - hono@4.12.27 || 4.12.34
-  - rolldown@1.2.0
+  - rolldown@1.2.0 || 1.2.4
   - puppeteer-core@25.1.0
   - puppeteer@25.1.0
   - ws@8.21.0

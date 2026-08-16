@@ -25,7 +25,10 @@ export async function createProject(projectDirectory: string, options: NewProjec
     const targets = normalizeTargets(options.targets);
     await validatePaths(destination, witSource);
 
-    const typescript = (await import("typescript")).default;
+    // TypeScript 7's native compiler does not yet expose the stable JS
+    // Program/factory/printer API. Keep this compatibility dependency isolated
+    // so it can be removed when the native API stabilizes.
+    const typescript = (await import("typescript-compiler-api")).default;
     const generatedTypes = await typesComponent(witSource, {
         guest: true,
         worldName: options.world,
@@ -131,9 +134,9 @@ async function generatedPackageJson(input: {
         devDependencies: {
             "@bytecodealliance/jco": `^${ownPackage.version}`,
             ...(input.targets.includes("nodejs") ? { "@types/node": "^24.0.0" } : {}),
-            rolldown: "^1.2.0",
-            typescript: "^6.0.3",
-            vitest: "^4.0.8",
+            rolldown: "^1.2.4",
+            typescript: "7.0.2",
+            vitest: "^4.1.10",
         },
     };
 }
@@ -167,7 +170,7 @@ function configurations(language: NewLanguage, targets: NewTarget[]): Record<str
                 },
                 include,
             }),
-            "rolldown.config.mjs": `export default {\n  tsconfig: "./tsconfig.json",\n};\n`,
+            "rolldown.config.mjs": `export default {\n  tsconfig: "../tsconfig.json",\n};\n`,
         };
     }
     return {
@@ -180,8 +183,8 @@ function configurations(language: NewLanguage, targets: NewTarget[]): Record<str
             extends: "./tsconfig.json",
             compilerOptions: { lib: ["ES2022", "DOM", "DOM.Iterable"], types: [] },
         }),
-        "rolldown.nodejs.config.mjs": `export default {\n  tsconfig: "./tsconfig.nodejs.json",\n};\n`,
-        "rolldown.web.config.mjs": `export default {\n  tsconfig: "./tsconfig.web.json",\n};\n`,
+        "rolldown.nodejs.config.mjs": `export default {\n  tsconfig: "../tsconfig.nodejs.json",\n};\n`,
+        "rolldown.web.config.mjs": `export default {\n  tsconfig: "../tsconfig.web.json",\n};\n`,
     };
 }
 

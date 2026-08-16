@@ -80,8 +80,9 @@
         "componentize-qjs": "^0.4.2",
         "mkdirp": "^3",
         "ora": "^8",
-        "rolldown": "^1.1.0",
-        "typescript": "catalog:"
+        "rolldown": "^1.2.4",
+        "typescript": "7.0.2",
+        "typescript-compiler-api": "npm:typescript@6.0.3"
     },
     "devDependencies": {
         "@commitlint/config-conventional": "^19.8.1",

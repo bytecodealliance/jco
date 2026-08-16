@@ -1,4 +1,4 @@
-import type ts from "typescript";
+import type ts from "typescript-compiler-api";
 
 import type { ComponentImplementationModel, FunctionModel, ResourceModel } from "./new-model.js";
 

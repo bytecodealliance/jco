@@ -7,7 +7,7 @@ import { afterEach, assert, expect, suite, test } from "vitest";
 
 import { createProject } from "../dist/cmd/new.js";
 import { renderComponent } from "../dist/cmd/new-render.js";
-import typescript from "typescript";
+import typescript from "typescript-compiler-api";
 
 const fixture = fileURLToPath(new URL("./fixtures/wit/multiple-worlds/test.wit", import.meta.url));
 const temporaryDirectories = [];
@@ -53,6 +53,7 @@ suite("jco new", () => {
         assert.equal(packageJson.packageManager, "pnpm@11.0.0");
         assert.notProperty(packageJson.devDependencies, "@types/node");
         assert.notProperty(packageJson.scripts, "build:web");
+        assert.include(await readFile(join(project, "rolldown.config.mjs"), "utf8"), '"../tsconfig.json"');
     });
 
     test("creates checked JavaScript and both targets by default", async () => {
@@ -72,6 +73,7 @@ suite("jco new", () => {
         assert.equal(packageJson.packageManager, "npm@11.0.0");
         assert.property(packageJson.scripts, "build:nodejs");
         assert.property(packageJson.scripts, "build:web");
+        assert.include(await readFile(join(project, "rolldown.web.config.mjs"), "utf8"), '"../tsconfig.web.json"');
     });
 
     test("requires a world when the WIT package has multiple worlds", async () => {
