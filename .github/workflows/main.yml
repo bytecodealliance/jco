@@ -38,7 +38,7 @@ jobs:
 
       - name: Install Rust
         run: rustup update stable --no-self-update
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
@@ -459,7 +459,7 @@ jobs:
 
       - name: Install Rust
         run: rustup update stable --no-self-update
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
@@ -610,7 +610,7 @@ jobs:
       - name: Remove tests mod
         run: rm -r crates/jco/tests/mod.rs
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Format source code
         run: cargo fmt -- --check
@@ -628,7 +628,7 @@ jobs:
       - name: Remove tests mod
         run: rm -r crates/jco/tests/mod.rs
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Run clippy
         run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
@@ -647,7 +647,7 @@ jobs:
 
       - name: Install Rust
         run: rustup update stable --no-self-update
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
