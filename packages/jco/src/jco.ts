@@ -344,7 +344,9 @@ program
     )
     .action(
         asyncAction(async (projectDirectory: string, opts: any) => {
-            if (!opts.wit) throw new Error("required option '--wit <path>' not specified");
+            if (!opts.wit) {
+                throw new Error("required option '--wit <path>' not specified");
+            }
             await createProject(projectDirectory, {
                 wit: opts.wit,
                 world: opts.world,

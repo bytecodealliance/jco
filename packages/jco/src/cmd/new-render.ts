@@ -19,9 +19,13 @@ export function renderComponent(
     for (const fn of model.functions) {
         const localName = safeLocalName(fn.name);
         const statement = exportedFunction(typescript, fn, localName, f.createTypeQueryNode(worldMember(f, fn.name)));
-        if (language === "javascript") addJavaScriptType(typescript, statement, model.world, fn.name);
+        if (language === "javascript") {
+            addJavaScriptType(typescript, statement, model.world, fn.name);
+        }
         statements.push(statement);
-        if (localName !== fn.name) statements.push(exportAlias(typescript, localName, fn.name));
+        if (localName !== fn.name) {
+            statements.push(exportAlias(typescript, localName, fn.name));
+        }
     }
     for (const iface of model.interfaces) {
         const classNames: Array<{ exportName: string; localName: string }> = [];
@@ -51,7 +55,9 @@ export function renderComponent(
                 typescript.NodeFlags.Const,
             ),
         );
-        if (language === "javascript") addJavaScriptType(typescript, statement, model.world, iface.name);
+        if (language === "javascript") {
+            addJavaScriptType(typescript, statement, model.world, iface.name);
+        }
         statements.push(statement);
         if (localInterfaceName !== iface.name) {
             statements.push(exportAlias(typescript, localInterfaceName, iface.name));
@@ -63,7 +69,9 @@ export function renderComponent(
         typescript.NodeFlags.None,
     );
     const printed = typescript.createPrinter({ newLine: typescript.NewLineKind.LineFeed }).printFile(source) + "\n";
-    if (language === "typescript") return printed;
+    if (language === "typescript") {
+        return printed;
+    }
     return (
         "// @ts-check\n" +
         typescript.transpileModule(printed, {
@@ -259,7 +267,9 @@ function resourceClass(typescript: typeof ts, resource: ResourceModel, className
             ),
         );
     }
-    for (const method of resource.methods) members.push(classMethod(typescript, method, false));
+    for (const method of resource.methods) {
+        members.push(classMethod(typescript, method, false));
+    }
     for (const method of resource.staticMethods) {
         members.push(classMethod(typescript, method, true));
     }

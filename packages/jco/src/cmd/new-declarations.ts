@@ -41,7 +41,9 @@ export function declarationModel(
                 const symbol = checker.getSymbolAtLocation(statement.name);
                 if (symbol) {
                     modules.set(statement.name.text, symbol);
-                    if (!sourceFile.fileName.includes("/interfaces/")) rootModules.push(statement.name.text);
+                    if (!sourceFile.fileName.includes("/interfaces/")) {
+                        rootModules.push(statement.name.text);
+                    }
                 }
             }
         }
@@ -152,7 +154,9 @@ function interfaceFromSymbol(
 
 function functionFromSymbol(typescript: typeof ts, checker: ts.TypeChecker, symbol: ts.Symbol): FunctionModel {
     const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-    if (!declaration) throw new Error(`Missing declaration for ${symbol.name}`);
+    if (!declaration) {
+        throw new Error(`Missing declaration for ${symbol.name}`);
+    }
     const signature = checker.getSignatureFromDeclaration(declaration as ts.SignatureDeclaration);
     return {
         name: symbol.name,
@@ -163,7 +167,9 @@ function functionFromSymbol(typescript: typeof ts, checker: ts.TypeChecker, symb
 
 function resourceFromSymbol(typescript: typeof ts, symbol: ts.Symbol): ResourceModel {
     const declaration = symbol.declarations?.find(typescript.isClassDeclaration);
-    if (!declaration) throw new Error(`Missing class declaration for ${symbol.name}`);
+    if (!declaration) {
+        throw new Error(`Missing class declaration for ${symbol.name}`);
+    }
     let constructorParameters: string[] | undefined;
     const methods: FunctionModel[] = [];
     const staticMethods: FunctionModel[] = [];
