@@ -1,0 +1,138 @@
+import type ts from "typescript";
+
+import type { ComponentImplementationModel, FunctionModel, InterfaceModel, ResourceModel } from "./new-model.js";
+
+export function declarationModel(
+    typescript: typeof ts,
+    files: Record<string, Uint8Array>,
+): ComponentImplementationModel {
+    const decoder = new TextDecoder();
+    const virtualFiles = Object.fromEntries(
+        Object.entries(files).map(([name, bytes]) => [`/${name.replaceAll("\\", "/")}`, decoder.decode(bytes)]),
+    );
+    const options: ts.CompilerOptions = {
+        module: typescript.ModuleKind.ESNext,
+        moduleResolution: typescript.ModuleResolutionKind.Bundler,
+        noLib: true,
+        skipLibCheck: true,
+    };
+    const baseHost = typescript.createCompilerHost(options);
+    const host: ts.CompilerHost = {
+        ...baseHost,
+        fileExists: (name) => virtualFiles[name] !== undefined,
+        readFile: (name) => virtualFiles[name],
+        getCurrentDirectory: () => "/",
+        getDefaultLibFileName: () => "/lib.d.ts",
+        getSourceFile: (name, languageVersion) => {
+            const source = virtualFiles[name];
+            return source === undefined
+                ? undefined
+                : typescript.createSourceFile(name, source, languageVersion, true, typescript.ScriptKind.TS);
+        },
+    };
+    const program = typescript.createProgram(Object.keys(virtualFiles), options, host);
+    const checker = program.getTypeChecker();
+    const modules = new Map<string, ts.Symbol>();
+    const rootModules: string[] = [];
+
+    for (const sourceFile of program.getSourceFiles()) {
+        for (const statement of sourceFile.statements) {
+            if (typescript.isModuleDeclaration(statement) && typescript.isStringLiteral(statement.name)) {
+                const symbol = checker.getSymbolAtLocation(statement.name);
+                if (symbol) {
+                    modules.set(statement.name.text, symbol);
+                    if (!sourceFile.fileName.includes("/interfaces/")) rootModules.push(statement.name.text);
+                }
+            }
+        }
+    }
+    if (rootModules.length !== 1) {
+        throw new Error(`Expected one generated world declaration, found ${rootModules.length}`);
+    }
+    const world = rootModules[0];
+    const worldSymbol = modules.get(world)!;
+    const functions: FunctionModel[] = [];
+    const interfaces: InterfaceModel[] = [];
+
+    for (const exported of checker.getExportsOfModule(worldSymbol)) {
+        const declaration = exported.declarations?.[0];
+        if (
+            declaration &&
+            typescript.isNamespaceExport(declaration) &&
+            typescript.isExportDeclaration(declaration.parent) &&
+            declaration.parent.isTypeOnly
+        ) {
+            continue;
+        }
+        const target = exported.flags & typescript.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported;
+        if (target.flags & typescript.SymbolFlags.Function) {
+            functions.push(functionFromSymbol(typescript, checker, target));
+        } else if (target.flags & typescript.SymbolFlags.ValueModule) {
+            interfaces.push(interfaceFromSymbol(typescript, checker, exported.name, target));
+        }
+    }
+    return { world, functions, interfaces };
+}
+
+function interfaceFromSymbol(
+    typescript: typeof ts,
+    checker: ts.TypeChecker,
+    name: string,
+    symbol: ts.Symbol,
+): InterfaceModel {
+    const functions: FunctionModel[] = [];
+    const resources: ResourceModel[] = [];
+    for (const exported of checker.getExportsOfModule(symbol)) {
+        if (exported.flags & typescript.SymbolFlags.Function) {
+            functions.push(functionFromSymbol(typescript, checker, exported));
+        } else if (exported.flags & typescript.SymbolFlags.Class) {
+            resources.push(resourceFromSymbol(typescript, exported));
+        }
+    }
+    return { name, functions, resources };
+}
+
+function functionFromSymbol(typescript: typeof ts, checker: ts.TypeChecker, symbol: ts.Symbol): FunctionModel {
+    const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+    if (!declaration) throw new Error(`Missing declaration for ${symbol.name}`);
+    const signature = checker.getSignatureFromDeclaration(declaration as ts.SignatureDeclaration);
+    return {
+        name: symbol.name,
+        parameters:
+            signature?.parameters.map((parameter, index) => safeParameterName(typescript, parameter.name, index)) ?? [],
+    };
+}
+
+function resourceFromSymbol(typescript: typeof ts, symbol: ts.Symbol): ResourceModel {
+    const declaration = symbol.declarations?.find(typescript.isClassDeclaration);
+    if (!declaration) throw new Error(`Missing class declaration for ${symbol.name}`);
+    let constructorParameters: string[] | undefined;
+    const methods: FunctionModel[] = [];
+    const staticMethods: FunctionModel[] = [];
+    for (const member of declaration.members) {
+        if (typescript.isConstructorDeclaration(member)) {
+            if (!member.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.PrivateKeyword)) {
+                constructorParameters = member.parameters.map((parameter, index) =>
+                    safeParameterName(typescript, parameter.name.getText(), index),
+                );
+            }
+        } else if (typescript.isMethodDeclaration(member) && typescript.isIdentifier(member.name)) {
+            const method = {
+                name: member.name.text,
+                parameters: member.parameters.map((parameter, index) =>
+                    safeParameterName(typescript, parameter.name.getText(), index),
+                ),
+            };
+            if (member.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.StaticKeyword)) {
+                staticMethods.push(method);
+            } else {
+                methods.push(method);
+            }
+        }
+    }
+    return { name: symbol.name, constructorParameters, methods, staticMethods };
+}
+
+function safeParameterName(_typescript: typeof ts, name: string, index: number): string {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : `arg${index}`;
+}

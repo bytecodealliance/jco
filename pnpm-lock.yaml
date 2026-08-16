@@ -328,6 +328,9 @@ importers:
       rolldown:
         specifier: ^1.1.0
         version: 1.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
     devDependencies:
       '@commitlint/config-conventional':
         specifier: ^19.8.1
@@ -353,9 +356,6 @@ importers:
       semver:
         specifier: ^7.7.1
         version: 7.8.5
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
       vite:
         specifier: ^7.1.5
         version: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
