@@ -321,7 +321,7 @@ program
     .action(asyncAction(parse));
 
 program
-    .command("new")
+    .command("scaffold")
     .description("Create a JavaScript or TypeScript WebAssembly component project")
     .argument("<project-directory>", "directory to create")
     .option("--wit <path>", "WIT file or package directory")
@@ -342,16 +342,8 @@ program
             .argParser(collectOptions)
             .default([]),
     )
-    // Retain these options only to give the former command a focused error.
-    .option("-o, --output <output-file>", "legacy component-new output")
-    .option("--adapt <adapter...>", "legacy component-new adapter")
-    .option("--wasi-reactor", "legacy component-new WASI Reactor adapter")
-    .option("--wasi-command", "legacy component-new WASI Command adapter")
     .action(
         asyncAction(async (projectDirectory: string, opts: any) => {
-            if (opts.output || opts.adapt || opts.wasiReactor || opts.wasiCommand) {
-                throw new Error("The former `jco new` command is now `jco component-new`");
-            }
             if (!opts.wit) throw new Error("required option '--wit <path>' not specified");
             await createProject(projectDirectory, {
                 wit: opts.wit,
@@ -364,8 +356,20 @@ program
     );
 
 program
-    .command("component-new")
+    .command("new")
     .description("create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]")
+    .argument("<core-module>", "Wasm core module filepath")
+    .requiredOption("-o, --output <output-file>", "Wasm component output filepath")
+    .option("--name <name>", "custom output name")
+    .option("--adapt <[NAME=]adapter...>", "component adapters to apply")
+    .option("--wasi-reactor", "build with the WASI Reactor adapter")
+    .option("--wasi-command", "build with the WASI Command adapter")
+    .action(asyncAction(componentNew));
+
+const tool = program.command("tool").description("Low-level WebAssembly conversion utilities");
+
+tool.command("core-to-component")
+    .description("convert a core WebAssembly module into a WebAssembly component")
     .argument("<core-module>", "Wasm core module filepath")
     .requiredOption("-o, --output <output-file>", "Wasm component output filepath")
     .option("--name <name>", "custom output name")

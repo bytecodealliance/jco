@@ -5,11 +5,11 @@ from JavaScript or TypeScript ES module source code.
 
 ## Scaffold a project from WIT
 
-The quickest way to start is `jco new`. It copies an existing WIT file or package directory into a regular Node.js
+The quickest way to start is `jco scaffold`. It copies an existing WIT file or package directory into a regular Node.js
 project, generates guest declarations, and creates a compiling implementation skeleton for the selected world:
 
 ```console
-jco new hello-component --wit path/to/wit
+jco scaffold hello-component --wit path/to/wit
 cd hello-component
 pnpm install
 pnpm check
@@ -20,23 +20,23 @@ pnpm build
 TypeScript and pnpm are the defaults. Select checked JavaScript or another package manager when creating the project:
 
 ```console
-jco new hello-js --wit path/to/world.wit --language javascript --package-manager npm
+jco scaffold hello-js --wit path/to/world.wit --language javascript --package-manager npm
 ```
 
 If the WIT package contains one world, Jco selects it automatically. If it contains multiple worlds, name one with
 the long-form option:
 
 ```console
-jco new hello-component --wit path/to/wit --world example:hello/app
+jco scaffold hello-component --wit path/to/wit --world example:hello/app
 ```
 
 By default, the scaffold checks and builds both Node.js and web targets. Select only one target, or repeat `--target`
 to be explicit:
 
 ```console
-jco new hello-node --wit path/to/wit --target nodejs
-jco new hello-web --wit path/to/wit --target web
-jco new hello-both --wit path/to/wit --target nodejs --target web
+jco scaffold hello-node --wit path/to/wit --target nodejs
+jco scaffold hello-web --wit path/to/wit --target web
+jco scaffold hello-both --wit path/to/wit --target nodejs --target web
 ```
 
 A dual-target project has a shared `tsconfig.json`, platform-specific `tsconfig.nodejs.json` and `tsconfig.web.json`,
@@ -47,8 +47,9 @@ The generated `README.md` records the selected world and package-manager command
 `src/component.ts` (or `src/component.js`), run `pnpm types` after changing the copied `wit/` package, and use
 `pnpm check`, `pnpm test`, and `pnpm build` throughout development. npm and Yarn can run the same standard scripts.
 
-`jco componentize`, described below, remains the lower-level workflow. The former low-level `jco new` command was
-renamed to `jco component-new`.
+`jco componentize`, described below, remains the lower-level source-to-component workflow. The separate low-level
+`jco new` command wraps `wasm-tools component new` for adapting a core Wasm module into a component. The equivalent
+explicit spelling is `jco tool core-to-component`.
 
 ## Build source directly
 
