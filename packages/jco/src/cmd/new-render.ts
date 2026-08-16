@@ -72,6 +72,118 @@ export function renderComponent(
     );
 }
 
+export function renderComponentTest(
+    typescript: typeof ts,
+    model: ComponentImplementationModel,
+    language: "typescript" | "javascript",
+): string {
+    const f = typescript.factory;
+    const assertions: ts.Statement[] = [];
+    for (const fn of model.functions) {
+        assertions.push(typeofAssertion(typescript, componentMember(typescript, fn.name), "function"));
+    }
+    for (const iface of model.interfaces) {
+        const interfaceExpression = componentMember(typescript, iface.name);
+        assertions.push(typeofAssertion(typescript, interfaceExpression, "object"));
+        for (const fn of iface.functions) {
+            assertions.push(
+                typeofAssertion(
+                    typescript,
+                    f.createElementAccessExpression(interfaceExpression, f.createStringLiteral(fn.name)),
+                    "function",
+                ),
+            );
+        }
+        for (const resource of iface.resources) {
+            assertions.push(
+                typeofAssertion(
+                    typescript,
+                    f.createElementAccessExpression(interfaceExpression, f.createStringLiteral(resource.name)),
+                    "function",
+                ),
+            );
+        }
+    }
+    const sourceExtension = language === "javascript" ? ".js" : "";
+    const statements: ts.Statement[] = [
+        f.createImportDeclaration(
+            undefined,
+            f.createImportClause(
+                false,
+                undefined,
+                f.createNamedImports(
+                    ["describe", "expect", "test"].map((name) =>
+                        f.createImportSpecifier(false, undefined, f.createIdentifier(name)),
+                    ),
+                ),
+            ),
+            f.createStringLiteral("vitest"),
+        ),
+        f.createImportDeclaration(
+            undefined,
+            f.createImportClause(false, undefined, f.createNamespaceImport(f.createIdentifier("component"))),
+            f.createStringLiteral(`../src/component${sourceExtension}`),
+        ),
+        f.createExpressionStatement(
+            f.createCallExpression(f.createIdentifier("describe"), undefined, [
+                f.createStringLiteral("component implementation"),
+                f.createArrowFunction(
+                    undefined,
+                    undefined,
+                    [],
+                    undefined,
+                    f.createToken(typescript.SyntaxKind.EqualsGreaterThanToken),
+                    f.createBlock(
+                        [
+                            f.createExpressionStatement(
+                                f.createCallExpression(f.createIdentifier("test"), undefined, [
+                                    f.createStringLiteral("matches the selected WIT world"),
+                                    f.createArrowFunction(
+                                        undefined,
+                                        undefined,
+                                        [],
+                                        undefined,
+                                        f.createToken(typescript.SyntaxKind.EqualsGreaterThanToken),
+                                        f.createBlock(assertions, true),
+                                    ),
+                                ]),
+                            ),
+                        ],
+                        true,
+                    ),
+                ),
+            ]),
+        ),
+    ];
+    const source = f.createSourceFile(
+        statements,
+        f.createToken(typescript.SyntaxKind.EndOfFileToken),
+        typescript.NodeFlags.None,
+    );
+    return typescript.createPrinter({ newLine: typescript.NewLineKind.LineFeed }).printFile(source) + "\n";
+}
+
+function componentMember(typescript: typeof ts, name: string): ts.Expression {
+    return typescript.factory.createElementAccessExpression(
+        typescript.factory.createIdentifier("component"),
+        typescript.factory.createStringLiteral(name),
+    );
+}
+
+function typeofAssertion(typescript: typeof ts, expression: ts.Expression, expected: string): ts.Statement {
+    const f = typescript.factory;
+    return f.createExpressionStatement(
+        f.createCallExpression(
+            f.createPropertyAccessExpression(
+                f.createCallExpression(f.createIdentifier("expect"), undefined, [f.createTypeOfExpression(expression)]),
+                f.createIdentifier("toBe"),
+            ),
+            undefined,
+            [f.createStringLiteral(expected)],
+        ),
+    );
+}
+
 function addJavaScriptType(typescript: typeof ts, node: ts.Node, world: string, name: string): void {
     typescript.addSyntheticLeadingComment(
         node,

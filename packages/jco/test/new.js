@@ -80,6 +80,9 @@ suite("jco new", () => {
             await readFile(join(project, "src/component.ts"), "utf8"),
             "export const foo1: typeof World.foo1",
         );
+        const generatedTest = await readFile(join(project, "test/component.test.ts"), "utf8");
+        assert.include(generatedTest, 'component["foo1"]');
+        assert.include(generatedTest, '["foo"]');
         const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
         assert.equal(packageJson.packageManager, "pnpm@11.0.0");
         assert.equal(packageJson.scripts.check, "pnpm run check:types");
