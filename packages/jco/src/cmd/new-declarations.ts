@@ -74,6 +74,64 @@ export function declarationModel(
     return { world, functions, interfaces };
 }
 
+export function validateComponentSource(
+    typescript: typeof ts,
+    files: Record<string, Uint8Array>,
+    source: string,
+    language: "typescript" | "javascript",
+): void {
+    const decoder = new TextDecoder();
+    const sourceName = language === "typescript" ? "/component.ts" : "/component.js";
+    const virtualFiles: Record<string, string> = {
+        [sourceName]: source,
+        ...Object.fromEntries(
+            Object.entries(files).map(([name, bytes]) => [`/${name.replaceAll("\\", "/")}`, decoder.decode(bytes)]),
+        ),
+    };
+    const options: ts.CompilerOptions = {
+        allowJs: language === "javascript",
+        checkJs: language === "javascript",
+        module: typescript.ModuleKind.ESNext,
+        moduleResolution: typescript.ModuleResolutionKind.Bundler,
+        noEmit: true,
+        skipLibCheck: true,
+        strict: true,
+        noImplicitAny: language === "typescript",
+        target: typescript.ScriptTarget.ES2022,
+    };
+    const baseHost = typescript.createCompilerHost(options);
+    const host: ts.CompilerHost = {
+        ...baseHost,
+        fileExists: (name) => virtualFiles[name] !== undefined || baseHost.fileExists(name),
+        readFile: (name) => virtualFiles[name] ?? baseHost.readFile(name),
+        getCurrentDirectory: () => "/",
+        getSourceFile: (name, languageVersion) => {
+            const contents = virtualFiles[name];
+            return contents === undefined
+                ? baseHost.getSourceFile(name, languageVersion)
+                : typescript.createSourceFile(
+                      name,
+                      contents,
+                      languageVersion,
+                      true,
+                      name.endsWith(".js") ? typescript.ScriptKind.JS : typescript.ScriptKind.TS,
+                  );
+        },
+    };
+    const program = typescript.createProgram(Object.keys(virtualFiles), options, host);
+    const diagnostics = typescript
+        .getPreEmitDiagnostics(program)
+        .filter((diagnostic) => diagnostic.file === undefined || diagnostic.file.fileName === sourceName);
+    if (diagnostics.length > 0) {
+        const message = typescript.formatDiagnostics(diagnostics, {
+            getCanonicalFileName: (name) => name,
+            getCurrentDirectory: () => "/",
+            getNewLine: () => "\n",
+        });
+        throw new Error(`Generated component failed type checking:\n${message}`);
+    }
+}
+
 function interfaceFromSymbol(
     typescript: typeof ts,
     checker: ts.TypeChecker,
