@@ -4,7 +4,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 import { typesComponent } from "./types.js";
 import { declarationModel, validateComponentSource } from "./new-declarations.js";
 import { packageManagerAdapter } from "./new-package-manager.js";
-import { renderComponent } from "./new-render.js";
+import { renderComponent, renderComponentTest } from "./new-render.js";
 
 export type NewLanguage = "typescript" | "javascript";
 export type NewPackageManager = "pnpm" | "npm" | "yarn";
@@ -37,6 +37,7 @@ export async function createProject(projectDirectory: string, options: NewProjec
     });
     const model = declarationModel(typescript, generatedTypes);
     const source = renderComponent(typescript, model, language);
+    const testSource = renderComponentTest(typescript, model, language);
     validateComponentSource(typescript, generatedTypes, source, language);
     const files = await scaffoldFiles({
         projectName: npmPackageName(basename(destination)),
@@ -45,6 +46,7 @@ export async function createProject(projectDirectory: string, options: NewProjec
         targets,
         world: model.world,
         source,
+        testSource,
         generatedTypes,
         witSource,
     });
@@ -74,6 +76,7 @@ async function scaffoldFiles(input: {
     targets: NewTarget[];
     world: string;
     source: string;
+    testSource: string;
     generatedTypes: Record<string, Uint8Array>;
     witSource: string;
 }): Promise<Record<string, string | Uint8Array>> {
@@ -81,7 +84,7 @@ async function scaffoldFiles(input: {
     const files: Record<string, string | Uint8Array> = {
         ".gitignore": "node_modules/\ndist/\n",
         [`src/component.${extension}`]: input.source,
-        [`test/component.test.${extension}`]: smokeTest(input.language),
+        [`test/component.test.${extension}`]: input.testSource,
     };
     for (const [name, contents] of Object.entries(input.generatedTypes)) files[`types/generated/${name}`] = contents;
     const packageJson = await generatedPackageJson(input);
@@ -189,12 +192,6 @@ function configurations(language: NewLanguage, targets: NewTarget[]): Record<str
         "rolldown.nodejs.config.mjs": `export default {\n  tsconfig: "../tsconfig.nodejs.json",\n};\n`,
         "rolldown.web.config.mjs": `export default {\n  tsconfig: "../tsconfig.web.json",\n};\n`,
     };
-}
-
-function smokeTest(language: NewLanguage): string {
-    const typeAnnotation = language === "typescript" ? ": Record<string, unknown>" : "";
-    const sourceExtension = language === "typescript" ? "" : ".js";
-    return `import { describe, expect, test } from "vitest";\nimport * as component from "../src/component${sourceExtension}";\n\ndescribe("component implementation", () => {\n  test("exports an implementation", () => {\n    const exports${typeAnnotation} = component;\n    expect(Object.keys(exports).length).toBeGreaterThan(0);\n  });\n});\n`;
 }
 
 function readme(
