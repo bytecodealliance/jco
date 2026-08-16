@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 
 import { typesComponent } from "./types.js";
 import { declarationModel, validateComponentSource } from "./new-declarations.js";
+import { packageManagerAdapter } from "./new-package-manager.js";
 import { renderComponent } from "./new-render.js";
 
 export type NewLanguage = "typescript" | "javascript";
@@ -101,6 +102,7 @@ async function generatedPackageJson(input: {
     const ownPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
     const extension = input.language === "typescript" ? "ts" : "js";
     const world = shellArgument(input.world);
+    const manager = packageManagerAdapter(input.packageManager);
     const wit = "wit";
     const source = `src/component.${extension}`;
     const types = `jco guest-types ${wit} --world-name ${world} --strict -o types/generated`;
@@ -108,7 +110,7 @@ async function generatedPackageJson(input: {
     if (input.targets.length === 2) {
         scripts["check:types:nodejs"] = "tsc -p tsconfig.nodejs.json";
         scripts["check:types:web"] = "tsc -p tsconfig.web.json";
-        scripts.check = "npm run check:types:nodejs && npm run check:types:web";
+        scripts.check = `${manager.run("check:types:nodejs")} && ${manager.run("check:types:web")}`;
         scripts["build:nodejs"] = buildCommand(
             source,
             wit,
@@ -117,20 +119,20 @@ async function generatedPackageJson(input: {
             "dist/nodejs/component.wasm",
         );
         scripts["build:web"] = buildCommand(source, wit, world, "rolldown.web.config.mjs", "dist/web/component.wasm");
-        scripts.build = "npm run build:nodejs && npm run build:web";
+        scripts.build = `${manager.run("build:nodejs")} && ${manager.run("build:web")}`;
     } else {
         scripts["check:types"] = "tsc -p tsconfig.json";
-        scripts.check = "npm run check:types";
+        scripts.check = manager.run("check:types");
         scripts.build = buildCommand(source, wit, world, "rolldown.config.mjs", "dist/component.wasm");
     }
     scripts.test = "vitest run";
-    scripts.prebuild = "npm run types";
+    scripts.prebuild = manager.run("types");
     return {
         name: input.projectName,
         version: "0.1.0",
         private: true,
         type: "module",
-        packageManager: packageManagerVersion(input.packageManager),
+        packageManager: manager.packageManager,
         scripts,
         devDependencies: {
             "@bytecodealliance/jco": `^${ownPackage.version}`,
@@ -199,10 +201,12 @@ function readme(
     input: { packageManager: NewPackageManager; targets: NewTarget[]; world: string },
     extension: string,
 ): string {
-    const run = input.packageManager === "npm" ? "npm run" : input.packageManager;
-    const install = input.packageManager === "yarn" ? "yarn install" : `${input.packageManager} install`;
-    const builds = input.targets.length === 2 ? `\`${run} build:nodejs\` and \`${run} build:web\`` : `\`${run} build\``;
-    return `# JavaScript component\n\nThis project implements the \`${input.world}\` WIT world. Edit \`src/component.${extension}\` and replace the generated TODO bodies.\n\n## Develop\n\n\`\`\`console\n${install}\n${run} types\n${run} check\n${run} test\n${run} build\n\`\`\`\n\nThe WIT package is copied into \`wit/\`; generated guest declarations live in \`types/generated/\`. Run \`${run} types\` after changing WIT. Build individual targets with ${builds}.\n\nThe scripts are standard package scripts, so npm, pnpm, or Yarn can be used with their equivalent \`install\` and \`run\` commands. Rolldown settings are in the generated configuration file${input.targets.length === 2 ? "s" : ""}.\n`;
+    const manager = packageManagerAdapter(input.packageManager);
+    const builds =
+        input.targets.length === 2
+            ? `\`${manager.run("build:nodejs")}\` and \`${manager.run("build:web")}\``
+            : `\`${manager.run("build")}\``;
+    return `# JavaScript component\n\nThis project implements the \`${input.world}\` WIT world. Edit \`src/component.${extension}\` and replace the generated TODO bodies.\n\n## Develop\n\n\`\`\`console\n${manager.install}\n${manager.run("types")}\n${manager.run("check")}\n${manager.run("test")}\n${manager.run("build")}\n\`\`\`\n\nThe WIT package is copied into \`wit/\`; generated guest declarations live in \`types/generated/\`. Run \`${manager.run("types")}\` after changing WIT. Build individual targets with ${builds}.\n\nThe scripts are standard package scripts, so npm, pnpm, or Yarn can be used with their equivalent \`install\` and \`run\` commands. Rolldown settings are in the generated configuration file${input.targets.length === 2 ? "s" : ""}.\n`;
 }
 
 async function validatePaths(destination: string, witSource: string): Promise<void> {
@@ -258,10 +262,6 @@ function npmPackageName(name: string): string {
         .replace(/^[._-]+|[._-]+$/g, "");
     if (!normalized) throw new Error(`Cannot derive an npm package name from ${JSON.stringify(name)}`);
     return normalized;
-}
-
-function packageManagerVersion(manager: NewPackageManager): string {
-    return { pnpm: "pnpm@11.0.0", npm: "npm@11.0.0", yarn: "yarn@4.9.2" }[manager];
 }
 
 function shellArgument(value: string): string {

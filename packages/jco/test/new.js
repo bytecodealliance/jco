@@ -7,6 +7,7 @@ import { afterEach, assert, expect, suite, test } from "vitest";
 
 import { createProject } from "../dist/cmd/new.js";
 import { validateComponentSource } from "../dist/cmd/new-declarations.js";
+import { packageManagerAdapter } from "../dist/cmd/new-package-manager.js";
 import { renderComponent } from "../dist/cmd/new-render.js";
 import typescript from "typescript-compiler-api";
 
@@ -18,6 +19,17 @@ afterEach(async () => {
 });
 
 suite("jco new", () => {
+    test.each([
+        ["pnpm", "pnpm@11.0.0", "pnpm-lock.yaml", "pnpm run check"],
+        ["npm", "npm@11.0.0", "package-lock.json", "npm run check"],
+        ["yarn", "yarn@4.9.2", "yarn.lock", "yarn run check"],
+    ])("abstracts %s commands", (name, metadata, lockfile, check) => {
+        const manager = packageManagerAdapter(name);
+        assert.equal(manager.packageManager, metadata);
+        assert.equal(manager.lockfile, lockfile);
+        assert.equal(manager.run("check"), check);
+    });
+
     test("renders reserved world export names through aliases", () => {
         const source = renderComponent(
             typescript,
@@ -70,6 +82,8 @@ suite("jco new", () => {
         );
         const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
         assert.equal(packageJson.packageManager, "pnpm@11.0.0");
+        assert.equal(packageJson.scripts.check, "pnpm run check:types");
+        assert.equal(packageJson.scripts.prebuild, "pnpm run types");
         assert.notProperty(packageJson.devDependencies, "@types/node");
         assert.notProperty(packageJson.scripts, "build:web");
         assert.include(await readFile(join(project, "rolldown.config.mjs"), "utf8"), '"../tsconfig.json"');
@@ -90,6 +104,7 @@ suite("jco new", () => {
         assert.include(source, '@type {typeof import("jco:test/world1").foo1}');
         const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
         assert.equal(packageJson.packageManager, "npm@11.0.0");
+        assert.equal(packageJson.scripts.prebuild, "npm run types");
         assert.property(packageJson.scripts, "build:nodejs");
         assert.property(packageJson.scripts, "build:web");
         assert.include(await readFile(join(project, "rolldown.web.config.mjs"), "utf8"), '"../tsconfig.web.json"');
