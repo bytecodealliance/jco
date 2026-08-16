@@ -87,6 +87,22 @@ async function run() {
     test(wasm.result.listU32, new Uint32Array([1]));
     test(wasm.result.listU32, new Uint32Array([1, 2, 3, -1, -2, 0]));
 
+    expected = new Uint32Array([1, 2, 3]);
+    const listU32FromArray = wasm.result.listU32([1, 2, 3] as any);
+    expected = null;
+    assert.deepStrictEqual(listU32FromArray, new Uint32Array([1, 2, 3]));
+    for (const listInteger of [
+        wasm.result.listU8,
+        wasm.result.listS8,
+        wasm.result.listU16,
+        wasm.result.listS16,
+        wasm.result.listU32,
+        wasm.result.listS32,
+    ]) {
+        assert.throws(() => listInteger([1, '2', 3] as any), TypeError);
+        assert.throws(() => listInteger([1, 2.5, 3] as any), TypeError);
+    }
+
     test(wasm.result.listS32, new Int32Array([]));
     test(wasm.result.listS32, new Int32Array([1]));
     test(wasm.result.listS32, new Int32Array([1, 2, 3, -1, -2, 0]));

@@ -356,20 +356,20 @@ impl ConversionIntrinsic {
                                 return v === 0 || v === 1;
                                 break;
                             case 'u8':
-                                return v >= 0 && v <= 255;
+                                return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 255;
                                 break;
                             case 's8':
-                                return v >= -128 && v <= 127;
+                                return typeof v === 'number' && Number.isInteger(v) && v >= -128 && v <= 127;
                                 break;
                             case 'u16':
-                                return v >= 0 && v <= 65535;
+                                return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 65535;
                                 break;
                             case 's16':
-                                return v >= -32768 && v <= 32767;
+                                return typeof v === 'number' && Number.isInteger(v) && v >= -32768 && v <= 32767;
                             case 'u32':
-                                return v >= 0 && v <= 4_294_967_295;
+                                return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 4_294_967_295;
                             case 's32':
-                                return v >= -2_147_483_648 && v <= 2_147_483_647;
+                                return typeof v === 'number' && Number.isInteger(v) && v >= -2_147_483_648 && v <= 2_147_483_647;
                             case 'u64':
                                 return typeof v === 'bigint' && v >= 0 && v <= 18_446_744_073_709_551_615n;
                             case 's64':
