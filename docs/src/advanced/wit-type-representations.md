@@ -237,6 +237,11 @@ type Result<T,E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 When a result is returned directly from a function, any thrown error of the function is treated as the result error type,
 while any direct return value is treated as the result success type.
 
+For guest exports, `@bytecodealliance/jco-transpile` throws the lifted error payload directly by default. The `jco`
+API and CLI preserve the historical behavior of wrapping that value in an `Error` with a `payload` property. Pass
+`noComponentErrorWrapping: true` to the API, or `--no-component-error-wrapping` to the CLI, to make `jco` throw the
+payload directly. Pass `noComponentErrorWrapping: false` to `jco-transpile` to request the compatibility wrapper.
+
 Consider the following interface:
 
 ```wit

@@ -51,6 +51,7 @@ Options include:
 * `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 * `--tracing`: Emit tracing calls for all function entry and exits.
+* `--no-component-error-wrapping`: Throw the lifted error payload directly for a top-level `result::err` instead of wrapping it in a generated `ComponentError`. Jco preserves wrapping by default for compatibility.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
 
 * `--async-mode [mode]`: EXPERIMENTAL: For the component imports and exports, functions and methods on resources can be specified as `async`. The only option is `jspi` (JavaScript Promise Integration).
