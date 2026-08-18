@@ -11,30 +11,36 @@ import {
     outputStreamCreate,
     registerDispose,
 } from "../io/worker-io.js";
-import { FILE, INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../io/calls.js";
 import {
-    closeSync,
+    FILE,
+    FILESYSTEM_DESCRIPTOR_CLOSE,
+    FILESYSTEM_DESCRIPTOR_GET_TYPE,
+    FILESYSTEM_DESCRIPTOR_METADATA_HASH,
+    FILESYSTEM_DESCRIPTOR_OPEN,
+    FILESYSTEM_DESCRIPTOR_READ,
+    FILESYSTEM_DESCRIPTOR_SET_SIZE,
+    FILESYSTEM_DESCRIPTOR_SET_TIMES,
+    FILESYSTEM_DESCRIPTOR_STAT,
+    FILESYSTEM_DESCRIPTOR_SYNC,
+    FILESYSTEM_DESCRIPTOR_SYNC_DATA,
+    FILESYSTEM_DESCRIPTOR_WRITE,
+    INPUT_STREAM_CREATE,
+    OUTPUT_STREAM_CREATE,
+} from "../io/calls.js";
+import {
     constants,
-    fdatasyncSync,
-    fstatSync,
-    fsyncSync,
-    ftruncateSync,
-    futimesSync,
     linkSync,
     lstatSync,
     lutimesSync,
     mkdirSync,
     opendirSync,
-    openSync,
     readlinkSync,
-    readSync,
     renameSync,
     rmdirSync,
     statSync,
     symlinkSync,
     unlinkSync,
     utimesSync,
-    writeSync,
 } from "node:fs";
 import { platform } from "node:process";
 
@@ -69,6 +75,10 @@ function lookupType(obj): DescriptorType {
     return "unknown";
 }
 
+function closeFileResource(id: number) {
+    ioCall(FILESYSTEM_DESCRIPTOR_CLOSE, id);
+}
+
 // Note: This should implement per-segment semantics of openAt, but we cannot
 //       currently due to the lack of support for openat() in Node.js.
 //       Tracking issue: https://github.com/libuv/libuv/issues/4167
@@ -78,7 +88,7 @@ function lookupType(obj): DescriptorType {
  */
 class Descriptor implements IDescriptor {
     #hostPreopen;
-    #fd;
+    #fileResourceId;
     #finalizer;
     #mode;
     #fullPath;
@@ -99,10 +109,15 @@ class Descriptor implements IDescriptor {
         return descriptor;
     }
 
-    static _create(fd, mode, fullPath) {
+    static _create(fileResourceId, mode, fullPath) {
         const descriptor = new Descriptor();
-        descriptor.#fd = fd;
-        descriptor.#finalizer = registerDispose(descriptor, null, fd, closeSync);
+        descriptor.#fileResourceId = fileResourceId;
+        descriptor.#finalizer = registerDispose(
+            descriptor,
+            null,
+            fileResourceId,
+            closeFileResource,
+        );
         descriptor.#mode = mode;
         descriptor.#fullPath = fullPath;
         return descriptor;
@@ -122,7 +137,7 @@ class Descriptor implements IDescriptor {
         return inputStreamCreate(
             FILE,
             ioCall(INPUT_STREAM_CREATE | FILE, null, {
-                fd: this.#fd,
+                descriptorId: this.#fileResourceId,
                 offset,
             }),
         );
@@ -134,7 +149,10 @@ class Descriptor implements IDescriptor {
         }
         return outputStreamCreate(
             FILE,
-            ioCall(OUTPUT_STREAM_CREATE | FILE, null, { fd: this.#fd, offset }),
+            ioCall(OUTPUT_STREAM_CREATE | FILE, null, {
+                descriptorId: this.#fileResourceId,
+                offset,
+            }),
         );
     }
 
@@ -153,7 +171,7 @@ class Descriptor implements IDescriptor {
             throw "invalid";
         }
         try {
-            fdatasyncSync(this.#fd);
+            ioCall(FILESYSTEM_DESCRIPTOR_SYNC_DATA, this.#fileResourceId);
         } catch (e: any) {
             if (e.code === "EPERM") {
                 return;
@@ -170,8 +188,7 @@ class Descriptor implements IDescriptor {
         if (this.#hostPreopen) {
             return "directory";
         }
-        const stats = fstatSync(this.#fd);
-        return lookupType(stats);
+        return ioCall(FILESYSTEM_DESCRIPTOR_GET_TYPE, this.#fileResourceId);
     }
 
     setSize(size) {
@@ -179,7 +196,7 @@ class Descriptor implements IDescriptor {
             throw "is-directory";
         }
         try {
-            ftruncateSync(this.#fd, Number(size));
+            ioCall(FILESYSTEM_DESCRIPTOR_SET_SIZE, this.#fileResourceId, Number(size));
         } catch (e: any) {
             if (isWindows && e.code === "EPERM") {
                 throw "access";
@@ -208,7 +225,7 @@ class Descriptor implements IDescriptor {
             dataModificationTimestamp.tag === "no-change" && stats.dataModificationTimestamp,
         );
         try {
-            futimesSync(this.#fd, atime, mtime);
+            ioCall(FILESYSTEM_DESCRIPTOR_SET_TIMES, this.#fileResourceId, { atime, mtime });
         } catch (e) {
             throw convertFsError(e);
         }
@@ -229,17 +246,23 @@ class Descriptor implements IDescriptor {
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
-        const buf = new Uint8Array(Number(length));
-        const bytesRead = readSync(this.#fd, buf, 0, Number(length), Number(offset));
-        const out = new Uint8Array(buf.buffer, 0, bytesRead);
-        return [out, bytesRead === 0];
+        const { bytes, eof } = ioCall(FILESYSTEM_DESCRIPTOR_READ, this.#fileResourceId, {
+            length: Number(length),
+            offset: Number(offset),
+        });
+        return [bytes, eof];
     }
 
     write(buffer, offset) {
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
-        return BigInt(writeSync(this.#fd, buffer, 0, buffer.byteLength, Number(offset)));
+        return BigInt(
+            ioCall(FILESYSTEM_DESCRIPTOR_WRITE, this.#fileResourceId, {
+                buffer,
+                offset: Number(offset),
+            }),
+        );
     }
 
     readDirectory(): IDirectoryEntryStream {
@@ -259,7 +282,7 @@ class Descriptor implements IDescriptor {
             throw "invalid";
         }
         try {
-            fsyncSync(this.#fd);
+            ioCall(FILESYSTEM_DESCRIPTOR_SYNC, this.#fileResourceId);
         } catch (e: any) {
             if (e.code === "EPERM") {
                 return;
@@ -283,11 +306,11 @@ class Descriptor implements IDescriptor {
         }
         let stats;
         try {
-            stats = fstatSync(this.#fd, { bigint: true });
+            stats = ioCall(FILESYSTEM_DESCRIPTOR_STAT, this.#fileResourceId);
         } catch (e) {
             throw convertFsError(e);
         }
-        const type = lookupType(stats);
+        const type = stats.type;
         return {
             type,
             linkCount: stats.nlink,
@@ -428,12 +451,12 @@ class Descriptor implements IDescriptor {
             }
         }
         try {
-            const fd = openSync(
-                fullPath.endsWith("/") ? fullPath.slice(0, -1) : fullPath,
-                fsOpenFlags,
-            );
-            const descriptor = descriptorCreate(fd, descriptorFlags, fullPath);
-            if (fullPath.endsWith("/") && descriptor.getType() !== "directory") {
+            const { id, type } = ioCall(FILESYSTEM_DESCRIPTOR_OPEN, null, {
+                path: fullPath.endsWith("/") ? fullPath.slice(0, -1) : fullPath,
+                flags: fsOpenFlags,
+            });
+            const descriptor = descriptorCreate(id, descriptorFlags, fullPath);
+            if (fullPath.endsWith("/") && type !== "directory") {
                 descriptor[symbolDispose]();
                 throw "not-directory";
             }
@@ -544,8 +567,7 @@ class Descriptor implements IDescriptor {
             return { upper: 0n, lower: BigInt(this._id) };
         }
         try {
-            const stats = fstatSync(this.#fd, { bigint: true });
-            return { upper: stats.mtimeNs, lower: stats.ino };
+            return ioCall(FILESYSTEM_DESCRIPTOR_METADATA_HASH, this.#fileResourceId);
         } catch (e) {
             throw convertFsError(e);
         }

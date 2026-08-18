@@ -19,6 +19,17 @@ import {
     CLOCKS_DURATION_SUBSCRIBE,
     CLOCKS_INSTANT_SUBSCRIBE,
     FILE,
+    FILESYSTEM_DESCRIPTOR_CLOSE,
+    FILESYSTEM_DESCRIPTOR_GET_TYPE,
+    FILESYSTEM_DESCRIPTOR_METADATA_HASH,
+    FILESYSTEM_DESCRIPTOR_OPEN,
+    FILESYSTEM_DESCRIPTOR_READ,
+    FILESYSTEM_DESCRIPTOR_SET_SIZE,
+    FILESYSTEM_DESCRIPTOR_SET_TIMES,
+    FILESYSTEM_DESCRIPTOR_STAT,
+    FILESYSTEM_DESCRIPTOR_SYNC,
+    FILESYSTEM_DESCRIPTOR_SYNC_DATA,
+    FILESYSTEM_DESCRIPTOR_WRITE,
     FUTURE_DISPOSE,
     FUTURE_SUBSCRIBE,
     FUTURE_TAKE_VALUE,
@@ -101,6 +112,21 @@ import {
     reverseMap,
 } from "./calls.js";
 import {
+    fileResourceFd,
+    getFileResourceType,
+    metadataHashFileResource,
+    openFileResource,
+    readFileResource,
+    releaseFileResource,
+    retainFileResource,
+    setFileResourceSize,
+    setFileResourceTimes,
+    statFileResource,
+    syncFileResource,
+    syncFileResourceData,
+    writeFileResource,
+} from "./worker-filesystem.js";
+import {
     SOCKET_STATE_BIND,
     SOCKET_STATE_BOUND,
     SOCKET_STATE_CONNECT,
@@ -170,6 +196,7 @@ export interface Stream {
     stream: NodeJS.ReadableStream | NodeJS.WritableStream;
     flushPromise: Promise<void> | null;
     pollState;
+    fileResourceId?: number;
 }
 
 export interface Future {
@@ -571,18 +598,44 @@ function handle(call, id, payload) {
         }
 
         // Filesystem
+        case FILESYSTEM_DESCRIPTOR_OPEN:
+            return openFileResource(payload.path, payload.flags);
+        case FILESYSTEM_DESCRIPTOR_CLOSE:
+            return releaseFileResource(id);
+        case FILESYSTEM_DESCRIPTOR_SYNC_DATA:
+            return syncFileResourceData(id);
+        case FILESYSTEM_DESCRIPTOR_GET_TYPE:
+            return getFileResourceType(id);
+        case FILESYSTEM_DESCRIPTOR_SET_SIZE:
+            return setFileResourceSize(id, payload);
+        case FILESYSTEM_DESCRIPTOR_SET_TIMES:
+            return setFileResourceTimes(id, payload.atime, payload.mtime);
+        case FILESYSTEM_DESCRIPTOR_READ:
+            return readFileResource(id, payload.length, payload.offset);
+        case FILESYSTEM_DESCRIPTOR_WRITE:
+            return writeFileResource(id, payload.buffer, payload.offset);
+        case FILESYSTEM_DESCRIPTOR_SYNC:
+            return syncFileResource(id);
+        case FILESYSTEM_DESCRIPTOR_STAT:
+            return statFileResource(id);
+        case FILESYSTEM_DESCRIPTOR_METADATA_HASH:
+            return metadataHashFileResource(id);
         case INPUT_STREAM_CREATE | FILE: {
-            const { fd, offset } = payload;
+            const { descriptorId, offset } = payload;
+            const fd = fileResourceFd(descriptorId);
             const stream = createReadStream(null as unknown as PathLike, {
                 fd,
                 autoClose: false,
                 highWaterMark: 64 * 1024,
                 start: Number(offset),
             });
-            return createReadableStream(stream);
+            const streamId = createReadableStream(stream);
+            streams.get(streamId).fileResourceId = retainFileResource(descriptorId);
+            return streamId;
         }
         case OUTPUT_STREAM_CREATE | FILE: {
-            const { fd, offset } = payload;
+            const { descriptorId, offset } = payload;
+            const fd = fileResourceFd(descriptorId);
             const stream = createWriteStream(null as unknown as PathLike, {
                 fd,
                 autoClose: false,
@@ -590,7 +643,9 @@ function handle(call, id, payload) {
                 highWaterMark: 64 * 1024,
                 start: Number(offset),
             });
-            return createWritableStream(stream);
+            const streamId = createWritableStream(stream);
+            streams.get(streamId).fileResourceId = retainFileResource(descriptorId);
+            return streamId;
         }
     }
 
@@ -638,6 +693,9 @@ function handle(call, id, payload) {
             const stream = streams.get(id);
             verifyPollsDroppedForDrop(stream.pollState, "input stream");
             streams.delete(id);
+            if (stream.fileResourceId) {
+                return releaseFileResource(stream.fileResourceId);
+            }
             return;
         }
         case OUTPUT_STREAM_CHECK_WRITE: {
@@ -840,9 +898,15 @@ function handle(call, id, payload) {
         case OUTPUT_STREAM_DISPOSE: {
             const stream = streams.get(id);
             verifyPollsDroppedForDrop(stream.pollState, "output stream");
-            stream.stream.end();
             streams.delete(id);
-            return;
+            if (stream.fileResourceId) {
+                return new Promise<void>((resolve) => stream.stream.end(resolve)).then(() =>
+                    releaseFileResource(stream.fileResourceId),
+                );
+            } else {
+                stream.stream.end();
+                return;
+            }
         }
 
         case POLL_POLLABLE_READY:
