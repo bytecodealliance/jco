@@ -366,6 +366,9 @@ jobs:
         run: |
           cargo xtask generate tests preview2
 
+      - name: Preview 2 filesystem worker resources
+        run: pnpm --filter @bytecodealliance/preview2-shim run test:deno
+
       - name: WASI Preview 2 Conformance
         run: cargo test deno_
 
