@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { preopens } from "../dist/nodejs/filesystem.js";
+import { preopens } from "../../dist/nodejs/filesystem.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 

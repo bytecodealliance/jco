@@ -65,7 +65,7 @@
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "test": "vitest run -c test/vitest.ts",
-        "test:deno": "deno test --no-check -A test/deno-filesystem.mjs",
+        "test:deno": "deno test --no-check -A test/deno/*.mjs",
         "prepack": "pnpm run build"
     },
     "devDependencies": {
