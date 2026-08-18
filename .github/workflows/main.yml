@@ -858,7 +858,9 @@ jobs:
           tool: wkg
 
       - id: wasi-sdk
-        uses: bytecodealliance/setup-wasi-sdk-action@b2de090b44eb70013ee96b393727d473b35e1728
+        uses: bytecodealliance/setup-wasi-sdk-action@ffaf8f7ddb5c29b50932285ac5ebcf80c0c287a4
+        with:
+          version: 34.0-rc.2
 
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
