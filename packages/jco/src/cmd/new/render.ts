@@ -124,6 +124,83 @@ export function renderComponent(
     );
 }
 
+/** Render an imports plugin suitable for passing to a component's instantiate function. */
+export function renderHostPlugin(
+    typescript: typeof ts,
+    model: ComponentImplementationModel,
+    language: "typescript" | "javascript",
+): string {
+    const f = typescript.factory;
+    if (!model.typeModule) {
+        throw new Error("Missing host type module");
+    }
+    const statements: ts.Statement[] = [
+        f.createImportDeclaration(
+            undefined,
+            f.createImportClause(true, undefined, f.createNamespaceImport(f.createIdentifier("World"))),
+            f.createStringLiteral(model.typeModule),
+        ),
+    ];
+    const importProperties: ts.ObjectLiteralElementLike[] = [];
+    for (const iface of model.interfaces) {
+        if (!iface.importName) {
+            continue;
+        }
+        const classNames: Array<{ exportName: string; localName: string }> = [];
+        for (const resource of iface.resources) {
+            const className = `${upperFirst(iface.name)}${resource.name}`;
+            classNames.push({ exportName: resource.name, localName: className });
+            statements.push(resourceClass(typescript, resource, className));
+        }
+        const implementation = f.createObjectLiteralExpression(
+            [
+                ...iface.functions.map((fn) => objectMethod(typescript, fn)),
+                ...classNames.map(({ exportName, localName }) =>
+                    f.createPropertyAssignment(propertyName(f, exportName), f.createIdentifier(localName)),
+                ),
+            ],
+            true,
+        );
+        const typedImplementation = f.createSatisfiesExpression(
+            implementation,
+            f.createTypeQueryNode(f.createQualifiedName(f.createIdentifier("World"), propertyName(f, iface.name))),
+        );
+        importProperties.push(f.createPropertyAssignment(f.createStringLiteral(iface.importName), typedImplementation));
+    }
+    statements.push(
+        f.createVariableStatement(
+            [f.createModifier(typescript.SyntaxKind.ExportKeyword)],
+            f.createVariableDeclarationList(
+                [
+                    f.createVariableDeclaration(
+                        "imports",
+                        undefined,
+                        undefined,
+                        f.createObjectLiteralExpression(importProperties, true),
+                    ),
+                ],
+                typescript.NodeFlags.Const,
+            ),
+        ),
+        f.createExportAssignment(undefined, false, f.createIdentifier("imports")),
+    );
+    const source = f.createSourceFile(
+        statements,
+        f.createToken(typescript.SyntaxKind.EndOfFileToken),
+        typescript.NodeFlags.None,
+    );
+    const printed = typescript.createPrinter({ newLine: typescript.NewLineKind.LineFeed }).printFile(source) + "\n";
+    if (language === "typescript") {
+        return printed;
+    }
+    return (
+        "// @ts-check\n" +
+        typescript.transpileModule(printed, {
+            compilerOptions: { module: typescript.ModuleKind.ESNext, target: typescript.ScriptTarget.ES2022 },
+        }).outputText
+    );
+}
+
 export function renderComponentTest(
     typescript: typeof ts,
     model: ComponentImplementationModel,
@@ -213,6 +290,25 @@ export function renderComponentTest(
         typescript.NodeFlags.None,
     );
     return typescript.createPrinter({ newLine: typescript.NewLineKind.LineFeed }).printFile(source) + "\n";
+}
+
+export function renderHostPluginTest(
+    typescript: typeof ts,
+    model: ComponentImplementationModel,
+    language: "typescript" | "javascript",
+): string {
+    const extension = language === "javascript" ? ".js" : "";
+    const assertions = model.interfaces
+        .filter((iface) => iface.importName)
+        .flatMap((iface) => [
+            `    expect(typeof imports[${JSON.stringify(iface.importName)}]).toBe("object");`,
+            ...iface.functions.map(
+                (fn) =>
+                    `    expect(typeof imports[${JSON.stringify(iface.importName)}][${JSON.stringify(fn.name)}]).toBe("function");`,
+            ),
+        ])
+        .join("\n");
+    return `import { expect, test } from "vitest";\nimport imports from "../src/plugin${extension}";\n\ntest("provides the selected world's imports", () => {\n${assertions}\n});\n`;
 }
 
 /** Generate a component member */

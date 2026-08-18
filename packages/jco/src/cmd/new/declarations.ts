@@ -5,6 +5,7 @@ import type { ComponentImplementationModel, FunctionModel, InterfaceModel, Resou
 export function declarationModel(
     typescript: typeof ts,
     files: Record<string, Uint8Array>,
+    hostMode = false,
 ): ComponentImplementationModel {
     const decoder = new TextDecoder();
     const virtualFiles = Object.fromEntries(
@@ -36,6 +37,9 @@ export function declarationModel(
 
     const program = typescript.createProgram(Object.keys(virtualFiles), options, host);
     const checker = program.getTypeChecker();
+    if (hostMode) {
+        return hostDeclarationModel(typescript, program, checker);
+    }
     const modules = new Map<string, ts.Symbol>();
     const rootModules: string[] = [];
 
@@ -83,6 +87,57 @@ export function declarationModel(
     return { world, functions, interfaces };
 }
 
+function hostDeclarationModel(
+    typescript: typeof ts,
+    program: ts.Program,
+    checker: ts.TypeChecker,
+): ComponentImplementationModel {
+    const root = program.getSourceFiles().find((source) => !source.fileName.includes("/interfaces/"));
+    if (!root) {
+        throw new Error("Expected one generated host world declaration");
+    }
+    const world = root.getFullText().match(/\/\/ world ([^\s]+)/)?.[1];
+    if (!world) {
+        throw new Error("Could not determine the generated host world");
+    }
+    const interfaces: InterfaceModel[] = [];
+    for (const statement of root.statements) {
+        if (
+            !typescript.isExportDeclaration(statement) ||
+            !statement.isTypeOnly ||
+            !statement.exportClause ||
+            !typescript.isNamespaceExport(statement.exportClause)
+        ) {
+            continue;
+        }
+        const exported = checker.getSymbolAtLocation(statement.exportClause.name);
+        if (!exported) {
+            continue;
+        }
+        const moduleSpecifier = typescript.isStringLiteral(statement.moduleSpecifier!)
+            ? statement.moduleSpecifier.text
+            : undefined;
+        const interfaceFile = moduleSpecifier
+            ? program.getSourceFile(`/${moduleSpecifier.replace(/^\.\//, "").replace(/\.js$/, ".d.ts")}`)
+            : undefined;
+        const importName = interfaceFile?.getFullText().match(/@module Interface ([^\s*]+)/)?.[1];
+        const target = interfaceFile && checker.getSymbolAtLocation(interfaceFile);
+        if (!importName || !target) {
+            throw new Error(`Could not determine the WIT import for ${exported.name}`);
+        }
+        interfaces.push({ ...interfaceFromSymbol(typescript, checker, exported.name, target), importName });
+    }
+    return {
+        world,
+        typeModule: `../types/generated/${root.fileName
+            .split("/")
+            .pop()!
+            .replace(/\.d\.ts$/, ".js")}`,
+        functions: [],
+        interfaces,
+    };
+}
+
 export function validateComponentSource(
     typescript: typeof ts,
     files: Record<string, Uint8Array>,
@@ -90,11 +145,14 @@ export function validateComponentSource(
     language: "typescript" | "javascript",
 ): void {
     const decoder = new TextDecoder();
-    const sourceName = language === "typescript" ? "/component.ts" : "/component.js";
+    const sourceName = language === "typescript" ? "/src/component.ts" : "/src/component.js";
     const virtualFiles: Record<string, string> = {
         [sourceName]: source,
         ...Object.fromEntries(
-            Object.entries(files).map(([name, bytes]) => [`/${name.replaceAll("\\", "/")}`, decoder.decode(bytes)]),
+            Object.entries(files).map(([name, bytes]) => [
+                `/types/generated/${name.replaceAll("\\", "/")}`,
+                decoder.decode(bytes),
+            ]),
         ),
     };
 
@@ -115,6 +173,9 @@ export function validateComponentSource(
     const host: ts.CompilerHost = {
         ...baseHost,
         fileExists: (name) => virtualFiles[name] !== undefined || baseHost.fileExists(name),
+        directoryExists: (name) =>
+            Object.keys(virtualFiles).some((file) => file.startsWith(`${name}/`)) ||
+            (baseHost.directoryExists?.(name) ?? false),
         readFile: (name) => virtualFiles[name] ?? baseHost.readFile(name),
         getCurrentDirectory: () => "/",
         getSourceFile: (name, languageVersion) => {

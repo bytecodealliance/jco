@@ -21,7 +21,7 @@ import { renderComponent } from "../dist/cmd/new/render.js";
 suite("jco scaffold", () => {
     test.each([
         ["pnpm", `pnpm@${DEFAULT_PNPM_VERSION}`, "pnpm-lock.yaml", "pnpm run check"],
-        ["npm", `npm@${DEFAULT_PNPM_VERSION}`, "package-lock.json", "npm run check"],
+        ["npm", `npm@${DEFAULT_NPM_VERSION}`, "package-lock.json", "npm run check"],
         ["yarn", `yarn@${DEFAULT_YARN_VERSION}`, "yarn.lock", "yarn run check"],
     ])("abstracts %s commands", (name, metadata, lockfile, check) => {
         const manager = packageManagerAdapter(name);
@@ -94,6 +94,40 @@ suite("jco scaffold", () => {
         assert.notProperty(packageJson.devDependencies, "@types/node");
         assert.notProperty(packageJson.scripts, "build:web");
         assert.include(await readFile(join(project, "rolldown.config.mjs"), "utf8"), '"../tsconfig.json"');
+
+        await rm(root, { recursive: true, force: true });
+    });
+
+    test("scaffolds both guest and host sides of a world", async () => {
+        const root = await getTmpDir();
+        const wit = join(root, "both.wit");
+        await writeFile(
+            wit,
+            `package test:both;
+
+interface dependency {
+    ping: func(value: string) -> string;
+}
+
+world app {
+    import dependency;
+    export run: func(value: string) -> string;
+}
+`,
+        );
+        const guest = join(root, "guest");
+        const host = join(root, "host");
+        await createProject(guest, { wit, world: "test:both/app", targets: ["nodejs"] });
+        await createProject(host, { wit, world: "test:both/app", host: true });
+
+        assert.include(await readFile(join(guest, "src/component.ts"), "utf8"), "export const run: typeof World.run");
+        const plugin = await readFile(join(host, "src/plugin.ts"), "utf8");
+        assert.include(plugin, '"test:both/dependency"');
+        assert.match(plugin, /ping\(value/);
+        assert.include(plugin, "export default imports");
+        const packageJson = JSON.parse(await readFile(join(host, "package.json"), "utf8"));
+        assert.match(packageJson.scripts.types, /^jco types /);
+        assert.notProperty(packageJson.scripts, "build");
 
         await rm(root, { recursive: true, force: true });
     });

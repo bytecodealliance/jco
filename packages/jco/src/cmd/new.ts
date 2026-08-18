@@ -4,7 +4,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 import { typesComponent } from "./types.js";
 import { declarationModel, validateComponentSource } from "./new/declarations.js";
 import { packageManagerAdapter } from "./new/package-manager.js";
-import { renderComponent, renderComponentTest } from "./new/render.js";
+import { renderComponent, renderComponentTest, renderHostPlugin, renderHostPluginTest } from "./new/render.js";
 
 export type NewLanguage = "typescript" | "javascript";
 export type NewPackageManager = "pnpm" | "npm" | "yarn";
@@ -16,6 +16,7 @@ export interface NewProjectOptions {
     language?: NewLanguage | "ts" | "js";
     packageManager?: NewPackageManager;
     targets?: NewTarget[];
+    host?: boolean;
 }
 
 /** Create a JS project to match a given WIT */
@@ -31,15 +32,18 @@ export async function createProject(projectDirectory: string, options: NewProjec
     // Program/factory/printer API. Keep this compatibility dependency isolated
     // so it can be removed when the native API stabilizes.
     const typescript = (await import("typescript-compiler-api")).default;
+    const host = options.host ?? false;
     const generatedTypes = await typesComponent(witSource, {
-        guest: true,
+        guest: !host,
         worldName: options.world,
         strict: true,
     });
 
-    const model = declarationModel(typescript, generatedTypes);
-    const source = renderComponent(typescript, model, language);
-    const testSource = renderComponentTest(typescript, model, language);
+    const model = declarationModel(typescript, generatedTypes, host);
+    const source = host ? renderHostPlugin(typescript, model, language) : renderComponent(typescript, model, language);
+    const testSource = host
+        ? renderHostPluginTest(typescript, model, language)
+        : renderComponentTest(typescript, model, language);
 
     validateComponentSource(typescript, generatedTypes, source, language);
 
@@ -53,6 +57,7 @@ export async function createProject(projectDirectory: string, options: NewProjec
         testSource,
         generatedTypes,
         witSource,
+        host,
     });
 
     const temporary = await mkdtemp(join(dirname(destination), `.${basename(destination)}-jco-new-`));
@@ -87,22 +92,23 @@ interface ScaffoldFilesArgs {
     testSource: string;
     generatedTypes: Record<string, Uint8Array>;
     witSource: string;
+    host: boolean;
 }
 
 async function scaffoldFiles(args: ScaffoldFilesArgs): Promise<Record<string, string | Uint8Array>> {
     const extension = args.language === "typescript" ? "ts" : "js";
     const files: Record<string, string | Uint8Array> = {
         ".gitignore": "node_modules/\ndist/\n",
-        [`src/component.${extension}`]: args.source,
-        [`test/component.test.${extension}`]: args.testSource,
+        [`src/${args.host ? "plugin" : "component"}.${extension}`]: args.source,
+        [`test/${args.host ? "plugin" : "component"}.test.${extension}`]: args.testSource,
     };
     for (const [name, contents] of Object.entries(args.generatedTypes)) {
         files[`types/generated/${name}`] = contents;
     }
-    const packageJson = await generatedPackageJson(input);
+    const packageJson = await generatedPackageJson(args);
     files["package.json"] = `${JSON.stringify(packageJson, null, 2)}\n`;
-    files["README.md"] = readme(input, extension);
-    Object.assign(files, configurations(args.language, args.targets));
+    files["README.md"] = readme(args, extension);
+    Object.assign(files, configurations(args.language, args.host ? [] : args.targets));
     return files;
 }
 
@@ -113,6 +119,7 @@ interface GeneratePackageJsonArgs {
     targets: NewTarget[];
     world: string;
     witSource: string;
+    host: boolean;
 }
 
 /** Generate package.json for the new project */
@@ -122,10 +129,13 @@ async function generatedPackageJson(args: GeneratePackageJsonArgs) {
     const world = shellArgument(args.world);
     const manager = packageManagerAdapter(args.packageManager);
     const wit = "wit";
-    const source = `src/component.${extension}`;
-    const types = `jco guest-types ${wit} --world-name ${world} --strict -o types/generated`;
+    const source = `src/${args.host ? "plugin" : "component"}.${extension}`;
+    const types = `jco ${args.host ? "types" : "guest-types"} ${wit} --world-name ${world} --strict -o types/generated`;
     const scripts: Record<string, string> = { types };
-    if (args.targets.length === 2) {
+    if (args.host) {
+        scripts["check:types"] = "tsc -p tsconfig.json";
+        scripts.check = manager.run("check:types");
+    } else if (args.targets.length === 2) {
         scripts["check:types:nodejs"] = "tsc -p tsconfig.nodejs.json";
         scripts["check:types:web"] = "tsc -p tsconfig.web.json";
         scripts.check = `${manager.run("check:types:nodejs")} && ${manager.run("check:types:web")}`;
@@ -181,6 +191,9 @@ function configurations(language: NewLanguage, targets: NewTarget[]): Record<str
         ...allowJs,
     };
     const include = ["src/**/*", "test/**/*", "types/generated/**/*.d.ts"];
+    if (targets.length === 0) {
+        return { "tsconfig.json": json({ compilerOptions: { ...shared, lib: ["ES2022"], types: ["node"] }, include }) };
+    }
     if (targets.length === 1) {
         const target = targets[0];
         return {
@@ -211,10 +224,13 @@ function configurations(language: NewLanguage, targets: NewTarget[]): Record<str
 }
 
 function readme(
-    input: { packageManager: NewPackageManager; targets: NewTarget[]; world: string },
+    input: { packageManager: NewPackageManager; targets: NewTarget[]; world: string; host: boolean },
     extension: string,
 ): string {
     const manager = packageManagerAdapter(input.packageManager);
+    if (input.host) {
+        return `# JavaScript host plugin\n\nThis project provides the imports required by the \`${input.world}\` WIT world. Edit \`src/plugin.${extension}\` and replace the generated TODO bodies, then pass its default export to \`instantiate\`.\n\n## Develop\n\n\`\`\`console\n${manager.install}\n${manager.run("types")}\n${manager.run("check")}\n${manager.run("test")}\n\`\`\`\n\nThe WIT package is copied into \`wit/\`; generated host declarations live in \`types/generated/\`. Run \`${manager.run("types")}\` after changing WIT.\n`;
+    }
     const builds =
         input.targets.length === 2
             ? `\`${manager.run("build:nodejs")}\` and \`${manager.run("build:web")}\``
