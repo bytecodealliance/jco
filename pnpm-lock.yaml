@@ -432,6 +432,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      typescript-compiler-api:
+        specifier: npm:typescript@6.0.3
+        version: typescript@6.0.3
       vite:
         specifier: ^7.1.5
         version: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
@@ -608,6 +611,9 @@ packages:
   '@bytecodealliance/jco-transpile@0.6.1':
     resolution: {integrity: sha512-MFE+2u2MhTOkN2Yg6qDuIeC1tgtxTFl7JFeY3uAuNGST5/skov17Dbnlnf4O0nJuroKlDXguUzq/El8Gx9YFpw==}
 
+  '@bytecodealliance/jco-transpile@0.7.0':
+    resolution: {integrity: sha512-FCUUB2IgENQGfaSTfKLsx0Q8L95K2MpaJBcF6AGOBtCZndWWUkcvtHW3cu5MTVYOCfd6S5itMADSXaK2RWsJ7A==}
+
   '@bytecodealliance/jco-transpile@0.8.0':
     resolution: {integrity: sha512-tnCkIAzj6CCKl0lZIO9FHQee3gWxgjPgfNlWN4vjYppBN4v1TsbAgN3LD7sBE2GJsozQz2hXzqivO8P0w5j9xg==}
 
@@ -617,6 +623,10 @@ packages:
 
   '@bytecodealliance/jco@1.27.0':
     resolution: {integrity: sha512-MG3875pStjkVZt6hxm/2rszf9EgOR2VGIostrpliTyYLyx+3u6W6U3fWpGVmRwXcS8VW1pUolQl9kHO5RKeIbA==}
+    hasBin: true
+
+  '@bytecodealliance/jco@1.28.0':
+    resolution: {integrity: sha512-INFLNlvTquj5Dsx/iXIZadqsDUlnHFwSg6pj+r8VM94UgkRQox9tMPkOpPIq8g+cObil+El7klOIGxH7kFgsFg==}
     hasBin: true
 
   '@bytecodealliance/preview2-shim@0.17.9':
@@ -4109,7 +4119,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.22.0':
     dependencies:
-      '@bytecodealliance/jco': 1.27.0
+      '@bytecodealliance/jco': 1.28.0
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4125,6 +4135,13 @@ snapshots:
       oxc-minify: 0.136.0
 
   '@bytecodealliance/jco-transpile@0.6.1':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.20.1
+      '@bytecodealliance/preview3-shim': 0.2.2
+      binaryen: 130.0.0
+      oxc-minify: 0.136.0
+
+  '@bytecodealliance/jco-transpile@0.7.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.20.1
       '@bytecodealliance/preview3-shim': 0.2.2
@@ -4163,6 +4180,20 @@ snapshots:
       mkdirp: 3.0.1
       ora: 8.2.0
       rolldown: 1.2.0
+
+  '@bytecodealliance/jco@1.28.0':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.22.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.7.0
+      '@bytecodealliance/preview2-shim': 0.20.1
+      '@bytecodealliance/preview3-shim': 0.2.2
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.3
+      mkdirp: 3.0.1
+      ora: 8.2.0
+      rolldown: 1.2.4
 
   '@bytecodealliance/preview2-shim@0.17.9': {}
 

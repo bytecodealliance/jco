@@ -9,7 +9,7 @@ import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import mime from 'mime';
-import ts from 'typescript';
+import ts from 'typescript-compiler-api';
 import which from 'which';
 
 const exec = promisify(syncExec);
