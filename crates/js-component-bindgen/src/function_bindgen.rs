@@ -303,6 +303,39 @@ impl FunctionBindgenComponentState {
     }
 }
 
+/// Returns whether an `ok`/`err` tagged object can unambiguously be interpreted
+/// as an explicitly wrapped result returned by a host import.
+///
+/// Hosts have historically returned the raw success payload, so that
+/// interpretation takes precedence whenever the payload itself can have the
+/// corresponding tag.
+fn unambiguous_result_wrapper_tags(resolve: &Resolve, ty: Option<&Type>) -> (bool, bool) {
+    let Some(ty) = ty else {
+        return (true, true);
+    };
+    let Type::Id(id) = ty else {
+        return (true, true);
+    };
+
+    match &resolve.types[crate::dealias(resolve, *id)].kind {
+        TypeDefKind::Variant(variant) => (
+            !variant.cases.iter().any(|case| case.name == "ok"),
+            !variant.cases.iter().any(|case| case.name == "err"),
+        ),
+        TypeDefKind::Result(_) => (false, false),
+        TypeDefKind::Record(record) => {
+            let unambiguous = !record.fields.iter().any(|field| field.name == "tag");
+            (unambiguous, unambiguous)
+        }
+        TypeDefKind::Flags(flags) => {
+            let unambiguous = !flags.flags.iter().any(|flag| flag.name == "tag");
+            (unambiguous, unambiguous)
+        }
+        TypeDefKind::Option(payload) => unambiguous_result_wrapper_tags(resolve, Some(payload)),
+        _ => (true, true),
+    }
+}
+
 impl FunctionBindgen<'_> {
     fn tmp(&mut self) -> usize {
         let ret = self.tmp;
@@ -2020,6 +2053,19 @@ impl Bindgen for FunctionBindgen<'_> {
                     // If configured to force all thrown errors into result objects,
                     // then we add a try/catch around the call
                     ErrHandling::ResultCatchHandler => {
+                        let (wrapped_ok, wrapped_err) = unambiguous_result_wrapper_tags(
+                            self.resolve,
+                            get_thrown_type(self.resolve, func.result).unwrap().0,
+                        );
+                        let host_ret = format!("hostRet{}", self.tmp());
+                        let wrapper_test = match (wrapped_ok, wrapped_err) {
+                            (true, true) => {
+                                format!("({host_ret}.tag === 'ok' || {host_ret}.tag === 'err')")
+                            }
+                            (true, false) => format!("{host_ret}.tag === 'ok'"),
+                            (false, true) => format!("{host_ret}.tag === 'err'"),
+                            (false, false) => "false".to_string(),
+                        };
                         // result<_, string> allows JS error coercion only, while
                         // any other result type will trap for arbitrary JS errors.
                         let err_payload = if let (_, Some(Type::Id(err_ty))) =
@@ -2039,7 +2085,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             r#"
                             let ret;
                             try {{
-                                ret = {{ tag: 'ok', val: {call} }};
+                                const {host_ret} = {call};
+                                ret = {host_ret} !== null && typeof {host_ret} === 'object' && {wrapper_test}
+                                    ? {host_ret}
+                                    : {{ tag: 'ok', val: {host_ret} }};
                             }} catch (e) {{
                                 if ({get_component_state}({component_idx_expr}).markTrapped(e)) {{ throw e; }}
                                 ret = {{ tag: 'err', val: {err_payload}(e) }};
@@ -3667,6 +3716,48 @@ fn gen_dataview_set_and_check_fn_js_for_numeric_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn result_wrapper_detection_preserves_ambiguous_success_payloads() {
+        let mut resolve = Resolve::new();
+        let package = resolve
+            .push_str(
+                std::path::Path::new("result-wrappers.wit"),
+                r#"
+                    package test:result-wrappers;
+
+                    interface imports {
+                        variant ordinary-variant { a(u32), b }
+                        variant ok-variant { ok(u32), other }
+                        record tagged-record { tag: string, val: u32 }
+
+                        primitive: func() -> result<u32, string>;
+                        ordinary: func() -> result<ordinary-variant, string>;
+                        ok-case: func() -> result<ok-variant, string>;
+                        nested: func() -> result<result<u32, string>, string>;
+                        tagged: func() -> result<tagged-record, string>;
+                    }
+                "#,
+            )
+            .unwrap();
+        let interface = resolve.packages[package].interfaces["imports"];
+
+        let tags_for = |name: &str| {
+            let ok = get_thrown_type(
+                &resolve,
+                resolve.interfaces[interface].functions[name].result,
+            )
+            .unwrap()
+            .0;
+            unambiguous_result_wrapper_tags(&resolve, ok)
+        };
+
+        assert_eq!(tags_for("primitive"), (true, true));
+        assert_eq!(tags_for("ordinary"), (true, true));
+        assert_eq!(tags_for("ok-case"), (false, true));
+        assert_eq!(tags_for("nested"), (false, false));
+        assert_eq!(tags_for("tagged"), (false, false));
+    }
 
     #[test]
     fn test_alias_type_gen_dataview_set_and_check_fn_js_for_numeric_type() {
