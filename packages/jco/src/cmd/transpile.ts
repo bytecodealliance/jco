@@ -17,6 +17,7 @@ export interface TranspileOpts {
     asyncExports?: string[];
     validLiftingOptimization?: boolean;
     tracing?: boolean;
+    noComponentErrorWrapping?: boolean;
     nodejsCompat?: boolean;
     tlaCompat?: boolean;
     base64Cutoff?: number;
@@ -66,6 +67,10 @@ export async function transpileComponent(component: Uint8Array, opts: TranspileO
 }
 
 function prepOpts(opts: any, program?: any) {
+    // Preserve jco's existing ComponentError behavior even though the lower-level
+    // jco-transpile API defaults to throwing raw top-level result error payloads.
+    opts.noComponentErrorWrapping ??= opts.componentErrorWrapping === false;
+
     const varIdx = program?.parent.rawArgs.indexOf("--");
     if (varIdx !== undefined && varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);

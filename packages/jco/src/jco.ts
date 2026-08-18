@@ -120,6 +120,10 @@ program
     )
     .option("--tracing", "emit `tracing` calls on function entry/exit")
     .option(
+        "--no-component-error-wrapping",
+        "throw top-level result error payloads directly instead of wrapping them in ComponentError",
+    )
+    .option(
         "-b, --base64-cutoff <bytes>",
         "set the byte size under which core Wasm binaries will be inlined as base64",
         myParseInt,
