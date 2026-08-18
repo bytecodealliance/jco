@@ -1,4 +1,4 @@
-import type { NewPackageManager } from "./new.js";
+import type { NewPackageManager } from "../new.js";
 
 export interface PackageManagerAdapter {
     name: NewPackageManager;
@@ -9,11 +9,15 @@ export interface PackageManagerAdapter {
     run(script: string): string;
 }
 
+export const DEFAULT_PNPM_VERSION = "11.0.0";
+export const DEFAULT_NPM_VERSION = "12.0.2";
+export const DEFAULT_YARN_VERSION = "4.18.0";
+
 const PACKAGE_MANAGERS: Record<NewPackageManager, PackageManagerAdapter> = {
     pnpm: {
         name: "pnpm",
         executable: "pnpm",
-        packageManager: "pnpm@11.0.0",
+        packageManager: `pnpm@${DEFAULT_PNPM_VERSION}`,
         lockfile: "pnpm-lock.yaml",
         install: "pnpm install",
         run: (script) => `pnpm run ${script}`,
@@ -21,7 +25,7 @@ const PACKAGE_MANAGERS: Record<NewPackageManager, PackageManagerAdapter> = {
     npm: {
         name: "npm",
         executable: "npm",
-        packageManager: "npm@11.0.0",
+        packageManager: `npm@${DEFAULT_NPM_VERSION}`,
         lockfile: "package-lock.json",
         install: "npm install",
         run: (script) => `npm run ${script}`,
@@ -29,7 +33,7 @@ const PACKAGE_MANAGERS: Record<NewPackageManager, PackageManagerAdapter> = {
     yarn: {
         name: "yarn",
         executable: "yarn",
-        packageManager: "yarn@4.9.2",
+        packageManager: `yarn@${DEFAULT_YARN_VERSION}`,
         lockfile: "yarn.lock",
         install: "yarn install",
         run: (script) => `yarn run ${script}`,

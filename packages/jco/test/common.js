@@ -23,6 +23,9 @@ export const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL("./fixtures/componen
 /** Path to JS for fixture components */
 export const COMPONENT_JS_FIXTURES_DIR = fileURLToPath(new URL("./fixtures/componentize", import.meta.url));
 
+/** Path to WIT fixtures */
+export const WIT_FIXTURES_DIR = fileURLToPath(new URL("./fixtures/wit", import.meta.url));
+
 /** Path to p3 related fixture components */
 export const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, "p3");
 

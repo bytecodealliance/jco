@@ -78,13 +78,21 @@ Commands:
 
 For help with individual command options, use `jco <cmd> --help`.
 
-### Create a component project
+### Scaffold a new component project
 
-`jco scaffold` creates a regular Node.js project whose source skeleton matches an existing WIT world. TypeScript, pnpm,
-and both Node.js and web targets are the defaults:
+`jco scaffold` creates a regular Node.js project whose source skeleton matches an existing WIT world. By default,
+Typescript, `pnpm`, and both NodeJS and Web targets are used:
 
 ```console
 jco scaffold my-component --wit path/to/wit
+```
+
+`--wit` accepts a self-contained `.wit` file or WIT package directory and copies it into the project. If dealing with a
+WIT file that contains multiple worlds, supply the `--world` option as well.
+
+Immediately, you should be able to install and build the component:
+
+```console
 cd my-component
 pnpm install
 pnpm check
@@ -92,19 +100,11 @@ pnpm test
 pnpm build
 ```
 
-Use `--language javascript` for checked JavaScript, `--package-manager npm` or `--package-manager yarn` to render
-instructions for another package manager, and repeat `--target nodejs` or `--target web` to select an explicit target
-subset. A single target produces conventional `tsconfig.json`, `rolldown.config.mjs`, and `dist/component.wasm`
-paths. The default dual-target project produces separate Node.js/web configs and output components.
+You can configure scaffolding in various ways:
 
-`--wit` accepts a self-contained `.wit` file or WIT package directory and copies it into the project. When the package
-has one world, Jco selects it automatically. Multiple worlds require the long-form `--world <world>` option. The
-generated README explains how to edit TODO bodies, regenerate guest declarations, type-check, test, customize
-Rolldown, and build each selected target.
-
-The low-level `jco new` command remains a wrapper for `wasm-tools component new`. The explicit
-`jco tool core-to-component` spelling is an alias with the same arguments and behavior; the programmatic
-`componentNew` API is unchanged.
+- `--language javascript` to generate a Javscript scaffold (the default is Typescript)
+- `--package-manager npm`/`--package-manager yarn` to use a separate package manager (`pnpm` is the default)
+- `--target nodejs`/`--target web` (can be repeated) to explicitly enable targets (by default both targets are supported)
 
 ### Transpile
 

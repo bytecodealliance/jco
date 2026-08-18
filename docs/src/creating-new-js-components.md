@@ -5,11 +5,20 @@ from JavaScript or TypeScript ES module source code.
 
 ## Scaffold a project from WIT
 
-The quickest way to start is `jco scaffold`. It copies an existing WIT file or package directory into a regular Node.js
-project, generates guest declarations, and creates a compiling implementation skeleton for the selected world:
+The quickest way to start a new component is with `jco scaffold`.
+
+`jco scaffold` uses an existing WIT package file or directory to produce a JS component project that builds for
+NodeJS or the Web, including typescript declarations and an implementation skeleton.
+
+To use `jco scaffold`, simply name the folder and point at the WIT directory:
 
 ```console
 jco scaffold hello-component --wit path/to/wit
+```
+
+After runnig this command you can enter the folder and build the project:
+
+```console
 cd hello-component
 pnpm install
 pnpm check
@@ -17,21 +26,26 @@ pnpm test
 pnpm build
 ```
 
-TypeScript and pnpm are the defaults. Select checked JavaScript or another package manager when creating the project:
+By default Typescript and `pnpm` are used, but you may use JS and other package managers if desired:
 
 ```console
-jco scaffold hello-js --wit path/to/world.wit --language javascript --package-manager npm
+jco scaffold hello-js \
+    --wit path/to/world.wit \
+    --language javascript \
+    --package-manager npm
 ```
 
-If the WIT package contains one world, Jco selects it automatically. If it contains multiple worlds, name one with
-the long-form option:
+If your WIT package contains one world, Jco selects it automatically. If it contains multiple worlds, use the `--world`
+option to specify which one you'd like to target:
 
 ```console
-jco scaffold hello-component --wit path/to/wit --world example:hello/app
+jco scaffold hello-component \
+    --wit path/to/wit \
+    --world example:hello/app
 ```
 
-By default, the scaffold checks and builds both Node.js and web targets. Select only one target, or repeat `--target`
-to be explicit:
+By default, the scaffold checks and builds both Node.js and web targets. To build for only one target, you can use the
+`--target` option. Note that the option can be repeated (this has the same effect as not specifying it):
 
 ```console
 jco scaffold hello-node --wit path/to/wit --target nodejs
@@ -39,17 +53,13 @@ jco scaffold hello-web --wit path/to/wit --target web
 jco scaffold hello-both --wit path/to/wit --target nodejs --target web
 ```
 
-A dual-target project has a shared `tsconfig.json`, platform-specific `tsconfig.nodejs.json` and `tsconfig.web.json`,
-matching Rolldown configurations, and `build:nodejs`/`build:web` scripts. A single-target project instead uses only
-`tsconfig.json`, `rolldown.config.mjs`, and `dist/component.wasm`; web-only projects do not install Node types.
+Multi-target projects have some shared files (`tsconfig.json`) but also platform specific files (e.g. `tsconfig.nodejs.json`),
+with differing Rolldown configurations and scripts available in `package.json` for building (e.g. `build:nodejs` vs `build:web`).
 
-The generated `README.md` records the selected world and package-manager commands. Replace TODO bodies in
-`src/component.ts` (or `src/component.js`), run `pnpm types` after changing the copied `wit/` package, and use
-`pnpm check`, `pnpm test`, and `pnpm build` throughout development. npm and Yarn can run the same standard scripts.
+A `README.md` will be generated which records the selected world and package-manager commands.
 
-`jco componentize`, described below, remains the lower-level source-to-component workflow. The separate low-level
-`jco new` command wraps `wasm-tools component new` for adapting a core Wasm module into a component. The equivalent
-explicit spelling is `jco tool core-to-component`.
+Replace TODO bodies in generated files (`src/component.{js,ts}`), run `pnpm types` (or `npm run types`) after changing the
+copied `wit/` package, and use `pnpm check`, `pnpm test`, and `pnpm build` throughout development.
 
 ## Build source directly
 

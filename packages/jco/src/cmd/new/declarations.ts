@@ -1,6 +1,6 @@
 import type ts from "typescript-compiler-api";
 
-import type { ComponentImplementationModel, FunctionModel, InterfaceModel, ResourceModel } from "./new-model.js";
+import type { ComponentImplementationModel, FunctionModel, InterfaceModel, ResourceModel } from "./model.js";
 
 export function declarationModel(
     typescript: typeof ts,
@@ -10,13 +10,16 @@ export function declarationModel(
     const virtualFiles = Object.fromEntries(
         Object.entries(files).map(([name, bytes]) => [`/${name.replaceAll("\\", "/")}`, decoder.decode(bytes)]),
     );
+
     const options: ts.CompilerOptions = {
         module: typescript.ModuleKind.ESNext,
         moduleResolution: typescript.ModuleResolutionKind.Bundler,
         noLib: true,
         skipLibCheck: true,
     };
+
     const baseHost = typescript.createCompilerHost(options);
+
     const host: ts.CompilerHost = {
         ...baseHost,
         fileExists: (name) => virtualFiles[name] !== undefined,
@@ -30,11 +33,13 @@ export function declarationModel(
                 : typescript.createSourceFile(name, source, languageVersion, true, typescript.ScriptKind.TS);
         },
     };
+
     const program = typescript.createProgram(Object.keys(virtualFiles), options, host);
     const checker = program.getTypeChecker();
     const modules = new Map<string, ts.Symbol>();
     const rootModules: string[] = [];
 
+    // Build graph for typechecking
     for (const sourceFile of program.getSourceFiles()) {
         for (const statement of sourceFile.statements) {
             if (typescript.isModuleDeclaration(statement) && typescript.isStringLiteral(statement.name)) {
@@ -56,6 +61,7 @@ export function declarationModel(
     const functions: FunctionModel[] = [];
     const interfaces: InterfaceModel[] = [];
 
+    // Gather interfaces and functions
     for (const exported of checker.getExportsOfModule(worldSymbol)) {
         const declaration = exported.declarations?.[0];
         if (
@@ -73,6 +79,7 @@ export function declarationModel(
             interfaces.push(interfaceFromSymbol(typescript, checker, exported.name, target));
         }
     }
+
     return { world, functions, interfaces };
 }
 
@@ -90,6 +97,7 @@ export function validateComponentSource(
             Object.entries(files).map(([name, bytes]) => [`/${name.replaceAll("\\", "/")}`, decoder.decode(bytes)]),
         ),
     };
+
     const options: ts.CompilerOptions = {
         allowJs: language === "javascript",
         checkJs: language === "javascript",
@@ -101,7 +109,9 @@ export function validateComponentSource(
         noImplicitAny: language === "typescript",
         target: typescript.ScriptTarget.ES2022,
     };
+
     const baseHost = typescript.createCompilerHost(options);
+
     const host: ts.CompilerHost = {
         ...baseHost,
         fileExists: (name) => virtualFiles[name] !== undefined || baseHost.fileExists(name),
@@ -121,6 +131,8 @@ export function validateComponentSource(
         },
     };
     const program = typescript.createProgram(Object.keys(virtualFiles), options, host);
+
+    // Perform type checking
     const diagnostics = typescript
         .getPreEmitDiagnostics(program)
         .filter((diagnostic) => diagnostic.file === undefined || diagnostic.file.fileName === sourceName);

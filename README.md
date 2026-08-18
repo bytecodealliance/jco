@@ -91,11 +91,17 @@ pnpm test
 pnpm build
 ```
 
-The generated repository includes guest declarations, an implementation skeleton, Node.js and web type-check/build
-configuration, and its own workflow README. See the [Jco Book][jco-book] for language, world, target, and package-manager
-options.
+The generated repository includes everything you need to get started:
+- Guest (component)  typescript declarations
+- Implementation skeleton code
+- Node.js & web type-check and build scripts
+- Configuration files
+- README
 
-For instructions on how to build an example component, see the [Component model section on Javascript][cm-book-js].
+> [!NOTE]
+> See the [Jco Book][jco-book] for language, world, target, and package-manager options.
+
+For more instructions on how to build an example component, see the [Component model section on Javascript][cm-book-js].
 
 To see examples of common patterns, check out the [example components folder (`examples/components`)](./examples/components).
 
