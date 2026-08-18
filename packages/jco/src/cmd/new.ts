@@ -2,9 +2,9 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFi
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 
 import { typesComponent } from "./types.js";
-import { declarationModel, validateComponentSource } from "./new-declarations.js";
-import { packageManagerAdapter } from "./new-package-manager.js";
-import { renderComponent, renderComponentTest } from "./new-render.js";
+import { declarationModel, validateComponentSource } from "./new/declarations.js";
+import { packageManagerAdapter } from "./new/package-manager.js";
+import { renderComponent, renderComponentTest } from "./new/render.js";
 
 export type NewLanguage = "typescript" | "javascript";
 export type NewPackageManager = "pnpm" | "npm" | "yarn";
@@ -18,6 +18,7 @@ export interface NewProjectOptions {
     targets?: NewTarget[];
 }
 
+/** Create a JS project to match a given WIT */
 export async function createProject(projectDirectory: string, options: NewProjectOptions): Promise<string> {
     const destination = resolve(projectDirectory);
     const witSource = resolve(options.wit);
@@ -35,10 +36,13 @@ export async function createProject(projectDirectory: string, options: NewProjec
         worldName: options.world,
         strict: true,
     });
+
     const model = declarationModel(typescript, generatedTypes);
     const source = renderComponent(typescript, model, language);
     const testSource = renderComponentTest(typescript, model, language);
+
     validateComponentSource(typescript, generatedTypes, source, language);
+
     const files = await scaffoldFiles({
         projectName: npmPackageName(basename(destination)),
         language,
@@ -67,11 +71,13 @@ export async function createProject(projectDirectory: string, options: NewProjec
         await rm(temporary, { recursive: true, force: true });
         throw error;
     }
-    console.log(`Created ${destination}`);
+
+    console.error(`Created ${destination}`);
+
     return destination;
 }
 
-async function scaffoldFiles(input: {
+interface ScaffoldFilesArgs {
     projectName: string;
     language: NewLanguage;
     packageManager: NewPackageManager;
@@ -81,40 +87,45 @@ async function scaffoldFiles(input: {
     testSource: string;
     generatedTypes: Record<string, Uint8Array>;
     witSource: string;
-}): Promise<Record<string, string | Uint8Array>> {
-    const extension = input.language === "typescript" ? "ts" : "js";
+}
+
+async function scaffoldFiles(args: ScaffoldFilesArgs): Promise<Record<string, string | Uint8Array>> {
+    const extension = args.language === "typescript" ? "ts" : "js";
     const files: Record<string, string | Uint8Array> = {
         ".gitignore": "node_modules/\ndist/\n",
-        [`src/component.${extension}`]: input.source,
-        [`test/component.test.${extension}`]: input.testSource,
+        [`src/component.${extension}`]: args.source,
+        [`test/component.test.${extension}`]: args.testSource,
     };
-    for (const [name, contents] of Object.entries(input.generatedTypes)) {
+    for (const [name, contents] of Object.entries(args.generatedTypes)) {
         files[`types/generated/${name}`] = contents;
     }
     const packageJson = await generatedPackageJson(input);
     files["package.json"] = `${JSON.stringify(packageJson, null, 2)}\n`;
     files["README.md"] = readme(input, extension);
-    Object.assign(files, configurations(input.language, input.targets));
+    Object.assign(files, configurations(args.language, args.targets));
     return files;
 }
 
-async function generatedPackageJson(input: {
+interface GeneratePackageJsonArgs {
     projectName: string;
     language: NewLanguage;
     packageManager: NewPackageManager;
     targets: NewTarget[];
     world: string;
     witSource: string;
-}) {
+}
+
+/** Generate package.json for the new project */
+async function generatedPackageJson(args: GeneratePackageJsonArgs) {
     const ownPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
-    const extension = input.language === "typescript" ? "ts" : "js";
-    const world = shellArgument(input.world);
-    const manager = packageManagerAdapter(input.packageManager);
+    const extension = args.language === "typescript" ? "ts" : "js";
+    const world = shellArgument(args.world);
+    const manager = packageManagerAdapter(args.packageManager);
     const wit = "wit";
     const source = `src/component.${extension}`;
     const types = `jco guest-types ${wit} --world-name ${world} --strict -o types/generated`;
     const scripts: Record<string, string> = { types };
-    if (input.targets.length === 2) {
+    if (args.targets.length === 2) {
         scripts["check:types:nodejs"] = "tsc -p tsconfig.nodejs.json";
         scripts["check:types:web"] = "tsc -p tsconfig.web.json";
         scripts.check = `${manager.run("check:types:nodejs")} && ${manager.run("check:types:web")}`;
@@ -134,8 +145,9 @@ async function generatedPackageJson(input: {
     }
     scripts.test = "vitest run";
     scripts.prebuild = manager.run("types");
+
     return {
-        name: input.projectName,
+        name: args.projectName,
         version: "0.1.0",
         private: true,
         type: "module",
@@ -143,7 +155,7 @@ async function generatedPackageJson(input: {
         scripts,
         devDependencies: {
             "@bytecodealliance/jco": `^${ownPackage.version}`,
-            ...(input.targets.includes("nodejs") ? { "@types/node": "^24.0.0" } : {}),
+            ...(args.targets.includes("nodejs") ? { "@types/node": "^24.0.0" } : {}),
             rolldown: "^1.2.4",
             typescript: "7.0.2",
             vitest: "^4.1.10",

@@ -322,7 +322,7 @@ program
 
 program
     .command("scaffold")
-    .description("Create a JavaScript or TypeScript WebAssembly component project")
+    .description("Create a TypeScript or JavaScript WebAssembly component project")
     .argument("<project-directory>", "directory to create")
     .option("--wit <path>", "WIT file or package directory")
     .option("--world <world>", "WIT world to implement")

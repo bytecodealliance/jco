@@ -1,28 +1,28 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { afterEach, assert, expect, suite, test } from "vitest";
-
-import { createProject } from "../dist/cmd/new.js";
-import { validateComponentSource } from "../dist/cmd/new-declarations.js";
-import { packageManagerAdapter } from "../dist/cmd/new-package-manager.js";
-import { renderComponent } from "../dist/cmd/new-render.js";
 import typescript from "typescript-compiler-api";
 
-const fixture = fileURLToPath(new URL("./fixtures/wit/multiple-worlds/test.wit", import.meta.url));
-const temporaryDirectories = [];
+import { assert, expect, suite, test } from "vitest";
 
-afterEach(async () => {
-    await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
+import { WIT_FIXTURES_DIR } from "./common.js";
+import { getTmpDir } from "./helpers.js";
+
+import { createProject } from "../dist/cmd/new.js";
+import { validateComponentSource } from "../dist/cmd/new/declarations.js";
+import {
+    packageManagerAdapter,
+    DEFAULT_PNPM_VERSION,
+    DEFAULT_YARN_VERSION,
+    DEFAULT_NPM_VERSION,
+} from "../dist/cmd/new/package-manager.js";
+import { renderComponent } from "../dist/cmd/new/render.js";
 
 suite("jco scaffold", () => {
     test.each([
-        ["pnpm", "pnpm@11.0.0", "pnpm-lock.yaml", "pnpm run check"],
-        ["npm", "npm@11.0.0", "package-lock.json", "npm run check"],
-        ["yarn", "yarn@4.9.2", "yarn.lock", "yarn run check"],
+        ["pnpm", `pnpm@${DEFAULT_PNPM_VERSION}`, "pnpm-lock.yaml", "pnpm run check"],
+        ["npm", `npm@${DEFAULT_PNPM_VERSION}`, "package-lock.json", "npm run check"],
+        ["yarn", `yarn@${DEFAULT_YARN_VERSION}`, "yarn.lock", "yarn run check"],
     ])("abstracts %s commands", (name, metadata, lockfile, check) => {
         const manager = packageManagerAdapter(name);
         assert.equal(manager.packageManager, metadata);
@@ -61,9 +61,13 @@ suite("jco scaffold", () => {
     });
 
     test("creates a type-checkable single-target TypeScript scaffold", async () => {
-        const root = await temporaryDirectory();
+        const root = await getTmpDir();
         const project = join(root, "my-component");
-        await createProject(project, { wit: fixture, world: "jco:test/world1", targets: ["web"] });
+        await createProject(project, {
+            wit: join(WIT_FIXTURES_DIR, "/multiple-worlds/test.wit"),
+            world: "jco:test/world1",
+            targets: ["web"],
+        });
 
         assert.deepEqual((await readdir(project)).sort(), [
             ".gitignore",
@@ -84,19 +88,21 @@ suite("jco scaffold", () => {
         assert.include(generatedTest, 'component["foo1"]');
         assert.include(generatedTest, '["foo"]');
         const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
-        assert.equal(packageJson.packageManager, "pnpm@11.0.0");
+        assert.equal(packageJson.packageManager, `pnpm@${DEFAULT_PNPM_VERSION}`);
         assert.equal(packageJson.scripts.check, "pnpm run check:types");
         assert.equal(packageJson.scripts.prebuild, "pnpm run types");
         assert.notProperty(packageJson.devDependencies, "@types/node");
         assert.notProperty(packageJson.scripts, "build:web");
         assert.include(await readFile(join(project, "rolldown.config.mjs"), "utf8"), '"../tsconfig.json"');
+
+        await rm(root, { recursive: true, force: true });
     });
 
     test("creates checked JavaScript and both targets by default", async () => {
-        const root = await temporaryDirectory();
+        const root = await getTmpDir();
         const project = join(root, "javascript-component");
         await createProject(project, {
-            wit: fixture,
+            wit: join(WIT_FIXTURES_DIR, "/multiple-worlds/test.wit"),
             world: "jco:test/world1",
             language: "javascript",
             packageManager: "npm",
@@ -106,29 +112,33 @@ suite("jco scaffold", () => {
         assert.match(source, /^\/\/ @ts-check/);
         assert.include(source, '@type {typeof import("jco:test/world1").foo1}');
         const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
-        assert.equal(packageJson.packageManager, "npm@11.0.0");
+        assert.equal(packageJson.packageManager, `npm@${DEFAULT_NPM_VERSION}`);
         assert.equal(packageJson.scripts.prebuild, "npm run types");
         assert.property(packageJson.scripts, "build:nodejs");
         assert.property(packageJson.scripts, "build:web");
         assert.include(await readFile(join(project, "rolldown.web.config.mjs"), "utf8"), '"../tsconfig.web.json"');
+
+        await rm(root, { recursive: true, force: true });
     });
 
     test("requires a world when the WIT package has multiple worlds", async () => {
-        const root = await temporaryDirectory();
+        const root = await getTmpDir();
         const project = join(root, "ambiguous");
-        await expect(createProject(project, { wit: fixture })).rejects.toThrow(/multiple worlds|world/i);
+        await expect(
+            createProject(project, { wit: join(WIT_FIXTURES_DIR, "/multiple-worlds/test.wit") }),
+        ).rejects.toThrow(/multiple worlds|world/i);
         await expect(readdir(project)).rejects.toThrow();
+
+        await rm(root, { recursive: true, force: true });
     });
 
     test("does not overwrite a non-empty destination", async () => {
-        const root = await temporaryDirectory();
+        const root = await getTmpDir();
         await writeFile(join(root, "keep.txt"), "keep");
-        await expect(createProject(root, { wit: fixture, world: "jco:test/world1" })).rejects.toThrow(/not empty/);
+        await expect(
+            createProject(root, { wit: join(WIT_FIXTURES_DIR, "/multiple-worlds/test.wit"), world: "jco:test/world1" }),
+        ).rejects.toThrow(/not empty/);
+
+        await rm(root, { recursive: true, force: true });
     });
 });
-
-async function temporaryDirectory() {
-    const directory = await mkdtemp(join(tmpdir(), "jco-new-test-"));
-    temporaryDirectories.push(directory);
-    return directory;
-}

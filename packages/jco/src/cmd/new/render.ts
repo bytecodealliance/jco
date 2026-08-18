@@ -1,7 +1,51 @@
 import type ts from "typescript-compiler-api";
 
-import type { ComponentImplementationModel, FunctionModel, ResourceModel } from "./new-model.js";
+import type { ComponentImplementationModel, FunctionModel, ResourceModel } from "./model.js";
 
+const RESERVED_WORDS = new Set([
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "import",
+    "in",
+    "instanceof",
+    "let",
+    "new",
+    "null",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+]);
+
+/** Render the javascript code for a component */
 export function renderComponent(
     typescript: typeof ts,
     model: ComponentImplementationModel,
@@ -171,6 +215,7 @@ export function renderComponentTest(
     return typescript.createPrinter({ newLine: typescript.NewLineKind.LineFeed }).printFile(source) + "\n";
 }
 
+/** Generate a component member */
 function componentMember(typescript: typeof ts, name: string): ts.Expression {
     return typescript.factory.createElementAccessExpression(
         typescript.factory.createIdentifier("component"),
@@ -178,6 +223,7 @@ function componentMember(typescript: typeof ts, name: string): ts.Expression {
     );
 }
 
+/** Generate a typeof assertion */
 function typeofAssertion(typescript: typeof ts, expression: ts.Expression, expected: string): ts.Statement {
     const f = typescript.factory;
     return f.createExpressionStatement(
@@ -192,6 +238,7 @@ function typeofAssertion(typescript: typeof ts, expression: ts.Expression, expec
     );
 }
 
+/** Generate a JS type */
 function addJavaScriptType(typescript: typeof ts, node: ts.Node, world: string, name: string): void {
     typescript.addSyntheticLeadingComment(
         node,
@@ -201,6 +248,7 @@ function addJavaScriptType(typescript: typeof ts, node: ts.Node, world: string, 
     );
 }
 
+/** Generate an exported function */
 function exportedFunction(
     typescript: typeof ts,
     fn: FunctionModel,
@@ -231,6 +279,7 @@ function exportedFunction(
     );
 }
 
+/** Generate an export alias */
 function exportAlias(typescript: typeof ts, localName: string, exportName: string): ts.ExportDeclaration {
     const f = typescript.factory;
     return f.createExportDeclaration(
@@ -242,6 +291,7 @@ function exportAlias(typescript: typeof ts, localName: string, exportName: strin
     );
 }
 
+/** Generate an object method */
 function objectMethod(typescript: typeof ts, fn: FunctionModel): ts.MethodDeclaration {
     return typescript.factory.createMethodDeclaration(
         undefined,
@@ -255,6 +305,7 @@ function objectMethod(typescript: typeof ts, fn: FunctionModel): ts.MethodDeclar
     );
 }
 
+/** Generate an resource class */
 function resourceClass(typescript: typeof ts, resource: ResourceModel, className: string): ts.ClassDeclaration {
     const f = typescript.factory;
     const members: ts.ClassElement[] = [];
@@ -276,6 +327,7 @@ function resourceClass(typescript: typeof ts, resource: ResourceModel, className
     return f.createClassDeclaration(undefined, f.createIdentifier(className), undefined, undefined, members);
 }
 
+/** Generate a class method */
 function classMethod(typescript: typeof ts, method: FunctionModel, isStatic: boolean): ts.MethodDeclaration {
     const f = typescript.factory;
     const declaration = f.createMethodDeclaration(
@@ -297,6 +349,7 @@ function classMethod(typescript: typeof ts, method: FunctionModel, isStatic: boo
     return declaration;
 }
 
+/** Generate function parameters */
 function parameters(typescript: typeof ts, names: string[]): ts.ParameterDeclaration[] {
     return names.map((name) =>
         typescript.factory.createParameterDeclaration(
@@ -309,6 +362,7 @@ function parameters(typescript: typeof ts, names: string[]): ts.ParameterDeclara
     );
 }
 
+/** Generate a TODO block (to be implemented by the user) */
 function todoBlock(typescript: typeof ts): ts.Block {
     const f = typescript.factory;
     return f.createBlock(
@@ -321,10 +375,12 @@ function todoBlock(typescript: typeof ts): ts.Block {
     );
 }
 
+/** Generate a world member */
 function worldMember(f: ts.NodeFactory, name: string): ts.EntityName {
     return f.createQualifiedName(f.createIdentifier("World"), propertyName(f, name));
 }
 
+/** Generate a property name */
 function propertyName(f: ts.NodeFactory, name: string): ts.Identifier {
     return f.createIdentifier(name);
 }
@@ -332,49 +388,6 @@ function propertyName(f: ts.NodeFactory, name: string): ts.Identifier {
 function upperFirst(value: string): string {
     return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }
-
-const RESERVED_WORDS = new Set([
-    "await",
-    "break",
-    "case",
-    "catch",
-    "class",
-    "const",
-    "continue",
-    "debugger",
-    "default",
-    "delete",
-    "do",
-    "else",
-    "enum",
-    "export",
-    "extends",
-    "false",
-    "finally",
-    "for",
-    "function",
-    "if",
-    "import",
-    "in",
-    "instanceof",
-    "let",
-    "new",
-    "null",
-    "return",
-    "static",
-    "super",
-    "switch",
-    "this",
-    "throw",
-    "true",
-    "try",
-    "typeof",
-    "var",
-    "void",
-    "while",
-    "with",
-    "yield",
-]);
 
 function safeLocalName(name: string): string {
     return RESERVED_WORDS.has(name) || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? `_${name}` : name;
