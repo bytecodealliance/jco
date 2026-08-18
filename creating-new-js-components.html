@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ed2a56a9.js";
+            window.path_to_searchindex_js = "searchindex-a3ab68f7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1f53c7bb.js"></script>
@@ -183,6 +183,50 @@
                         <h1 id="creating-new-javascript-and-typescript-components"><a class="header" href="#creating-new-javascript-and-typescript-components">Creating new JavaScript and TypeScript components</a></h1>
 <p>Jco exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> and <a href="https://github.com/andreiltd/componentize-qjs"><code>componentize-qjs</code></a> to make it easy to build components
 from JavaScript or TypeScript ES module source code.</p>
+<h2 id="scaffold-a-project-from-wit"><a class="header" href="#scaffold-a-project-from-wit">Scaffold a project from WIT</a></h2>
+<p>The quickest way to start a new component is with <code>jco scaffold</code>.</p>
+<p><code>jco scaffold</code> uses an existing WIT package file or directory to produce a JS component project that builds for
+NodeJS or the Web, including typescript declarations and an implementation skeleton.</p>
+<p>To use <code>jco scaffold</code>, simply name the folder and point at the WIT directory:</p>
+<pre><code class="language-console">jco scaffold hello-component --wit path/to/wit
+</code></pre>
+<p>After runnig this command you can enter the folder and build the project:</p>
+<pre><code class="language-console">cd hello-component
+pnpm install
+pnpm check
+pnpm test
+pnpm build
+</code></pre>
+<p>By default Typescript and <code>pnpm</code> are used, but you may use JS and other package managers if desired:</p>
+<pre><code class="language-console">jco scaffold hello-js \
+    --wit path/to/world.wit \
+    --language javascript \
+    --package-manager npm
+</code></pre>
+<p>If your WIT package contains one world, Jco selects it automatically. If it contains multiple worlds, use the <code>--world</code>
+option to specify which one you’d like to target:</p>
+<pre><code class="language-console">jco scaffold hello-component \
+    --wit path/to/wit \
+    --world example:hello/app
+</code></pre>
+<p>By default, the scaffold checks and builds both Node.js and web targets. To build for only one target, you can use the
+<code>--target</code> option. Note that the option can be repeated (this has the same effect as not specifying it):</p>
+<pre><code class="language-console">jco scaffold hello-node --wit path/to/wit --target nodejs
+jco scaffold hello-web --wit path/to/wit --target web
+jco scaffold hello-both --wit path/to/wit --target nodejs --target web
+</code></pre>
+<p>Multi-target projects have some shared files (<code>tsconfig.json</code>) but also platform specific files (e.g. <code>tsconfig.nodejs.json</code>),
+with differing Rolldown configurations and scripts available in <code>package.json</code> for building (e.g. <code>build:nodejs</code> vs <code>build:web</code>).</p>
+<p>A <code>README.md</code> will be generated which records the selected world and package-manager commands.</p>
+<p>To scaffold the other side of the component boundary, use <code>--host</code>. This generates a host plugin whose default export
+is an imports object ready to pass to the component’s <code>instantiate</code> function:</p>
+<pre><code class="language-console">jco scaffold hello-host --wit path/to/wit --world example:hello/app --host
+</code></pre>
+<p>The regular scaffold implements the world’s exports in <code>src/component.ts</code>; the host scaffold implements its imports
+in <code>src/plugin.ts</code>. This makes it possible to generate both sides from the same WIT world.</p>
+<p>Replace TODO bodies in generated files (<code>src/component.{js,ts}</code>), run <code>pnpm types</code> (or <code>npm run types</code>) after changing the
+copied <code>wit/</code> package, and use <code>pnpm check</code>, <code>pnpm test</code>, and <code>pnpm build</code> throughout development.</p>
+<h2 id="build-source-directly"><a class="header" href="#build-source-directly">Build source directly</a></h2>
 <p>Building a JavaScript component is as easy as calling <code>jco componentize</code>, with a few options:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.js
 </code></pre>
