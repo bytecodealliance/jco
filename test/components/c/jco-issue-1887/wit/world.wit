@@ -1,0 +1,5 @@
+package test:jco-bug;
+
+world biz {
+  export bump: func() -> u32;
+}

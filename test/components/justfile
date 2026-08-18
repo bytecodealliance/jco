@@ -14,6 +14,15 @@ build:
     {{just}} build-jco-issue-1383
     {{just}} build-jco-issue-1384
     {{just}} build-jco-issue-1390
+    {{just}} build-jco-issue-1887
+
+# Build the wasi-sdk P3 reactor required to test jco issue #1887
+[group('build')]
+@build-jco-issue-1887:
+    echo "==> building jco-issue-1887 reactor (c)..."
+    mkdir -p output/jco-issue-1887
+    {{just}} -f c/jco-issue-1887/justfile build
+    mv c/jco-issue-1887/component.wasm output/jco-issue-1887/component.wasm
 
 # Build the components required to test jco issue #1380
 [group('build')]
