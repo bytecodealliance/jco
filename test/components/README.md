@@ -52,6 +52,7 @@ useful but likely incomplete list is below:
 | Language             | Dependency                           | Description                                                                  |
 |----------------------|--------------------------------------|------------------------------------------------------------------------------|
 | [C++ (`cpp`)](./cpp) | [`wasi-sdk`][wasi-sdk]               | Bytecode Alliance maintained toolin for building C/C++ components            |
+| [C (`c`)](./c)       | [`wasi-sdk`][wasi-sdk]               | Bytecode Alliance toolchain for C components, including WASI P3 fixtures      |
 | [Python](./python)   | [`uv`][uv]                           | Python package manager                                                       |
 |                      | [`componentize-py`][componentize-py] | Bytecode Alliance maintained tooling for building Python projects components |
 

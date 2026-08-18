@@ -1,0 +1,24 @@
+wit_bindgen := env_var_or_default("WIT_BINDGEN", "wit-bindgen")
+wasi_sdk_path := env_var_or_default("WASI_SDK_PATH", env_var_or_default("WASI_SDK", "/opt/wasi-sdk"))
+
+@_default:
+    just --list
+
+gen-bindings:
+    {{wit_bindgen}} c --world biz wit/ --out-dir gen
+
+build: gen-bindings
+    @if [ ! -x "{{wasi_sdk_path}}/bin/clang" ]; then \
+        echo '[error] failed to find wasi-sdk clang at {{wasi_sdk_path}}/bin/clang'; \
+        echo '    install wasi-sdk 34+ and set WASI_SDK_PATH'; \
+        exit 1; \
+    fi
+    {{wasi_sdk_path}}/bin/clang \
+        -target wasm32-wasip3 \
+        -mexec-model=reactor \
+        -O1 \
+        -I gen \
+        src/main.c \
+        gen/biz.c \
+        gen/biz_component_type.o \
+        -o component.wasm
