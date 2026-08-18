@@ -8,7 +8,8 @@ import { exec, jcoPath, fileExists, getTmpDir } from "../helpers.js";
 import { EXTENDED_TEST_COMPONENTS_DIR } from "../common.js";
 
 suite("jco-issue-1887", () => {
-    test("WASI P3 reactor initializes and runs", async () => {
+    // TODO: re-enable this test once jco-transpile has been released w/ fix
+    test.skip("WASI P3 reactor initializes and runs", async () => {
         const componentPath = join(EXTENDED_TEST_COMPONENTS_DIR, "jco-issue-1887/component.wasm");
         assert(await fileExists(componentPath), "built issue component must be in place");
 
