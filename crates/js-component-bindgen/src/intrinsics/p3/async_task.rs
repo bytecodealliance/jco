@@ -419,7 +419,7 @@ impl AsyncTaskIntrinsic {
 
                           const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
                           if (!currentTaskMeta) {{
-                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context get`);
                           }}
                           const taskID = currentTaskMeta.taskID;
 
