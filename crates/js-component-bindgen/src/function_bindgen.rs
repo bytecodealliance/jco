@@ -184,6 +184,9 @@ pub struct FunctionBindgen<'a> {
     /// Whether tracing is enabled
     pub tracing_enabled: bool,
 
+    /// Whether top-level result errors should be thrown as their raw lifted payload.
+    pub no_component_error_wrapping: bool,
+
     /// Method if string encoding
     pub encoding: StringEncoding,
 
@@ -2161,8 +2164,13 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // (sync) Handle single `result<t>` case
                     1 if self.err == ErrHandling::ThrowResultErr => {
-                        let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
+                        let throw_err = if self.no_component_error_wrapping {
+                            "throw retCopy.val;".to_string()
+                        } else {
+                            let component_err = self.intrinsic(Intrinsic::ComponentError);
+                            format!("throw new {component_err}(retCopy.val);")
+                        };
 
                         uwriteln!(self.src, "const retCopy = {op};");
                         uwriteln!(self.src, "task.resolve([retCopy.val]);");
@@ -2181,7 +2189,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             self.src,
                             r#"
                               if (typeof retCopy === 'object' && retCopy.tag === 'err') {{
-                                  throw new {component_err}(retCopy.val);
+                                  {throw_err}
                               }}
                               return retCopy.val;
                             "#
@@ -3404,6 +3412,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     "-1".into()
                 };
 
+                let throw_result_err = if self.no_component_error_wrapping {
+                    "throw taskRes.val;".to_string()
+                } else {
+                    let component_err = self.intrinsic(Intrinsic::ComponentError);
+                    format!("throw new {component_err}(taskRes.val);")
+                };
+
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix}  [Instruction::AsyncTaskReturn]', {{
@@ -3496,7 +3511,7 @@ impl Bindgen for FunctionBindgen<'_> {
                           if (typeof taskRes !== 'object') {{
                               return {return_task_res};
                           }}
-                          if (taskRes.tag === 'err') {{ throw taskRes.val; }}
+                          if (taskRes.tag === 'err') {{ {throw_result_err} }}
                           if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
                       }}
 

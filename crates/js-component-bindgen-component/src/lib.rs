@@ -66,6 +66,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             )
             .valid_lifting_optimization(options.valid_lifting_optimization.unwrap_or(false))
             .tracing(options.tracing.unwrap_or(false))
+            .no_component_error_wrapping(options.no_component_error_wrapping.unwrap_or(false))
             .no_namespaced_exports(options.no_namespaced_exports.unwrap_or(false))
             .multi_memory(options.multi_memory.unwrap_or(false))
             .supports_wasm_exnref(options.bindgen_enable_wasm_exnref.unwrap_or(false))

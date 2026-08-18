@@ -55,6 +55,10 @@ world js-component-bindgen {
     /// Whether or not to emit `tracing` calls on function entry/exit.
     tracing: option<bool>,
 
+    /// Throw top-level result error payloads directly instead of wrapping them
+    /// in a generated ComponentError.
+    no-component-error-wrapping: option<bool>,
+
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     no-namespaced-exports: option<bool>,

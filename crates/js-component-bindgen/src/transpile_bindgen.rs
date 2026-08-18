@@ -97,6 +97,10 @@ pub struct TranspileOpts {
     /// Whether or not to emit `tracing` calls on function entry/exit.
     #[builder(default)]
     pub tracing: bool,
+    /// Throw the lifted error payload directly for top-level `result` errors
+    /// instead of wrapping it in a generated `ComponentError`.
+    #[builder(default)]
+    pub no_component_error_wrapping: bool,
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     #[builder(default)]
@@ -4330,6 +4334,7 @@ impl<'a> Instantiator<'a, '_> {
             post_return: post_return.as_ref(),
             tracing_prefix: &tracing_prefix,
             tracing_enabled: self.bindgen.opts.tracing,
+            no_component_error_wrapping: self.bindgen.opts.no_component_error_wrapping,
             encoding: match opts.string_encoding {
                 wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
