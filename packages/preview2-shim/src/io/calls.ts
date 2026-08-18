@@ -41,6 +41,19 @@ export const OUTPUT_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
 
 export const OUTPUT_STREAM_GET_TOTAL_BYTES = ++call_id << CALL_SHIFT;
 
+// Filesystem descriptors
+export const FILESYSTEM_DESCRIPTOR_OPEN = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_CLOSE = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_SYNC_DATA = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_GET_TYPE = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_SET_SIZE = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_SET_TIMES = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_READ = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_WRITE = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_SYNC = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_STAT = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_METADATA_HASH = ++call_id << CALL_SHIFT;
+
 // Io Poll
 export const POLL_POLLABLE_READY = ++call_id << CALL_SHIFT;
 export const POLL_POLLABLE_BLOCK = ++call_id << CALL_SHIFT;
