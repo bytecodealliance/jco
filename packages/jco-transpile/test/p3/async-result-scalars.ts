@@ -52,7 +52,7 @@ suite('async export scalar results (direct-param task.return)', () => {
             await api().getU64Err('boom');
             assert.fail('expected err result to throw');
         } catch (err) {
-            assert.strictEqual(err.payload ?? err, 'boom');
+            assert.strictEqual(err, 'boom');
         }
     });
 

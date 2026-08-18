@@ -17,6 +17,26 @@ suite('Transpile', async () => {
     const flavorfulWasmBytes = await readComponentBytes(
         fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
     );
+    const variantsWasmBytes = await readComponentBytes(
+        fileURLToPath(new URL('./fixtures/components/runtime/variants.component.wasm', import.meta.url)),
+    );
+
+    test.concurrent('throws raw top-level result errors by default', async () => {
+        const { files } = await transpileBytes(variantsWasmBytes, { name: 'variants' });
+        const source = Buffer.from(files['variants.js']).toString();
+        assert.include(source, 'throw retCopy.val;');
+        assert.notInclude(source, 'class ComponentError extends Error');
+    });
+
+    test.concurrent('can preserve ComponentError wrapping', async () => {
+        const { files } = await transpileBytes(variantsWasmBytes, {
+            name: 'variants',
+            noComponentErrorWrapping: false,
+        });
+        const source = Buffer.from(files['variants.js']).toString();
+        assert.include(source, 'throw new ComponentError(retCopy.val);');
+        assert.include(source, 'class ComponentError extends Error');
+    });
 
     test.concurrent('transpile (via API)', async () => {
         const { files } = await transpile(

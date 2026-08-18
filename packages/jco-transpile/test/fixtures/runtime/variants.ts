@@ -64,9 +64,7 @@ async function run() {
         wasm.test.roundtripResult({ tag: 'err', val: f });
         assert.fail('Expected an error');
     } catch (e: any) {
-        assert.strictEqual(e.constructor.name, 'ComponentError');
-        assert.ok(e.message.includes('5'));
-        assert.strictEqual(e.payload, 5);
+        assert.strictEqual(e, 5);
     }
 
     assert.deepStrictEqual(wasm.test.roundtripEnum('a'), 'a');

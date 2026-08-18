@@ -100,9 +100,7 @@ export async function run() {
         wasm.test.errnoResult();
         assert.ok(false);
     } catch (e: any) {
-        assert.strictEqual(e.constructor.name, 'ComponentError');
-        assert.ok(e.toString().includes('Error: b'));
-        assert.strictEqual(e.payload, 'b');
+        assert.strictEqual(e, 'b');
     }
 
     const [r1, r2] = wasm.test.listTypedefs('typedef1', ['typedef2']);
