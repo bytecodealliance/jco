@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a3ab68f7.js";
+            window.path_to_searchindex_js = "searchindex-74715be3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1f53c7bb.js"></script>
@@ -242,6 +242,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
+</li>
+<li>
+<p><code>--no-component-error-wrapping</code>: Throw the lifted error payload directly for a top-level <code>result::err</code> instead of wrapping it in a generated <code>ComponentError</code>. Jco preserves wrapping by default for compatibility.</p>
 </li>
 <li>
 <p><code>--no-namespaced-exports</code>: Removes exports of the type <code>test as "test:flavorful/test"</code> which are not compatible with typescript</p>

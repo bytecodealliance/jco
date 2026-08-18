@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a3ab68f7.js";
+            window.path_to_searchindex_js = "searchindex-74715be3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1f53c7bb.js"></script>
@@ -380,6 +380,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
+</li>
+<li>
+<p><code>--no-component-error-wrapping</code>: Throw the lifted error payload directly for a top-level <code>result::err</code> instead of wrapping it in a generated <code>ComponentError</code>. Jco preserves wrapping by default for compatibility.</p>
 </li>
 <li>
 <p><code>--no-namespaced-exports</code>: Removes exports of the type <code>test as "test:flavorful/test"</code> which are not compatible with typescript</p>
@@ -985,6 +988,10 @@ that would <em>not</em> fit in a <code>u32</code> (unsigned 32 bit integer) via 
 <h3 id="results-in-context-function-return-values"><a class="header" href="#results-in-context-function-return-values"><code>result</code>s in context: Function return values</a></h3>
 <p>When a result is returned directly from a function, any thrown error of the function is treated as the result error type,
 while any direct return value is treated as the result success type.</p>
+<p>For guest exports, <code>@bytecodealliance/jco-transpile</code> throws the lifted error payload directly by default. The <code>jco</code>
+API and CLI preserve the historical behavior of wrapping that value in an <code>Error</code> with a <code>payload</code> property. Pass
+<code>noComponentErrorWrapping: true</code> to the API, or <code>--no-component-error-wrapping</code> to the CLI, to make <code>jco</code> throw the
+payload directly. Pass <code>noComponentErrorWrapping: false</code> to <code>jco-transpile</code> to request the compatibility wrapper.</p>
 <p>Consider the following interface:</p>
 <pre><code class="language-wit">interface fallible {
     f: func(n: u32) -&gt; result&lt;string, string&gt;;
