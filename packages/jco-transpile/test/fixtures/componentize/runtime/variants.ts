@@ -15,11 +15,9 @@ async function run() {
             },
             roundtripResult(x) {
                 if (x.tag == 'ok') {
-                    return x.val;
+                    return x.val === 4 ? { tag: 'ok', val: x.val } : x.val;
                 } else {
-                    throw Object.assign(new Error(''), {
-                        payload: Math.round(x.val),
-                    });
+                    return { tag: 'err', val: Math.round(x.val) };
                 }
             },
             roundtripEnum(x) {
