@@ -57,7 +57,7 @@ Options:
   -h, --help                            display help for command
 
 Commands:
-  scaffold [options] <project-directory> Create a JavaScript or TypeScript WebAssembly component project
+  scaffold [options] <project-directory> Create a JavaScript or TypeScript WebAssembly component or host-plugin project
   componentize [options] <source>       Create a component from a JavaScript or TypeScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
   types [options] <wit-path>            Generate types for the given WIT
@@ -102,6 +102,8 @@ pnpm build
 
 You can configure scaffolding in various ways:
 
+- `--host` to generate a plugin that provides the selected world's imports for use with `instantiate` (the default
+  generates a guest that implements its exports)
 - `--language javascript` to generate a Javscript scaffold (the default is Typescript)
 - `--package-manager npm`/`--package-manager yarn` to use a separate package manager (`pnpm` is the default)
 - `--target nodejs`/`--target web` (can be repeated) to explicitly enable targets (by default both targets are supported)

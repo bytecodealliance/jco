@@ -58,6 +58,16 @@ with differing Rolldown configurations and scripts available in `package.json` f
 
 A `README.md` will be generated which records the selected world and package-manager commands.
 
+To scaffold the other side of the component boundary, use `--host`. This generates a host plugin whose default export
+is an imports object ready to pass to the component's `instantiate` function:
+
+```console
+jco scaffold hello-host --wit path/to/wit --world example:hello/app --host
+```
+
+The regular scaffold implements the world's exports in `src/component.ts`; the host scaffold implements its imports
+in `src/plugin.ts`. This makes it possible to generate both sides from the same WIT world.
+
 Replace TODO bodies in generated files (`src/component.{js,ts}`), run `pnpm types` (or `npm run types`) after changing the
 copied `wit/` package, and use `pnpm check`, `pnpm test`, and `pnpm build` throughout development.
 

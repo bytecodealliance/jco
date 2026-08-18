@@ -12,12 +12,14 @@ export interface ResourceModel {
 
 export interface InterfaceModel {
     name: string;
+    importName?: string;
     functions: FunctionModel[];
     resources: ResourceModel[];
 }
 
 export interface ComponentImplementationModel {
     world: string;
+    typeModule?: string;
     functions: FunctionModel[];
     interfaces: InterfaceModel[];
 }

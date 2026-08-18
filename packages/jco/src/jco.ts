@@ -322,10 +322,11 @@ program
 
 program
     .command("scaffold")
-    .description("Create a TypeScript or JavaScript WebAssembly component project")
+    .description("Create a TypeScript or JavaScript WebAssembly component or host-plugin project")
     .argument("<project-directory>", "directory to create")
     .option("--wit <path>", "WIT file or package directory")
     .option("--world <world>", "WIT world to implement")
+    .option("--host", "scaffold a host plugin that provides the world's imports")
     .addOption(
         new Option("--language <language>", "component source language")
             .choices(["typescript", "javascript", "ts", "js"])
@@ -353,6 +354,7 @@ program
                 language: opts.language,
                 packageManager: opts.packageManager,
                 targets: opts.target,
+                host: opts.host,
             });
         }),
     );
