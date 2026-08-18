@@ -344,6 +344,7 @@ pub fn transpile_bindgen(
         future_tables,
         err_ctx_tables,
         init_current_module: None,
+        init_context_components: Default::default(),
     };
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
@@ -760,6 +761,11 @@ pub(crate) struct Instantiator<'a, 'b> {
     /// blocks has started, and is likely to be stale if read too late (i.e. it will be set
     /// to the last module processed).
     init_current_module: Option<RuntimeComponentInstanceIndex>,
+
+    /// Component instances whose core modules import `context.get`/`context.set`.
+    /// These need a temporary task while core start functions run during
+    /// component initialization.
+    init_context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -1039,6 +1045,8 @@ impl<'a> Instantiator<'a, '_> {
             self.trampoline(i, trampoline);
         }
 
+        self.wrap_initialization_in_context_tasks();
+
         if self.bindgen.opts.instantiation_mode.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
@@ -1054,6 +1062,66 @@ impl<'a> Instantiator<'a, '_> {
         {
             self.trampoline(i, trampoline);
         }
+    }
+
+    fn wrap_initialization_in_context_tasks(&mut self) {
+        let component_indices = self
+            .init_context_components
+            .borrow()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        if component_indices.is_empty() {
+            return;
+        }
+
+        let create_task = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::CreateNewCurrentTask,
+        ));
+        let clear_task = self
+            .bindgen
+            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask));
+        let set_task_meta = self
+            .bindgen
+            .intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+        let clear_task_meta = self
+            .bindgen
+            .intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
+
+        let mut setup = source::Source::default();
+        for component_idx in &component_indices {
+            uwriteln!(setup, "let _initTaskID{};", component_idx.as_u32());
+        }
+        uwriteln!(setup, "try {{");
+        for component_idx in &component_indices {
+            let component_idx = component_idx.as_u32();
+            uwriteln!(
+                setup,
+                r#"
+                  [, _initTaskID{component_idx}] = {create_task}({{
+                      componentIdx: {component_idx},
+                      isAsync: false,
+                      callingWasmExport: true,
+                      entryFnName: '<initialize>',
+                  }});
+                  {set_task_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
+                "#,
+            );
+        }
+        self.src.js_init.prepend_str(&setup);
+
+        uwriteln!(self.src.js_init, "}} finally {{");
+        for component_idx in component_indices.iter().rev() {
+            let component_idx = component_idx.as_u32();
+            uwriteln!(
+                self.src.js_init,
+                r#"
+                  {clear_task_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
+                  {clear_task}({component_idx}, _initTaskID{component_idx});
+                "#,
+            );
+        }
+        uwriteln!(self.src.js_init, "}}");
     }
 
     fn ensure_local_resource_class(&mut self, local_name: String) {
@@ -4496,41 +4564,49 @@ impl<'a> Instantiator<'a, '_> {
                 wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_0 => {
                     let context_get_fn =
                         Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet).name();
+                    let component_idx = self.init_current_module.expect("missing current module");
+                    self.init_context_components
+                        .borrow_mut()
+                        .insert(component_idx);
                     format!(
                         "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
-                        self.init_current_module
-                            .expect("missing current module")
-                            .as_u32(),
+                        component_idx.as_u32(),
                     )
                 }
                 wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_0 => {
                     let context_set_fn =
                         Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet).name();
+                    let component_idx = self.init_current_module.expect("missing current module");
+                    self.init_context_components
+                        .borrow_mut()
+                        .insert(component_idx);
                     format!(
                         "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
-                        self.init_current_module
-                            .expect("missing current module")
-                            .as_u32(),
+                        component_idx.as_u32(),
                     )
                 }
                 wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_1 => {
                     let context_get_fn =
                         Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet).name();
+                    let component_idx = self.init_current_module.expect("missing current module");
+                    self.init_context_components
+                        .borrow_mut()
+                        .insert(component_idx);
                     format!(
                         "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
-                        self.init_current_module
-                            .expect("missing current module")
-                            .as_u32(),
+                        component_idx.as_u32(),
                     )
                 }
                 wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_1 => {
                     let context_set_fn =
                         Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet).name();
+                    let component_idx = self.init_current_module.expect("missing current module");
+                    self.init_context_components
+                        .borrow_mut()
+                        .insert(component_idx);
                     format!(
                         "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
-                        self.init_current_module
-                            .expect("missing current module")
-                            .as_u32(),
+                        component_idx.as_u32(),
                     )
                 }
 
