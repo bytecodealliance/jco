@@ -178,9 +178,9 @@ pub(crate) const RESERVED_KEYWORDS: &[&str] = &[
     "default",
     "delete",
     "do",
-    "eval",
     "else",
     "enum",
+    "eval",
     "export",
     "extends",
     "false",
@@ -215,3 +215,38 @@ pub(crate) const RESERVED_KEYWORDS: &[&str] = &[
     "with",
     "yield",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// RESERVED_KEYWORDS must stay sorted: `is_js_reserved_word` relies on
+    /// `binary_search`, and a misplaced entry makes the search miss keywords
+    /// (e.g. `eval` when placed before `else`/`enum`).
+    #[test]
+    fn reserved_keywords_are_sorted_and_searchable() {
+        assert!(
+            RESERVED_KEYWORDS.windows(2).all(|w| w[0] < w[1]),
+            "RESERVED_KEYWORDS must be sorted for binary_search"
+        );
+        for keyword in RESERVED_KEYWORDS {
+            assert!(
+                is_js_reserved_word(keyword),
+                "binary_search must find reserved keyword: {keyword}"
+            );
+            assert!(
+                !is_valid_js_identifier(keyword),
+                "reserved keyword must not be a valid JS identifier: {keyword}"
+            );
+        }
+    }
+
+    /// Regression test: a component export named `eval` must be renamed to a
+    /// valid strict-mode-safe binding (see #1898).
+    #[test]
+    fn eval_is_sanitized() {
+        assert!(!is_valid_js_identifier("eval"));
+        assert_ne!(to_js_identifier("eval"), "eval");
+        assert!(is_valid_js_identifier(&to_js_identifier("eval")));
+    }
+}
