@@ -1333,11 +1333,13 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
+                let align = self.sizes.align(element).align_wasm32();
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 uwriteln!(
                     self.src,
-                    "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {elem_size}));",
+                    "if (ptr{tmp} % {align} !== 0) throw new TypeError(`list pointer [${{ptr{tmp}}}] is not aligned to {align}`);
+                    var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {elem_size}));",
                     elem_size = self.sizes.size(element).size_wasm32(),
                     array_ty = js_array_ty(resolve, element).unwrap(), // TODO: this is the wrong endianness
                 );
@@ -1460,10 +1462,15 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 let tmp = self.tmp();
                 let size = self.sizes.size(element).size_wasm32();
+                let align = self.sizes.align(element).align_wasm32();
                 let len = format!("len{tmp}");
                 uwriteln!(self.src, "var {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
                 uwriteln!(self.src, "var {base} = {};", operands[0]);
+                uwriteln!(
+                    self.src,
+                    "if ({base} % {align} !== 0) throw new TypeError(`list pointer [${{{base}}}] is not aligned to {align}`);"
+                );
                 let result = format!("result{tmp}");
                 uwriteln!(self.src, "var {result} = [];");
                 results.push(result.clone());

@@ -949,6 +949,9 @@ impl LiftIntrinsic {
                             : values => new typedArray(values);
 
                         const readValuesAndReset = (ctx, originalPtr, originalLen, dataPtr, len) => {{
+                            if (dataPtr % elemAlign32 !== 0) {{
+                                throw new TypeError(`list pointer [${{dataPtr}}] is not aligned to ${{elemAlign32}}`);
+                            }}
                             ctx.storagePtr = dataPtr;
                             const val = [];
                             for (var i = 0; i < len; i++) {{
