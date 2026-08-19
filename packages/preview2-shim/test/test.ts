@@ -1,5 +1,6 @@
 import { env } from "node:process";
 import { throws } from "node:assert";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 
 import { suite, test, assert, beforeEach, afterEach } from "vitest";
@@ -464,6 +465,54 @@ suite("Node.js Preview2", () => {
             tcpSocket.finishListen();
 
             // const [socket, input, output] = tcpSocket.accept();
+        });
+
+        test("tcp.connect(): should preserve an explicitly bound local address", async () => {
+            const server = createServer();
+            const acceptedSockets = new Set<import("node:net").Socket>();
+            server.on("connection", (socket) => {
+                acceptedSockets.add(socket);
+                socket.on("close", () => acceptedSockets.delete(socket));
+            });
+            await new Promise<void>((resolve, reject) => {
+                server.once("error", reject);
+                server.listen(0, "127.0.0.1", resolve);
+            });
+            const serverAddress = server.address();
+            assert(serverAddress && typeof serverAddress !== "string");
+
+            const { sockets } = await import("@bytecodealliance/preview2-shim");
+            const network = sockets.instanceNetwork.instanceNetwork();
+            const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
+            tcpSocket.startBind(network, {
+                tag: "ipv4",
+                val: { address: [127, 0, 0, 1], port: 0 },
+            });
+            tcpSocket.finishBind();
+            const boundAddress = tcpSocket.localAddress();
+            let connected = false;
+
+            try {
+                tcpSocket.startConnect(network, {
+                    tag: "ipv4",
+                    val: { address: [127, 0, 0, 1], port: serverAddress.port },
+                });
+                tcpSocket.subscribe().block();
+                tcpSocket.finishConnect();
+                connected = true;
+
+                assert.deepStrictEqual(tcpSocket.localAddress(), boundAddress);
+            } finally {
+                if (connected) {
+                    tcpSocket.shutdown("both");
+                }
+                for (const socket of acceptedSockets) {
+                    socket.destroy();
+                }
+                await new Promise<void>((resolve, reject) => {
+                    server.close((err) => (err ? reject(err) : resolve()));
+                });
+            }
         });
 
         test(
