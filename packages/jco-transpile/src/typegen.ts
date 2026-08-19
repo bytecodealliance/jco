@@ -56,6 +56,9 @@ interface TypegenOptions {
      * as opposed to a host (NodeJS, via `jco transpile`) binding.
      */
     guest?: boolean;
+
+    /** Represent WIT flags as bigint values instead of objects of booleans */
+    flagsAsBigInt?: boolean;
 }
 
 /**
@@ -161,6 +164,7 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         features,
         guest: opts.guest ?? false,
         asyncMode,
+        flagsAsBigint: opts.flagsAsBigInt === true,
     };
     const types = generateTypes(name, generateOpts).map(([name, file]) => [`${outDir}${name}`, file]);
 
