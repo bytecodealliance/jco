@@ -193,7 +193,7 @@ suite("API", () => {
         const meta = await metadataShow(newComponent);
         assert.deepStrictEqual(meta[0].metaType, {
             tag: "component",
-            val: 2,
+            val: 5,
         });
         assert.deepStrictEqual(meta[1].producers, [
             [
