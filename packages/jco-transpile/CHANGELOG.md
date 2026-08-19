@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.10.0] - 2026-08-19
+
+This release contains an update of the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.6.0](https://crates.io/crates/js-component-bindgen/2.6.0)
+
+### 🚀 Features
+
+- _(transpile)_ support flags as bigints by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ use published p3-shim, disable test until release by @vados-cosmonic in #1904
+
+- _(transpile)_ use workspace version, fix test setup by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ remove retry from tcp streams test by @vados-cosmonic
+
+- _(transpile)_ restore invalid alignment coverage by @vados-cosmonic in #1903
+
 ## [0.9.0] - 2026-08-18
 
 This release contains an update of the underlying transpiled `js-component-bindgen`
