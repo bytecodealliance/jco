@@ -240,6 +240,33 @@ describe("Integration: TCP Socket Send", () => {
   });
 });
 
+describe("Integration: bound TCP Socket Connect", () => {
+  test("preserves the explicitly bound local address", async () => {
+    const server = net.createServer();
+    const accepted = new Promise((resolve) => {
+      server.once("connection", resolve);
+    });
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const client = createIpv4Socket();
+    client.bind(ipv4LocalAddress);
+    const boundAddress = client.getLocalAddress();
+
+    try {
+      await client.connect(makeIpAddress("ipv4", "127.0.0.1", server.address().port));
+      const peer = await accepted;
+      expect(client.getLocalAddress()).toStrictEqual(boundAddress);
+      peer.destroy();
+    } finally {
+      client[Symbol.dispose]();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
+
 describe("Integration: TCP Socket Errors", () => {
   test("a reset after connect does not terminate the socket worker", async () => {
     let resetPeer;

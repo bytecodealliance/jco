@@ -7,9 +7,6 @@ import { Router } from "../workers/resource-worker.js";
 import { serializeIpAddress, makeIpAddress, ipAddressConflict } from "../sockets/address.js";
 import { SocketError } from "../sockets/error.js";
 
-import process from "node:process";
-const { TCP, constants: TCPConstants } = (process as any).binding("tcp_wrap");
-
 // Socket instances stored by ID
 const sockets = new Map<any, any>();
 // Unique IDs for sockets
@@ -39,15 +36,16 @@ Router()
 // Create a new TCP socket
 function handleTcpCreate({ family }) {
   const socketId = NEXT_SOCKET_ID++;
-  const handle = new TCP(TCPConstants.SOCKET);
 
   sockets.set(socketId, {
-    handle,
     family,
     tcp: null,
     server: null,
+    acceptWriter: null,
     backlog: 128,
     localAddress: null,
+    keepAliveEnabled: false,
+    keepAliveIdleTime: 0,
     disposed: false,
     activeStreams: 0,
   });
@@ -61,7 +59,7 @@ async function handleTcpBind({ socketId, localAddress }) {
   const address = serializeIpAddress(localAddress);
   const port = localAddress.val.port;
 
-  const { handle, family } = socket;
+  const { family } = socket;
 
   const hasConflict = [...sockets].some(
     ([id, { localAddress: boundAddress }]) =>
@@ -74,27 +72,26 @@ async function handleTcpBind({ socketId, localAddress }) {
     throw err;
   }
 
-  await new Promise<void>((resolve, reject) => {
-    let code;
-    if (family === "ipv6") {
-      code = handle.bind6(address, port, TCPConstants.UV_TCP_IPV6ONLY);
-    } else {
-      code = handle.bind(address, port);
-    }
-
-    if (code !== 0) {
-      reject(SocketError.from(-code));
-    } else {
-      resolve();
-    }
+  // node:net has no public standalone TCP bind API. Keep a server open
+  // to reserve the endpoint, then reuse it for listen or close it for connect.
+  const server = (socket.server = createTcpServer(socket));
+  const onListening = once(server, "listening");
+  server.listen({
+    host: address,
+    port,
+    backlog: socket.backlog,
+    ipv6Only: family === "ipv6",
   });
-
-  const out: any = {};
-  const code = handle.getsockname(out);
-  if (code !== 0) {
-    throw SocketError.from(-code);
+  await onListening;
+  const boundAddress = server.address();
+  if (!boundAddress || typeof boundAddress === "string") {
+    throw new SocketError("invalid-state");
   }
-  socket.localAddress = makeIpAddress(out.family.toLowerCase(), out.address, out.port);
+  socket.localAddress = makeIpAddress(
+    boundAddress.family.toLowerCase(),
+    boundAddress.address,
+    boundAddress.port,
+  );
 }
 
 // Connect a socket to remote address
@@ -103,15 +100,22 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
   const host = serializeIpAddress(remoteAddress);
   const port = remoteAddress.val.port;
 
+  const localAddress = socket.localAddress;
+  await closeTcpServer(socket);
+
   const tcp = (socket.tcp = new Socket({
-    handle: socket.handle,
-    pauseOnCreate: true,
     allowHalfOpen: true,
-  } as any));
+  }));
+  tcp.setKeepAlive(socket.keepAliveEnabled, socket.keepAliveIdleTime);
 
   // TODO(tandr): Add lookup
   const onConnect = once(tcp, "connect");
-  tcp.connect({ port, host });
+  tcp.connect({
+    port,
+    host,
+    localAddress: localAddress ? serializeIpAddress(localAddress) : undefined,
+    localPort: localAddress?.val.port,
+  });
   // events.once rejects when the emitter produces an error while waiting and
   // removes its temporary listeners after settling. A separate error promise
   // would remain attached after a successful connect and could later reject
@@ -122,41 +126,72 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
 async function handleTcpListen({ socketId, stream }) {
   const writer = stream.getWriter();
   const socket = sockets.get(socketId);
-  const { handle, backlog, family } = socket;
+  const { backlog, family } = socket;
 
-  const server = new Server({
-    pauseOnConnect: true,
-    allowHalfOpen: true,
-  });
-
-  const onListening = once(server, "listening");
-  server.listen(handle, backlog);
-  await onListening;
+  socket.acceptWriter = writer;
+  let server = socket.server;
+  if (!server) {
+    server = socket.server = createTcpServer(socket);
+    const onListening = once(server, "listening");
+    server.listen({
+      host: family === "ipv6" ? "::" : "0.0.0.0",
+      port: 0,
+      backlog,
+      ipv6Only: family === "ipv6",
+    });
+    await onListening;
+  }
 
   const addr = server.address();
   if (addr && typeof addr === "object") {
     socket.localAddress = makeIpAddress(family, addr.address, addr.port);
   }
+}
 
+function createTcpServer(socket) {
+  const server = new Server({
+    pauseOnConnect: true,
+    allowHalfOpen: true,
+  });
   server.on("connection", (conn) => {
+    const writer = socket.acceptWriter;
+    // The reservation is already listening at the OS level, so reject any
+    // connections that arrive before the WASI socket enters its listen state.
+    if (!writer) {
+      conn.destroy();
+      return;
+    }
     conn.allowHalfOpen = true;
+    conn.setKeepAlive(socket.keepAliveEnabled, socket.keepAliveIdleTime);
     const id = NEXT_SOCKET_ID++;
     sockets.set(id, {
-      handle: (conn as any)._handle,
-      family,
-      backlog,
+      family: socket.family,
+      backlog: socket.backlog,
       tcp: conn,
       server: null,
-      localAddress: makeIpAddress(family, conn.localAddress, conn.localPort),
+      acceptWriter: null,
+      localAddress: makeIpAddress(socket.family, conn.localAddress, conn.localPort),
+      keepAliveEnabled: socket.keepAliveEnabled,
+      keepAliveIdleTime: socket.keepAliveIdleTime,
       disposed: false,
       activeStreams: 0,
     });
-    writer.write({ family, socketId: id });
+    writer.write({ family: socket.family, socketId: id });
   });
+  server.on("error", (err) => socket.acceptWriter?.abort(err));
+  server.on("close", () => socket.acceptWriter?.close());
+  return server;
+}
 
-  socket.server = server;
-  server.on("error", (err) => stream.abort(err));
-  server.on("close", () => writer.close());
+function closeTcpServer(socket) {
+  const server = socket.server;
+  socket.server = null;
+  if (!server) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  });
 }
 
 async function handleTcpSend({ socketId, stream }) {
@@ -261,35 +296,31 @@ function cleanupDisposedSocket(socketId, socket) {
   if (socket.tcp) {
     socket.tcp.destroy();
   }
-  if (socket.handle) {
-    socket.handle.close();
-  }
-
   sockets.delete(socketId);
 }
 
 async function handleGetLocalAddress({ socketId }) {
   const socket = sockets.get(socketId);
-  const out: any = {};
-
-  const code = socket.handle.getsockname(out);
-  if (code !== 0) {
-    throw SocketError.from(-code);
+  const address = socket.tcp?.address();
+  if (address && typeof address !== "string" && "family" in address) {
+    return makeIpAddress(address.family.toLowerCase(), address.address, address.port);
   }
-
-  return makeIpAddress(out.family.toLowerCase(), out.address, out.port);
+  if (socket.localAddress) {
+    return socket.localAddress;
+  }
+  throw new SocketError("invalid-state");
 }
 
 async function handleGetRemoteAddress({ socketId }) {
   const socket = sockets.get(socketId);
-  const out: any = {};
-
-  const code = socket.handle.getpeername(out);
-  if (code !== 0) {
-    throw SocketError.from(-code);
+  if (!socket.tcp?.remoteFamily || !socket.tcp.remoteAddress || !socket.tcp.remotePort) {
+    throw new SocketError("invalid-state");
   }
-
-  return makeIpAddress(out.family.toLowerCase(), out.address, out.port);
+  return makeIpAddress(
+    socket.tcp.remoteFamily.toLowerCase(),
+    socket.tcp.remoteAddress,
+    socket.tcp.remotePort,
+  );
 }
 
 function handleTcpSetBacklogSize({ socketId, value }) {
@@ -299,12 +330,9 @@ function handleTcpSetBacklogSize({ socketId, value }) {
 
 async function handleTcpSetKeepAlive({ socketId, keepAliveEnabled, keepAliveIdleTime }) {
   const socket = sockets.get(socketId);
-  const time = Number(keepAliveIdleTime / 1_000_000_000n);
-
-  const code = socket.handle.setKeepAlive(keepAliveEnabled, time);
-  if (code !== 0) {
-    throw SocketError.from(-code);
-  }
+  socket.keepAliveEnabled = keepAliveEnabled;
+  socket.keepAliveIdleTime = Number(keepAliveIdleTime / 1_000_000_000n);
+  socket.tcp?.setKeepAlive(socket.keepAliveEnabled, socket.keepAliveIdleTime);
 }
 
 async function handleRecvBufferSize({ socketId }) {
