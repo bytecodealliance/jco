@@ -17,6 +17,7 @@ import { nodeExec, readFixtureFlags, runTSCodegen } from './helpers.js';
  * which tests run first.
  */
 const CODEGEN_TRANSPILE_DEPS = {
+    alignment: ['alignment/alignment.js'],
     dummy_proxy: ['dummy_proxy/dummy_proxy.js'],
     example_guest_export: ['example_guest_export/example_guest_export.js'],
     example_guest_import: ['example_guest_import/example_guest_import.js'],

@@ -1,9 +1,9 @@
-// Flags: --instantiation
+// Flags: --instantiation --strict
 
 import * as helpers from './helpers.js';
 // @ts-expect-error
 import { instantiate } from '../js-test-components/numbers/numbers.js';
-import { strictEqual } from 'node:assert';
+import { strictEqual, throws } from 'node:assert';
 
 function assert(x: boolean) {
     if (!x) {
@@ -122,6 +122,15 @@ async function run() {
     strictEqual(wasm.test.roundtripChar('a'), 'a');
     strictEqual(wasm.test.roundtripChar(' '), ' ');
     strictEqual(wasm.test.roundtripChar('🚩'), '🚩');
+
+    throws(() => wasm.test.roundtripU8(-1), TypeError);
+    throws(() => wasm.test.roundtripS8(128), TypeError);
+    throws(() => wasm.test.roundtripU16(-1), TypeError);
+    throws(() => wasm.test.roundtripS16(1 << 15), TypeError);
+    throws(() => wasm.test.roundtripU32(-1), TypeError);
+    throws(() => wasm.test.roundtripS32(2 ** 31), TypeError);
+    throws(() => wasm.test.roundtripU64(-1n), TypeError);
+    throws(() => wasm.test.roundtripS64(1n << 63n), TypeError);
 
     wasm.test.setScalar(2);
     strictEqual(wasm.test.getScalar(), 2);
