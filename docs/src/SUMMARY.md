@@ -9,6 +9,7 @@
     - [WIT Type representations](./advanced/wit-type-representations.md)
     - [Manual Wasm instantiation with WASI overrides](./advanced/manual-wasm-instantiation-with-wasi-overrides.md)
     - [Detecting traps](./advanced/detecting-traps.md)
+    - [Preview 3 streams and backpressure](./advanced/preview3-streams-and-backpressure.md)
 - [Troubleshooting]()
   - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide]()
