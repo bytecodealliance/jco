@@ -4,6 +4,7 @@ import { suite, test, assert, expect } from 'vitest';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
+import { transpile } from '../../src/index.js';
 import { setupAsyncTest } from '../helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues, timeoutMs } from '../common.js';
 
@@ -188,6 +189,24 @@ suite('Async (WASI P3)', () => {
         assert.strictEqual(hostU32, await instance.getU32());
 
         await cleanup();
+    });
+
+    test.concurrent('async host import trampolines return lifted values directly', async () => {
+        const { files } = await transpile(join(LOCAL_TEST_COMPONENTS_DIR, 'async-simple-import.wasm'), {
+            name: 'async-simple-import',
+            minify: false,
+            asyncMode: 'jspi',
+            asyncImports: ['load-string', 'load-u32'],
+            asyncExports: ['get-string', 'get-u32'],
+        });
+        const source = new TextDecoder().decode(files['async-simple-import.js']);
+        const directHostReturns = source.match(/task\.resolve\(\[ret\]\);\s*task\.exit\(\);\s*return ret;/g);
+
+        assert.isAtLeast(directHostReturns?.length ?? 0, 2);
+        assert.notMatch(
+            source,
+            /task\.resolve\(\[ret\]\);\s*task\.exit\(\);\s*return await task\.completionPromise\(\);/,
+        );
     });
 
     test.concurrent('async return of imported owned resource', async () => {
