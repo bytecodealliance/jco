@@ -239,3 +239,39 @@ describe("Integration: TCP Socket Send", () => {
     client[Symbol.dispose]();
   });
 });
+
+describe("Integration: TCP Socket Errors", () => {
+  test("a reset after connect does not terminate the socket worker", async () => {
+    let resetPeer;
+    const accepted = new Promise((resolve) => {
+      resetPeer = resolve;
+    });
+    const server = net.createServer({ allowHalfOpen: true }, resetPeer);
+
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const client = createIpv4Socket();
+    const address = makeIpAddress("ipv4", "127.0.0.1", server.address().port);
+
+    try {
+      await client.connect(address);
+      const peer = await accepted;
+      const [, receiveResult] = client.receive();
+
+      peer.resetAndDestroy();
+      await expect(receiveResult.read()).rejects.toThrow();
+
+      // A late error from a completed connect must not become an unhandled
+      // rejection that terminates the shared resource worker.
+      const replacement = createIpv4Socket();
+      expect(() => replacement.bind(ipv4LocalAddress)).not.toThrow();
+      replacement[Symbol.dispose]();
+    } finally {
+      client[Symbol.dispose]();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
