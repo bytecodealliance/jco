@@ -147,6 +147,9 @@ pub struct FunctionBindgen<'a> {
 
     /// Whether to perform valid lifting optimization
     pub valid_lifting_optimization: bool,
+    /// Whether WIT flags are represented as bigint values.
+    #[builder(default)]
+    pub flags_as_bigint: bool,
 
     /// Sizes and alignments for sub elements
     pub sizes: &'a SizeAlign,
@@ -778,6 +781,31 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::FlagsLower { flags, .. } => {
                 let op0 = &operands[0];
 
+                if self.flags_as_bigint {
+                    let flag_count = flags.flags.len();
+                    uwriteln!(
+                        self.src,
+                        "if (typeof {op0} !== 'bigint') {{
+                            throw new TypeError('flags must be a bigint');
+                        }}
+                        if ({op0} < 0n || ({op0} >> {flag_count}n) !== 0n) {{
+                            throw new TypeError('flags have extraneous bits set');
+                        }}"
+                    );
+
+                    for i in 0..flags.repr().count() {
+                        let tmp = self.tmp();
+                        let name = format!("flags{tmp}");
+                        let shift = i * 32;
+                        uwriteln!(
+                            self.src,
+                            "const {name} = Number(({op0} >> {shift}n) & 0xffff_ffffn);"
+                        );
+                        results.push(name);
+                    }
+                    return;
+                }
+
                 // Generate the result names.
                 for _ in 0..flags.repr().count() {
                     let tmp = self.tmp();
@@ -838,6 +866,15 @@ impl Bindgen for FunctionBindgen<'_> {
                             }}"
                         );
                     }
+                }
+
+                if self.flags_as_bigint {
+                    uwriteln!(self.src, "var flags{tmp} = 0n;");
+                    for (i, op) in operands.iter().enumerate() {
+                        let shift = i * 32;
+                        uwriteln!(self.src, "flags{tmp} |= BigInt({op} >>> 0) << {shift}n;");
+                    }
+                    return;
                 }
 
                 uwriteln!(self.src, "var flags{tmp} = {{");

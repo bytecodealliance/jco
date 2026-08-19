@@ -65,6 +65,7 @@ struct TsBindgen {
     /// For guest types, ambient modules are generated and imported using `ns:pkg/iface`.
     /// For host types, concrete modules are generated and imported using `./interfaces/{id}.js`.
     is_guest: bool,
+    flags_as_bigint: bool,
 
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -103,6 +104,7 @@ struct TsInterface<'a> {
     src: Source,
     is_root: bool,
     is_guest: bool,
+    flags_as_bigint: bool,
     resolve: &'a Resolve,
     has_constructor: bool,
     needs_ty_option: bool,
@@ -136,6 +138,7 @@ pub fn ts_bindgen(
         needs_ty_option: false,
         needs_ty_result: false,
         is_guest: opts.guest,
+        flags_as_bigint: opts.flags_as_bigint,
         async_imports,
         async_exports,
         references: Default::default(),
@@ -238,7 +241,8 @@ pub fn ts_bindgen(
                         continue;
                     }
 
-                    let mut generator = TsInterface::new(resolve, true, opts.guest);
+                    let mut generator =
+                        TsInterface::new(resolve, true, opts.guest, opts.flags_as_bigint);
                     generator.docs(&ty.docs);
 
                     match &ty.kind {
@@ -620,7 +624,7 @@ impl TsBindgen {
         _files: &mut Files,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut generator = TsInterface::new(resolve, false, self.is_guest);
+        let mut generator = TsInterface::new(resolve, false, self.is_guest, self.flags_as_bigint);
         generator.ts_func(
             func,
             true,
@@ -677,7 +681,7 @@ impl TsBindgen {
         _files: &mut Files,
         declaration: bool,
     ) {
-        let mut generator = TsInterface::new(resolve, false, self.is_guest);
+        let mut generator = TsInterface::new(resolve, false, self.is_guest, self.flags_as_bigint);
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
@@ -786,7 +790,8 @@ impl TsBindgen {
         let (_name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
         if !iface_exists {
-            let mut generator = TsInterface::new(resolve, false, self.is_guest);
+            let mut generator =
+                TsInterface::new(resolve, false, self.is_guest, self.flags_as_bigint);
             generator.begin(&id_name); // Write module declaration
 
             // Generate function definitions
@@ -849,10 +854,11 @@ impl TsBindgen {
 }
 
 impl<'a> TsInterface<'a> {
-    fn new(resolve: &'a Resolve, is_root: bool, is_guest: bool) -> Self {
+    fn new(resolve: &'a Resolve, is_root: bool, is_guest: bool, flags_as_bigint: bool) -> Self {
         TsInterface {
             is_root,
             is_guest,
+            flags_as_bigint,
             src: Source::default(),
             resources: BTreeMap::new(),
             local_names: LocalNames::default(),
@@ -1108,7 +1114,7 @@ impl<'a> TsInterface<'a> {
                 .or_insert_with(|| {
                     (
                         meta.clone(),
-                        TsInterface::new(self.resolve, false, self.is_guest),
+                        TsInterface::new(self.resolve, false, self.is_guest, self.flags_as_bigint),
                     )
                 })
                 .1
@@ -1279,6 +1285,21 @@ impl<'a> TsInterface<'a> {
 
     fn type_flags(&mut self, _id: TypeId, name: &str, flags: &Flags, docs: &Docs) {
         self.docs(docs);
+        if self.flags_as_bigint {
+            let name = name.to_upper_camel_case();
+            self.src
+                .push_str(&format!("export type {name} = bigint;\n"));
+            self.src.push_str(&format!("export const {name}: {{\n"));
+            for flag in flags.flags.iter() {
+                self.docs(&flag.docs);
+                self.src.push_str(&format!(
+                    "readonly {}: bigint,\n",
+                    flag.name.to_upper_camel_case()
+                ));
+            }
+            self.src.push_str("};\n");
+            return;
+        }
         self.src.push_str(&format!(
             "export interface {} {{\n",
             name.to_upper_camel_case()
@@ -1489,9 +1510,12 @@ impl<'a> TsInterface<'a> {
 
     fn type_resource(&mut self, _id: TypeId, ty: &TypeDef, meta: GeneratedTypeMeta) {
         let resource = ty.name.clone().unwrap();
-        self.resources
-            .entry(resource)
-            .or_insert_with(|| (meta, TsInterface::new(self.resolve, false, self.is_guest)));
+        self.resources.entry(resource).or_insert_with(|| {
+            (
+                meta,
+                TsInterface::new(self.resolve, false, self.is_guest, self.flags_as_bigint),
+            )
+        });
     }
 }
 

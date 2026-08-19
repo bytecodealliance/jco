@@ -1163,6 +1163,36 @@ mod tests {
             assert!(source.contains("class FutureEnd"), "missing FutureEnd");
         }
     }
+
+    #[test]
+    fn flat_flags_bigint_representation_is_opt_in() {
+        fn render(flags_as_bigint: bool) -> Source {
+            let mut intrinsics = BTreeSet::from([
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags),
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags),
+            ]);
+            let opts = TranspileOpts::builder()
+                .name("test".into())
+                .flags_as_bigint(flags_as_bigint)
+                .build();
+            render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            )
+        }
+
+        let default_source = render(false);
+        assert!(default_source.contains("val[name] = (bits & 1) === 1;"));
+        assert!(default_source.contains("const flagObj = ctx.vals[0];"));
+        assert!(!default_source.contains("val = BigInt(bits >>> 0);"));
+
+        let bigint_source = render(true);
+        assert!(bigint_source.contains("val = BigInt(bits >>> 0);"));
+        assert!(bigint_source.contains("typeof bigintFlags !== 'bigint'"));
+        assert!(!bigint_source.contains("const flagObj = ctx.vals[0];"));
+    }
 }
 
 /// Profile for determinism to be used by async implementation

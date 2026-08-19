@@ -80,6 +80,9 @@ world js-component-bindgen {
     /// Configure whether to generate code that includes strict type checks
     strict: option<bool>,
 
+    /// Represent WIT flags as bigint values instead of objects of booleans.
+    flags-as-bigint: option<bool>,
+
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
   }
@@ -138,6 +141,9 @@ world js-component-bindgen {
 
     /// Configure whether to generate code that includes strict type checks
     strict: option<bool>,
+
+    /// Represent WIT flags as bigint values instead of objects of booleans.
+    flags-as-bigint: option<bool>,
   }
 
   enum export-type {

@@ -74,6 +74,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .guest(options.guest.unwrap_or(false))
             .maybe_async_mode(options.async_mode.map(Into::into))
             .strict(options.strict.unwrap_or(false))
+            .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
             .asmjs(options.asmjs.unwrap_or(false))
             .build();
 
@@ -167,6 +168,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .guest(opts.guest.unwrap_or(false))
             .maybe_async_mode(opts.async_mode.map(Into::into))
             .strict(opts.strict.unwrap_or(false))
+            .flags_as_bigint(opts.flags_as_bigint.unwrap_or(false))
             .asmjs(false)
             .build();
 

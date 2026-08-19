@@ -253,7 +253,7 @@ impl LowerIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::LowerFlatBool => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -887,6 +887,32 @@ impl LowerIntrinsic {
             Self::LowerFlatFlags => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_flat_flags_fn = self.name();
+                let lower_value = if render_args.transpile_opts.flags_as_bigint {
+                    r#"
+                            const bigintFlags = ctx.vals[0];
+                            if (typeof bigintFlags !== 'bigint') {
+                                throw new TypeError('flags must be a bigint');
+                            }
+                            if (bigintFlags < 0n || (bigintFlags >> BigInt(names.length)) !== 0n) {
+                                throw new TypeError('flags have extraneous bits set');
+                            }
+                            const flagValue = Number(bigintFlags);
+                    "#
+                } else {
+                    r#"
+                            const flagObj = ctx.vals[0];
+                            let flagValue = 0;
+                            if (typeof flagObj === 'object' && flagObj !== null) {
+                                for (const [idx, name] of names.entries()) {
+                                    if (flagObj[name] === true) {
+                                        flagValue |= 1 << idx;
+                                    }
+                                }
+                            } else if (flagObj !== null && flagObj !== undefined) {
+                                throw new TypeError('only an object, undefined or null can be converted to flags');
+                            }
+                    "#
+                };
 
                 output.push_str(&format!(r#"
                     function {lower_flat_flags_fn}(meta) {{
@@ -896,17 +922,7 @@ impl LowerIntrinsic {
                             {debug_log_fn}('[{lower_flat_flags_fn}()] args', {{ ctx }});
                             if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
 
-                            let flagObj = ctx.vals[0];
-                            let flagValue = 0;
-                            if (typeof flagObj === 'object' && flagObj !== null) {{
-                                for (const [idx, name] of names.entries()) {{
-                                    if (flagObj[name] === true) {{
-                                        flagValue |= 1 << idx;
-                                    }}
-                                }}
-                            }} else if (flagObj !== null && flagObj !== undefined) {{
-                                throw new TypeError('only an object, undefined or null can be converted to flags');
-                            }}
+                            {lower_value}
 
                             const rem = ctx.storagePtr % align32;
                             if (rem !== 0) {{ ctx.storagePtr += (align32 - rem); }}

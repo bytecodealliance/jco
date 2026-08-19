@@ -330,3 +330,63 @@ trait ManagesIntrinsics {
     /// Add an intrinsic, supplying it's name afterwards
     fn add_intrinsic(&mut self, intrinsic: Intrinsic);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FLAGS_WIT: &str = r#"
+        package test:flag-values;
+
+        interface api {
+            flags permissions {
+                read,
+                write,
+            }
+            roundtrip: func(value: permissions) -> permissions;
+        }
+
+        world flag-values {
+            export api;
+        }
+    "#;
+
+    fn flags_interface(flags_as_bigint: bool) -> String {
+        let mut resolve = Resolve::default();
+        let package = resolve.push_str("flags.wit", FLAGS_WIT).unwrap();
+        let world = resolve
+            .select_world(&[package], Some("flag-values"))
+            .unwrap();
+        let files = generate_types(
+            "flags",
+            resolve,
+            world,
+            TranspileOpts::builder()
+                .name("flags".into())
+                .flags_as_bigint(flags_as_bigint)
+                .build(),
+        )
+        .unwrap();
+        let (_, contents) = files
+            .into_iter()
+            .find(|(name, _)| name.ends_with("api.d.ts"))
+            .unwrap();
+        String::from_utf8(contents).unwrap()
+    }
+
+    #[test]
+    fn flags_types_are_objects_by_default() {
+        let source = flags_interface(false);
+        assert!(source.contains("export interface Permissions"));
+        assert!(!source.contains("export const Permissions"));
+    }
+
+    #[test]
+    fn flags_types_can_be_bigints_with_constants() {
+        let source = flags_interface(true);
+        assert!(source.contains("export type Permissions = bigint;"));
+        assert!(source.contains("export const Permissions: {"));
+        assert!(source.contains("readonly Read: bigint"));
+        assert!(source.contains("readonly Write: bigint"));
+    }
+}
