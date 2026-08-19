@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-aa43dc0c.js";
+            window.path_to_searchindex_js = "searchindex-5d16444c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-9521a751.js"></script>
@@ -206,6 +206,18 @@ NodeJS or the Web, including typescript declarations and an implementation skele
 <p>To use <code>jco scaffold</code>, simply name the folder and point at the WIT directory:</p>
 <pre><code class="language-console">jco scaffold hello-component --wit path/to/wit
 </code></pre>
+<p>Jco also bundles official WASI WIT packages for three common starting points:</p>
+<pre><code class="language-console">jco scaffold my-command --wit builtin:wasi-command
+jco scaffold my-http-service --wit builtin:wasi-proxy
+jco scaffold my-reactor --wit builtin:wasi-reactor
+</code></pre>
+<p>Without a version suffix these select WASI 0.3.0. To target the latest bundled WASI 0.2 release instead, use
+<code>@0.2.x</code> (currently 0.2.12):</p>
+<pre><code class="language-console">jco scaffold my-command --wit builtin:wasi-command@0.2.x
+</code></pre>
+<p>The command and reactor aliases select the <code>wasi:cli/command</code> and <code>wasi:cli/imports</code> worlds. The proxy alias selects
+<code>wasi:http/service</code> in WASI 0.3 and <code>wasi:http/proxy</code> in WASI 0.2. Jco copies the selected snapshot into the generated
+project’s <code>wit/</code> directory, so this workflow does not require a registry client or network access.</p>
 <p>After runnig this command you can enter the folder and build the project:</p>
 <pre><code class="language-console">cd hello-component
 pnpm install
