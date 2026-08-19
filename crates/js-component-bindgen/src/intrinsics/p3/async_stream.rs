@@ -22,6 +22,9 @@ pub enum AsyncStreamIntrinsic {
     /// Map of stream tables to component indices
     GlobalStreamTableMap,
 
+    /// Create an internal stream and provide its table-management helpers
+    CreateStream,
+
     /// The definition of the `StreamEnd` JS superclass
     StreamEndClass,
 
@@ -234,7 +237,13 @@ pub enum AsyncStreamIntrinsic {
 impl AsyncStreamIntrinsic {
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        []
+        [
+            Self::CreateStream.name(),
+            "addStreamEndToTable",
+            "getStreamEnd",
+            "deleteStreamEnd",
+            "removeStreamEndFromTable",
+        ]
     }
 
     /// Get the name for the intrinsic
@@ -242,6 +251,7 @@ impl AsyncStreamIntrinsic {
         match self {
             Self::GlobalStreamMap => "STREAMS",
             Self::GlobalStreamTableMap => "STREAM_TABLES",
+            Self::CreateStream => "createStream",
             Self::StreamEndClass => "StreamEnd",
             Self::InternalStreamClass => "InternalStream",
             Self::StreamWritableEndClass => "StreamWritableEnd",
@@ -267,6 +277,201 @@ impl AsyncStreamIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::CreateStream => {
+                let create_stream_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let internal_stream_class =
+                    render_args.require_intrinsic(Self::InternalStreamClass);
+                let global_stream_map = render_args.require_intrinsic(Self::GlobalStreamMap);
+                let global_stream_table_map =
+                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function addStreamEndToTable(args) {{
+                        {debug_log_fn}('[addStreamEndToTable()] args', args);
+                        const {{ tableIdx, streamEnd }} = args;
+                        if (typeof streamEnd === 'number') {{ throw new Error("INSERTING BAD STREAMEND"); }}
+
+                        let {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                        if (componentIdx === undefined || !table) {{
+                            throw new Error(`invalid global stream table state for table [${{tableIdx}}]`);
+                        }}
+
+                        const handle = table.insert(streamEnd);
+                        streamEnd.setHandle(handle);
+                        streamEnd.setStreamTableIdx(tableIdx);
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const waitableIdx = cstate.handles.insert(streamEnd);
+                        streamEnd.setWaitableIdx(waitableIdx);
+
+                        {debug_log_fn}('[addStreamEndToTable()] added stream end', {{
+                            tableIdx,
+                            table,
+                            handle,
+                            streamEnd,
+                            destComponentIdx: componentIdx,
+                        }});
+
+                        return {{ handle, waitableIdx }};
+                    }}
+
+                    function {create_stream_fn}(cstate, args) {{
+                        {debug_log_fn}('[{create_stream_fn}()] args', args);
+                        const {{ tableIdx, elemMeta, hostInjectFn }} = args;
+                        if (tableIdx === undefined) {{ throw new Error("missing table idx while adding stream"); }}
+                        if (elemMeta === undefined) {{ throw new Error("missing element metadata while adding stream"); }}
+
+                        const {{ table: localStreamTable, componentIdx }} = {global_stream_table_map}[tableIdx];
+                        if (!localStreamTable) {{
+                            throw new Error(`missing global stream table lookup for table [${{tableIdx}}] while creating stream`);
+                        }}
+                        if (componentIdx !== cstate.componentIdx()) {{
+                            throw new Error('component idx mismatch while creating stream');
+                        }}
+
+                        const readWaitable = cstate.createWaitable();
+                        const writeWaitable = cstate.createWaitable();
+
+                        const stream = new {internal_stream_class}({{
+                            tableIdx,
+                            elemMeta,
+                            readWaitable,
+                            writeWaitable,
+                            hostInjectFn,
+                        }});
+                        stream.setGlobalStreamMapRep({global_stream_map}.insert(stream));
+
+                        const writeEnd = stream.writeEnd();
+                        writeEnd.setWaitableIdx(cstate.handles.insert(writeEnd));
+                        writeEnd.setHandle(localStreamTable.insert(writeEnd));
+                        if (writeEnd.streamTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched stream table"); }}
+
+                        const writeEndWaitableIdx = writeEnd.waitableIdx();
+                        const writeEndHandle = writeEnd.handle();
+                        writeWaitable.setTarget(`waitable for stream write end (waitable [${{writeEndWaitableIdx}}])`);
+                        writeEnd.setTarget(`stream write end (waitable [${{writeEndWaitableIdx}}])`);
+
+                        const readEnd = stream.readEnd();
+                        readEnd.setWaitableIdx(cstate.handles.insert(readEnd));
+                        readEnd.setHandle(localStreamTable.insert(readEnd));
+                        if (readEnd.streamTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched stream table"); }}
+
+                        const readEndWaitableIdx = readEnd.waitableIdx();
+                        const readEndHandle = readEnd.handle();
+                        readWaitable.setTarget(`waitable for read end (waitable [${{readEndWaitableIdx}}])`);
+                        readEnd.setTarget(`stream read end (waitable [${{readEndWaitableIdx}}])`);
+
+                        return {{
+                            writeEnd,
+                            writeEndWaitableIdx,
+                            writeEndHandle,
+                            readEndWaitableIdx,
+                            readEndHandle,
+                            readEnd,
+                        }};
+                    }}
+
+                    function getStreamEnd(args) {{
+                        {debug_log_fn}('[getStreamEnd()] args', args);
+                        const {{ tableIdx, streamEndHandle, streamEndWaitableIdx }} = args;
+                        if (tableIdx === undefined) {{
+                            throw new Error('missing table idx while getting stream end');
+                        }}
+
+                        const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                        let streamEnd;
+                        if (streamEndWaitableIdx !== undefined) {{
+                            streamEnd = cstate.handles.get(streamEndWaitableIdx);
+                        }} else if (streamEndHandle !== undefined) {{
+                            if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while getting stream end`); }}
+                            streamEnd = table.get(streamEndHandle);
+                        }} else {{
+                            throw new TypeError("must specify either waitable idx or handle to retrieve stream");
+                        }}
+
+                        if (!streamEnd) {{
+                            throw new Error(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
+                        }}
+                        if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {{
+                            throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
+                        }}
+
+                        return streamEnd;
+                    }}
+
+                    function deleteStreamEnd(args) {{
+                        {debug_log_fn}('[deleteStreamEnd()] args', args);
+                        const {{ tableIdx, streamEndWaitableIdx }} = args;
+                        if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
+                        if (streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
+
+                        const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                        const streamEnd = cstate.handles.get(streamEndWaitableIdx);
+                        if (!streamEnd) {{
+                            throw new Error(`missing stream end [${{streamEndWaitableIdx}}] in component handles while deleting stream`);
+                        }}
+                        if (streamEnd.streamTableIdx() !== tableIdx) {{
+                            throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
+                        }}
+
+                        let removed = cstate.handles.remove(streamEnd.waitableIdx());
+                        if (!removed) {{
+                             throw new Error(`failed to remove stream end [${{streamEndWaitableIdx}}] waitable obj in component [${{componentIdx}}]`);
+                        }}
+
+                        removed = table.remove(streamEnd.handle());
+                        if (!removed) {{
+                             throw new Error(`failed to remove stream end with handle [${{streamEnd.handle()}}] from stream table [${{tableIdx}}] in component [${{componentIdx}}]`);
+                        }}
+
+                        return streamEnd;
+                    }}
+
+                    function removeStreamEndFromTable(args) {{
+                        {debug_log_fn}('[removeStreamEndFromTable()] args', args);
+
+                        const {{ tableIdx, streamWaitableIdx }} = args;
+                        if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
+                        if (streamWaitableIdx === undefined) {{
+                            throw new Error("missing stream end waitable idx while removing stream end");
+                        }}
+
+                        const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                        if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while removing stream end`); }}
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                        const streamEnd = cstate.handles.get(streamWaitableIdx);
+                        if (!streamEnd) {{
+                            throw new Error(`missing stream end (handle [${{streamWaitableIdx}}], table [${{tableIdx}}])`);
+                        }}
+                        const handle = streamEnd.handle();
+
+                        let removed = cstate.handles.remove(streamWaitableIdx);
+                        if (!removed) {{
+                            throw new Error(`failed to remove streamEnd from handles (waitable idx [${{streamWaitableIdx}}]), component [${{componentIdx}}])`);
+                        }}
+
+                        removed = table.remove(handle);
+                        if (!removed) {{
+                            throw new Error(`failed to remove streamEnd from table (handle [${{handle}}]), table [${{tableIdx}}], component [${{componentIdx}}])`);
+                        }}
+
+                        return streamEnd;
+                    }}
+                    "#,
+                ));
+            }
+
             Self::StreamEndClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
@@ -1421,6 +1626,7 @@ impl AsyncStreamIntrinsic {
             Self::HostStreamClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let host_stream_class_name = self.name();
+                let _ = render_args.require_intrinsic(Self::CreateStream);
                 let external_stream_class =
                     render_args.require_intrinsic(Self::ExternalStreamClass);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -1470,7 +1676,7 @@ impl AsyncStreamIntrinsic {
                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
-                           const streamEnd = cstate.getStreamEnd({{
+                           const streamEnd = getStreamEnd({{
                                tableIdx: this.#streamTableIdx,
                                streamEndWaitableIdx: this.#streamEndWaitableIdx
                            }});
@@ -1717,6 +1923,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamNew => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_new_fn = render_args.require_intrinsic(Self::StreamNew);
+                let create_stream_fn = render_args.require_intrinsic(Self::CreateStream);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -1747,7 +1954,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error('component instance is not marked as may leave during stream.new');
                         }}
 
-                        const {{ writeEndWaitableIdx, readEndWaitableIdx, writeEndHandle, readEndHandle }} = cstate.createStream({{
+                        const {{ writeEndWaitableIdx, readEndWaitableIdx, writeEndHandle, readEndHandle }} = {create_stream_fn}(cstate, {{
                             tableIdx: streamTableIdx,
                             elemMeta,
                         }});
@@ -1773,6 +1980,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamNewFromLift => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_new_from_lift_fn = self.name();
+                let _ = render_args.require_intrinsic(Self::CreateStream);
                 let global_stream_map = render_args.require_intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GlobalStreamMap,
                 ));
@@ -1873,7 +2081,7 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}('only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
                         }}
 
-                        const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                        const streamEnd = getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
                             throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
@@ -1931,7 +2139,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const streamEnd = cstate.getStreamEnd({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
+                        const streamEnd = getStreamEnd({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
                         if (!streamEnd) {{ throw new Error('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
@@ -1998,7 +2206,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing component state for component idx [${{componentIdx}}]`); }}
 
-                        const streamEnd = cstate.deleteStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                        const streamEnd = deleteStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
                             throw new Error(`missing stream (waitable [${{streamEndWaitableIdx}}], table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
@@ -2015,6 +2223,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamTransfer => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_transfer_fn = self.name();
+                let _ = render_args.require_intrinsic(Self::CreateStream);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -2051,7 +2260,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const streamEnd = cstate.removeStreamEndFromTable({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
+                        const streamEnd = removeStreamEndFromTable({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
                         if (!streamEnd.isReadable()) {{
                             throw new Error("writable stream ends cannot be moved");
                         }}
@@ -2059,7 +2268,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error('readable ends cannot be moved once writable ends are dropped');
                         }}
 
-                        const {{ handle, waitableIdx }} = cstate.addStreamEndToTable({{ tableIdx: destTableIdx, streamEnd }});
+                        const {{ handle, waitableIdx }} = addStreamEndToTable({{ tableIdx: destTableIdx, streamEnd }});
                         streamEnd.setTarget(`stream read end (waitable [${{waitableIdx}}])`);
 
                         {debug_log_fn}('[{stream_transfer_fn}()] successfully transferred', {{

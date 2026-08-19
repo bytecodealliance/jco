@@ -1188,6 +1188,33 @@ mod tests {
     }
 
     #[test]
+    fn component_async_state_does_not_pull_in_create_stream_or_create_future() {
+        let state = Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass);
+        let create_stream = Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream);
+        let create_future = Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture);
+        let (source, intrinsics) = render([state]);
+
+        assert!(!intrinsics.contains(&create_stream));
+        assert!(!intrinsics.contains(&create_future));
+        assert!(!source.contains("function createStream(cstate, args)"));
+        assert!(!source.contains("function createFuture(cstate, args)"));
+
+        let (source, _) = render([create_stream]);
+        assert!(source.contains("function createStream(cstate, args)"));
+        assert!(!source.contains("function createFuture(cstate, args)"));
+
+        let (source, _) = render([create_future]);
+        assert!(source.contains("function createFuture(cstate, args)"));
+        assert!(!source.contains("function createStream(cstate, args)"));
+
+        let (_, intrinsics) = render([Intrinsic::Lift(LiftIntrinsic::LiftFlatStream)]);
+        assert!(intrinsics.contains(&create_stream));
+
+        let (_, intrinsics) = render([Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture)]);
+        assert!(intrinsics.contains(&create_future));
+    }
+
+    #[test]
     fn discovers_transitive_dependencies_in_dependency_order() {
         let transfer = Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow);
         let table_flag = Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag);
