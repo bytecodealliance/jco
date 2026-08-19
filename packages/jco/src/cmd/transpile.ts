@@ -34,6 +34,7 @@ export interface TranspileOpts {
     quiet?: boolean;
     noTypescript?: boolean;
     wasiShim?: boolean;
+    flagsAsBigInt?: boolean;
 }
 
 // These re-exports exist to avoid breaking backwards compatibility
