@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.30.0] - 2026-08-19
+
+### 🚀 Features
+
+- _(jco)_ support flags as bigints by @vados-cosmonic
+
+- _(jco)_ add run sandbox controls by @vados-cosmonic in #1901
+
+- _(jco)_ integrate wrapping option, disabled for backwards compat by @vados-cosmonic
+
+- _(jco)_ scaffold host plugins by @vados-cosmonic
+
+- _(jco)_ add explicit core-to-component tool by @vados-cosmonic
+
+- _(jco)_ abstract scaffold package managers by @vados-cosmonic
+
+- _(jco)_ scaffold component projects by @vados-cosmonic
+
+- _(jco)_ rename low-level new command by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(jco)_ improve documentation, impl for jco new by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ fix test consuming exported resource by @vados-cosmonic in #1893
+
+- _(jco)_ disable extended 1887 test until jco-transpile release by @vados-cosmonic in #1888
+
+- _(jco)_ add extended test for issue 1887 by @vados-cosmonic
+
+- _(jco)_ generate world-shaped scaffold tests by @vados-cosmonic
+
+- _(jco)_ validate generated component sources by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile, preview2-shim, preview3-shim by @vados-cosmonic
+
+- _(jco)_ lint by @vados-cosmonic
+
+- _(jco)_ update scaffold toolchain by @vados-cosmonic
+
 ## [1.29.0] - 2026-08-15
 
 ### ⚙️ Miscellaneous Tasks
