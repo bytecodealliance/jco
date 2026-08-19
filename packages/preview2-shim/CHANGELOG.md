@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.20.2] - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ keep file descriptors in I/O worker by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ group Deno tests in directory by @vados-cosmonic in #1889
+
 ## [0.20.1] - 2026-08-04
 
 ### 🐛 Bug Fixes
