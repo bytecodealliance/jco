@@ -956,7 +956,7 @@ impl<'a> Instantiator<'a, '_> {
             let global_stream_table_map = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                 AsyncStreamIntrinsic::GlobalStreamTableMap,
             ));
-            let rep_table_class = Intrinsic::RepTableClass.name();
+            let rep_table_class = self.bindgen.intrinsic(Intrinsic::RepTableClass);
             for (table_idx, component_idx) in self.stream_tables.iter() {
                 self.src.js.push_str(&format!(
                     "{global_stream_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
@@ -972,7 +972,7 @@ impl<'a> Instantiator<'a, '_> {
             let global_future_table_map = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                 AsyncFutureIntrinsic::GlobalFutureTableMap,
             ));
-            let rep_table_class = Intrinsic::RepTableClass.name();
+            let rep_table_class = self.bindgen.intrinsic(Intrinsic::RepTableClass);
             for (table_idx, component_idx) in self.future_tables.iter() {
                 self.src.js.push_str(&format!(
                     "{global_future_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
@@ -988,7 +988,7 @@ impl<'a> Instantiator<'a, '_> {
             let global_err_ctx_table_map = self
                 .bindgen
                 .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap));
-            let rep_table_class = Intrinsic::RepTableClass.name();
+            let rep_table_class = self.bindgen.intrinsic(Intrinsic::RepTableClass);
             for (table_idx, component_idx) in self.err_ctx_tables.iter() {
                 self.src.js.push_str(&format!(
                     "{global_err_ctx_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
@@ -1196,7 +1196,7 @@ impl<'a> Instantiator<'a, '_> {
         let err_ctx_local_tables = self
             .bindgen
             .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentLocalTable));
-        let rep_table_class = Intrinsic::RepTableClass.name();
+        let rep_table_class = self.bindgen.intrinsic(Intrinsic::RepTableClass);
         let c = component_idx.as_u32();
         if !self.error_context_component_initialized[component_idx] {
             uwriteln!(self.src.js, "{err_ctx_local_tables}.set({c}, new Map());");
@@ -1690,8 +1690,9 @@ impl<'a> Instantiator<'a, '_> {
                 // so we augment and save here, knowing that any stream.write/read operation
                 // that uses a memory is indicative of that component's memory
                 //
-                let register_global_memory_for_component_fn =
-                    Intrinsic::RegisterGlobalMemoryForComponent.name();
+                let register_global_memory_for_component_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
                 uwriteln!(
                     self.src.js_init,
                     r#"{register_global_memory_for_component_fn}({{
@@ -1770,8 +1771,9 @@ impl<'a> Instantiator<'a, '_> {
                 // PrepareCall for an async call is sometimes missing memories,
                 // so we augment and save here, knowing that any stream.write/read operation
                 // that uses a memory is indicative of that component's memory
-                let register_global_memory_for_component_fn =
-                    Intrinsic::RegisterGlobalMemoryForComponent.name();
+                let register_global_memory_for_component_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
                 uwriteln!(
                     self.src.js_init,
                     r#"{register_global_memory_for_component_fn}({{
@@ -4465,7 +4467,7 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js("}");
     }
 
-    fn augmented_import_def(&self, def: &core::AugmentedImport<'_>) -> String {
+    fn augmented_import_def(&mut self, def: &core::AugmentedImport<'_>) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => self.core_def(def),
             core::AugmentedImport::Memory { mem, op } => {
@@ -4559,10 +4561,12 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn core_def(&self, def: &CoreDef) -> String {
+    fn core_def(&mut self, def: &CoreDef) -> String {
         match def {
             CoreDef::Export(e) => self.core_export_var_name(e),
-            CoreDef::TaskMayBlock => AsyncTaskIntrinsic::CurrentTaskMayBlock.name().into(),
+            CoreDef::TaskMayBlock => self
+                .bindgen
+                .intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock.into()),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
@@ -4571,8 +4575,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             CoreDef::UnsafeIntrinsic(ui) => match ui {
                 wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_0 => {
-                    let context_get_fn =
-                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet).name();
+                    let context_get_fn = self
+                        .bindgen
+                        .intrinsic(AsyncTaskIntrinsic::ContextGet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
                     self.init_context_components
                         .borrow_mut()
@@ -4583,8 +4588,9 @@ impl<'a> Instantiator<'a, '_> {
                     )
                 }
                 wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_0 => {
-                    let context_set_fn =
-                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet).name();
+                    let context_set_fn = self
+                        .bindgen
+                        .intrinsic(AsyncTaskIntrinsic::ContextSet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
                     self.init_context_components
                         .borrow_mut()
@@ -4595,8 +4601,9 @@ impl<'a> Instantiator<'a, '_> {
                     )
                 }
                 wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_1 => {
-                    let context_get_fn =
-                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet).name();
+                    let context_get_fn = self
+                        .bindgen
+                        .intrinsic(AsyncTaskIntrinsic::ContextGet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
                     self.init_context_components
                         .borrow_mut()
@@ -4607,8 +4614,9 @@ impl<'a> Instantiator<'a, '_> {
                     )
                 }
                 wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_1 => {
-                    let context_set_fn =
-                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet).name();
+                    let context_set_fn = self
+                        .bindgen
+                        .intrinsic(AsyncTaskIntrinsic::ContextSet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
                     self.init_context_components
                         .borrow_mut()
