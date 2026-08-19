@@ -1147,14 +1147,8 @@ mod tests {
     #[test]
     fn future_read_write_emit_future_end_classes() {
         for (op, end_class) in [
-            (
-                AsyncFutureIntrinsic::FutureRead,
-                "class FutureReadableEnd",
-            ),
-            (
-                AsyncFutureIntrinsic::FutureWrite,
-                "class FutureWritableEnd",
-            ),
+            (AsyncFutureIntrinsic::FutureRead, "class FutureReadableEnd"),
+            (AsyncFutureIntrinsic::FutureWrite, "class FutureWritableEnd"),
         ] {
             let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(op)]);
             let opts = TranspileOpts::default();
