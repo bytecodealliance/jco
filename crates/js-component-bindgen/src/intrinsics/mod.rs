@@ -1191,27 +1191,90 @@ mod tests {
     fn component_async_state_does_not_pull_in_create_stream_or_create_future() {
         let state = Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass);
         let create_stream = Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream);
+        let get_stream_end = Intrinsic::AsyncStream(AsyncStreamIntrinsic::GetStreamEnd);
         let create_future = Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture);
+        let get_future_end = Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GetFutureEnd);
         let (source, intrinsics) = render([state]);
 
         assert!(!intrinsics.contains(&create_stream));
+        assert!(!intrinsics.contains(&get_stream_end));
         assert!(!intrinsics.contains(&create_future));
+        assert!(!intrinsics.contains(&get_future_end));
         assert!(!source.contains("function createStream(cstate, args)"));
         assert!(!source.contains("function createFuture(cstate, args)"));
 
         let (source, _) = render([create_stream]);
         assert!(source.contains("function createStream(cstate, args)"));
+        assert!(!source.contains("function getStreamEnd(args)"));
         assert!(!source.contains("function createFuture(cstate, args)"));
 
         let (source, _) = render([create_future]);
         assert!(source.contains("function createFuture(cstate, args)"));
+        assert!(!source.contains("function getFutureEnd(args)"));
         assert!(!source.contains("function createStream(cstate, args)"));
 
         let (_, intrinsics) = render([Intrinsic::Lift(LiftIntrinsic::LiftFlatStream)]);
-        assert!(intrinsics.contains(&create_stream));
+        assert!(intrinsics.contains(&get_stream_end));
+        assert!(!intrinsics.contains(&create_stream));
 
         let (_, intrinsics) = render([Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture)]);
-        assert!(intrinsics.contains(&create_future));
+        assert!(intrinsics.contains(&get_future_end));
+        assert!(!intrinsics.contains(&create_future));
+    }
+
+    #[test]
+    fn stream_and_future_helpers_are_individual_intrinsics() {
+        let helpers = [
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream),
+                "createStream",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::GetStreamEnd),
+                "getStreamEnd",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::AddStreamEndToTable),
+                "addStreamEndToTable",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::DeleteStreamEnd),
+                "deleteStreamEnd",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::RemoveStreamEndFromTable),
+                "removeStreamEndFromTable",
+            ),
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture),
+                "createFuture",
+            ),
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GetFutureEnd),
+                "getFutureEnd",
+            ),
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::AddFutureEndToTable),
+                "addFutureEndToTable",
+            ),
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::RemoveFutureEndFromTable),
+                "removeFutureEndFromTable",
+            ),
+        ];
+
+        for &(intrinsic, name) in &helpers {
+            let (source, intrinsics) = render([intrinsic]);
+            assert!(intrinsics.contains(&intrinsic));
+
+            for &(_, other_name) in &helpers {
+                assert_eq!(
+                    source.contains(&format!("function {other_name}(")),
+                    name == other_name,
+                    "rendering {name} unexpectedly changed whether {other_name} was emitted",
+                );
+            }
+        }
     }
 
     #[test]
