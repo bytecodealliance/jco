@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-206d9c1f.js";
+            window.path_to_searchindex_js = "searchindex-aa43dc0c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-1f53c7bb.js"></script>
+        <script src="toc-9521a751.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1572,6 +1572,116 @@ try {
 </code></pre>
 <p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
 thrown as <code>WebAssembly.RuntimeError</code> instances.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-3-streams-and-backpressure"><a class="header" href="#preview-3-streams-and-backpressure">Preview 3 Streams and Backpressure</a></h1>
+<p>Preview 3 WIT <code>stream&lt;T&gt;</code> values are asynchronous sequences of elements.</p>
+<p>Jco accepts JS <code>AsyncIterable</code>s for host-provided readable streams, including
+<code>ReadableStream</code> and async generators (which may be manually constructed). Numeric
+chunks such as <code>Uint8Array</code> are expanded into their individual elements.</p>
+<p>Items passed through iterables are elements, <em>not</em> chunks.</p>
+<p>A component may do many things that are not quite similar to how async iterables work
+natively in JS:</p>
+<ul>
+<li>Consume part of a chunk</li>
+<li>Combine several chunks in one read</li>
+<li>Issue a zero-length readiness read</li>
+<li>Cancel an in-progress read.</li>
+</ul>
+<p>Code that depends on one JavaScript chunk corresponding to one
+component read has to be written with this in mind.</p>
+<h2 id="backpressure-is-not-an-acknowledgement"><a class="header" href="#backpressure-is-not-an-acknowledgement">Backpressure is not an acknowledgement</a></h2>
+<p>Backpressure limits how far a producer should run ahead of a consumer. It does
+not prove that the component has processed a value (i.e. if you are performing an
+operation on stream elements, it does not mean that the component has <em>performed</em>
+the relevant operation).</p>
+<p>In particular:</p>
+<ul>
+<li><code>ReadableStreamDefaultController.enqueue()</code> returns immediately.</li>
+<li><code>WritableStreamDefaultWriter.ready</code> means the stream can accept more data.</li>
+<li>A resolved <code>WritableStreamDefaultWriter.write()</code> means the Web Stream
+accepted the chunk according to its queuing strategy; it is not an
+application-level acknowledgement from the component.</li>
+<li>Runtime readiness probes may request data before the component performs its
+next non-empty read.</li>
+</ul>
+<p><strong>If the producer needs delivery confirmation, this should be expressed in WIT,
+rather than inferring it from Stream object backpressure.</strong></p>
+<p>Use a bounded producer and wait for backpressure before producing more data:</p>
+<pre><code class="language-js">const transform = new TransformStream(
+    undefined,
+    { highWaterMark: 1 },
+    { highWaterMark: 1 },
+);
+const writer = transform.writable.getWriter();
+
+async function produce(source) {
+    try {
+        for await (const chunk of source) {
+            if (writer.desiredSize !== null &amp;&amp; writer.desiredSize &lt;= 0) {
+                await writer.ready;
+            }
+            await writer.write(chunk);
+        }
+        await writer.close();
+    } catch (error) {
+        await writer.abort(error);
+        throw error;
+    }
+}
+
+// Pass transform.readable as the JS representation of stream&lt;u8&gt;.
+</code></pre>
+<p>Try to avoid enqueuing unbounded inputs eagerly, and treat an enqueued typed array as
+immutable; mutating or reusing its storage while it is buffered can change data
+that has not crossed the component boundary yet.</p>
+<h2 id="cancellation-can-race-completion"><a class="header" href="#cancellation-can-race-completion">Cancellation can race completion</a></h2>
+<p>When <code>stream&lt;t&gt;</code>s are cancelled, in-progress copies are automatically resolved.
+Data can become available between the cancellation request and cancellation
+completion, which means the result may therefore report either:</p>
+<ol>
+<li><code>cancelled</code> with no progress; or</li>
+<li><code>completed</code> with the number of elements copied before cancellation ocurred</li>
+</ol>
+<p>Regardless of which occurs, the stream remains usable, it’s up to the producer
+to retain retain values that were fetched from its source but were not copied,
+preserve their order, and offer them to the next read.</p>
+<p>The producer <em>must not</em> start a second write against a stream end that already
+has a copy in progress.</p>
+<p>This means that for custom async iterators, you should likely implement cleanup
+with <code>return()</code> or a generator <code>finally</code> block.</p>
+<p>Also, cancellation of one component read does not necessarily mean that the entire
+WIT stream was dropped:</p>
+<pre><code class="language-js">async function* byteStream(source) {
+    try {
+        for await (const chunk of source) {
+            yield chunk;
+        }
+    } finally {
+        await source.close();
+    }
+}
+</code></pre>
+<h2 id="zero-length-reads-are-readiness-probes"><a class="header" href="#zero-length-reads-are-readiness-probes">Zero-length reads are readiness probes</a></h2>
+<p>A component can read zero elements to wait until data or end-of-stream is
+observable without consuming an element.</p>
+<p>Jco may pull one host chunk to answer that readiness query, but the values
+must remain available for a later non-empty read.</p>
+<p>This has two practical consequences:</p>
+<ol>
+<li>Producing a chunk does not imply that any of its elements were consumed.</li>
+<li>A source with side effects should perform them when producing the value, not
+when assuming the component received it.</li>
+</ol>
+<p>When testing a host stream you should generally include:</p>
+<ul>
+<li>Delayed production</li>
+<li>Chunks larger than the guest read buffer</li>
+<li>Repeated read cancellation</li>
+<li>Zero-length readiness reads</li>
+<li>An end-to-end ordering check.</li>
+</ul>
+<p>Timing-only assertions are not a good idea, and you should generally make sure to
+interact with the stream directly.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
