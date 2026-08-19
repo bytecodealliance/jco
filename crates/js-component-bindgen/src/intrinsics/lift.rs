@@ -1324,6 +1324,7 @@ impl LiftIntrinsic {
                 let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let _ = render_args.require_intrinsic(AsyncFutureIntrinsic::CreateFuture);
 
                 uwriteln!(
                     output,
@@ -1361,7 +1362,7 @@ impl LiftIntrinsic {
                             const cstate = {get_or_create_async_state_fn}(componentIdx);
                             if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                            const futureEnd = cstate.getFutureEnd({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
+                            const futureEnd = getFutureEnd({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
                             if (!futureEnd) {{
                                 throw new Error(`missing future end [${{futureEndWaitableIdx}}] (table [${{futureTableIdx}}]) in component [${{componentIdx}}] during lift`);
                             }}
@@ -1392,6 +1393,7 @@ impl LiftIntrinsic {
                 let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let _ = render_args.require_intrinsic(AsyncStreamIntrinsic::CreateStream);
 
                 output.push_str(&format!(r#"
                     function {lift_flat_stream_fn}(meta) {{
@@ -1427,7 +1429,7 @@ impl LiftIntrinsic {
                             const cstate = {get_or_create_async_state_fn}(componentIdx);
                             if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                            const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                            const streamEnd = getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                             if (!streamEnd) {{
                                 throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}]) in component [${{componentIdx}}] during lift`);
                             }}

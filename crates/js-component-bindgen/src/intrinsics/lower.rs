@@ -1104,6 +1104,8 @@ impl LowerIntrinsic {
                 let nested_future_symbol = render_args.require_intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::NestedFutureSymbol,
                 ));
+                let create_future_fn =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::CreateFuture);
 
                 uwriteln!(
                     output,
@@ -1151,7 +1153,7 @@ impl LowerIntrinsic {
                                 // recursively by elemMeta.lowerFn when this layer settles.
                                 let nestingLevel = 0;
                                 while (nestingLevel >= 0) {{
-                                    const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = cstate.createFuture({{
+                                    const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = {create_future_fn}(cstate, {{
                                         tableIdx: futureTableIdx,
                                         elemMeta,
                                     }});
@@ -1211,6 +1213,8 @@ impl LowerIntrinsic {
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn),
                 );
                 let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
+                let create_stream_fn =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::CreateStream);
 
                 output.push_str(&format!(
                     r#"
@@ -1251,7 +1255,7 @@ impl LowerIntrinsic {
                                         throw new Error(`missing async state for component [${{componentIdx}}]`);
                                     }}
 
-                                    const {{ writeEnd, readEnd }} = cstate.createStream({{
+                                    const {{ writeEnd, readEnd }} = {create_stream_fn}(cstate, {{
                                         tableIdx: streamTableIdx,
                                         elemMeta,
                                     }});

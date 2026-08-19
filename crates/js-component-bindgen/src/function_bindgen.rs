@@ -2837,6 +2837,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let nested_future_symbol = self.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::NestedFutureSymbol,
                 ));
+                let create_future_fn =
+                    self.intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture));
 
                 // Build the lowering function for the type produced by the future
                 let type_id = &crate::dealias(self.resolve, *ty);
@@ -2975,7 +2977,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 writeEndWaitableIdx,
                                 readEnd,
                                 readEndWaitableIdx
-                            }} = cstate{tmp}.createFuture({{
+                            }} = {create_future_fn}(cstate{tmp}, {{
                                 tableIdx: {future_table_idx},
                                 elemMeta: {{
                                     liftFn: {lift_fn_js},
@@ -3200,6 +3202,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let gen_read_fn_from_lowerable_stream_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
                 ));
+                let create_stream_fn =
+                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream));
 
                 // TODO(???): A component could end up receiving a stream that it outputted,
                 // and the below would fail (imported: false)?
@@ -3322,7 +3326,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         const cstate{tmp} = {get_or_create_async_state_fn}({component_idx_expr});
                         if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx_expr}]`); }}
 
-                        const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = cstate{tmp}.createStream({{
+                        const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = {create_stream_fn}(cstate{tmp}, {{
                             tableIdx: {stream_table_idx},
                             elemMeta: {{
                                 liftFn: {lift_fn_js},
