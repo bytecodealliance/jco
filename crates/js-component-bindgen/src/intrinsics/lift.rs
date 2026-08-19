@@ -253,7 +253,7 @@ impl LiftIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::LiftFlatBool => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -1211,6 +1211,21 @@ impl LiftIntrinsic {
                 let lift_u8 = Self::LiftFlatU8.name();
                 let lift_u16 = Self::LiftFlatU16.name();
                 let lift_u32 = Self::LiftFlatU32.name();
+                let init_value = if render_args.transpile_opts.flags_as_bigint {
+                    "null"
+                } else {
+                    "{}"
+                };
+                let finish_value = if render_args.transpile_opts.flags_as_bigint {
+                    "val = BigInt(bits >>> 0);"
+                } else {
+                    r#"
+                            for (const name of names) {
+                                val[name] = (bits & 1) === 1;
+                                bits >>>= 1;
+                            }
+                    "#
+                };
 
                 output.push_str(&format!(
                     r#"
@@ -1220,7 +1235,7 @@ impl LiftIntrinsic {
                         return function {lift_flat_flags_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_flags_fn}()] args', {{ ctx }});
 
-                            const val = {{}};
+                            let val = {init_value};
 
                             let liftRes;
                             let align;
@@ -1240,10 +1255,7 @@ impl LiftIntrinsic {
                             let bits = liftRes[0];
                             ctx = liftRes[1];
 
-                            for (const name of names) {{
-                                val[name] = (bits & 1) === 1;
-                                bits >>>= 1;
-                            }}
+                            {finish_value}
 
                             const rem = ctx.storagePtr % align32;
                             if (rem !== 0) {{ ctx.storagePtr += align32 - rem; }}

@@ -118,6 +118,9 @@ pub struct TranspileOpts {
     /// Configure whether to generate code that includes strict type checks
     #[builder(default)]
     pub strict: bool,
+    /// Represent WIT flags as bigint values instead of objects of booleans.
+    #[builder(default)]
+    pub flags_as_bigint: bool,
     /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
     #[builder(default)]
     pub asmjs: bool,
@@ -4375,6 +4378,7 @@ impl<'a> Instantiator<'a, '_> {
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
             valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
+            flags_as_bigint: self.bindgen.opts.flags_as_bigint,
             sizes: &self.sizes,
             err: if get_thrown_type(self.resolve, func.result).is_some() {
                 match abi {
@@ -4821,6 +4825,36 @@ impl<'a> Instantiator<'a, '_> {
                             unreachable!("unexpectedly non-interface export instance")
                         }
                     };
+
+                    if self.bindgen.opts.flags_as_bigint {
+                        for (type_name, type_id) in &self.resolve.interfaces[iface_id].types {
+                            let type_id = crate::dealias(self.resolve, *type_id);
+                            let TypeDefKind::Flags(flags) = &self.resolve.types[type_id].kind
+                            else {
+                                continue;
+                            };
+
+                            let local_name = self
+                                .bindgen
+                                .local_names
+                                .create_once(&type_name.to_upper_camel_case())
+                                .to_string();
+                            uwriteln!(self.src.js, "const {local_name} = Object.freeze({{");
+                            for (index, flag) in flags.flags.iter().enumerate() {
+                                uwriteln!(
+                                    self.src.js,
+                                    "{}: 1n << {index}n,",
+                                    flag.name.to_upper_camel_case()
+                                );
+                            }
+                            uwriteln!(self.src.js, "}});");
+                            self.bindgen.esm_bindgen.add_export_constant(
+                                &export_name,
+                                local_name,
+                                type_name.to_upper_camel_case(),
+                            );
+                        }
+                    }
 
                     // Process exported instances
                     for (func_name, (export_idx, _extern_data)) in exports.raw_iter() {
