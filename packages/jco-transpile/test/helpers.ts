@@ -622,6 +622,8 @@ export async function readFixtureFlags(fixturePath: string): Promise<Transpilati
             opts.js = true;
         } else if (arg === '--tla-compat') {
             opts.tlaCompat = true;
+        } else if (arg === '--strict') {
+            opts.strict = true;
         } else if (arg === '--base64-cutoff') {
             const offset = args[idx + 1];
             opts.base64Cutoff = parseInt(offset, 10);
