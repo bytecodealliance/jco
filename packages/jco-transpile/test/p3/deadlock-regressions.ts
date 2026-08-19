@@ -162,4 +162,52 @@ suite('async scheduling regressions', () => {
             await cleanup();
         }
     });
+
+    test('cancelled host stream reads preserve every value in order', async () => {
+        const expected = Uint8Array.from({ length: 2 * 1024 * 1024 }, (_, index) => index & 0xff);
+        let offset = 0;
+        const stream = {
+            [Symbol.asyncIterator]() {
+                return {
+                    next() {
+                        return new Promise((resolve) => {
+                            queueMicrotask(() => {
+                                if (offset === expected.length) {
+                                    resolve({ value: undefined, done: true });
+                                    return;
+                                }
+                                const end = Math.min(offset + 64 * 1024, expected.length);
+                                const value = expected.slice(offset, end);
+                                offset = end;
+                                resolve({ value, done: false });
+                            });
+                        });
+                    },
+                };
+            },
+        };
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'stream-concurrency.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/stream-concurrency-host': {
+                        signal: () => {},
+                        zeroReadComplete: () => {},
+                    },
+                },
+            },
+        });
+
+        try {
+            assert.deepEqual(
+                await instance['jco:test-components/stream-concurrency-test'].readWithCancellation(stream),
+                expected,
+            );
+        } finally {
+            await cleanup();
+        }
+    });
 });
