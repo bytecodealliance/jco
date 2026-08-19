@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.9.0] - 2026-08-18
+
+This release contains an update of the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.5.0](https://crates.io/crates/js-component-bindgen/2.5.0)
+
+### 🚀 Features
+
+- _(transpile)_ expose component wrapping option by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ use ts compiler API (v6) from runtime tests by @vados-cosmonic in #1883
+
+### 🧪 Testing
+
+- _(transpile)_ add tests for wrapped/unwrapped results by @vados-cosmonic in #1892
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update p2-shim and p3-shim
+
 ## [0.8.0] - 2026-08-14
 
 This release contains an update of the underlying transpiled `js-component-bindgen`
