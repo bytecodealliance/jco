@@ -1,0 +1,105 @@
+package wasi:sockets@0.3.0;
+interface ip-name-lookup {
+    use types.{ip-address};
+    variant error-code {
+        access-denied,
+        invalid-argument,
+        name-unresolvable,
+        temporary-resolver-failure,
+        permanent-resolver-failure,
+        other(option<string>),
+    }
+    resolve-addresses: async func(name: string) -> result<list<ip-address>, error-code>;
+}
+interface types {
+    use wasi:clocks/types@0.3.0.{duration};
+    variant error-code {
+        access-denied,
+        not-supported,
+        invalid-argument,
+        out-of-memory,
+        timeout,
+        invalid-state,
+        address-not-bindable,
+        address-in-use,
+        remote-unreachable,
+        connection-refused,
+        connection-broken,
+        connection-reset,
+        connection-aborted,
+        datagram-too-large,
+        other(option<string>),
+    }
+    enum ip-address-family {
+        ipv4,
+        ipv6,
+    }
+    type ipv4-address = tuple<u8, u8, u8, u8>;
+    type ipv6-address = tuple<u16, u16, u16, u16, u16, u16, u16, u16>;
+    variant ip-address {
+        ipv4(ipv4-address),
+        ipv6(ipv6-address),
+    }
+    record ipv4-socket-address {
+        port: u16,
+        address: ipv4-address,
+    }
+    record ipv6-socket-address {
+        port: u16,
+        flow-info: u32,
+        address: ipv6-address,
+        scope-id: u32,
+    }
+    variant ip-socket-address {
+        ipv4(ipv4-socket-address),
+        ipv6(ipv6-socket-address),
+    }
+    resource tcp-socket {
+        create: static func(address-family: ip-address-family) -> result<tcp-socket, error-code>;
+        bind: func(local-address: ip-socket-address) -> result<_, error-code>;
+        connect: async func(remote-address: ip-socket-address) -> result<_, error-code>;
+        listen: func() -> result<stream<tcp-socket>, error-code>;
+        send: func(data: stream<u8>) -> future<result<_, error-code>>;
+        receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>;
+        get-local-address: func() -> result<ip-socket-address, error-code>;
+        get-remote-address: func() -> result<ip-socket-address, error-code>;
+        get-is-listening: func() -> bool;
+        get-address-family: func() -> ip-address-family;
+        set-listen-backlog-size: func(value: u64) -> result<_, error-code>;
+        get-keep-alive-enabled: func() -> result<bool, error-code>;
+        set-keep-alive-enabled: func(value: bool) -> result<_, error-code>;
+        get-keep-alive-idle-time: func() -> result<duration, error-code>;
+        set-keep-alive-idle-time: func(value: duration) -> result<_, error-code>;
+        get-keep-alive-interval: func() -> result<duration, error-code>;
+        set-keep-alive-interval: func(value: duration) -> result<_, error-code>;
+        get-keep-alive-count: func() -> result<u32, error-code>;
+        set-keep-alive-count: func(value: u32) -> result<_, error-code>;
+        get-hop-limit: func() -> result<u8, error-code>;
+        set-hop-limit: func(value: u8) -> result<_, error-code>;
+        get-receive-buffer-size: func() -> result<u64, error-code>;
+        set-receive-buffer-size: func(value: u64) -> result<_, error-code>;
+        get-send-buffer-size: func() -> result<u64, error-code>;
+        set-send-buffer-size: func(value: u64) -> result<_, error-code>;
+    }
+    resource udp-socket {
+        create: static func(address-family: ip-address-family) -> result<udp-socket, error-code>;
+        bind: func(local-address: ip-socket-address) -> result<_, error-code>;
+        connect: func(remote-address: ip-socket-address) -> result<_, error-code>;
+        disconnect: func() -> result<_, error-code>;
+        send: async func(data: list<u8>, remote-address: option<ip-socket-address>) -> result<_, error-code>;
+        receive: async func() -> result<tuple<list<u8>, ip-socket-address>, error-code>;
+        get-local-address: func() -> result<ip-socket-address, error-code>;
+        get-remote-address: func() -> result<ip-socket-address, error-code>;
+        get-address-family: func() -> ip-address-family;
+        get-unicast-hop-limit: func() -> result<u8, error-code>;
+        set-unicast-hop-limit: func(value: u8) -> result<_, error-code>;
+        get-receive-buffer-size: func() -> result<u64, error-code>;
+        set-receive-buffer-size: func(value: u64) -> result<_, error-code>;
+        get-send-buffer-size: func() -> result<u64, error-code>;
+        set-send-buffer-size: func(value: u64) -> result<_, error-code>;
+    }
+}
+world imports {
+    import types;
+    import ip-name-lookup;
+}

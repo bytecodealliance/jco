@@ -331,7 +331,7 @@ program
     .command("scaffold")
     .description("Create a TypeScript or JavaScript WebAssembly component or host-plugin project")
     .argument("<project-directory>", "directory to create")
-    .option("--wit <path>", "WIT file or package directory")
+    .option("--wit <path|builtin>", "WIT file, package directory, or builtin:wasi-{command,proxy,reactor}")
     .option("--world <world>", "WIT world to implement")
     .option("--host", "scaffold a host plugin that provides the world's imports")
     .addOption(
@@ -353,7 +353,7 @@ program
     .action(
         asyncAction(async (projectDirectory: string, opts: any) => {
             if (!opts.wit) {
-                throw new Error("required option '--wit <path>' not specified");
+                throw new Error("required option '--wit <path|builtin>' not specified");
             }
             await createProject(projectDirectory, {
                 wit: opts.wit,

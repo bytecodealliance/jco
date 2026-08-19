@@ -1,0 +1,42 @@
+package wasi:clocks@0.3.0;
+interface monotonic-clock {
+    use types.{duration};
+    type mark = u64;
+    now: func() -> mark;
+    get-resolution: func() -> duration;
+    wait-until: async func(
+        when: mark,
+    );
+    wait-for: async func(
+        how-long: duration,
+    );
+}
+interface system-clock {
+    use types.{duration};
+    record instant {
+        seconds: s64,
+        nanoseconds: u32,
+    }
+    now: func() -> instant;
+    get-resolution: func() -> duration;
+}
+@unstable(feature = clocks-timezone)
+interface timezone {
+    @unstable(feature = clocks-timezone)
+    use system-clock.{instant};
+    @unstable(feature = clocks-timezone)
+    iana-id: func() -> option<string>;
+    @unstable(feature = clocks-timezone)
+    utc-offset: func(when: instant) -> option<s64>;
+    @unstable(feature = clocks-timezone)
+    to-debug-string: func() -> string;
+}
+interface types {
+    type duration = u64;
+}
+world imports {
+    import monotonic-clock;
+    import system-clock;
+    @unstable(feature = clocks-timezone)
+    import timezone;
+}
