@@ -1305,6 +1305,9 @@ impl Bindgen for FunctionBindgen<'_> {
             // when a list of lists or list of Uint8Arrays is sent.
             //
             Instruction::ListCanonLower { element, .. } => {
+                self.intrinsic(Intrinsic::Conversion(
+                    ConversionIntrinsic::RequireValidNumericPrimitive,
+                ));
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
                 let realloc = self.realloc.unwrap();
@@ -1777,7 +1780,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     if self.requires_async_porcelain | self.is_async {
                         (
                             "await ",
-                            Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
+                            self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync),
                             format!(
                                 r#"
                               {debug_log_fn}('[Instruction::CallWasm] error during async call', {{
@@ -1795,7 +1798,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     } else {
                         (
                             "",
-                            Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
+                            self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn),
                             format!(
                                 r#"
                               {debug_log_fn}('[Instruction::CallWasm] error during sync call', {{
@@ -2027,7 +2030,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 {
                     (
                         "await ",
-                        Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name(),
+                        self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync),
                         format!(
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during async call', {{
@@ -2046,7 +2049,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     (
                         "",
-                        Intrinsic::WithGlobalCurrentTaskMetaFn.name(),
+                        self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn),
                         format!(
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during sync call', {{
