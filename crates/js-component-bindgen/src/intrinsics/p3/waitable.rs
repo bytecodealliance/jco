@@ -121,11 +121,6 @@ pub enum WaitableIntrinsic {
 }
 
 impl WaitableIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -146,12 +141,13 @@ impl WaitableIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::WaitableSetClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let waitable_set_class = Self::WaitableSetClass.name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
 
                 output.push_str(&format!(
                     r#"
@@ -266,9 +262,10 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let waitable_class = Self::WaitableClass.name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let waitable_class = render_args.require_intrinsic(Self::WaitableClass);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
 
                 output.push_str(&format!(
                     r#"
@@ -404,11 +401,12 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableSetNew => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let waitable_set_class = Self::WaitableSetClass.name();
-                let waitable_set_new_fn = Self::WaitableSetNew.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
+                let waitable_set_new_fn = render_args.require_intrinsic(Self::WaitableSetNew);
                 output.push_str(&format!(r#"
                     function {waitable_set_new_fn}(componentIdx) {{
                         {debug_log_fn}('[{waitable_set_new_fn}()] args', {{ componentIdx }});
@@ -427,15 +425,16 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableSetWait => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let waitable_set_wait_fn = Self::WaitableSetWait.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let store_event_in_component_memory_fn =
-                    Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let waitable_set_class = Self::WaitableSetClass.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let waitable_set_wait_fn = render_args.require_intrinsic(Self::WaitableSetWait);
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let store_event_in_component_memory_fn = render_args
+                    .require_intrinsic(Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory));
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
 
                 output.push_str(&format!(r#"
                     async function {waitable_set_wait_fn}(ctx, waitableSetRep, resultPtr) {{
@@ -479,15 +478,17 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableSetPoll => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let waitable_set_poll_fn = Self::WaitableSetPoll.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let waitable_set_poll_fn = render_args.require_intrinsic(Self::WaitableSetPoll);
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let store_event_in_component_memory_fn =
-                    HostIntrinsic::StoreEventInComponentMemory.name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                    render_args.require_intrinsic(HostIntrinsic::StoreEventInComponentMemory);
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 output.push_str(&format!(r#"
                     function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
                         const {{ componentIdx, memoryIdx, getMemoryFn, isAsync, isCancellable }} = ctx;
@@ -554,13 +555,14 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableSetDrop => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let waitable_set_drop_fn = Self::WaitableSetDrop.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let remove_waitable_set_fn = Self::RemoveWaitableSet.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let waitable_set_drop_fn = render_args.require_intrinsic(Self::WaitableSetDrop);
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let remove_waitable_set_fn = render_args.require_intrinsic(Self::RemoveWaitableSet);
                 output.push_str(&format!("
                     function {waitable_set_drop_fn}(componentIdx, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentIdx, waitableSetRep }});
@@ -580,8 +582,8 @@ impl WaitableIntrinsic {
             }
 
             Self::RemoveWaitableSet => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let remove_waitable_set_fn = Self::RemoveWaitableSet.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let remove_waitable_set_fn = render_args.require_intrinsic(Self::RemoveWaitableSet);
                 output.push_str(&format!(r#"
                     function {remove_waitable_set_fn}(args) {{
                         {debug_log_fn}('[{remove_waitable_set_fn}()] args', args);
@@ -611,10 +613,11 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableJoin => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let waitable_join_fn = Self::WaitableJoin.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let waitable_join_fn = render_args.require_intrinsic(Self::WaitableJoin);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 output.push_str(&format!(r#"
                     function {waitable_join_fn}(componentIdx, waitableRep, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_join_fn}()] args', {{

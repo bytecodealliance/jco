@@ -173,11 +173,6 @@ pub enum ErrCtxIntrinsic {
 }
 
 impl ErrCtxIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -212,11 +207,11 @@ impl ErrCtxIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::ComponentGlobalTable => {
-                let name = Self::ComponentGlobalTable.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
+                let name = render_args.require_intrinsic(Self::ComponentGlobalTable);
+                let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
                 output.push_str(&format!(r#"
                 class {name} {{
                      static data = null;
@@ -231,7 +226,8 @@ impl ErrCtxIntrinsic {
             }
 
             Self::GlobalErrCtxTableMap => {
-                let global_err_ctx_table_map = Self::GlobalErrCtxTableMap.name();
+                let global_err_ctx_table_map =
+                    render_args.require_intrinsic(Self::GlobalErrCtxTableMap);
                 output.push_str(&format!(
                     r#"
                     const {global_err_ctx_table_map} = {{}};
@@ -242,16 +238,17 @@ impl ErrCtxIntrinsic {
             // NOTE: the top and middle level of the component local table are regular maps, with
             // leaves being actual `RepTable`s
             Self::ComponentLocalTable => {
-                let name = Self::ComponentLocalTable.name();
+                let name = render_args.require_intrinsic(Self::ComponentLocalTable);
                 output.push_str(&format!(r#"let {name} = new Map();"#));
             }
 
             Self::ErrorContextNew => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let create_local_handle_fn = Self::CreateLocalHandle.name();
-                let reserve_global_err_ctx_fn = Self::ReserveGlobalRep.name();
-                let err_ctx_new_fn = Self::ErrorContextNew.name();
-                let get_local_tbl_fn = Self::GetLocalTable.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let create_local_handle_fn = render_args.require_intrinsic(Self::CreateLocalHandle);
+                let reserve_global_err_ctx_fn =
+                    render_args.require_intrinsic(Self::ReserveGlobalRep);
+                let err_ctx_new_fn = render_args.require_intrinsic(Self::ErrorContextNew);
+                let get_local_tbl_fn = render_args.require_intrinsic(Self::GetLocalTable);
 
                 output.push_str(&format!(
                     r#"
@@ -278,10 +275,12 @@ impl ErrCtxIntrinsic {
             }
 
             Self::ErrorContextDebugMessage => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let global_tbl = Self::ComponentGlobalTable.name();
-                let err_ctx_debug_msg_fn = Self::ErrorContextDebugMessage.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
+                let err_ctx_debug_msg_fn =
+                    render_args.require_intrinsic(Self::ErrorContextDebugMessage);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
 
                 output.push_str(&format!(r#"
                     function {err_ctx_debug_msg_fn}(ctx, handle, outputStrPtr) {{
@@ -302,12 +301,14 @@ impl ErrCtxIntrinsic {
             }
 
             Self::ErrorContextDrop => {
-                let global_ref_count_add_fn = Self::GlobalRefCountAdd.name();
-                let global_tbl = Self::ComponentGlobalTable.name();
-                let err_ctx_drop_fn = Self::ErrorContextDrop.name();
-                let get_local_tbl_fn = Self::GetLocalTable.name();
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let global_ref_count_add_fn =
+                    render_args.require_intrinsic(Self::GlobalRefCountAdd);
+                let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
+                let err_ctx_drop_fn = render_args.require_intrinsic(Self::ErrorContextDrop);
+                let get_local_tbl_fn = render_args.require_intrinsic(Self::GetLocalTable);
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
 
                 output.push_str(&format!(r#"
                     function {err_ctx_drop_fn}(ctx, handle) {{
@@ -342,12 +343,14 @@ impl ErrCtxIntrinsic {
             }
 
             Self::ErrorContextTransfer => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_local_tbl_fn = Self::GetLocalTable.name();
-                let err_ctx_transfer_fn = Self::ErrorContextTransfer.name();
-                let create_local_handle_fn = Self::CreateLocalHandle.name();
-                let global_err_ctx_table_map = Self::GlobalErrCtxTableMap.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_local_tbl_fn = render_args.require_intrinsic(Self::GetLocalTable);
+                let err_ctx_transfer_fn = render_args.require_intrinsic(Self::ErrorContextTransfer);
+                let create_local_handle_fn = render_args.require_intrinsic(Self::CreateLocalHandle);
+                let global_err_ctx_table_map =
+                    render_args.require_intrinsic(Self::GlobalErrCtxTableMap);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
 
                 // TODO: error contexts should be stored in handles like streams are
 
@@ -412,8 +415,9 @@ impl ErrCtxIntrinsic {
             }
 
             Self::GlobalRefCountAdd => {
-                let global_tbl = Self::ComponentGlobalTable.name();
-                let err_ctx_global_ref_count_add_fn = Self::GlobalRefCountAdd.name();
+                let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
+                let err_ctx_global_ref_count_add_fn =
+                    render_args.require_intrinsic(Self::GlobalRefCountAdd);
                 output.push_str(&format!("
                     function {err_ctx_global_ref_count_add_fn}(globalRep, amount) {{
                         const globalTable = {global_tbl}.get();
@@ -427,10 +431,10 @@ impl ErrCtxIntrinsic {
             }
 
             Self::GetLocalTable => {
-                let get_local_tbl_fn = Self::GetLocalTable.name();
-                let local_tbl_var = Self::ComponentLocalTable.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
-                // let local_tbl_var = Self::GlobalErrCtxTableMap.name()
+                let get_local_tbl_fn = render_args.require_intrinsic(Self::GetLocalTable);
+                let local_tbl_var = render_args.require_intrinsic(Self::ComponentLocalTable);
+                let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
+                // let local_tbl_var = render_args.require_intrinsic(Self::GlobalErrCtxTableMap)
 
                 output.push_str(&format!(r#"
                     function {get_local_tbl_fn}(componentIdx, tableIdx, opts) {{
@@ -462,9 +466,10 @@ impl ErrCtxIntrinsic {
 
             Self::CreateLocalHandle => {
                 // NOTE: `rep`s are global component model representations, `handle`s are component-local table indices
-                let create_local_handle_fn = Self::CreateLocalHandle.name();
-                let global_tbl = Self::ComponentGlobalTable.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let create_local_handle_fn = render_args.require_intrinsic(Self::CreateLocalHandle);
+                let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
 
                 output.push_str(&format!(r#"
                     function {create_local_handle_fn}(componentIdx, componentLocalTable, globalRep) {{
@@ -489,8 +494,8 @@ impl ErrCtxIntrinsic {
             }
 
             Self::ReserveGlobalRep => {
-                let global_tbl = Self::ComponentGlobalTable.name();
-                let reserve_global_rep_fn = Self::ReserveGlobalRep.name();
+                let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
+                let reserve_global_rep_fn = render_args.require_intrinsic(Self::ReserveGlobalRep);
                 output.push_str(&format!(
                     r#"
                     function {reserve_global_rep_fn}(debugMessage, refCount) {{

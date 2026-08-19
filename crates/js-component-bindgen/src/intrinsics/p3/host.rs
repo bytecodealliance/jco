@@ -81,11 +81,6 @@ pub enum HostIntrinsic {
 }
 
 impl HostIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         ["syncStartCall", "asyncStartCall", "prepareCall"]
@@ -102,7 +97,7 @@ impl HostIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             // PrepareCall is called before an async-lowered import (from the host or another component)
             // is called from inside a component.
@@ -125,13 +120,15 @@ impl HostIntrinsic {
             // that expects to have that information.
             //
             Self::PrepareCall => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let prepare_call_fn = Self::PrepareCall.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let create_new_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
-                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let prepare_call_fn = render_args.require_intrinsic(Self::PrepareCall);
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let create_new_current_task_fn = render_args.require_intrinsic(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask),
+                );
+                let set_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
 
                 output.push_str(&format!(
                   r#"
@@ -279,21 +276,25 @@ impl HostIntrinsic {
             // CallWasm/CallInterface, rather than here.
             //
             Self::AsyncStartCall => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let async_start_call_fn = Self::AsyncStartCall.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let async_driver_loop_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
-                let lookup_memories_for_component_fn = Intrinsic::LookupMemoriesForComponent.name();
-                let current_component_idx_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
-                let get_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let async_start_call_fn = render_args.require_intrinsic(Self::AsyncStartCall);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let async_driver_loop_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                let lookup_memories_for_component_fn =
+                    render_args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
+                let current_component_idx_globals = render_args
+                    .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
+                let get_current_task_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
-                    Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 // TODO: lower here for non-zero param count
                 // https://github.com/bytecodealliance/wasmtime/blob/69ef9afc11a2846248c9e94affca0223dbd033fc/crates/wasmtime/src/runtime/component/concurrent.rs#L1775
@@ -614,20 +615,23 @@ impl HostIntrinsic {
             }
 
             Self::SyncStartCall => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let sync_start_call_fn = Self::SyncStartCall.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let async_driver_loop_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
-                let current_component_idx_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
-                let get_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let sync_start_call_fn = render_args.require_intrinsic(Self::SyncStartCall);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let async_driver_loop_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                let current_component_idx_globals = render_args
+                    .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
+                let get_current_task_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
-                    Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
-                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let set_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
 
                 // NTOE: in the case of a sync-lowered import of an async fucntion,
                 // we must handle the blocking start-call differently:
@@ -800,8 +804,9 @@ impl HostIntrinsic {
             }
 
             Self::StoreEventInComponentMemory => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let store_event_in_component_memory_fn = Self::StoreEventInComponentMemory.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let store_event_in_component_memory_fn =
+                    render_args.require_intrinsic(Self::StoreEventInComponentMemory);
                 output.push_str(&format!(
                     r#"
                     function {store_event_in_component_memory_fn}(args) {{

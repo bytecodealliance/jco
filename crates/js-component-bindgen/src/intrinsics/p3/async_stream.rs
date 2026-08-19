@@ -232,11 +232,6 @@ pub enum AsyncStreamIntrinsic {
 }
 
 impl AsyncStreamIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -270,11 +265,11 @@ impl AsyncStreamIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::StreamEndClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_end_class = Self::StreamEndClass.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
                 output.push_str(&format!(
                     r#"
                     class {stream_end_class} {{
@@ -434,18 +429,21 @@ impl AsyncStreamIntrinsic {
             // TODO(fix): the stream class itself is ONE CLASS/need to share data. The classes don't have to be distinct.
             //
             Self::StreamReadableEndClass | Self::StreamWritableEndClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let (end_class_name, _js_stream_class_name) = match self {
                     Self::StreamReadableEndClass => (self.name(), "ReadableStream"),
                     Self::StreamWritableEndClass => (self.name(), "WritableStream"),
                     _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
 
-                let stream_end_class = Self::StreamEndClass.name();
-                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
-                let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
+                let managed_buffer_class =
+                    render_args.require_intrinsic(Intrinsic::ManagedBufferClass);
+                let global_buffer_manager =
+                    render_args.require_intrinsic(Intrinsic::GlobalBufferManager);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 // Internal helper fn that sets up for a `copy()` call
                 let copy_setup_impl = format!(
@@ -543,7 +541,8 @@ impl AsyncStreamIntrinsic {
                     "#
                 );
 
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 let (rw_fn_name, inner_rw_impl) = match self {
                     // Internal implementation for writing to internal buffer after reading from a provided managed buffers
@@ -700,10 +699,11 @@ impl AsyncStreamIntrinsic {
                     _ => unreachable!("invalid stream end enum"),
                 };
 
-                let async_blocked_const =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::AsyncBlockedConstant,
+                ));
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
                 // NOTE: This shared copy impl is meant to be called from *outside* the stream end class in question,
                 // but internally to the bindgen-generated code (i.e. from `stream.{read,write}` or from a
@@ -862,8 +862,10 @@ impl AsyncStreamIntrinsic {
                     _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
 
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
 
                 // NOTE: these action implementations `write()` and `read()` are normally called
                 // from the host -- internally components will use the `stream.{write, read}` intrinsics
@@ -1333,10 +1335,10 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::InternalStreamClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let internal_stream_class_name = self.name();
-                let read_end_class = Self::StreamReadableEndClass.name();
-                let write_end_class = Self::StreamWritableEndClass.name();
+                let read_end_class = render_args.require_intrinsic(Self::StreamReadableEndClass);
+                let write_end_class = render_args.require_intrinsic(Self::StreamWritableEndClass);
 
                 output.push_str(&format!(
                     r#"
@@ -1417,12 +1419,15 @@ impl AsyncStreamIntrinsic {
             // host stream will be used to often give away the *read* end.
             //
             Self::HostStreamClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let host_stream_class_name = self.name();
-                let external_stream_class = Self::ExternalStreamClass.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                let external_stream_class =
+                    render_args.require_intrinsic(Self::ExternalStreamClass);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                     r#"
@@ -1596,11 +1601,12 @@ impl AsyncStreamIntrinsic {
             // TODO(fix): remove host stream rep tracking, force this on the host to maintain as metadata.
             //
             Self::ExternalStreamClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let external_stream_class_name = self.name();
-                let symbol_dispose = Intrinsic::SymbolDispose.name();
-                let symbol_async_iterator = Intrinsic::SymbolAsyncIterator.name();
-                let symbol_cabi_rep = Intrinsic::SymbolResourceRep.name();
+                let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
+                let symbol_async_iterator =
+                    render_args.require_intrinsic(Intrinsic::SymbolAsyncIterator);
+                let symbol_cabi_rep = render_args.require_intrinsic(Intrinsic::SymbolResourceRep);
 
                 output.push_str(&format!(
                     r#"
@@ -1685,8 +1691,8 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::GlobalStreamMap => {
-                let global_stream_map = Self::GlobalStreamMap.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
+                let global_stream_map = render_args.require_intrinsic(Self::GlobalStreamMap);
+                let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
                 output.push_str(&format!(
                     r#"
                     const {global_stream_map} = new {rep_table_class}({{ target: 'global stream map' }});
@@ -1695,7 +1701,8 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::GlobalStreamTableMap => {
-                let global_stream_table_map = Self::GlobalStreamTableMap.name();
+                let global_stream_table_map =
+                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
                 output.push_str(&format!(
                     r#"
                     const {global_stream_table_map} = {{}};
@@ -1708,12 +1715,13 @@ impl AsyncStreamIntrinsic {
             //
             // NOTE: Unit streams are represented with a streamTypeRep of null
             Self::StreamNew => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_new_fn = Self::StreamNew.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let stream_new_fn = render_args.require_intrinsic(Self::StreamNew);
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 output.push_str(&format!(r#"
                     function {stream_new_fn}(ctx) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', {{ ctx }});
@@ -1763,12 +1771,14 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamNewFromLift => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_new_from_lift_fn = self.name();
-                let global_stream_map =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap).name();
-                let host_stream_class =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass).name();
+                let global_stream_map = render_args.require_intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::GlobalStreamMap,
+                ));
+                let host_stream_class = render_args.require_intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::HostStreamClass,
+                ));
 
                 output.push_str(&format!(
                     r#"
@@ -1805,25 +1815,30 @@ impl AsyncStreamIntrinsic {
             // The pending buffer represents waiting write/read buffer.
             //
             Self::StreamWrite | Self::StreamRead => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_op_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let may_block = AsyncTaskIntrinsic::CurrentTaskMayBlock.name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let may_block =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock);
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let managed_buffer_class =
+                    render_args.require_intrinsic(Intrinsic::ManagedBufferClass);
                 let (event_code, stream_end_class) = match self {
                     Self::StreamWrite => (
                         format!("{async_event_code_enum}.STREAM_WRITE"),
-                        &Self::StreamWritableEndClass.name(),
+                        &render_args.require_intrinsic(Self::StreamWritableEndClass),
                     ),
                     Self::StreamRead => (
                         format!("{async_event_code_enum}.STREAM_READ"),
-                        &Self::StreamReadableEndClass.name(),
+                        &render_args.require_intrinsic(Self::StreamReadableEndClass),
                     ),
                     _ => unreachable!("unexpected stream operation"),
                 };
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
                     async function {stream_op_fn}(
@@ -1887,25 +1902,27 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamCancelRead | Self::StreamCancelWrite => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_cancel_fn = self.name();
-                let async_blocked_const =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
+                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::AsyncBlockedConstant,
+                ));
                 let is_cancel_write = matches!(self, Self::StreamCancelWrite);
                 let event_code_enum = format!(
                     "{}.STREAM_{}",
-                    Intrinsic::AsyncEventCodeEnum.name(),
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum),
                     if is_cancel_write { "WRITE" } else { "READ" }
                 );
                 let stream_end_class = if is_cancel_write {
-                    Self::StreamWritableEndClass.name()
+                    render_args.require_intrinsic(Self::StreamWritableEndClass)
                 } else {
-                    Self::StreamReadableEndClass.name()
+                    render_args.require_intrinsic(Self::StreamReadableEndClass)
                 };
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 output.push_str(&format!(r#"
                     async function {stream_cancel_fn}(ctx, streamEndWaitableIdx) {{
                         {debug_log_fn}('[{stream_cancel_fn}()] args', {{ ctx, streamEndWaitableIdx }});
@@ -1957,18 +1974,19 @@ impl AsyncStreamIntrinsic {
             // a host has tried to read off the end (i.e. getting back the async blocked constant),
             // when running non-deterministrically (the default)
             Self::StreamDropReadable | Self::StreamDropWritable => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_drop_fn = self.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let is_write = matches!(self, Self::StreamDropWritable);
                 let stream_end_class = if is_write {
-                    Self::StreamWritableEndClass.name()
+                    render_args.require_intrinsic(Self::StreamWritableEndClass)
                 } else {
-                    Self::StreamReadableEndClass.name()
+                    render_args.require_intrinsic(Self::StreamReadableEndClass)
                 };
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 output.push_str(&format!(r#"
                     function {stream_drop_fn}(ctx, streamEndWaitableIdx) {{
                         {debug_log_fn}('[{stream_drop_fn}()] args', {{ ctx, streamEndWaitableIdx }});
@@ -1995,11 +2013,13 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamTransfer => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_transfer_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let global_stream_table_map =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
 
                 output.push_str(&format!(
                     r#"
@@ -2064,10 +2084,13 @@ impl AsyncStreamIntrinsic {
 
             Self::IsStreamLowerableObject => {
                 let is_stream_lowerable_object = self.name();
-                let external_stream_class = Self::ExternalStreamClass.name();
-                let async_iterator_symbol = Intrinsic::SymbolAsyncIterator.name();
-                let iterator_symbol = Intrinsic::SymbolIterator.name();
-                let external_readable_stream_class = Intrinsic::PlatformReadableStreamClass.name();
+                let external_stream_class =
+                    render_args.require_intrinsic(Self::ExternalStreamClass);
+                let async_iterator_symbol =
+                    render_args.require_intrinsic(Intrinsic::SymbolAsyncIterator);
+                let iterator_symbol = render_args.require_intrinsic(Intrinsic::SymbolIterator);
+                let external_readable_stream_class =
+                    render_args.require_intrinsic(Intrinsic::PlatformReadableStreamClass);
 
                 output.push_str(&format!(
                     r#"
@@ -2084,11 +2107,14 @@ impl AsyncStreamIntrinsic {
 
             Self::GenReadFnFromLowerableStream => {
                 let gen_read_fn_from_lowerable_stream = self.name();
-                let is_stream_lowerable_object = Self::IsStreamLowerableObject.name();
-                let async_iterator_symbol = Intrinsic::SymbolAsyncIterator.name();
-                let iterator_symbol = Intrinsic::SymbolIterator.name();
-                let external_readable_stream_class = Intrinsic::PlatformReadableStreamClass.name();
-                let symbol_dispose = Intrinsic::SymbolDispose.name();
+                let is_stream_lowerable_object =
+                    render_args.require_intrinsic(Self::IsStreamLowerableObject);
+                let async_iterator_symbol =
+                    render_args.require_intrinsic(Intrinsic::SymbolAsyncIterator);
+                let iterator_symbol = render_args.require_intrinsic(Intrinsic::SymbolIterator);
+                let external_readable_stream_class =
+                    render_args.require_intrinsic(Intrinsic::PlatformReadableStreamClass);
+                let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
 
                 output.push_str(&format!(
                     r#"
@@ -2127,7 +2153,8 @@ impl AsyncStreamIntrinsic {
 
             Self::GenStreamHostInjectFn => {
                 let gen_host_inject_fn = self.name();
-                let pending_value_queue_class = Self::PendingValueQueueClass.name();
+                let pending_value_queue_class =
+                    render_args.require_intrinsic(Self::PendingValueQueueClass);
 
                 output.push_str(&format!(
                     r#"
