@@ -109,15 +109,14 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
     allowHalfOpen: true,
   } as any));
 
-  const onConnect = once(tcp, "connect");
-  const onError = once(tcp, "error").then(([err]) => {
-    throw err;
-  });
-
   // TODO(tandr): Add lookup
+  const onConnect = once(tcp, "connect");
   tcp.connect({ port, host });
-
-  await Promise.race([onConnect, onError]);
+  // events.once rejects when the emitter produces an error while waiting and
+  // removes its temporary listeners after settling. A separate error promise
+  // would remain attached after a successful connect and could later reject
+  // unobserved when an established connection is reset.
+  await onConnect;
 }
 
 async function handleTcpListen({ socketId, stream }) {
@@ -131,13 +130,8 @@ async function handleTcpListen({ socketId, stream }) {
   });
 
   const onListening = once(server, "listening");
-  const onError = once(server, "error").then(([err]) => {
-    throw err;
-  });
-
   server.listen(handle, backlog);
-
-  await Promise.race([onListening, onError]);
+  await onListening;
 
   const addr = server.address();
   if (addr && typeof addr === "object") {
