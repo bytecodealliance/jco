@@ -207,11 +207,6 @@ pub enum LowerIntrinsic {
 }
 
 impl LowerIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -256,9 +251,10 @@ impl LowerIntrinsic {
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::LowerFlatBool => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
                 output.push_str(&format!(r#"
                     function _lowerFlatBool(ctx) {{
                         {debug_log_fn}('[_lowerFlatBool()] args', {{ ctx }});
@@ -277,9 +273,10 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatS8 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
                 output.push_str(&format!(r#"
                     function _lowerFlatS8(ctx) {{
                         {debug_log_fn}('[_lowerFlatS8()] args', {{ ctx }});
@@ -298,10 +295,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatU8 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u8_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_u8_fn}(ctx) {{
@@ -322,10 +320,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatS16 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_s16_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_s16_fn}(ctx) {{
@@ -348,10 +347,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatU16 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u16_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_u16_fn}(ctx) {{
@@ -374,10 +374,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatS32 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_s32_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_s32_fn}(ctx) {{
@@ -402,10 +403,11 @@ impl LowerIntrinsic {
             // discrepancy of indirect values and indirect params (where to get storagePtr/len)
             // to the function versus params that actually indicate where to write!
             Self::LowerFlatU32 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u32_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_u32_fn}(ctx) {{
@@ -427,10 +429,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatS64 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_s64_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!("
                     function {lower_flat_s64_fn}(ctx) {{
@@ -451,10 +454,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatU64 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u64_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!("
                     function {lower_flat_u64_fn}(ctx) {{
@@ -474,10 +478,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatFloat32 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_f32_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_f32_fn}(ctx) {{
@@ -497,10 +502,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatFloat64 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_f64_fn = self.name();
-                let require_valid_numeric_primitive_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
+                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
+                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+                );
 
                 output.push_str(&format!("
                     function {lower_flat_f64_fn}(ctx) {{
@@ -520,8 +526,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatChar => {
-                let i32_to_char_fn = Intrinsic::Conversion(ConversionIntrinsic::I32ToChar).name();
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let i32_to_char_fn = render_args
+                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToChar));
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 output.push_str(&format!("
                     function _lowerFlatChar(ctx) {{
                         {debug_log_fn}('[_lowerFlatChar()] args', {{ ctx }});
@@ -539,8 +546,10 @@ impl LowerIntrinsic {
 
             Self::LowerFlatStringAny => {
                 let lower_flat_string_any_fn = self.name();
-                let lower_flat_string_utf8_fn = Self::LowerFlatStringUtf8.name();
-                let lower_flat_string_utf16_fn = Self::LowerFlatStringUtf16.name();
+                let lower_flat_string_utf8_fn =
+                    render_args.require_intrinsic(Self::LowerFlatStringUtf8);
+                let lower_flat_string_utf16_fn =
+                    render_args.require_intrinsic(Self::LowerFlatStringUtf16);
                 output.push_str(&format!("
                     function {lower_flat_string_any_fn}(ctx) {{
                         switch (ctx.stringEncoding) {{
@@ -556,9 +565,10 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatStringUtf16 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_string_utf16_fn = self.name();
-                let utf16_encode_fn = Intrinsic::String(StringIntrinsic::Utf16Encode).name();
+                let utf16_encode_fn =
+                    render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
 
                 output.push_str(&format!("
                     function {lower_flat_string_utf16_fn}(ctx) {{
@@ -577,9 +587,10 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatStringUtf8 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_string_utf8_fn = self.name();
-                let utf8_encode_fn = Intrinsic::String(StringIntrinsic::Utf8Encode).name();
+                let utf8_encode_fn =
+                    render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
 
                 output.push_str(&format!(r#"
                     function {lower_flat_string_utf8_fn}(ctx) {{
@@ -598,7 +609,7 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatRecord => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_record_fn = self.name();
 
                 output.push_str(&format!(
@@ -634,11 +645,11 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatVariant => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_variant_fn = self.name();
-                let lower_u8_fn = Self::LowerFlatU8.name();
-                let lower_u16_fn = Self::LowerFlatU16.name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
+                let lower_u8_fn = render_args.require_intrinsic(Self::LowerFlatU8);
+                let lower_u16_fn = render_args.require_intrinsic(Self::LowerFlatU16);
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
 
                 output.push_str(&format!(r#"
                     function {lower_flat_variant_fn}(meta) {{
@@ -689,9 +700,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatList => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_list_fn = self.name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
 
                 output.push_str(&format!(r#"
                     function {lower_flat_list_fn}(meta) {{
@@ -794,9 +805,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatMap => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_map_fn = self.name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
 
                 output.push_str(&format!(r#"
                     function {lower_flat_map_fn}(meta) {{
@@ -851,7 +862,7 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatTuple => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_tuple_fn = self.name();
 
                 output.push_str(&format!(
@@ -885,7 +896,7 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatFlags => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_flags_fn = self.name();
                 let lower_value = if render_args.transpile_opts.flags_as_bigint {
                     r#"
@@ -945,9 +956,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatEnum => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_enum_fn = self.name();
-                let lower_variant_fn = Self::LowerFlatVariant.name();
+                let lower_variant_fn = render_args.require_intrinsic(Self::LowerFlatVariant);
 
                 output.push_str(&format!(
                     r#"
@@ -972,9 +983,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatOption => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_option_fn = self.name();
-                let lower_variant_fn = Self::LowerFlatVariant.name();
+                let lower_variant_fn = render_args.require_intrinsic(Self::LowerFlatVariant);
 
                 output.push_str(&format!(
                     "
@@ -1005,9 +1016,9 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatResult => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_result_fn = self.name();
-                let lower_variant_fn = Self::LowerFlatVariant.name();
+                let lower_variant_fn = render_args.require_intrinsic(Self::LowerFlatVariant);
 
                 output.push_str(&format!(
                     r#"
@@ -1035,8 +1046,8 @@ impl LowerIntrinsic {
 
             Self::LowerFlatOwn => {
                 let lower_flat_own_fn = self.name();
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
 
                 output.push_str(&format!(
                     r#"
@@ -1064,7 +1075,7 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatBorrow => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_borrow_fn = self.name();
                 output.push_str(&format!(
                     "
@@ -1077,18 +1088,22 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatFuture => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_future_fn = self.name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
                 let is_future_lowerable_object =
-                    AsyncFutureIntrinsic::IsFutureLowerableObject.name();
-                let symbol_cabi_rep = Intrinsic::SymbolResourceRep.name();
-                let global_future_map = AsyncFutureIntrinsic::GlobalFutureMap.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
-                let gen_future_host_inject_fn =
-                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn).name();
-                let nested_future_symbol =
-                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol).name();
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::IsFutureLowerableObject);
+                let symbol_cabi_rep = render_args.require_intrinsic(Intrinsic::SymbolResourceRep);
+                let global_future_map =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureMap);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let gen_future_host_inject_fn = render_args.require_intrinsic(
+                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
+                );
+                let nested_future_symbol = render_args.require_intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::NestedFutureSymbol,
+                ));
 
                 uwriteln!(
                     output,
@@ -1177,21 +1192,25 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatStream => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_stream_fn = self.name();
-                let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
-                let external_stream_class = AsyncStreamIntrinsic::ExternalStreamClass.name();
-                let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
+                let global_stream_map =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamMap);
+                let external_stream_class =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::ExternalStreamClass);
+                let internal_stream_class =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::InternalStreamClass);
                 let is_stream_lowerable_object =
-                    AsyncStreamIntrinsic::IsStreamLowerableObject.name();
-                let symbol_cabi_rep = Intrinsic::SymbolResourceRep.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
-                let gen_read_fn_from_lowerable_stream_fn =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream)
-                        .name();
-                let gen_stream_host_inject_fn =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn).name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::IsStreamLowerableObject);
+                let symbol_cabi_rep = render_args.require_intrinsic(Intrinsic::SymbolResourceRep);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let gen_read_fn_from_lowerable_stream_fn = render_args
+                    .require_intrinsic(AsyncStreamIntrinsic::GenReadFnFromLowerableStream);
+                let gen_stream_host_inject_fn = render_args.require_intrinsic(
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn),
+                );
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
 
                 output.push_str(&format!(
                     r#"
@@ -1273,14 +1292,19 @@ impl LowerIntrinsic {
             //
             // see: `LiftIntrinsic::LiftFlatErrorContext`
             Self::LowerFlatErrorContext => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_error_context_fn = self.name();
-                let lower_u32_fn = Self::LowerFlatU32.name();
-                let create_local_handle_fn = ErrCtxIntrinsic::CreateLocalHandle.name();
-                let err_ctx_global_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
-                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
-                let global_tbl = ErrCtxIntrinsic::ComponentGlobalTable.name();
-                let get_local_tbl_fn = ErrCtxIntrinsic::GetLocalTable.name();
+                let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
+                let create_local_handle_fn =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::CreateLocalHandle);
+                let err_ctx_global_ref_count_add_fn =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::GlobalRefCountAdd);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let global_tbl =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::ComponentGlobalTable);
+                let get_local_tbl_fn =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::GetLocalTable);
 
                 // NOTE: at this point the error context has already been lowered into the appropriate
                 // place for us via error context transfer.

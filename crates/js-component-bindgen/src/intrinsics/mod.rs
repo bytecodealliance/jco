@@ -1,7 +1,8 @@
 //! Intrinsics used from JS
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::sync::Mutex;
 
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
@@ -166,6 +167,35 @@ pub enum Intrinsic {
     SuspendingImportWrapperFn,
 }
 
+macro_rules! impl_from_intrinsic {
+    ($($ty:ty => $variant:ident),+ $(,)?) => {
+        $(
+            impl From<$ty> for Intrinsic {
+                fn from(intrinsic: $ty) -> Self {
+                    Self::$variant(intrinsic)
+                }
+            }
+        )+
+    };
+}
+
+impl_from_intrinsic! {
+    JsHelperIntrinsic => JsHelper,
+    WebIdlIntrinsic => WebIdl,
+    ConversionIntrinsic => Conversion,
+    StringIntrinsic => String,
+    ResourceIntrinsic => Resource,
+    ErrCtxIntrinsic => ErrCtx,
+    AsyncTaskIntrinsic => AsyncTask,
+    WaitableIntrinsic => Waitable,
+    LiftIntrinsic => Lift,
+    LowerIntrinsic => Lower,
+    AsyncStreamIntrinsic => AsyncStream,
+    AsyncFutureIntrinsic => AsyncFuture,
+    ComponentIntrinsic => Component,
+    HostIntrinsic => Host,
+}
+
 impl Intrinsic {
     pub fn render(&self, output: &mut Source, args: &RenderIntrinsicsArgs) {
         match self {
@@ -216,8 +246,8 @@ impl Intrinsic {
             }
 
             Intrinsic::TypeCheckValidI32 => {
-                let i32_const_min = Intrinsic::ConstantI32Min.name();
-                let i32_const_max = Intrinsic::ConstantI32Max.name();
+                let i32_const_min = args.require_intrinsic(Intrinsic::ConstantI32Min);
+                let i32_const_max = args.require_intrinsic(Intrinsic::ConstantI32Max);
 
                 uwriteln!(
                     output,
@@ -229,7 +259,7 @@ impl Intrinsic {
             }
 
             Intrinsic::AsyncFunctionCtor => {
-                let async_fn_type = Intrinsic::AsyncFunctionCtor.name();
+                let async_fn_type = args.require_intrinsic(Intrinsic::AsyncFunctionCtor);
                 uwriteln!(
                     output,
                     "const {async_fn_type} = (async () => {{}}).constructor;"
@@ -237,8 +267,8 @@ impl Intrinsic {
             }
 
             Intrinsic::TypeCheckAsyncFn => {
-                let async_fn_check = Intrinsic::TypeCheckAsyncFn.name();
-                let async_fn_ctor = Intrinsic::AsyncFunctionCtor.name();
+                let async_fn_check = args.require_intrinsic(Intrinsic::TypeCheckAsyncFn);
+                let async_fn_ctor = args.require_intrinsic(Intrinsic::AsyncFunctionCtor);
                 uwriteln!(
                     output,
                     r#"
@@ -335,7 +365,7 @@ impl Intrinsic {
             }
 
             Intrinsic::GetErrorPayload => {
-                let hop = Intrinsic::HasOwnProperty.name();
+                let hop = args.require_intrinsic(Intrinsic::HasOwnProperty);
                 uwrite!(
                     output,
                     "
@@ -349,7 +379,7 @@ impl Intrinsic {
             }
 
             Intrinsic::GetErrorPayloadString => {
-                let hop = Intrinsic::HasOwnProperty.name();
+                let hop = args.require_intrinsic(Intrinsic::HasOwnProperty);
                 uwrite!(
                     output,
                     "
@@ -460,7 +490,7 @@ impl Intrinsic {
             ),
 
             Intrinsic::DebugLog => {
-                let fn_name = Intrinsic::DebugLog.name();
+                let fn_name = args.require_intrinsic(Intrinsic::DebugLog);
                 output.push_str(&format!(
                     "
                     const {fn_name} = (...args) => {{
@@ -493,7 +523,7 @@ impl Intrinsic {
             }
 
             Intrinsic::AsyncEventCodeEnum => {
-                let name = Intrinsic::AsyncEventCodeEnum.name();
+                let name = args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 output.push_str(&format!(
                     "
                     const {name} = {{
@@ -510,8 +540,8 @@ impl Intrinsic {
             }
 
             Intrinsic::ManagedBufferClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+                let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
+                let managed_buffer_class = args.require_intrinsic(Intrinsic::ManagedBufferClass);
                 output.push_str(&format!(
                     r#"
                     class {managed_buffer_class} {{
@@ -680,9 +710,9 @@ impl Intrinsic {
             }
 
             Intrinsic::BufferManagerClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
-                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+                let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
+                let buffer_manager_class = args.require_intrinsic(Intrinsic::BufferManagerClass);
+                let managed_buffer_class = args.require_intrinsic(Intrinsic::ManagedBufferClass);
 
                 output.push_str(&format!(r#"
                     class {buffer_manager_class} {{
@@ -754,16 +784,16 @@ impl Intrinsic {
             }
 
             Intrinsic::GlobalBufferManager => {
-                let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
-                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
+                let global_buffer_manager = args.require_intrinsic(Intrinsic::GlobalBufferManager);
+                let buffer_manager_class = args.require_intrinsic(Intrinsic::BufferManagerClass);
                 output.push_str(&format!(
                     "const {global_buffer_manager} = new {buffer_manager_class}();"
                 ));
             }
 
             Intrinsic::RepTableClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
+                let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
+                let rep_table_class = args.require_intrinsic(Intrinsic::RepTableClass);
                 output.push_str(&format!(r#"
                     class {rep_table_class} {{
                         // Sentinel marking a freed slot; the freelist link for a freed slot
@@ -856,16 +886,18 @@ impl Intrinsic {
             }
 
             Intrinsic::GlobalComponentMemoryMap => {
-                let global_component_memory_map = Intrinsic::GlobalComponentMemoryMap.name();
+                let global_component_memory_map =
+                    args.require_intrinsic(Intrinsic::GlobalComponentMemoryMap);
                 output.push_str(&format!(
                     "const {global_component_memory_map} = new Map();\n"
                 ));
             }
 
             Intrinsic::RegisterGlobalMemoryForComponent => {
-                let global_component_memory_map = Intrinsic::GlobalComponentMemoryMap.name();
+                let global_component_memory_map =
+                    args.require_intrinsic(Intrinsic::GlobalComponentMemoryMap);
                 let register_global_component_memory =
-                    Intrinsic::RegisterGlobalMemoryForComponent.name();
+                    args.require_intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
                 output.push_str(&format!(
                     r#"
                       function {register_global_component_memory}(args) {{
@@ -885,9 +917,10 @@ impl Intrinsic {
             }
 
             Intrinsic::LookupMemoriesForComponent => {
-                let global_component_memory_map = Intrinsic::GlobalComponentMemoryMap.name();
+                let global_component_memory_map =
+                    args.require_intrinsic(Intrinsic::GlobalComponentMemoryMap);
                 let lookup_global_memories_for_component =
-                    Intrinsic::LookupMemoriesForComponent.name();
+                    args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
                 output.push_str(&format!(
                     r#"
                       function {lookup_global_memories_for_component}(args) {{
@@ -914,8 +947,10 @@ impl Intrinsic {
             }
 
             Self::GetGlobalCurrentTaskMetaFn => {
-                let get_current_global_task_meta_fn = Self::GetGlobalCurrentTaskMetaFn.name();
-                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                let get_current_global_task_meta_fn =
+                    args.require_intrinsic(Self::GetGlobalCurrentTaskMetaFn);
+                let global_current_task_meta_obj =
+                    args.require_intrinsic(Self::GlobalCurrentTaskMeta);
 
                 uwriteln!(
                     output,
@@ -936,7 +971,8 @@ impl Intrinsic {
 
             Self::SetGlobalCurrentTaskMetaFn => {
                 let set_global_current_task_meta_fn = self.name();
-                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                let global_current_task_meta_obj =
+                    args.require_intrinsic(Self::GlobalCurrentTaskMeta);
 
                 uwriteln!(
                     output,
@@ -953,9 +989,11 @@ impl Intrinsic {
             }
 
             Self::WithGlobalCurrentTaskMetaFn => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let with_global_current_task_meta_fn = Self::WithGlobalCurrentTaskMetaFn.name();
-                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
+                let with_global_current_task_meta_fn =
+                    args.require_intrinsic(Self::WithGlobalCurrentTaskMetaFn);
+                let global_current_task_meta_obj =
+                    args.require_intrinsic(Self::GlobalCurrentTaskMeta);
 
                 output.push_str(&format!(
                     r#"
@@ -1011,10 +1049,11 @@ impl Intrinsic {
             // all pending work serially, with this intrinsic becoming simply queueing work onto that event loop.
             //
             Self::WithGlobalCurrentTaskMetaFnAsync => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let with_global_current_task_meta_async_fn =
-                    Self::WithGlobalCurrentTaskMetaFnAsync.name();
-                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                    args.require_intrinsic(Self::WithGlobalCurrentTaskMetaFnAsync);
+                let global_current_task_meta_obj =
+                    args.require_intrinsic(Self::GlobalCurrentTaskMeta);
 
                 output.push_str(&format!(
                     r#"
@@ -1045,9 +1084,11 @@ impl Intrinsic {
             }
 
             Self::ClearGlobalCurrentTaskMetaFn => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let clear_global_current_task_meta_fn = Self::ClearGlobalCurrentTaskMetaFn.name();
-                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
+                let clear_global_current_task_meta_fn =
+                    args.require_intrinsic(Self::ClearGlobalCurrentTaskMetaFn);
+                let global_current_task_meta_obj =
+                    args.require_intrinsic(Self::GlobalCurrentTaskMeta);
 
                 output.push_str(&format!(
                     r#"
@@ -1082,8 +1123,10 @@ impl Intrinsic {
             // context.set (and task-exit bookkeeping) address the task
             // that is actually executing.
             Self::SuspendingImportWrapperFn => {
-                let suspending_import_wrapper_fn = Self::SuspendingImportWrapperFn.name();
-                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                let suspending_import_wrapper_fn =
+                    args.require_intrinsic(Self::SuspendingImportWrapperFn);
+                let global_current_task_meta_obj =
+                    args.require_intrinsic(Self::GlobalCurrentTaskMeta);
 
                 output.push_str(&format!(
                     r#"
@@ -1121,6 +1164,62 @@ impl Intrinsic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn render(initial: impl IntoIterator<Item = Intrinsic>) -> (Source, BTreeSet<Intrinsic>) {
+        let mut intrinsics = initial.into_iter().collect();
+        let opts = TranspileOpts::default();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        (source, intrinsics)
+    }
+
+    #[test]
+    fn renders_only_requested_and_discovered_intrinsics() {
+        let (source, intrinsics) = render([Intrinsic::CoinFlip]);
+
+        assert_eq!(intrinsics, BTreeSet::from([Intrinsic::CoinFlip]));
+        assert!(source.contains("Math.random()"));
+        assert!(!source.contains("_debugLog"));
+        assert!(!source.contains("class RepTable"));
+    }
+
+    #[test]
+    fn discovers_transitive_dependencies_in_dependency_order() {
+        let transfer = Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow);
+        let table_flag = Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag);
+        let table_get = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
+        let table_remove = Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove);
+        let (source, intrinsics) = render([transfer]);
+
+        for dependency in [table_flag, table_get, table_remove] {
+            assert!(intrinsics.contains(&dependency));
+        }
+
+        let flag_position = source.find("const T_FLAG").unwrap();
+        let get_position = source.find("function rscTableGet").unwrap();
+        let remove_position = source.find("function rscTableRemove").unwrap();
+        let transfer_position = source.find("function resourceTransferBorrow").unwrap();
+        assert!(flag_position < get_position);
+        assert!(flag_position < remove_position);
+        assert!(get_position < transfer_position);
+        assert!(remove_position < transfer_position);
+    }
+
+    #[test]
+    fn self_dependencies_are_cycle_safe() {
+        let current_tasks = Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
+        let (source, intrinsics) = render([current_tasks]);
+
+        assert_eq!(intrinsics, BTreeSet::from([current_tasks]));
+        assert_eq!(
+            source.matches("const ASYNC_TASKS_BY_COMPONENT_IDX").count(),
+            1
+        );
+    }
 
     #[test]
     fn resource_transfer_borrow_checks_source_handle() {
@@ -1234,91 +1333,64 @@ pub struct RenderIntrinsicsArgs<'a> {
     pub(crate) determinism_profile: AsyncDeterminismProfile,
     /// Options provided when performing transpilation
     pub(crate) transpile_opts: &'a TranspileOpts,
+    /// Intrinsic dependencies discovered while rendering one intrinsic
+    #[builder(default)]
+    discovered_intrinsics: Mutex<BTreeSet<Intrinsic>>,
 }
 
-/// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 45] = [
-    Intrinsic::WebAssemblyRuntimeError,
-    Intrinsic::PromiseWithResolversPonyfill,
-    Intrinsic::SymbolDispose,
-    Intrinsic::SymbolAsyncIterator,
-    Intrinsic::SymbolIterator,
-    Intrinsic::DebugLog,
-    Intrinsic::GlobalAsyncDeterminism,
-    Intrinsic::GlobalComponentMemoryMap,
-    Intrinsic::GlobalCurrentTaskMeta,
-    Intrinsic::GetGlobalCurrentTaskMetaFn,
-    Intrinsic::SetGlobalCurrentTaskMetaFn,
-    Intrinsic::WithGlobalCurrentTaskMetaFn,
-    Intrinsic::WithGlobalCurrentTaskMetaFnAsync,
-    Intrinsic::ClearGlobalCurrentTaskMetaFn,
-    Intrinsic::SuspendingImportWrapperFn,
-    Intrinsic::LookupMemoriesForComponent,
-    Intrinsic::RegisterGlobalMemoryForComponent,
-    Intrinsic::RepTableClass,
-    Intrinsic::CoinFlip,
-    Intrinsic::ScopeId,
-    // Type checking helpers
-    Intrinsic::ConstantI32Min,
-    Intrinsic::ConstantI32Max,
-    Intrinsic::Conversion(ConversionIntrinsic::IsValidNumericPrimitive),
-    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-    Intrinsic::TypeCheckValidI32,
-    Intrinsic::TypeCheckAsyncFn,
-    // Resources
-    Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows),
-    // Async helpers
-    Intrinsic::AsyncFunctionCtor,
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
-    // Host helpers
-    Intrinsic::Host(HostIntrinsic::PrepareCall),
-    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
-    Intrinsic::Host(HostIntrinsic::SyncStartCall),
-    // Waitable helpers
-    Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
-    // Error context helpers
-    Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap),
-    // Context get/set are not used via trampolines but are
-    // `UnsafeIntrinsic`s, so they are mapped for any module that uses them
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet),
-    // Required for context.{get,set}
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-    Intrinsic::AsyncEventCodeEnum,
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-];
+impl RenderIntrinsicsArgs<'_> {
+    /// Retrieve an intrinsic's name and register it as a dependency of the
+    /// intrinsic currently being rendered.
+    pub fn require_intrinsic(&self, intrinsic: impl Into<Intrinsic>) -> &'static str {
+        let intrinsic = intrinsic.into();
+        self.discovered_intrinsics
+            .lock()
+            .expect("intrinsic dependency collector lock should not be poisoned")
+            .insert(intrinsic);
+        intrinsic.name()
+    }
+
+    fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {
+        std::mem::take(
+            &mut *self
+                .discovered_intrinsics
+                .lock()
+                .expect("intrinsic dependency collector lock should not be poisoned"),
+        )
+    }
+}
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
 /// intrinsic.
-pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+pub fn render_intrinsics(mut args: RenderIntrinsicsArgs) -> Source {
+    render_intrinsics_discovered(&mut args)
+}
+
+fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
+    let mut pending = args.intrinsics.clone();
+    let mut rendered = BTreeMap::new();
+    let mut dependencies = BTreeMap::new();
+
+    while let Some(intrinsic) = pending.pop_first() {
+        if rendered.contains_key(&intrinsic) {
+            continue;
+        }
+
+        debug_assert!(args.take_discovered_intrinsics().is_empty());
+        let mut source = Source::default();
+        intrinsic.render(&mut source, args);
+        let discovered = args.take_discovered_intrinsics();
+        for dependency in &discovered {
+            if !rendered.contains_key(dependency) {
+                pending.insert(*dependency);
+            }
+            args.intrinsics.insert(*dependency);
+        }
+        dependencies.insert(intrinsic, discovered);
+        rendered.insert(intrinsic, source);
+    }
+
     let mut output = Source::default();
-    let mut rendered_intrinsics = HashSet::new();
-
-    // Render some early intrinsics
-    for intrinsic in EARLY_INTRINSICS {
-        intrinsic.render(&mut output, &args);
-        rendered_intrinsics.insert(intrinsic.name());
-    }
-
-    // Add intrinsics to the list we must render
-    if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
-        || args.intrinsics.contains(&Intrinsic::GetErrorPayloadString)
-    {
-        args.intrinsics.insert(Intrinsic::HasOwnProperty);
-    }
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
-    {
-        args.intrinsics.insert(Intrinsic::IsLE);
-    }
-
     if args
         .intrinsics
         .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
@@ -1349,512 +1421,54 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         );
     }
 
-    if args.intrinsics.contains(&Intrinsic::Resource(
-        ResourceIntrinsic::ResourceTransferBorrow,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
-            &Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
-            &Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
-        ]);
-    } else if args.intrinsics.contains(&Intrinsic::Resource(
-        ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-    )) {
-        args.intrinsics.insert(Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTableCreateBorrow,
-        ));
+    let mut visiting = BTreeSet::new();
+    let mut emitted = BTreeSet::new();
+    for intrinsic in args.intrinsics.iter().copied() {
+        emit_intrinsic(
+            intrinsic,
+            &dependencies,
+            &rendered,
+            &mut visiting,
+            &mut emitted,
+            &mut output,
+        );
     }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::String(StringIntrinsic::Utf8EncodeAsync))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::IsLE,
-            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::String(StringIntrinsic::Utf16EncodeAsync))
-    {
-        args.intrinsics.extend([&Intrinsic::IsLE]);
-    }
-
-    // Attempting to perform a debug message hoist will require string encoding to memory
-    if args.intrinsics.contains(&Intrinsic::ErrCtx(
-        ErrCtxIntrinsic::ErrorContextDebugMessage,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::String(StringIntrinsic::Utf8Encode),
-            &Intrinsic::String(StringIntrinsic::Utf16Encode),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::ErrCtx(
-        ErrCtxIntrinsic::ErrorContextDebugMessage,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::TypeCheckValidI32,
-            &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
-            &Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError),
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::GetOrCreateAsyncState,
-    )) {
-        args.intrinsics.extend([&Intrinsic::RepTableClass]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
-            &Intrinsic::RepTableClass,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
-            &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Waitable(WaitableIntrinsic::RemoveWaitableSet)]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::GetOrCreateAsyncState,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
-            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::ComponentAsyncStateClass,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::WebAssemblyRuntimeError,
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatResult))
-        | args
-            .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
-        | args
-            .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatResult))
-    {
-        args.intrinsics
-            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatOption))
-    {
-        args.intrinsics
-            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU8),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU16),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStream))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::IsStreamLowerableObject),
-            &Intrinsic::SymbolResourceRep,
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ])
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::GenStreamHostInjectFn,
-    )) {
-        args.intrinsics.insert(Intrinsic::AsyncStream(
-            AsyncStreamIntrinsic::PendingValueQueueClass,
-        ));
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::IsStreamLowerableObject),
-            &Intrinsic::SymbolAsyncIterator,
-            &Intrinsic::SymbolIterator,
-            &Intrinsic::SymbolDispose,
-            &Intrinsic::PlatformReadableStreamClass,
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::IsStreamLowerableObject,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
-            &Intrinsic::SymbolAsyncIterator,
-            &Intrinsic::SymbolIterator,
-            &Intrinsic::PlatformReadableStreamClass,
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::IsFutureLowerableObject),
-            &Intrinsic::SymbolResourceRep,
-            &Intrinsic::GetErrorPayload,
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ])
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
-    {
-        args.intrinsics.extend([
-            Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8),
-            Intrinsic::String(StringIntrinsic::Utf8Encode),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16))
-    {
-        args.intrinsics.extend([
-            Intrinsic::String(StringIntrinsic::Utf16Encode),
-            Intrinsic::IsLE,
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
-    {
-        args.intrinsics.insert(Intrinsic::AsyncStream(
-            AsyncStreamIntrinsic::ExternalStreamClass,
-        ));
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::CreateNewCurrentTask,
-    )) || args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::StreamWritableEndClass,
-    )) || args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::StreamReadableEndClass,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamEndClass),
-            &Intrinsic::AsyncEventCodeEnum,
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::StreamNewFromLift,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
-            &Intrinsic::GlobalBufferManager,
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::ExternalStreamClass,
-    )) {
-        args.intrinsics.insert(Intrinsic::SymbolResourceRep);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::GlobalBufferManager,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
-            &Intrinsic::AsyncEventCodeEnum,
-        ]);
-    }
-
-    // Future read/write trampolines (`Trampoline::FutureRead`/`FutureWrite`)
-    // emit code that references the future end classes directly
-    // (e.g. `futureEnd instanceof FutureReadableEnd`, `FutureEnd.CopyState`),
-    // so the end classes must be emitted even when the component does not use
-    // `future.new` (i.e. `FutureNew` is absent). Without this, transpiled
-    // output for such components fails at runtime with
-    // `ReferenceError: FutureReadableEnd is not defined` on the first future
-    // read/write (see #1898).
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite))
-    {
-        args.intrinsics.insert(Intrinsic::AsyncFuture(
-            AsyncFutureIntrinsic::FutureWritableEndClass,
-        ));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead))
-    {
-        args.intrinsics.insert(Intrinsic::AsyncFuture(
-            AsyncFutureIntrinsic::FutureReadableEndClass,
-        ));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWritableEndClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureReadableEndClass),
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncFuture(
-        AsyncFutureIntrinsic::FutureNewFromLift,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
-            &Intrinsic::GlobalBufferManager,
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncFuture(
-        AsyncFutureIntrinsic::FutureWritableEndClass,
-    )) || args.intrinsics.contains(&Intrinsic::AsyncFuture(
-        AsyncFutureIntrinsic::FutureReadableEndClass,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass),
-            &Intrinsic::AsyncEventCodeEnum,
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::GlobalBufferManager) {
-        args.intrinsics.extend([&Intrinsic::BufferManagerClass]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::BufferManagerClass) {
-        args.intrinsics.extend([&Intrinsic::ManagedBufferClass]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
-    )) || args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
-            &Intrinsic::ClearGlobalCurrentTaskMetaFn,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::SymmetricSyncGuestCallStack),
-        ]);
-    }
-
-    for current_intrinsic in args.intrinsics.iter() {
-        // Skip already rendered intrinsics (i.e. the early intrinsics)
-        if rendered_intrinsics.contains(current_intrinsic.name()) {
-            continue;
-        }
-
-        current_intrinsic.render(&mut output, &args);
-    }
-
     output
+}
+
+fn emit_intrinsic(
+    intrinsic: Intrinsic,
+    dependencies: &BTreeMap<Intrinsic, BTreeSet<Intrinsic>>,
+    rendered: &BTreeMap<Intrinsic, Source>,
+    visiting: &mut BTreeSet<Intrinsic>,
+    emitted: &mut BTreeSet<Intrinsic>,
+    output: &mut Source,
+) {
+    if emitted.contains(&intrinsic) || !visiting.insert(intrinsic) {
+        return;
+    }
+
+    if let Some(intrinsic_dependencies) = dependencies.get(&intrinsic) {
+        for dependency in intrinsic_dependencies {
+            emit_intrinsic(
+                *dependency,
+                dependencies,
+                rendered,
+                visiting,
+                emitted,
+                output,
+            );
+        }
+    }
+
+    visiting.remove(&intrinsic);
+    if emitted.insert(intrinsic) {
+        output.push_str(
+            rendered
+                .get(&intrinsic)
+                .expect("intrinsic should have been rendered"),
+        );
+    }
 }
 
 impl Intrinsic {

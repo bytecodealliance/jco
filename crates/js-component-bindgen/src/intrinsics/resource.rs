@@ -67,11 +67,6 @@ pub enum ResourceIntrinsic {
 }
 
 impl ResourceIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -107,7 +102,7 @@ impl ResourceIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::CurResourceBorrows => output.push_str(
                 "
@@ -115,19 +110,19 @@ impl ResourceIntrinsic {
             ",
             ),
 
-            Self::ResourceTableFlag => output.push_str(
-                "
-                const T_FLAG = 1 << 30;
-            ",
-            ),
+            Self::ResourceTableFlag => {
+                let table_flag = self.name();
+                uwriteln!(output, "const {table_flag} = 1 << 30;");
+            }
 
             Self::ResourceTableCreateBorrow => {
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
                 uwriteln!(
                     output,
                     r#"
                       function rscTableCreateBorrow(table, rep, scopeId) {{
                           if (scopeId === undefined) {{ throw new Error("missing scopeId"); }}
-                          const free = table[0] & ~T_FLAG;
+                          const free = table[0] & ~{table_flag};
                           if (free === 0) {{
                               table.push(scopeId);
                               table.push(rep);
@@ -142,38 +137,46 @@ impl ResourceIntrinsic {
                 );
             }
 
-            Self::ResourceTableCreateOwn => output.push_str(
-                "
-                function rscTableCreateOwn(table, rep) {
-                    const free = table[0] & ~T_FLAG;
+            Self::ResourceTableCreateOwn => {
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                uwriteln!(
+                    output,
+                    r#"
+                function rscTableCreateOwn(table, rep) {{
+                    const free = table[0] & ~{table_flag};
                     table._createdReps.add(rep);
-                    if (free === 0) {
+                    if (free === 0) {{
                         table.push(0);
-                        table.push(rep | T_FLAG);
+                        table.push(rep | {table_flag});
                         return (table.length >> 1) - 1;
-                    }
+                    }}
                     table[0] = table[free << 1];
                     table[free << 1] = 0;
-                    table[(free << 1) + 1] = rep | T_FLAG;
+                    table[(free << 1) + 1] = rep | {table_flag};
                     return free;
-                }
-            ",
-            ),
+                }}
+            "#
+                )
+            }
 
-            Self::ResourceTableGet => output.push_str(
-                "
-                function rscTableGet(table, handle) {
+            Self::ResourceTableGet => {
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                uwriteln!(
+                    output,
+                    r#"
+                function rscTableGet(table, handle) {{
                     const scope = table[handle << 1];
                     const val = table[(handle << 1) + 1];
-                    const own = (val & T_FLAG) !== 0;
-                    const rep = val & ~T_FLAG;
-                    if (rep === 0 || (scope & T_FLAG) !== 0) {
+                    const own = (val & {table_flag}) !== 0;
+                    const rep = val & ~{table_flag};
+                    if (rep === 0 || (scope & {table_flag}) !== 0) {{
                         throw new TypeError('Invalid handle');
-                    }
-                    return { rep, scope, own };
-                }
-            ",
-            ),
+                    }}
+                    return {{ rep, scope, own }};
+                }}
+            "#
+                )
+            }
 
             Self::ResourceTableEnsureBorrowDrop => output.push_str(
                 "
@@ -185,31 +188,37 @@ impl ResourceIntrinsic {
             ",
             ),
 
-            Self::ResourceTableRemove => output.push_str(
-                r#"
-                function rscTableRemove(table, handle) {
+            Self::ResourceTableRemove => {
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                uwriteln!(
+                    output,
+                    r#"
+                function rscTableRemove(table, handle) {{
                     const scope = table[handle << 1];
                     const val = table[(handle << 1) + 1];
-                    const own = (val & T_FLAG) !== 0;
-                    const rep = val & ~T_FLAG;
-                    if (val === 0 || (scope & T_FLAG) !== 0) {
+                    const own = (val & {table_flag}) !== 0;
+                    const rep = val & ~{table_flag};
+                    if (val === 0 || (scope & {table_flag}) !== 0) {{
                         throw new TypeError("Invalid handle");
-                    }
-                    table[handle << 1] = table[0] | T_FLAG;
-                    table[0] = handle | T_FLAG;
-                    return { rep, scope, own };
-                }
-            "#,
-            ),
+                    }}
+                    table[handle << 1] = table[0] | {table_flag};
+                    table[0] = handle | {table_flag};
+                    return {{ rep, scope, own }};
+                }}
+            "#
+                )
+            }
 
             Self::ResourceTransferBorrow => {
                 let resource_transfer_borrow_fn = self.name();
-                let handle_tables = Intrinsic::HandleTables.name();
-                let resource_borrows = Self::ResourceCallBorrows.name();
-                let rsc_table_get = Self::ResourceTableGet.name();
-                let rsc_table_remove = Self::ResourceTableRemove.name();
-                let rsc_table_create_borrow = Self::ResourceTableCreateBorrow.name();
-                let scope_id = Intrinsic::ScopeId.name();
+                let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
+                let resource_borrows = render_args.require_intrinsic(Self::ResourceCallBorrows);
+                let rsc_table_get = render_args.require_intrinsic(Self::ResourceTableGet);
+                let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
+                let rsc_table_create_borrow =
+                    render_args.require_intrinsic(Self::ResourceTableCreateBorrow);
+                let scope_id = render_args.require_intrinsic(Intrinsic::ScopeId);
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
 
                 uwriteln!(
                     output,
@@ -221,7 +230,7 @@ impl ResourceIntrinsic {
 
                         let toTable = {handle_tables}[toTid];
                         if (!toTable) {{
-                            {handle_tables}[toTid] = [T_FLAG, 0];
+                            {handle_tables}[toTid] = [{table_flag}, 0];
                             toTable = {handle_tables}[toTid];
                             toTable._createdReps = new Set();
                         }}
@@ -239,19 +248,21 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTransferBorrowValidLifting => {
-                let handle_tables = Intrinsic::HandleTables.name();
-                let rsc_table_remove = Self::ResourceTableRemove.name();
-                let rsc_table_create_borrow = Self::ResourceTableCreateBorrow.name();
-                let scope_id = Intrinsic::ScopeId.name();
+                let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
+                let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
+                let rsc_table_create_borrow =
+                    render_args.require_intrinsic(Self::ResourceTableCreateBorrow);
+                let scope_id = render_args.require_intrinsic(Intrinsic::ScopeId);
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
                 output.push_str(&format!(r#"
                     function resourceTransferBorrowValidLifting(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const isOwn = (fromTable[(handle << 1) + 1] & T_FLAG) !== 0;
-                        const rep = isOwn ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
+                        const isOwn = (fromTable[(handle << 1) + 1] & {table_flag}) !== 0;
+                        const rep = isOwn ? fromTable[(handle << 1) + 1] & ~{table_flag} : {rsc_table_remove}(fromTable, handle).rep;
 
                         let toTable = {handle_tables}[toTid];
                         if (!toTable) {{
-                            {handle_tables}[toTid] = [T_FLAG, 0];
+                            {handle_tables}[toTid] = [{table_flag}, 0];
                             toTable = {handle_tables}[toTid];
                             toTable._createdReps = new Set();
                         }}
@@ -266,9 +277,11 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTransferOwn => {
-                let handle_tables = Intrinsic::HandleTables.name();
-                let rsc_table_remove = Self::ResourceTableRemove.name();
-                let rsc_table_create_own = Self::ResourceTableCreateOwn.name();
+                let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
+                let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
+                let rsc_table_create_own =
+                    render_args.require_intrinsic(Self::ResourceTableCreateOwn);
+                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
                 output.push_str(&format!(
                     r#"
                     function resourceTransferOwn(handle, fromTid, toTid) {{
@@ -276,7 +289,7 @@ impl ResourceIntrinsic {
 
                         let toTable = {handle_tables}[toTid];
                         if (!toTable) {{
-                            {handle_tables}[toTid] = [T_FLAG, 0];
+                            {handle_tables}[toTid] = [{table_flag}, 0];
                             toTable = {handle_tables}[toTid];
                             toTable._createdReps = new Set();
                         }}

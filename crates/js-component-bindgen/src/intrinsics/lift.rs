@@ -207,11 +207,6 @@ pub enum LiftIntrinsic {
 }
 
 impl LiftIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -256,7 +251,7 @@ impl LiftIntrinsic {
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::LiftFlatBool => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_bool_fn = self.name();
 
                 uwriteln!(
@@ -289,7 +284,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatS8 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_s8_fn = self.name();
 
                 uwriteln!(
@@ -321,7 +316,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatU8 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_u8_fn = self.name();
 
                 uwriteln!(
@@ -354,7 +349,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatS16 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_s16_fn = self.name();
 
                 uwriteln!(
@@ -386,7 +381,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatU16 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_u16_fn = self.name();
 
                 uwriteln!(
@@ -422,7 +417,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatS32 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_s32_fn = self.name();
 
                 uwriteln!(
@@ -454,7 +449,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatU32 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_u32_fn = self.name();
 
                 uwriteln!(
@@ -486,7 +481,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatS64 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_s64_fn = self.name();
 
                 uwriteln!(
@@ -520,7 +515,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatU64 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_u64_fn = self.name();
 
                 uwriteln!(
@@ -554,7 +549,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatFloat32 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_f32_fn = self.name();
 
                 uwriteln!(
@@ -588,7 +583,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatFloat64 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_f64_fn = self.name();
                 uwriteln!(
                     output,
@@ -622,8 +617,9 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatChar => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let i32_to_char_fn = Intrinsic::Conversion(ConversionIntrinsic::I32ToChar).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let i32_to_char_fn = render_args
+                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToChar));
                 let lift_flat_char_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_char_fn}(ctx) {{
@@ -652,8 +648,10 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStringAny => {
                 let lift_flat_string_any_fn = self.name();
-                let lift_flat_string_utf8_fn = Self::LiftFlatStringUtf8.name();
-                let lift_flat_string_utf16_fn = Self::LiftFlatStringUtf16.name();
+                let lift_flat_string_utf8_fn =
+                    render_args.require_intrinsic(Self::LiftFlatStringUtf8);
+                let lift_flat_string_utf16_fn =
+                    render_args.require_intrinsic(Self::LiftFlatStringUtf16);
                 output.push_str(&format!(r#"
                     function {lift_flat_string_any_fn}(ctx) {{
                         switch (ctx.stringEncoding) {{
@@ -669,8 +667,9 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatStringUtf8 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let decoder = Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let decoder = render_args
+                    .require_intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
                 let lift_flat_string_utf8_fn = self.name();
 
                 output.push_str(&format!(r#"
@@ -708,8 +707,9 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatStringUtf16 => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let decoder = Intrinsic::String(StringIntrinsic::Utf16Decoder).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let decoder =
+                    render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder));
                 let lift_flat_string_utf16_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_string_utf16_fn}(ctx) {{
@@ -741,7 +741,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatRecord => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_record_fn = self.name();
                 output.push_str(&format!(
                     r#"
@@ -800,11 +800,11 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatVariant => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_variant_fn = self.name();
-                let lift_u8 = Self::LiftFlatU8.name();
-                let lift_u16 = Self::LiftFlatU16.name();
-                let lift_u32 = Self::LiftFlatU32.name();
+                let lift_u8 = render_args.require_intrinsic(Self::LiftFlatU8);
+                let lift_u16 = render_args.require_intrinsic(Self::LiftFlatU16);
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
 
                 output.push_str(&format!(r#"
                     const {lift_flat_variant_fn}Scratch = new DataView(new ArrayBuffer(8));
@@ -935,9 +935,9 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatList => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_list_fn = self.name();
-                let lift_u32 = Self::LiftFlatU32.name();
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
 
                 output.push_str(&format!(r#"
                     function {lift_flat_list_fn}(meta) {{
@@ -1034,9 +1034,9 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatMap => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_map_fn = self.name();
-                let lift_u32 = Self::LiftFlatU32.name();
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
 
                 output.push_str(&format!(r#"
                     function {lift_flat_map_fn}(meta) {{
@@ -1093,7 +1093,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatTuple => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_tuple_fn = self.name();
                 output.push_str(&format!(
                     "
@@ -1152,8 +1152,8 @@ impl LiftIntrinsic {
             // NOTE: enums are returned as the string tag that would normally
             // e.g. `{tag: 'member0' }` -> `'member0'`
             Self::LiftFlatEnum => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lift_variant = Self::LiftFlatVariant.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let lift_variant = render_args.require_intrinsic(Self::LiftFlatVariant);
                 let lift_flat_enum_fn = self.name();
                 output.push_str(&format!(
                     r#"
@@ -1172,8 +1172,8 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatOption => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lift_variant = Self::LiftFlatVariant.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let lift_variant = render_args.require_intrinsic(Self::LiftFlatVariant);
                 let lift_flat_option_fn = self.name();
                 output.push_str(&format!(
                     r#"
@@ -1189,8 +1189,8 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatResult => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lift_variant = Self::LiftFlatVariant.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let lift_variant = render_args.require_intrinsic(Self::LiftFlatVariant);
                 let lift_flat_result_fn = self.name();
                 output.push_str(&format!(
                     r#"
@@ -1206,11 +1206,11 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatFlags => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_flags_fn = self.name();
-                let lift_u8 = Self::LiftFlatU8.name();
-                let lift_u16 = Self::LiftFlatU16.name();
-                let lift_u32 = Self::LiftFlatU32.name();
+                let lift_u8 = render_args.require_intrinsic(Self::LiftFlatU8);
+                let lift_u16 = render_args.require_intrinsic(Self::LiftFlatU16);
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
                 let init_value = if render_args.transpile_opts.flags_as_bigint {
                     "null"
                 } else {
@@ -1268,9 +1268,9 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatOwn => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_own_fn = self.name();
-                let lift_flat_u32_fn = Self::LiftFlatU32.name();
+                let lift_flat_u32_fn = render_args.require_intrinsic(Self::LiftFlatU32);
 
                 // NOTE: meta carries the resource class behind a thunk
                 // (`classNameFn`), never as a direct reference: lift metadata
@@ -1300,7 +1300,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatBorrow => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_borrow_fn = self.name();
                 uwriteln!(
                     output,
@@ -1314,13 +1314,16 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatFuture => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_future_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let global_future_table_map = AsyncFutureIntrinsic::GlobalFutureTableMap.name();
-                let lift_u32 = Self::LiftFlatU32.name();
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let global_future_table_map =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureTableMap);
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 uwriteln!(
                     output,
@@ -1376,15 +1379,19 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatStream => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let external_stream_class =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let external_stream_class = render_args.require_intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::ExternalStreamClass,
+                ));
                 let lift_flat_stream_fn = self.name();
-                let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
-                let lift_u32 = Self::LiftFlatU32.name();
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                let global_stream_table_map =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
                     function {lift_flat_stream_fn}(meta) {{
@@ -1457,12 +1464,15 @@ impl LiftIntrinsic {
             // a component-global "rep" (i.e. the component model represenation).
             //
             Self::LiftFlatErrorContext => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_err_ctx_local_table_fn = ErrCtxIntrinsic::GetLocalTable.name();
-                let err_ctx_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_err_ctx_local_table_fn =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::GetLocalTable);
+                let err_ctx_ref_count_add_fn =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::GlobalRefCountAdd);
                 let lift_flat_error_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 output.push_str(&format!(r#"
                     function {lift_flat_error_fn}(errCtxTableIdx, ctx) {{

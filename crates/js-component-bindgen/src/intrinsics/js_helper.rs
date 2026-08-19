@@ -1,9 +1,6 @@
 //! Intrinsics that represent helpers that should be used from JS code
 
-use crate::{
-    intrinsics::{Intrinsic, RenderIntrinsicsArgs},
-    source::Source,
-};
+use crate::{intrinsics::RenderIntrinsicsArgs, source::Source};
 
 /// This enum contains intrinsics that function as JS helpers
 ///
@@ -19,11 +16,6 @@ pub enum JsHelperIntrinsic {
 }
 
 impl JsHelperIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         ["emptyFunc", "dataView"]

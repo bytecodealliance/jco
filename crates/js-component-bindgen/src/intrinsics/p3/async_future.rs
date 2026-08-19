@@ -221,11 +221,6 @@ pub enum AsyncFutureIntrinsic {
 }
 
 impl AsyncFutureIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -278,11 +273,11 @@ impl AsyncFutureIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::GlobalFutureMap => {
-                let global_future_map = Self::GlobalFutureMap.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
+                let global_future_map = render_args.require_intrinsic(Self::GlobalFutureMap);
+                let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
                 output.push_str(&format!(
                     r#"
                     const {global_future_map} = new {rep_table_class}({{ target: 'global future map' }});
@@ -362,7 +357,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::GlobalFutureTableMap => {
-                let global_future_table_map = Self::GlobalFutureTableMap.name();
+                let global_future_table_map =
+                    render_args.require_intrinsic(Self::GlobalFutureTableMap);
                 output.push_str(&format!(
                     r#"
                     const {global_future_table_map} = {{}};
@@ -382,11 +378,13 @@ impl AsyncFutureIntrinsic {
             // host future will be used to often give away the *read* end.
             //
             Self::HostFutureClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let host_future_class_name = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                     r#"
@@ -446,8 +444,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureEndClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let future_end_class = Self::FutureEndClass.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
 
                 uwriteln!(
                     output,
@@ -580,18 +578,22 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureReadableEndClass | Self::FutureWritableEndClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let (class_name, _future_var_name, _js_future_var_type) = match self {
                     Self::FutureReadableEndClass => (self.name(), "promise", "Promise"),
                     Self::FutureWritableEndClass => (self.name(), "resolve", "Function"),
                     _ => unreachable!(),
                 };
-                let future_end_class = Self::FutureEndClass.name();
-                let future_value_class = AsyncFutureIntrinsic::FutureValueClass.name();
-                let global_buffer_mgr = Intrinsic::GlobalBufferManager.name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
+                let future_value_class =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
+                let global_buffer_mgr =
+                    render_args.require_intrinsic(Intrinsic::GlobalBufferManager);
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 // Generate the inner read/write logic necessary for eitther kind of write end
                 // this will be called internally (usually during guest reads), via places like
@@ -981,7 +983,8 @@ impl AsyncFutureIntrinsic {
                 let drop_check = match self {
                     Self::FutureReadableEndClass => "".into(),
                     Self::FutureWritableEndClass => {
-                        let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                        let runtime_error_class =
+                            render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                         format!(
                             r#"
                               if (this.isWritable() && !this.isDoneState()) {{
@@ -1077,10 +1080,11 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::InternalFutureClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let internal_future_class = Self::InternalFutureClass.name();
-                let write_end_class = Self::FutureWritableEndClass.name();
-                let read_end_class = Self::FutureReadableEndClass.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let internal_future_class =
+                    render_args.require_intrinsic(Self::InternalFutureClass);
+                let write_end_class = render_args.require_intrinsic(Self::FutureWritableEndClass);
+                let read_end_class = render_args.require_intrinsic(Self::FutureReadableEndClass);
 
                 uwriteln!(
                     output,
@@ -1154,12 +1158,13 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureNew => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let future_new_fn = Self::FutureNew.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let future_new_fn = render_args.require_intrinsic(Self::FutureNew);
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 uwriteln!(
                     output,
@@ -1191,12 +1196,14 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureNewFromLift => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_new_from_lift_fn = self.name();
-                let global_future_map =
-                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap).name();
-                let host_future_class =
-                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass).name();
+                let global_future_map = render_args.require_intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::GlobalFutureMap,
+                ));
+                let host_future_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::HostFutureClass,
+                ));
 
                 output.push_str(&format!(
                     r#"
@@ -1229,22 +1236,30 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureWrite | Self::FutureRead => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let async_blocked_const =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let event_code_enum = render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::AsyncBlockedConstant,
+                ));
 
                 let future_op_fn = self.name();
                 let (guest_op_fn, future_end_class) = match self {
-                    Self::FutureWrite => ("guestWrite", Self::FutureWritableEndClass.name()),
-                    Self::FutureRead => ("guestRead", Self::FutureReadableEndClass.name()),
+                    Self::FutureWrite => (
+                        "guestWrite",
+                        render_args.require_intrinsic(Self::FutureWritableEndClass),
+                    ),
+                    Self::FutureRead => (
+                        "guestRead",
+                        render_args.require_intrinsic(Self::FutureReadableEndClass),
+                    ),
                     _ => unreachable!(),
                 };
-                let future_end_base_class = Self::FutureEndClass.name();
+                let future_end_base_class = render_args.require_intrinsic(Self::FutureEndClass);
 
                 let event_code = match self {
                     Self::FutureWrite => format!("{event_code_enum}.FUTURE_WRITE"),
@@ -1334,19 +1349,22 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureCancelRead | Self::FutureCancelWrite => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let is_cancel_write = matches!(self, Self::FutureCancelWrite);
                 let future_end_class = if is_cancel_write {
-                    Self::FutureWritableEndClass.name()
+                    render_args.require_intrinsic(Self::FutureWritableEndClass)
                 } else {
-                    Self::FutureReadableEndClass.name()
+                    render_args.require_intrinsic(Self::FutureReadableEndClass)
                 };
                 let future_cancel_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let async_blocked_const =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::AsyncBlockedConstant,
+                ));
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
 
                 output.push_str(&format!(r#"
                     async function {future_cancel_fn}(
@@ -1400,16 +1418,17 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureDropReadable | Self::FutureDropWritable => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_drop_fn = self.name();
                 let is_writable = matches!(self, Self::FutureDropWritable);
                 let future_end_class = if is_writable {
-                    Self::FutureWritableEndClass.name()
+                    render_args.require_intrinsic(Self::FutureWritableEndClass)
                 } else {
-                    Self::FutureReadableEndClass.name()
+                    render_args.require_intrinsic(Self::FutureReadableEndClass)
                 };
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 output.push_str(&format!(r#"
                     function {future_drop_fn}(ctx, futureEndWaitableIdx) {{
                         {debug_log_fn}('[{future_drop_fn}()] args', {{ ctx }});
@@ -1432,11 +1451,13 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureTransfer => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_transfer_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let global_future_table_map = Self::GlobalFutureTableMap.name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let global_future_table_map =
+                    render_args.require_intrinsic(Self::GlobalFutureTableMap);
 
                 output.push_str(&format!(
                     r#"
@@ -1495,10 +1516,10 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::GenFutureHostInjectFn => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let gen_host_inject_fn = self.name();
-                let nested_future_symbol = Self::NestedFutureSymbol.name();
-                let get_error_payload = Intrinsic::GetErrorPayload.name();
+                let nested_future_symbol = render_args.require_intrinsic(Self::NestedFutureSymbol);
+                let get_error_payload = render_args.require_intrinsic(Intrinsic::GetErrorPayload);
 
                 uwriteln!(
                     output,

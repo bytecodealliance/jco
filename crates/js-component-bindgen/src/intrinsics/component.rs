@@ -58,11 +58,6 @@ pub enum ComponentIntrinsic {
 }
 
 impl ComponentIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -81,17 +76,18 @@ impl ComponentIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::GlobalAsyncStateMap => {
-                let var_name = Self::GlobalAsyncStateMap.name();
+                let var_name = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 uwriteln!(output, r#"const {var_name} = new Map();"#);
             }
 
             Self::BackpressureInc => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let backpressure_inc_fn = Self::BackpressureInc.name();
-                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let backpressure_inc_fn = render_args.require_intrinsic(Self::BackpressureInc);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(Self::GetOrCreateAsyncState);
                 output.push_str(&format!(
                     r#"
                     function {backpressure_inc_fn}(componentIdx) {{
@@ -106,9 +102,10 @@ impl ComponentIntrinsic {
             }
 
             Self::BackpressureDec => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let backpressure_dec_fn = Self::BackpressureDec.name();
-                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let backpressure_dec_fn = render_args.require_intrinsic(Self::BackpressureDec);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(Self::GetOrCreateAsyncState);
                 output.push_str(&format!(
                     "
                     function {backpressure_dec_fn}(componentIdx) {{
@@ -123,20 +120,30 @@ impl ComponentIntrinsic {
 
             Self::ComponentAsyncStateClass => {
                 let component_async_state_class = self.name();
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
-                let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
-                let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
-                let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
-                let internal_future_class = AsyncFutureIntrinsic::InternalFutureClass.name();
-                let global_future_map = AsyncFutureIntrinsic::GlobalFutureMap.name();
-                let global_future_table_map = AsyncFutureIntrinsic::GlobalFutureTableMap.name();
-                let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
-                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
+                let internal_stream_class =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::InternalStreamClass);
+                let global_stream_map =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamMap);
+                let global_stream_table_map =
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
+                let internal_future_class =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::InternalFutureClass);
+                let global_future_map =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureMap);
+                let global_future_table_map =
+                    render_args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureTableMap);
+                let waitable_class =
+                    render_args.require_intrinsic(WaitableIntrinsic::WaitableClass);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(Self::GetOrCreateAsyncState);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let stream_readable_end_class =
-                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass).name();
-                let runtime_error_class = Intrinsic::WebAssemblyRuntimeError.name();
+                    render_args.require_intrinsic(AsyncStreamIntrinsic::StreamReadableEndClass);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                     r#"
@@ -970,9 +977,10 @@ impl ComponentIntrinsic {
             }
 
             Self::GetOrCreateAsyncState => {
-                let get_state_fn = Self::GetOrCreateAsyncState.name();
-                let async_state_map = Self::GlobalAsyncStateMap.name();
-                let component_async_state_class = Self::ComponentAsyncStateClass.name();
+                let get_state_fn = render_args.require_intrinsic(Self::GetOrCreateAsyncState);
+                let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
+                let component_async_state_class =
+                    render_args.require_intrinsic(Self::ComponentAsyncStateClass);
                 output.push_str(&format!(
                     r#"
                     function {get_state_fn}(componentIdx, init) {{
@@ -987,9 +995,10 @@ impl ComponentIntrinsic {
             }
 
             Self::ComponentStateSetAllError => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let async_state_map = Self::GlobalAsyncStateMap.name();
-                let component_state_set_all_error_fn = Self::ComponentStateSetAllError.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
+                let component_state_set_all_error_fn =
+                    render_args.require_intrinsic(Self::ComponentStateSetAllError);
                 output.push_str(&format!(
                     r#"
                     function {component_state_set_all_error_fn}() {{

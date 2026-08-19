@@ -1,6 +1,6 @@
 //! Intrinsics that represent helpers that enable WebIDL integration
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::source::Source;
 
 /// This enum contains intrinsics that enable WebIDL
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -9,11 +9,6 @@ pub enum WebIdlIntrinsic {
 }
 
 impl WebIdlIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         ["globalThisIdlProxy"]

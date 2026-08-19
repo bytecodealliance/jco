@@ -31,11 +31,6 @@ pub enum StringIntrinsic {
 }
 
 impl StringIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve all global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -67,13 +62,13 @@ impl StringIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         let name = self.name();
         match self {
             Self::Utf16Decoder => uwriteln!(output, "const {name} = new TextDecoder('utf-16');"),
 
             Self::Utf16Encode | Self::Utf16EncodeAsync => {
-                let is_le = Intrinsic::IsLE.name();
+                let is_le = render_args.require_intrinsic(Intrinsic::IsLE);
 
                 let (fn_preamble, realloc_call) = match self {
                     Self::Utf16Encode => ("", "realloc"),
@@ -106,7 +101,7 @@ impl StringIntrinsic {
             Self::GlobalTextEncoderUtf8 => uwriteln!(output, "const {name} = new TextEncoder();"),
 
             Self::Utf8Encode | Self::Utf8EncodeAsync => {
-                let encoder = Self::GlobalTextEncoderUtf8.name();
+                let encoder = render_args.require_intrinsic(Self::GlobalTextEncoderUtf8);
                 let (fn_preamble, realloc_call) = match self {
                     Self::Utf8Encode => ("", "realloc"),
                     Self::Utf8EncodeAsync => ("async ", "await realloc"),

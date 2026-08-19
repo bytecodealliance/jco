@@ -264,11 +264,6 @@ pub enum AsyncTaskIntrinsic {
 }
 
 impl AsyncTaskIntrinsic {
-    /// Retrieve dependencies for this intrinsic
-    pub fn deps() -> &'static [&'static Intrinsic] {
-        &[]
-    }
-
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -330,7 +325,7 @@ impl AsyncTaskIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::CurrentTaskMayBlock => {
                 let var_name = self.name();
@@ -343,7 +338,7 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::GlobalAsyncCurrentTaskMap => {
-                let var_name = Self::GlobalAsyncCurrentTaskMap.name();
+                let var_name = render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskMap);
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
 
@@ -356,16 +351,17 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::AsyncBlockedConstant => {
-                let name = Self::AsyncBlockedConstant.name();
+                let name = render_args.require_intrinsic(Self::AsyncBlockedConstant);
                 output.push_str(&format!("const {name} = 0xFFFF_FFFF;"));
             }
 
             Self::ContextSet => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let context_set_fn = Self::ContextSet.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let context_set_fn = render_args.require_intrinsic(Self::ContextSet);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let type_check_i32 = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 uwriteln!(
                     output,
@@ -404,10 +400,11 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::ContextGet => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let context_get_fn = Self::ContextGet.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let context_get_fn = render_args.require_intrinsic(Self::ContextGet);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 uwriteln!(
                     output,
@@ -446,10 +443,11 @@ impl AsyncTaskIntrinsic {
 
             // Equivalent of `task.return`
             Self::TaskReturn => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let task_return_fn = Self::TaskReturn.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let task_return_fn = render_args.require_intrinsic(Self::TaskReturn);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
@@ -548,10 +546,11 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::SubtaskDrop => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let subtask_drop_fn = Self::SubtaskDrop.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let subtask_drop_fn = render_args.require_intrinsic(Self::SubtaskDrop);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 uwriteln!(
                     output,
                     r#"
@@ -571,10 +570,11 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::Yield => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let yield_fn = self.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 output.push_str(&format!(
                     "
@@ -599,13 +599,15 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::SubtaskCancel => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let subtask_cancel_fn = Self::SubtaskCancel.name();
-                let subtask_class = Self::AsyncSubtaskClass.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let subtask_cancel_fn = render_args.require_intrinsic(Self::SubtaskCancel);
+                let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 // Implements `canon subtask.cancel` -- the *supertask*-side request to
                 // cancel a pending subtask (in contrast to `canon task.cancel`, which is
@@ -665,12 +667,14 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::TaskCancel => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let task_cancel_fn = Self::TaskCancel.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let task_cancel_fn = render_args.require_intrinsic(Self::TaskCancel);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 output.push_str(&format!("
                     function {task_cancel_fn}(componentIdx) {{
@@ -697,11 +701,14 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::CreateNewCurrentTask => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let task_class = Self::AsyncTaskClass.name();
-                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
-                let task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
-                let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let task_class = render_args.require_intrinsic(Self::AsyncTaskClass);
+                let global_task_map =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskMap);
+                let task_id_globals =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskIds);
+                let component_idx_globals =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentComponentIdxs);
 
                 output.push_str(&format!(
                     r#"
@@ -767,9 +774,10 @@ impl AsyncTaskIntrinsic {
 
             // Debug log for this is disabled since it is fairly noisy
             Self::GetCurrentTask => {
-                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
-                let current_component_idx_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
+                let global_task_map =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskMap);
+                let current_component_idx_globals = render_args
+                    .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
                 output.push_str(&format!(
                     r#"
                     function {fn_name}(componentIdx, taskID) {{
@@ -798,11 +806,14 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::ClearCurrentTask => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
-                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
-                let task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
-                let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
+                let global_task_map =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskMap);
+                let task_id_globals =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskIds);
+                let component_idx_globals =
+                    render_args.require_intrinsic(Self::GlobalAsyncCurrentComponentIdxs);
 
                 output.push_str(&format!(
                     r#"
@@ -842,22 +853,27 @@ impl AsyncTaskIntrinsic {
             // NOTE: since threads are not yet supported, places that would have called out to threads instead run
             // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let task_class = Self::AsyncTaskClass.name();
-                let subtask_class = Self::AsyncSubtaskClass.name();
-                let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
-                let coin_flip_fn = Intrinsic::CoinFlip.name();
-                let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
-                let clear_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let event_code_enum = render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let task_class = render_args.require_intrinsic(Self::AsyncTaskClass);
+                let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
+                let global_async_determinism =
+                    render_args.require_intrinsic(Intrinsic::GlobalAsyncDeterminism);
+                let coin_flip_fn = render_args.require_intrinsic(Intrinsic::CoinFlip);
+                let waitable_class = render_args
+                    .require_intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableClass));
+                let clear_current_task_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask));
                 let with_global_current_task_meta_async_fn =
-                    Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
-                let future_value_class =
-                    Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass).name();
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
+                let future_value_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureValueClass,
+                ));
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -1616,11 +1632,13 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::AsyncSubtaskClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let subtask_class = Self::AsyncSubtaskClass.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let lookup_memories_for_component = Intrinsic::LookupMemoriesForComponent.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let lookup_memories_for_component =
+                    render_args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
 
                 output.push_str(&format!(r#"
                     class {subtask_class} {{
@@ -2034,8 +2052,9 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::UnpackCallbackResult => {
-                let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
-                let i32_typecheck_fn = Intrinsic::TypeCheckValidI32.name();
+                let unpack_callback_result_fn =
+                    render_args.require_intrinsic(Self::UnpackCallbackResult);
+                let i32_typecheck_fn = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
                 output.push_str(&format!("
                     function {unpack_callback_result_fn}(result) {{
                         if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
@@ -2053,15 +2072,18 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::DriverLoop => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let driver_loop_fn = Self::DriverLoop.name();
-                let i32_typecheck = Intrinsic::TypeCheckValidI32.name();
-                let to_int32_fn = Intrinsic::Conversion(ConversionIntrinsic::ToInt32).name();
-                let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let waitable_set_class =
-                    Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass).name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let driver_loop_fn = render_args.require_intrinsic(Self::DriverLoop);
+                let i32_typecheck = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
+                let to_int32_fn = render_args
+                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
+                let unpack_callback_result_fn =
+                    render_args.require_intrinsic(Self::UnpackCallbackResult);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let waitable_set_class = render_args
+                    .require_intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass));
 
                 output.push_str(&format!(r#"
                     async function {driver_loop_fn}(args) {{
@@ -2274,14 +2296,18 @@ impl AsyncTaskIntrinsic {
             // similar to PrepareCall/AsyncStartCall in guest->guest async lowered import calls.
             //
             Self::LowerImport => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lower_import_fn = Self::LowerImport.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let lower_import_fn = render_args.require_intrinsic(Self::LowerImport);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
 
                 output.push_str(&format!(
                     r#"
@@ -2515,18 +2541,25 @@ impl AsyncTaskIntrinsic {
             // TODO(breaking): remove when manually specifying async imports/expors is removed.
             //
             Self::LowerImportBackwardsCompat => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lower_import_backwards_compat_fn = Self::LowerImportBackwardsCompat.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let create_new_current_task_fn = Self::CreateNewCurrentTask.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
-                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let lower_import_backwards_compat_fn =
+                    render_args.require_intrinsic(Self::LowerImportBackwardsCompat);
+                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let create_new_current_task_fn =
+                    render_args.require_intrinsic(Self::CreateNewCurrentTask);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let get_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let set_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
                 let clear_global_current_task_meta_fn =
-                    Intrinsic::ClearGlobalCurrentTaskMetaFn.name();
-                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+                    render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
 
                 output.push_str(&format!(
                     r#"
@@ -2776,16 +2809,20 @@ impl AsyncTaskIntrinsic {
             // the availability (unlock) of component instances that they run on.
             //
             Self::EnterSymmetricSyncGuestCall => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let enter_symmetric_sync_guest_call_fn = self.name();
-                let get_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let create_new_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
-                let symmetric_sync_guest_call_stack = Self::SymmetricSyncGuestCallStack.name();
+                let get_current_task_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let create_new_current_task_fn = render_args.require_intrinsic(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask),
+                );
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let set_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                let symmetric_sync_guest_call_stack =
+                    render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
 
                 // TODO: find a way to get the callee function/export name for the executing symmetric call,
                 // at present we only have the current executing task which is far outside
@@ -2872,15 +2909,17 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::ExitSymmetricSyncGuestCall => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let exit_symmetric_sync_guest_call_fn = self.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let get_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let get_current_task_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let clear_global_current_task_meta_fn =
-                    Intrinsic::ClearGlobalCurrentTaskMetaFn.name();
-                let symmetric_sync_guest_call_stack = Self::SymmetricSyncGuestCallStack.name();
+                    render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
+                let symmetric_sync_guest_call_stack =
+                    render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
 
                 // NOTE: we need to end the task (and clear task machinery/set relevant state)
                 // for sync->sync guest calls here because normal task machinery does not work
