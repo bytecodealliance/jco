@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFi
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 
 import { typesComponent } from "./types.js";
+import { copyBuiltinWit, resolveBuiltinWit } from "./new/builtin-wit.js";
 import { declarationModel, validateComponentSource } from "./new/declarations.js";
 import { packageManagerAdapter } from "./new/package-manager.js";
 import { renderComponent, renderComponentTest, renderHostPlugin, renderHostPluginTest } from "./new/render.js";
@@ -22,52 +23,63 @@ export interface NewProjectOptions {
 /** Create a JS project to match a given WIT */
 export async function createProject(projectDirectory: string, options: NewProjectOptions): Promise<string> {
     const destination = resolve(projectDirectory);
-    const witSource = resolve(options.wit);
+    const builtinWit = resolveBuiltinWit(options.wit);
+    const witSource = builtinWit ? undefined : resolve(options.wit);
     const language = normalizeLanguage(options.language);
     const packageManager = options.packageManager ?? "pnpm";
     const targets = normalizeTargets(options.targets);
     await validatePaths(destination, witSource);
-
-    // TypeScript 7's native compiler does not yet expose the stable JS
-    // Program/factory/printer API. Keep this compatibility dependency isolated
-    // so it can be removed when the native API stabilizes.
-    const typescript = (await import("typescript-compiler-api")).default;
-    const host = options.host ?? false;
-    const generatedTypes = await typesComponent(witSource, {
-        guest: !host,
-        worldName: options.world,
-        strict: true,
-    });
-
-    const model = declarationModel(typescript, generatedTypes, host);
-    const source = host ? renderHostPlugin(typescript, model, language) : renderComponent(typescript, model, language);
-    const testSource = host
-        ? renderHostPluginTest(typescript, model, language)
-        : renderComponentTest(typescript, model, language);
-
-    validateComponentSource(typescript, generatedTypes, source, language);
-
-    const files = await scaffoldFiles({
-        projectName: npmPackageName(basename(destination)),
-        language,
-        packageManager,
-        targets,
-        world: model.world,
-        source,
-        testSource,
-        generatedTypes,
-        witSource,
-        host,
-    });
+    if (builtinWit && options.world) {
+        throw new Error("--world cannot be used with a builtin WIT starting point");
+    }
 
     const temporary = await mkdtemp(join(dirname(destination), `.${basename(destination)}-jco-new-`));
     try {
+        const projectWit = join(temporary, "wit");
+        if (builtinWit) {
+            await copyBuiltinWit(builtinWit, projectWit);
+        } else {
+            await copyWit(witSource!, projectWit);
+        }
+
+        // TypeScript 7's native compiler does not yet expose the stable JS
+        // Program/factory/printer API. Keep this compatibility dependency isolated
+        // so it can be removed when the native API stabilizes.
+        const typescript = (await import("typescript-compiler-api")).default;
+        const host = options.host ?? false;
+        const generatedTypes = await typesComponent(projectWit, {
+            guest: !host,
+            worldName: builtinWit?.world ?? options.world,
+            strict: true,
+        });
+
+        const model = declarationModel(typescript, generatedTypes, host);
+        const source = host
+            ? renderHostPlugin(typescript, model, language)
+            : renderComponent(typescript, model, language);
+        const testSource = host
+            ? renderHostPluginTest(typescript, model, language)
+            : renderComponentTest(typescript, model, language);
+
+        validateComponentSource(typescript, generatedTypes, source, language);
+
+        const files = await scaffoldFiles({
+            projectName: npmPackageName(basename(destination)),
+            language,
+            packageManager,
+            targets,
+            world: model.world,
+            source,
+            testSource,
+            generatedTypes,
+            host,
+        });
+
         for (const [name, contents] of Object.entries(files)) {
             const output = join(temporary, name);
             await mkdir(dirname(output), { recursive: true });
             await writeFile(output, contents);
         }
-        await copyWit(witSource, join(temporary, "wit"));
         if (await exists(destination)) {
             await rm(destination, { recursive: false });
         }
@@ -91,7 +103,6 @@ interface ScaffoldFilesArgs {
     source: string;
     testSource: string;
     generatedTypes: Record<string, Uint8Array>;
-    witSource: string;
     host: boolean;
 }
 
@@ -118,7 +129,6 @@ interface GeneratePackageJsonArgs {
     packageManager: NewPackageManager;
     targets: NewTarget[];
     world: string;
-    witSource: string;
     host: boolean;
 }
 
@@ -238,16 +248,18 @@ function readme(
     return `# JavaScript component\n\nThis project implements the \`${input.world}\` WIT world. Edit \`src/component.${extension}\` and replace the generated TODO bodies.\n\n## Develop\n\n\`\`\`console\n${manager.install}\n${manager.run("types")}\n${manager.run("check")}\n${manager.run("test")}\n${manager.run("build")}\n\`\`\`\n\nThe WIT package is copied into \`wit/\`; generated guest declarations live in \`types/generated/\`. Run \`${manager.run("types")}\` after changing WIT. Build individual targets with ${builds}.\n\nThe scripts are standard package scripts, so npm, pnpm, or Yarn can be used with their equivalent \`install\` and \`run\` commands. Rolldown settings are in the generated configuration file${input.targets.length === 2 ? "s" : ""}.\n`;
 }
 
-async function validatePaths(destination: string, witSource: string): Promise<void> {
-    const witStat = await stat(witSource).catch(() => undefined);
-    if (!witStat || (!witStat.isFile() && !witStat.isDirectory())) {
-        throw new Error(`WIT path does not exist: ${witSource}`);
-    }
-    if (witStat.isFile() && extname(witSource) !== ".wit") {
-        throw new Error("--wit must name a .wit file or directory");
-    }
-    if (destination === witSource || witSource.startsWith(destination + sep)) {
-        throw new Error("The project destination cannot contain the WIT source");
+async function validatePaths(destination: string, witSource: string | undefined): Promise<void> {
+    if (witSource) {
+        const witStat = await stat(witSource).catch(() => undefined);
+        if (!witStat || (!witStat.isFile() && !witStat.isDirectory())) {
+            throw new Error(`WIT path does not exist: ${witSource}`);
+        }
+        if (witStat.isFile() && extname(witSource) !== ".wit") {
+            throw new Error("--wit must name a .wit file or directory");
+        }
+        if (destination === witSource || witSource.startsWith(destination + sep)) {
+            throw new Error("The project destination cannot contain the WIT source");
+        }
     }
     const destinationStat = await stat(destination).catch(() => undefined);
     if (destinationStat && !destinationStat.isDirectory()) {

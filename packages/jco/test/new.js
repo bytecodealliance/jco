@@ -6,7 +6,7 @@ import typescript from "typescript-compiler-api";
 import { assert, expect, suite, test } from "vitest";
 
 import { WIT_FIXTURES_DIR } from "./common.js";
-import { getTmpDir } from "./helpers.js";
+import { exec, getTmpDir, jcoPath } from "./helpers.js";
 
 import { createProject } from "../dist/cmd/new.js";
 import { validateComponentSource } from "../dist/cmd/new/declarations.js";
@@ -19,6 +19,42 @@ import {
 import { renderComponent } from "../dist/cmd/new/render.js";
 
 suite("jco scaffold", () => {
+    test.each([
+        ["builtin:wasi-command", "wasi:cli/command@0.3.0", "package wasi:cli@0.3.0;", "export const run"],
+        ["builtin:wasi-proxy", "wasi:http/service@0.3.0", "package wasi:http@0.3.0;", "export const handler"],
+        ["builtin:wasi-reactor", "wasi:cli/imports@0.3.0", "package wasi:cli@0.3.0;", "import type * as World"],
+    ])("scaffolds %s through the CLI", async (builtin, world, witPackage, sourceExport) => {
+        const root = await getTmpDir();
+        const project = join(root, builtin.slice("builtin:".length));
+        try {
+            await exec(jcoPath, "scaffold", project, "--wit", builtin, "--target", "nodejs");
+
+            const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
+            assert.include(packageJson.scripts.types, `--world-name ${world}`);
+            assert.include(await readFile(join(project, "wit/package.wit"), "utf8"), witPackage);
+            assert.include(await readFile(join(project, "src/component.ts"), "utf8"), sourceExport);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    test("resolves the latest supported Preview 2 builtin", async () => {
+        const root = await getTmpDir();
+        const project = join(root, "preview2-command");
+        try {
+            await createProject(project, { wit: "builtin:wasi-command@0.2.x", targets: ["nodejs"] });
+            const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
+            assert.include(packageJson.scripts.types, "--world-name wasi:cli/command@0.2.12");
+            assert.include(await readFile(join(project, "wit/package.wit"), "utf8"), "package wasi:cli@0.2.12;");
+
+            await expect(
+                createProject(join(root, "unsupported"), { wit: "builtin:wasi-command@0.2.11" }),
+            ).rejects.toThrow(/Supported versions are 0\.3\.x and 0\.2\.x/);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
     test.each([
         ["pnpm", `pnpm@${DEFAULT_PNPM_VERSION}`, "pnpm-lock.yaml", "pnpm run check"],
         ["npm", `npm@${DEFAULT_NPM_VERSION}`, "package-lock.json", "npm run check"],

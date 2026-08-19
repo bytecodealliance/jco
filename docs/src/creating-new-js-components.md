@@ -16,6 +16,25 @@ To use `jco scaffold`, simply name the folder and point at the WIT directory:
 jco scaffold hello-component --wit path/to/wit
 ```
 
+Jco also bundles official WASI WIT packages for three common starting points:
+
+```console
+jco scaffold my-command --wit builtin:wasi-command
+jco scaffold my-http-service --wit builtin:wasi-proxy
+jco scaffold my-reactor --wit builtin:wasi-reactor
+```
+
+Without a version suffix these select WASI 0.3.0. To target the latest bundled WASI 0.2 release instead, use
+`@0.2.x` (currently 0.2.12):
+
+```console
+jco scaffold my-command --wit builtin:wasi-command@0.2.x
+```
+
+The command and reactor aliases select the `wasi:cli/command` and `wasi:cli/imports` worlds. The proxy alias selects
+`wasi:http/service` in WASI 0.3 and `wasi:http/proxy` in WASI 0.2. Jco copies the selected snapshot into the generated
+project's `wit/` directory, so this workflow does not require a registry client or network access.
+
 After runnig this command you can enter the folder and build the project:
 
 ```console

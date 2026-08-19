@@ -1,0 +1,170 @@
+package wasi:http@0.3.0;
+interface types {
+  use wasi:clocks/types@0.3.0.{duration};
+  variant method {
+    get,
+    head,
+    post,
+    put,
+    delete,
+    connect,
+    options,
+    trace,
+    patch,
+    other(string)
+  }
+  variant scheme {
+    HTTP,
+    HTTPS,
+    other(string)
+  }
+  variant error-code {
+    DNS-timeout,
+    DNS-error(DNS-error-payload),
+    destination-not-found,
+    destination-unavailable,
+    destination-IP-prohibited,
+    destination-IP-unroutable,
+    connection-refused,
+    connection-terminated,
+    connection-timeout,
+    connection-read-timeout,
+    connection-write-timeout,
+    connection-limit-reached,
+    TLS-protocol-error,
+    TLS-certificate-error,
+    TLS-alert-received(TLS-alert-received-payload),
+    HTTP-request-denied,
+    HTTP-request-length-required,
+    HTTP-request-body-size(option<u64>),
+    HTTP-request-method-invalid,
+    HTTP-request-URI-invalid,
+    HTTP-request-URI-too-long,
+    HTTP-request-header-section-size(option<u32>),
+    HTTP-request-header-size(option<field-size-payload>),
+    HTTP-request-trailer-section-size(option<u32>),
+    HTTP-request-trailer-size(field-size-payload),
+    HTTP-response-incomplete,
+    HTTP-response-header-section-size(option<u32>),
+    HTTP-response-header-size(field-size-payload),
+    HTTP-response-body-size(option<u64>),
+    HTTP-response-trailer-section-size(option<u32>),
+    HTTP-response-trailer-size(field-size-payload),
+    HTTP-response-transfer-coding(option<string>),
+    HTTP-response-content-coding(option<string>),
+    HTTP-response-timeout,
+    HTTP-upgrade-failed,
+    HTTP-protocol-error,
+    loop-detected,
+    configuration-error,
+    internal-error(option<string>)
+  }
+  record DNS-error-payload {
+    rcode: option<string>,
+    info-code: option<u16>
+  }
+  record TLS-alert-received-payload {
+    alert-id: option<u8>,
+    alert-message: option<string>
+  }
+  record field-size-payload {
+    field-name: option<string>,
+    field-size: option<u32>
+  }
+  variant header-error {
+    invalid-syntax,
+    forbidden,
+    immutable,
+    size-exceeded,
+    other(option<string>),
+  }
+  variant request-options-error {
+    not-supported,
+    immutable,
+    other(option<string>),
+  }
+  type field-name = string;
+  type field-value = list<u8>;
+  resource fields {
+    constructor();
+    from-list: static func(
+      entries: list<tuple<field-name,field-value>>
+    ) -> result<fields, header-error>;
+    get: func(name: field-name) -> list<field-value>;
+    has: func(name: field-name) -> bool;
+    set: func(name: field-name, value: list<field-value>) -> result<_, header-error>;
+    delete: func(name: field-name) -> result<_, header-error>;
+    get-and-delete: func(name: field-name) -> result<list<field-value>, header-error>;
+    append: func(name: field-name, value: field-value) -> result<_, header-error>;
+    copy-all: func() -> list<tuple<field-name,field-value>>;
+    clone: func() -> fields;
+  }
+  type headers = fields;
+  type trailers = fields;
+  resource request {
+    new: static func(
+      headers: headers,
+      contents: option<stream<u8>>,
+      trailers: future<result<option<trailers>, error-code>>,
+      options: option<request-options>
+    ) -> tuple<request, future<result<_, error-code>>>;
+    get-method: func() -> method;
+    set-method: func(method: method) -> result;
+    get-path-with-query: func() -> option<string>;
+    set-path-with-query: func(path-with-query: option<string>) -> result;
+    get-scheme: func() -> option<scheme>;
+    set-scheme: func(scheme: option<scheme>) -> result;
+    get-authority: func() -> option<string>;
+    set-authority: func(authority: option<string>) -> result;
+    get-options: func() -> option<request-options>;
+    get-headers: func() -> headers;
+    consume-body: static func(this: request, res: future<result<_, error-code>>) -> tuple<stream<u8>, future<result<option<trailers>, error-code>>>;
+  }
+  resource request-options {
+    constructor();
+    get-connect-timeout: func() -> option<duration>;
+    set-connect-timeout: func(duration: option<duration>) -> result<_, request-options-error>;
+    get-first-byte-timeout: func() -> option<duration>;
+    set-first-byte-timeout: func(duration: option<duration>) -> result<_, request-options-error>;
+    get-between-bytes-timeout: func() -> option<duration>;
+    set-between-bytes-timeout: func(duration: option<duration>) -> result<_, request-options-error>;
+    clone: func() -> request-options;
+  }
+  type status-code = u16;
+  resource response {
+    new: static func(
+      headers: headers,
+      contents: option<stream<u8>>,
+      trailers: future<result<option<trailers>, error-code>>,
+    ) -> tuple<response, future<result<_, error-code>>>;
+    get-status-code: func() -> status-code;
+    set-status-code: func(status-code: status-code) -> result;
+    get-headers: func() -> headers;
+    consume-body: static func(this: response, res: future<result<_, error-code>>) -> tuple<stream<u8>, future<result<option<trailers>, error-code>>>;
+  }
+}
+world service {
+  include wasi:clocks/imports@0.3.0;
+  include wasi:random/imports@0.3.0;
+  import wasi:cli/stdout@0.3.0;
+  import wasi:cli/stderr@0.3.0;
+  import wasi:cli/stdin@0.3.0;
+  import client;
+  export handler;
+}
+world middleware {
+  include service;
+  import handler;
+}
+interface handler {
+  use types.{request, response, error-code};
+  handle: async func(
+    request: request,
+  ) -> result<response, error-code>;
+}
+interface client {
+  use types.{request, response, error-code};
+  send: async func(
+    request: request,
+  ) -> result<response, error-code>;
+}

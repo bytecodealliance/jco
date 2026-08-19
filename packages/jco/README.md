@@ -90,6 +90,18 @@ jco scaffold my-component --wit path/to/wit
 `--wit` accepts a self-contained `.wit` file or WIT package directory and copies it into the project. If dealing with a
 WIT file that contains multiple worlds, supply the `--world` option as well.
 
+For a quick WASI starting point, use one of Jco's bundled WIT packages:
+
+```console
+jco scaffold my-command --wit builtin:wasi-command
+jco scaffold my-http-service --wit builtin:wasi-proxy
+jco scaffold my-reactor --wit builtin:wasi-reactor
+```
+
+These aliases default to WASI 0.3.0. Use the `@0.2.x` suffix, for example
+`builtin:wasi-command@0.2.x`, to select the latest bundled WASI 0.2 release (currently 0.2.12). Jco copies the bundled
+official WASI sources into the generated project's `wit/` directory, so scaffolding does not require network access.
+
 Immediately, you should be able to install and build the component:
 
 ```console
