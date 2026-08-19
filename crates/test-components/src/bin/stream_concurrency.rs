@@ -62,6 +62,40 @@ impl stream_concurrency_test::Guest for Component {
         }
         values
     }
+
+    async fn read_with_cancellation(mut rx: StreamReader<u8>) -> Vec<u8> {
+        let mut values = Vec::new();
+        let mut buffer = Vec::with_capacity(1024);
+        let mut consecutive_cancellations = 0;
+
+        loop {
+            let (status, returned_buffer) = {
+                let mut future = pin!(rx.read(buffer));
+                let mut context = Context::from_waker(Waker::noop());
+                match future.as_mut().poll(&mut context) {
+                    Poll::Ready(result) => result,
+                    Poll::Pending => future.cancel(),
+                }
+            };
+            buffer = returned_buffer;
+
+            match status {
+                StreamResult::Complete(count) => {
+                    assert_eq!(buffer.len(), count);
+                    values.append(&mut buffer);
+                    consecutive_cancellations = 0;
+                }
+                StreamResult::Dropped => break,
+                StreamResult::Cancelled => {
+                    assert!(consecutive_cancellations < 10);
+                    consecutive_cancellations += 1;
+                    rx.read(Vec::new()).await;
+                }
+            }
+        }
+
+        values
+    }
 }
 
 fn main() {}
