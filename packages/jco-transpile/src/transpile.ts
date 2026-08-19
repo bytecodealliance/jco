@@ -145,6 +145,9 @@ export interface TranspilationOptions {
 
     /** Whether to run bindgen in strict mode */
     strict?: boolean;
+
+    /** Represent WIT flags as bigint values instead of objects of booleans */
+    flagsAsBigInt?: boolean;
 }
 
 interface TranspilationResult {
@@ -311,6 +314,7 @@ export async function transpileBytes(
         multiMemory: opts.multiMemory === true,
         bindgenEnableWasmExnref: opts.bindgenEnableWasmExnref === true,
         strict: opts.strict === true,
+        flagsAsBigint: opts.flagsAsBigInt === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };
