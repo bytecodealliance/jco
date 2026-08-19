@@ -33,6 +33,7 @@ const config = {
                 'ops',
                 'docs',
                 'tests',
+                'ai',
                 // Projects
                 'jco',
                 'bare-jco',
