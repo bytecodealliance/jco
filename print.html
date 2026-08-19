@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-74715be3.js";
+            window.path_to_searchindex_js = "searchindex-206d9c1f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1f53c7bb.js"></script>
@@ -377,6 +377,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 </li>
 <li>
 <p><code>--valid-lifting-optimization</code>: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.</p>
+</li>
+<li>
+<p><code>--flags-as-bigint</code>: Represents WIT flags as <code>bigint</code> values and exports named flag constants. By default, flags remain objects of booleans for backwards compatibility.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
