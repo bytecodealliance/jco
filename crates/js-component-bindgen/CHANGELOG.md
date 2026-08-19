@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.5.0] - 2026-08-19
+
+### 🚀 Features
+
+- _(bindgen)_ accept wrapped/unwrapped results from host imports by @vados-cosmonic
+
+- _(bindgen)_ allow disabling ComponentError wrap for sync calls by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ current task during WebAssembly.initialize by @vados-cosmonic
+
+- _(bindgen)_ restrict numeric conversions by @vados-cosmonic in #1882
+
+
+
+
 ## [2.4.0] - 2026-08-14
 
 ### 🚀 Features
