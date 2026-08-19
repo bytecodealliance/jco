@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.2] - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ clean up tcp initialization listeners by @vados-cosmonic
+
 ## [0.3.1] - 2026-08-19
 
 ### 🐛 Bug Fixes
