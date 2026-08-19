@@ -1294,6 +1294,10 @@ impl AsyncStreamIntrinsic {
                             {debug_log_fn}('[{stream_end_class}#cancel()]');
                             const completeCancel = () => {{
                                 if (this.isDropped()) {{ return; }}
+                                // Host injection may complete the copy before this deferred
+                                // cancellation runs. Preserve that completion event instead of
+                                // cancelling the next operation or starting a duplicate write.
+                                if (this.hasPendingEvent()) {{ return; }}
                                 if (this.#hostCancelFn?.()) {{ return; }}
                                 const result = this.#pendingBufferMeta?.buffer?.processed > 0
                                     ? {stream_end_class}.CopyResult.COMPLETED
