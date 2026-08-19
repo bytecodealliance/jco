@@ -5555,7 +5555,7 @@ fn flat_core_types_js_expr(flat: &Option<Vec<&'static str>>) -> String {
 /// context in order to perform the lift. For example, running this for bool
 /// will produce the following:
 ///
-/// ```
+/// ```js
 /// _liftFlatBool
 /// ```
 ///
@@ -6198,7 +6198,7 @@ pub fn gen_flat_lower_fn_list_js_expr(
 /// context in order to perform the lower. For example, running this for bool
 /// will produce the following:
 ///
-/// ```
+/// ```js
 /// _lowerFlatBool
 /// ```
 ///

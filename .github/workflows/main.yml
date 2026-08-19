@@ -610,9 +610,6 @@ jobs:
       - name: Install Rust
         run: rustup update stable && rustup default stable && rustup component add rustfmt
 
-      - name: Remove tests mod
-        run: rm -r crates/jco/tests/mod.rs
-
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Format source code
@@ -627,9 +624,6 @@ jobs:
 
       - name: Install Rust
         run: rustup update stable && rustup default stable
-
-      - name: Remove tests mod
-        run: rm -r crates/jco/tests/mod.rs
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 

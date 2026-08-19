@@ -400,7 +400,7 @@ impl FunctionBindgen<'_> {
     /// let ret =
     /// ```
     ///
-    /// ```
+    /// ```js
     /// var [ ret0, ret1, ret2 ] =
     /// ```
     ///

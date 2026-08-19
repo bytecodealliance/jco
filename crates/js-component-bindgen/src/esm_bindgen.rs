@@ -294,7 +294,7 @@ impl EsmBindgen {
     ///
     /// This is normally right before the instantiation code in the generated output, e.g.:
     ///
-    /// ```
+    /// ```js
     /// const { someFn } = imports['ns:pkg/iface'];
     /// const { asyncOtherFn } = imports['ns:pkg/iface2'];
     /// const { someFn, asyncSomeFn } = imports['ns:pkg/iface3'];
