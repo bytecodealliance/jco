@@ -3427,13 +3427,26 @@ impl<'a> Instantiator<'a, '_> {
             ),
         };
 
-        let abi = if is_async {
+        // A function's interface type can be async while its canonical lower is
+        // sync. In that case the core caller uses the regular flat canonical
+        // ABI and blocks while the async callee runs. Deriving this from
+        // `is_async` instead would incorrectly apply the async argument-buffer
+        // ABI to sync-lowered functions with more than four flat parameters.
+        let abi = if options.async_ {
             AbiVariant::GuestImportAsync
         } else {
             AbiVariant::GuestImport
         };
 
-        let nparams = self.resolve.wasm_signature(abi, func).params.len();
+        // Use the translated core function type as the source of truth for the
+        // JavaScript trampoline's arity. Keep the canonical ABI calculation
+        // checked against it since `abi::call` below uses that calculation to
+        // generate the trampoline body.
+        let core_ty = self.types[options.core_type].unwrap_func();
+        let wasm_signature = self.resolve.wasm_signature(abi, func);
+        assert_eq!(wasm_signature.params.len(), core_ty.params().len());
+        assert_eq!(wasm_signature.results.len(), core_ty.results().len());
+        let nparams = core_ty.params().len();
 
         // Generate the JS trampoline function for a bound import
         let trampoline_idx = trampoline.as_u32();
