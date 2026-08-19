@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ dispose initial socket resources by @vados-cosmonic in #1880
+
 ## [0.3.0] - 2026-08-11
 
 ### 🚀 Features
