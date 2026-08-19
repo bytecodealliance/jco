@@ -30,8 +30,17 @@ pub enum AsyncFutureIntrinsic {
     /// Map of future tables to component indices
     GlobalFutureTableMap,
 
-    /// Create an internal future and provide its table-management helpers
+    /// Create an internal future
     CreateFuture,
+
+    /// Retrieve a future end from its component or future table
+    GetFutureEnd,
+
+    /// Add a future end to a future table and its component's waitable table
+    AddFutureEndToTable,
+
+    /// Remove a future end from a future table and its component's waitable table
+    RemoveFutureEndFromTable,
 
     /// The definition of the `FutureWritableEnd` JS class
     ///
@@ -241,9 +250,9 @@ impl AsyncFutureIntrinsic {
             Self::FutureWrite.name(),
             Self::FutureValueClass.name(),
             Self::CreateFuture.name(),
-            "getFutureEnd",
-            "addFutureEndToTable",
-            "removeFutureEndFromTable",
+            Self::GetFutureEnd.name(),
+            Self::AddFutureEndToTable.name(),
+            Self::RemoveFutureEndFromTable.name(),
             Self::GlobalFutureMap.name(),
             Self::GlobalFutureTableMap.name(),
             Self::InternalFutureClass.name(),
@@ -273,6 +282,9 @@ impl AsyncFutureIntrinsic {
             Self::FutureValueClass => "FutureValue",
             Self::GlobalFutureTableMap => "FUTURE_TABLES",
             Self::CreateFuture => "createFuture",
+            Self::GetFutureEnd => "getFutureEnd",
+            Self::AddFutureEndToTable => "addFutureEndToTable",
+            Self::RemoveFutureEndFromTable => "removeFutureEndFromTable",
             Self::HostFutureClass => "HostFuture",
             Self::InternalFutureClass => "InternalFuture",
             Self::GenFutureHostInjectFn => "_genFutureHostInjectFn",
@@ -382,9 +394,6 @@ impl AsyncFutureIntrinsic {
                 let global_future_map = render_args.require_intrinsic(Self::GlobalFutureMap);
                 let global_future_table_map =
                     render_args.require_intrinsic(Self::GlobalFutureTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-                );
 
                 output.push_str(&format!(
                     r#"
@@ -445,8 +454,23 @@ impl AsyncFutureIntrinsic {
                         }};
                     }}
 
-                    function getFutureEnd(args) {{
-                        {debug_log_fn}('[getFutureEnd()] args', args);
+                    "#,
+                ));
+            }
+
+            Self::GetFutureEnd => {
+                let get_future_end_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_future_table_map =
+                    render_args.require_intrinsic(Self::GlobalFutureTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function {get_future_end_fn}(args) {{
+                        {debug_log_fn}('[{get_future_end_fn}()] args', args);
                         const {{ tableIdx, futureEndHandle, futureEndWaitableIdx }} = args;
                         if (tableIdx === undefined) {{
                             throw new Error('missing table idx while getting future end');
@@ -475,8 +499,23 @@ impl AsyncFutureIntrinsic {
                         return futureEnd;
                     }}
 
-                    function addFutureEndToTable(args) {{
-                        {debug_log_fn}('[addFutureEndToTable()] args', args);
+                    "#,
+                ));
+            }
+
+            Self::AddFutureEndToTable => {
+                let add_future_end_to_table_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_future_table_map =
+                    render_args.require_intrinsic(Self::GlobalFutureTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function {add_future_end_to_table_fn}(args) {{
+                        {debug_log_fn}('[{add_future_end_to_table_fn}()] args', args);
                         const {{ tableIdx, futureEnd }} = args;
                         if (typeof futureEnd === 'number') {{ throw new Error("INSERTING BAD FUTUREEND"); }}
 
@@ -493,7 +532,7 @@ impl AsyncFutureIntrinsic {
                         const waitableIdx = cstate.handles.insert(futureEnd);
                         futureEnd.setWaitableIdx(waitableIdx);
 
-                        {debug_log_fn}('[addFutureEndToTable()] added future end', {{
+                        {debug_log_fn}('[{add_future_end_to_table_fn}()] added future end', {{
                             tableIdx,
                             table,
                             handle,
@@ -504,8 +543,23 @@ impl AsyncFutureIntrinsic {
                         return {{ handle, waitableIdx }};
                     }}
 
-                    function removeFutureEndFromTable(args) {{
-                        {debug_log_fn}('[removeFutureEndFromTable()] args', args);
+                    "#,
+                ));
+            }
+
+            Self::RemoveFutureEndFromTable => {
+                let remove_future_end_from_table_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_future_table_map =
+                    render_args.require_intrinsic(Self::GlobalFutureTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function {remove_future_end_from_table_fn}(args) {{
+                        {debug_log_fn}('[{remove_future_end_from_table_fn}()] args', args);
                         const {{ tableIdx, futureWaitableIdx }} = args;
                         if (tableIdx === undefined) {{ throw new Error("missing table idx while removing future end"); }}
                         if (futureWaitableIdx === undefined) {{
@@ -553,7 +607,7 @@ impl AsyncFutureIntrinsic {
             Self::HostFutureClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let host_future_class_name = self.name();
-                let _ = render_args.require_intrinsic(Self::CreateFuture);
+                let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -601,7 +655,7 @@ impl AsyncFutureIntrinsic {
                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
-                           const futureEnd = getFutureEnd({{
+                           const futureEnd = {get_future_end_fn}({{
                                tableIdx: this.#futureTableIdx,
                                futureEndWaitableIdx: this.#futureEndWaitableIdx
                            }});
@@ -1373,7 +1427,6 @@ impl AsyncFutureIntrinsic {
             Self::FutureNewFromLift => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_new_from_lift_fn = self.name();
-                let _ = render_args.require_intrinsic(Self::CreateFuture);
                 let global_future_map = render_args.require_intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::GlobalFutureMap,
                 ));
@@ -1413,6 +1466,7 @@ impl AsyncFutureIntrinsic {
 
             Self::FutureWrite | Self::FutureRead => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -1480,7 +1534,7 @@ impl AsyncFutureIntrinsic {
                             throw new Error('only tasks that may block may call future.{future_op_fn}');
                         }}
 
-                        const futureEnd = getFutureEnd({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
+                        const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
                         if (!futureEnd) {{
                             throw new Error(`missing future with waitable idx [${{futureEndWaitableIdx}}] (component [${{componentIdx}}])`);
                         }}
@@ -1526,6 +1580,9 @@ impl AsyncFutureIntrinsic {
 
             Self::FutureCancelRead | Self::FutureCancelWrite => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
+                let remove_future_end_from_table_fn =
+                    render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let is_cancel_write = matches!(self, Self::FutureCancelWrite);
                 let future_end_class = if is_cancel_write {
                     render_args.require_intrinsic(Self::FutureWritableEndClass)
@@ -1556,13 +1613,13 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        let futureEnd = getFutureEnd({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
+                        let futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
                         if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new Error('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
-                        futureEnd = removeFutureEndFromTable({{
+                        futureEnd = {remove_future_end_from_table_fn}({{
                             tableIdx: futureTableIdx,
                             futureWaitableIdx: futureEndWaitableIdx,
                         }});
@@ -1596,6 +1653,8 @@ impl AsyncFutureIntrinsic {
             Self::FutureDropReadable | Self::FutureDropWritable => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_drop_fn = self.name();
+                let remove_future_end_from_table_fn =
+                    render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let is_writable = matches!(self, Self::FutureDropWritable);
                 let future_end_class = if is_writable {
                     render_args.require_intrinsic(Self::FutureWritableEndClass)
@@ -1613,7 +1672,7 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const futureEnd = removeFutureEndFromTable({{
+                        const futureEnd = {remove_future_end_from_table_fn}({{
                             tableIdx: futureTableIdx,
                             futureWaitableIdx: futureEndWaitableIdx
                         }});
@@ -1629,7 +1688,10 @@ impl AsyncFutureIntrinsic {
             Self::FutureTransfer => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_transfer_fn = self.name();
-                let _ = render_args.require_intrinsic(Self::CreateFuture);
+                let remove_future_end_from_table_fn =
+                    render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
+                let add_future_end_to_table_fn =
+                    render_args.require_intrinsic(Self::AddFutureEndToTable);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -1662,7 +1724,7 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const futureEnd = removeFutureEndFromTable({{ tableIdx: srcTableIdx, futureWaitableIdx: srcFutureWaitableIdx }});
+                        const futureEnd = {remove_future_end_from_table_fn}({{ tableIdx: srcTableIdx, futureWaitableIdx: srcFutureWaitableIdx }});
                         if (!futureEnd.isReadable()) {{
                             throw new Error("writable future ends cannot be moved");
                         }}
@@ -1670,7 +1732,7 @@ impl AsyncFutureIntrinsic {
                             throw new Error('future read ends cannot be moved once the value has been delivered');
                         }}
 
-                        const {{ handle, waitableIdx }} = addFutureEndToTable({{ tableIdx: destTableIdx, futureEnd }});
+                        const {{ handle, waitableIdx }} = {add_future_end_to_table_fn}({{ tableIdx: destTableIdx, futureEnd }});
                         futureEnd.setTarget(`future read end (waitable [${{waitableIdx}}])`);
 
                         {debug_log_fn}('[{future_transfer_fn}()] successfully transferred', {{

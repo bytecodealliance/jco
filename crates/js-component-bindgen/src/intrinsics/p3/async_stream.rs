@@ -22,8 +22,20 @@ pub enum AsyncStreamIntrinsic {
     /// Map of stream tables to component indices
     GlobalStreamTableMap,
 
-    /// Create an internal stream and provide its table-management helpers
+    /// Create an internal stream
     CreateStream,
+
+    /// Retrieve a stream end from its component or stream table
+    GetStreamEnd,
+
+    /// Add a stream end to a stream table and its component's waitable table
+    AddStreamEndToTable,
+
+    /// Delete a stream end from its component and stream tables
+    DeleteStreamEnd,
+
+    /// Remove a stream end from a stream table and its component's waitable table
+    RemoveStreamEndFromTable,
 
     /// The definition of the `StreamEnd` JS superclass
     StreamEndClass,
@@ -239,10 +251,10 @@ impl AsyncStreamIntrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
             Self::CreateStream.name(),
-            "addStreamEndToTable",
-            "getStreamEnd",
-            "deleteStreamEnd",
-            "removeStreamEndFromTable",
+            Self::AddStreamEndToTable.name(),
+            Self::GetStreamEnd.name(),
+            Self::DeleteStreamEnd.name(),
+            Self::RemoveStreamEndFromTable.name(),
         ]
     }
 
@@ -252,6 +264,10 @@ impl AsyncStreamIntrinsic {
             Self::GlobalStreamMap => "STREAMS",
             Self::GlobalStreamTableMap => "STREAM_TABLES",
             Self::CreateStream => "createStream",
+            Self::GetStreamEnd => "getStreamEnd",
+            Self::AddStreamEndToTable => "addStreamEndToTable",
+            Self::DeleteStreamEnd => "deleteStreamEnd",
+            Self::RemoveStreamEndFromTable => "removeStreamEndFromTable",
             Self::StreamEndClass => "StreamEnd",
             Self::InternalStreamClass => "InternalStream",
             Self::StreamWritableEndClass => "StreamWritableEnd",
@@ -277,12 +293,9 @@ impl AsyncStreamIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
-            Self::CreateStream => {
-                let create_stream_fn = self.name();
+            Self::AddStreamEndToTable => {
+                let add_stream_end_to_table_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let internal_stream_class =
-                    render_args.require_intrinsic(Self::InternalStreamClass);
-                let global_stream_map = render_args.require_intrinsic(Self::GlobalStreamMap);
                 let global_stream_table_map =
                     render_args.require_intrinsic(Self::GlobalStreamTableMap);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -291,8 +304,8 @@ impl AsyncStreamIntrinsic {
 
                 output.push_str(&format!(
                     r#"
-                    function addStreamEndToTable(args) {{
-                        {debug_log_fn}('[addStreamEndToTable()] args', args);
+                    function {add_stream_end_to_table_fn}(args) {{
+                        {debug_log_fn}('[{add_stream_end_to_table_fn}()] args', args);
                         const {{ tableIdx, streamEnd }} = args;
                         if (typeof streamEnd === 'number') {{ throw new Error("INSERTING BAD STREAMEND"); }}
 
@@ -309,7 +322,7 @@ impl AsyncStreamIntrinsic {
                         const waitableIdx = cstate.handles.insert(streamEnd);
                         streamEnd.setWaitableIdx(waitableIdx);
 
-                        {debug_log_fn}('[addStreamEndToTable()] added stream end', {{
+                        {debug_log_fn}('[{add_stream_end_to_table_fn}()] added stream end', {{
                             tableIdx,
                             table,
                             handle,
@@ -320,6 +333,21 @@ impl AsyncStreamIntrinsic {
                         return {{ handle, waitableIdx }};
                     }}
 
+                    "#,
+                ));
+            }
+
+            Self::CreateStream => {
+                let create_stream_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let internal_stream_class =
+                    render_args.require_intrinsic(Self::InternalStreamClass);
+                let global_stream_map = render_args.require_intrinsic(Self::GlobalStreamMap);
+                let global_stream_table_map =
+                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
+
+                output.push_str(&format!(
+                    r#"
                     function {create_stream_fn}(cstate, args) {{
                         {debug_log_fn}('[{create_stream_fn}()] args', args);
                         const {{ tableIdx, elemMeta, hostInjectFn }} = args;
@@ -376,8 +404,23 @@ impl AsyncStreamIntrinsic {
                         }};
                     }}
 
-                    function getStreamEnd(args) {{
-                        {debug_log_fn}('[getStreamEnd()] args', args);
+                    "#,
+                ));
+            }
+
+            Self::GetStreamEnd => {
+                let get_stream_end_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_stream_table_map =
+                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function {get_stream_end_fn}(args) {{
+                        {debug_log_fn}('[{get_stream_end_fn}()] args', args);
                         const {{ tableIdx, streamEndHandle, streamEndWaitableIdx }} = args;
                         if (tableIdx === undefined) {{
                             throw new Error('missing table idx while getting stream end');
@@ -406,8 +449,23 @@ impl AsyncStreamIntrinsic {
                         return streamEnd;
                     }}
 
-                    function deleteStreamEnd(args) {{
-                        {debug_log_fn}('[deleteStreamEnd()] args', args);
+                    "#,
+                ));
+            }
+
+            Self::DeleteStreamEnd => {
+                let delete_stream_end_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_stream_table_map =
+                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function {delete_stream_end_fn}(args) {{
+                        {debug_log_fn}('[{delete_stream_end_fn}()] args', args);
                         const {{ tableIdx, streamEndWaitableIdx }} = args;
                         if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
                         if (streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
@@ -436,8 +494,23 @@ impl AsyncStreamIntrinsic {
                         return streamEnd;
                     }}
 
-                    function removeStreamEndFromTable(args) {{
-                        {debug_log_fn}('[removeStreamEndFromTable()] args', args);
+                    "#,
+                ));
+            }
+
+            Self::RemoveStreamEndFromTable => {
+                let remove_stream_end_from_table_fn = self.name();
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let global_stream_table_map =
+                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
+                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+
+                output.push_str(&format!(
+                    r#"
+                    function {remove_stream_end_from_table_fn}(args) {{
+                        {debug_log_fn}('[{remove_stream_end_from_table_fn}()] args', args);
 
                         const {{ tableIdx, streamWaitableIdx }} = args;
                         if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
@@ -1626,7 +1699,7 @@ impl AsyncStreamIntrinsic {
             Self::HostStreamClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let host_stream_class_name = self.name();
-                let _ = render_args.require_intrinsic(Self::CreateStream);
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let external_stream_class =
                     render_args.require_intrinsic(Self::ExternalStreamClass);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -1676,7 +1749,7 @@ impl AsyncStreamIntrinsic {
                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
-                           const streamEnd = getStreamEnd({{
+                           const streamEnd = {get_stream_end_fn}({{
                                tableIdx: this.#streamTableIdx,
                                streamEndWaitableIdx: this.#streamEndWaitableIdx
                            }});
@@ -1980,7 +2053,6 @@ impl AsyncStreamIntrinsic {
             Self::StreamNewFromLift => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_new_from_lift_fn = self.name();
-                let _ = render_args.require_intrinsic(Self::CreateStream);
                 let global_stream_map = render_args.require_intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GlobalStreamMap,
                 ));
@@ -2025,6 +2097,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamWrite | Self::StreamRead => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_op_fn = self.name();
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -2081,7 +2154,7 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}('only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
                         }}
 
-                        const streamEnd = getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                        const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
                             throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
@@ -2112,6 +2185,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamCancelRead | Self::StreamCancelWrite => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_cancel_fn = self.name();
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
@@ -2139,7 +2213,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const streamEnd = getStreamEnd({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
+                        const streamEnd = {get_stream_end_fn}({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
                         if (!streamEnd) {{ throw new Error('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
@@ -2184,6 +2258,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamDropReadable | Self::StreamDropWritable => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_drop_fn = self.name();
+                let delete_stream_end_fn = render_args.require_intrinsic(Self::DeleteStreamEnd);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let is_write = matches!(self, Self::StreamDropWritable);
@@ -2206,7 +2281,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing component state for component idx [${{componentIdx}}]`); }}
 
-                        const streamEnd = deleteStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                        const streamEnd = {delete_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
                             throw new Error(`missing stream (waitable [${{streamEndWaitableIdx}}], table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
@@ -2223,7 +2298,10 @@ impl AsyncStreamIntrinsic {
             Self::StreamTransfer => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_transfer_fn = self.name();
-                let _ = render_args.require_intrinsic(Self::CreateStream);
+                let remove_stream_end_from_table_fn =
+                    render_args.require_intrinsic(Self::RemoveStreamEndFromTable);
+                let add_stream_end_to_table_fn =
+                    render_args.require_intrinsic(Self::AddStreamEndToTable);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -2260,7 +2338,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const streamEnd = removeStreamEndFromTable({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
+                        const streamEnd = {remove_stream_end_from_table_fn}({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
                         if (!streamEnd.isReadable()) {{
                             throw new Error("writable stream ends cannot be moved");
                         }}
@@ -2268,7 +2346,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error('readable ends cannot be moved once writable ends are dropped');
                         }}
 
-                        const {{ handle, waitableIdx }} = addStreamEndToTable({{ tableIdx: destTableIdx, streamEnd }});
+                        const {{ handle, waitableIdx }} = {add_stream_end_to_table_fn}({{ tableIdx: destTableIdx, streamEnd }});
                         streamEnd.setTarget(`stream read end (waitable [${{waitableIdx}}])`);
 
                         {debug_log_fn}('[{stream_transfer_fn}()] successfully transferred', {{
