@@ -124,6 +124,22 @@ For Wasm components that implement the WASI Command world, a `jco run` utility i
 jco run cowasy.component.wasm hello
 ```
 
+By default, `jco run` retains its historical behavior and gives the component access to the host
+filesystem, environment, and network. Pass `--sandbox` to deny those capabilities, then grant
+only those the component needs:
+
+```console
+jco run command.wasm --sandbox \
+  --sandbox-env-set HOME=/guest \
+  --sandbox-fs-preopen ./data::/data \
+  --sandbox-net-inherit
+```
+
+`--sandbox-env-set NAME` inherits one variable from the host, while `--sandbox-env-inherit` inherits
+them all. `--sandbox-fs-preopen HOST[::GUEST]` exposes a directory (using the host path as the guest
+path when it is omitted). The environment and preopen options may be repeated; values are applied
+in command-line order.
+
 Using the preview2-shim WASI implementation, full access to the underlying system primitives is provided, including filesystem and environment variable permissions.
 
 For HTTP Proxy components, `jco serve` provides a JS server implementation:
