@@ -1,9 +1,11 @@
 import { env } from 'node:process';
+import { readFile } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile } from '../../src/index.js';
+import { transpile, transpileBytes } from '../../src/index.js';
+import { parse } from '../../src/wasm-tools.js';
 
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
@@ -120,6 +122,35 @@ suite('Transpile (WASI P3)', () => {
             assert.notInclude(source, "from 'wasi:random/");
         });
     }
+
+    test('uses the core signature for sync-lowered async imports', async () => {
+        const componentPath = join(P3_COMPONENT_FIXTURES_DIR, 'sync-lowered-async-import.wat');
+        const component = await parse(await readFile(componentPath, 'utf8'));
+        const { files } = await transpileBytes(component);
+        const decoder = new TextDecoder();
+        const source = Object.entries(files)
+            .filter(([name]) => name.endsWith('.js'))
+            .map(([, source]) => (typeof source === 'string' ? source : decoder.decode(source)))
+            .join('\n');
+
+        const marker = ".fnName = 'test:filesystem/types#openAt'";
+        const markerIndex = source.indexOf(marker);
+        assert.isAtLeast(markerIndex, 0, 'open-at import trampoline is missing');
+        const declarationStart = source.lastIndexOf('const _trampoline', markerIndex);
+        const declarationEnd = source.indexOf('{', declarationStart);
+        const declaration = source.slice(declarationStart, declarationEnd);
+        const body = source.slice(declarationEnd, markerIndex);
+
+        assert.match(
+            declaration,
+            /async function\(arg0, arg1, arg2, arg3, arg4, arg5, arg6\)/,
+            'open-at must use its seven-parameter flat core import signature',
+        );
+        assert.include(body, 'var handle1 = arg0;');
+        assert.include(body, 'var ptr3 = arg2;');
+        assert.include(body, 'var len3 = arg3;');
+        assert.notInclude(body, 'getInt32(arg0 + 0', 'open-at parameters must not use the async buffer ABI');
+    });
 
     for (const componentRelPath of P3_FIXTURE_COMPONENTS) {
         const componentPath = join(P3_COMPONENT_FIXTURES_DIR, componentRelPath);
