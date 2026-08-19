@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.6.0] - 2026-08-19
+
+### 🚀 Features
+
+- _(bindgen)_ add opt-in bigint flags by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ register generated intrinsic usages by @vados-cosmonic
+
+- _(bindgen)_ avoid cancelling next operation when pending by @vados-cosmonic
+
+- _(bindgen)_ validate lifted list pointer alignment by @vados-cosmonic
+
+- _(bindgen)_ emit FutureEnd classes for FutureRead/FutureWrite by @evanlhatch
+
+- _(bindgen)_ sort RESERVED_KEYWORDS so binary_search finds eval by @evanlhatch in #1899
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ move future & stream helpers to own intrinsics by @vados-cosmonic in #1902
+
+- _(bindgen)_ move stream and future functions out of cstate by @vados-cosmonic
+
+- _(bindgen)_ discover intrinsic dependencies while rendering by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ lint by @vados-cosmonic in #1900
+
+
+
+## New Contributors
+* @evanlhatch made their first contribution
+
+
 ## [2.5.0] - 2026-08-19
 
 ### 🚀 Features
