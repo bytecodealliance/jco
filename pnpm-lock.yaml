@@ -36,8 +36,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       '@bytecodealliance/preview2-shim':
-        specifier: 0.20.1
-        version: 0.20.1
+        specifier: 0.20.2
+        version: 0.20.2
       '@commitlint/config-conventional':
         specifier: ^19.8.1
         version: 19.8.1
@@ -4178,7 +4178,7 @@ snapshots:
       '@bytecodealliance/componentize-js': 0.22.0
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.6.1
-      '@bytecodealliance/preview2-shim': 0.20.1
+      '@bytecodealliance/preview2-shim': 0.20.2
       '@bytecodealliance/preview3-shim': 0.2.2
       binaryen: 130.0.0
       commander: 14.0.3
@@ -4193,7 +4193,7 @@ snapshots:
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.7.0
       '@bytecodealliance/preview2-shim': 0.20.2
-      '@bytecodealliance/preview3-shim': 0.3.1
+      '@bytecodealliance/preview3-shim': 0.3.2
       binaryen: 130.0.0
       commander: 14.0.3
       componentize-qjs: 0.4.3
