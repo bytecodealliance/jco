@@ -1,13 +1,18 @@
 package local:test;
 
 interface foo {
-  resource bar {}
+  resource bar {
+    constructor(name: string);
+  }
+
+  create-bar: func() -> bar;
+  consume-bar: func(bar: bar) -> string;
 }
 
 world test {
-  use foo.{bar};
-  export create-bar: func() -> bar;
-  export consume-bar: func(bar: bar) -> string;
+  // The bar resource type is only exported when its defining interface is
+  // explicitly exported.
+  export foo;
 
   export hello: func() -> string;
 }

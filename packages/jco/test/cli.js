@@ -658,24 +658,13 @@ suite("CLI", () => {
         );
         assert.strictEqual(stderr, "");
         {
-            const { stderr } = await exec(
-                jcoPath,
-                "transpile",
-                outFile,
-                "--name",
-                "componentize",
-                "--map",
-                "local:test/foo=./foo.js",
-                "-o",
-                outDir,
-            );
+            const { stderr } = await exec(jcoPath, "transpile", outFile, "--name", "componentize", "-o", outDir);
             assert.strictEqual(stderr, "");
         }
         await writeFile(`${outDir}/package.json`, JSON.stringify({ type: "module" }));
-        await writeFile(`${outDir}/foo.js`, `export class Bar {}`);
         const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
         assert.strictEqual(m.hello(), "world");
-        // assert.strictEqual(m.consumeBar(m.createBar()), 'bar1');
+        assert.strictEqual(m.foo.consumeBar(m.foo.createBar()), "bar1");
 
         await cleanup();
     });

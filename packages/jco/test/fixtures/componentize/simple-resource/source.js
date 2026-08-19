@@ -6,6 +6,8 @@ class Bar {
 
 export const foo = {
     Bar,
+    createBar,
+    consumeBar,
 };
 
 let idx = 1;
