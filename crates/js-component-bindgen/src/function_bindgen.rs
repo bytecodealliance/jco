@@ -3569,6 +3569,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 // then we should start it, given that the task we have recently created (however we got to
                 // the async return) is going to continue to be polled soon (via the driver loop).
                 //
+                // Host-import tasks may be parented by a canonical ABI subtask. Their
+                // resolution is propagated to that subtask, and their own completion
+                // promise is intentionally left unsettled, so return the lifted host
+                // value directly after resolving and exiting the task.
                 uwriteln!(
                     self.src,
                     r#"
@@ -3580,7 +3584,7 @@ impl Bindgen for FunctionBindgen<'_> {
                           }})
                           task.resolve([ret]);
                           task.exit();
-                          return {return_awaited_completion_promise};
+                          return ret;
                       }}
 
                       const componentState = {get_or_create_async_state_fn}({component_idx_expr});
@@ -3617,14 +3621,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                       return {return_task_res};
                       "#,
-                    // If we are returning the awaited task completion promise directly
-                    // that contains a future<t>, we must wrap the result so we can deal
-                    // with nesting if present
-                    return_awaited_completion_promise = if self.wrap_async_future_result {
-                        "{ value: await task.completionPromise() }"
-                    } else {
-                        "await task.completionPromise()"
-                    },
                     // If we are returning the task result post-resolution, and it contains a future<t>,
                     // we must wrap the result so we can deal with nesting if present
                     return_task_res = if self.wrap_async_future_result {
