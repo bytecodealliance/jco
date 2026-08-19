@@ -402,11 +402,11 @@ importers:
   packages/jco-transpile:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.20.1
-        version: 0.20.1
+        specifier: ^0.20.2
+        version: 0.20.2
       '@bytecodealliance/preview3-shim':
-        specifier: ^0.2.2
-        version: 0.2.2
+        specifier: ^0.3.1
+        version: 0.3.1
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -629,6 +629,10 @@ packages:
     resolution: {integrity: sha512-INFLNlvTquj5Dsx/iXIZadqsDUlnHFwSg6pj+r8VM94UgkRQox9tMPkOpPIq8g+cObil+El7klOIGxH7kFgsFg==}
     hasBin: true
 
+  '@bytecodealliance/jco@1.28.1':
+    resolution: {integrity: sha512-K6STS3cFzfDup+OKYgbRrHdd2BfavUaxu36xK2IL91s3oPBV9mf6ZFVHvAJp8qpj5PkF62DfY3O+ydIduQWj7w==}
+    hasBin: true
+
   '@bytecodealliance/preview2-shim@0.17.9':
     resolution: {integrity: sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA==}
 
@@ -638,6 +642,9 @@ packages:
   '@bytecodealliance/preview2-shim@0.20.1':
     resolution: {integrity: sha512-gvQP6DWfeQIYKHBb+nPykku1DRtfXQjM685+e75YYr8ZF2ZxisE4+nWrpwf84+NaWJRfuL5HvoLKQFbup1iwkQ==}
 
+  '@bytecodealliance/preview2-shim@0.20.2':
+    resolution: {integrity: sha512-Bp1cer1jztaQamLv1YKdc4MimI9LNAAKM2lNxOtGTLs7/At5KlA0fW1HWTi3ZJ5McaWNwJUDWSe5Lr0EgUpsnA==}
+
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
 
@@ -646,6 +653,9 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.3.0':
     resolution: {integrity: sha512-QFSVzn1QQAj/vsHS0kSDD2apKtkBlSJnEKGGnpjMjC39OLpOmjqrBcQQM8ic14ZdVbau6vpQdPj2e2UqZSK7qg==}
+
+  '@bytecodealliance/preview3-shim@0.3.1':
+    resolution: {integrity: sha512-RPyvU+x8QW0Z+qjyCFTkrPdCPH18N3g6lauhats8HWsaPk5BNUGIg3wlp+bNdYW5hhz0w4CxJgEUPTm9yBPUBg==}
 
   '@bytecodealliance/weval@0.4.1':
     resolution: {integrity: sha512-vJegSAkNjENhJcMUod76KUGAgQLdACDDCwB3JwyR14zDhyHVPAvArvtDDYEEi+c+ELzls62H6wxTvzRmaYTaqg==}
@@ -4104,14 +4114,14 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.19.3':
     dependencies:
-      '@bytecodealliance/jco': 1.27.0
+      '@bytecodealliance/jco': 1.28.0
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
 
   '@bytecodealliance/componentize-js@0.21.0':
     dependencies:
-      '@bytecodealliance/jco': 1.27.0
+      '@bytecodealliance/jco': 1.28.0
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4119,7 +4129,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.22.0':
     dependencies:
-      '@bytecodealliance/jco': 1.28.0
+      '@bytecodealliance/jco': 1.28.1
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4195,11 +4205,27 @@ snapshots:
       ora: 8.2.0
       rolldown: 1.2.4
 
+  '@bytecodealliance/jco@1.28.1':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.22.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.7.0
+      '@bytecodealliance/preview2-shim': 0.20.1
+      '@bytecodealliance/preview3-shim': 0.3.0
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.3
+      mkdirp: 3.0.1
+      ora: 8.2.0
+      rolldown: 1.2.4
+
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
   '@bytecodealliance/preview2-shim@0.19.0': {}
 
   '@bytecodealliance/preview2-shim@0.20.1': {}
+
+  '@bytecodealliance/preview2-shim@0.20.2': {}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
@@ -4210,6 +4236,10 @@ snapshots:
       '@bytecodealliance/preview2-shim': 0.19.0
 
   '@bytecodealliance/preview3-shim@0.3.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.19.0
+
+  '@bytecodealliance/preview3-shim@0.3.1':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
 
