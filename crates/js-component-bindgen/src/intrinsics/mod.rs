@@ -1140,6 +1140,35 @@ mod tests {
         assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
         assert!(source.contains("if (!own) rscTableRemove(fromTable, handle);"));
     }
+
+    /// Future read/write trampoline code references the future end classes
+    /// (`instanceof FutureReadableEnd`, `FutureEnd.CopyState`), so the classes
+    /// must be emitted even when `FutureNew` is absent (see #1898).
+    #[test]
+    fn future_read_write_emit_future_end_classes() {
+        for (op, end_class) in [
+            (
+                AsyncFutureIntrinsic::FutureRead,
+                "class FutureReadableEnd",
+            ),
+            (
+                AsyncFutureIntrinsic::FutureWrite,
+                "class FutureWritableEnd",
+            ),
+        ] {
+            let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(op)]);
+            let opts = TranspileOpts::default();
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+
+            assert!(source.contains(end_class), "missing {end_class}");
+            assert!(source.contains("class FutureEnd"), "missing FutureEnd");
+        }
+    }
 }
 
 /// Profile for determinism to be used by async implementation
@@ -1703,6 +1732,32 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
             &Intrinsic::AsyncEventCodeEnum,
         ]);
+    }
+
+    // Future read/write trampolines (`Trampoline::FutureRead`/`FutureWrite`)
+    // emit code that references the future end classes directly
+    // (e.g. `futureEnd instanceof FutureReadableEnd`, `FutureEnd.CopyState`),
+    // so the end classes must be emitted even when the component does not use
+    // `future.new` (i.e. `FutureNew` is absent). Without this, transpiled
+    // output for such components fails at runtime with
+    // `ReferenceError: FutureReadableEnd is not defined` on the first future
+    // read/write (see #1898).
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite))
+    {
+        args.intrinsics.insert(Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::FutureWritableEndClass,
+        ));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead))
+    {
+        args.intrinsics.insert(Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::FutureReadableEndClass,
+        ));
     }
 
     if args
