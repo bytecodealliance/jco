@@ -38,6 +38,7 @@ export interface TypesOptions {
     guest?: boolean;
     quiet?: boolean;
     strict?: boolean;
+    flagsAsBigInt?: boolean;
 }
 
 export async function types(witPath: string | undefined, opts: TypesOptions) {
@@ -171,6 +172,7 @@ export async function typesComponent(witPath: string, opts: TypesOptions): Promi
             features,
             guest,
             strict: opts.strict === true,
+            flagsAsBigInt: opts.flagsAsBigInt === true,
             asyncMode: asyncModeObj,
         } as any);
         types = Object.entries(generated).map(([name, bytes]) => [`${outDir}${name}`, bytes]);

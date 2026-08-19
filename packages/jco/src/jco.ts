@@ -147,6 +147,7 @@ program
     .option("--multi-memory", "optimized output for Wasm multi-memory")
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
+    .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .allowExcessArguments(true)
     .action(asyncAction(transpileCmd));
 
@@ -184,6 +185,7 @@ program
     .option("--all-features", "enable all features")
     .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')")
     .option("--strict", "generate bindings with strict type checking")
+    .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .action(asyncAction(types));
 
 program
@@ -207,6 +209,7 @@ program
             .preset("sync"),
     )
     .option("--strict", "generate bindings with strict type checking")
+    .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .action(asyncAction(guestTypes));
 
 program
