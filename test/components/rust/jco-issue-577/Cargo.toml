@@ -1,0 +1,15 @@
+[package]
+name = "jco-issue-577"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+humantime = "2"
+wstd = { version = "0.6.8", default-features = false }
+
+# Keep this standalone P2 component separate from the P1-to-P3 component
+# workspace in the parent directory.
+[workspace]

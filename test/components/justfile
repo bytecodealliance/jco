@@ -1,5 +1,6 @@
 just := env_var_or_default("JUST", just_executable())
 wac := env_var_or_default("WAC", "wac")
+cargo := env_var_or_default("CARGO", "cargo")
 
 component_output_dir := justfile_directory() / "output"
 
@@ -9,6 +10,7 @@ component_output_dir := justfile_directory() / "output"
 # Build all components for test
 [group('build')]
 build:
+    {{just}} build-jco-issue-577
     {{just}} build-jco-issue-1380
     {{just}} build-jco-issue-1381
     {{just}} build-jco-issue-1383
@@ -16,6 +18,19 @@ build:
     {{just}} build-jco-issue-1390
     {{just}} build-jco-issue-1887
     {{just}} build-jco-issue-1887-list-param
+
+# Build the wstd P2 HTTP client required to test jco issue #577
+[group('build')]
+@build-jco-issue-577:
+    echo "==> building jco-issue-577 wstd HTTP client (rust/wasip2)..."
+    mkdir -p output/jco-issue-577
+    {{cargo}} build \
+        --manifest-path rust/jco-issue-577/Cargo.toml \
+        --locked \
+        --release \
+        --target wasm32-wasip2
+    cp rust/jco-issue-577/target/wasm32-wasip2/release/jco-issue-577.wasm \
+        output/jco-issue-577/component.wasm
 
 # Build the wasi-sdk P3 reactor required to test jco issue #1887
 [group('build')]
