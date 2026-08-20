@@ -630,6 +630,8 @@ export async function readFixtureFlags(fixturePath: string): Promise<Transpilati
             opts.variantsInlineCases = true;
         } else if (arg === '--use-namespace-objects') {
             opts.useNamespaceObjects = true;
+        } else if (arg === '--enum-values-screaming-snake-case') {
+            opts.enumValuesScreamingSnakeCase = true;
         } else if (arg === '--base64-cutoff') {
             const offset = args[idx + 1];
             opts.base64Cutoff = parseInt(offset, 10);

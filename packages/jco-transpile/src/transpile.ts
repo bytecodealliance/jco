@@ -157,6 +157,9 @@ export interface TranspilationOptions {
      * Implies `flagsAsBigInt` and conflicts with `variantsInlineCases`.
      */
     useNamespaceObjects?: boolean;
+
+    /** Represent WIT enum values as SCREAMING_SNAKE_CASE strings */
+    enumValuesScreamingSnakeCase?: boolean;
 }
 
 interface TranspilationResult {
@@ -326,6 +329,7 @@ export async function transpileBytes(
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,
+        enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };

@@ -68,6 +68,9 @@ interface TypegenOptions {
      * Implies `flagsAsBigInt` and conflicts with `variantsInlineCases`.
      */
     useNamespaceObjects?: boolean;
+
+    /** Represent WIT enum values as SCREAMING_SNAKE_CASE strings */
+    enumValuesScreamingSnakeCase?: boolean;
 }
 
 /**
@@ -176,6 +179,7 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,
+        enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
     };
     const types = generateTypes(name, generateOpts).map(([name, file]) => [`${outDir}${name}`, file]);
 
