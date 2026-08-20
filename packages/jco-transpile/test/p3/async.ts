@@ -191,6 +191,37 @@ suite('Async (WASI P3)', () => {
         await cleanup();
     });
 
+    // https://github.com/bytecodealliance/jco/issues/1898 (bug 4)
+    test.concurrent('async host import tasks do not hang after resolving their parent subtask', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-host-import-hang.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    load: { default: async () => 42 },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncMode: 'jspi',
+                        asyncImports: ['load'],
+                        asyncExports: ['run'],
+                    },
+                },
+            },
+        });
+
+        try {
+            assert.strictEqual(
+                await Promise.race([instance.run(), timeoutMs(5_000, 'async host import timed out')]),
+                42,
+            );
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('async host import trampolines return lifted values directly', async () => {
         const { files } = await transpile(join(LOCAL_TEST_COMPONENTS_DIR, 'async-simple-import.wasm'), {
             name: 'async-simple-import',
