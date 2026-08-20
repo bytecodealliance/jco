@@ -8,6 +8,7 @@ mod bindings {
 
 use bindings::exports::jco::test_components::stream_concurrency_test;
 use bindings::jco::test_components::stream_concurrency_host;
+use bindings::wit_stream;
 use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 use wit_bindgen::{StreamReader, StreamResult};
@@ -95,6 +96,24 @@ impl stream_concurrency_test::Guest for Component {
         }
 
         values
+    }
+
+    async fn write_until_dropped() -> StreamReader<u8> {
+        let (mut tx, rx) = wit_stream::new();
+        wit_bindgen::spawn_local(async move {
+            loop {
+                // Tell the host before every write. The regression test consumes
+                // one value, waits until the next write is pending, then drops the
+                // reader. That drop used to re-enter this producer before the
+                // shared stream state was marked dropped and deadlock both sides.
+                stream_concurrency_host::signal();
+                let (status, _) = tx.write(vec![42]).await;
+                if status == StreamResult::Dropped {
+                    break;
+                }
+            }
+        });
+        rx
     }
 }
 
