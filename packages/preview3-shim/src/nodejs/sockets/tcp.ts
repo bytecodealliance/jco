@@ -292,7 +292,13 @@ export class TcpSocket {
     }
     let stream;
     try {
-      stream = readableByteStreamFromReader(data, { name: "tcp send data" });
+      // A remote error arrives from the TCP worker through a MessagePort. Yield
+      // after each chunk so a guest producer that completes writes immediately
+      // cannot starve that error (and its stream cancellation) indefinitely.
+      stream = readableByteStreamFromReader(data, {
+        name: "tcp send data",
+        yieldAfterChunk: true,
+      });
     } catch (error) {
       if (error instanceof TypeError) {
         throw new SocketError("invalid-argument", error.message, undefined, { cause: error });

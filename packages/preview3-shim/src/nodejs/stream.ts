@@ -1,6 +1,12 @@
 export const DEFAULT_BYTE_STREAM_CHUNK_SIZE = 64 * 1024;
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
+interface ReadableByteStreamOptions {
+  chunkSize?: number;
+  name?: string;
+  yieldAfterChunk?: boolean;
+}
+
 let BYTE_STREAM_ENCODER = null;
 function encoder() {
   return (BYTE_STREAM_ENCODER ??= new TextEncoder());
@@ -51,9 +57,10 @@ export function readableStreamFromIterator(iterator, name = "iterator") {
  * @param {object} [opts={}] - Optional adapter settings.
  * @param {number} [opts.chunkSize=DEFAULT_BYTE_STREAM_CHUNK_SIZE] - Maximum bytes to request per generated `read()` call.
  * @param {string} [opts.name="stream reader"] - Reader name used in error messages.
+ * @param {boolean} [opts.yieldAfterChunk=false] - Yield one event-loop turn after each chunk.
  * @returns {ReadableStream<Uint8Array>} A transferable stream of byte chunks.
  */
-export function readableByteStreamFromReader(reader, opts = {}) {
+export function readableByteStreamFromReader(reader, opts: ReadableByteStreamOptions = {}) {
   const source = byteStreamSource(reader, opts);
   return new ReadableStream({
     async pull(controller) {
@@ -63,6 +70,9 @@ export function readableByteStreamFromReader(reader, opts = {}) {
         return;
       }
       controller.enqueue(_byteChunk(value));
+      if (opts.yieldAfterChunk) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     },
     cancel(reason) {
       return source.cancel?.(reason);
