@@ -336,4 +336,29 @@ describe("readableByteStreamFromReader()", () => {
 
     await expect(reader.read()).rejects.toThrow("Invalid byte stream value: 256");
   });
+
+  test("can yield an event-loop turn between chunks", async () => {
+    let eventLoopTurnCompleted = false;
+    let reads = 0;
+    const source = {
+      async read() {
+        reads += 1;
+        if (reads === 1) {
+          setTimeout(() => {
+            eventLoopTurnCompleted = true;
+          }, 0);
+          return { value: [42], done: false };
+        }
+        expect(eventLoopTurnCompleted).toBe(true);
+        return { value: undefined, done: true };
+      },
+    };
+
+    const reader = readableByteStreamFromReader(source, {
+      yieldAfterChunk: true,
+    }).getReader();
+
+    expect((await reader.read()).value).toEqual(new Uint8Array([42]));
+    expect((await reader.read()).done).toBe(true);
+  });
 });
