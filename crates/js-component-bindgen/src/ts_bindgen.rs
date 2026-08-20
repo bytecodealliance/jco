@@ -67,6 +67,7 @@ struct TsBindgen {
     is_guest: bool,
     flags_as_bigint: bool,
     variants_inline_cases: bool,
+    use_namespace_objects: bool,
 
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -107,6 +108,7 @@ struct TsInterface<'a> {
     is_guest: bool,
     flags_as_bigint: bool,
     variants_inline_cases: bool,
+    use_namespace_objects: bool,
     resolve: &'a Resolve,
     has_constructor: bool,
     needs_ty_option: bool,
@@ -142,6 +144,7 @@ pub fn ts_bindgen(
         is_guest: opts.guest,
         flags_as_bigint: opts.flags_as_bigint,
         variants_inline_cases: opts.variants_inline_cases,
+        use_namespace_objects: opts.use_namespace_objects,
         async_imports,
         async_exports,
         references: Default::default(),
@@ -250,6 +253,7 @@ pub fn ts_bindgen(
                         opts.guest,
                         opts.flags_as_bigint,
                         opts.variants_inline_cases,
+                        opts.use_namespace_objects,
                     );
                     generator.docs(&ty.docs);
 
@@ -638,6 +642,7 @@ impl TsBindgen {
             self.is_guest,
             self.flags_as_bigint,
             self.variants_inline_cases,
+            self.use_namespace_objects,
         );
         generator.ts_func(
             func,
@@ -701,6 +706,7 @@ impl TsBindgen {
             self.is_guest,
             self.flags_as_bigint,
             self.variants_inline_cases,
+            self.use_namespace_objects,
         );
         let id_name = &resolve.worlds[world].name;
 
@@ -816,6 +822,7 @@ impl TsBindgen {
                 self.is_guest,
                 self.flags_as_bigint,
                 self.variants_inline_cases,
+                self.use_namespace_objects,
             );
             generator.begin(&id_name); // Write module declaration
 
@@ -885,12 +892,14 @@ impl<'a> TsInterface<'a> {
         is_guest: bool,
         flags_as_bigint: bool,
         variants_inline_cases: bool,
+        use_namespace_objects: bool,
     ) -> Self {
         TsInterface {
             is_root,
             is_guest,
             flags_as_bigint,
             variants_inline_cases,
+            use_namespace_objects,
             src: Source::default(),
             resources: BTreeMap::new(),
             local_names: LocalNames::default(),
@@ -1152,6 +1161,7 @@ impl<'a> TsInterface<'a> {
                             self.is_guest,
                             self.flags_as_bigint,
                             self.variants_inline_cases,
+                            self.use_namespace_objects,
                         ),
                     )
                 })
@@ -1327,15 +1337,7 @@ impl<'a> TsInterface<'a> {
             let name = name.to_upper_camel_case();
             self.src
                 .push_str(&format!("export type {name} = bigint;\n"));
-            self.src.push_str(&format!("export const {name}: {{\n"));
-            for flag in flags.flags.iter() {
-                self.docs(&flag.docs);
-                self.src.push_str(&format!(
-                    "readonly {}: bigint,\n",
-                    flag.name.to_upper_camel_case()
-                ));
-            }
-            self.src.push_str("};\n");
+            self.type_flags_namespace(&name, flags);
             return;
         }
         self.src.push_str(&format!(
@@ -1379,6 +1381,7 @@ impl<'a> TsInterface<'a> {
                 }
                 self.src.push_str("}\n");
             }
+            self.type_variant_namespace(name, variant);
             return;
         }
 
@@ -1404,6 +1407,7 @@ impl<'a> TsInterface<'a> {
         }
         self.src.deindent(1);
         self.src.push_str(";\n");
+        self.type_variant_namespace(name, variant);
     }
 
     fn type_option(&mut self, _id: TypeId, name: &str, payload: &Type, docs: &Docs) {
@@ -1420,6 +1424,57 @@ impl<'a> TsInterface<'a> {
             self.src.push_str(" | undefined");
         }
         self.src.push_str(";\n");
+    }
+
+    fn type_flags_namespace(&mut self, name: &str, flags: &Flags) {
+        self.src.push_str(&format!("export const {name}: {{\n"));
+        for flag in flags.flags.iter() {
+            self.docs(&flag.docs);
+            self.src.push_str(&format!(
+                "readonly {}: bigint,\n",
+                flag.name.to_upper_camel_case()
+            ));
+        }
+        self.src.push_str("};\n");
+    }
+
+    fn type_enum_namespace(&mut self, name: &str, enum_: &Enum) {
+        if !self.use_namespace_objects {
+            return;
+        }
+        let name = name.to_upper_camel_case();
+        self.src.push_str(&format!("export const {name}: {{\n"));
+        for case in &enum_.cases {
+            self.docs(&case.docs);
+            self.src.push_str(&format!(
+                "readonly {}: '{}',\n",
+                case.name.to_upper_camel_case(),
+                case.name
+            ));
+        }
+        self.src.push_str("};\n");
+    }
+
+    fn type_variant_namespace(&mut self, name: &str, variant: &Variant) {
+        if !self.use_namespace_objects {
+            return;
+        }
+        let name = name.to_upper_camel_case();
+        self.src.push_str(&format!("export const {name}: {{\n"));
+        for case in &variant.cases {
+            self.docs(&case.docs);
+            self.src
+                .push_str(&format!("readonly {}: (", case.name.to_upper_camel_case()));
+            if let Some(ty) = &case.ty {
+                self.src.push_str("val: ");
+                self.print_ty(ty);
+            }
+            self.src.push_str(&format!(
+                ") => Extract<{name}, {{ tag: '{}' }}>,\n",
+                case.name
+            ));
+        }
+        self.src.push_str("};\n");
     }
 
     fn type_result(&mut self, _id: TypeId, name: &str, result: &Result_, docs: &Docs) {
@@ -1466,6 +1521,7 @@ impl<'a> TsInterface<'a> {
             self.src.push_str(&format!("'{}'", case.name));
         }
         self.src.push_str(";\n");
+        self.type_enum_namespace(name, enum_);
     }
 
     fn type_alias(
@@ -1526,6 +1582,18 @@ impl<'a> TsInterface<'a> {
                 self.src.push_str(";\n");
             }
         }
+
+        if let Type::Id(id) = ty {
+            let kind = self.resolve.types[dealias(self.resolve, *id)].kind.clone();
+            match &kind {
+                TypeDefKind::Flags(flags) if self.flags_as_bigint => {
+                    self.type_flags_namespace(&type_name, flags)
+                }
+                TypeDefKind::Enum(enum_) => self.type_enum_namespace(name, enum_),
+                TypeDefKind::Variant(variant) => self.type_variant_namespace(name, variant),
+                _ => {}
+            }
+        }
     }
 
     fn type_future(&mut self, name: &str, element_ty: &Option<Type>, docs: &Docs) {
@@ -1583,6 +1651,7 @@ impl<'a> TsInterface<'a> {
                     self.is_guest,
                     self.flags_as_bigint,
                     self.variants_inline_cases,
+                    self.use_namespace_objects,
                 ),
             )
         });
