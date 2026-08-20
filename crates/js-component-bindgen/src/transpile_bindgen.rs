@@ -4456,6 +4456,17 @@ impl<'a> Instantiator<'a, '_> {
             for_import: Some(for_import),
         };
 
+        let is_guest_export = matches!(
+            abi,
+            AbiVariant::GuestExport
+                | AbiVariant::GuestExportAsync
+                | AbiVariant::GuestExportAsyncStackful
+        );
+        if is_guest_export {
+            f.start_wasm_export_task();
+            f.begin_wasm_export_body();
+        }
+
         // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of
         // instructions which represents the function being generated.
         abi::call(
@@ -4473,6 +4484,10 @@ impl<'a> Instantiator<'a, '_> {
             &mut f,
             is_async,
         );
+
+        if is_guest_export {
+            f.end_wasm_export_body();
+        }
 
         // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
         self.src.js(&f.src);

@@ -1228,6 +1228,7 @@ impl AsyncTaskIntrinsic {
                         isRunningState() {{ return this.#state !== {task_class}.State.RESOLVED; }}
                         isResolvedState() {{ return this.#state === {task_class}.State.RESOLVED; }}
                         isResolved() {{ return this.#state === {task_class}.State.RESOLVED; }}
+                        isExited() {{ return this.#exited; }}
 
                         async waitUntil(opts) {{
                             const {{ readyFn, cancellable }} = opts;
