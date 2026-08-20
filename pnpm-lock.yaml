@@ -272,6 +272,12 @@ importers:
         specifier: 1.25.2
         version: 1.25.2
 
+  examples/transpile/js-string-builtins:
+    dependencies:
+      '@bytecodealliance/jco':
+        specifier: 1.30.0
+        version: 1.30.0
+
   examples/transpile/p3-stream-chat:
     dependencies:
       '@bytecodealliance/jco':
@@ -627,6 +633,10 @@ packages:
 
   '@bytecodealliance/jco@1.28.1':
     resolution: {integrity: sha512-K6STS3cFzfDup+OKYgbRrHdd2BfavUaxu36xK2IL91s3oPBV9mf6ZFVHvAJp8qpj5PkF62DfY3O+ydIduQWj7w==}
+    hasBin: true
+
+  '@bytecodealliance/jco@1.30.0':
+    resolution: {integrity: sha512-eUb7NCI5Un7edpRqP0iHDhl8TXu4v5/tj0ku4CaKKMVWS7tvHuldH/XIPcSCkgZ9+AleIOMNS2CeM5quONUvxg==}
     hasBin: true
 
   '@bytecodealliance/preview2-shim@0.17.9':
@@ -4200,6 +4210,22 @@ snapshots:
       mkdirp: 3.0.1
       ora: 8.2.0
       rolldown: 1.2.4
+
+  '@bytecodealliance/jco@1.30.0':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.22.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.10.0
+      '@bytecodealliance/preview2-shim': 0.20.2
+      '@bytecodealliance/preview3-shim': 0.3.2
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.3
+      mkdirp: 3.0.1
+      ora: 8.2.0
+      rolldown: 1.2.4
+      typescript: 7.0.2
+      typescript-compiler-api: typescript@6.0.3
 
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
