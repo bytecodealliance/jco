@@ -87,6 +87,10 @@ world js-component-bindgen {
     /// generating a named interface for each case.
     variants-inline-cases: option<bool>,
 
+    /// Generate runtime namespace objects for WIT flags, enums, and variants.
+    /// Implies `flags-as-bigint` and conflicts with `variants-inline-cases`.
+    use-namespace-objects: option<bool>,
+
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
   }
@@ -152,6 +156,10 @@ world js-component-bindgen {
     /// Inline WIT variant cases in their discriminated unions instead of
     /// generating a named interface for each case.
     variants-inline-cases: option<bool>,
+
+    /// Generate runtime namespace objects for WIT flags, enums, and variants.
+    /// Implies `flags-as-bigint` and conflicts with `variants-inline-cases`.
+    use-namespace-objects: option<bool>,
   }
 
   enum export-type {

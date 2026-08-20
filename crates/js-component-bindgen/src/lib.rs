@@ -68,8 +68,9 @@ pub fn generate_types(
     name: &str,
     resolve: Resolve,
     world_id: WorldId,
-    opts: TranspileOpts,
+    mut opts: TranspileOpts,
 ) -> Result<Vec<(String, Vec<u8>)>> {
+    normalize_namespace_object_options(&mut opts)?;
     let mut files = files::Files::default();
 
     ts_bindgen(name, &resolve, world_id, &opts, &mut files)
@@ -85,9 +86,10 @@ pub fn generate_types(
 /// Generate the JS transpilation bindgen for a given Wasm component binary
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
+pub fn transpile(component: &[u8], mut opts: TranspileOpts) -> Result<Transpiled> {
     use wasmtime_environ::component::{Component, Translator};
 
+    normalize_namespace_object_options(&mut opts)?;
     let name = opts.name.clone();
     let mut files = files::Files::default();
 
@@ -187,6 +189,17 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
         imports,
         exports,
     })
+}
+
+fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
+    ensure!(
+        !(opts.use_namespace_objects && opts.variants_inline_cases),
+        "useNamespaceObjects cannot be combined with variantsInlineCases"
+    );
+    if opts.use_namespace_objects {
+        opts.flags_as_bigint = true;
+    }
+    Ok(())
 }
 
 fn core_file_name(name: &str, idx: u32) -> String {

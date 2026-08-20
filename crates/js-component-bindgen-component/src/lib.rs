@@ -76,6 +76,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .strict(options.strict.unwrap_or(false))
             .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
+            .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
             .asmjs(options.asmjs.unwrap_or(false))
             .build();
 
@@ -171,12 +172,13 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .strict(opts.strict.unwrap_or(false))
             .flags_as_bigint(opts.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(opts.variants_inline_cases.unwrap_or(false))
+            .use_namespace_objects(opts.use_namespace_objects.unwrap_or(false))
             .asmjs(false)
             .build();
 
         let files = js_component_bindgen::generate_types(&name, resolve, world, opts)
             .with_context(|| format!("generating types for [{}]", name))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{e:?}"))?;
 
         Ok(files)
     }

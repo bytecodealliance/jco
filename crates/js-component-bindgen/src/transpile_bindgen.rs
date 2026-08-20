@@ -125,6 +125,10 @@ pub struct TranspileOpts {
     /// generating a named interface for each case.
     #[builder(default)]
     pub variants_inline_cases: bool,
+    /// Generate runtime namespace objects for WIT flags, enums, and variants.
+    /// Implies `flags_as_bigint` and conflicts with `variants_inline_cases`.
+    #[builder(default)]
+    pub use_namespace_objects: bool,
     /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
     #[builder(default)]
     pub asmjs: bool,
@@ -4866,28 +4870,72 @@ impl<'a> Instantiator<'a, '_> {
                         }
                     };
 
-                    if self.bindgen.opts.flags_as_bigint {
+                    if self.bindgen.opts.flags_as_bigint || self.bindgen.opts.use_namespace_objects
+                    {
+                        let mut namespace_locals = BTreeMap::<TypeId, String>::new();
                         for (type_name, type_id) in &self.resolve.interfaces[iface_id].types {
                             let type_id = crate::dealias(self.resolve, *type_id);
-                            let TypeDefKind::Flags(flags) = &self.resolve.types[type_id].kind
-                            else {
+                            let kind = &self.resolve.types[type_id].kind;
+                            let generate = matches!(kind, TypeDefKind::Flags(_))
+                                && self.bindgen.opts.flags_as_bigint
+                                || matches!(kind, TypeDefKind::Enum(_) | TypeDefKind::Variant(_))
+                                    && self.bindgen.opts.use_namespace_objects;
+                            if !generate {
                                 continue;
-                            };
+                            }
 
                             let local_name = self
                                 .bindgen
                                 .local_names
                                 .create_once(&type_name.to_upper_camel_case())
                                 .to_string();
-                            uwriteln!(self.src.js, "const {local_name} = Object.freeze({{");
-                            for (index, flag) in flags.flags.iter().enumerate() {
-                                uwriteln!(
-                                    self.src.js,
-                                    "{}: 1n << {index}n,",
-                                    flag.name.to_upper_camel_case()
-                                );
+                            if let Some(existing) = namespace_locals.get(&type_id) {
+                                uwriteln!(self.src.js, "const {local_name} = {existing};");
+                            } else {
+                                uwriteln!(self.src.js, "const {local_name} = Object.freeze({{");
+                                match kind {
+                                    TypeDefKind::Flags(flags) => {
+                                        for (index, flag) in flags.flags.iter().enumerate() {
+                                            uwriteln!(
+                                                self.src.js,
+                                                "{}: 1n << {index}n,",
+                                                flag.name.to_upper_camel_case()
+                                            );
+                                        }
+                                    }
+                                    TypeDefKind::Enum(enum_) => {
+                                        for case in &enum_.cases {
+                                            uwriteln!(
+                                                self.src.js,
+                                                "{}: '{}',",
+                                                case.name.to_upper_camel_case(),
+                                                case.name
+                                            );
+                                        }
+                                    }
+                                    TypeDefKind::Variant(variant) => {
+                                        for case in &variant.cases {
+                                            let case_name = case.name.to_upper_camel_case();
+                                            if case.ty.is_some() {
+                                                uwriteln!(
+                                                    self.src.js,
+                                                    "{case_name}: (val) => ({{ tag: '{}', val }}),",
+                                                    case.name
+                                                );
+                                            } else {
+                                                uwriteln!(
+                                                    self.src.js,
+                                                    "{case_name}: () => ({{ tag: '{}' }}),",
+                                                    case.name
+                                                );
+                                            }
+                                        }
+                                    }
+                                    _ => unreachable!(),
+                                }
+                                uwriteln!(self.src.js, "}});");
+                                namespace_locals.insert(type_id, local_name.clone());
                             }
-                            uwriteln!(self.src.js, "}});");
                             self.bindgen.esm_bindgen.add_export_constant(
                                 &export_name,
                                 local_name,
