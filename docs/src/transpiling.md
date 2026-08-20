@@ -51,6 +51,7 @@ Options include:
 * `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 * `--flags-as-bigint`: Represents WIT flags as `bigint` values and exports named flag constants. By default, flags remain objects of booleans for backwards compatibility.
+* `--variants-inline-cases`: Inlines WIT variant cases in their discriminated unions instead of exporting a named interface for every case. The named interfaces remain the default for backwards compatibility.
 * `--tracing`: Emit tracing calls for all function entry and exits.
 * `--no-component-error-wrapping`: Throw the lifted error payload directly for a top-level `result::err` instead of wrapping it in a generated `ComponentError`. Jco preserves wrapping by default for compatibility.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript

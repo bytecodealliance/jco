@@ -90,6 +90,17 @@ For example, pseudo Typescript for the of the above `filter` variant would look 
 > You can work around this limitation of variants by having the contained type be a _tuple_,
 > (e.g. `tuple<string, u32, string>`), or using a named record as the related data.
 
+By default, generated TypeScript declarations export a named interface for each variant case. Pass
+`--variants-inline-cases` to `jco transpile`, `jco types`, or `jco guest-types` to emit the cases directly in the
+discriminated union instead:
+
+```ts
+export type Filter = { tag: 'all' } | { tag: 'none' } | { tag: 'some'; val: string[] };
+```
+
+Inlining prevents a generated case name such as `OperationCreate` from colliding with a WIT record named
+`operation-create`. The option is disabled by default because existing code may import the named case interfaces.
+
 ## Records (`record`)
 
 ### WIT Syntax
