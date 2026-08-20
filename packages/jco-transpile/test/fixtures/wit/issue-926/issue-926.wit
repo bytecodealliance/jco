@@ -1,0 +1,29 @@
+package test:issue-926;
+
+interface operations {
+  record metadata {
+    label: string,
+  }
+
+  record operation-create {
+    credit: u64,
+    metadata: metadata,
+  }
+
+  record operation-edit {
+    credit: u64,
+  }
+
+  variant operation {
+    /// Creates an operation.
+    create(operation-create),
+    edit(operation-edit),
+    cancel,
+  }
+
+  process: func(value: operation) -> operation;
+}
+
+world issue-926 {
+  export operations;
+}

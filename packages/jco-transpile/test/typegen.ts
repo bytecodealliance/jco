@@ -140,4 +140,20 @@ suite('Type Generation', () => {
             "export type MessageFuture = import('./test-named-async-types-types.js').MessageFuture;",
         );
     });
+
+    // https://github.com/bytecodealliance/jco/issues/926
+    test('variant cases do not collide with WIT type names', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/issue-926`, {
+            worldName: 'test:issue-926/issue-926',
+        });
+        const declaration = Buffer.from(files['interfaces/test-issue-926-operations.d.ts']).toString();
+
+        assert.include(
+            declaration,
+            `export type Operation =\n  | {\n    /**\n     * Creates an operation.\n     */\n    tag: 'create',\n    val: OperationCreate,\n  }\n  | {\n    tag: 'edit',\n    val: OperationEdit,\n  }\n  | {\n    tag: 'cancel',\n  };`,
+        );
+        assert.strictEqual(declaration.match(/export interface OperationCreate/g)?.length, 1);
+        assert.strictEqual(declaration.match(/export interface OperationEdit/g)?.length, 1);
+        assert.notInclude(declaration, 'export interface OperationCancel');
+    });
 });
