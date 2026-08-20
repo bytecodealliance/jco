@@ -1,0 +1,20 @@
+{
+    "name": "js-string-builtins-transpile",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Use Jco manual instantiation with the WebAssembly JS String Builtins proposal",
+    "type": "module",
+    "scripts": {
+        "build:component": "jco parse palindrome.component.wat -o palindrome.component.wasm",
+        "transpile": "jco transpile palindrome.component.wasm --name palindrome --instantiation async -o dist",
+        "build": "pnpm run build:component && pnpm run transpile",
+        "demo": "node demo.js",
+        "all": "pnpm run build && pnpm run demo"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco": "1.30.0"
+    },
+    "engines": {
+        "node": ">=24"
+    }
+}

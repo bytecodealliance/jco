@@ -30,6 +30,7 @@ packages:
   - examples/components/ts-resource-import
   - examples/components/typegen-async-export
   - examples/components/webidl-book-library
+  - examples/transpile/js-string-builtins
   - examples/transpile/p3-stream-chat
 
 catalog:
@@ -84,4 +85,4 @@ minimumReleaseAgeExclude:
   - puppeteer-core@25.1.0
   - puppeteer@25.1.0
   - ws@8.21.0
-  - '@bytecodealliance/jco@1.26.0 || 1.26.1 || 1.27.0'
+  - '@bytecodealliance/jco@1.26.0 || 1.26.1 || 1.27.0 || 1.30.0'
