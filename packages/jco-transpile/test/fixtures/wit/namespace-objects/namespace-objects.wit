@@ -1,0 +1,27 @@
+package test:namespace-objects;
+
+interface api {
+  type x = y;
+
+  variant y {
+    text(string),
+    number(u32),
+    empty,
+  }
+
+  enum direction {
+    north,
+    south,
+  }
+
+  flags permissions {
+    read,
+    write,
+  }
+
+  accept: func(x: x, y: y, direction: direction, permissions: permissions);
+}
+
+world namespace-objects {
+  export api;
+}

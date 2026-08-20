@@ -62,6 +62,12 @@ interface TypegenOptions {
 
     /** Inline WIT variant cases instead of generating a named interface for each case */
     variantsInlineCases?: boolean;
+
+    /**
+     * Generate namespace objects for WIT flags, enums, and variants.
+     * Implies `flagsAsBigInt` and conflicts with `variantsInlineCases`.
+     */
+    useNamespaceObjects?: boolean;
 }
 
 /**
@@ -169,6 +175,7 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         asyncMode,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
+        useNamespaceObjects: opts.useNamespaceObjects === true,
     };
     const types = generateTypes(name, generateOpts).map(([name, file]) => [`${outDir}${name}`, file]);
 
