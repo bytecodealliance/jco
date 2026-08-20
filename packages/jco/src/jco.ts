@@ -149,6 +149,11 @@ program
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
+    .addOption(
+        new Option("--use-namespace-objects", "generate namespace objects for WIT flags, enums, and variants")
+            .conflicts("variantsInlineCases")
+            .implies({ flagsAsBigint: true }),
+    )
     .allowExcessArguments(true)
     .action(asyncAction(transpileCmd));
 
@@ -188,6 +193,11 @@ program
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
+    .addOption(
+        new Option("--use-namespace-objects", "generate namespace objects for WIT flags, enums, and variants")
+            .conflicts("variantsInlineCases")
+            .implies({ flagsAsBigint: true }),
+    )
     .action(asyncAction(types));
 
 program
@@ -213,6 +223,11 @@ program
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
+    .addOption(
+        new Option("--use-namespace-objects", "generate namespace objects for WIT flags, enums, and variants")
+            .conflicts("variantsInlineCases")
+            .implies({ flagsAsBigint: true }),
+    )
     .action(asyncAction(guestTypes));
 
 program

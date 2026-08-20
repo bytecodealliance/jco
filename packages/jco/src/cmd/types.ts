@@ -40,6 +40,7 @@ export interface TypesOptions {
     strict?: boolean;
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
+    useNamespaceObjects?: boolean;
 }
 
 export async function types(witPath: string | undefined, opts: TypesOptions) {
@@ -98,6 +99,8 @@ export async function guestTypes(witPath: string | undefined, opts: TypesOptions
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
 export async function typesComponent(witPath: string, opts: TypesOptions): Promise<Record<string, Uint8Array>> {
+    const cliOpts = opts as TypesOptions & { flagsAsBigint?: boolean };
+    const flagsAsBigInt = opts.flagsAsBigInt === true || cliOpts.flagsAsBigint === true;
     const name =
         opts.name ||
         (opts.worldName
@@ -173,8 +176,9 @@ export async function typesComponent(witPath: string, opts: TypesOptions): Promi
             features,
             guest,
             strict: opts.strict === true,
-            flagsAsBigInt: opts.flagsAsBigInt === true,
+            flagsAsBigInt,
             variantsInlineCases: opts.variantsInlineCases === true,
+            useNamespaceObjects: opts.useNamespaceObjects === true,
             asyncMode: asyncModeObj,
         } as any);
         types = Object.entries(generated).map(([name, bytes]) => [`${outDir}${name}`, bytes]);
