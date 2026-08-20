@@ -36,6 +36,7 @@ export interface TranspileOpts {
     wasiShim?: boolean;
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
+    useNamespaceObjects?: boolean;
 }
 
 // These re-exports exist to avoid breaking backwards compatibility
@@ -69,6 +70,10 @@ export async function transpileComponent(component: Uint8Array, opts: TranspileO
 }
 
 function prepOpts(opts: any, program?: any) {
+    // Commander derives `flagsAsBigint` from `--flags-as-bigint`, while the
+    // public API uses the conventional TypeScript spelling `flagsAsBigInt`.
+    opts.flagsAsBigInt ??= opts.flagsAsBigint;
+
     // Preserve jco's existing ComponentError behavior even though the lower-level
     // jco-transpile API defaults to throwing raw top-level result error payloads.
     opts.noComponentErrorWrapping ??= opts.componentErrorWrapping === false;
