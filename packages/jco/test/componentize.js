@@ -194,8 +194,7 @@ suite("componentize", () => {
         ).rejects.toThrow(/TypeScript declaration files cannot be componentized directly/);
     });
 
-    // TODO: Enable once this test can run Wizer reliably in constrained CI environments.
-    test.skip("bundles and executes a local dependency graph", async () => {
+    test("bundles and executes a local dependency graph", async () => {
         const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "local-dependency");
         const outputDir = await getTmpDir();
         const componentPath = join(outputDir, "component.wasm");
