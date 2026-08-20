@@ -154,6 +154,7 @@ program
             .conflicts("variantsInlineCases")
             .implies({ flagsAsBigint: true }),
     )
+    .option("--enum-values-screaming-snake-case", "represent WIT enum values as SCREAMING_SNAKE_CASE strings")
     .allowExcessArguments(true)
     .action(asyncAction(transpileCmd));
 
@@ -198,6 +199,7 @@ program
             .conflicts("variantsInlineCases")
             .implies({ flagsAsBigint: true }),
     )
+    .option("--enum-values-screaming-snake-case", "represent WIT enum values as SCREAMING_SNAKE_CASE strings")
     .action(asyncAction(types));
 
 program
@@ -228,6 +230,7 @@ program
             .conflicts("variantsInlineCases")
             .implies({ flagsAsBigint: true }),
     )
+    .option("--enum-values-screaming-snake-case", "represent WIT enum values as SCREAMING_SNAKE_CASE strings")
     .action(asyncAction(guestTypes));
 
 program

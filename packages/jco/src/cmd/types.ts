@@ -41,6 +41,7 @@ export interface TypesOptions {
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;
+    enumValuesScreamingSnakeCase?: boolean;
 }
 
 export async function types(witPath: string | undefined, opts: TypesOptions) {
@@ -179,6 +180,7 @@ export async function typesComponent(witPath: string, opts: TypesOptions): Promi
             flagsAsBigInt,
             variantsInlineCases: opts.variantsInlineCases === true,
             useNamespaceObjects: opts.useNamespaceObjects === true,
+            enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
             asyncMode: asyncModeObj,
         } as any);
         types = Object.entries(generated).map(([name, bytes]) => [`${outDir}${name}`, bytes]);
