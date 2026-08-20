@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4a0ec5c4.js";
+            window.path_to_searchindex_js = "searchindex-0a190b25.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-9521a751.js"></script>
@@ -398,6 +398,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 </li>
 <li>
 <p><code>--use-namespace-objects</code>: Exports namespace objects for WIT enums, flags, and variants. This implies <code>--flags-as-bigint</code> and cannot be combined with <code>--variants-inline-cases</code>.</p>
+</li>
+<li>
+<p><code>--enum-values-screaming-snake-case</code>: Represents WIT enum values as <code>SCREAMING_SNAKE_CASE</code> strings instead of their original kebab-case names.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
@@ -859,6 +862,18 @@ and <a href="https://www.typescriptlang.org/">Typescript</a> (if dealing with <c
 </tbody>
 </table>
 </div>
+<h2 id="enums-enum"><a class="header" href="#enums-enum">Enums (<code>enum</code>)</a></h2>
+<p>Jco represents a WIT enum as a union of string literals. By default, the strings preserve the WIT case names:</p>
+<pre><code class="language-wit">enum status { request-pending, request-complete }
+</code></pre>
+<pre><code class="language-ts">export type Status = 'request-pending' | 'request-complete';
+</code></pre>
+<p>Pass <code>--enum-values-screaming-snake-case</code> to use <code>SCREAMING_SNAKE_CASE</code> values at the JavaScript boundary and in generated
+declarations:</p>
+<pre><code class="language-ts">export type Status = 'REQUEST_PENDING' | 'REQUEST_COMPLETE';
+</code></pre>
+<p>The option affects both values passed into a component and values returned from it. It also works with
+<code>--use-namespace-objects</code>; in that mode, for example, <code>Status.RequestPending</code> has the value <code>'REQUEST_PENDING'</code>.</p>
 <h2 id="namespace-objects"><a class="header" href="#namespace-objects">Namespace objects</a></h2>
 <p>WIT enums and variants are represented as TypeScript types by default, so they do not provide JavaScript values for
 constructing cases. Pass <code>--use-namespace-objects</code> to <code>jco transpile</code> to generate namespace objects for enums, flags,
