@@ -68,6 +68,7 @@ struct TsBindgen {
     flags_as_bigint: bool,
     variants_inline_cases: bool,
     use_namespace_objects: bool,
+    enum_values_screaming_snake_case: bool,
 
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -109,6 +110,7 @@ struct TsInterface<'a> {
     flags_as_bigint: bool,
     variants_inline_cases: bool,
     use_namespace_objects: bool,
+    enum_values_screaming_snake_case: bool,
     resolve: &'a Resolve,
     has_constructor: bool,
     needs_ty_option: bool,
@@ -145,6 +147,7 @@ pub fn ts_bindgen(
         flags_as_bigint: opts.flags_as_bigint,
         variants_inline_cases: opts.variants_inline_cases,
         use_namespace_objects: opts.use_namespace_objects,
+        enum_values_screaming_snake_case: opts.enum_values_screaming_snake_case,
         async_imports,
         async_exports,
         references: Default::default(),
@@ -254,6 +257,7 @@ pub fn ts_bindgen(
                         opts.flags_as_bigint,
                         opts.variants_inline_cases,
                         opts.use_namespace_objects,
+                        opts.enum_values_screaming_snake_case,
                     );
                     generator.docs(&ty.docs);
 
@@ -643,6 +647,7 @@ impl TsBindgen {
             self.flags_as_bigint,
             self.variants_inline_cases,
             self.use_namespace_objects,
+            self.enum_values_screaming_snake_case,
         );
         generator.ts_func(
             func,
@@ -707,6 +712,7 @@ impl TsBindgen {
             self.flags_as_bigint,
             self.variants_inline_cases,
             self.use_namespace_objects,
+            self.enum_values_screaming_snake_case,
         );
         let id_name = &resolve.worlds[world].name;
 
@@ -823,6 +829,7 @@ impl TsBindgen {
                 self.flags_as_bigint,
                 self.variants_inline_cases,
                 self.use_namespace_objects,
+                self.enum_values_screaming_snake_case,
             );
             generator.begin(&id_name); // Write module declaration
 
@@ -893,6 +900,7 @@ impl<'a> TsInterface<'a> {
         flags_as_bigint: bool,
         variants_inline_cases: bool,
         use_namespace_objects: bool,
+        enum_values_screaming_snake_case: bool,
     ) -> Self {
         TsInterface {
             is_root,
@@ -900,6 +908,7 @@ impl<'a> TsInterface<'a> {
             flags_as_bigint,
             variants_inline_cases,
             use_namespace_objects,
+            enum_values_screaming_snake_case,
             src: Source::default(),
             resources: BTreeMap::new(),
             local_names: LocalNames::default(),
@@ -1162,6 +1171,7 @@ impl<'a> TsInterface<'a> {
                             self.flags_as_bigint,
                             self.variants_inline_cases,
                             self.use_namespace_objects,
+                            self.enum_values_screaming_snake_case,
                         ),
                     )
                 })
@@ -1446,10 +1456,12 @@ impl<'a> TsInterface<'a> {
         self.src.push_str(&format!("export const {name}: {{\n"));
         for case in &enum_.cases {
             self.docs(&case.docs);
+            let case_value =
+                crate::enum_case_name(&case.name, self.enum_values_screaming_snake_case);
             self.src.push_str(&format!(
                 "readonly {}: '{}',\n",
                 case.name.to_upper_camel_case(),
-                case.name
+                case_value
             ));
         }
         self.src.push_str("};\n");
@@ -1518,7 +1530,9 @@ impl<'a> TsInterface<'a> {
             if i != 0 {
                 self.src.push_str(" | ");
             }
-            self.src.push_str(&format!("'{}'", case.name));
+            let case_name =
+                crate::enum_case_name(&case.name, self.enum_values_screaming_snake_case);
+            self.src.push_str(&format!("'{case_name}'"));
         }
         self.src.push_str(";\n");
         self.type_enum_namespace(name, enum_);
@@ -1652,6 +1666,7 @@ impl<'a> TsInterface<'a> {
                     self.flags_as_bigint,
                     self.variants_inline_cases,
                     self.use_namespace_objects,
+                    self.enum_values_screaming_snake_case,
                 ),
             )
         });

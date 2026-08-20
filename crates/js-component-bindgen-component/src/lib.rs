@@ -77,6 +77,9 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
             .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
+            .enum_values_screaming_snake_case(
+                options.enum_values_screaming_snake_case.unwrap_or(false),
+            )
             .asmjs(options.asmjs.unwrap_or(false))
             .build();
 
@@ -173,6 +176,9 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .flags_as_bigint(opts.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(opts.variants_inline_cases.unwrap_or(false))
             .use_namespace_objects(opts.use_namespace_objects.unwrap_or(false))
+            .enum_values_screaming_snake_case(
+                opts.enum_values_screaming_snake_case.unwrap_or(false),
+            )
             .asmjs(false)
             .build();
 

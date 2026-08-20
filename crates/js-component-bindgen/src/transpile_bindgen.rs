@@ -129,6 +129,9 @@ pub struct TranspileOpts {
     /// Implies `flags_as_bigint` and conflicts with `variants_inline_cases`.
     #[builder(default)]
     pub use_namespace_objects: bool,
+    /// Represent WIT enum values as SCREAMING_SNAKE_CASE strings.
+    #[builder(default)]
+    pub enum_values_screaming_snake_case: bool,
     /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
     #[builder(default)]
     pub asmjs: bool,
@@ -4402,6 +4405,7 @@ impl<'a> Instantiator<'a, '_> {
             intrinsics: &mut self.bindgen.all_intrinsics,
             valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
             flags_as_bigint: self.bindgen.opts.flags_as_bigint,
+            enum_values_screaming_snake_case: self.bindgen.opts.enum_values_screaming_snake_case,
             sizes: &self.sizes,
             err: if get_thrown_type(self.resolve, func.result).is_some() {
                 match abi {
@@ -4905,11 +4909,15 @@ impl<'a> Instantiator<'a, '_> {
                                     }
                                     TypeDefKind::Enum(enum_) => {
                                         for case in &enum_.cases {
+                                            let case_value = crate::enum_case_name(
+                                                &case.name,
+                                                self.bindgen.opts.enum_values_screaming_snake_case,
+                                            );
                                             uwriteln!(
                                                 self.src.js,
                                                 "{}: '{}',",
                                                 case.name.to_upper_camel_case(),
-                                                case.name
+                                                case_value
                                             );
                                         }
                                     }
@@ -5927,6 +5935,10 @@ pub fn gen_flat_lift_fn_js_expr(
 
             let mut elem_lifts_expr = String::from("[");
             for name in &enum_ty.names {
+                let name = crate::enum_case_name(
+                    name,
+                    instantiator.bindgen.opts.enum_values_screaming_snake_case,
+                );
                 elem_lifts_expr.push_str(&format!(
                     "['{name}', null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],"
                 ));
@@ -6563,6 +6575,10 @@ pub fn gen_flat_lower_fn_js_expr(
 
             let mut elem_lowers_expr = String::from("[");
             for name in &enum_ty.names {
+                let name = crate::enum_case_name(
+                    name,
+                    instantiator.bindgen.opts.enum_values_screaming_snake_case,
+                );
                 elem_lowers_expr.push_str(&format!(
                     "['{name}', null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],"
                 ));

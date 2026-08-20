@@ -91,6 +91,9 @@ world js-component-bindgen {
     /// Implies `flags-as-bigint` and conflicts with `variants-inline-cases`.
     use-namespace-objects: option<bool>,
 
+    /// Represent WIT enum values as SCREAMING_SNAKE_CASE strings.
+    enum-values-screaming-snake-case: option<bool>,
+
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
   }
@@ -160,6 +163,9 @@ world js-component-bindgen {
     /// Generate runtime namespace objects for WIT flags, enums, and variants.
     /// Implies `flags-as-bigint` and conflicts with `variants-inline-cases`.
     use-namespace-objects: option<bool>,
+
+    /// Represent WIT enum values as SCREAMING_SNAKE_CASE strings.
+    enum-values-screaming-snake-case: option<bool>,
   }
 
   enum export-type {
