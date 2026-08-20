@@ -43,11 +43,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: 'sockets/p3-sockets-tcp-sample-application.wasm' },
     { path: 'sockets/p3-sockets-tcp-sockopts.wasm' },
     { path: 'sockets/p3-sockets-tcp-states.wasm' },
-    {
-        path: 'sockets/p3-sockets-tcp-streams.wasm',
-        // TODO: Unskip once the preview3-shim TCP listener cleanup fix is released.
-        failing: true,
-    },
+    { path: 'sockets/p3-sockets-tcp-streams.wasm' },
     { path: 'sockets/p3-sockets-udp-bind.wasm' },
     { path: 'sockets/p3-sockets-udp-connect.wasm' },
     { path: 'sockets/p3-sockets-udp-receive.wasm' },
