@@ -69,29 +69,45 @@ To install it, use [`pnpm`][pnpm]:
 pnpm install @bytecodealliance/jco
 ```
 
-> [!NOTE]
-> If you're using jco to build components, you should also install `componentize-js`, which is dynamically imported:
->
-> ```console
-> pnpm install @bytecodealliance/componentize-js
-> ```
-
 [pnpm]: https://pnpm.io/
 
 ### Building an example component
 
-Create a TypeScript component project from a WIT file or package directory:
+Create a TypeScript component project using Jco's built-in WASI CLI world:
 
 ```console
-jco scaffold my-component --wit path/to/wit
-cd my-component
+pnpm exec jco scaffold my-command --wit builtin:wasi-command
+
+# Note that you can also scaffold from an existing WIT package
+# directory instead:
+# jco scaffold my-component --wit path/to/wit
+```
+
+Scaffolding the project wil create a folder called `my-command` (the first argument to `jco scaffold`),
+and you can swith to that folder and instantly build the component:
+
+```console
+cd my-command
 pnpm install
 pnpm check
 pnpm test
 pnpm build
 ```
 
+> [!NOTE]
+> To see examples of common patterns, check out the [example components folder (`examples/components`)](./examples/components).
+
+Jco bundles three common starting points, which default to WASI 0.3:
+
+- `builtin:wasi-command` uses the `wasi:cli/command` world from the upstream [WASI CLI WIT interfaces][wasi-cli-wit]
+- `builtin:wasi-reactor` uses the `wasi:cli/imports` world from the upstream [WASI CLI WIT interfaces][wasi-cli-wit]
+- `builtin:wasi-proxy` uses the `wasi:http/service` world from the upstream [WASI HTTP WIT interfaces][wasi-http-wit]
+
+Add the `@0.2.x` suffix to use the bundled WASI 0.2 interfaces instead, for example
+`builtin:wasi-command@0.2.x`. You can also pass a WIT file or package directory to `--wit` for a custom world.
+
 The generated repository includes everything you need to get started:
+
 - Guest (component)  typescript declarations
 - Implementation skeleton code
 - Node.js & web type-check and build scripts
@@ -103,9 +119,9 @@ The generated repository includes everything you need to get started:
 
 For more instructions on how to build an example component, see the [Component model section on Javascript][cm-book-js].
 
-To see examples of common patterns, check out the [example components folder (`examples/components`)](./examples/components).
-
 [cm-book-js]: https://component-model.bytecodealliance.org/language-support/javascript.html
+[wasi-cli-wit]: https://github.com/WebAssembly/WASI/tree/main/proposals/cli/wit
+[wasi-http-wit]: https://github.com/WebAssembly/WASI/tree/main/proposals/http/wit
 
 ## Learn more
 
