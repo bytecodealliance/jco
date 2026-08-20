@@ -150,6 +150,9 @@ pub struct FunctionBindgen<'a> {
     /// Whether WIT flags are represented as bigint values.
     #[builder(default)]
     pub flags_as_bigint: bool,
+    /// Whether WIT enum values use SCREAMING_SNAKE_CASE strings.
+    #[builder(default)]
+    pub enum_values_screaming_snake_case: bool,
 
     /// Sizes and alignments for sub elements
     pub sizes: &'a SizeAlign,
@@ -1338,13 +1341,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     switch (val{tmp}) {{"
                 );
                 for (i, case) in enum_.cases.iter().enumerate() {
+                    let case_name =
+                        crate::enum_case_name(&case.name, self.enum_values_screaming_snake_case);
                     uwriteln!(
                         self.src,
                         "case '{case}': {{
                             enum{tmp} = {i};
                             break;
                         }}",
-                        case = case.name
+                        case = case_name
                     );
                 }
                 uwriteln!(self.src, "default: {{");
@@ -1377,13 +1382,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     operands[0]
                 );
                 for (i, case) in enum_.cases.iter().enumerate() {
+                    let case_name =
+                        crate::enum_case_name(&case.name, self.enum_values_screaming_snake_case);
                     uwriteln!(
                         self.src,
                         "case {i}: {{
                             enum{tmp} = '{case}';
                             break;
                         }}",
-                        case = case.name
+                        case = case_name
                     );
                 }
                 if !self.valid_lifting_optimization {

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use heck::ToShoutySnakeCase;
 use ts_bindgen::ts_bindgen;
 use wasmtime_environ::component::{CanonicalOptions, ComponentTypesBuilder, StaticModuleIndex};
 use wasmtime_environ::wasmparser::WasmFeatures;
@@ -26,6 +27,14 @@ use transpile_bindgen::transpile_bindgen;
 pub use transpile_bindgen::{
     AsyncMode, BindingsMode, ExportKind, InstantiationMode, TranspileOpts,
 };
+
+fn enum_case_name(name: &str, screaming_snake_case: bool) -> String {
+    if screaming_snake_case {
+        name.to_shouty_snake_case()
+    } else {
+        name.to_string()
+    }
+}
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
