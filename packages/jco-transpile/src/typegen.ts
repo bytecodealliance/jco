@@ -59,6 +59,9 @@ interface TypegenOptions {
 
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
+
+    /** Inline WIT variant cases instead of generating a named interface for each case */
+    variantsInlineCases?: boolean;
 }
 
 /**
@@ -165,6 +168,7 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         guest: opts.guest ?? false,
         asyncMode,
         flagsAsBigint: opts.flagsAsBigInt === true,
+        variantsInlineCases: opts.variantsInlineCases === true,
     };
     const types = generateTypes(name, generateOpts).map(([name, file]) => [`${outDir}${name}`, file]);
 

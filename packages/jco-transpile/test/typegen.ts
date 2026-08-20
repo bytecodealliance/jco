@@ -142,9 +142,22 @@ suite('Type Generation', () => {
     });
 
     // https://github.com/bytecodealliance/jco/issues/926
-    test('variant cases do not collide with WIT type names', async () => {
+    test('preserves named variant case interfaces by default', async () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/issue-926`, {
             worldName: 'test:issue-926/issue-926',
+        });
+        const declaration = Buffer.from(files['interfaces/test-issue-926-operations.d.ts']).toString();
+
+        assert.include(declaration, 'export type Operation = OperationCreate | OperationEdit | OperationCancel;');
+        assert.strictEqual(declaration.match(/export interface OperationCreate/g)?.length, 2);
+        assert.strictEqual(declaration.match(/export interface OperationEdit/g)?.length, 2);
+        assert.strictEqual(declaration.match(/export interface OperationCancel/g)?.length, 1);
+    });
+
+    test('can inline variant cases to avoid WIT type name collisions', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/issue-926`, {
+            worldName: 'test:issue-926/issue-926',
+            variantsInlineCases: true,
         });
         const declaration = Buffer.from(files['interfaces/test-issue-926-operations.d.ts']).toString();
 

@@ -148,6 +148,9 @@ export interface TranspilationOptions {
 
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
+
+    /** Inline WIT variant cases instead of generating a named interface for each case */
+    variantsInlineCases?: boolean;
 }
 
 interface TranspilationResult {
@@ -315,6 +318,7 @@ export async function transpileBytes(
         bindgenEnableWasmExnref: opts.bindgenEnableWasmExnref === true,
         strict: opts.strict === true,
         flagsAsBigint: opts.flagsAsBigInt === true,
+        variantsInlineCases: opts.variantsInlineCases === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };
