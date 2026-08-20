@@ -66,6 +66,7 @@ struct TsBindgen {
     /// For host types, concrete modules are generated and imported using `./interfaces/{id}.js`.
     is_guest: bool,
     flags_as_bigint: bool,
+    variants_inline_cases: bool,
 
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -105,6 +106,7 @@ struct TsInterface<'a> {
     is_root: bool,
     is_guest: bool,
     flags_as_bigint: bool,
+    variants_inline_cases: bool,
     resolve: &'a Resolve,
     has_constructor: bool,
     needs_ty_option: bool,
@@ -139,6 +141,7 @@ pub fn ts_bindgen(
         needs_ty_result: false,
         is_guest: opts.guest,
         flags_as_bigint: opts.flags_as_bigint,
+        variants_inline_cases: opts.variants_inline_cases,
         async_imports,
         async_exports,
         references: Default::default(),
@@ -241,8 +244,13 @@ pub fn ts_bindgen(
                         continue;
                     }
 
-                    let mut generator =
-                        TsInterface::new(resolve, true, opts.guest, opts.flags_as_bigint);
+                    let mut generator = TsInterface::new(
+                        resolve,
+                        true,
+                        opts.guest,
+                        opts.flags_as_bigint,
+                        opts.variants_inline_cases,
+                    );
                     generator.docs(&ty.docs);
 
                     match &ty.kind {
@@ -624,7 +632,13 @@ impl TsBindgen {
         _files: &mut Files,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut generator = TsInterface::new(resolve, false, self.is_guest, self.flags_as_bigint);
+        let mut generator = TsInterface::new(
+            resolve,
+            false,
+            self.is_guest,
+            self.flags_as_bigint,
+            self.variants_inline_cases,
+        );
         generator.ts_func(
             func,
             true,
@@ -681,7 +695,13 @@ impl TsBindgen {
         _files: &mut Files,
         declaration: bool,
     ) {
-        let mut generator = TsInterface::new(resolve, false, self.is_guest, self.flags_as_bigint);
+        let mut generator = TsInterface::new(
+            resolve,
+            false,
+            self.is_guest,
+            self.flags_as_bigint,
+            self.variants_inline_cases,
+        );
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
@@ -790,8 +810,13 @@ impl TsBindgen {
         let (_name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
         if !iface_exists {
-            let mut generator =
-                TsInterface::new(resolve, false, self.is_guest, self.flags_as_bigint);
+            let mut generator = TsInterface::new(
+                resolve,
+                false,
+                self.is_guest,
+                self.flags_as_bigint,
+                self.variants_inline_cases,
+            );
             generator.begin(&id_name); // Write module declaration
 
             // Generate function definitions
@@ -854,11 +879,18 @@ impl TsBindgen {
 }
 
 impl<'a> TsInterface<'a> {
-    fn new(resolve: &'a Resolve, is_root: bool, is_guest: bool, flags_as_bigint: bool) -> Self {
+    fn new(
+        resolve: &'a Resolve,
+        is_root: bool,
+        is_guest: bool,
+        flags_as_bigint: bool,
+        variants_inline_cases: bool,
+    ) -> Self {
         TsInterface {
             is_root,
             is_guest,
             flags_as_bigint,
+            variants_inline_cases,
             src: Source::default(),
             resources: BTreeMap::new(),
             local_names: LocalNames::default(),
@@ -1114,7 +1146,13 @@ impl<'a> TsInterface<'a> {
                 .or_insert_with(|| {
                     (
                         meta.clone(),
-                        TsInterface::new(self.resolve, false, self.is_guest, self.flags_as_bigint),
+                        TsInterface::new(
+                            self.resolve,
+                            false,
+                            self.is_guest,
+                            self.flags_as_bigint,
+                            self.variants_inline_cases,
+                        ),
                     )
                 })
                 .1
@@ -1314,6 +1352,36 @@ impl<'a> TsInterface<'a> {
 
     fn type_variant(&mut self, _id: TypeId, name: &str, variant: &Variant, docs: &Docs) {
         self.docs(docs);
+        if !self.variants_inline_cases {
+            self.src
+                .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+            for (i, case) in variant.cases.iter().enumerate() {
+                if i > 0 {
+                    self.src.push_str(" | ");
+                }
+                self.src
+                    .push_str(&format!("{}_{}", name, case.name).to_upper_camel_case());
+            }
+            self.src.push_str(";\n");
+            for case in variant.cases.iter() {
+                self.docs(&case.docs);
+                self.src.push_str(&format!(
+                    "export interface {} {{\n",
+                    format!("{}_{}", name, case.name).to_upper_camel_case()
+                ));
+                self.src.push_str("tag: '");
+                self.src.push_str(&case.name);
+                self.src.push_str("',\n");
+                if let Some(ty) = case.ty {
+                    self.src.push_str("val: ");
+                    self.print_ty(&ty);
+                    self.src.push_str(",\n");
+                }
+                self.src.push_str("}\n");
+            }
+            return;
+        }
+
         // Keep the cases inline so a variant `foo` with a case `bar` cannot
         // synthesize a `FooBar` name that collides with a WIT type `foo-bar`.
         // Consumers can still name one case with `Extract<Foo, { tag: 'bar' }>`.
@@ -1509,7 +1577,13 @@ impl<'a> TsInterface<'a> {
         self.resources.entry(resource).or_insert_with(|| {
             (
                 meta,
-                TsInterface::new(self.resolve, false, self.is_guest, self.flags_as_bigint),
+                TsInterface::new(
+                    self.resolve,
+                    false,
+                    self.is_guest,
+                    self.flags_as_bigint,
+                    self.variants_inline_cases,
+                ),
             )
         });
     }

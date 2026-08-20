@@ -121,6 +121,10 @@ pub struct TranspileOpts {
     /// Represent WIT flags as bigint values instead of objects of booleans.
     #[builder(default)]
     pub flags_as_bigint: bool,
+    /// Inline WIT variant cases in their discriminated unions instead of
+    /// generating a named interface for each case.
+    #[builder(default)]
+    pub variants_inline_cases: bool,
     /// Whether the core module(s) to be wrapped were actually transpiled from Wasm to JS (asm.js) and thus need shimming for i64
     #[builder(default)]
     pub asmjs: bool,

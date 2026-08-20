@@ -83,6 +83,10 @@ world js-component-bindgen {
     /// Represent WIT flags as bigint values instead of objects of booleans.
     flags-as-bigint: option<bool>,
 
+    /// Inline WIT variant cases in their discriminated unions instead of
+    /// generating a named interface for each case.
+    variants-inline-cases: option<bool>,
+
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
   }
@@ -144,6 +148,10 @@ world js-component-bindgen {
 
     /// Represent WIT flags as bigint values instead of objects of booleans.
     flags-as-bigint: option<bool>,
+
+    /// Inline WIT variant cases in their discriminated unions instead of
+    /// generating a named interface for each case.
+    variants-inline-cases: option<bool>,
   }
 
   enum export-type {
