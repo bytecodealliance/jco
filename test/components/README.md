@@ -53,6 +53,7 @@ useful but likely incomplete list is below:
 |----------------------|--------------------------------------|------------------------------------------------------------------------------|
 | [C++ (`cpp`)](./cpp) | [`wasi-sdk`][wasi-sdk]               | Bytecode Alliance maintained toolin for building C/C++ components            |
 | [C (`c`)](./c)       | [`wasi-sdk`][wasi-sdk]               | Bytecode Alliance toolchain for C components, including WASI P3 fixtures      |
+| [Rust (`rust`)](./rust) | `rustup target add wasm32-wasip2` | Rust toolchain and WASI P2 target used by the `wstd` HTTP client fixture      |
 | [Python](./python)   | [`uv`][uv]                           | Python package manager                                                       |
 |                      | [`componentize-py`][componentize-py] | Bytecode Alliance maintained tooling for building Python projects components |
 
