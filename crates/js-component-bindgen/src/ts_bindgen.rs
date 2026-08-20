@@ -1314,22 +1314,16 @@ impl<'a> TsInterface<'a> {
 
     fn type_variant(&mut self, _id: TypeId, name: &str, variant: &Variant, docs: &Docs) {
         self.docs(docs);
+        // Keep the cases inline so a variant `foo` with a case `bar` cannot
+        // synthesize a `FooBar` name that collides with a WIT type `foo-bar`.
+        // Consumers can still name one case with `Extract<Foo, { tag: 'bar' }>`.
         self.src
-            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
-        for (i, case) in variant.cases.iter().enumerate() {
-            if i > 0 {
-                self.src.push_str(" | ");
-            }
-            self.src
-                .push_str(&format!("{}_{}", name, case.name).to_upper_camel_case());
-        }
-        self.src.push_str(";\n");
+            .push_str(&format!("export type {} =", name.to_upper_camel_case()));
+        self.src.indent(1);
         for case in variant.cases.iter() {
+            self.src.push_str("\n");
+            self.src.push_str("| {\n");
             self.docs(&case.docs);
-            self.src.push_str(&format!(
-                "export interface {} {{\n",
-                format!("{}_{}", name, case.name).to_upper_camel_case()
-            ));
             self.src.push_str("tag: '");
             self.src.push_str(&case.name);
             self.src.push_str("',\n");
@@ -1338,8 +1332,10 @@ impl<'a> TsInterface<'a> {
                 self.print_ty(&ty);
                 self.src.push_str(",\n");
             }
-            self.src.push_str("}\n");
+            self.src.push_str("}");
         }
+        self.src.deindent(1);
+        self.src.push_str(";\n");
     }
 
     fn type_option(&mut self, _id: TypeId, name: &str, payload: &Type, docs: &Docs) {
