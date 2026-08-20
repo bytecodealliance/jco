@@ -86,38 +86,41 @@ suite('screaming-case enums', () => {
         }
     });
 
-    test('uses screaming-case values for async enum payloads', async () => {
-        class ExampleResource {
-            getId() {
-                return 0;
+    test.skipIf(typeof WebAssembly?.Suspending !== 'function')(
+        'uses screaming-case values for async enum payloads',
+        async () => {
+            class ExampleResource {
+                getId() {
+                    return 0;
+                }
             }
-        }
 
-        const runtime = await setupAsyncTest({
-            asyncMode: 'jspi',
-            component: {
-                name: 'enums-screaming-async',
-                path: join(LOCAL_TEST_COMPONENTS_DIR, 'future-lower.wasm'),
-                skipInstantiation: true,
-            },
-            jco: {
-                transpile: {
-                    extraArgs: { enumValuesScreamingSnakeCase: true },
+            const runtime = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: 'enums-screaming-async',
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'future-lower.wasm'),
+                    skipInstantiation: true,
                 },
-            },
-        });
-
-        try {
-            const instance = await runtime.esModule.instantiate(undefined, {
-                ...new WASIShim().getImportObject(),
-                'jco:test-components/resources': { ExampleResource },
+                jco: {
+                    transpile: {
+                        extraArgs: { enumValuesScreamingSnakeCase: true },
+                    },
+                },
             });
-            const readEnum = instance['jco:test-components/future-lower-async'].readFutureValueEnum;
-            assert.strictEqual(await readEnum(Promise.resolve('FIRST')), 'FIRST');
-        } finally {
-            await runtime.cleanup();
-        }
-    });
+
+            try {
+                const instance = await runtime.esModule.instantiate(undefined, {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/resources': { ExampleResource },
+                });
+                const readEnum = instance['jco:test-components/future-lower-async'].readFutureValueEnum;
+                assert.strictEqual(await readEnum(Promise.resolve('FIRST')), 'FIRST');
+            } finally {
+                await runtime.cleanup();
+            }
+        },
+    );
 
     test('uses screaming-case values for standalone type generation', async () => {
         const files = await generateHostTypes(witPath, {
