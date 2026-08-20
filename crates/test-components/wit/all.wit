@@ -958,6 +958,19 @@ world sync-to-async-caller {
   export sync-lower-runner;
 }
 
+interface sync-lowered-async-import-host {
+  compute: async func(value: u32) -> u32;
+}
+
+interface sync-lowered-async-import-runner {
+  run: async func() -> u32;
+}
+
+world sync-lowered-async-import {
+  import sync-lowered-async-import-host;
+  export sync-lowered-async-import-runner;
+}
+
 interface reexport-source {
   resource widget {
     poke: func() -> u32;
