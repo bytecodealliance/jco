@@ -175,4 +175,34 @@ suite('--strict', () => {
             ),
         );
     });
+
+    // Regression test for https://github.com/bytecodealliance/jco/issues/402.
+    // TODO: Once strict mode is the default, ensure these errors are thrown by
+    // every transpilation rather than only explicitly strict transpilation.
+    test.concurrent('rejects invalid u32 values when enabled', async () => {
+        const outDir = await getTmpDir();
+        const bytes = await readFile(join(COMPONENT_FIXTURES_DIR, 'adder.component.wasm'));
+        const { files } = await transpileBytes(bytes, { name: 'adder', outDir, strict: true });
+
+        try {
+            await writeFiles(files);
+            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+
+            const { add } = await import(pathToFileURL(join(outDir, 'adder.js')).href);
+            const invalidU32s = [4294967300, -4294967200, -1, 1.5, '1', NaN, Infinity, null, undefined];
+
+            for (const value of invalidU32s) {
+                assert.throws(
+                    () => add.add(value, 0),
+                    TypeError,
+                    /invalid u32 value/,
+                    `expected ${String(value)} to be rejected as a u32`,
+                );
+            }
+
+            assert.strictEqual(add.add(42, 0), 42);
+        } finally {
+            await rm(outDir, { recursive: true });
+        }
+    });
 });
