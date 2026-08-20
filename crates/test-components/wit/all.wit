@@ -308,6 +308,11 @@ world async-simple-import {
   export get-string: async func() -> string;
 }
 
+world async-host-import-hang {
+  import load: async func() -> u32;
+  export run: async func() -> u32;
+}
+
 world async-error-context {
   export local-run-async;
 }
