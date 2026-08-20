@@ -115,6 +115,7 @@ jobs:
       matrix:
         os:
           - windows-2025
+          - windows-latest
         node:
           - 22.x
           - 24.x
@@ -122,12 +123,16 @@ jobs:
         include:
           - os: windows-2025
             weval-bin-path: .weval-bin/weval.exe
+          - os: windows-latest
+            weval-bin-path: .weval-bin/weval.exe
           - os: ubuntu-22.04
             weval-bin-path: .weval-bin/weval
           - os: macos-latest
             weval-bin-path: .weval-bin/weval
         exclude:
           - os: windows-2025
+            node: latest
+          - os: windows-latest
             node: latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -240,6 +245,7 @@ jobs:
       matrix:
         os:
           - windows-2025
+          - windows-latest
         node:
           - 22.x
           - 24.x
