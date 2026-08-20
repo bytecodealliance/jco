@@ -685,12 +685,11 @@ impl AsyncStreamIntrinsic {
                                 return;
                             }}
 
+                            this.setDropped();
                             if (this.#waitable) {{
                                 const w = this.#waitable;
                                 w.drop();
                             }}
-
-                            this.setDropped();
                         }}
                     }}
                 "#
@@ -1594,13 +1593,16 @@ impl AsyncStreamIntrinsic {
                         drop() {{
                             {debug_log_fn}('[{stream_end_class}#drop()]');
                             if (this.isDropped()) {{ return; }}
-                            if (this.#hostDropFn) {{
-                                Promise.resolve(this.#hostDropFn()).catch(err => {{
+                            const hostDropFn = this.#hostDropFn;
+                            this.#hostDropFn = null;
+                            super.drop();
+                            if (hostDropFn) {{
+                                // A source drop hook can re-enter the component, so both ends must
+                                // observe the drop before the hook wakes a waiting writer.
+                                Promise.resolve(hostDropFn()).catch(err => {{
                                     {debug_log_fn}('[{stream_end_class}#drop()] host drop failed', err);
                                 }});
-                                this.#hostDropFn = null;
                             }}
-                            super.drop();
                             if (this.#pendingBufferMeta) {{
                                 const result = this.#pendingBufferMeta.buffer?.processed > 0
                                     ? {stream_end_class}.CopyResult.COMPLETED
