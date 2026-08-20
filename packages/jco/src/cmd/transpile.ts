@@ -37,6 +37,7 @@ export interface TranspileOpts {
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;
+    enumValuesScreamingSnakeCase?: boolean;
 }
 
 // These re-exports exist to avoid breaking backwards compatibility
