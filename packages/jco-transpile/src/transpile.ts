@@ -151,6 +151,12 @@ export interface TranspilationOptions {
 
     /** Inline WIT variant cases instead of generating a named interface for each case */
     variantsInlineCases?: boolean;
+
+    /**
+     * Generate namespace objects for WIT flags, enums, and variants.
+     * Implies `flagsAsBigInt` and conflicts with `variantsInlineCases`.
+     */
+    useNamespaceObjects?: boolean;
 }
 
 interface TranspilationResult {
@@ -319,6 +325,7 @@ export async function transpileBytes(
         strict: opts.strict === true,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
+        useNamespaceObjects: opts.useNamespaceObjects === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
     };

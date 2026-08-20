@@ -628,6 +628,8 @@ export async function readFixtureFlags(fixturePath: string): Promise<Transpilati
             opts.flagsAsBigInt = true;
         } else if (arg === '--variants-inline-cases') {
             opts.variantsInlineCases = true;
+        } else if (arg === '--use-namespace-objects') {
+            opts.useNamespaceObjects = true;
         } else if (arg === '--base64-cutoff') {
             const offset = args[idx + 1];
             opts.base64Cutoff = parseInt(offset, 10);
