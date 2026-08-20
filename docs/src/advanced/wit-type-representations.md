@@ -34,6 +34,28 @@ More complicated types that are built into WIT but require more work to translat
 
 [mdn-js-bigint]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt
 
+## Enums (`enum`)
+
+Jco represents a WIT enum as a union of string literals. By default, the strings preserve the WIT case names:
+
+```wit
+enum status { request-pending, request-complete }
+```
+
+```ts
+export type Status = 'request-pending' | 'request-complete';
+```
+
+Pass `--enum-values-screaming-snake-case` to use `SCREAMING_SNAKE_CASE` values at the JavaScript boundary and in generated
+declarations:
+
+```ts
+export type Status = 'REQUEST_PENDING' | 'REQUEST_COMPLETE';
+```
+
+The option affects both values passed into a component and values returned from it. It also works with
+`--use-namespace-objects`; in that mode, for example, `Status.RequestPending` has the value `'REQUEST_PENDING'`.
+
 ## Namespace objects
 
 WIT enums and variants are represented as TypeScript types by default, so they do not provide JavaScript values for

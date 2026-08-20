@@ -53,6 +53,7 @@ Options include:
 * `--flags-as-bigint`: Represents WIT flags as `bigint` values and exports named flag constants. By default, flags remain objects of booleans for backwards compatibility.
 * `--variants-inline-cases`: Inlines WIT variant cases in their discriminated unions instead of exporting a named interface for every case. The named interfaces remain the default for backwards compatibility.
 * `--use-namespace-objects`: Exports namespace objects for WIT enums, flags, and variants. This implies `--flags-as-bigint` and cannot be combined with `--variants-inline-cases`.
+* `--enum-values-screaming-snake-case`: Represents WIT enum values as `SCREAMING_SNAKE_CASE` strings instead of their original kebab-case names.
 * `--tracing`: Emit tracing calls for all function entry and exits.
 * `--no-component-error-wrapping`: Throw the lifted error payload directly for a top-level `result::err` instead of wrapping it in a generated `ComponentError`. Jco preserves wrapping by default for compatibility.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
