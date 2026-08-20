@@ -15,6 +15,7 @@ build:
     {{just}} build-jco-issue-1384
     {{just}} build-jco-issue-1390
     {{just}} build-jco-issue-1887
+    {{just}} build-jco-issue-1887-list-param
 
 # Build the wasi-sdk P3 reactor required to test jco issue #1887
 [group('build')]
@@ -23,6 +24,14 @@ build:
     mkdir -p output/jco-issue-1887
     {{just}} -f c/jco-issue-1887/justfile build
     mv c/jco-issue-1887/component.wasm output/jco-issue-1887/component.wasm
+
+# Build the wasi-sdk P3 reactor required to test the list-parameter follow-up to jco issue #1887
+[group('build')]
+@build-jco-issue-1887-list-param:
+    echo "==> building jco-issue-1887-list-param reactor (c)..."
+    mkdir -p output/jco-issue-1887-list-param
+    {{just}} -f c/jco-issue-1887-list-param/justfile build
+    mv c/jco-issue-1887-list-param/component.wasm output/jco-issue-1887-list-param/component.wasm
 
 # Build the components required to test jco issue #1380
 [group('build')]

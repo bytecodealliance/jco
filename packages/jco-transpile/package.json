@@ -67,6 +67,7 @@
         "build:release": "pnpm run build:vendor:release && pnpm run build:ts",
         "test:build:components": "pnpm run -w build:test:components",
         "test": "vitest run -c test/vitest.ts",
+        "test:extended": "vitest run -c test/vitest.extended.ts",
         "test:lts": "vitest run -c test/vitest.lts.ts",
         "prepack": "pnpm run build:release"
     },

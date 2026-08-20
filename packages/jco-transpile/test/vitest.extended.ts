@@ -1,7 +1,9 @@
+import { availableParallelism } from 'node:os';
+
 import { defineConfig } from 'vitest/config';
 
-const DEFAULT_TIMEOUT_MS = 1000 * 60 * 1; // 10m
-const CI_DEFAULT_TIMEOUT_MS = 1000 * 60 * 3; // 1m
+const DEFAULT_TIMEOUT_MS = 1000 * 60;
+const CI_DEFAULT_TIMEOUT_MS = 1000 * 60 * 3;
 
 const REPORTERS = process.env.GITHUB_ACTIONS ? ['verbose', 'github-actions'] : ['verbose'];
 const JSPI_EXEC_ARGV = 'Suspending' in WebAssembly ? [] : ['--experimental-wasm-jspi'];
@@ -9,25 +11,15 @@ const JSPI_EXEC_ARGV = 'Suspending' in WebAssembly ? [] : ['--experimental-wasm-
 export default defineConfig({
     test: {
         reporters: REPORTERS,
+        maxConcurrency: Math.max(availableParallelism() / 2, 5),
         disableConsoleIntercept: true,
         printConsoleTrace: true,
         passWithNoTests: false,
-        include: ['test/**/*.ts'],
-        exclude: [
-            'test/helpers.ts',
-            'test/common.ts',
-            'test/output',
-            'test/fixtures',
-            'test/extended/**',
-            'test/vitest.ts',
-            'test/vitest.extended.ts',
-            'test/vitest.lts.ts',
-            'test/p3/ported/wasmtime/component-async/common.ts',
-        ],
+        include: ['test/extended/**/*.ts'],
         testTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         hookTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
         teardownTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
-        execArgv: ['--expose-gc', ...JSPI_EXEC_ARGV, '--stack-trace-limit=100'],
         pool: 'forks',
+        execArgv: ['--expose-gc', ...JSPI_EXEC_ARGV, '--stack-trace-limit=100'],
     },
 });

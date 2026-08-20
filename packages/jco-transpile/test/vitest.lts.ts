@@ -28,6 +28,7 @@ export default defineConfig({
             'test/output',
             'test/fixtures',
             'test/vitest.ts',
+            'test/vitest.extended.ts',
             'test/vitest.lts.ts',
             'test/p3/ported/wasmtime/component-async/common.ts',
         ],
