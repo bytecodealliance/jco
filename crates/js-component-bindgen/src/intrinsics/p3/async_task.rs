@@ -2400,12 +2400,17 @@ impl AsyncTaskIntrinsic {
                         // TODO(breaking): remove checking for manual async specification here, once we can go p3-only
                         //
                         if (!isManualAsync && !isAsync && funcTypeIsAsync) {{
-                            const {{ promise, resolve }} = {promise_with_resolvers_fn}();
+                            const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
-                                if (!subtask.isResolvedState()) {{
-                                    await task.suspendUntil({{ readyFn: () => task.isResolvedState() }});
+                                try {{
+                                    await importFn(...params);
+                                    if (!subtask.isResolved()) {{
+                                        await task.suspendUntil({{ readyFn: () => subtask.isResolved() }});
+                                    }}
+                                    resolve(subtask.getResult());
+                                }} catch (err) {{
+                                    reject(err);
                                 }}
-                                resolve(subtask.getResult());
                             }});
                             return promise;
                         }}
@@ -2701,12 +2706,17 @@ impl AsyncTaskIntrinsic {
                         // TODO(breaking): remove checking for manual async specification here, once we can go p3-only
                         //
                         if (!isManualAsync && !isAsync && funcTypeIsAsync) {{
-                            const {{ promise, resolve }} = {promise_with_resolvers_fn}();
+                            const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
-                                if (!subtask.isResolvedState()) {{
-                                    await task.suspendUntil({{ readyFn: () => task.isResolvedState() }});
+                                try {{
+                                    await importFn(...params);
+                                    if (!subtask.isResolved()) {{
+                                        await task.suspendUntil({{ readyFn: () => subtask.isResolved() }});
+                                    }}
+                                    resolve(subtask.getResult());
+                                }} catch (err) {{
+                                    reject(err);
                                 }}
-                                resolve(subtask.getResult());
                             }});
                             return promise;
                         }}
