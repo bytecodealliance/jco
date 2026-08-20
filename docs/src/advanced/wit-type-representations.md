@@ -34,6 +34,33 @@ More complicated types that are built into WIT but require more work to translat
 
 [mdn-js-bigint]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt
 
+## Namespace objects
+
+WIT enums and variants are represented as TypeScript types by default, so they do not provide JavaScript values for
+constructing cases. Pass `--use-namespace-objects` to `jco transpile` to generate namespace objects for enums, flags,
+and variants. The same option on `jco types` and `jco guest-types` generates matching declarations.
+
+For example, given these WIT types:
+
+```wit
+enum direction { north, south }
+flags permissions { read, write }
+variant request { open(string), close }
+```
+
+an exported interface provides values like:
+
+```js
+api.Direction.North; // 'north'
+api.Permissions.Read | api.Permissions.Write; // 3n
+api.Request.Open('/tmp/file'); // { tag: 'open', val: '/tmp/file' }
+api.Request.Close(); // { tag: 'close' }
+```
+
+The namespace objects are frozen. Aliases of the same WIT type share the same object. Since flag namespace values are
+bit masks, this option implies `--flags-as-bigint`. It cannot be combined with `--variants-inline-cases`, and remains
+disabled by default to preserve existing generated APIs.
+
 ## Variants (`variant`)
 
 > [!NOTE]
