@@ -478,6 +478,7 @@ interface stream-concurrency-test {
   read-after-signal: async func(s: stream<u8>) -> list<u8>;
   zero-read-after-cancel: async func(s: stream<u8>) -> list<u8>;
   read-with-cancellation: async func(s: stream<u8>) -> list<u8>;
+  write-until-dropped: async func() -> stream<u8>;
 }
 
 world stream-concurrency {

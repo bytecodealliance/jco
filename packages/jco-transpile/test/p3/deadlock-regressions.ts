@@ -210,4 +210,39 @@ suite('async scheduling regressions', () => {
             await cleanup();
         }
     });
+
+    test('dropping a guest stream does not synchronously re-enter its producer', async () => {
+        const secondWriteStarted = Promise.withResolvers<void>();
+        let writesStarted = 0;
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'stream-concurrency.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/stream-concurrency-host': {
+                        signal: () => {
+                            writesStarted += 1;
+                            if (writesStarted === 2) {
+                                secondWriteStarted.resolve();
+                            }
+                        },
+                        zeroReadComplete: () => {},
+                    },
+                },
+            },
+        });
+
+        try {
+            const stream = await instance['jco:test-components/stream-concurrency-test'].writeUntilDropped();
+            assert.deepEqual(await stream.next(), {
+                done: false,
+                value: new Uint8Array([42]),
+            });
+            await secondWriteStarted.promise;
+            stream[Symbol.dispose]();
+        } finally {
+            await cleanup();
+        }
+    });
 });
