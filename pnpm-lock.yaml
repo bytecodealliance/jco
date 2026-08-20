@@ -411,8 +411,8 @@ importers:
         specifier: ^0.20.2
         version: 0.20.2
       '@bytecodealliance/preview3-shim':
-        specifier: workspace:^0.3.2
-        version: link:../preview3-shim
+        specifier: ^0.3.2
+        version: 0.3.2
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
