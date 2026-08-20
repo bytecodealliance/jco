@@ -38,6 +38,21 @@ suite('Transpile', async () => {
         assert.include(source, 'class ComponentError extends Error');
     });
 
+    test.concurrent('can inline variant cases in generated declarations', async () => {
+        const named = await transpileBytes(variantsWasmBytes, { name: 'variants' });
+        const namedTypes = Buffer.from(named.files['interfaces/test-variants-test.d.ts']).toString();
+        assert.include(namedTypes, 'export type C1 = C1A | C1B;');
+        assert.include(namedTypes, 'export interface C1A {');
+
+        const inline = await transpileBytes(variantsWasmBytes, {
+            name: 'variants',
+            variantsInlineCases: true,
+        });
+        const inlineTypes = Buffer.from(inline.files['interfaces/test-variants-test.d.ts']).toString();
+        assert.include(inlineTypes, "export type C1 =\n  | {\n    tag: 'a',");
+        assert.notInclude(inlineTypes, 'export interface C1A {');
+    });
+
     test.concurrent('transpile (via API)', async () => {
         const { files } = await transpile(
             fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
