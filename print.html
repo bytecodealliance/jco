@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5d16444c.js";
+            window.path_to_searchindex_js = "searchindex-016a40fa.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-9521a751.js"></script>
@@ -392,6 +392,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 </li>
 <li>
 <p><code>--flags-as-bigint</code>: Represents WIT flags as <code>bigint</code> values and exports named flag constants. By default, flags remain objects of booleans for backwards compatibility.</p>
+</li>
+<li>
+<p><code>--variants-inline-cases</code>: Inlines WIT variant cases in their discriminated unions instead of exporting a named interface for every case. The named interfaces remain the default for backwards compatibility.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
@@ -898,6 +901,13 @@ Alternative variant members may hold <em>different</em> types to represent diffe
 <p>You can work around this limitation of variants by having the contained type be a <em>tuple</em>,
 (e.g. <code>tuple&lt;string, u32, string&gt;</code>), or using a named record as the related data.</p>
 </blockquote>
+<p>By default, generated TypeScript declarations export a named interface for each variant case. Pass
+<code>--variants-inline-cases</code> to <code>jco transpile</code>, <code>jco types</code>, or <code>jco guest-types</code> to emit the cases directly in the
+discriminated union instead:</p>
+<pre><code class="language-ts">export type Filter = { tag: 'all' } | { tag: 'none' } | { tag: 'some'; val: string[] };
+</code></pre>
+<p>Inlining prevents a generated case name such as <code>OperationCreate</code> from colliding with a WIT record named
+<code>operation-create</code>. The option is disabled by default because existing code may import the named case interfaces.</p>
 <h2 id="records-record"><a class="header" href="#records-record">Records (<code>record</code>)</a></h2>
 <h3 id="wit-syntax-1"><a class="header" href="#wit-syntax-1">WIT Syntax</a></h3>
 <pre><code class="language-wit">record person {
