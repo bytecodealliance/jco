@@ -43,7 +43,9 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: 'sockets/p3-sockets-tcp-sample-application.wasm' },
     { path: 'sockets/p3-sockets-tcp-sockopts.wasm' },
     { path: 'sockets/p3-sockets-tcp-states.wasm' },
-    { path: 'sockets/p3-sockets-tcp-streams.wasm' },
+    // TODO(unskip): Re-enable after a preview3-shim release includes the TCP
+    // send event-loop fairness fix currently present only in the workspace.
+    { path: 'sockets/p3-sockets-tcp-streams.wasm', failing: true },
     { path: 'sockets/p3-sockets-udp-bind.wasm' },
     { path: 'sockets/p3-sockets-udp-connect.wasm' },
     { path: 'sockets/p3-sockets-udp-receive.wasm' },
