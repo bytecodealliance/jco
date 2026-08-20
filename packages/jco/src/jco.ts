@@ -148,6 +148,7 @@ program
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
+    .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
     .allowExcessArguments(true)
     .action(asyncAction(transpileCmd));
 
@@ -186,6 +187,7 @@ program
     .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')")
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
+    .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
     .action(asyncAction(types));
 
 program
@@ -210,6 +212,7 @@ program
     )
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
+    .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
     .action(asyncAction(guestTypes));
 
 program
