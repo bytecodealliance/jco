@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.21.0] - 2026-08-21
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ avoid using process.binding by @vados-cosmonic
+
 ## [0.20.2] - 2026-08-19
 
 ### 🐛 Bug Fixes
