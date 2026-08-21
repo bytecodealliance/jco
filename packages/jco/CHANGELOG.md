@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.31.0] - 2026-08-21
+
+### 🚀 Features
+
+- _(jco)_ enum screaming case by @vados-cosmonic
+
+- _(jco)_ pass through namespace object config, fix flags as bigint by @vados-cosmonic
+
+- _(jco)_ add variant inlining option by @vados-cosmonic
+
+- _(jco)_ add builtin WASI scaffold worlds by @vados-cosmonic in #1918
+
+### 🧪 Testing
+
+- _(jco)_ add wstd P2 HTTP trailers regression by @vados-cosmonic in #1924
+
+- _(jco)_ unskip tests that should now pass by @vados-cosmonic in #1922
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.11.0 by @vados-cosmonic in #1939
+
+- _(jco)_ update preview3-shim to v0.4.0 by @vados-cosmonic in #1937
+
+- _(jco)_ update p2-shim to 0.21.0 by @vados-cosmonic
+
 ## [1.30.0] - 2026-08-19
 
 ### 🚀 Features
