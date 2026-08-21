@@ -36,8 +36,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       '@bytecodealliance/preview2-shim':
-        specifier: 0.20.2
-        version: 0.20.2
+        specifier: 0.21.0
+        version: 0.21.0
       '@commitlint/config-conventional':
         specifier: ^19.8.1
         version: 19.8.1
@@ -90,8 +90,8 @@ importers:
   examples/components/fs-write-file:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.19.0
-        version: 0.19.0
+        specifier: ^0.21.0
+        version: 0.21.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.25.2
@@ -311,8 +311,8 @@ importers:
         specifier: ^0.10.0
         version: 0.10.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.20.2
-        version: 0.20.2
+        specifier: ^0.21.0
+        version: 0.21.0
       '@bytecodealliance/preview3-shim':
         specifier: ^0.3.2
         version: 0.3.2
@@ -387,8 +387,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.1
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.20.1
-        version: 0.20.1
+        specifier: ^0.21.0
+        version: 0.21.0
       '@types/which':
         specifier: ^3.0.4
         version: 3.0.4
@@ -408,8 +408,8 @@ importers:
   packages/jco-transpile:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.20.2
-        version: 0.20.2
+        specifier: ^0.21.0
+        version: 0.21.0
       '@bytecodealliance/preview3-shim':
         specifier: ^0.3.2
         version: 0.3.2
@@ -637,9 +637,6 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.19.0':
     resolution: {integrity: sha512-OSUlcM62fXLuzYP0DjBn/SwjKMZ/y/2PMXZ8v5cRiiFcroauntlPRl/oCnx0xYjYiqdYvE0PY50VCNutll0xOw==}
-
-  '@bytecodealliance/preview2-shim@0.20.1':
-    resolution: {integrity: sha512-gvQP6DWfeQIYKHBb+nPykku1DRtfXQjM685+e75YYr8ZF2ZxisE4+nWrpwf84+NaWJRfuL5HvoLKQFbup1iwkQ==}
 
   '@bytecodealliance/preview2-shim@0.20.2':
     resolution: {integrity: sha512-Bp1cer1jztaQamLv1YKdc4MimI9LNAAKM2lNxOtGTLs7/At5KlA0fW1HWTi3ZJ5McaWNwJUDWSe5Lr0EgUpsnA==}
@@ -4205,8 +4202,6 @@ snapshots:
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
   '@bytecodealliance/preview2-shim@0.19.0': {}
-
-  '@bytecodealliance/preview2-shim@0.20.1': {}
 
   '@bytecodealliance/preview2-shim@0.20.2': {}
 
