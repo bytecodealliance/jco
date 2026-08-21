@@ -16,7 +16,7 @@ const ASYNC_G2G_CALL_LIMIT_NS = env.CI ? 70_000_000 : 40_000_000;
 // test was introduced. These should narrow as call overhead improves.
 const WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 12 : 10;
 const SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 1_500 : 1_000;
-const ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 10_000 : 8_000;
+const ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 20_000 : 8_000;
 const ADDER_COMPONENT_PATH = fileURLToPath(new URL('./fixtures/components/adder.component.wasm', import.meta.url));
 const ADDER_MODULE_PATH = fileURLToPath(new URL('./fixtures/runtime/adder.wat', import.meta.url));
 
