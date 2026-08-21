@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.11.0] - 2026-08-21
+
+### 🚀 Features
+
+- _(transpile)_ support enum values for sneaking case by @vados-cosmonic
+
+- _(transpile)_ enable namespace objects for flags,enums,variants by @vados-cosmonic
+
+- _(transpile)_ add variant inlining option by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ unskip tests that should be fixed now by @vados-cosmonic
+
+- _(transpile)_ increase async component call overhead ratio in CI by @vados-cosmonic in #1934
+
+- _(transpile)_ skip TCP stream fixture until shim release by @vados-cosmonic in #1923
+
+- _(transpile)_ add test for deadlocks involving mid-stream writes by @vados-cosmonic
+
+- _(transpile)_ cover strict u32 validation by @vados-cosmonic
+
+- _(transpile)_ skip async enum test on platforms without JSPI by @vados-cosmonic in #1927
+
+- _(transpile)_ unskip test for p3-shim tcp listener cleanup fix by @vados-cosmonic
+
+- _(transpile)_ add extended test for issue 1887 by @vados-cosmonic
+
+- _(transpile)_ add test for async host import hang by @vados-cosmonic in #1916
+
+- _(transpile)_ add test for async host import trampolines by @vados-cosmonic
+
+- _(transpile)_ add component to test sync lowered async imports by @vados-cosmonic in #1917
+
+- _(transpile)_ add tests for sync lowered async by @vados-cosmonic
+
+- _(transpile)_ add test for variatn type name collisions by @vados-cosmonic
+
+- _(transpile)_ add tests for flags as bigint by @vados-cosmonic in #1912
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update p3-shim to v0.4.0 by @vados-cosmonic
+
+- _(transpile)_ update p2-shim to 0.21.0 by @vados-cosmonic
+
 ## [0.10.0] - 2026-08-19
 
 This release contains an update of the underlying transpiled `js-component-bindgen`
