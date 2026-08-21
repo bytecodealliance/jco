@@ -11,7 +11,7 @@ const TRACE: bool = false;
 const DENO: bool = true;
 const DEFAULT_TEST_FILTER: &[&str] = &[];
 
-const DEFAULT_RETRIES: u32 = 5;
+const DEFAULT_ATTEMPTS: u32 = 5;
 
 /// Tests that should be ignored
 const TEST_IGNORE: &[&str] = &[
@@ -136,6 +136,13 @@ pub fn build_test_programs(project_dir: impl AsRef<Path>, target: &str) -> Resul
 
 pub fn run() -> Result<()> {
     let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
+    let jco_script_path = project_dir.join("packages/jco/dist/jco.js");
+
+    anyhow::ensure!(
+        jco_script_path.is_file(),
+        "missing built jco script at [{}]; run `pnpm --filter '@bytecodealliance/jco' run build` first",
+        jco_script_path.display()
+    );
 
     // Compile wasmtime test programs
     let test_program_dir = project_dir.join("submodules/wasmtime/crates/test-programs");
@@ -204,8 +211,6 @@ pub fn run() -> Result<()> {
     );
 
     let output_module_path = jco_crate_dir.join("tests/generated/mod.rs");
-    let jco_script_path = project_dir.join("packages/jco/dist/jco.js");
-
     // Perform the tests
     let all_names = Arc::new(Mutex::new(Vec::new()));
     let jco_crate_dir = Arc::new(jco_crate_dir);
@@ -445,8 +450,8 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
     };
 
     // Generate code for feature detection
-    let windows_skip_prefix = if windows_skip {
-        "#[cfg(not(windows))]"
+    let windows_cfg = if windows_skip {
+        "#![cfg(not(windows))]"
     } else {
         Default::default()
     };
@@ -486,7 +491,7 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
         code = with_retry(WithRetryArgs {
             piped,
             should_error,
-            retries: DEFAULT_RETRIES,
+            attempts: DEFAULT_ATTEMPTS,
             original_src: &code,
         });
     } else {
@@ -501,8 +506,12 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
             anyhow::bail!("CHILD PROCESS ERROR: {{e:?}}\n");
         }}
     }};
-    assert!({should_error}status.success(), "test execution failed");
     {piped_cleanup}
+    anyhow::ensure!(
+        {should_error}status.success(),
+        "test command {{:?}} exited with {{status}}",
+        cmd{piped_cmd_num}
+    );
 
 "#,
             piped_cmd_num = if piped { "2" } else { "1" },
@@ -514,12 +523,12 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
     let src = format!(
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
+{windows_cfg}
 
 use std::fs;
 {maybe_include_write}use std::process::{{Command, Stdio}};
 
 #[test]
-{windows_skip_prefix}
 fn {test_name}() -> anyhow::Result<()> {{
     let _ = fs::remove_dir_all(r#"{deno_test_file}"#);
     {code}
@@ -624,8 +633,8 @@ struct WithRetryArgs<'a> {
     piped: bool,
     /// Whether test failures should generate errors
     should_error: bool,
-    /// Number of times the retry should be attempted
-    retries: u32,
+    /// Maximum number of times the test should be attempted
+    attempts: u32,
     /// Core test code that will be wrapped to allow flaking
     original_src: &'a str,
 }
@@ -639,11 +648,12 @@ fn with_retry<'a>(args: WithRetryArgs<'a>) -> String {
         piped,
         should_error,
         original_src,
-        retries,
+        attempts,
     } = args;
 
     let mut src = String::new();
     let piped_cmd_num = if piped { "2" } else { "1" };
+    let piped_cleanup = if piped { "_cmd1_child.wait()?;" } else { "" };
     let should_error = if !should_error { "" } else { "!" };
 
     // Wrap the original test function in something repeatable
@@ -660,11 +670,15 @@ let test_run = || {{
     let status = match _cmd{piped_cmd_num}_child.wait() {{
         Ok(s) => s,
         Err(e) => {{
+            {piped_cleanup}
             anyhow::bail!("CHILD PROCESS ERROR: {{e:?}}\n");
         }}
     }};
+    {piped_cleanup}
 
-    if !{should_error}status.success() {{ anyhow::bail!("test execution failed, retrying..."); }}
+    if !{should_error}status.success() {{
+        anyhow::bail!("test command {{:?}} exited with {{status}}", cmd{piped_cmd_num});
+    }}
 
     Ok(()) as anyhow::Result<()>
 }};
@@ -674,14 +688,15 @@ let test_run = || {{
     // Build a retry loop to run the now-augmented original test
     src.push_str(&format!(
         r#"
-let mut _passed = false;
-for _n in 0..{retries}-1 {{
-    if test_run().is_ok() {{
-        _passed = true;
-        return Ok(());
+let mut _last_err = None;
+for _n in 0..{attempts} {{
+    match test_run() {{
+        Ok(()) => return Ok(()),
+        Err(e) => _last_err = Some(e),
     }}
 }}
-anyhow::ensure!(_passed, "at least one test run passed");
+let _last_err = _last_err.expect("retry count must be greater than zero");
+anyhow::bail!("test execution failed after {attempts} attempts: {{_last_err:#}}");
 "#
     ));
 
@@ -699,4 +714,39 @@ fn generate_mod(test_names: &[String]) -> String {
             let _ = writeln!(output, "mod {test_name};");
             output
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn generated_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
+        generate_test(GenerateTestArgs {
+            test_name,
+            windows_skip,
+            deno,
+            jco_script_path: Path::new("packages/jco/dist/jco.js"),
+            jco_crate_dir: Path::new("crates/jco"),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn windows_skip_applies_to_the_generated_module() {
+        let src = generated_test("cli_args", true, true);
+        let cfg_pos = src.find("#![cfg(not(windows))]").unwrap();
+        let imports_pos = src.find("use std::fs;").unwrap();
+
+        assert!(cfg_pos < imports_pos);
+        assert!(!src.contains("#[cfg(not(windows))]\nfn"));
+    }
+
+    #[test]
+    fn flaky_test_retains_the_last_error() {
+        let src = generated_test("preview2_tcp_streams", false, false);
+
+        assert!(src.contains("for _n in 0..5"));
+        assert!(src.contains("Err(e) => _last_err = Some(e)"));
+        assert!(src.contains("test execution failed after 5 attempts: {_last_err:#}"));
+    }
 }
