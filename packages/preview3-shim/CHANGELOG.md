@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0] - 2026-08-21
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ mid-chunk write yielding for streams by @vados-cosmonic
+
+- _(p3-shim)_ avoid using process.binding by @vados-cosmonic in #1915
+
 ## [0.3.2] - 2026-08-19
 
 ### 🐛 Bug Fixes
