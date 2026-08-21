@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.7.0] - 2026-08-21
+
+### 🚀 Features
+
+- _(bindgen)_ add enum values screaming case option by @vados-cosmonic
+
+- _(bindgen)_ enable namespace objects for enums,variants,flags by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ stream drop semantics by @vados-cosmonic
+
+- _(bindgen)_ create task before arg handling for core wasm exports by @vados-cosmonic
+
+- _(bindgen)_ return directly from async host imports by @vados-cosmonic
+
+- _(bindgen)_ use of subtask resolve check by @vados-cosmonic
+
+- _(bindgen)_ honor core ABI for lowered imports by @vados-cosmonic
+
+- _(bindgen)_ avoid TypeScript variant name collisions by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ use option for inlining variant cases by @vados-cosmonic
+
+
+
+
 ## [2.6.0] - 2026-08-19
 
 ### 🚀 Features
