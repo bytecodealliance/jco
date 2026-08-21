@@ -411,8 +411,8 @@ importers:
         specifier: ^0.21.0
         version: 0.21.0
       '@bytecodealliance/preview3-shim':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.0
+        version: 0.4.0
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -655,6 +655,9 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.3.2':
     resolution: {integrity: sha512-hA2l46B6ivwL+6jKBH3lsm8oRuxPJrwRDfaVyTf6NnBA9VqR8gzDZxSwE472s/Mn9vKvqRJmBmRNJA8pPX8Rhg==}
+
+  '@bytecodealliance/preview3-shim@0.4.0':
+    resolution: {integrity: sha512-BSObtycxeNmR+aVJ6QnSR6OxxMBj+Tv4/CZ/VsKtcJsaaUwLe7CEiiu+GrET0mChocTw6mMfQ7DmPxwWoWnMdQ==}
 
   '@bytecodealliance/weval@0.4.1':
     resolution: {integrity: sha512-vJegSAkNjENhJcMUod76KUGAgQLdACDDCwB3JwyR14zDhyHVPAvArvtDDYEEi+c+ELzls62H6wxTvzRmaYTaqg==}
@@ -4222,6 +4225,10 @@ snapshots:
   '@bytecodealliance/preview3-shim@0.3.2':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
+
+  '@bytecodealliance/preview3-shim@0.4.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.21.0
 
   '@bytecodealliance/weval@0.4.1':
     dependencies:
