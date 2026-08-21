@@ -62,7 +62,7 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.19.0"
+    "@bytecodealliance/preview2-shim": "^0.21.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.4",
