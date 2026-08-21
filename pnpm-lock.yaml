@@ -314,8 +314,8 @@ importers:
         specifier: ^0.21.0
         version: 0.21.0
       '@bytecodealliance/preview3-shim':
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.0
+        version: 0.4.0
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -649,9 +649,6 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.2.2':
     resolution: {integrity: sha512-9z4tjc+qixUhyeYo3ycoT4cZ9yIlUfkowJxGoKeMfbRd8zT3uvIr1YNfXyU0I93GPu+gdaTVsr8iMr55utEJSA==}
-
-  '@bytecodealliance/preview3-shim@0.3.1':
-    resolution: {integrity: sha512-RPyvU+x8QW0Z+qjyCFTkrPdCPH18N3g6lauhats8HWsaPk5BNUGIg3wlp+bNdYW5hhz0w4CxJgEUPTm9yBPUBg==}
 
   '@bytecodealliance/preview3-shim@0.3.2':
     resolution: {integrity: sha512-hA2l46B6ivwL+6jKBH3lsm8oRuxPJrwRDfaVyTf6NnBA9VqR8gzDZxSwE472s/Mn9vKvqRJmBmRNJA8pPX8Rhg==}
@@ -4142,7 +4139,7 @@ snapshots:
   '@bytecodealliance/jco-transpile@0.10.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.20.2
-      '@bytecodealliance/preview3-shim': 0.3.1
+      '@bytecodealliance/preview3-shim': 0.3.2
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
@@ -4215,10 +4212,6 @@ snapshots:
       '@bytecodealliance/preview2-shim': 0.17.9
 
   '@bytecodealliance/preview3-shim@0.2.2':
-    dependencies:
-      '@bytecodealliance/preview2-shim': 0.19.0
-
-  '@bytecodealliance/preview3-shim@0.3.1':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
 
