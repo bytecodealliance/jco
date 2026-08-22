@@ -4,6 +4,8 @@
 - [Creating new JS components](./creating-new-js-components.md)
 - [Transpiling](./transpiling.md)
 - [Example Workflow](./example.md)
+- [Performance]()
+    - [Preview 2 HTTP serving](./performance/preview2-http-serving.md)
 - [Advanced]()
     - [Optimized Host Bindings](./advanced/optimized-host-bindings.md)
     - [WIT Type representations](./advanced/wit-type-representations.md)

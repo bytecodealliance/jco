@@ -169,6 +169,8 @@ Using the preview2-shim WASI implementation, full access to the underlying syste
 
 For HTTP Proxy components, `jco serve` provides a JS server implementation:
 
+> **Warning:** `jco serve` is intended for development and testing only. It is not production ready.
+
 ```
 jco serve --port 8080 server.wasm
 ```
