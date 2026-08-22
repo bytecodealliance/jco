@@ -1,5 +1,4 @@
 import { version, env, argv, execArgv, platform } from "node:process";
-import { createServer as createNetServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from "node:path";
 import { cp, mkdtemp, writeFile, stat, mkdir, readFile, rm, symlink } from "node:fs/promises";
@@ -12,6 +11,9 @@ import mime from "mime";
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
 import { JCO_JS_PATH } from "./common.js";
+import { getRandomPort } from "./server-helpers.js";
+
+export { getRandomPort, terminateServer, waitForServer } from "./server-helpers.js";
 
 export const isWindows = platform === "win32";
 
@@ -454,33 +456,6 @@ export async function loadTestPage(args) {
             json: testOutputJSON,
         },
     };
-}
-
-// Utility function for getting a random port
-export async function getRandomPort() {
-    return await new Promise((resolve) => {
-        const server = createNetServer();
-        server.listen(0, function () {
-            const port = this.address().port;
-            server.on("close", () => resolve(port));
-            server.close();
-        });
-    });
-}
-
-/** Wait until a spawned server announces that it is ready on stderr. */
-export async function waitForServer(child, readyMessage = "Server listening") {
-    let stderr = "";
-    await new Promise((resolve, reject) => {
-        child.stderr.on("data", (chunk) => {
-            stderr += chunk;
-            if (stderr.includes(readyMessage)) {
-                resolve();
-            }
-        });
-        child.once("error", reject);
-        child.once("exit", (code) => reject(new Error(`server exited with ${code}: ${stderr}`)));
-    });
 }
 
 /**

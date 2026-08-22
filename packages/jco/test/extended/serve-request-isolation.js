@@ -6,7 +6,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { suite, test, assert, beforeAll, afterAll } from "vitest";
 
 import { COMPONENT_JS_FIXTURES_DIR, JCO_JS_PATH } from "../common.js";
-import { exec, getRandomPort, getTmpDir, waitForServer } from "../helpers.js";
+import { exec, getRandomPort, getTmpDir, terminateServer, waitForServer } from "../helpers.js";
 
 suite("serve request isolation", () => {
     let tmpDir;
@@ -47,6 +47,7 @@ addEventListener("fetch", event => event.respondWith((async () =>
         test(`isolates state and proxies bodies end to end in ${name}`, async () => {
             const port = await getRandomPort();
             const child = spawn(execPath, [JCO_JS_PATH, "serve", componentPath, option, "--port", String(port)], {
+                detached: true,
                 stdio: ["ignore", "ignore", "pipe"],
             });
             try {
@@ -56,8 +57,7 @@ addEventListener("fetch", event => event.respondWith((async () =>
                 assert.strictEqual(await first.text(), "1:first");
                 assert.strictEqual(await second.text(), "1:second");
             } finally {
-                child.kill();
-                await new Promise((resolve) => child.once("exit", resolve));
+                await terminateServer(child);
             }
         });
     }
