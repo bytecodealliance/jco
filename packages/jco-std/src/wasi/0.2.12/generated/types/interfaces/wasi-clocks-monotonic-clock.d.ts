@@ -2,10 +2,10 @@
 declare module 'wasi:clocks/monotonic-clock@0.2.12' {
   /**
    * Read the current value of the clock.
-   * 
+   *
    * The clock is monotonic, therefore calling this function repeatedly will
    * produce a sequence of non-decreasing values.
-   * 
+   *
    * For completeness, this function traps if it's not possible to represent
    * the value of the clock in an `instant`. Consequently, implementations
    * should ensure that the starting time is low enough to avoid the
