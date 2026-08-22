@@ -72,20 +72,20 @@ importers:
   examples/components/add:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/adder:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/builtin-bundle-ts:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/fs-write-file:
     dependencies:
@@ -94,20 +94,20 @@ importers:
         version: 0.21.0
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/host-logging:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/http-hello-world:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
     devDependencies:
       terminate:
         specifier: ^2.8.0
@@ -116,8 +116,8 @@ importers:
   examples/components/http-server-fetch-handler:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/http-server-hono:
     dependencies:
@@ -129,8 +129,8 @@ importers:
         version: 4.12.34
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
       rolldown:
         specifier: ^1.1.0
         version: 1.2.0
@@ -151,8 +151,8 @@ importers:
         version: 4.12.34
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
       rolldown:
         specifier: ^1.1.0
         version: 1.2.0
@@ -166,8 +166,8 @@ importers:
   examples/components/node-compat:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
       rolldown:
         specifier: ^1.1.0
         version: 1.2.0
@@ -178,26 +178,26 @@ importers:
   examples/components/node-fetch:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/nodejs-platform:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/string-reverse:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/string-reverse-upper:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: ^1.25.2
-        version: 1.27.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/ts-resource-export:
     devDependencies:
@@ -205,8 +205,8 @@ importers:
         specifier: ^0.22.0
         version: 0.22.0
       '@bytecodealliance/jco':
-        specifier: file:../../../packages/jco
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
       '@bytecodealliance/preview2-shim':
         specifier: file:../../../packages/preview2-shim
         version: link:../../../packages/preview2-shim
@@ -229,8 +229,8 @@ importers:
         specifier: ^0.22.0
         version: 0.22.0
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
       '@bytecodealliance/preview2-shim':
         specifier: file:../../../packages/preview2-shim
         version: link:../../../packages/preview2-shim
@@ -250,8 +250,8 @@ importers:
   examples/components/typegen-async-export:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
     devDependencies:
       '@rollup/plugin-node-resolve':
         specifier: ^16.0.1
@@ -269,8 +269,8 @@ importers:
   examples/components/webidl-book-library:
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: 1.25.2
-        version: 1.25.2
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/components/wintertc:
     devDependencies:
@@ -281,14 +281,14 @@ importers:
   examples/transpile/js-string-builtins:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: 1.30.0
-        version: 1.30.0
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/transpile/p3-stream-chat:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
       '@bytecodealliance/jco-transpile':
         specifier: workspace:*
         version: link:../../../packages/jco-transpile
@@ -617,9 +617,6 @@ packages:
   '@bytecodealliance/jco-std@0.2.0':
     resolution: {integrity: sha512-/GJoiSS6jVerxqAZOlm0CqbU64tokRLVdLtJeF9gnC9YVlYZA8PC/RUIW6pEtx9Np2hwHzPUTwb4RSzobaRIBw==}
 
-  '@bytecodealliance/jco-transpile@0.10.0':
-    resolution: {integrity: sha512-G2mYqDz1rQiDJ+re4avajauks9uZWPqarivAVrvpCQZvak9uhz6sqZxLBHa2wZPv0GvB7x9dP9ooMMednFfSYw==}
-
   '@bytecodealliance/jco-transpile@0.11.0':
     resolution: {integrity: sha512-0mTr0qGd3Y55BczPO127NTgfY/lSpRgDMElifTnSzbidsyAo4wa4zrSoqwQpBrSiJvXqTLGm1sRT2zkwGaGelw==}
 
@@ -635,10 +632,6 @@ packages:
 
   '@bytecodealliance/jco@1.27.0':
     resolution: {integrity: sha512-MG3875pStjkVZt6hxm/2rszf9EgOR2VGIostrpliTyYLyx+3u6W6U3fWpGVmRwXcS8VW1pUolQl9kHO5RKeIbA==}
-    hasBin: true
-
-  '@bytecodealliance/jco@1.30.0':
-    resolution: {integrity: sha512-eUb7NCI5Un7edpRqP0iHDhl8TXu4v5/tj0ku4CaKKMVWS7tvHuldH/XIPcSCkgZ9+AleIOMNS2CeM5quONUvxg==}
     hasBin: true
 
   '@bytecodealliance/jco@1.31.0':
@@ -662,9 +655,6 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.2.2':
     resolution: {integrity: sha512-9z4tjc+qixUhyeYo3ycoT4cZ9yIlUfkowJxGoKeMfbRd8zT3uvIr1YNfXyU0I93GPu+gdaTVsr8iMr55utEJSA==}
-
-  '@bytecodealliance/preview3-shim@0.3.2':
-    resolution: {integrity: sha512-hA2l46B6ivwL+6jKBH3lsm8oRuxPJrwRDfaVyTf6NnBA9VqR8gzDZxSwE472s/Mn9vKvqRJmBmRNJA8pPX8Rhg==}
 
   '@bytecodealliance/preview3-shim@0.4.0':
     resolution: {integrity: sha512-BSObtycxeNmR+aVJ6QnSR6OxxMBj+Tv4/CZ/VsKtcJsaaUwLe7CEiiu+GrET0mChocTw6mMfQ7DmPxwWoWnMdQ==}
@@ -4149,13 +4139,6 @@ snapshots:
 
   '@bytecodealliance/jco-std@0.2.0': {}
 
-  '@bytecodealliance/jco-transpile@0.10.0':
-    dependencies:
-      '@bytecodealliance/preview2-shim': 0.20.2
-      '@bytecodealliance/preview3-shim': 0.3.2
-      binaryen: 130.0.0
-      oxc-minify: 0.136.0
-
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.21.0
@@ -4203,22 +4186,6 @@ snapshots:
       ora: 8.2.0
       rolldown: 1.2.0
 
-  '@bytecodealliance/jco@1.30.0':
-    dependencies:
-      '@bytecodealliance/componentize-js': 0.22.0
-      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.10.0
-      '@bytecodealliance/preview2-shim': 0.20.2
-      '@bytecodealliance/preview3-shim': 0.3.2
-      binaryen: 130.0.0
-      commander: 14.0.3
-      componentize-qjs: 0.4.3
-      mkdirp: 3.0.1
-      ora: 8.2.0
-      rolldown: 1.2.4
-      typescript: 7.0.2
-      typescript-compiler-api: typescript@6.0.3
-
   '@bytecodealliance/jco@1.31.0':
     dependencies:
       '@bytecodealliance/componentize-js': 0.22.0
@@ -4248,10 +4215,6 @@ snapshots:
       '@bytecodealliance/preview2-shim': 0.17.9
 
   '@bytecodealliance/preview3-shim@0.2.2':
-    dependencies:
-      '@bytecodealliance/preview2-shim': 0.19.0
-
-  '@bytecodealliance/preview3-shim@0.3.2':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.19.0
 

@@ -14,7 +14,7 @@
         "all": "pnpm transpile && pnpm run build:ts:demo && pnpm run demo"
     },
     "dependencies": {
-        "@bytecodealliance/jco": "workspace:*",
+        "@bytecodealliance/jco": "1.31.0",
         "@bytecodealliance/jco-transpile": "workspace:*",
         "@bytecodealliance/preview2-shim": "workspace:*"
     },
