@@ -3,6 +3,24 @@ package local:js-component-bindgen;
 world js-component-bindgen {
   type files = list<tuple<string, list<u8>>>;
   type maps = list<tuple<string, string>>;
+  type package-spec = string;
+  type package-name = string;
+  type wit-source = string;
+  type error-message = string;
+  type wit-files = map<string, wit-source>;
+
+  record package-mismatch {
+    found: package-name,
+    expected: package-spec,
+  }
+
+  variant unpack-error {
+    invalid-package-spec(error-message),
+    invalid-wasm(error-message),
+    component-artifact,
+    package-mismatch(package-mismatch),
+    print-error(error-message),
+  }
 
   variant instantiation-mode {
     %async,
@@ -185,4 +203,7 @@ world js-component-bindgen {
   export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>;
 
   export generate-types: func(name: string, options: type-generation-options) -> result<files, string>;
+
+  /// Expand an encoded WIT package into a conventional WIT directory file map.
+  export unpack-wit: func(expected: option<package-spec>, binary: list<u8>) -> result<wit-files, unpack-error>;
 }

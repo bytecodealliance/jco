@@ -1,9 +1,10 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context as _, Result};
 
-use js_component_bindgen::source::wit_parser::Resolve;
+use js_component_bindgen::source::wit_parser::{Resolve, UnresolvedPackageGroup};
 use js_component_bindgen::transpile;
+use wit_component::{DecodedWasm, WitPrinter};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -36,6 +37,7 @@ mod bindings {
     //! of the js-component-bindgen Wasm component used by Jco
 
     use super::JsComponentBindgenComponent;
+    use wit_bindgen::rt::WitMap as _;
     wit_bindgen::generate!({
         world: "js-component-bindgen"
     });
@@ -43,7 +45,7 @@ mod bindings {
 }
 use bindings::{
     AsyncImportsExports, AsyncMode, BindingsMode, EnabledFeatureSet, ExportType, GenerateOptions,
-    InstantiationMode, Transpiled, TypeGenerationOptions, Wit,
+    InstantiationMode, PackageMismatch, Transpiled, TypeGenerationOptions, UnpackError, Wit,
 };
 
 /// Implementation of the `js-component-bindgen` world
@@ -150,7 +152,21 @@ impl bindings::Guest for JsComponentBindgenComponent {
                         .map_err(|e| format!("{e:?}"))?
                 }
             }
-            Wit::Binary(_) => todo!("reading WIT from binary not yet implemented"),
+            Wit::Binary(binary) => {
+                let decoded = wit_component::decode(&binary)
+                    .map_err(|e| format!("failed to decode binary WIT: {e:#}"))?;
+                let (binary_resolve, package) = match decoded {
+                    DecodedWasm::WitPackage(resolve, package) => (resolve, package),
+                    DecodedWasm::Component(resolve, world) => {
+                        let package = resolve.worlds[world]
+                            .package
+                            .ok_or_else(|| "component world has no package".to_string())?;
+                        (resolve, package)
+                    }
+                };
+                resolve = binary_resolve;
+                package
+            }
         };
 
         let world_string = opts.world.map(|world| world.to_string());
@@ -188,6 +204,57 @@ impl bindings::Guest for JsComponentBindgenComponent {
 
         Ok(files)
     }
+
+    fn unpack_wit(
+        expected: Option<String>,
+        binary: Vec<u8>,
+    ) -> Result<BTreeMap<String, String>, UnpackError> {
+        let decoded =
+            wit_component::decode(&binary).map_err(|e| UnpackError::InvalidWasm(e.to_string()))?;
+        let (resolve, root) = match decoded {
+            DecodedWasm::WitPackage(resolve, package) => (resolve, package),
+            DecodedWasm::Component(_, _) => return Err(UnpackError::ComponentArtifact),
+        };
+        let root_name = &resolve.packages[root].name;
+        if let Some(expected) = expected {
+            let Some(parsed_expected) = parse_package_spec(&expected) else {
+                return Err(UnpackError::InvalidPackageSpec(expected));
+            };
+            if root_name.to_string() != parsed_expected {
+                return Err(UnpackError::PackageMismatch(PackageMismatch {
+                    found: root_name.to_string(),
+                    expected,
+                }));
+            }
+        }
+
+        resolve
+            .packages
+            .iter()
+            .map(|(id, package)| {
+                let mut printer = WitPrinter::default();
+                printer
+                    .print(&resolve, id, &[])
+                    .map_err(|e| UnpackError::PrintError(e.to_string()))?;
+                let path = if id == root {
+                    "package.wit".to_string()
+                } else {
+                    format!(
+                        "deps/{}/package.wit",
+                        package.name.to_string().replace([':', '@'], "-")
+                    )
+                };
+                Ok((path, printer.output.to_string()))
+            })
+            .collect()
+    }
+}
+
+fn parse_package_spec(spec: &str) -> Option<String> {
+    let source = format!("package {spec}; world validate {{}}");
+    UnresolvedPackageGroup::parse("package-spec.wit", &source)
+        .ok()
+        .map(|group| group.main.name.to_string())
 }
 
 impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
@@ -218,5 +285,19 @@ impl From<AsyncMode> for js_component_bindgen::AsyncMode {
                 js_component_bindgen::AsyncMode::JavaScriptPromiseIntegration { imports, exports }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_package_spec;
+
+    #[test]
+    fn validates_package_specs_with_the_wit_parser() {
+        assert_eq!(
+            parse_package_spec("docs:adder@0.1.0").as_deref(),
+            Some("docs:adder@0.1.0")
+        );
+        assert_eq!(parse_package_spec("not-a-package"), None);
     }
 }
