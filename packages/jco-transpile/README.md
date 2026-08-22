@@ -1,13 +1,10 @@
 # `@bytecodealliance/jco-transpile`
 
 This [`@bytecodealliance/jco`][jco] sub-project enables transpilation of [WebAssembly Components][cm-book] into ES modules
-that can be run in Javascript environments like NodeJS and the browser (experimental).
+that can be run in Javascript environments like NodeJS and the browser.
 
 `@bytecodealliance/jco-transpile` is used primarily when only transpilation functionality of `jco` is needed,
 and `jco` derives it's use of transpilation from this library.
-
-> [!WARNING]
-> Browser support is considered experimental, and not currently suitable for production applications.
 
 [cm-book]: https://component-model.bytecodealliance.org/
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco

@@ -9,9 +9,6 @@ an evolving architecture for interoperabl WebAssembly libraries, aplications and
 WebAssembly components can be used from server side applications _and_ in the browser, and
 `@bytecodealliance/jco-std` contains shared functionality and helpers for both environments.
 
-> [!WARNING]
-> Browser support is considered experimental, and not currently suitable for production applications.
-
 [cm-book]: https://component-model.bytecodealliance.org/
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 

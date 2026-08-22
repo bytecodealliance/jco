@@ -29,7 +29,7 @@ pnpm install
 At this point, since this project is *just* NodeJS, you could use the module from any NodeJS project or browser project where appropriate.
 
 That said, we'll be focusing on building the JS code we've written so far into a WebAssembly binary, which can run *anywhere*
-WebAssembly runtimes are supported, including in other languages, and the browser (experimental support).
+WebAssembly runtimes are supported, including in other languages and the browser.
 
 ## Building the WebAssembly component
 
