@@ -1404,6 +1404,7 @@ dependencies = [
  "anyhow",
  "js-component-bindgen",
  "semver",
+ "serde_json",
  "structopt",
  "wast",
  "webidl2wit",
