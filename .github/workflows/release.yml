@@ -297,29 +297,29 @@ jobs:
         settings:
           - host: macos-latest
             target: x86_64-apple-darwin
-            build-args: ""
+            build-arg: ""
           - host: macos-latest
             target: aarch64-apple-darwin
-            build-args: ""
+            build-arg: ""
           - host: windows-latest
             target: x86_64-pc-windows-msvc
-            build-args: ""
+            build-arg: ""
           - host: windows-latest
             target: aarch64-pc-windows-msvc
-            build-args: ""
+            build-arg: ""
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build-args: ""
+            build-arg: ""
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            build-args: "--use-napi-cross"
+            build-arg: "--use-napi-cross"
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            build-args: "--cross-compile"
+            build-arg: "--cross-compile"
             zig: true
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            build-args: "--cross-compile"
+            build-arg: "--cross-compile"
             zig: true
     name: Build jco-node-fs (${{ matrix.settings.target }})
     runs-on: ${{ matrix.settings.host }}
@@ -359,11 +359,15 @@ jobs:
 
       - name: Build native filesystem helper
         env:
-          BUILD_ARGS: ${{ matrix.settings.build-args }}
+          BUILD_ARG: ${{ matrix.settings.build-arg }}
           TARGET: ${{ matrix.settings.target }}
         shell: bash
         run: |
-          pnpm --filter '@bytecodealliance/jco-node-fs' exec napi build --platform --release --target "$TARGET" $BUILD_ARGS
+          EXTRA_ARGS=()
+          if [[ -n "$BUILD_ARG" ]]; then
+            EXTRA_ARGS+=("$BUILD_ARG")
+          fi
+          pnpm --filter '@bytecodealliance/jco-node-fs' exec napi build --platform --release --target "$TARGET" "${EXTRA_ARGS[@]}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
