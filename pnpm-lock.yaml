@@ -275,8 +275,8 @@ importers:
   examples/components/wintertc:
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.31.0
+        version: 1.31.0
 
   examples/transpile/js-string-builtins:
     dependencies:
@@ -639,6 +639,10 @@ packages:
 
   '@bytecodealliance/jco@1.30.0':
     resolution: {integrity: sha512-eUb7NCI5Un7edpRqP0iHDhl8TXu4v5/tj0ku4CaKKMVWS7tvHuldH/XIPcSCkgZ9+AleIOMNS2CeM5quONUvxg==}
+    hasBin: true
+
+  '@bytecodealliance/jco@1.31.0':
+    resolution: {integrity: sha512-prA+SuDDLrTYK4+eL34dqMPLoPpjewYcCqxl88by4B04yBQF8g1wyzmekCOWR2/pJ7GGe4akJjnjugKPR16eQg==}
     hasBin: true
 
   '@bytecodealliance/preview2-shim@0.17.9':
@@ -4122,14 +4126,14 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.19.3':
     dependencies:
-      '@bytecodealliance/jco': 1.30.0
+      '@bytecodealliance/jco': 1.31.0
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
 
   '@bytecodealliance/componentize-js@0.21.0':
     dependencies:
-      '@bytecodealliance/jco': 1.30.0
+      '@bytecodealliance/jco': 1.31.0
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4137,7 +4141,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.22.0':
     dependencies:
-      '@bytecodealliance/jco': 1.30.0
+      '@bytecodealliance/jco': 1.31.0
       '@bytecodealliance/weval': 0.4.1
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
@@ -4206,6 +4210,22 @@ snapshots:
       '@bytecodealliance/jco-transpile': 0.10.0
       '@bytecodealliance/preview2-shim': 0.20.2
       '@bytecodealliance/preview3-shim': 0.3.2
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.3
+      mkdirp: 3.0.1
+      ora: 8.2.0
+      rolldown: 1.2.4
+      typescript: 7.0.2
+      typescript-compiler-api: typescript@6.0.3
+
+  '@bytecodealliance/jco@1.31.0':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.22.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.11.0
+      '@bytecodealliance/preview2-shim': 0.21.0
+      '@bytecodealliance/preview3-shim': 0.4.0
       binaryen: 130.0.0
       commander: 14.0.3
       componentize-qjs: 0.4.3
