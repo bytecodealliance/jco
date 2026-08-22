@@ -21,6 +21,7 @@ export default defineConfig({
             "test/extended/*",
             "test/output/*",
             "test/fixtures/*",
+            "test/bench/*",
             "test/common.js",
             "test/helpers.js",
             "test/p3/cli-runner.js",

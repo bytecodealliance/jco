@@ -30,6 +30,7 @@ export type RunOptions = RunComponentOptions;
 export interface ServeOptions extends RunComponentOptions {
     host?: string;
     isolateRequests?: "instance" | "worker";
+    isolateWorkerPoolSize?: number;
     port?: string;
 }
 
@@ -92,6 +93,10 @@ export async function serve(componentPath: string, args: string[], opts: ServeOp
     // Ensure that `args` is an array
     args = [...args];
     host = host ?? DEFAULT_SERVE_HOST;
+    const workerPoolSize = opts.isolateWorkerPoolSize ?? 50;
+    if (!Number.isInteger(workerPoolSize) || workerPoolSize < 1) {
+        throw new Error("--isolate-worker-pool-size must be a positive integer");
+    }
     const isolatedHandler =
         opts.isolateRequests === "instance"
             ? `(${createRequestIsolatedHandler.toString()})(
@@ -110,45 +115,110 @@ export async function serve(componentPath: string, args: string[], opts: ServeOp
     import { Worker } from 'node:worker_threads';
 
     const workerUrl = new URL('./_serve_worker.js', import.meta.url);
-    const server = http.createServer((request, response) => {
-      const worker = new Worker(workerUrl);
+    const workerPoolSize = ${workerPoolSize};
+    const idleWorkers = [];
+    const workerWaiters = [];
+
+    function createWorker() {
+      return new Promise((resolve, reject) => {
+        const worker = new Worker(workerUrl);
+        const onError = error => { cleanup(); reject(error); };
+        const onExit = code => {
+          cleanup();
+          reject(new Error(\`Request worker exited during startup with code \${code}\`));
+        };
+        const onMessage = ({ port, error }) => {
+          cleanup();
+          if (error) {
+            worker.terminate();
+            reject(new Error(error));
+          } else {
+            resolve({ worker, port });
+          }
+        };
+        const cleanup = () => {
+          worker.off('error', onError);
+          worker.off('exit', onExit);
+          worker.off('message', onMessage);
+        };
+        worker.once('error', onError);
+        worker.once('exit', onExit);
+        worker.once('message', onMessage);
+      });
+    }
+
+    function releaseWorker(entry) {
+      const waiter = workerWaiters.shift();
+      if (waiter) waiter(entry);
+      else idleWorkers.push(entry);
+    }
+
+    function replenishWorker() {
+      createWorker().then(releaseWorker, error => {
+        console.error('Unable to replenish isolated request worker:', error);
+        setTimeout(replenishWorker, 100);
+      });
+    }
+
+    function retireWorker(entry) {
+      entry.worker.terminate().finally(replenishWorker);
+    }
+
+    function acquireWorker() {
+      const entry = idleWorkers.shift();
+      if (entry) return Promise.resolve(entry);
+      return new Promise(resolve => workerWaiters.push(resolve));
+    }
+
+    idleWorkers.push(...await Promise.all(Array.from({ length: workerPoolSize }, createWorker)));
+
+    const server = http.createServer(async (request, response) => {
+      let entry;
       let upstream;
       let settled = false;
+      let aborted = false;
+      request.once('aborted', () => {
+        aborted = true;
+        upstream?.destroy();
+        if (entry && !settled) {
+          settled = true;
+          retireWorker(entry);
+        }
+      });
+      entry = await acquireWorker();
+      if (aborted) {
+        retireWorker(entry);
+        return;
+      }
+      const { worker, port: workerPort } = entry;
       const fail = error => {
         if (settled) return;
         settled = true;
         if (!response.headersSent) response.writeHead(502);
         response.end('Isolated component request failed');
         console.error(error);
-        worker.terminate();
+        retireWorker(entry);
       };
       worker.once('error', fail);
       worker.once('exit', code => {
-        if (!settled && code !== 0) fail(new Error(\`Request worker exited with code \${code}\`));
+        if (!settled) fail(new Error(\`Request worker exited with code \${code}\`));
       });
-      worker.once('message', ({ port: workerPort, error }) => {
-        if (error) return fail(new Error(error));
-        upstream = http.request({
-          hostname: '127.0.0.1',
-          port: workerPort,
-          method: request.method,
-          path: request.url,
-          headers: request.headers,
-        }, workerResponse => {
-          response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
-          workerResponse.pipe(response);
-          workerResponse.once('end', () => {
-            settled = true;
-            worker.terminate();
-          });
+      upstream = http.request({
+        hostname: '127.0.0.1',
+        port: workerPort,
+        method: request.method,
+        path: request.url,
+        headers: request.headers,
+      }, workerResponse => {
+        response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
+        workerResponse.pipe(response);
+        workerResponse.once('end', () => {
+          settled = true;
+          retireWorker(entry);
         });
-        upstream.once('error', fail);
-        request.pipe(upstream);
       });
-      request.once('aborted', () => {
-        upstream?.destroy();
-        worker.terminate();
-      });
+      upstream.once('error', fail);
+      request.pipe(upstream);
     });
     let port = ${port};
     while (true) {
