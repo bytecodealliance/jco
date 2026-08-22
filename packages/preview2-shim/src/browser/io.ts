@@ -78,7 +78,7 @@ class InputStream implements IInputStream {
             closed();
         }
         if (this.handler.read) {
-            return this.handler.read(len);
+            return this.handler.read.call(this, len);
         }
         return this.handler.blockingRead.call(this, len);
     }
@@ -123,10 +123,12 @@ class InputStream implements IInputStream {
             return pollableCreate();
         }
         const pollable = this.handler.subscribe
-            ? (this.handler.subscribe() as Pollable)
+            ? this.handler.subscribe.call(this)
             : pollableCreate();
-        this.#children.add(pollable);
-        pollable._onDispose(() => this.#children.delete(pollable));
+        if (pollable instanceof Pollable) {
+            this.#children.add(pollable);
+            pollable._onDispose(() => this.#children.delete(pollable));
+        }
         return pollable;
     }
 
@@ -203,6 +205,11 @@ class OutputStream implements IOutputStream {
             return this.handler.blockingWriteAndFlush.call(this, buf);
         }
         this.handler.write.call(this, buf);
+        if (this.handler.blockingFlush) {
+            this.handler.blockingFlush.call(this);
+        } else {
+            this.handler.flush?.call(this);
+        }
     }
 
     flush() {
@@ -221,15 +228,25 @@ class OutputStream implements IOutputStream {
         }
         if (this.handler.blockingFlush) {
             this.handler.blockingFlush.call(this);
+        } else {
+            this.handler.flush?.call(this);
         }
     }
 
     writeZeroes(len: bigint) {
-        this.write.call(this, new Uint8Array(checkedLength(len)));
+        const length = checkedLength(len);
+        if (len > this.#permit) {
+            throw new Error("write exceeds the permit returned by checkWrite");
+        }
+        this.write.call(this, new Uint8Array(length));
     }
 
     blockingWriteZeroesAndFlush(len: bigint) {
-        this.blockingWriteAndFlush.call(this, new Uint8Array(checkedLength(len)));
+        const length = checkedLength(len);
+        if (length > 4096) {
+            throw new RangeError("blockingWriteZeroesAndFlush accepts at most 4096 bytes");
+        }
+        this.blockingWriteAndFlush.call(this, new Uint8Array(length));
     }
 
     splice(src: InputStream, len: bigint) {
@@ -251,10 +268,12 @@ class OutputStream implements IOutputStream {
             return pollableCreate();
         }
         const pollable = this.handler.subscribe
-            ? (this.handler.subscribe() as Pollable)
+            ? this.handler.subscribe.call(this)
             : pollableCreate();
-        this.#children.add(pollable);
-        pollable._onDispose(() => this.#children.delete(pollable));
+        if (pollable instanceof Pollable) {
+            this.#children.add(pollable);
+            pollable._onDispose(() => this.#children.delete(pollable));
+        }
         return pollable;
     }
 

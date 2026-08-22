@@ -5,6 +5,14 @@ import type {
 import { pollableCreate } from "./io.js";
 
 const MAX_TIMEOUT_MS = 0x7fffffff;
+const MAX_U64 = (1n << 64n) - 1n;
+
+function checkedInstant(value: bigint, name: string): bigint {
+    if (typeof value !== "bigint" || value < 0n || value > MAX_U64) {
+        throw new TypeError(`${name} must be a valid u64`);
+    }
+    return value;
+}
 
 function timeout(durationNs: bigint): Promise<void> {
     let remainingMs = Number((durationNs + 999_999n) / 1_000_000n);
@@ -33,17 +41,17 @@ export const monotonicClock: typeof MonotonicClockNamespace = {
         return BigInt(Math.floor(performance.now() * 1e6));
     },
     subscribeInstant(instant: bigint) {
-        instant = BigInt(instant);
+        instant = checkedInstant(instant, "instant");
         const now = monotonicClock.now();
         if (instant <= now) {
-            return pollableCreate(new Promise((resolve) => setTimeout(resolve, 0)));
+            return pollableCreate();
         }
         return monotonicClock.subscribeDuration(instant - now);
     },
     subscribeDuration(duration: bigint) {
-        duration = BigInt(duration);
-        if (duration <= 0n) {
-            return pollableCreate(new Promise((resolve) => setTimeout(resolve, 0)));
+        duration = checkedInstant(duration, "duration");
+        if (duration === 0n) {
+            return pollableCreate();
         }
         return pollableCreate(timeout(duration));
     },
