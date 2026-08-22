@@ -5,9 +5,9 @@ world js-component-bindgen {
   type maps = list<tuple<string, string>>;
   type package-spec = string;
   type package-name = string;
-  type wit-source = string;
+  type wit-text = string;
   type error-message = string;
-  type wit-files = map<string, wit-source>;
+  type wit-files = map<string, wit-text>;
 
   record package-mismatch {
     found: package-name,
