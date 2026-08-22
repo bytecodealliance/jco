@@ -86,4 +86,4 @@ minimumReleaseAgeExclude:
   - puppeteer-core@25.1.0
   - puppeteer@25.1.0
   - ws@8.21.0
-  - '@bytecodealliance/jco@1.26.0 || 1.26.1 || 1.27.0 || 1.30.0'
+  - '@bytecodealliance/jco@1.26.0 || 1.26.1 || 1.27.0 || 1.30.0 || 1.31.0'
