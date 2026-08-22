@@ -2,7 +2,7 @@ import { env } from "node:process";
 
 import { suite, test, assert } from "vitest";
 
-import { getSandboxSetup } from "../src/cmd/run.js";
+import { createRequestIsolatedHandler, getSandboxSetup } from "../src/cmd/run.js";
 
 suite("Run sandbox", () => {
     test("preserves legacy behavior unless sandboxing is requested", () => {
@@ -47,5 +47,43 @@ suite("Run sandbox", () => {
                 env.JCO_RUN_SANDBOX_TEST = previous;
             }
         }
+    });
+});
+
+suite("Serve request isolation", () => {
+    test("creates a fresh component instance for every request", () => {
+        let instantiations = 0;
+        const handler = createRequestIsolatedHandler(
+            () => {
+                instantiations++;
+                let requests = 0;
+                return {
+                    incomingHandler: {
+                        handle() {
+                            return ++requests;
+                        },
+                    },
+                };
+            },
+            () => {
+                throw new Error("unused test module loader");
+            },
+            () => ({}),
+        );
+
+        assert.strictEqual(handler.handle({}, {}), 1);
+        assert.strictEqual(handler.handle({}, {}), 1);
+        assert.strictEqual(instantiations, 2);
+    });
+
+    test("rejects instances without an incoming handler", () => {
+        const handler = createRequestIsolatedHandler(
+            () => ({}),
+            () => {
+                throw new Error("unused test module loader");
+            },
+            () => ({}),
+        );
+        assert.throws(() => handler.handle({}, {}), /Not a valid HTTP server component/);
     });
 });

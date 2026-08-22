@@ -275,6 +275,11 @@ program
     .argument("<server>", "WASI server binary to run")
     .option("--port <number>")
     .option("--host <host>")
+    .addOption(
+        new Option("--isolate-requests [mode]", "Isolate every request in a fresh worker or component instance")
+            .choices(["worker", "instance"])
+            .preset("worker"),
+    )
     .option("--jco-dir <dir>", "Instead of using a temporary dir, set the output directory for the transpiled code")
     .option("--jco-trace", "Enable call tracing")
     .option(

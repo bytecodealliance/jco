@@ -468,6 +468,21 @@ export async function getRandomPort() {
     });
 }
 
+/** Wait until a spawned server announces that it is ready on stderr. */
+export async function waitForServer(child, readyMessage = "Server listening") {
+    let stderr = "";
+    await new Promise((resolve, reject) => {
+        child.stderr.on("data", (chunk) => {
+            stderr += chunk;
+            if (stderr.includes(readyMessage)) {
+                resolve();
+            }
+        });
+        child.once("error", reject);
+        child.once("exit", (code) => reject(new Error(`server exited with ${code}: ${stderr}`)));
+    });
+}
+
 /**
  * Start a web server that serves components and related files from a
  * given directory.

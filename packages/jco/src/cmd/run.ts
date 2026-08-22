@@ -29,7 +29,31 @@ export type RunOptions = RunComponentOptions;
 
 export interface ServeOptions extends RunComponentOptions {
     host?: string;
+    isolateRequests?: "instance" | "worker";
     port?: string;
+}
+
+interface IncomingHandler {
+    handle(request: unknown, responseOutparam: unknown): unknown;
+}
+
+export function createRequestIsolatedHandler(
+    instantiate: (
+        getCoreModule: (path: string) => WebAssembly.Module,
+        imports: Record<string, unknown>,
+    ) => { incomingHandler?: IncomingHandler },
+    getCoreModule: (path: string) => WebAssembly.Module,
+    getImportObject: () => Record<string, unknown>,
+): IncomingHandler {
+    return {
+        handle(request, responseOutparam) {
+            const instance = instantiate(getCoreModule, getImportObject());
+            if (typeof instance.incomingHandler?.handle !== "function") {
+                throw new Error("Not a valid HTTP server component to execute.");
+            }
+            return instance.incomingHandler.handle(request, responseOutparam);
+        },
+    };
 }
 
 export async function run(componentPath: string, args: string[], opts: RunOptions) {
@@ -68,13 +92,102 @@ export async function serve(componentPath: string, args: string[], opts: ServeOp
     // Ensure that `args` is an array
     args = [...args];
     host = host ?? DEFAULT_SERVE_HOST;
+    const isolatedHandler =
+        opts.isolateRequests === "instance"
+            ? `(${createRequestIsolatedHandler.toString()})(
+      mod.instantiate,
+      getCoreModule,
+      () => new WASIShim().getImportObject()
+    )`
+            : "mod.incomingHandler";
     return runComponent(
         componentPath,
         args,
         opts,
-        `
+        opts.isolateRequests === "worker"
+            ? `
+    import http from 'node:http';
+    import { Worker } from 'node:worker_threads';
+
+    const workerUrl = new URL('./_serve_worker.js', import.meta.url);
+    const server = http.createServer((request, response) => {
+      const worker = new Worker(workerUrl);
+      let upstream;
+      let settled = false;
+      const fail = error => {
+        if (settled) return;
+        settled = true;
+        if (!response.headersSent) response.writeHead(502);
+        response.end('Isolated component request failed');
+        console.error(error);
+        worker.terminate();
+      };
+      worker.once('error', fail);
+      worker.once('exit', code => {
+        if (!settled && code !== 0) fail(new Error(\`Request worker exited with code \${code}\`));
+      });
+      worker.once('message', ({ port: workerPort, error }) => {
+        if (error) return fail(new Error(error));
+        upstream = http.request({
+          hostname: '127.0.0.1',
+          port: workerPort,
+          method: request.method,
+          path: request.url,
+          headers: request.headers,
+        }, workerResponse => {
+          response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
+          workerResponse.pipe(response);
+          workerResponse.once('end', () => {
+            settled = true;
+            worker.terminate();
+          });
+        });
+        upstream.once('error', fail);
+        request.pipe(upstream);
+      });
+      request.once('aborted', () => {
+        upstream?.destroy();
+        worker.terminate();
+      });
+    });
+    let port = ${port};
+    while (true) {
+      try {
+        await new Promise((resolve, reject) => {
+          const onError = error => { server.off('listening', onListening); reject(error); };
+          const onListening = () => { server.off('error', onError); resolve(); };
+          server.once('error', onError);
+          server.once('listening', onListening);
+          server.listen(port, ${JSON.stringify(host)});
+        });
+        break;
+      } catch (error) {
+        if (${tryFindPort} && error.code === 'EADDRINUSE') { port++; continue; }
+        throw error;
+      }
+    }
+    console.error(\`Server listening @ ${host}:\${port}...\`);
+  `
+            : `
     import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
-    const server = new HTTPServer(mod.incomingHandler);
+    ${
+        opts.isolateRequests === "instance"
+            ? `
+    import { readFileSync } from 'node:fs';
+    import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+    const coreModules = new Map();
+    function getCoreModule(path) {
+      let module = coreModules.get(path);
+      if (!module) {
+        module = new WebAssembly.Module(readFileSync(new URL(path, import.meta.url)));
+        coreModules.set(path, module);
+      }
+      return module;
+    }
+    `
+            : ""
+    }
+    const server = new HTTPServer(${isolatedHandler});
     let port = ${port};
     ${
         tryFindPort
@@ -97,7 +210,12 @@ export async function serve(componentPath: string, args: string[], opts: ServeOp
     );
 }
 
-async function runComponent(componentPath: string, args: string[], opts: RunComponentOptions, executor: string) {
+async function runComponent(
+    componentPath: string,
+    args: string[],
+    opts: RunComponentOptions & { isolateRequests?: "instance" | "worker" },
+    executor: string,
+) {
     const jcoImport = opts.jcoImport ? resolve(opts.jcoImport) : null;
 
     const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
@@ -117,6 +235,7 @@ async function runComponent(componentPath: string, args: string[], opts: RunComp
                 tracing: opts.jcoTrace,
                 map: opts.jcoMap ? Object.fromEntries(opts.jcoMap.map((mapping) => mapping.split("="))) : undefined,
                 importBindings: opts.jcoImportBindings,
+                instantiation: opts.isolateRequests ? "sync" : undefined,
             });
         } catch (e) {
             throw new Error("Unable to transpile command for execution", {
@@ -152,16 +271,48 @@ async function runComponent(componentPath: string, args: string[], opts: RunComp
 
         const runPath = resolve(outDir, "_run.js");
         const sandboxSetup = getSandboxSetup(opts);
+        if (opts.isolateRequests === "worker") {
+            await writeFile(
+                resolve(outDir, "_serve_worker.js"),
+                `
+      ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ""}
+      import { parentPort } from 'node:worker_threads';
+      import { readFileSync } from 'node:fs';
+      import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
+      import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+      ${sandboxSetup}
+      try {
+        process.argv[1] = ${JSON.stringify(name)};
+        const mod = await import('./${name}.js');
+        const coreModules = new Map();
+        const getCoreModule = path => {
+          let module = coreModules.get(path);
+          if (!module) {
+            module = new WebAssembly.Module(readFileSync(new URL(path, import.meta.url)));
+            coreModules.set(path, module);
+          }
+          return module;
+        };
+        const instance = mod.instantiate(getCoreModule, new WASIShim().getImportObject());
+        const server = new HTTPServer(instance.incomingHandler);
+        server.listen(0, '127.0.0.1');
+        parentPort.postMessage({ port: server.address().port });
+      } catch (error) {
+        parentPort.postMessage({ error: error?.stack ?? String(error) });
+      }
+    `,
+            );
+        }
         await writeFile(
             runPath,
             `
-      ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ""}
+      ${jcoImport && opts.isolateRequests !== "worker" ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ""}
       import process from 'node:process';
       ${sandboxSetup}
       try {
         process.argv[1] = "${name}";
       } catch {}
-      const mod = await import('./${name}.js');
+      ${opts.isolateRequests === "worker" ? "" : `const mod = await import('./${name}.js');`}
       ${executor}
     `,
         );
