@@ -1790,7 +1790,13 @@ impl<'a> Instantiator<'a, '_> {
                 else {
                     unreachable!("missing/invalid data model for options during stream.read")
                 };
-                let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
+                let (memory_idx_js, get_memory_fn_js) = match memory {
+                    Some(idx) => (
+                        idx.as_u32().to_string(),
+                        format!("() => memory{}", idx.as_u32()),
+                    ),
+                    None => ("undefined".into(), "undefined".into()),
+                };
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(v) => {
                         let v = v.as_u32().to_string();
@@ -1810,17 +1816,20 @@ impl<'a> Instantiator<'a, '_> {
                 // so we augment and save here, knowing that any stream.write/read operation
                 // that uses a memory is indicative of that component's memory
                 //
-                let register_global_memory_for_component_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
-                uwriteln!(
-                    self.src.js_init,
-                    r#"{register_global_memory_for_component_fn}({{
-                         componentIdx: {component_instance_id},
-                         memoryIdx: {memory_idx},
-                         memory: memory{memory_idx},
-                     }});"#
-                );
+                if let Some(memory_idx) = memory {
+                    let memory_idx = memory_idx.as_u32();
+                    let register_global_memory_for_component_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
+                    uwriteln!(
+                        self.src.js_init,
+                        r#"{register_global_memory_for_component_fn}({{
+                             componentIdx: {component_instance_id},
+                             memoryIdx: {memory_idx},
+                             memory: memory{memory_idx},
+                         }});"#
+                    );
+                }
 
                 uwriteln!(
                     self.src.js,
@@ -1828,8 +1837,8 @@ impl<'a> Instantiator<'a, '_> {
                          null,
                          {{
                              componentIdx: {component_instance_id},
-                             memoryIdx: {memory_idx},
-                             getMemoryFn: () => memory{memory_idx},
+                             memoryIdx: {memory_idx_js},
+                             getMemoryFn: {get_memory_fn_js},
                              reallocIdx: {realloc_idx},
                              getReallocFn: {get_realloc_fn_js},
                              stringEncoding: {string_encoding},
@@ -1871,9 +1880,13 @@ impl<'a> Instantiator<'a, '_> {
                     unreachable!("unexpected memory data model during stream.write");
                 };
                 let component_instance_id = instance.as_u32();
-                let memory_idx = memory
-                    .expect("missing memory idx for stream.write")
-                    .as_u32();
+                let (memory_idx_js, get_memory_fn_js) = match memory {
+                    Some(idx) => (
+                        idx.as_u32().to_string(),
+                        format!("() => memory{}", idx.as_u32()),
+                    ),
+                    None => ("undefined".into(), "undefined".into()),
+                };
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(v) => {
                         let v = v.as_u32().to_string();
@@ -1891,17 +1904,20 @@ impl<'a> Instantiator<'a, '_> {
                 // PrepareCall for an async call is sometimes missing memories,
                 // so we augment and save here, knowing that any stream.write/read operation
                 // that uses a memory is indicative of that component's memory
-                let register_global_memory_for_component_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
-                uwriteln!(
-                    self.src.js_init,
-                    r#"{register_global_memory_for_component_fn}({{
-                         componentIdx: {component_instance_id},
-                         memoryIdx: {memory_idx},
-                         memory: memory{memory_idx},
-                     }});"#
-                );
+                if let Some(memory_idx) = memory {
+                    let memory_idx = memory_idx.as_u32();
+                    let register_global_memory_for_component_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
+                    uwriteln!(
+                        self.src.js_init,
+                        r#"{register_global_memory_for_component_fn}({{
+                             componentIdx: {component_instance_id},
+                             memoryIdx: {memory_idx},
+                             memory: memory{memory_idx},
+                         }});"#
+                    );
+                }
 
                 uwriteln!(
                     self.src.js,
@@ -1910,8 +1926,8 @@ impl<'a> Instantiator<'a, '_> {
                          null,
                          {{
                              componentIdx: {component_instance_id},
-                             memoryIdx: {memory_idx},
-                             getMemoryFn: () => memory{memory_idx},
+                             memoryIdx: {memory_idx_js},
+                             getMemoryFn: {get_memory_fn_js},
                              reallocIdx: {realloc_idx},
                              getReallocFn: {get_realloc_fn_js},
                              stringEncoding: {string_encoding},
@@ -2135,9 +2151,13 @@ impl<'a> Instantiator<'a, '_> {
 
                 let future_table_idx = ty.as_u32();
                 let component_idx = instance.as_u32();
-                let memory_idx = memory
-                    .expect("missing memory idx for future intrinsic")
-                    .as_u32();
+                let (memory_idx_js, get_memory_fn_js) = match memory {
+                    Some(idx) => (
+                        idx.as_u32().to_string(),
+                        format!("() => memory{}", idx.as_u32()),
+                    ),
+                    None => ("undefined".into(), "undefined".into()),
+                };
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(idx) => (
                         idx.as_u32().to_string(),
@@ -2154,8 +2174,8 @@ impl<'a> Instantiator<'a, '_> {
                           null,
                           {{
                               componentIdx: {component_idx},
-                              memoryIdx: {memory_idx},
-                              getMemoryFn: () => memory{memory_idx},
+                              memoryIdx: {memory_idx_js},
+                              getMemoryFn: {get_memory_fn_js},
                               reallocIdx: {realloc_idx},
                               getReallocFn: {get_realloc_fn_js},
                               stringEncoding: {string_encoding},

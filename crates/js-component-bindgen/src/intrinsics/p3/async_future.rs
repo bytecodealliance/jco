@@ -851,7 +851,7 @@ impl AsyncFutureIntrinsic {
                                   return;
                               }}
 
-                              if (componentIdx === meta.componentIdx && componentIdx !== -1 && !this.#elemMeta.isNoneOrNumberType) {{
+                              if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) {{
                                   throw new Error('same-component future reads not allowed for non-numeric types');
                               }}
 
@@ -890,7 +890,7 @@ impl AsyncFutureIntrinsic {
                                   return;
                               }}
 
-                              if (componentIdx === meta.componentIdx && componentIdx !== -1 && !this.#elemMeta.isNoneOrNumberType) {{
+                              if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) {{
                                   throw new Error('same-component future writes not allowed for non-numeric types');
                               }}
 
@@ -1548,7 +1548,7 @@ impl AsyncFutureIntrinsic {
                         await futureEnd.{guest_op_fn}({{
                             componentIdx,
                             stringEncoding,
-                            memory: getMemoryFn(),
+                            memory: getMemoryFn?.(),
                             realloc: getReallocFn?.(),
                             getReallocFn,
                             ptr,
