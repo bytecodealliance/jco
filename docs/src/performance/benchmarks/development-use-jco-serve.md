@@ -1,12 +1,21 @@
-# Preview 2 HTTP serving performance
+# Development-use `jco serve`
 
-Performance depends on the component, generated bindings, JavaScript runtime, hardware, and workload.
-Measurements from one application or machine should not be treated as production capacity estimates.
-Benchmark the relevant component in its deployment environment when performance affects a design
-decision.
+`jco serve` is a convenient development server for running HTTP components in Node.js. It currently
+hosts components that export the Preview 2 `wasi:http/incoming-handler` interface. It does not yet
+serve Preview 3 HTTP components.
 
 > **Warning:** `jco serve` is intended for development and testing only. It is not production ready,
 > and these benchmarks should not be interpreted as production deployment guidance.
+
+This benchmark measures Jco's Node.js development server, not the general performance of Preview 2
+HTTP components. A production deployment would typically use
+[Wasmtime](https://wasmtime.dev/) or another production-oriented component runtime, which is
+substantially more efficient than `jco serve`.
+
+Performance depends on the component, generated bindings, JavaScript runtime, hardware, and workload.
+Measurements from one application or machine should not be treated as production capacity estimates.
+Use this benchmark to compare development-server configurations rather than to estimate production
+capacity.
 
 ## Request isolation
 

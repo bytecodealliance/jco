@@ -179,7 +179,7 @@ especially worker isolation. Instance isolation is generally the faster isolatio
 isolation trades additional worker startup and HTTP proxy overhead for separate JavaScript globals and
 module caches. To reduce per-request startup latency without reusing JavaScript state, worker mode
 prewarms 50 one-shot workers by default; configure this with `--isolate-worker-pool-size`. See the
-[Preview 2 HTTP serving performance](https://bytecodealliance.github.io/jco/performance/preview2-http-serving.html)
+[development-use `jco serve` benchmark](https://bytecodealliance.github.io/jco/performance/benchmarks/development-use-jco-serve.html)
 page for benchmark results and reproduction instructions.
 
 > [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
