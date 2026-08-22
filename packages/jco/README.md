@@ -90,6 +90,19 @@ jco scaffold my-component --wit path/to/wit
 `--wit` accepts a self-contained `.wit` file or WIT package directory and copies it into the project. If dealing with a
 WIT file that contains multiple worlds, supply the `--world` option as well.
 
+It can also pull a versioned WASI package from the Bytecode Alliance OCI registry. The package and its embedded dependencies are
+expanded into the generated project's `wit/` directory, so subsequent builds do not access the registry:
+
+```console
+jco scaffold my-command --wit wasi:cli@0.3.0 --world wasi:cli/command@0.3.0
+```
+
+Use an `oci://` reference to scaffold from an arbitrary OCI registry package, including WIT-only components:
+
+```console
+jco scaffold my-adder --wit oci://ghcr.io/bytecodealliance/docs/adder:0.1.0 --world docs:adder/adder@0.1.0
+```
+
 For a quick WASI starting point, use one of Jco's bundled WIT packages:
 
 ```console

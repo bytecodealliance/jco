@@ -352,7 +352,7 @@ program
     .command("scaffold")
     .description("Create a TypeScript or JavaScript WebAssembly component or host-plugin project")
     .argument("<project-directory>", "directory to create")
-    .option("--wit <path|builtin>", "WIT file, package directory, or builtin:wasi-{command,proxy,reactor}")
+    .option("--wit <source>", "WIT path, builtin, wasi:package@version, or oci://registry/repository:tag")
     .option("--world <world>", "WIT world to implement")
     .option("--host", "scaffold a host plugin that provides the world's imports")
     .addOption(
