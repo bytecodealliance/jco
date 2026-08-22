@@ -5,6 +5,7 @@ import {
     type AsyncMode,
     type EnabledFeatureSet,
     generateTypes,
+    unpackWit as unpackWitComponent,
 } from '../vendor/js-component-bindgen-component.js';
 import type { InstantiationMode as WITInstantiationMode, WitPath } from '../vendor/js-component-bindgen-component.js';
 
@@ -12,6 +13,12 @@ import { TranspilationOptions } from './transpile.js';
 import { extractWITAsyncModeFromOpts, type FileBytes, isWindows } from './common.js';
 
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
+
+/** Expand an encoded WIT package into a conventional path-to-source map. */
+export async function unpackWit(packageSpec: string | undefined, bytes: Uint8Array) {
+    await $initBindgenComponent;
+    return unpackWitComponent(packageSpec, bytes);
+}
 
 /** Options for type generation */
 interface TypegenOptions {
