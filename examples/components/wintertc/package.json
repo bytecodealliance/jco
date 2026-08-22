@@ -1,12 +1,12 @@
 {
     "name": "wintertc",
     "private": true,
-    "description": "Exercise portable Web APIs in a JavaScript WebAssembly component",
+    "description": "Exercise portable Web APIs in a TypeScript WebAssembly component",
     "type": "module",
     "scripts": {
-        "build": "jco componentize component.js --bundle --wit wit --world-name component --out component.wasm",
-        "demo:node": "node demo.js",
-        "demo:deno": "deno run --allow-all demo-deno.js",
+        "build": "jco componentize component.ts --wit wit --world-name component --out component.wasm",
+        "demo:node": "node demo.ts",
+        "demo:deno": "deno run --allow-all demo-deno.ts",
         "demo": "pnpm run demo:node && pnpm run demo:deno",
         "all": "pnpm run build && pnpm run demo"
     },
