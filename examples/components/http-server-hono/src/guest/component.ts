@@ -1,9 +1,9 @@
-import { Hono } from "hono";
+import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 
 /**
  * jco-std contains an optional adapter that makes it easy to use Hono with your
- * project. The import below enables us to use the builtin `wasi:http@0.2.6`
+ * project. The import below enables us to use the builtin `wasi:http@0.2.12`
  * WIT interface supported by jco-std.
  *
  * @see https://github.com/WebAssembly/wasi-http
@@ -17,22 +17,22 @@ const log = buildLogger();
 
 app.use(logger(log));
 
-app.get("/", (c) => {
+app.get('/', (c) => {
     log.debug('entered handler');
-    return c.text("Hello World!!!!");
+    return c.text('Hello World!!!!');
 });
 
-app.post("/json/post", async (c) => {
+app.post('/json/post', async (c) => {
     const body = await c.req.json();
     return c.json({ method: c.req.method, body });
 });
 
-app.delete("/json/delete", async (c) => {
+app.delete('/json/delete', async (c) => {
     const body = await c.req.json();
     return c.json({ method: c.req.method, body });
 });
 
-app.patch("/json/patch", async (c) => {
+app.patch('/json/patch', async (c) => {
     const body = await c.req.json();
     return c.json({ method: c.req.method, body });
 });
