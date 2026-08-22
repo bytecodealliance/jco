@@ -272,6 +272,12 @@ importers:
         specifier: 1.25.2
         version: 1.25.2
 
+  examples/components/wintertc:
+    devDependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+
   examples/transpile/js-string-builtins:
     dependencies:
       '@bytecodealliance/jco':

@@ -726,6 +726,8 @@ jobs:
             workspace: examples/components/node-compat
           - name: fs-write-file
             workspace: examples/components/fs-write-file
+          - name: wintertc
+            workspace: examples/components/wintertc
           - name: p3-stream-chat
             workspace: examples/transpile/p3-stream-chat
     steps:
@@ -740,6 +742,11 @@ jobs:
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 11
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        if: ${{ matrix.project.name == 'wintertc' }}
+        with:
+          deno-version: v2.x
 
       - name: Restore jco build transpilation output
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

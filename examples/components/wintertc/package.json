@@ -1,0 +1,16 @@
+{
+    "name": "wintertc",
+    "private": true,
+    "description": "Exercise portable Web APIs in a JavaScript WebAssembly component",
+    "type": "module",
+    "scripts": {
+        "build": "jco componentize component.js --bundle --wit wit --world-name component --out component.wasm",
+        "demo:node": "node demo.js",
+        "demo:deno": "deno run --allow-all demo-deno.js",
+        "demo": "pnpm run demo:node && pnpm run demo:deno",
+        "all": "pnpm run build && pnpm run demo"
+    },
+    "devDependencies": {
+        "@bytecodealliance/jco": "workspace:*"
+    }
+}

@@ -22,6 +22,7 @@ A brief description of the examples contained in this folder:
 | [`ts-resource-export`](./ts-resource-export)               | Showcases an embedder ("host") using a resource defined in a component ("guest")                 |
 | [`ts-resource-import`](./ts-resource-import)               | Showcases using a component ("guest") that imports a Resource defined by an embedder ("host")    |
 | [`webidl-book-library`](./webidl-book-library)             | Showcases [WebIDL][webidl] support using [`webidl2wit`][webidl2wit]                              |
+| [`wintertc`](./wintertc)                                   | Exercises portable Web APIs provided by StarlingMonkey and verifies them as a regression test    |
 
 [hono]: https://hono.dev
 [nodejs]: https://nodejs.org

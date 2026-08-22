@@ -30,6 +30,7 @@ packages:
   - examples/components/ts-resource-import
   - examples/components/typegen-async-export
   - examples/components/webidl-book-library
+  - examples/components/wintertc
   - examples/transpile/js-string-builtins
   - examples/transpile/p3-stream-chat
 
