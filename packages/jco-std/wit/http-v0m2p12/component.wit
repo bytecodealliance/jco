@@ -1,0 +1,8 @@
+package bytecodealliance:jco-std;
+
+/// World used to generate the bindings required by the WASI HTTP 0.2.12 adapter.
+world http-v0m2p12 {
+    import wasi:config/store@0.2.0-rc.1;
+    import wasi:cli/environment@0.2.12;
+    import wasi:http/incoming-handler@0.2.12;
+}

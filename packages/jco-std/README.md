@@ -43,9 +43,11 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 
 > [!NOTE]
 > We use `@bytecodealliance/jco-std/wasi/0.2.x`, but if you'd like to use a specific version, you can
-> use an explicitly versioned export like `@bytecodealliance/jco-std/wasi/0.2.6`.
+> use an explicitly versioned export like `@bytecodealliance/jco-std/wasi/0.2.12`.
 >
-> Note that using `0.2.x` is similar to using `latest`, it may change at _any_ library update.
+> The `0.2.x` path selects the newest WASI 0.2 adapter verified with the ComponentizeJS
+> version used by Jco. It may change in any `jco-std` release. Use an explicitly versioned
+> path when your component must retain an older WIT world.
 
 [hono]: https://hono.dev
 
