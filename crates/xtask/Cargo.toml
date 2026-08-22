@@ -8,6 +8,7 @@ edition = "2024"
 anyhow = { workspace = true }
 js-component-bindgen = { workspace = true }
 semver = "1.0.23"
+serde_json = { workspace = true }
 structopt = { workspace = true }
 webidl2wit = { workspace = true }
 weedle = "0.13.0"

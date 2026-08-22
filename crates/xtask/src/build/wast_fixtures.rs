@@ -4,6 +4,10 @@ use std::io::{Read, Write};
 use std::path::Path;
 use wast::core::WastRetCore;
 
+fn js_string(value: &str) -> Result<String> {
+    serde_json::to_string(value).context("failed to encode JavaScript string")
+}
+
 /// Convert a single WAST file
 fn convert_wast_file(
     input_wast: &mut File,
@@ -37,9 +41,15 @@ fn convert_wast_file(
         "#
     )?;
 
+    let mut module_seen = false;
     for directive in parsed.directives {
         match directive {
             wast::WastDirective::Module(mut quote_wat) => {
+                ensure!(
+                    !module_seen,
+                    "multiple module directives are not yet supported"
+                );
+                module_seen = true;
                 let encoded = quote_wat.encode().with_context(|| {
                     format!(
                         "failed to encode component in WAT [{}]",
@@ -69,36 +79,49 @@ fn convert_wast_file(
             wast::WastDirective::Register { .. } => {
                 bail!("unsupported directive Register")
             }
-            wast::WastDirective::Invoke(_) => bail!("unsupported directive Invoke"),
+            wast::WastDirective::Invoke(invoke) => {
+                ensure!(module_seen, "invoke directive appeared before a module");
+                ensure!(
+                    invoke.module.is_none(),
+                    "wast invocations with named modules are not yet supported"
+                );
+                writeln!(
+                    output_js,
+                    "await instance[{}]({});",
+                    js_string(invoke.name)?,
+                    args_to_js_params(&invoke.args)?,
+                )?;
+            }
             wast::WastDirective::AssertTrap { exec, message, .. } => {
                 let (export_name, args) = extract_export_fn(&exec)?;
                 writeln!(
                     output_js,
                     r#"
-                      await expect(instance['{export_name}']({})).rejects.toThrow(/trap/, "expected trap with content like [{message}]");
+                      await expect(async () => instance[{}]({})).rejects.toThrow({});
                     "#,
+                    js_string(export_name)?,
                     args_to_js_params(args)?,
+                    js_string(message)?,
                 )?;
             }
             wast::WastDirective::AssertReturn { exec, results, .. } => {
-                ensure!(
-                    results.len() == 1,
-                    "assert return with multiple results not yet supported"
-                );
-                // TODO: we need to check asyncness for await or not
                 let (export_name, args) = extract_export_fn(&exec)?;
-                let check_expr = match results.first() {
-                    Some(ret) => {
-                        format!("assert.strictEqual(res, {});", wast_ret_to_js_param(ret)?)
-                    }
-                    None => "".into(),
+                let expected = results
+                    .iter()
+                    .map(wast_ret_to_js_param)
+                    .collect::<Result<Vec<_>>>()?;
+                let check_expr = match expected.as_slice() {
+                    [] => "assert.isUndefined(res);".into(),
+                    [expected] => format!("assert.deepEqual(res, {expected});"),
+                    expected => format!("assert.deepEqual(res, [{}]);", expected.join(",")),
                 };
                 writeln!(
                     output_js,
                     r#"
-                      res = await instance['{export_name}']({});
+                      res = await instance[{}]({});
                       {check_expr}
                     "#,
+                    js_string(export_name)?,
                     args_to_js_params(args)?,
                 )?;
             }
@@ -125,6 +148,8 @@ fn convert_wast_file(
         }
     }
 
+    ensure!(module_seen, "wast file did not contain a module directive");
+
     // Close out the function
     writeln!(output_js, "}}",)?;
 
@@ -148,10 +173,10 @@ fn args_to_js_params(args: &[wast::WastArg<'_>]) -> Result<String> {
 fn core_val_to_js_param(wast_arg: &wast::core::WastArgCore<'_>) -> Result<String> {
     match wast_arg {
         wast::core::WastArgCore::I32(v) => Ok(format!("{v}")),
-        wast::core::WastArgCore::I64(v) => Ok(format!("{v}")),
-        wast::core::WastArgCore::F32(v) => Ok(format!("{:.8}", f32::from_bits(v.bits))),
-        wast::core::WastArgCore::F64(v) => Ok(format!("{:.8}", f64::from_bits(v.bits))),
-        wast::core::WastArgCore::V128(v) => Ok(format!("{}", i128::from_le_bytes(v.to_le_bytes()))),
+        wast::core::WastArgCore::I64(v) => Ok(format!("{v}n")),
+        wast::core::WastArgCore::F32(v) => Ok(float_to_js(f32::from_bits(v.bits) as f64)),
+        wast::core::WastArgCore::F64(v) => Ok(float_to_js(f64::from_bits(v.bits))),
+        wast::core::WastArgCore::V128(_) => bail!("v128 unsupported core args"),
         wast::core::WastArgCore::RefNull(_) => bail!("refs unsupported core args"),
         wast::core::WastArgCore::RefExtern(_) => bail!("refs unsupported core args"),
         wast::core::WastArgCore::RefHost(_) => bail!("refs unsupported core args"),
@@ -170,10 +195,15 @@ fn wast_ret_to_js_param(wast_ret: &wast::WastRet<'_>) -> Result<String> {
 /// Convert a Wast CM value to a JS value
 fn wast_ret_core_val_to_js_param(wast_ret_core: &WastRetCore<'_>) -> Result<String> {
     match wast_ret_core {
-        WastRetCore::I32(_) => bail!("WastRetCore::I32 not yet supported"),
-        WastRetCore::I64(_) => bail!("WastRetCore::I64 not yet supported"),
-        WastRetCore::F32(_nan_pattern) => bail!("WastRetCore::F32 not yet supported"),
-        WastRetCore::F64(_nan_pattern) => bail!("WastRetCore::F64 not yet supported"),
+        WastRetCore::I32(v) => Ok(v.to_string()),
+        WastRetCore::I64(v) => Ok(format!("{v}n")),
+        WastRetCore::F32(wast::core::NanPattern::Value(v)) => {
+            Ok(float_to_js(f32::from_bits(v.bits) as f64))
+        }
+        WastRetCore::F64(wast::core::NanPattern::Value(v)) => {
+            Ok(float_to_js(f64::from_bits(v.bits)))
+        }
+        WastRetCore::F32(_) | WastRetCore::F64(_) => Ok("NaN".into()),
         WastRetCore::V128(_v128_pattern) => bail!("WastRetCore::V128 not yet supported"),
         WastRetCore::RefNull(_heap_type) => bail!("WastRetCore::RefNull not yet supported"),
         WastRetCore::RefExtern(_) => bail!("WastRetCore::RefExtern not yet supported"),
@@ -189,6 +219,20 @@ fn wast_ret_core_val_to_js_param(wast_ret_core: &WastRetCore<'_>) -> Result<Stri
     }
 }
 
+fn float_to_js(value: f64) -> String {
+    if value.is_nan() {
+        "NaN".into()
+    } else if value == f64::INFINITY {
+        "Infinity".into()
+    } else if value == f64::NEG_INFINITY {
+        "-Infinity".into()
+    } else if value == 0.0 && value.is_sign_negative() {
+        "-0".into()
+    } else {
+        format!("{value:?}")
+    }
+}
+
 /// Convert a Wast CM value to a JS value
 fn cm_val_to_js_param(wast_val: &wast::component::WastVal<'_>) -> Result<String> {
     match wast_val {
@@ -199,12 +243,12 @@ fn cm_val_to_js_param(wast_val: &wast::component::WastVal<'_>) -> Result<String>
         wast::component::WastVal::S16(v) => Ok(format!("{v}")),
         wast::component::WastVal::U32(v) => Ok(format!("{v}")),
         wast::component::WastVal::S32(v) => Ok(format!("{v}")),
-        wast::component::WastVal::U64(v) => Ok(format!("{v}")),
-        wast::component::WastVal::S64(v) => Ok(format!("{v}")),
-        wast::component::WastVal::F32(v) => Ok(format!("{:.8}", f32::from_bits(v.bits))),
-        wast::component::WastVal::F64(v) => Ok(format!("{:.8}", f64::from_bits(v.bits))),
-        wast::component::WastVal::Char(v) => Ok(format!("'{v}'")),
-        wast::component::WastVal::String(s) => Ok(format!("'{s}'")),
+        wast::component::WastVal::U64(v) => Ok(format!("{v}n")),
+        wast::component::WastVal::S64(v) => Ok(format!("{v}n")),
+        wast::component::WastVal::F32(v) => Ok(float_to_js(f32::from_bits(v.bits) as f64)),
+        wast::component::WastVal::F64(v) => Ok(float_to_js(f64::from_bits(v.bits))),
+        wast::component::WastVal::Char(v) => js_string(&v.to_string()),
+        wast::component::WastVal::String(s) => js_string(s),
         wast::component::WastVal::List(vals) | wast::component::WastVal::Tuple(vals) => vals
             .iter()
             .map(|v| cm_val_to_js_param(v))
@@ -213,35 +257,42 @@ fn cm_val_to_js_param(wast_val: &wast::component::WastVal<'_>) -> Result<String>
             .map(|v| format!("[{v}]")),
         wast::component::WastVal::Record(items) => items
             .iter()
-            .map(|(k, v)| cm_val_to_js_param(v).map(|v| format!("{k}: {v}")))
+            .map(|(k, v)| Ok(format!("{}: {}", js_string(k)?, cm_val_to_js_param(v)?)))
             .collect::<Result<Vec<String>>>()
             .map(|parts| parts.join(","))
             .map(|v| format!("{{{v}}}")),
         wast::component::WastVal::Variant(tag, wast_val) => match wast_val {
-            Some(v) => cm_val_to_js_param(v).map(|v| format!("{{ tag: '{tag}', val: {v} }}")),
-            None => Ok(format!("{{ tag: '{tag}', val: null }}")),
+            Some(v) => Ok(format!(
+                "{{ tag: {}, val: {} }}",
+                js_string(tag)?,
+                cm_val_to_js_param(v)?
+            )),
+            None => Ok(format!("{{ tag: {} }}", js_string(tag)?)),
         },
-        wast::component::WastVal::Enum(v) => Ok(format!("{{ tag: '{v}' }}")),
+        wast::component::WastVal::Enum(v) => Ok(format!("{{ tag: {} }}", js_string(v)?)),
         wast::component::WastVal::Option(wast_val) => match wast_val {
-            Some(v) => cm_val_to_js_param(v),
-            None => Ok("null".into()),
+            Some(v) => Ok(format!(
+                "{{ tag: 'some', val: {} }}",
+                cm_val_to_js_param(v)?
+            )),
+            None => Ok("{ tag: 'none' }".into()),
         },
         wast::component::WastVal::Result(wast_val) => match wast_val {
             Ok(v) => match v {
-                Some(v) => cm_val_to_js_param(v),
-                None => Ok("{{ tag: 'ok', val: null }}".into()),
+                Some(v) => Ok(format!("{{ tag: 'ok', val: {} }}", cm_val_to_js_param(v)?)),
+                None => Ok("{ tag: 'ok', val: undefined }".into()),
             },
             Err(e) => match e {
-                Some(v) => cm_val_to_js_param(v),
-                None => Ok("{{ tag: 'err', val: null }}".into()),
+                Some(v) => Ok(format!("{{ tag: 'err', val: {} }}", cm_val_to_js_param(v)?)),
+                None => Ok("{ tag: 'err', val: undefined }".into()),
             },
         },
         wast::component::WastVal::Flags(items) => Ok(format!(
             "{{{}}}",
             items
                 .iter()
-                .map(|k| format!("{k}: true"))
-                .collect::<Vec<String>>()
+                .map(|k| js_string(k).map(|k| format!("{k}: true")))
+                .collect::<Result<Vec<String>>>()?
                 .join(",")
         )),
     }
@@ -305,5 +356,105 @@ fn extract_export_fn<'a>(
         }
         wast::WastExecute::Wat(_) => bail!("unsupported wast execute type WastExecute::Wat"),
         wast::WastExecute::Get { .. } => bail!("unsupported wast execute type WastExecute::Get"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_TEMP_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    fn with_wast_fixture<T>(source: &str, test: impl FnOnce(&Path) -> Result<T>) -> Result<T> {
+        let fixture_dir = std::env::temp_dir().join(format!(
+            "jco-wast-fixture-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&fixture_dir)?;
+        let wast_path = fixture_dir.join("fixture.wast");
+        fs::write(&wast_path, source)?;
+        let result = test(&wast_path);
+        fs::remove_dir_all(fixture_dir)?;
+        result
+    }
+
+    #[test]
+    fn builds_component_and_javascript_assertions() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (component
+                    (core module $m
+                        (func (export "run") (result i32) i32.const 42)
+                        (func (export "trap") unreachable)
+                    )
+                    (core instance $i (instantiate $m))
+                    (func (export "run") (result u32) (canon lift (core func $i "run")))
+                    (func (export "trap") (canon lift (core func $i "trap")))
+                )
+                (invoke "run")
+                (assert_return (invoke "run") (u32.const 42))
+                (assert_trap (invoke "trap") "unreachable")
+            "#,
+            |wast_path| {
+                run(wast_path)?;
+
+                let wasm_path = wast_path.with_extension("wast.wasm");
+                let script_path = wast_path.with_extension("wast.js");
+                ensure!(
+                    !fs::read(wasm_path)?.is_empty(),
+                    "missing encoded component"
+                );
+                let script = fs::read_to_string(script_path)?;
+                ensure!(
+                    script.contains("await instance[\"run\"]();"),
+                    "missing invoke assertion"
+                );
+                ensure!(
+                    script.contains("assert.deepEqual(res, 42);"),
+                    "missing return assertion"
+                );
+                ensure!(
+                    script.contains("rejects.toThrow(\"unreachable\")"),
+                    "missing trap assertion"
+                );
+                Ok(())
+            },
+        )
+    }
+
+    #[test]
+    fn rejects_multiple_modules() -> Result<()> {
+        with_wast_fixture("(component) (component)", |wast_path| {
+            let err = run(wast_path).expect_err("multiple modules should fail");
+            ensure!(
+                err.to_string().contains("multiple module directives"),
+                "unexpected error: {err:#}"
+            );
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn renders_javascript_values() -> Result<()> {
+        use wast::component::WastVal;
+
+        assert_eq!(
+            cm_val_to_js_param(&WastVal::U64(u64::MAX))?,
+            "18446744073709551615n"
+        );
+        assert_eq!(
+            cm_val_to_js_param(&WastVal::Option(None))?,
+            "{ tag: 'none' }"
+        );
+        assert_eq!(
+            cm_val_to_js_param(&WastVal::String("quote: \" and newline:\n"))?,
+            r#""quote: \" and newline:\n""#
+        );
+        assert_eq!(float_to_js(f64::NEG_INFINITY), "-Infinity");
+        assert_eq!(float_to_js(-0.0), "-0");
+        Ok(())
     }
 }
