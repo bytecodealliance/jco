@@ -115,20 +115,31 @@ impl StringIntrinsic {
                               throw new TypeError('expected a string, received [' + typeof s + ']');
                           }}
                           if (s.length === 0) {{ return {{ ptr: 1, len: 0 }}; }}
-                          // A UTF-16 code unit expands to at most three UTF-8 bytes. Encode
-                          // directly into guest memory, then make its allocation match the
-                          // canonical ABI length so the guest can later free it correctly.
-                          const allocLen = s.length * 3;
-                          let ptr = {realloc_call}(0, 0, 1, allocLen);
+                          // Compute the exact allocation size up front. Some older preview1
+                          // adapters only support an initial allocation, not a subsequent shrink.
+                          let len = 0;
+                          let codepoints = 0;
+                          for (let i = 0; i < s.length; i++) {{
+                              const ch = s.charCodeAt(i);
+                              codepoints++;
+                              if (ch < 0x80) {{ len += 1; }}
+                              else if (ch < 0x800) {{ len += 2; }}
+                              else if (ch >= 0xd800 && ch <= 0xdbff &&
+                                       i + 1 < s.length &&
+                                       (s.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {{
+                                  len += 4;
+                                  i++;
+                              }} else {{ len += 3; }}
+                          }}
+                          const ptr = {realloc_call}(0, 0, 1, len);
                           const {{ read, written }} = {encoder}.encodeInto(
                               s,
-                              new Uint8Array(memory.buffer, ptr, allocLen),
+                              new Uint8Array(memory.buffer, ptr, len),
                           );
-                          if (read !== s.length) {{ throw new Error('failed to encode whole string'); }}
-                          if (written !== allocLen) {{
-                              ptr = {realloc_call}(ptr, allocLen, 1, written);
+                          if (read !== s.length || written !== len) {{
+                              throw new Error('failed to encode whole string');
                           }}
-                          const res = {{ ptr, len: written, codepoints: [...s].length }};
+                          const res = {{ ptr, len, codepoints }};
                           return res;
                       }}
                     "#
