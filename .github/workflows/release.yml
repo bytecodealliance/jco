@@ -352,10 +352,7 @@ jobs:
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.15.2
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          shared-key: jco-node-fs-${{ matrix.settings.target }}-${{ hashFiles('Cargo.lock') }}
+          use-cache: false
 
       - name: Install node modules
         run: pnpm install --frozen-lockfile
@@ -388,7 +385,7 @@ jobs:
           persist-credentials: false
 
       - name: Build FreeBSD binding
-        uses: cross-platform-actions/action@4347c661239bf5dcd0cd77708061488d907343d6 # v1.3.0
+        uses: cross-platform-actions/action@5ea7e8e4677bd726033a10b094ba1c5762b15dee # v1.3.0
         env:
           RUSTUP_IO_THREADS: 1
         with:
@@ -448,7 +445,9 @@ jobs:
           merge-multiple: true
 
       - name: Assemble and pack native release packages
-        run: node scripts/pack-napi-release.mjs ${{ needs.meta.outputs.project-dir }}
+        env:
+          PROJECT_DIR: ${{ needs.meta.outputs.project-dir }}
+        run: node scripts/pack-napi-release.mjs "$PROJECT_DIR"
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -599,21 +598,10 @@ jobs:
 
       - name: Test built jco-node-fs NPM package
         if: ${{ needs.meta.outputs.project == 'jco-node-fs' }}
-        shell: bash
         env:
-          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
-          GH_WORKSPACE: ${{ github.workspace }}
+          ARTIFACT_DIR: ${{ github.workspace }}/gh-artifacts
           VERSION: ${{ needs.meta.outputs.version }}
-        run: |
-          TEST_DIR="$(mktemp -d)"
-          cd "$TEST_DIR"
-          npm init --yes
-          npm install \
-            --ignore-scripts \
-            --no-audit \
-            "$GH_WORKSPACE/gh-artifacts/$ARTIFACT_NAME" \
-            "$GH_WORKSPACE/gh-artifacts/bytecodealliance-jco-node-fs-linux-x64-gnu-$VERSION.tgz"
-          node -e "const fs = require('node:fs'); const { fadvise } = require('@bytecodealliance/jco-node-fs'); const fd = fs.openSync('package.json', 'r'); try { fadvise(fd, 0n, 0n, 'normal'); } finally { fs.closeSync(fd); }"
+        run: node scripts/test-jco-node-fs-release.mjs
 
   crate-publish:
     runs-on: ubuntu-24.04
