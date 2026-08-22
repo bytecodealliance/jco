@@ -27,6 +27,10 @@ const modes = [
         name: "worker (pool 50)",
         options: ["--isolate-requests=worker", "--isolate-worker-pool-size=50"],
     },
+    {
+        name: "worker (pool 100)",
+        options: ["--isolate-requests=worker", "--isolate-worker-pool-size=100"],
+    },
 ];
 
 const tmpDir = await mkdtemp(join(tmpdir(), "jco-serve-bench-"));
@@ -43,7 +47,9 @@ try {
 
     const results = [];
     for (const mode of modes) {
-        results.push(mode.name === "native" ? await benchmarkNative() : await benchmarkMode(componentPath, mode));
+        results.push(
+            mode.name === "native" ? await benchmarkNative() : await benchmarkMode(componentPath, mode, tmpDir),
+        );
     }
 
     console.table(
@@ -98,9 +104,20 @@ async function runJco(args) {
     }
 }
 
-async function benchmarkMode(componentPath, { name, option, options }) {
+async function benchmarkMode(componentPath, { name, option, options }, tmpDir) {
     const port = await getRandomPort();
-    const args = [JCO_JS_PATH, "serve", componentPath, "--host", "127.0.0.1", "--port", String(port)];
+    const outDir = join(tmpDir, `serve-${name.replaceAll(/[^a-z0-9]+/gi, "-")}`);
+    const args = [
+        JCO_JS_PATH,
+        "serve",
+        componentPath,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(port),
+        "--jco-dir",
+        outDir,
+    ];
     if (option) {
         args.push(option);
     }
@@ -113,6 +130,7 @@ async function benchmarkMode(componentPath, { name, option, options }) {
         return await measureRequests(name, port);
     } finally {
         await terminateServer(child);
+        await rm(outDir, { recursive: true, force: true });
     }
 }
 
