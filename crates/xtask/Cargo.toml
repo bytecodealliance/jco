@@ -6,6 +6,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+heck = { workspace = true }
 js-component-bindgen = { workspace = true }
 semver = "1.0.23"
 serde_json = { workspace = true }
