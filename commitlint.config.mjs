@@ -36,6 +36,7 @@ const config = {
                 'ai',
                 // Projects
                 'jco',
+                'node-fs',
                 'bare-jco',
                 'bindgen',
                 'p2-shim',

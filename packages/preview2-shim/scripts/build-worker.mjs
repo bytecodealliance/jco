@@ -7,7 +7,7 @@ const packageDir = fileURLToPath(new URL("../", import.meta.url));
 const outputDir = fileURLToPath(new URL("../dist/io/", import.meta.url));
 const bundle = await rolldown({
     input: fileURLToPath(new URL("../dist/io/worker-thread.js", import.meta.url)),
-    external: /^node:/,
+    external: [/^node:/, "@bytecodealliance/jco-node-fs"],
     platform: "node",
 });
 

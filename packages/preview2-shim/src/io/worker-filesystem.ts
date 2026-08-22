@@ -1,5 +1,10 @@
 import fs, { type BigIntStats } from "node:fs";
+import { createRequire } from "node:module";
 import { promisify } from "node:util";
+import type { Advice, fadvise as Fadvise } from "@bytecodealliance/jco-node-fs";
+
+const require = createRequire(import.meta.url);
+let nativeFadvise: typeof Fadvise | undefined;
 
 const closeAsync = promisify(fs.close);
 const fdatasyncAsync = promisify(fs.fdatasync);
@@ -86,6 +91,11 @@ export async function releaseFileResource(id: number) {
 
 export function fileResourceFd(id: number) {
     return getFileResource(id).fd;
+}
+
+export function adviseFileResource(id: number, offset: bigint, length: bigint, advice: Advice) {
+    const fadvise = (nativeFadvise ??= require("@bytecodealliance/jco-node-fs").fadvise);
+    fadvise(fileResourceFd(id), offset, length, advice);
 }
 
 export async function syncFileResourceData(id: number) {

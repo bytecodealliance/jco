@@ -1,0 +1,62 @@
+{
+    "name": "@bytecodealliance/jco-node-fs",
+    "version": "0.1.0",
+    "description": "Native Node.js filesystem helpers for Jco",
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
+    },
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git",
+        "directory": "packages/jco-node-fs"
+    },
+    "files": [
+        "wrapper.d.ts",
+        "wrapper.js",
+        "index.js"
+    ],
+    "main": "wrapper.js",
+    "types": "wrapper.d.ts",
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "napi build --platform --release",
+        "build:debug": "napi build --platform",
+        "artifacts": "napi artifacts",
+        "create:npm-dirs": "napi create-npm-dirs",
+        "fmt": "pnpm run fmt:js && pnpm run fmt:rust",
+        "fmt:check": "pnpm run fmt:js:check && pnpm run fmt:rust:check",
+        "fmt:js": "oxfmt package.json wrapper.js wrapper.d.ts test README.md",
+        "fmt:js:check": "oxfmt --check package.json wrapper.js wrapper.d.ts test README.md",
+        "fmt:rust": "cargo fmt",
+        "fmt:rust:check": "cargo fmt -- --check",
+        "lint": "cargo clippy --all-targets -- -D warnings",
+        "prepare-release": "napi prepublish -t npm --no-gh-release --skip-optional-publish --root-publisher pnpm",
+        "pretest": "pnpm run build:debug",
+        "test": "node --test test/*.test.js"
+    },
+    "devDependencies": {
+        "@napi-rs/cli": "^3.4.1",
+        "oxfmt": "^0.32.0"
+    },
+    "napi": {
+        "binaryName": "jco-node-fs",
+        "targets": [
+            "x86_64-apple-darwin",
+            "aarch64-apple-darwin",
+            "x86_64-unknown-linux-gnu",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-unknown-linux-musl",
+            "aarch64-unknown-linux-musl",
+            "x86_64-pc-windows-msvc",
+            "aarch64-pc-windows-msvc",
+            "x86_64-unknown-freebsd"
+        ]
+    },
+    "engines": {
+        "node": ">=20"
+    }
+}

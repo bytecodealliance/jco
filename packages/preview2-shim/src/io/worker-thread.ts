@@ -19,6 +19,7 @@ import {
     CLOCKS_DURATION_SUBSCRIBE,
     CLOCKS_INSTANT_SUBSCRIBE,
     FILE,
+    FILESYSTEM_DESCRIPTOR_ADVISE,
     FILESYSTEM_DESCRIPTOR_CLOSE,
     FILESYSTEM_DESCRIPTOR_GET_TYPE,
     FILESYSTEM_DESCRIPTOR_METADATA_HASH,
@@ -112,6 +113,7 @@ import {
     reverseMap,
 } from "./calls.js";
 import {
+    adviseFileResource,
     fileResourceFd,
     getFileResourceType,
     metadataHashFileResource,
@@ -602,6 +604,8 @@ function handle(call, id, payload) {
             return openFileResource(payload.path, payload.flags);
         case FILESYSTEM_DESCRIPTOR_CLOSE:
             return releaseFileResource(id);
+        case FILESYSTEM_DESCRIPTOR_ADVISE:
+            return adviseFileResource(id, payload.offset, payload.length, payload.advice);
         case FILESYSTEM_DESCRIPTOR_SYNC_DATA:
             return syncFileResourceData(id);
         case FILESYSTEM_DESCRIPTOR_GET_TYPE:

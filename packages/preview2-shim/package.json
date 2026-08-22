@@ -68,6 +68,9 @@
         "test:deno": "deno test --no-check -A test/deno/*.mjs",
         "prepack": "pnpm run build"
     },
+    "dependencies": {
+        "@bytecodealliance/jco-node-fs": "^0.1.0"
+    },
     "devDependencies": {
         "@bytecodealliance/componentize-js": "0.22.0",
         "@bytecodealliance/jco": "1.25.2",

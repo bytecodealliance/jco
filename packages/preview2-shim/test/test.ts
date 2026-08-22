@@ -2,13 +2,21 @@ import { env } from "node:process";
 import { throws } from "node:assert";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
-
 import { suite, test, assert, beforeEach, afterEach } from "vitest";
 import {
     IpAddress,
     IpSocketAddress,
     Ipv4Address,
 } from "../types/interfaces/wasi-sockets-network.js";
+
+const ADVICE_VALUES = [
+    "normal",
+    "sequential",
+    "random",
+    "will-need",
+    "dont-need",
+    "no-reuse",
+] as const;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -134,6 +142,24 @@ suite("Node.js Preview2", () => {
         for (const item of toDispose) {
             item[symbolDispose]();
         }
+    });
+
+    // TODO(unskip): Enable after @bytecodealliance/jco-node-fs is published with prebuilt binaries.
+    test.skip("FS advise", async () => {
+        const { filesystem } = await import("@bytecodealliance/preview2-shim");
+        const [[rootDescriptor]] = filesystem.preopens.getDirectories();
+        const descriptor = rootDescriptor.openAt(
+            {},
+            fileURLToPath(import.meta.url).slice(1),
+            {},
+            { read: true },
+        );
+
+        for (const advice of ADVICE_VALUES) {
+            assert.doesNotThrow(() => descriptor.advise(0n, 0n, advice));
+        }
+
+        descriptor[symbolDispose]();
     });
 
     test("Fields.set on a fresh Fields", async () => {

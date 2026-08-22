@@ -50,6 +50,7 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 | `jco`                            | Javascript | `packages/jco`                          | The `jco` CLI                                                                                   |
 | `jco-transpile`                  | Javascript | `packages/jco-transpile`                | WebAssembly Component Transpilation functionaltiy                                               |
 | `jco-std`                        | Javascript | `packages/jco-std`                      | A "standard library" for Jco which provides integrations for popular JS frameworks/paradigms    |
+| `jco-node-fs`                    | Rust/JS    | `packages/jco-node-fs`                  | Native Node.js filesystem helpers used by Jco's WASI shims                                      |
 | `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview 2][wasi-p2] for NodeJS and Browsers            |
 | `preview3-shim`                  | Javascript | `packages/preview3-shim`                | Library that provides a mapping of WASI Preview 3 for NodeJS                                    |
 | `rolldown-plugin-jco`            | Javascript | `packages/rolldown-plugin-jco`          | Rolldown and Rollup plugin for importing WebAssembly Components through Jco                     |

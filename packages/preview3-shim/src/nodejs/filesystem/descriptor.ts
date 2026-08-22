@@ -187,11 +187,13 @@ class Descriptor {
    * @returns {Promise<void>}
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
-  async advise(_offset, _length, _advice) {
-    // TODO: This not directly suported on Node.js:
-    // https://github.com/bytecodealliance/jco/issues/718
-    if ((await this.getType()).tag === "directory") {
-      throw new FSError("bad-descriptor");
+  async advise(offset, length, advice) {
+    this.#ensureHandle();
+    try {
+      const { fadvise } = await import("@bytecodealliance/jco-node-fs");
+      fadvise(this.#handle.fd, offset, length, advice);
+    } catch (error) {
+      throw FSError.from(error);
     }
   }
 

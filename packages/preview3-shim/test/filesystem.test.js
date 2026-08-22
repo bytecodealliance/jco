@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 
 const { stream } = await import("@bytecodealliance/preview3-shim/stream");
+const ADVICE_VALUES = ["normal", "sequential", "random", "will-need", "dont-need", "no-reuse"];
 
 describe("Descriptor with os.tmpdir()", () => {
   let filesystem;
@@ -44,6 +45,18 @@ describe("Descriptor with os.tmpdir()", () => {
     expect(text).toContain("UNIQUE STRING");
 
     await future.read();
+    child[Symbol.dispose]?.();
+  });
+
+  // TODO(unskip): Enable after @bytecodealliance/jco-node-fs is published with prebuilt binaries.
+  test.skip("advise accepts every WASI advice value", async () => {
+    const subpath = fileURLToPath(import.meta.url).slice(1);
+    const child = await rootDescriptor.openAt({}, subpath, {}, { read: true });
+
+    for (const advice of ADVICE_VALUES) {
+      await expect(child.advise(0n, 0n, advice)).resolves.toBeUndefined();
+    }
+
     child[Symbol.dispose]?.();
   });
 
