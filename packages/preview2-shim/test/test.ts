@@ -840,6 +840,22 @@ suite("Instantiation", () => {
             Object.keys(invalidWASIShim.random.random).sort(),
         );
     });
+
+    test("WASIShim accepts application-provided filesystem namespaces", async () => {
+        const { filesystem } = await import("@bytecodealliance/preview2-shim");
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const customPreopens = { getDirectories: () => [] };
+        const shim = new WASIShim({
+            filesystem: {
+                types: filesystem.types,
+                preopens: customPreopens,
+            },
+        });
+        const imports = shim.getImportObject();
+
+        assert.strictEqual(imports["wasi:filesystem/types"], filesystem.types);
+        assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
+    });
 });
 
 suite("Sandboxing", () => {
@@ -1300,6 +1316,35 @@ suite("Browser shim guards", () => {
         await second;
     });
 
+    test("poll reuses pollables and returns ready indices in input order", async () => {
+        const { poll, pollableCreate } = await import("../src/browser/io.js");
+        let firstReady = false;
+        let secondReady = true;
+        let resolveFirst!: () => void;
+        let resolveSecond!: () => void;
+        const first = pollableCreate({
+            ready: () => firstReady,
+            wait: () => new Promise<void>((resolve) => (resolveFirst = resolve)),
+        });
+        const second = pollableCreate({
+            ready: () => secondReady,
+            wait: () => new Promise<void>((resolve) => (resolveSecond = resolve)),
+        });
+
+        assert.deepStrictEqual(poll.poll([first, second, first]), new Uint32Array([1]));
+        secondReady = false;
+        const next = poll.poll([first, second, first]);
+        firstReady = true;
+        resolveFirst();
+        assert.deepStrictEqual(await next, new Uint32Array([0, 2]));
+
+        firstReady = false;
+        const final = poll.poll([first, second]);
+        secondReady = true;
+        resolveSecond();
+        assert.deepStrictEqual(await final, new Uint32Array([1]));
+    });
+
     test("browser streams validate u64 lengths and write permits", async () => {
         const { inputStreamCreate, outputStreamCreate } = await import("../src/browser/io.js");
         const input = inputStreamCreate({ blockingRead: () => new Uint8Array() });
@@ -1312,6 +1357,39 @@ suite("Browser shim guards", () => {
         });
         assert.strictEqual(output.checkWrite(), 2n);
         assert.throws(() => output.write(new Uint8Array(3)), /exceeds the permit/);
+        assert.throws(() => output.writeZeroes(3n), /exceeds the permit/);
+        assert.throws(() => output.blockingWriteZeroesAndFlush(4097n), /at most 4096/);
+    });
+
+    test("browser blocking stream fallbacks flush and accept external pollables", async () => {
+        const { inputStreamCreate, outputStreamCreate } = await import("../src/browser/io.js");
+        const events: string[] = [];
+        const output = outputStreamCreate({
+            write: () => events.push("write"),
+            flush: () => events.push("flush"),
+        });
+        output.blockingWriteAndFlush(new Uint8Array([1]));
+        output.blockingFlush();
+        assert.deepStrictEqual(events, ["write", "flush", "flush"]);
+
+        const externalPollable = { ready: () => true, block() {} };
+        const input = inputStreamCreate({
+            blockingRead: () => new Uint8Array(),
+            subscribe: () => externalPollable as any,
+        });
+        assert.strictEqual(input.subscribe(), externalPollable);
+        (input as any)[symbolDispose]();
+    });
+
+    test("browser clocks validate u64 subscriptions and make elapsed timers ready", async () => {
+        const { monotonicClock, wallClock } = await import("../src/browser/clocks.js");
+        assert.strictEqual(typeof monotonicClock.resolution(), "bigint");
+        assert.strictEqual(typeof wallClock.resolution().seconds, "bigint");
+        assert.strictEqual(typeof wallClock.resolution().nanoseconds, "number");
+        assert.strictEqual(monotonicClock.subscribeDuration(0n).ready(), true);
+        assert.strictEqual(monotonicClock.subscribeInstant(monotonicClock.now()).ready(), true);
+        assert.throws(() => monotonicClock.subscribeDuration(-1n), /valid u64/);
+        assert.throws(() => monotonicClock.subscribeInstant(-1n), /valid u64/);
     });
 
     test("dropping browser streams disposes handlers exactly once", async () => {

@@ -53,10 +53,7 @@ type VersionedWASIImportObject<V extends string> = {
 };
 
 /** Used to append versions to generated WASI import objects */
-type AppendVersion<
-    Key extends string | number | symbol,
-    Version extends string,
-> = Version extends ''
+type AppendVersion<Key extends string | number | symbol, Version extends string> = Version extends ''
     ? Key
     : Version extends `${infer V}`
       ? Key extends `${infer K}`
@@ -68,7 +65,7 @@ type AppendVersion<
  * Sandbox configuration options for WASIShim
  */
 interface SandboxConfig {
-    /** Filesystem preopens mapping (virtual path -> host path) */
+    /** Node.js filesystem preopens mapping (virtual path -> host path). */
     preopens?: Record<string, string>;
     /** Environment variables visible to the guest */
     env?: Record<string, string>;
@@ -79,14 +76,25 @@ interface SandboxConfig {
 }
 
 /**
+ * Application-provided implementation of the two `wasi:filesystem` namespaces.
+ * Browser applications can use this boundary to select their own storage and
+ * permission model without the shim choosing a filesystem implementation.
+ */
+export interface FilesystemShim {
+    preopens: typeof import('./interfaces/wasi-filesystem-preopens.d.ts');
+    types: typeof import('./interfaces/wasi-filesystem-types.d.ts');
+    dispose?(): void;
+}
+
+/**
  * Configuration options for WASIShim
  */
 interface WASIShimConfig {
     /** Custom CLI shim */
     cli?: object;
-    /** Custom filesystem shim */
-    filesystem?: object;
-    /** Browser filesystem adapter and guest-path capability mappings. */
+    /** Application-provided filesystem namespaces. */
+    filesystem?: FilesystemShim;
+    /** Explicit ephemeral browser file-data adapter and guest-path mappings. */
     browserFilesystem?: {
         adapter: object;
         preopens: Record<string, unknown>;
@@ -177,7 +185,7 @@ interface WASIShimConfig {
  *     }
  * });
  *
- * // Limited filesystem access
+ * // Node.js only: limited host filesystem access
  * const limitedShim = new WASIShim({
  *     sandbox: {
  *         preopens: {
@@ -187,6 +195,9 @@ interface WASIShimConfig {
  *     }
  * });
  * ```
+ *
+ * Browser applications should inject `filesystem` namespaces or explicitly
+ * configure `browserFilesystem`; browser preopens never interpret host paths.
  *
  * Note that this object is similar but not identical to the Node `WASI` object --
  * it is solely concerned with shimming of preview2 when dealing with a WebAssembly
@@ -206,9 +217,7 @@ export class WASIShim {
      * @param {options} [opt]
      * @returns {object}
      */
-    getImportObject<V extends string = ''>(
-        opts?: GetImportObjectArgs
-    ): VersionedWASIImportObject<V>;
+    getImportObject<V extends string = ''>(opts?: GetImportObjectArgs): VersionedWASIImportObject<V>;
 }
 
 interface GetImportObjectArgs {

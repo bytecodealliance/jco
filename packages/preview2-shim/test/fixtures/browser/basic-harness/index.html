@@ -55,6 +55,9 @@ At the end of the test, the document body will be updated with the state of exec
 
     // Browser storage is capability-safe by default. Tests explicitly opt in
     // to the ephemeral compatibility filesystem when a component needs it.
+    if (browserFilesystem.preopens.getDirectories().length !== 0) {
+        throw new Error("browser filesystem must not select a default preopen");
+    }
     browserFilesystem._setFileData({ dir: {} });
 
     function updateOutput(msg) {

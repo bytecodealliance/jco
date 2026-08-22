@@ -66,7 +66,7 @@ import type {
  *   }
  * });
  *
- * // Limited filesystem access
+ * // Node.js only: limited host filesystem access
  * const limitedShim = new WASIShim({
  *   sandbox: {
  *     preopens: {
@@ -76,6 +76,9 @@ import type {
  *   }
  * });
  * ```
+ *
+ * Browser applications should inject `filesystem` namespaces or explicitly
+ * configure `browserFilesystem`; browser preopens never interpret host paths.
  *
  * Note that this object is similar but not identical to the Node `WASI` object --
  * it is solely concerned with shimming of preview2 when dealing with a WebAssembly

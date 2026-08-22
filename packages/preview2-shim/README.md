@@ -10,7 +10,6 @@ The Node.js implementation owns its worker artifact. Direct package use and supp
 bundlers should resolve it through the public shim imports; applications do not need to import or
 copy files from `dist/io`.
 
-
 ## Browser support matrix
 
 Browser defaults are capability-safe: clocks and secure randomness use Web APIs, stdout and stderr
@@ -36,8 +35,8 @@ An operation is not considered supported merely because its interface shape exis
 rows require the embedding application to provide that capability; unavailable operations fail with
 a WASI-domain error instead of logging or returning a placeholder resource.
 
-Browser applications select storage explicitly. The bundled in-memory adapter is ephemeral; durable
-adapters can implement `BrowserFilesystemAdapter` around application-owned storage:
+Browser applications select storage explicitly. The bundled file-data adapter is ephemeral and must
+be opted into:
 
 ```js
 import { filesystem } from "@bytecodealliance/preview2-shim";
@@ -56,8 +55,22 @@ const shim = new WASIShim({
 ```
 
 The browser shim does not request File System Access permissions or choose IndexedDB/OPFS on an
-application's behalf. Acquire capabilities in application code and pass them to a custom adapter.
-Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate `fetch` capability.
+application's behalf. Applications that need another storage model implement the generated
+`wasi:filesystem/types` and `wasi:filesystem/preopens` namespaces and inject them through the
+`filesystem` option:
+
+```js
+const shim = new WASIShim({
+    filesystem: {
+        types: applicationFilesystemTypes,
+        preopens: applicationFilesystemPreopens,
+    },
+});
+```
+
+This keeps permission prompts, handle acquisition, persistence, and synchronization policy in
+application code. Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate
+`fetch` capability.
 
 # Features
 
@@ -106,9 +119,9 @@ const component = await instantiate(loader, new WASIShim().getImportObject());
 
 ## Sandboxing
 
-By default, the preview2-shim provides full access to the host filesystem, environment variables,
-and network - matching the default behavior of Node.js libraries. However, you can configure
-sandboxing to restrict what guests can access.
+On Node.js, the preview2-shim provides host filesystem, environment, and network access by default,
+matching the usual behavior of Node.js libraries. Browser defaults expose no filesystem preopens or
+raw sockets. Both platforms can configure which capabilities a guest receives.
 
 ### Using WASIShim for sandboxing
 
@@ -127,7 +140,7 @@ const sandboxedShim = new WASIShim({
     },
 });
 
-// Limited filesystem access - map virtual paths to host paths
+// Node.js only: map virtual paths to host paths
 const limitedShim = new WASIShim({
     sandbox: {
         preopens: {
@@ -144,7 +157,10 @@ const component = await instantiate(loader, sandboxedShim.getImportObject());
 ### Notes on sandboxing
 
 - By default (when no options are passed), the shim is providing full access to match typical
-  Node.js library behavior.
+  Node.js library behavior. In browsers, filesystem preopens remain empty until the application
+  explicitly injects filesystem namespaces or selects the ephemeral file-data adapter.
+- `sandbox.preopens` maps guest paths to Node.js host paths. Browser applications use the
+  `filesystem` or `browserFilesystem` options shown above; host paths are rejected in browsers.
 - Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
   Multiple instances with different configurations will not affect each other.
 - The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and
