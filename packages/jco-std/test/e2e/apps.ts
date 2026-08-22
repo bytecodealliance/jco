@@ -24,39 +24,39 @@ const TEST_RESOLVER_CONFIG = {
   alias: {
     "@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/server": join(
       JCO_STD_DIR,
-      "dist/0.2.3/http/adapters/hono/server.js",
+      "dist/wasi/0.2.3/http/adapters/hono/server.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/env": join(
       JCO_STD_DIR,
-      "dist/0.2.3/http/adapters/hono/middleware/env.js",
+      "dist/wasi/0.2.3/http/adapters/hono/middleware/env.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/config": join(
       JCO_STD_DIR,
-      "dist/0.2.3/http/adapters/hono/middleware/config.js",
+      "dist/wasi/0.2.3/http/adapters/hono/middleware/config.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server": join(
       JCO_STD_DIR,
-      "dist/0.2.6/http/adapters/hono/server.js",
+      "dist/wasi/0.2.6/http/adapters/hono/server.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/middleware/env": join(
       JCO_STD_DIR,
-      "dist/0.2.6/http/adapters/hono/middleware/env.js",
+      "dist/wasi/0.2.6/http/adapters/hono/middleware/env.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/middleware/config": join(
       JCO_STD_DIR,
-      "dist/0.2.6/http/adapters/hono/middleware/config.js",
+      "dist/wasi/0.2.6/http/adapters/hono/middleware/config.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server": join(
       JCO_STD_DIR,
-      "dist/0.2.6/http/adapters/hono/server.js",
+      "dist/wasi/0.2.6/http/adapters/hono/server.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/middleware/env": join(
       JCO_STD_DIR,
-      "dist/0.2.6/http/adapters/hono/middleware/env.js",
+      "dist/wasi/0.2.6/http/adapters/hono/middleware/env.js",
     ),
     "@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/middleware/config": join(
       JCO_STD_DIR,
-      "dist/0.2.6/http/adapters/hono/middleware/config.js",
+      "dist/wasi/0.2.6/http/adapters/hono/middleware/config.js",
     ),
   },
 };
