@@ -10,6 +10,18 @@ use crate::uwriteln;
 /// This enum contains intrinsics that manage per-component state
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ComponentIntrinsic {
+    /// Global that stores the canonical ABI `may_leave` global by component instance.
+    GlobalInstanceFlagsMap,
+
+    /// Shared trap state for all component instances in this generated store.
+    GlobalStoreTrap,
+
+    /// Trap if the specified component instance may not currently leave.
+    CheckMayLeave,
+
+    /// Wrap a non-suspending canonical ABI trampoline with a `may_leave` check.
+    GuardMayLeave,
+
     /// Global that stores async state by component instance
     ///
     /// ```ts
@@ -64,6 +76,10 @@ impl ComponentIntrinsic {
     /// Get the name for the intrinsic
     pub fn name(&self) -> &'static str {
         match self {
+            Self::GlobalInstanceFlagsMap => "INSTANCE_FLAGS",
+            Self::GlobalStoreTrap => "STORE_TRAP",
+            Self::CheckMayLeave => "_checkMayLeave",
+            Self::GuardMayLeave => "_guardMayLeave",
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
             Self::GetOrCreateAsyncState => "getOrCreateAsyncState",
             Self::BackpressureInc => "backpressureInc",
@@ -76,6 +92,47 @@ impl ComponentIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::GlobalInstanceFlagsMap => {
+                let var_name = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
+                uwriteln!(output, r#"const {var_name} = new Map();"#);
+            }
+
+            Self::GlobalStoreTrap => {
+                let var_name = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                uwriteln!(output, r#"const {var_name} = {{ error: null }};"#);
+            }
+
+            Self::CheckMayLeave => {
+                let check_may_leave_fn = render_args.require_intrinsic(Self::CheckMayLeave);
+                let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(
+                    r#"
+                    function {check_may_leave_fn}(componentIdx) {{
+                        if ({instance_flags}.get(componentIdx)?.value !== 1) {{
+                            throw new {runtime_error_class}('cannot leave component instance');
+                        }}
+                    }}
+                    "#,
+                ));
+            }
+
+            Self::GuardMayLeave => {
+                let guard_may_leave_fn = render_args.require_intrinsic(Self::GuardMayLeave);
+                let check_may_leave_fn = render_args.require_intrinsic(Self::CheckMayLeave);
+                output.push_str(&format!(
+                    r#"
+                    function {guard_may_leave_fn}(componentIdx, fn) {{
+                        return function (...args) {{
+                            {check_may_leave_fn}(componentIdx);
+                            return fn.apply(this, args);
+                        }};
+                    }}
+                    "#,
+                ));
+            }
+
             Self::GlobalAsyncStateMap => {
                 let var_name = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 uwriteln!(output, r#"const {var_name} = new Map();"#);
@@ -126,6 +183,8 @@ impl ComponentIntrinsic {
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
+                let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
 
                 output.push_str(&format!(
                     r#"
@@ -151,8 +210,6 @@ impl ComponentIntrinsic {
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
                         #errored = null;
-                        #trapped = null;
-
                         #backpressure = 0;
                         #backpressureWaiters = 0n;
 
@@ -164,7 +221,7 @@ impl ComponentIntrinsic {
 
                         #onExclusiveReleaseHandlers = [];
 
-                        mayLeave = true;
+                        #mayLeave = true;
 
                         handles;
                         subtasks;
@@ -176,6 +233,17 @@ impl ComponentIntrinsic {
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
+
+                        get mayLeave() {{
+                            const flags = {instance_flags}.get(this.#componentIdx);
+                            return flags === undefined ? this.#mayLeave : flags.value === 1;
+                        }}
+                        set mayLeave(value) {{
+                            if (typeof value !== 'boolean') {{ throw new TypeError('mayLeave must be a boolean'); }}
+                            this.#mayLeave = value;
+                            const flags = {instance_flags}.get(this.#componentIdx);
+                            if (flags !== undefined) {{ flags.value = value ? 1 : 0; }}
+                        }}
 
                         errored() {{ return this.#errored !== null; }}
                         setErrored(err) {{
@@ -193,12 +261,12 @@ impl ComponentIntrinsic {
                                 return false;
                             }}
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
-                            if (this.#trapped === null) {{ this.#trapped = err; }}
+                            if ({store_trap}.error === null) {{ {store_trap}.error = err; }}
                             return true;
                         }}
 
                         throwIfTrapped() {{
-                            if (this.#trapped !== null) {{ throw this.#trapped; }}
+                            if ({store_trap}.error !== null) {{ throw {store_trap}.error; }}
                         }}
 
                         callingSyncImport(val) {{

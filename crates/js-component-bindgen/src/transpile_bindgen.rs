@@ -1315,9 +1315,21 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn instance_flags(&mut self) {
-        // SAFETY: short-lived borrow, and the refcell isn't mutably borrowed in the loop's body.
+        let used_instance_flags = self
+            .used_instance_flags
+            .borrow()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        if used_instance_flags.is_empty() {
+            return;
+        }
+
+        let instance_flags_map = self.bindgen.intrinsic(Intrinsic::Component(
+            ComponentIntrinsic::GlobalInstanceFlagsMap,
+        ));
         let mut instance_flag_defs = String::new();
-        for used in self.used_instance_flags.borrow().iter() {
+        for used in used_instance_flags {
             let i = used.as_u32();
             // As of wasmtime-environ 47 the per-instance flags global holds a
             // single boolean `may_leave` flag, so initialize it to `1`.
@@ -1325,8 +1337,105 @@ impl<'a> Instantiator<'a, '_> {
                 &mut instance_flag_defs,
                 "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, 1);",
             );
+            uwriteln!(
+                &mut instance_flag_defs,
+                "{instance_flags_map}.set({i}, instanceFlags{i});",
+            );
         }
         self.src.js_init.prepend_str(&instance_flag_defs);
+    }
+
+    /// Return the component instance whose canonical ABI `may_leave` flag a
+    /// guest-callable trampoline must check.
+    fn trampoline_may_leave_instance(
+        &self,
+        trampoline: &Trampoline,
+    ) -> Option<RuntimeComponentInstanceIndex> {
+        let instance = match trampoline {
+            Trampoline::ResourceRep { .. }
+            | Trampoline::ThreadIndex
+            | Trampoline::BackpressureInc { .. }
+            | Trampoline::BackpressureDec { .. }
+            | Trampoline::ResourceTransferOwn
+            | Trampoline::ResourceTransferBorrow
+            | Trampoline::PrepareCall { .. }
+            | Trampoline::SyncStartCall { .. }
+            | Trampoline::AsyncStartCall { .. }
+            | Trampoline::FutureTransfer
+            | Trampoline::StreamTransfer
+            | Trampoline::ErrorContextTransfer
+            | Trampoline::Trap
+            | Trampoline::EnterSyncCall
+            | Trampoline::ExitSyncCall
+            | Trampoline::Transcoder { .. } => return None,
+
+            Trampoline::LowerImport { options, .. } => {
+                self.component
+                    .options
+                    .get(*options)
+                    .expect("failed to find lower import options")
+                    .instance
+            }
+
+            Trampoline::ResourceNew { instance, .. }
+            | Trampoline::ResourceDrop { instance, .. }
+            | Trampoline::TaskReturn { instance, .. }
+            | Trampoline::TaskCancel { instance }
+            | Trampoline::WaitableSetNew { instance }
+            | Trampoline::WaitableSetWait { instance, .. }
+            | Trampoline::WaitableSetPoll { instance, .. }
+            | Trampoline::WaitableSetDrop { instance }
+            | Trampoline::WaitableJoin { instance }
+            | Trampoline::ThreadYield { instance, .. }
+            | Trampoline::ThreadNewIndirect { instance, .. }
+            | Trampoline::ThreadSuspend { instance, .. }
+            | Trampoline::ThreadSuspendToSuspended { instance, .. }
+            | Trampoline::ThreadSuspendTo { instance, .. }
+            | Trampoline::ThreadUnsuspend { instance, .. }
+            | Trampoline::ThreadYieldToSuspended { instance, .. }
+            | Trampoline::SubtaskDrop { instance }
+            | Trampoline::SubtaskCancel { instance, .. }
+            | Trampoline::ErrorContextNew { instance, .. }
+            | Trampoline::ErrorContextDebugMessage { instance, .. }
+            | Trampoline::ErrorContextDrop { instance, .. }
+            | Trampoline::StreamNew { instance, .. }
+            | Trampoline::StreamRead { instance, .. }
+            | Trampoline::StreamWrite { instance, .. }
+            | Trampoline::StreamCancelRead { instance, .. }
+            | Trampoline::StreamCancelWrite { instance, .. }
+            | Trampoline::StreamDropReadable { instance, .. }
+            | Trampoline::StreamDropWritable { instance, .. }
+            | Trampoline::FutureNew { instance, .. }
+            | Trampoline::FutureRead { instance, .. }
+            | Trampoline::FutureWrite { instance, .. }
+            | Trampoline::FutureCancelRead { instance, .. }
+            | Trampoline::FutureCancelWrite { instance, .. }
+            | Trampoline::FutureDropReadable { instance, .. }
+            | Trampoline::FutureDropWritable { instance, .. } => *instance,
+        };
+        Some(instance)
+    }
+
+    /// These trampolines check `may_leave` inside their JSPI-compatible
+    /// wrapper (or, for lower imports, inside the lowering helper itself).
+    fn trampoline_checks_may_leave_internally(trampoline: &Trampoline) -> bool {
+        matches!(
+            trampoline,
+            Trampoline::LowerImport { .. }
+                | Trampoline::SubtaskCancel { .. }
+                | Trampoline::WaitableSetWait { .. }
+                | Trampoline::StreamRead { .. }
+                | Trampoline::StreamWrite { .. }
+                | Trampoline::StreamCancelRead { .. }
+                | Trampoline::StreamCancelWrite { .. }
+                | Trampoline::FutureRead { .. }
+                | Trampoline::FutureWrite { .. }
+                | Trampoline::FutureCancelRead { .. }
+                | Trampoline::FutureCancelWrite { .. }
+                | Trampoline::FutureDropReadable { .. }
+                | Trampoline::FutureDropWritable { .. }
+                | Trampoline::ThreadYield { .. }
+        )
     }
 
     // Trampolines defined in is_early_trampoline() below that use:
@@ -4607,7 +4716,23 @@ impl<'a> Instantiator<'a, '_> {
             CoreDef::TaskMayBlock => self
                 .bindgen
                 .intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock.into()),
-            CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
+            CoreDef::Trampoline(i) => {
+                let trampoline = &self.translation.trampolines[*i];
+                let name = format!("trampoline{}", i.as_u32());
+                let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {
+                    return name;
+                };
+
+                self.used_instance_flags.borrow_mut().insert(instance);
+                if Self::trampoline_checks_may_leave_internally(trampoline) {
+                    name
+                } else {
+                    let guard_may_leave_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardMayLeave));
+                    format!("{guard_may_leave_fn}({}, {name})", instance.as_u32())
+                }
+            }
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
                 self.used_instance_flags.borrow_mut().insert(*i);

@@ -1127,11 +1127,13 @@ impl Intrinsic {
                     args.require_intrinsic(Self::SuspendingImportWrapperFn);
                 let global_current_task_meta_obj =
                     args.require_intrinsic(Self::GlobalCurrentTaskMeta);
+                let check_may_leave_fn = args.require_intrinsic(ComponentIntrinsic::CheckMayLeave);
 
                 output.push_str(&format!(
                     r#"
                       function {suspending_import_wrapper_fn}(componentIdx, fn) {{
                           return async function (...args) {{
+                              {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
                               try {{
                                   return await fn.apply(null, args);
