@@ -33,49 +33,64 @@
       "default": "./dist/node/path.js"
     },
     "./wasi/0.2.x/http/adapters/hono/server": {
-      "types": "./dist/0.2.6/http/adapters/hono/server.d.ts",
-      "browser": "./dist/0.2.6/http/adapters/hono/server.js",
-      "default": "./dist/0.2.6/http/adapters/hono/server.js"
+      "types": "./dist/wasi/0.2.12/http/adapters/hono/server.d.ts",
+      "browser": "./dist/wasi/0.2.12/http/adapters/hono/server.js",
+      "default": "./dist/wasi/0.2.12/http/adapters/hono/server.js"
     },
     "./wasi/0.2.x/http/adapters/hono/middleware/config": {
-      "types": "./dist/0.2.6/http/adapters/hono/middleware/config.d.ts",
-      "browser": "./dist/0.2.6/http/adapters/hono/middleware/config.js",
-      "default": "./dist/0.2.6/http/adapters/hono/middleware/config.js"
+      "types": "./dist/wasi/0.2.12/http/adapters/hono/middleware/config.d.ts",
+      "browser": "./dist/wasi/0.2.12/http/adapters/hono/middleware/config.js",
+      "default": "./dist/wasi/0.2.12/http/adapters/hono/middleware/config.js"
     },
     "./wasi/0.2.x/http/adapters/hono/middleware/env": {
-      "types": "./dist/0.2.6/http/adapters/hono/middleware/env.d.ts",
-      "browser": "./dist/0.2.6/http/adapters/hono/middleware/env.js",
-      "default": "./dist/0.2.6/http/adapters/hono/middleware/env.js"
+      "types": "./dist/wasi/0.2.12/http/adapters/hono/middleware/env.d.ts",
+      "browser": "./dist/wasi/0.2.12/http/adapters/hono/middleware/env.js",
+      "default": "./dist/wasi/0.2.12/http/adapters/hono/middleware/env.js"
+    },
+    "./wasi/0.2.12/http/adapters/hono/server": {
+      "types": "./dist/wasi/0.2.12/http/adapters/hono/server.d.ts",
+      "browser": "./dist/wasi/0.2.12/http/adapters/hono/server.js",
+      "default": "./dist/wasi/0.2.12/http/adapters/hono/server.js"
+    },
+    "./wasi/0.2.12/http/adapters/hono/middleware/config": {
+      "types": "./dist/wasi/0.2.12/http/adapters/hono/middleware/config.d.ts",
+      "browser": "./dist/wasi/0.2.12/http/adapters/hono/middleware/config.js",
+      "default": "./dist/wasi/0.2.12/http/adapters/hono/middleware/config.js"
+    },
+    "./wasi/0.2.12/http/adapters/hono/middleware/env": {
+      "types": "./dist/wasi/0.2.12/http/adapters/hono/middleware/env.d.ts",
+      "browser": "./dist/wasi/0.2.12/http/adapters/hono/middleware/env.js",
+      "default": "./dist/wasi/0.2.12/http/adapters/hono/middleware/env.js"
     },
     "./wasi/0.2.6/http/adapters/hono/server": {
-      "types": "./dist/0.2.6/http/adapters/hono/server.d.ts",
-      "browser": "./dist/0.2.6/http/adapters/hono/server.js",
-      "default": "./dist/0.2.6/http/adapters/hono/server.js"
+      "types": "./dist/wasi/0.2.6/http/adapters/hono/server.d.ts",
+      "browser": "./dist/wasi/0.2.6/http/adapters/hono/server.js",
+      "default": "./dist/wasi/0.2.6/http/adapters/hono/server.js"
     },
     "./wasi/0.2.6/http/adapters/hono/middleware/config": {
-      "types": "./dist/0.2.6/http/adapters/hono/middleware/config.d.ts",
-      "browser": "./dist/0.2.6/http/adapters/hono/middleware/config.js",
-      "default": "./dist/0.2.6/http/adapters/hono/middleware/config.js"
+      "types": "./dist/wasi/0.2.6/http/adapters/hono/middleware/config.d.ts",
+      "browser": "./dist/wasi/0.2.6/http/adapters/hono/middleware/config.js",
+      "default": "./dist/wasi/0.2.6/http/adapters/hono/middleware/config.js"
     },
     "./wasi/0.2.6/http/adapters/hono/middleware/env": {
-      "types": "./dist/0.2.6/http/adapters/hono/middleware/env.d.ts",
-      "browser": "./dist/0.2.6/http/adapters/hono/middleware/env.js",
-      "default": "./dist/0.2.6/http/adapters/hono/middleware/env.js"
+      "types": "./dist/wasi/0.2.6/http/adapters/hono/middleware/env.d.ts",
+      "browser": "./dist/wasi/0.2.6/http/adapters/hono/middleware/env.js",
+      "default": "./dist/wasi/0.2.6/http/adapters/hono/middleware/env.js"
     },
     "./wasi/0.2.3/http/adapters/hono/server": {
-      "types": "./dist/0.2.3/http/adapters/hono/server.d.ts",
-      "browser": "./dist/0.2.3/http/adapters/hono/server.js",
-      "default": "./dist/0.2.3/http/adapters/hono/server.js"
+      "types": "./dist/wasi/0.2.3/http/adapters/hono/server.d.ts",
+      "browser": "./dist/wasi/0.2.3/http/adapters/hono/server.js",
+      "default": "./dist/wasi/0.2.3/http/adapters/hono/server.js"
     },
     "./wasi/0.2.3/http/adapters/hono/middleware/config": {
-      "types": "./dist/0.2.3/http/adapters/hono/middleware/config.d.ts",
-      "browser": "./dist/0.2.3/http/adapters/hono/middleware/config.js",
-      "default": "./dist/0.2.3/http/adapters/hono/middleware/config.js"
+      "types": "./dist/wasi/0.2.3/http/adapters/hono/middleware/config.d.ts",
+      "browser": "./dist/wasi/0.2.3/http/adapters/hono/middleware/config.js",
+      "default": "./dist/wasi/0.2.3/http/adapters/hono/middleware/config.js"
     },
     "./wasi/0.2.3/http/adapters/hono/middleware/env": {
-      "types": "./dist/0.2.3/http/adapters/hono/middleware/env.d.ts",
-      "browser": "./dist/0.2.3/http/adapters/hono/middleware/env.js",
-      "default": "./dist/0.2.3/http/adapters/hono/middleware/env.js"
+      "types": "./dist/wasi/0.2.3/http/adapters/hono/middleware/env.d.ts",
+      "browser": "./dist/wasi/0.2.3/http/adapters/hono/middleware/env.js",
+      "default": "./dist/wasi/0.2.3/http/adapters/hono/middleware/env.js"
     }
   },
   "scripts": {
@@ -85,8 +100,9 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "build:bindings:wasi:http:0.2.6": "WIT_PATH=wit/http-v0m2p6 OUTPUT_DIR_PATH=src/wasi/0.2.6/generated/types node scripts/generate-wasi-bindings.mjs",
+    "build:bindings:wasi:http:0.2.12": "WIT_PATH=wit/http-v0m2p12 OUTPUT_DIR_PATH=src/wasi/0.2.12/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings:wasi:http:0.2.3": "WIT_PATH=wit/http-v0m2p3 OUTPUT_DIR_PATH=src/wasi/0.2.3/generated/types node scripts/generate-wasi-bindings.mjs",
-    "build:bindings": "pnpm run build:bindings:wasi:http:0.2.3 && pnpm run build:bindings:wasi:http:0.2.6",
+    "build:bindings": "pnpm run build:bindings:wasi:http:0.2.3 && pnpm run build:bindings:wasi:http:0.2.6 && pnpm run build:bindings:wasi:http:0.2.12",
     "build:ts": "tsc",
     "build": "pnpm run setup:jco-transpile:build && pnpm run build:bindings && pnpm run build:ts",
     "test": "vitest run -c test/vitest.ts",
