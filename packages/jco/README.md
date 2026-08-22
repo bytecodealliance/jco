@@ -160,6 +160,21 @@ For HTTP Proxy components, `jco serve` provides a JS server implementation:
 jco serve --port 8080 server.wasm
 ```
 
+By default, the server reuses one component instance for all requests. Pass `--isolate-requests`
+to run every request in a fresh Node.js worker thread (equivalent to
+`--isolate-requests=worker`):
+
+```
+jco serve --isolate-requests --port 8080 server.wasm
+```
+
+Worker isolation gives each request a separate V8 isolate, JavaScript global scope, module cache, and
+component instance. Request and response bodies are streamed through a local HTTP proxy. For lower
+overhead, `--isolate-requests=instance` creates fresh component memories, tables, globals, and resource
+tables while sharing the JavaScript isolate and module cache. Neither mode is a security sandbox or
+isolates external filesystem and network side effects. Both modes have a significant performance cost,
+especially worker isolation.
+
 > [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
 
 ### Componentize
