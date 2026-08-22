@@ -4,6 +4,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 import { typesComponent } from "./types.js";
 import { copyBuiltinWit, resolveBuiltinWit } from "./new/builtin-wit.js";
 import { declarationModel, validateComponentSource } from "./new/declarations.js";
+import { isOciWit, pullOciWit } from "./new/oci-wit.js";
 import { packageManagerAdapter } from "./new/package-manager.js";
 import { renderComponent, renderComponentTest, renderHostPlugin, renderHostPluginTest } from "./new/render.js";
 
@@ -24,7 +25,8 @@ export interface NewProjectOptions {
 export async function createProject(projectDirectory: string, options: NewProjectOptions): Promise<string> {
     const destination = resolve(projectDirectory);
     const builtinWit = resolveBuiltinWit(options.wit);
-    const witSource = builtinWit ? undefined : resolve(options.wit);
+    const ociWit = isOciWit(options.wit);
+    const witSource = builtinWit || ociWit ? undefined : resolve(options.wit);
     const language = normalizeLanguage(options.language);
     const packageManager = options.packageManager ?? "pnpm";
     const targets = normalizeTargets(options.targets);
@@ -38,6 +40,8 @@ export async function createProject(projectDirectory: string, options: NewProjec
         const projectWit = join(temporary, "wit");
         if (builtinWit) {
             await copyBuiltinWit(builtinWit, projectWit);
+        } else if (ociWit) {
+            await pullOciWit(options.wit, projectWit);
         } else {
             await copyWit(witSource!, projectWit);
         }

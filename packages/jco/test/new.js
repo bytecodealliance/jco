@@ -19,6 +19,54 @@ import {
 import { renderComponent } from "../dist/cmd/new/render.js";
 
 suite("jco scaffold", () => {
+    // TODO(unskip): enable once OCI network fixtures and the wasm-pkg-tools component are available in CI.
+    test.skip("scaffolds a versioned WASI package from OCI", async () => {
+        const root = await getTmpDir();
+        const project = join(root, "oci-command");
+        try {
+            await exec(
+                jcoPath,
+                "scaffold",
+                project,
+                "--wit",
+                "wasi:cli@0.3.0",
+                "--world",
+                "wasi:cli/command@0.3.0",
+                "--target",
+                "nodejs",
+            );
+
+            assert.include(await readFile(join(project, "wit/package.wit"), "utf8"), "package wasi:cli@0.3.0;");
+            assert.include(await readFile(join(project, "src/component.ts"), "utf8"), "export const run");
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    // TODO(unskip): enable once OCI network fixtures and the wasm-pkg-tools component are available in CI.
+    test.skip("scaffolds an arbitrary WIT package from an explicit OCI reference", async () => {
+        const root = await getTmpDir();
+        const project = join(root, "oci-adder");
+        try {
+            await exec(
+                jcoPath,
+                "scaffold",
+                project,
+                "--wit",
+                "oci://ghcr.io/bytecodealliance/docs/adder:0.1.0",
+                "--world",
+                "docs:adder/adder@0.1.0",
+                "--target",
+                "nodejs",
+            );
+
+            assert.include(await readFile(join(project, "wit/package.wit"), "utf8"), "package docs:adder@0.1.0;");
+            assert.include(await readFile(join(project, "src/component.ts"), "utf8"), "export const add");
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
     test.each([
         ["builtin:wasi-command", "wasi:cli/command@0.3.0", "package wasi:cli@0.3.0;", "export const run"],
         ["builtin:wasi-proxy", "wasi:http/service@0.3.0", "package wasi:http@0.3.0;", "export const handler"],
