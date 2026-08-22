@@ -100,6 +100,134 @@ suite('Directive Prologue', () => {
 });
 
 suite('Trap detection', () => {
+    test.concurrent('locks down sibling instances after a trap', async () => {
+        const outDir = await getTmpDir();
+        const component = await parse(`
+            (component
+                (component $trapping
+                    (core module $m
+                        (func (export "trap") unreachable)
+                    )
+                    (core instance $i (instantiate $m))
+                    (func (export "trap") (canon lift (core func $i "trap")))
+                )
+                (component $healthy
+                    (core module $m
+                        (func (export "ok"))
+                    )
+                    (core instance $i (instantiate $m))
+                    (func (export "ok") (canon lift (core func $i "ok")))
+                )
+                (instance $trapping-instance (instantiate $trapping))
+                (instance $healthy-instance (instantiate $healthy))
+                (func (export "trap") (alias export $trapping-instance "trap"))
+                (func (export "ok") (alias export $healthy-instance "ok"))
+            )
+        `);
+        const { files } = await transpileBytes(component, {
+            name: 'trap-lockdown',
+            outDir,
+            instantiation: 'async',
+        });
+
+        try {
+            await writeFiles(files);
+            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+
+            const esModule = await import(pathToFileURL(join(outDir, 'trap-lockdown.js')).href);
+            const instance = await esModule.instantiate(undefined, {});
+
+            let trap;
+            try {
+                instance.trap();
+            } catch (err) {
+                trap = err;
+            }
+
+            assert.instanceOf(trap, WebAssembly.RuntimeError);
+            let siblingError;
+            try {
+                instance.ok();
+            } catch (err) {
+                siblingError = err;
+            }
+            assert.strictEqual(siblingError, trap);
+        } finally {
+            await rm(outDir, { recursive: true });
+        }
+    });
+
+    test.concurrent('traps when post-return leaves through imports or built-ins', async () => {
+        const outDir = await getTmpDir();
+        const component = await parse(`
+            (component
+                (import "host" (func $host))
+                (canon lower (func $host) (core func $host-lowered))
+                (type $resource (resource (rep i32)))
+                (canon resource.new $resource (core func $resource-new))
+                (core module $m
+                    (import "" "host" (func $host))
+                    (import "" "resource-new" (func $resource-new (param i32) (result i32)))
+                    (func (export "lower"))
+                    (func (export "resource"))
+                    (func (export "post-return-lower")
+                        (call $host)
+                    )
+                    (func (export "post-return-resource")
+                        (drop (call $resource-new (i32.const 0)))
+                    )
+                )
+                (core instance $i (instantiate $m
+                    (with "" (instance
+                        (export "host" (func $host-lowered))
+                        (export "resource-new" (func $resource-new))
+                    ))
+                ))
+                (func (export "lower") (canon lift
+                    (core func $i "lower")
+                    (post-return (core func $i "post-return-lower"))
+                ))
+                (func (export "resource") (canon lift
+                    (core func $i "resource")
+                    (post-return (core func $i "post-return-resource"))
+                ))
+            )
+        `);
+        const { files } = await transpileBytes(component, {
+            name: 'may-leave-post-return',
+            outDir,
+            instantiation: 'async',
+        });
+
+        try {
+            await writeFiles(files);
+            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+
+            const esModule = await import(pathToFileURL(join(outDir, 'may-leave-post-return.js')).href);
+            const lowerInstance = await esModule.instantiate(undefined, { host() {} });
+
+            let trap;
+            try {
+                lowerInstance.lower();
+            } catch (err) {
+                trap = err;
+            }
+
+            assert.instanceOf(trap, WebAssembly.RuntimeError);
+            assert.match(trap.message, /cannot leave component instance/);
+            assert.throws(() => lowerInstance.lower(), WebAssembly.RuntimeError);
+
+            const resourceInstance = await esModule.instantiate(undefined, { host() {} });
+            assert.throws(
+                () => resourceInstance.resource(),
+                WebAssembly.RuntimeError,
+                /cannot leave component instance/,
+            );
+        } finally {
+            await rm(outDir, { recursive: true });
+        }
+    });
+
     test.concurrent.skipIf(typeof WebAssembly.Suspending !== 'function')(
         'identifies a bindgen trap as a WebAssembly.RuntimeError',
         async () => {
