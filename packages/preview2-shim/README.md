@@ -4,7 +4,7 @@ WASI Preview2 implementations for Node.js & browsers.
 
 Node.js support is fully tested and conformant against the Wasmtime test suite.
 
-Browser support is considered experimental, and not currently suitable for production applications.
+Browser support is available with the platform limitations documented below.
 
 The Node.js implementation owns its worker artifact. Direct package use and supported downstream
 bundlers should resolve it through the public shim imports; applications do not need to import or
@@ -16,20 +16,20 @@ Browser defaults are capability-safe: clocks and secure randomness use Web APIs,
 write to the console, stdin is closed, outbound HTTP uses `fetch`, filesystem preopens must be
 configured explicitly, and raw sockets are unavailable unless an embedding supplies an adapter.
 
-| WASI area                     | Browser status                                                              | Default capability                                                |
-| ----------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| CLI environment and arguments | Configurable per `WASIShim`; compatibility setters are global               | Empty snapshots unless configured                                 |
-| CLI stdin                     | Adapter-backed                                                              | Closed stream                                                     |
-| CLI stdout and stderr         | Web API                                                                     | Console-backed, preserving split UTF-8 writes until flush/newline |
-| CLI terminals                 | Adapter-backed                                                              | No terminal resource                                              |
-| Clocks                        | Web API                                                                     | `performance.now`, `Date.now`, and timer-backed pollables         |
-| Random                        | Web API                                                                     | `crypto.getRandomValues`, including requests larger than 64 KiB   |
-| I/O streams and poll          | Implemented browser resources                                               | Non-blocking streams depend on their injected handlers            |
-| Filesystem                    | Adapter-backed; in-memory compatibility implementation remains experimental | No persistent storage is selected implicitly                      |
-| Outbound HTTP                 | Web API                                                                     | Delegates to `fetch`                                              |
-| Incoming HTTP                 | Host adapter required                                                       | Browsers cannot listen for arbitrary inbound HTTP                 |
-| TCP, UDP, and DNS             | Host adapter required                                                       | Raw sockets are not exposed by standard browsers                  |
-| `WASIShim` instantiation      | Implemented                                                                 | Interface namespaces can be overridden per instance               |
+| WASI area                     | Browser status                                                | Default capability                                                |
+| ----------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| CLI environment and arguments | Configurable per `WASIShim`; compatibility setters are global | Empty snapshots unless configured                                 |
+| CLI stdin                     | Adapter-backed                                                | Closed stream                                                     |
+| CLI stdout and stderr         | Web API                                                       | Console-backed, preserving split UTF-8 writes until flush/newline |
+| CLI terminals                 | Adapter-backed                                                | No terminal resource                                              |
+| Clocks                        | Web API                                                       | `performance.now`, `Date.now`, and timer-backed pollables         |
+| Random                        | Web API                                                       | `crypto.getRandomValues`, including requests larger than 64 KiB   |
+| I/O streams and poll          | Implemented browser resources                                 | Non-blocking streams depend on their injected handlers            |
+| Filesystem                    | Adapter-backed; opt-in in-memory compatibility implementation | No persistent storage is selected implicitly                      |
+| Outbound HTTP                 | Web API                                                       | Delegates to `fetch`                                              |
+| Incoming HTTP                 | Host adapter required                                         | Browsers cannot listen for arbitrary inbound HTTP                 |
+| TCP, UDP, and DNS             | Host adapter required                                         | Raw sockets are not exposed by standard browsers                  |
+| `WASIShim` instantiation      | Implemented                                                   | Interface namespaces can be overridden per instance               |
 
 An operation is not considered supported merely because its interface shape exists. Adapter-backed
 rows require the embedding application to provide that capability; unavailable operations fail with

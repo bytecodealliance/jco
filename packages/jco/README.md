@@ -25,7 +25,7 @@ Jco provides a fully native JS toolchain for working with [WebAssembly Component
 Features include:
 
 - "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-- WASI Preview2 support in Node.js & browsers (experimental).
+- WASI Preview2 support in Node.js & browsers.
 - Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
 - Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
 - "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).

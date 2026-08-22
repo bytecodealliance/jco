@@ -179,7 +179,8 @@ For all subsystems - `cli`, `clocks`, `filesystem`, `http`, `io`, `random` and `
 
 To disable this automatic WASI handling the `--no-wasi-shim` flag can be provided and WASI will be treated like any other import without special handling.
 
-Note that browser support for WASI is currently experimental.
+Browser WASI support is subject to web-platform capability limitations; some interfaces require
+application-provided adapters.
 
 ### Interface Implementation Example
 
