@@ -558,6 +558,7 @@ dependencies = [
  "wasmtime-environ",
  "wat",
  "wit-bindgen",
+ "wit-component",
 ]
 
 [[package]]

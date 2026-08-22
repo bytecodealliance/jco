@@ -12,7 +12,8 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = { workspace = true }
 wasmtime-environ = { workspace = true, features = [ "component-model" ] }
-wit-bindgen = { workspace = true }
+wit-bindgen = { workspace = true, features = ["macros"] }
+wit-component = { workspace = true }
 wat = { workspace = true, features = [ "component-model" ]}
 
 js-component-bindgen = { path = "../js-component-bindgen" }
