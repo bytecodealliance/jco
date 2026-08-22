@@ -138,8 +138,8 @@ fn transpile(args: TranspileArgs) -> Result<()> {
             && !fs::exists(obj_dir.join("wasm-tools.js"))
                 .context("checking for obj/wasm-tools.js")?
         {
-            // Build the workspace and the components
-            cmd!(sh, "cargo build --workspace --target wasm32-wasip1").read()?;
+            // Build the components needed to bootstrap the optimizer.
+            crate::build::workspace::run(false)?;
             // Transpile the built components so they can be used for optimization
             transpile_components(BuildType::Debug).context("transpiling all components (debug)")?;
         }
