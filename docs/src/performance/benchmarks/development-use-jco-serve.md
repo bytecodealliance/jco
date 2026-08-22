@@ -1,35 +1,55 @@
 # Development-use `jco serve`
 
-`jco serve` is a convenient development server for running HTTP components in Node.js. It currently
-hosts components that export the Preview 2 `wasi:http/incoming-handler` interface. It does not yet
-serve Preview 3 HTTP components.
+`jco serve` is a convenient development utility for running Preview 2 HTTP components (in particular
+components that export the `wasi:http/incoming-handler` interface) in Node.js.
 
-> **Warning:** `jco serve` is intended for development and testing only. It is not production ready,
-> and these benchmarks should not be interpreted as production deployment guidance.
+> [!WARNING]
+> `jco serve` is intended for development and testing only.
+>
+> It is not production ready, and these benchmarks should not be
+> interpreted as production deployment guidance.
+>
+> `jco serve` does not yet support Preview 3 HTTP components.
 
-This benchmark measures Jco's Node.js development server, not the general performance of Preview 2
-HTTP components. A production deployment would typically use
-[Wasmtime](https://wasmtime.dev/) or another production-oriented component runtime, which is
-substantially more efficient than `jco serve`.
+## Caveats
+
+Given the "for development" development nature of `jco serve`, this benchmark measures Jco's
+Node.js development server, not the general performance of Preview 2 HTTP components.
+
+A production deployment would typically use [Wasmtime][wasmtime] or another production-oriented
+component runtime, which is substantially more efficient than `jco serve`.
 
 Performance depends on the component, generated bindings, JavaScript runtime, hardware, and workload.
 Measurements from one application or machine should not be treated as production capacity estimates.
 Use this benchmark to compare development-server configurations rather than to estimate production
 capacity.
 
+[wasmtime]: https://wasmtime.dev
+
 ## Request isolation
 
-By default, `jco serve` reuses a component instance across requests. The
-`--isolate-requests=instance` mode creates a fresh component instance while retaining the same
-JavaScript isolate and module cache. The stronger `--isolate-requests=worker` mode creates a worker
-thread with a separate V8 isolate and module cache for every request. A bare `--isolate-requests`
-option selects worker isolation.
+By default, `jco serve` reuses a single instantiated component across requests.
 
-Worker mode maintains a pool of 50 prewarmed workers by default. Workers are one-shot: each handles
-exactly one request and is then terminated and replaced, so prewarming does not reuse JavaScript
-globals or module caches across requests. The capacity can be adjusted with
-`--isolate-worker-pool-size`. Larger pools can hide worker startup latency during bursts, at the cost
-of higher server startup time and memory use.
+The `--isolate-requests=instance` argument introduces a light (and permeable) layer of isolation:
+a fresh component instance while retaining the same JavaScript isolate and module cache.
+
+The stronger `--isolate-requests=worker` mode creates a worker thread with a separate V8
+isolate and module cache for every request.
+
+> [!NOTE]
+> The `--isolate-requests` option selects worker isolation by default
+
+### Worker mode efficiency
+
+Workers are one-shot: each handles exactly one request and is then terminated and replaced, so
+prewarming does not reuse JavaScript globals or module caches across requests.
+
+As the cost of isolated workers is quite high, Worker mode maintains a pool of 50 prewarmed workers by default.
+
+The capacity can be adjusted with `--isolate-worker-pool-size`. Larger pools can hide worker
+startup latency during bursts, at the cost of higher server startup time and memory use.
+
+## Running the benchmark
 
 Jco includes an opt-in end-to-end benchmark that compares both isolation modes with a shared
 component and a native Node.js HTTP handler:
@@ -38,15 +58,20 @@ component and a native Node.js HTTP handler:
 pnpm --filter @bytecodealliance/jco bench:serve-isolation
 ```
 
-The benchmark is not part of the normal test suite. It builds a minimal HTTP component, starts a real
-server for each mode, and makes sequential requests to expose per-request overhead. It reports
-requests per second and mean, median, and p95 latency. By default, each mode receives 100 warmup
-requests followed by 10,000 measured requests.
+> [!NOTE]
+> The benchmark is not part of the normal test suite.
+
+The `serve-isolation` benchmark suite builds a minimal HTTP component, starts a real
+NodeJS server for each mode, and makes sequential requests to expose per-request overhead. It reports
+requests per second and mean, median, and p95 latency.
+
+By default, each mode receives 100 warmup requests followed by 10,000 measured requests.
 
 Worker isolation intentionally creates a worker for every request, so a complete default run can take
-a long time. Based on the reference result below, benchmarking all three worker pool sizes makes a
-default run take over one hour. A smaller smoke run can be requested before committing to the full
-benchmark:
+a long time.
+
+Based on the reference result below, benchmarking all three worker pool sizes may take a while.
+A smaller smoke run can be requested before committing to the full benchmark:
 
 ```console
 JCO_SERVE_BENCH_WARMUP=5 \
@@ -76,9 +101,8 @@ pnpm --filter @bytecodealliance/jco bench:serve-isolation
 
 ### Reference result
 
-The following result was collected on August 22, 2026 using Node.js 24.19.0 on a 6-vCPU Intel Xeon
-2.60 GHz virtual machine. The benchmark made 10 warmup requests followed by 100 measured sequential
-requests per mode:
+Using Node.js 24.19.0 on a 6-vCPU Intel Xeon 2.60 GHz virtual machine, the benchmark made 10 warmup requests
+followed by 100 measured sequential requests per mode:
 
 | Mode                  | Requests/s | Mean latency | Median latency | p95 latency |
 | --------------------- | ---------: | -----------: | -------------: | ----------: |
@@ -89,10 +113,10 @@ requests per mode:
 | Worker, pool size 50  |      13.55 |     73.82 ms |       70.14 ms |   100.00 ms |
 | Worker, pool size 100 |      14.78 |     67.66 ms |       65.14 ms |    95.25 ms |
 
-This result illustrates the relative cost of the isolation mechanisms for a minimal component. A
-larger component, concurrent traffic, different response sizes, pool utilization, or another Node.js
-version can change both the absolute results and the ratios between modes. In this sequential sample,
-increasing the pool from 1 to 50 improved worker throughput by approximately 3.3x. Doubling it again
-from 50 to 100 produced only another 9% throughput improvement while doubling the number of prewarmed
-workers. This diminishing return supports 50 as the default, while instance isolation remained the
-faster isolation mechanism.
+> [!NOTE]
+> The performance ratios here are likely more improtant than the absoltue numbers.
+
+This result illustrates the relative cost of the isolation mechanisms for a minimal component.
+
+A larger component, concurrent traffic, different response sizes, pool utilization, or another Node.js
+version can change both the absolute results and the ratios between modes.
