@@ -13,8 +13,8 @@ members = [
   "crates/wasm-tools-component",
   "crates/xtask",
   "crates/jco",
-  "packages/jco-node-fs",
 ]
+exclude = ["packages/jco-node-fs"]
 
 [workspace.package]
 edition = "2024"
