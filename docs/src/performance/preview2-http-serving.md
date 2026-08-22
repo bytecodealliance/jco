@@ -35,8 +35,8 @@ requests per second and mean, median, and p95 latency. By default, each mode rec
 requests followed by 10,000 measured requests.
 
 Worker isolation intentionally creates a worker for every request, so a complete default run can take
-a long time. Based on the reference result below, benchmarking both worker pool sizes makes a default
-run take approximately one hour. A smaller smoke run can be requested before committing to the full
+a long time. Based on the reference result below, benchmarking all three worker pool sizes makes a
+default run take over one hour. A smaller smoke run can be requested before committing to the full
 benchmark:
 
 ```console
@@ -71,16 +71,19 @@ The following result was collected on August 22, 2026 using Node.js 24.19.0 on a
 2.60 GHz virtual machine. The benchmark made 10 warmup requests followed by 100 measured sequential
 requests per mode:
 
-| Mode                 | Requests/s | Mean latency | Median latency | p95 latency |
-| -------------------- | ---------: | -----------: | -------------: | ----------: |
-| Native `node:http`   |     572.03 |      1.75 ms |        1.72 ms |     2.29 ms |
-| Shared component     |     218.05 |      4.59 ms |        4.55 ms |     5.50 ms |
-| Instance isolation   |      21.19 |     47.18 ms |       46.97 ms |    57.49 ms |
-| Worker, pool size 1  |       4.18 |    239.26 ms |      239.93 ms |   264.04 ms |
-| Worker, pool size 50 |      12.67 |     78.91 ms |       77.21 ms |   116.28 ms |
+| Mode                  | Requests/s | Mean latency | Median latency | p95 latency |
+| --------------------- | ---------: | -----------: | -------------: | ----------: |
+| Native `node:http`    |     598.13 |      1.67 ms |        1.69 ms |     2.03 ms |
+| Shared component      |     225.07 |      4.44 ms |        4.31 ms |     5.40 ms |
+| Instance isolation    |      22.88 |     43.71 ms |       43.24 ms |    47.59 ms |
+| Worker, pool size 1   |       4.15 |    240.95 ms |      239.36 ms |   274.28 ms |
+| Worker, pool size 50  |      13.55 |     73.82 ms |       70.14 ms |   100.00 ms |
+| Worker, pool size 100 |      14.78 |     67.66 ms |       65.14 ms |    95.25 ms |
 
 This result illustrates the relative cost of the isolation mechanisms for a minimal component. A
 larger component, concurrent traffic, different response sizes, pool utilization, or another Node.js
 version can change both the absolute results and the ratios between modes. In this sequential sample,
-the 50-worker pool improved worker throughput by approximately 3x, while instance isolation remained
-the faster isolation mechanism.
+increasing the pool from 1 to 50 improved worker throughput by approximately 3.3x. Doubling it again
+from 50 to 100 produced only another 9% throughput improvement while doubling the number of prewarmed
+workers. This diminishing return supports 50 as the default, while instance isolation remained the
+faster isolation mechanism.
