@@ -7,7 +7,7 @@ import { env, execPath, version as nodeVersion } from "node:process";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
-import { getRandomPort, terminateServer, waitForServer } from "../server-helpers.js";
+import { getRandomPort, terminateServer, waitForServer } from "./server-helpers.js";
 
 const JCO_JS_PATH = fileURLToPath(new URL("../../dist/jco.js", import.meta.url));
 const HTTP_WIT_PATH = fileURLToPath(new URL("../fixtures/componentize/wasi-http-detection-new/wit", import.meta.url));
@@ -19,7 +19,14 @@ const modes = [
     { name: "native" },
     { name: "shared", option: undefined },
     { name: "instance", option: "--isolate-requests=instance" },
-    { name: "worker", option: "--isolate-requests=worker" },
+    {
+        name: "worker (pool 1)",
+        options: ["--isolate-requests=worker", "--isolate-worker-pool-size=1"],
+    },
+    {
+        name: "worker (pool 50)",
+        options: ["--isolate-requests=worker", "--isolate-worker-pool-size=50"],
+    },
 ];
 
 const tmpDir = await mkdtemp(join(tmpdir(), "jco-serve-bench-"));
@@ -91,11 +98,14 @@ async function runJco(args) {
     }
 }
 
-async function benchmarkMode(componentPath, { name, option }) {
+async function benchmarkMode(componentPath, { name, option, options }) {
     const port = await getRandomPort();
     const args = [JCO_JS_PATH, "serve", componentPath, "--host", "127.0.0.1", "--port", String(port)];
     if (option) {
         args.push(option);
+    }
+    if (options) {
+        args.push(...options);
     }
     const child = spawn(execPath, args, { detached: true, stdio: ["ignore", "ignore", "pipe"] });
     try {

@@ -280,6 +280,7 @@ program
             .choices(["worker", "instance"])
             .preset("worker"),
     )
+    .option("--isolate-worker-pool-size <number>", "Number of one-shot request workers to prewarm", myParseInt, 50)
     .option("--jco-dir <dir>", "Instead of using a temporary dir, set the output directory for the transpiled code")
     .option("--jco-trace", "Enable call tracing")
     .option(

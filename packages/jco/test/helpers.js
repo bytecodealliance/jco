@@ -11,9 +11,9 @@ import mime from "mime";
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
 import { JCO_JS_PATH } from "./common.js";
-import { getRandomPort } from "./server-helpers.js";
+import { getRandomPort } from "./bench/server-helpers.js";
 
-export { getRandomPort, terminateServer, waitForServer } from "./server-helpers.js";
+export { getRandomPort, terminateServer, waitForServer } from "./bench/server-helpers.js";
 
 export const isWindows = platform === "win32";
 
