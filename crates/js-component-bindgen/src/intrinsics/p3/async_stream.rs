@@ -2169,7 +2169,7 @@ impl AsyncStreamIntrinsic {
 
                         const result = await streamEnd.copy({{
                             isAsync,
-                            memory: getMemoryFn(),
+                            memory: getMemoryFn?.(),
                             ptr,
                             count,
                             eventCode: {event_code},
