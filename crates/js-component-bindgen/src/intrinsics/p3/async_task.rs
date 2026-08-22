@@ -2309,6 +2309,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
+                let check_may_leave_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
 
                 output.push_str(&format!(
                     r#"
@@ -2332,6 +2334,8 @@ impl AsyncTaskIntrinsic {
                             importFn,
                         }} = args;
 
+                        {check_may_leave_fn}(componentIdx);
+
                         const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
 
                         const taskMeta = {current_task_get_fn}(componentIdx, taskID);
@@ -2341,13 +2345,6 @@ impl AsyncTaskIntrinsic {
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-
-                        // TODO: re-enable this check -- postReturn can call imports though,
-                        // and that breaks things.
-                        //
-                        // if (!cstate.mayLeave) {{
-                        //     throw new Error(`cannot leave instance [${{componentIdx}}]`);
-                        // }}
 
                         if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
                             throw new Error("non async exports cannot synchronously call async functions");
@@ -2566,6 +2563,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
+                let check_may_leave_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
 
                 output.push_str(&format!(
                     r#"
@@ -2588,6 +2587,8 @@ impl AsyncTaskIntrinsic {
                             importFn,
                             stringEncoding,
                         }} = args;
+
+                        {check_may_leave_fn}(componentIdx);
 
                         let meta = {get_global_current_task_meta_fn}(componentIdx);
                         let createdTask;
@@ -2640,13 +2641,6 @@ impl AsyncTaskIntrinsic {
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-
-                        // TODO: re-enable this check -- postReturn can call imports though,
-                        // and that breaks things.
-                        //
-                        // if (!cstate.mayLeave) {{
-                        //     throw new Error(`cannot leave instance [${{componentIdx}}]`);
-                        // }}
 
                         if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
                             throw new Error("non async exports cannot synchronously call async functions");
