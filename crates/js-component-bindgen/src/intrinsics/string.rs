@@ -115,10 +115,20 @@ impl StringIntrinsic {
                               throw new TypeError('expected a string, received [' + typeof s + ']');
                           }}
                           if (s.length === 0) {{ return {{ ptr: 1, len: 0 }}; }}
-                          let buf = {encoder}.encode(s);
-                          let ptr = {realloc_call}(0, 0, 1, buf.length);
-                          new Uint8Array(memory.buffer).set(buf, ptr);
-                          const res = {{ ptr, len: buf.length, codepoints: [...s].length }};
+                          // A UTF-16 code unit expands to at most three UTF-8 bytes. Encode
+                          // directly into guest memory, then make its allocation match the
+                          // canonical ABI length so the guest can later free it correctly.
+                          const allocLen = s.length * 3;
+                          let ptr = {realloc_call}(0, 0, 1, allocLen);
+                          const {{ read, written }} = {encoder}.encodeInto(
+                              s,
+                              new Uint8Array(memory.buffer, ptr, allocLen),
+                          );
+                          if (read !== s.length) {{ throw new Error('failed to encode whole string'); }}
+                          if (written !== allocLen) {{
+                              ptr = {realloc_call}(ptr, allocLen, 1, written);
+                          }}
+                          const res = {{ ptr, len: written, codepoints: [...s].length }};
                           return res;
                       }}
                     "#
