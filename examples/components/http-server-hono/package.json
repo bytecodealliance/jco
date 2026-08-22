@@ -20,7 +20,7 @@
     "hono": "^4.12.34"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.25.2",
+    "@bytecodealliance/jco": "1.31.0",
     "rolldown": "^1.1.0",
     "terminate": "^2.8.0",
     "typescript": "^6.0.3"

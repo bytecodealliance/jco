@@ -12,7 +12,7 @@
         "all": "pnpm run build && pnpm run demo"
     },
     "dependencies": {
-        "@bytecodealliance/jco": "1.30.0"
+        "@bytecodealliance/jco": "1.31.0"
     },
     "engines": {
         "node": ">=24"
