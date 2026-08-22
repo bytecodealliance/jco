@@ -1402,6 +1402,7 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "heck 0.5.0",
  "js-component-bindgen",
  "semver",
  "serde_json",

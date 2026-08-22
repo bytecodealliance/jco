@@ -1,4 +1,5 @@
 use anyhow::{Context as _, Result, bail, ensure};
+use heck::ToLowerCamelCase;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -6,6 +7,10 @@ use wast::core::WastRetCore;
 
 fn js_string(value: &str) -> Result<String> {
     serde_json::to_string(value).context("failed to encode JavaScript string")
+}
+
+fn js_export_name(name: &str) -> Result<String> {
+    js_string(&name.to_lower_camel_case())
 }
 
 /// Convert a single WAST file
@@ -88,7 +93,7 @@ fn convert_wast_file(
                 writeln!(
                     output_js,
                     "await instance[{}]({});",
-                    js_string(invoke.name)?,
+                    js_export_name(invoke.name)?,
                     args_to_js_params(&invoke.args)?,
                 )?;
             }
@@ -99,7 +104,7 @@ fn convert_wast_file(
                     r#"
                       await expect(async () => instance[{}]({})).rejects.toThrow({});
                     "#,
-                    js_string(export_name)?,
+                    js_export_name(export_name)?,
                     args_to_js_params(args)?,
                     js_string(message)?,
                 )?;
@@ -121,7 +126,7 @@ fn convert_wast_file(
                       res = await instance[{}]({});
                       {check_expr}
                     "#,
-                    js_string(export_name)?,
+                    js_export_name(export_name)?,
                     args_to_js_params(args)?,
                 )?;
             }
@@ -455,6 +460,10 @@ mod tests {
         );
         assert_eq!(float_to_js(f64::NEG_INFINITY), "-Infinity");
         assert_eq!(float_to_js(-0.0), "-0");
+        assert_eq!(
+            js_export_name("drop-readable-future-before-read")?,
+            r#""dropReadableFutureBeforeRead""#
+        );
         Ok(())
     }
 }
