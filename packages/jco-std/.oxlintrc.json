@@ -12,7 +12,8 @@
     "dist",
     "src/wasi/0.2.x/generated/types/**/*.d.ts",
     "src/wasi/0.2.3/generated/types/**/*.d.ts",
-    "src/wasi/0.2.6/generated/types/**/*.d.ts"
+    "src/wasi/0.2.6/generated/types/**/*.d.ts",
+    "src/wasi/0.2.12/generated/types/**/*.d.ts"
   ],
   "rules": {
     "no-unused-vars": "error",
