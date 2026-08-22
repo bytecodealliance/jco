@@ -188,7 +188,10 @@ component instance. Request and response bodies are streamed through a local HTT
 overhead, `--isolate-requests=instance` creates fresh component memories, tables, globals, and resource
 tables while sharing the JavaScript isolate and module cache. Neither mode is a security sandbox or
 isolates external filesystem and network side effects. Both modes have a significant performance cost,
-especially worker isolation.
+especially worker isolation. Instance isolation is generally the faster isolation mechanism; worker
+isolation trades additional worker startup and HTTP proxy overhead for separate JavaScript globals and
+module caches. See the [Preview 2 HTTP serving performance](https://bytecodealliance.github.io/jco/performance/preview2-http-serving.html)
+page for benchmark results and reproduction instructions.
 
 > [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
 
