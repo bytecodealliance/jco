@@ -1,4 +1,4 @@
-# Portable Web APIs in a JavaScript component
+# Portable Web APIs in a TypeScript component
 
 This example exercises Web Platform APIs that are commonly available across server-side JavaScript runtimes. These
 APIs broadly follow the [WinterTC Minimum Common Web Platform API][wintertc] and are provided during componentization
@@ -6,8 +6,9 @@ by [StarlingMonkey][starlingmonkey]. The example is both a usage reference and a
 when its `componentize-js` dependency changes.
 
 The component exposes a manually implemented `wasi:http/incoming-handler` using the familiar Service Worker `fetch`
-event pattern. The small HTTP adapter lives in [`http.ts`](./http.ts), keeping the main component focused on the APIs
-being demonstrated. Each request exercises these API groups and returns their pass/fail results as JSON:
+event pattern. The small HTTP adapter lives in [`http.ts`](./http.ts), and each built-in check has its own module under
+[`builtins`](./builtins). [`component.ts`](./component.ts) brings the checks together and returns their pass/fail
+results as JSON for each request:
 
 - URL and `URLSearchParams`
 - `TextEncoder`, `TextDecoder`, `atob`, and `btoa`
