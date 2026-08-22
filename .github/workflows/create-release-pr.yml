@@ -11,6 +11,7 @@ on:
         options:
           - jco
           - bare-jco
+          - jco-node-fs
           - jco-transpile
           - jco-std
           - js-component-bindgen
@@ -102,6 +103,12 @@ jobs:
               export CURRENT_VERSION;
               export IS_JS_PROJECT=true;
               ;;
+            jco-node-fs)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
+              export IS_NAPI_PROJECT=true;
+              ;;
             jco-transpile)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
@@ -139,7 +146,7 @@ jobs:
               export IS_RUST_PROJECT=true;
               ;;
             *)
-              echo "unexpected project type (neither Rust nor JS)";
+              echo "unexpected project type";
               exit 1;
           esac
 
@@ -152,6 +159,7 @@ jobs:
           echo -e "next-version=$NEXT_VERSION"
           echo -e "is-rust-project=$IS_RUST_PROJECT"
           echo -e "is-js-project=$IS_JS_PROJECT"
+          echo -e "is-napi-project=$IS_NAPI_PROJECT"
           echo -e "is-prerelease=$IS_PRERELEASE"
 
           {
@@ -161,6 +169,7 @@ jobs:
               echo -e "next-version=$NEXT_VERSION";
               echo -e "is-rust-project=$IS_RUST_PROJECT";
               echo -e "is-js-project=$IS_JS_PROJECT";
+              echo -e "is-napi-project=$IS_NAPI_PROJECT";
               echo -e "is-prerelease=$IS_PRERELEASE";
           } >> "$GITHUB_OUTPUT"
 
@@ -181,8 +190,12 @@ jobs:
           NEXT_VERSION: ${{ steps.project-meta.outputs.next-version }}
           IS_RUST_PROJECT: ${{ steps.project-meta.outputs.is-rust-project }}
           IS_JS_PROJECT: ${{ steps.project-meta.outputs.is-js-project }}
+          IS_NAPI_PROJECT: ${{ steps.project-meta.outputs.is-napi-project }}
         run: |
-          if [ "true" == "$IS_RUST_PROJECT" ]; then
+          if [ "true" == "$IS_NAPI_PROJECT" ]; then
+            npm pkg set "version=$NEXT_VERSION";
+            cargo set-version -p "$PROJECT" "$NEXT_VERSION";
+          elif [ "true" == "$IS_RUST_PROJECT" ]; then
             cargo set-version -p "$PROJECT" "$NEXT_VERSION";
           elif [ "true" == "$IS_JS_PROJECT" ]; then
             npm pkg set "version=$NEXT_VERSION";

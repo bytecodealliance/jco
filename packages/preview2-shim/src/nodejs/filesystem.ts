@@ -13,6 +13,7 @@ import {
 } from "../io/worker-io.js";
 import {
     FILE,
+    FILESYSTEM_DESCRIPTOR_ADVISE,
     FILESYSTEM_DESCRIPTOR_CLOSE,
     FILESYSTEM_DESCRIPTOR_GET_TYPE,
     FILESYSTEM_DESCRIPTOR_METADATA_HASH,
@@ -160,9 +161,18 @@ class Descriptor implements IDescriptor {
         return this.writeViaStream(this.stat().size);
     }
 
-    advise(_offset, _length, _advice) {
+    advise(offset, length, advice) {
         if (this.getType() === "directory") {
             throw "bad-descriptor";
+        }
+        try {
+            ioCall(FILESYSTEM_DESCRIPTOR_ADVISE, this.#fileResourceId, {
+                offset,
+                length,
+                advice,
+            });
+        } catch (e) {
+            throw convertFsError(e);
         }
     }
 

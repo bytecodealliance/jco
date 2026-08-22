@@ -9,6 +9,7 @@ packages:
   - packages/bare-jco
   - packages/jco-transpile
   - packages/jco-std
+  - packages/jco-node-fs
   - packages/preview2-shim
   - packages/preview3-shim
   - packages/rolldown-plugin-jco

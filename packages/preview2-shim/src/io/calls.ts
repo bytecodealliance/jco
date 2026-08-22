@@ -44,6 +44,7 @@ export const OUTPUT_STREAM_GET_TOTAL_BYTES = ++call_id << CALL_SHIFT;
 // Filesystem descriptors
 export const FILESYSTEM_DESCRIPTOR_OPEN = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_CLOSE = ++call_id << CALL_SHIFT;
+export const FILESYSTEM_DESCRIPTOR_ADVISE = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_SYNC_DATA = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_GET_TYPE = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_SET_SIZE = ++call_id << CALL_SHIFT;

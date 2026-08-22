@@ -1,0 +1,43 @@
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# Changelog\n
+"""
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="jco-node-fs-v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.scope %}_({{ commit.scope }})_ {% endif %}\
+          {% if commit.breaking %}[**breaking**] {% endif %}\
+          {{ commit.message | split(pat="\n") | first | trim }}\
+          {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif %}\
+          {% if commit.remote.pr_number %} in #{{ commit.remote.pr_number }}{%- endif %}
+    {% endfor %}
+{% endfor %}\n
+"""
+trim = true
+
+[git]
+commit_parsers = [
+    { message = '^feat\(node-fs\)', group = '<!-- 0 -->🚀 Features' },
+    { message = '^fix\(node-fs\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+    { message = '^doc\(node-fs\)', group = '<!-- 2 -->📚 Documentation' },
+    { message = '^perf\(node-fs\)', group = '<!-- 3 -->⚡ Performance' },
+    { message = '^refactor\(node-fs\)', group = '<!-- 4 -->🚜 Refactor' },
+    { message = '^test\(node-fs\)', group = '<!-- 5 -->🧪 Testing' },
+    { message = '^chore\(node-fs\)', group = '<!-- 6 -->⚙️ Miscellaneous Tasks' },
+    { message = '^sec\(node-fs\)', group = '<!-- 7 -->🔒️ Security' },
+    { message = '^release', skip = true },
+]
+filter_commits = true
+filter = { exclude = { scopes = ["ci", "infra", "ops"] } }
+topo_order = false
+sort_commits = "newest"
+tag_pattern = "^jco-node-fs-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
+include_paths = ["packages/jco-node-fs/**/*"]
