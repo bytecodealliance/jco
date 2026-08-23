@@ -426,8 +426,8 @@ importers:
         specifier: ^0.21.0
         version: 0.21.0
       '@bytecodealliance/preview3-shim':
-        specifier: workspace:^
-        version: link:../preview3-shim
+        specifier: ^0.4.0
+        version: 0.4.0
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -469,7 +469,7 @@ importers:
   packages/preview2-shim:
     dependencies:
       '@bytecodealliance/jco-node-fs':
-        specifier: ^0.1.0
+        specifier: workspace:^
         version: link:../jco-node-fs
     devDependencies:
       '@bytecodealliance/componentize-js':
@@ -500,7 +500,7 @@ importers:
   packages/preview3-shim:
     dependencies:
       '@bytecodealliance/jco-node-fs':
-        specifier: ^0.1.0
+        specifier: workspace:^
         version: link:../jco-node-fs
       '@bytecodealliance/preview2-shim':
         specifier: ^0.21.0
@@ -665,9 +665,6 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.21.0':
     resolution: {integrity: sha512-rl1NnsvBlL6Q912BUkYotiZ6L/LE8SJUnvJOuElp/kjULHnAaz8Zn4qeBiiiRmQcoZGYXXrW5dhEbPeYtcxXXQ==}
-
-  '@bytecodealliance/preview2-shim@file:packages/preview2-shim':
-    resolution: {directory: packages/preview2-shim, type: directory}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -4721,10 +4718,6 @@ snapshots:
   '@bytecodealliance/preview2-shim@0.20.2': {}
 
   '@bytecodealliance/preview2-shim@0.21.0': {}
-
-  '@bytecodealliance/preview2-shim@file:packages/preview2-shim':
-    dependencies:
-      '@bytecodealliance/jco-node-fs': link:packages/jco-node-fs
 
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
