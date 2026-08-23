@@ -112,6 +112,7 @@ impl stream_concurrency_test::Guest for Component {
                     break;
                 }
             }
+            stream_concurrency_host::signal();
         });
         rx
     }

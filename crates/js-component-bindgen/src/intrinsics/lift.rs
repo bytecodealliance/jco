@@ -1447,7 +1447,10 @@ impl LiftIntrinsic {
                                 isWritable: streamEnd.isWritable(),
                                 writeFn: (v) => {{ return streamEnd.write(v); }},
                                 readFn: (opts) => {{ return streamEnd.read(opts); }},
-                                dropFn: () => {{ return streamEnd.drop(); }},
+                                // A host can dispose an in-flight read after its event has
+                                // been published but before its polling continuation consumes
+                                // it. Detach the endpoint without discarding that completion.
+                                dropFn: () => {{ return streamEnd.drop({{ allowPendingEvent: true }}); }},
                             }});
 
                             return [ stream, ctx ];

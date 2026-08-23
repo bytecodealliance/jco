@@ -4,10 +4,6 @@ Router()
   .op("nop", () => {
     return { ok: true };
   })
-  .op("delay", async () => {
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    return { ok: true };
-  })
   .op("err", () => {
     throw "err";
   })

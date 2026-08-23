@@ -245,4 +245,130 @@ suite('async scheduling regressions', () => {
             await cleanup();
         }
     });
+
+    test('disposing a lifted stream with a completed read wakes its pending writer', async () => {
+        const secondWriteStarted = Promise.withResolvers<void>();
+        const writerStopped = Promise.withResolvers<void>();
+        const disposed = Promise.withResolvers<void>();
+        let writesStarted = 0;
+        let stream;
+        let read;
+        let disposeError;
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'stream-concurrency.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/stream-concurrency-host': {
+                        signal: () => {
+                            writesStarted += 1;
+                            if (writesStarted === 2) {
+                                // Register a host read before this synchronous import returns
+                                // and the guest performs its second write. Dispose in the next
+                                // microtask, after that write publishes the read event but before
+                                // the blocked host read's polling loop consumes it.
+                                read = stream.next();
+                                queueMicrotask(() => {
+                                    try {
+                                        stream[Symbol.dispose]();
+                                        stream[Symbol.dispose]();
+                                    } catch (error) {
+                                        disposeError = error;
+                                    } finally {
+                                        disposed.resolve();
+                                    }
+                                });
+                                secondWriteStarted.resolve();
+                            } else if (writesStarted === 3) {
+                                writerStopped.resolve();
+                            }
+                        },
+                        zeroReadComplete: () => {},
+                    },
+                },
+            },
+        });
+
+        try {
+            stream = await instance['jco:test-components/stream-concurrency-test'].writeUntilDropped();
+            assert.deepEqual(await stream.next(), {
+                done: false,
+                value: new Uint8Array([42]),
+            });
+            await secondWriteStarted.promise;
+            await disposed.promise;
+            assert.isUndefined(disposeError);
+
+            await Promise.race([
+                read.catch(() => undefined),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('pending read did not settle')), 1_000)),
+            ]);
+            await Promise.race([
+                writerStopped.promise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('pending writer was not woken')), 1_000)),
+            ]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('disposing a blocked lifted read before completion wakes both endpoints', async () => {
+        const writerStopped = Promise.withResolvers<void>();
+        const disposed = Promise.withResolvers<void>();
+        let writesStarted = 0;
+        let stream;
+        let read;
+        let disposeError;
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'stream-concurrency.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/stream-concurrency-host': {
+                        signal: () => {
+                            writesStarted += 1;
+                            if (writesStarted === 2) {
+                                // Dispose synchronously, before this import returns and
+                                // lets the guest publish its next write.
+                                read = stream.next();
+                                try {
+                                    stream[Symbol.dispose]();
+                                } catch (error) {
+                                    disposeError = error;
+                                } finally {
+                                    disposed.resolve();
+                                }
+                            } else if (writesStarted === 3) {
+                                writerStopped.resolve();
+                            }
+                        },
+                        zeroReadComplete: () => {},
+                    },
+                },
+            },
+        });
+
+        try {
+            stream = await instance['jco:test-components/stream-concurrency-test'].writeUntilDropped();
+            assert.deepEqual(await stream.next(), {
+                done: false,
+                value: new Uint8Array([42]),
+            });
+            await disposed.promise;
+            assert.isUndefined(disposeError);
+            await Promise.race([
+                read.catch(() => undefined),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('blocked read did not settle')), 1_000)),
+            ]);
+            await Promise.race([
+                writerStopped.promise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('pending writer was not woken')), 1_000)),
+            ]);
+        } finally {
+            await cleanup();
+        }
+    });
 });

@@ -19,20 +19,6 @@ export class ResourceWorker {
     return this.#worker;
   }
 
-  #startOperation(worker) {
-    const token = {};
-    this.#pending.set(token, worker);
-    worker.ref();
-    return token;
-  }
-
-  #finishOperation(token) {
-    this.#pending.delete(token);
-    if (this.#pending.size === 0) {
-      this.#worker?.unref();
-    }
-  }
-
   terminate() {
     if (!this.#worker) {
       return;
@@ -47,13 +33,11 @@ export class ResourceWorker {
   /** Async IPC */
   run(msg, transferable = []) {
     const worker = this.#getWorker();
-    const token = this.#startOperation(worker);
     const { port1, port2 } = new MessageChannel();
 
     return new Promise((resolve, reject) => {
       port1.once("message", ({ result, error }) => {
         port1.close();
-        this.#finishOperation(token);
 
         if (error) {
           reject(deserializeError(error));
@@ -62,35 +46,24 @@ export class ResourceWorker {
         resolve(result);
       });
 
-      try {
-        worker.postMessage({ ...msg, _reply: port2 }, [port2, ...transferable]);
-      } catch (err) {
-        port1.close();
-        port2.close();
-        this.#finishOperation(token);
-        reject(err);
-      }
+      worker.postMessage({ ...msg, _reply: port2 }, [port2, ...transferable]);
     });
   }
 
   /** Synchronous IPC */
   runSync(msg, transferable = []) {
     const worker = this.#getWorker();
-    const token = this.#startOperation(worker);
 
     const { port1: rx, port2: tx } = new MessageChannel();
     const _condvar = new SharedArrayBuffer(4);
     const lock = new Int32Array(_condvar);
 
-    let message;
-    try {
-      worker.postMessage({ ...msg, _condvar, _reply: tx }, [tx, ...transferable]);
-      Atomics.wait(lock, 0, 0);
-      ({ message } = receiveMessageOnPort(rx) || {});
-    } finally {
-      rx.close();
-      this.#finishOperation(token);
-    }
+    worker.postMessage({ ...msg, _condvar, _reply: tx }, [tx, ...transferable]);
+
+    Atomics.wait(lock, 0, 0);
+
+    const { message } = receiveMessageOnPort(rx) || {};
+    rx.close();
 
     if (!message) {
       throw new Error("No response from worker");
