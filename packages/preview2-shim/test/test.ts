@@ -144,8 +144,7 @@ suite("Node.js Preview2", () => {
         }
     });
 
-    // TODO(unskip): Enable after @bytecodealliance/jco-node-fs is published with prebuilt binaries.
-    test.skip("FS advise", async () => {
+    test("FS advise", async () => {
         const { filesystem } = await import("@bytecodealliance/preview2-shim");
         const [[rootDescriptor]] = filesystem.preopens.getDirectories();
         const descriptor = rootDescriptor.openAt(
