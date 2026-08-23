@@ -48,8 +48,7 @@ describe("Descriptor with os.tmpdir()", () => {
     child[Symbol.dispose]?.();
   });
 
-  // TODO(unskip): Enable after @bytecodealliance/jco-node-fs is published with prebuilt binaries.
-  test.skip("advise accepts every WASI advice value", async () => {
+  test("advise accepts every WASI advice value", async () => {
     const subpath = fileURLToPath(import.meta.url).slice(1);
     const child = await rootDescriptor.openAt({}, subpath, {}, { read: true });
 

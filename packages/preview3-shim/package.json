@@ -62,7 +62,7 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@bytecodealliance/jco-node-fs": "workspace:^",
+    "@bytecodealliance/jco-node-fs": "0.2.0",
     "@bytecodealliance/preview2-shim": "^0.21.0"
   },
   "devDependencies": {
