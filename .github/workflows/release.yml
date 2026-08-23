@@ -645,6 +645,10 @@ jobs:
           cargo publish $OPT_DRY_RUN
 
   npm-publish:
+    # test-npm-release deliberately runs after either pack-npm-release or
+    # pack-napi-release succeeds. Override the implicit success() check here so
+    # the skipped, inapplicable pack job does not propagate and skip publishing.
+    if: ${{ always() && needs.meta.result == 'success' && needs.test-npm-release.result == 'success' }}
     runs-on: ubuntu-24.04
     needs:
       - meta
