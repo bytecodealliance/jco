@@ -1,6 +1,6 @@
 {
     "name": "@bytecodealliance/jco-node-fs",
-    "version": "0.0.0",
+    "version": "0.2.0",
     "description": "Native Node.js filesystem helpers for Jco",
     "homepage": "https://github.com/bytecodealliance/jco#readme",
     "bugs": {
