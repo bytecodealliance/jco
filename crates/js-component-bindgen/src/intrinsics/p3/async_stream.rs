@@ -669,7 +669,7 @@ impl AsyncStreamIntrinsic {
                         isDropped() {{ return this.#isDroppedFn(); }}
                         setDropped() {{ return this.#setDroppedFn(); }}
 
-                        drop() {{
+                        drop(opts = {{}}) {{
                             {debug_log_fn}('[{stream_end_class}#drop()]', {{
                                 waitable: this.#waitable,
                                 waitableinSet: this.#waitable.isInSet(),
@@ -688,7 +688,14 @@ impl AsyncStreamIntrinsic {
                             this.setDropped();
                             if (this.#waitable) {{
                                 const w = this.#waitable;
-                                w.drop();
+                                if (opts.allowPendingEvent) {{
+                                    // A lifted host read can still be observing this event.
+                                    // Detach it from any guest waitable set, but leave the
+                                    // event available for the in-flight host read to consume.
+                                    w.join(null);
+                                }} else {{
+                                    w.drop();
+                                }}
                             }}
                         }}
                     }}
@@ -1590,12 +1597,12 @@ impl AsyncStreamIntrinsic {
                             }}
                         }}
 
-                        drop() {{
+                        drop(opts = {{}}) {{
                             {debug_log_fn}('[{stream_end_class}#drop()]');
                             if (this.isDropped()) {{ return; }}
                             const hostDropFn = this.#hostDropFn;
                             this.#hostDropFn = null;
-                            super.drop();
+                            super.drop(opts);
                             if (hostDropFn) {{
                                 // A source drop hook can re-enter the component, so both ends must
                                 // observe the drop before the hook wakes a waiting writer.
@@ -1770,7 +1777,10 @@ impl AsyncStreamIntrinsic {
                                 writeFn: async (v) => {{
                                     await streamEnd.write(v);
                                 }},
-                                dropFn: () => streamEnd.drop(),
+                                // The host may dispose while an already-completed read is
+                                // between event publication and its polling continuation.
+                                // Preserve that event for the in-flight host promise.
+                                dropFn: () => streamEnd.drop({{ allowPendingEvent: true }}),
                             }});
                         }}
                     }}
