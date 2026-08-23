@@ -69,7 +69,7 @@
         "prepack": "pnpm run build"
     },
     "dependencies": {
-        "@bytecodealliance/jco-node-fs": "^0.1.0"
+        "@bytecodealliance/jco-node-fs": "workspace:^"
     },
     "devDependencies": {
         "@bytecodealliance/componentize-js": "0.22.0",
