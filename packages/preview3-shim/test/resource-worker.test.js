@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { Worker } from "node:worker_threads";
 import { ResourceWorker } from "../dist/nodejs/workers/resource-worker.js";
 
@@ -11,6 +11,25 @@ describe("ResourceWorker round-trip", () => {
 
   test("sync run nop", () => {
     expect(_worker.runSync({ op: "nop" })).toEqual({ ok: true });
+  });
+
+  test("keeps the worker referenced while an operation is pending", async () => {
+    let worker;
+    let ref;
+    let unref;
+    const resourceWorker = new ResourceWorker(() => {
+      worker = new Worker(new URL("./nop-worker.js", import.meta.url));
+      ref = vi.spyOn(worker, "ref");
+      unref = vi.spyOn(worker, "unref");
+      return worker;
+    });
+
+    const result = resourceWorker.run({ op: "delay" });
+    expect(ref).toHaveBeenCalledOnce();
+    expect(unref).toHaveBeenCalledOnce();
+    await expect(result).resolves.toEqual({ ok: true });
+    expect(unref).toHaveBeenCalledTimes(2);
+    resourceWorker.terminate();
   });
 
   test("async run err", async () => {

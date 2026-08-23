@@ -1,6 +1,4 @@
 import { Socket, Server } from "node:net";
-import { Readable } from "stream";
-import { pipeline } from "stream/promises";
 import { once } from "node:events";
 
 import { Router } from "../workers/resource-worker.js";
@@ -199,11 +197,43 @@ async function handleTcpSend({ socketId, stream }) {
   socket.activeStreams++;
 
   const { tcp } = socket;
-  const readable = Readable.fromWeb(stream);
+  const reader = stream.getReader();
+  let rejectOnSocketError;
+  const socketError = new Promise<never>((_resolve, reject) => {
+    rejectOnSocketError = reject;
+  });
+  tcp.once("error", rejectOnSocketError);
 
   try {
-    await pipeline(readable, tcp);
+    // Do not replace this pump with stream.pipeline(). Node 26 changed async
+    // iteration to preserve allowHalfOpen duplex streams. For WASI TCP send,
+    // however, a write failure must promptly cancel the transferred input
+    // stream so the guest's stream writer is dropped. Explicitly awaiting each
+    // write keeps socket backpressure and cancellation coupled across workers.
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), socketError]);
+      if (done) {
+        break;
+      }
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          tcp.write(value, (err) => (err ? reject(err) : resolve()));
+        }),
+        socketError,
+      ]);
+    }
+    await new Promise<void>((resolve, reject) => {
+      tcp.end((err) => (err ? reject(err) : resolve()));
+    });
+  } catch (err) {
+    // Cancellation crosses the worker boundary. Do not wait for its completion:
+    // the producer can itself be waiting for this operation's result, which
+    // would turn error propagation into a cycle.
+    void reader.cancel(err).catch(() => {});
+    throw err;
   } finally {
+    tcp.off("error", rejectOnSocketError);
+    reader.releaseLock();
     socket.activeStreams--;
     cleanupDisposedSocket(socketId, socket);
   }
