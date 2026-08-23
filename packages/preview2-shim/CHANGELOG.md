@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.0] - 2026-08-23
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ update jco-node-fs to v0.2.0 by @vados-cosmonic
+
+- _(p2-shim)_ set jco-node-fs to workspace pre-release by @vados-cosmonic
+
 ## [0.21.0] - 2026-08-21
 
 ### 🐛 Bug Fixes
