@@ -2,7 +2,7 @@
 
 use napi_derive::napi;
 
-#[cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 use std::{num::NonZeroU64, os::fd::BorrowedFd};
 
 const INVALID_ARGUMENT_ERRNO: i32 = 22;
@@ -20,7 +20,7 @@ pub fn fadvise_raw(fd: i32, offset: String, length: String, advice: String) -> i
         return INVALID_ARGUMENT_ERRNO;
     };
 
-    #[cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     {
         let advice = match advice.as_str() {
             "normal" => rustix::fs::Advice::Normal,
@@ -41,9 +41,9 @@ pub fn fadvise_raw(fd: i32, offset: String, length: String, advice: String) -> i
         }
     }
 
-    // POSIX file advice is permitted to be ignored. macOS and Windows do not
-    // expose posix_fadvise, so retain the WASI-compatible no-op behavior there.
-    #[cfg(not(any(target_os = "android", target_os = "freebsd", target_os = "linux")))]
+    // POSIX file advice is permitted to be ignored. Retain the WASI-compatible
+    // no-op behavior on targets where this binding does not support fadvise.
+    #[cfg(not(target_os = "linux"))]
     {
         let _ = (fd, offset, length, advice);
         0

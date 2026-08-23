@@ -375,52 +375,12 @@ jobs:
           name: bindings-${{ matrix.settings.target }}
           path: packages/jco-node-fs/jco-node-fs.*.node
 
-  build-napi-freebsd-release:
-    if: ${{ needs.meta.outputs.is-napi-project == 'true' }}
-    needs:
-      - meta
-    name: Build jco-node-fs (x86_64-unknown-freebsd)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build FreeBSD binding
-        uses: cross-platform-actions/action@24ef01df165c76df1ed2b9f9e9212e78dc2fc963 # v1.4.0
-        env:
-          RUSTUP_IO_THREADS: 1
-        with:
-          operating_system: freebsd
-          version: "15.0"
-          memory: 8G
-          cpu_count: 3
-          environment_variables: RUSTUP_IO_THREADS
-          shell: bash
-          run: |
-            sudo pkg install -y -f curl node npm cmake
-            sudo npm install -g pnpm@11 --ignore-scripts
-            curl https://sh.rustup.rs -sSf --output rustup.sh
-            sh rustup.sh -y --profile minimal --default-toolchain stable
-            source "$HOME/.cargo/env"
-            pnpm install --frozen-lockfile
-            pnpm --filter '@bytecodealliance/jco-node-fs' exec napi build --platform --release --target x86_64-unknown-freebsd
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          if-no-files-found: error
-          name: bindings-x86_64-unknown-freebsd
-          path: packages/jco-node-fs/jco-node-fs.*.node
-
   pack-napi-release:
     if: ${{ needs.meta.outputs.is-napi-project == 'true' }}
     runs-on: ubuntu-24.04
     needs:
       - meta
       - build-napi-release
-      - build-napi-freebsd-release
     permissions:
       id-token: write
       attestations: write

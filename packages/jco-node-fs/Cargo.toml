@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 napi = { version = "3.12.2", default-features = false, features = ["napi6"] }
 napi-derive = "3.6.3"
 
-[target.'cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1.1.4", features = ["fs"] }
 
 [build-dependencies]

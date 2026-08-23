@@ -67,42 +67,6 @@ function requireNative() {
     } catch (err) {
       loadErrors.push(err)
     }
-  } else if (process.platform === 'android') {
-    if (process.arch === 'arm64') {
-      try {
-        return require('./jco-node-fs.android-arm64.node')
-      } catch (e) {
-        loadErrors.push(e)
-      }
-      try {
-        const binding = require('@bytecodealliance/jco-node-fs-android-arm64')
-        const bindingPackageVersion = require('@bytecodealliance/jco-node-fs-android-arm64/package.json').version
-        if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
-        }
-        return binding
-      } catch (e) {
-        loadErrors.push(e)
-      }
-    } else if (process.arch === 'arm') {
-      try {
-        return require('./jco-node-fs.android-arm-eabi.node')
-      } catch (e) {
-        loadErrors.push(e)
-      }
-      try {
-        const binding = require('@bytecodealliance/jco-node-fs-android-arm-eabi')
-        const bindingPackageVersion = require('@bytecodealliance/jco-node-fs-android-arm-eabi/package.json').version
-        if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
-        }
-        return binding
-      } catch (e) {
-        loadErrors.push(e)
-      }
-    } else {
-      loadErrors.push(new Error(`Unsupported architecture on Android ${process.arch}`))
-    }
   } else if (process.platform === 'win32') {
     if (process.arch === 'x64') {
       if ((process.config && process.config.variables && process.config.variables.shlib_suffix === 'dll.a') || (process.config && process.config.variables && process.config.variables.node_target_type === 'shared_library')) {
@@ -223,42 +187,6 @@ function requireNative() {
       }
     } else {
       loadErrors.push(new Error(`Unsupported architecture on macOS: ${process.arch}`))
-    }
-  } else if (process.platform === 'freebsd') {
-    if (process.arch === 'x64') {
-      try {
-        return require('./jco-node-fs.freebsd-x64.node')
-      } catch (e) {
-        loadErrors.push(e)
-      }
-      try {
-        const binding = require('@bytecodealliance/jco-node-fs-freebsd-x64')
-        const bindingPackageVersion = require('@bytecodealliance/jco-node-fs-freebsd-x64/package.json').version
-        if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
-        }
-        return binding
-      } catch (e) {
-        loadErrors.push(e)
-      }
-    } else if (process.arch === 'arm64') {
-      try {
-        return require('./jco-node-fs.freebsd-arm64.node')
-      } catch (e) {
-        loadErrors.push(e)
-      }
-      try {
-        const binding = require('@bytecodealliance/jco-node-fs-freebsd-arm64')
-        const bindingPackageVersion = require('@bytecodealliance/jco-node-fs-freebsd-arm64/package.json').version
-        if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
-        }
-        return binding
-      } catch (e) {
-        loadErrors.push(e)
-      }
-    } else {
-      loadErrors.push(new Error(`Unsupported architecture on FreeBSD: ${process.arch}`))
     }
   } else if (process.platform === 'linux') {
     if (process.arch === 'x64') {
