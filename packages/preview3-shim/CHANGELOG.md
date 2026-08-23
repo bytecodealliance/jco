@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0] - 2026-08-23
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ keep resource workers alive during operations by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.22.0 by @vados-cosmonic in #1963
+
+- _(p3-shim)_ update jco-node-fs to v0.2.0 by @vados-cosmonic
+
+- _(p3-shim)_ set jco-node-fs to workspace pre-release by @vados-cosmonic
+
 ## [0.4.0] - 2026-08-21
 
 ### 🐛 Bug Fixes
