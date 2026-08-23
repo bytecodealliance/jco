@@ -61,6 +61,15 @@ catalog:
   which: ^2.0.2
 
 minimumReleaseAgeExclude:
+  - '@bytecodealliance/jco-node-fs@0.2.0'
+  - '@bytecodealliance/jco-node-fs-darwin-arm64@0.2.0'
+  - '@bytecodealliance/jco-node-fs-darwin-x64@0.2.0'
+  - '@bytecodealliance/jco-node-fs-linux-arm64-gnu@0.2.0'
+  - '@bytecodealliance/jco-node-fs-linux-arm64-musl@0.2.0'
+  - '@bytecodealliance/jco-node-fs-linux-x64-gnu@0.2.0'
+  - '@bytecodealliance/jco-node-fs-linux-x64-musl@0.2.0'
+  - '@bytecodealliance/jco-node-fs-win32-arm64-msvc@0.2.0'
+  - '@bytecodealliance/jco-node-fs-win32-x64-msvc@0.2.0'
   - '@oxc-project/types@0.144.0'
   - '@bytecodealliance/componentize-js@0.22.0'
   - '@bytecodealliance/jco-transpile@0.3.7 || 0.3.8 || 0.3.9 || 0.4.0 || 0.4.1 || 0.4.2 || 0.5.0 || 0.5.1 || 0.5.2 || 0.6.0 || 0.6.1 || 0.7.0 || 0.8.0 || 0.10.0 || 0.11.0'
