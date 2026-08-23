@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.8.0] - 2026-08-23
+
+### 🚀 Features
+
+- _(bindgen)_ support WIT unpacking by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ preserve lifted stream completion on dispose by @vados-cosmonic in #1955
+
+- _(bindgen)_ support zero-copy encoding with old adapters by @vados-cosmonic in #1945
+
+- _(bindgen)_ restore zero-copy UTF-8 lowering by @vados-cosmonic
+
+- _(bindgen)_ fix enum collision by @vados-cosmonic in #1944
+
+- _(bindgen)_ support unit futures and streams by @vados-cosmonic
+
+- _(bindgen)_ complete may-leave enforcement by @vados-cosmonic
+
+
+
+
 ## [2.7.0] - 2026-08-21
 
 ### 🚀 Features
