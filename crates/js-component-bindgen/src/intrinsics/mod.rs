@@ -1004,6 +1004,7 @@ impl Intrinsic {
                           if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
                           if (!args.fn) {{ throw new TypeError('missing fn'); }}
                           const {{ taskID, componentIdx, fn }} = args;
+                          const previous = {global_current_task_meta_obj}[componentIdx] ?? null;
 
                           try {{
                               {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
@@ -1015,7 +1016,11 @@ impl Intrinsic {
                               }});
                               throw err;
                           }} finally {{
-                              {global_current_task_meta_obj}[componentIdx] = null;
+                              // Synchronous wrappers can nest without any intervening JS
+                              // scheduling. Restore the caller rather than clearing it so
+                              // helper core exports (for example fused return adapters) can
+                              // temporarily run under a different task of the same component.
+                              {global_current_task_meta_obj}[componentIdx] = previous;
                           }}
                       }}
                     "#,
@@ -1179,6 +1184,18 @@ mod tests {
         (source, intrinsics)
     }
 
+    fn render_intrinsic_body(intrinsic: Intrinsic) -> Source {
+        let mut source = Source::default();
+        let mut intrinsics = BTreeSet::new();
+        let opts = TranspileOpts::default();
+        let args = RenderIntrinsicsArgs::builder()
+            .intrinsics(&mut intrinsics)
+            .transpile_opts(&opts)
+            .build();
+        intrinsic.render(&mut source, &args);
+        source
+    }
+
     #[test]
     fn renders_only_requested_and_discovered_intrinsics() {
         let (source, intrinsics) = render([Intrinsic::CoinFlip]);
@@ -1311,6 +1328,93 @@ mod tests {
             source.matches("const ASYNC_TASKS_BY_COMPONENT_IDX").count(),
             1
         );
+    }
+
+    #[test]
+    fn sync_current_task_wrapper_restores_nested_task() {
+        let (source, _) = render([Intrinsic::WithGlobalCurrentTaskMetaFn]);
+
+        assert!(source.contains("const previous = CURRENT_TASK_META[componentIdx] ?? null;"));
+        assert!(source.contains("CURRENT_TASK_META[componentIdx] = previous;"));
+    }
+
+    #[test]
+    fn resource_destructor_call_creates_and_completes_a_sync_guest_task() {
+        let source = render_intrinsic_body(Intrinsic::Resource(
+            ResourceIntrinsic::ResourceDestructorCall,
+        ));
+
+        assert!(source.contains("if (_getGlobalCurrentTaskMeta(componentIdx))"));
+        assert!(source.contains("return dtor(rep);"));
+        assert!(source.contains("const [task] = createNewCurrentTask({"));
+        assert!(source.contains("isAsync: false,"));
+        assert!(source.contains("callingWasmExport: true,"));
+        assert!(source.contains("task.enterSync();"));
+        assert!(source.contains("return _withGlobalCurrentTaskMeta({"));
+        assert!(source.contains("task.resolve([]);"));
+        assert!(source.contains("task.exit();"));
+        assert!(source.contains("task.setErrored(err);"));
+        assert!(source.contains("task.reject(err);"));
+        assert!(source.contains("task.exit({ skipExclusiveLockCheck: true });"));
+    }
+
+    #[test]
+    fn task_return_fused_adapter_runs_in_the_caller_task() {
+        let source = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
+
+        assert!(source.contains("const callerTask = task.getParentSubtask().getParentTask();"));
+        assert!(source.contains("taskID: callerTask.id(),"));
+        assert!(source.contains("componentIdx: callerTask.componentIdx(),"));
+        assert!(source.contains(
+            "fn: () => subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]),"
+        ));
+    }
+
+    #[test]
+    fn deferred_fused_adapter_runs_in_the_caller_task() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+
+        assert!(source.contains("const callerTask = this.#parentSubtask.getParentTask();"));
+        assert!(source.contains("taskID: callerTask.id(),"));
+        assert!(source.contains("componentIdx: callerTask.componentIdx(),"));
+        assert!(
+            source.contains("fn: () => meta.returnFn.apply(null, [taskValue, meta.resultPtr]),")
+        );
+    }
+
+    #[test]
+    fn async_task_post_return_runs_in_the_completing_task() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+
+        assert!(source.contains("taskID: this.#id,"));
+        assert!(source.contains("componentIdx: this.#componentIdx,"));
+        assert!(source.contains("fn: () => this.#postReturnFn(taskValue),"));
+    }
+
+    #[test]
+    fn async_start_fused_adapter_runs_in_the_caller_task() {
+        let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
+
+        assert!(source.contains("const callerTask = subtask.getParentTask();"));
+        assert!(source.contains("taskID: callerTask.id(),"));
+        assert!(source.contains("componentIdx: callerTask.componentIdx(),"));
+        assert!(source.contains(
+            "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
+        ));
+    }
+
+    #[test]
+    fn sync_start_fused_adapter_runs_in_the_caller_task() {
+        let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::SyncStartCall));
+
+        assert!(source.contains("const callerTask = subtask.getParentTask();"));
+        assert!(source.contains("taskID: callerTask.id(),"));
+        assert!(source.contains("componentIdx: callerTask.componentIdx(),"));
+        assert!(source.contains(
+            "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
+        ));
     }
 
     #[test]
