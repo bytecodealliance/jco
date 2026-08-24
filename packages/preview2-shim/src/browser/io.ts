@@ -307,6 +307,8 @@ class Pollable implements PollNamespace.Pollable {
     #disposed = false;
     #wait: Promise<void> | null = null;
     #disposeCallbacks: (() => void)[] = [];
+    #wakeUnusable!: () => void;
+    #unusable = new Promise<void>((resolve) => (this.#wakeUnusable = resolve));
 
     static _create(source?: Promise<void> | PollableSource) {
         const pollable = new Pollable();
@@ -340,7 +342,10 @@ class Pollable implements PollNamespace.Pollable {
         // Deduplicate simultaneous waiters, but discard a completed wait so a
         // level-triggered source can be polled again after its event is consumed.
         if (!this.#wait) {
-            this.#wait = Promise.resolve(this.#source.wait()).finally(() => {
+            this.#wait = Promise.race([
+                Promise.resolve(this.#source.wait()),
+                this.#unusable.then(() => this.#assertUsable()),
+            ]).finally(() => {
                 this.#wait = null;
             });
         }
@@ -356,8 +361,11 @@ class Pollable implements PollNamespace.Pollable {
     }
 
     _invalidate() {
+        if (this.#invalid || this.#disposed) {
+            return;
+        }
         this.#invalid = true;
-        this.#wait = null;
+        this.#wakeUnusable();
     }
 
     #assertUsable() {
@@ -374,7 +382,7 @@ class Pollable implements PollNamespace.Pollable {
             return;
         }
         this.#disposed = true;
-        this.#wait = null;
+        this.#wakeUnusable();
         for (const callback of this.#disposeCallbacks.splice(0)) {
             callback();
         }

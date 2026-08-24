@@ -1514,6 +1514,35 @@ suite("Browser shim guards", () => {
         }
     });
 
+    test("dropping resources wakes blocked child pollables", async () => {
+        const { inputStreamCreate, poll, pollableCreate } = await import("../src/browser/io.js");
+        const input = inputStreamCreate({
+            blockingRead: () => new Uint8Array(),
+            subscribe: () =>
+                // The source intentionally never becomes ready on its own.
+                pollableCreate({
+                    ready: () => false,
+                    wait: () => new Promise<void>(() => {}),
+                }),
+        });
+        const child = input.subscribe();
+        const blocked = child.block();
+        const polled = poll.poll([child]) as Promise<Uint32Array>;
+
+        (input as any)[symbolDispose]();
+
+        const blockError = await blocked.then(
+            () => undefined,
+            (error) => error,
+        );
+        const pollError = await polled.then(
+            () => undefined,
+            (error) => error,
+        );
+        assert.match(blockError.message, /parent resource has been disposed/);
+        assert.match(pollError.message, /parent resource has been disposed/);
+    });
+
     test("browser random rejects invalid allocation lengths", async () => {
         const { random } = await import("../src/browser/random.js");
         assert.throws(() => random.getRandomBytes(-1n), /valid u64/);
