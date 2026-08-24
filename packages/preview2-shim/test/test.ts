@@ -1668,6 +1668,64 @@ suite("Browser shim guards", () => {
         const opts = new types.RequestOptions();
         assert.throws(() => opts.setBetweenBytesTimeout(-1n), /negative/);
     });
+
+    test("browser HTTP options preserve undefined timeouts", async () => {
+        const { types } = await import("../src/browser/http.js");
+        const opts = new types.RequestOptions();
+        assert.strictEqual(opts.connectTimeout(), undefined);
+        opts.setConnectTimeout(10n);
+        opts.setConnectTimeout(undefined);
+        opts.setFirstByteTimeout(undefined);
+        opts.setBetweenBytesTimeout(undefined);
+        assert.strictEqual(opts.connectTimeout(), undefined);
+        assert.strictEqual(opts.firstByteTimeout(), undefined);
+        assert.strictEqual(opts.betweenBytesTimeout(), undefined);
+    });
+
+    test("browser HTTP validates DNS, IPv4, and IPv6 authorities", async () => {
+        const { types } = await import("../src/browser/http.js");
+        const request = new types.OutgoingRequest(new types.Fields());
+        for (const authority of ["example.com", "127.0.0.1:8080", "[::1]:8080"]) {
+            request.setAuthority(authority);
+            assert.strictEqual(request.authority(), authority);
+        }
+        for (const authority of [
+            "",
+            "user@example.com",
+            "example.com:",
+            "example.com:65536",
+            "::1",
+            "[not-ipv6]",
+        ]) {
+            throws(() => request.setAuthority(authority));
+        }
+    });
+
+    test("browser HTTP preserves repeated outgoing headers", async () => {
+        const { outgoingHandler, types } = await import("../src/browser/http.js");
+        const originalFetch = globalThis.fetch;
+        let receivedHeader: string | null = null;
+        globalThis.fetch = async (_input, init) => {
+            receivedHeader = (init?.headers as Headers).get("x-repeat");
+            return new Response();
+        };
+        try {
+            const encoder = new TextEncoder();
+            const request = new types.OutgoingRequest(
+                types.Fields.fromList([
+                    ["x-repeat", encoder.encode("one")],
+                    ["x-repeat", encoder.encode("two")],
+                ]),
+            );
+            request.setAuthority("example.com");
+            request.setPathWithQuery("/");
+            const response = outgoingHandler.handle(request, undefined);
+            await response.subscribe().block();
+            assert.strictEqual(receivedHeader, "one, two");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
 });
 
 function testWithGCWrap(asyncTestFn: any) {

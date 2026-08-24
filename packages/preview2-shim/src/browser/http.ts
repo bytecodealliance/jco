@@ -167,16 +167,16 @@ const fieldsFromEntriesChecked = Fields._fromEntriesChecked;
 delete Fields._fromEntriesChecked;
 
 class RequestOptions implements TypesNamespace.RequestOptions {
-    #connectTimeout = DEFAULT_HTTP_TIMEOUT_NS;
-    #firstByteTimeout = DEFAULT_HTTP_TIMEOUT_NS;
-    #betweenBytesTimeout = DEFAULT_HTTP_TIMEOUT_NS;
+    #connectTimeout: bigint | undefined;
+    #firstByteTimeout: bigint | undefined;
+    #betweenBytesTimeout: bigint | undefined;
 
     connectTimeout() {
         return this.#connectTimeout;
     }
 
-    setConnectTimeout(duration: bigint) {
-        if (duration < 0n) {
+    setConnectTimeout(duration: bigint | undefined) {
+        if (duration !== undefined && duration < 0n) {
             throw new Error("duration must not be negative");
         }
         this.#connectTimeout = duration;
@@ -186,8 +186,8 @@ class RequestOptions implements TypesNamespace.RequestOptions {
         return this.#firstByteTimeout;
     }
 
-    setFirstByteTimeout(duration: bigint) {
-        if (duration < 0n) {
+    setFirstByteTimeout(duration: bigint | undefined) {
+        if (duration !== undefined && duration < 0n) {
             throw new Error("duration must not be negative");
         }
         this.#firstByteTimeout = duration;
@@ -197,8 +197,8 @@ class RequestOptions implements TypesNamespace.RequestOptions {
         return this.#betweenBytesTimeout;
     }
 
-    setBetweenBytesTimeout(duration: bigint) {
-        if (duration < 0n) {
+    setBetweenBytesTimeout(duration: bigint | undefined) {
+        if (duration !== undefined && duration < 0n) {
             throw new Error("duration must not be negative");
         }
         this.#betweenBytesTimeout = duration;
@@ -352,14 +352,19 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
     }
 
     setAuthority(authority: string | undefined) {
-        if (authority) {
-            const [host, port, ...extra] = authority.split(":");
-            const portNum = Number(port);
-            if (
-                extra.length ||
-                (port !== undefined && (portNum.toString() !== port || portNum > 65535)) ||
-                !host.match(/^[a-zA-Z0-9-.]+$/)
-            ) {
+        if (authority !== undefined) {
+            const match = authority.startsWith("[")
+                ? authority.match(/^\[([0-9A-Fa-f:.]+)\](?::([0-9]+))?$/)
+                : authority.match(/^([a-zA-Z0-9.-]+)(?::([0-9]+))?$/);
+            if (!match || (match[2] !== undefined && Number(match[2]) > 65535)) {
+                throw undefined;
+            }
+            try {
+                const parsed = new URL(`http://${authority}/`);
+                if (parsed.username || parsed.password || !parsed.hostname) {
+                    throw undefined;
+                }
+            } catch {
                 throw undefined;
             }
         }
@@ -386,7 +391,7 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
         for (const [key, value] of request.#headers.entries()) {
             const lowerKey = key.toLowerCase();
             if (!forbiddenHeaders.has(lowerKey)) {
-                headers.set(key, utf8Decoder.decode(value));
+                headers.append(key, utf8Decoder.decode(value));
             }
         }
 
