@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.12.1] - 2026-08-24
+
+This release contains an update of the underlying transpiled `js-component-bindgen`
+to [`js-component-bindgen` v2.8.1](https://crates.io/crates/js-component-bindgen/2.8.1)
+
+### 🧪 Testing
+
+- _(transpile)_ cover delayed future result lowering by @vados-cosmonic in #1969
+
+- _(transpile)_ cover context-dependent resource disposal by @vados-cosmonic
+
 ## [0.12.0] - 2026-08-24
 
 ### 🚀 Features
