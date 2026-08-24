@@ -1,6 +1,6 @@
 import process, { env } from "node:process";
 import { pathToFileURL, URL, fileURLToPath } from "node:url";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { sep, normalize, resolve, extname } from "node:path";
 import { createServer as createHTTPServer } from "node:http";
@@ -258,7 +258,13 @@ export async function startTestServer(args: StartTestServerArgs): Promise<StartT
         baseURL,
         browser,
         cleanup: async () => {
-            await new Promise<void>((resolve) => server.close(() => resolve()));
+            await Promise.all([
+                browser.close(),
+                new Promise<void>((resolve, reject) =>
+                    server.close((error) => (error ? reject(error) : resolve())),
+                ),
+            ]);
+            await rm(transpiledOutputDir, { recursive: true, force: true });
         },
     };
 }
