@@ -232,10 +232,6 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
         body.#resolveFinished();
     }
 
-    static _bodyData(outgoingBody: OutgoingBody): Uint8Array | null {
-        return outgoingBody.#bodyData();
-    }
-
     #bodyData(): Uint8Array | null {
         if (this.#chunks.length === 0) {
             return null;
@@ -281,9 +277,6 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
 const outgoingBodyCreate = OutgoingBody._create;
 // @ts-expect-error - Deleting static method
 delete OutgoingBody._create;
-const outgoingBodyData = OutgoingBody._bodyData;
-// @ts-expect-error - Deleting static method
-delete OutgoingBody._bodyData;
 const outgoingBodyFinishedData = OutgoingBody._finishedBodyData;
 // @ts-expect-error - Deleting static method
 delete OutgoingBody._finishedBodyData;
