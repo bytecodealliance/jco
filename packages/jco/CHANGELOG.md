@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.32.1] - 2026-08-24
+
+### 🚜 Refactor
+
+- _(jco)_ remove ora spinner dependency by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.12.1 by @vados-cosmonic
+
 ## [1.32.0] - 2026-08-24
 
 ### 🚀 Features
