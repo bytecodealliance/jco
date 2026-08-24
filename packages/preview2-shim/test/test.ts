@@ -1587,6 +1587,45 @@ suite("Browser shim guards", () => {
         assert.strictEqual(await response.text(), "created");
     });
 
+    test("browser outgoing HTTP waits for the complete request body", async () => {
+        const { outgoingHandler, types } = await import("../src/browser/http.js");
+        const originalFetch = globalThis.fetch;
+        let requestedBody: Uint8Array | undefined;
+        let fetchCalls = 0;
+        globalThis.fetch = async (_input, init) => {
+            fetchCalls++;
+            requestedBody = new Uint8Array(await new Response(init?.body).arrayBuffer());
+            return new Response("ok");
+        };
+        try {
+            const request = new types.OutgoingRequest(new types.Fields());
+            request.setMethod({ tag: "post" });
+            request.setScheme({ tag: "HTTPS" });
+            request.setAuthority("example.com");
+            request.setPathWithQuery("/");
+            const body = request.body();
+            const stream = body.write();
+
+            const response = outgoingHandler.handle(request, undefined);
+            await Promise.resolve();
+            assert.strictEqual(fetchCalls, 0);
+
+            stream.checkWrite();
+            stream.write(new TextEncoder().encode("complete body"));
+            types.OutgoingBody.finish(body, undefined);
+            await response.subscribe().block();
+
+            assert.strictEqual(fetchCalls, 1);
+            assert.strictEqual(new TextDecoder().decode(requestedBody), "complete body");
+            throws(
+                () => stream.write(new Uint8Array([0])),
+                ({ tag }) => tag === "closed",
+            );
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     test("browser CLI factories isolate configuration and streams", async () => {
         const { createCli } = await import("../src/browser/cli.js");
         const firstWrites: number[] = [];

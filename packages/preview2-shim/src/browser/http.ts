@@ -209,6 +209,8 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
     #outputStream: any = null;
     #chunks: Uint8Array[] = [];
     #finished = false;
+    #resolveFinished!: () => void;
+    #finishedPromise = new Promise<void>((resolve) => (this.#resolveFinished = resolve));
 
     write() {
         const outputStream = this.#outputStream;
@@ -227,23 +229,33 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
             throw { tag: "internal-error", val: "body already finished" };
         }
         body.#finished = true;
+        body.#resolveFinished();
     }
 
     static _bodyData(outgoingBody: OutgoingBody): Uint8Array | null {
-        if (outgoingBody.#chunks.length === 0) {
+        return outgoingBody.#bodyData();
+    }
+
+    #bodyData(): Uint8Array | null {
+        if (this.#chunks.length === 0) {
             return null;
         }
         let totalLen = 0;
-        for (const chunk of outgoingBody.#chunks) {
+        for (const chunk of this.#chunks) {
             totalLen += chunk.byteLength;
         }
         const result = new Uint8Array(totalLen);
         let offset = 0;
-        for (const chunk of outgoingBody.#chunks) {
+        for (const chunk of this.#chunks) {
             result.set(chunk, offset);
             offset += chunk.byteLength;
         }
         return result;
+    }
+
+    static async _finishedBodyData(outgoingBody: OutgoingBody): Promise<Uint8Array | null> {
+        await outgoingBody.#finishedPromise;
+        return outgoingBody.#bodyData();
     }
 
     static _create(): OutgoingBody {
@@ -251,6 +263,9 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
         const chunks = outgoingBody.#chunks;
         outgoingBody.#outputStream = outputStreamCreate({
             write(buf: Uint8Array): void {
+                if (outgoingBody.#finished) {
+                    throw { tag: "closed" };
+                }
                 chunks.push(new Uint8Array(buf));
             },
             blockingFlush() {},
@@ -269,6 +284,9 @@ delete OutgoingBody._create;
 const outgoingBodyData = OutgoingBody._bodyData;
 // @ts-expect-error - Deleting static method
 delete OutgoingBody._bodyData;
+const outgoingBodyFinishedData = OutgoingBody._finishedBodyData;
+// @ts-expect-error - Deleting static method
+delete OutgoingBody._finishedBodyData;
 
 type Method = TypesNamespace.Method;
 type Scheme = TypesNamespace.Scheme;
@@ -372,7 +390,11 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
             }
         }
 
-        const bodyData = outgoingBodyData(request.#body);
+        // Fetch request streams are not consistently supported by browsers. Buffer the body,
+        // but do not dispatch until the guest has explicitly finished it.
+        const bodyData = request.#bodyRequested
+            ? outgoingBodyFinishedData(request.#body)
+            : Promise.resolve(null);
 
         let timeoutMs = Number(DEFAULT_HTTP_TIMEOUT_NS / 1_000_000n);
         if (options) {
@@ -797,7 +819,7 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
         url: string,
         method: string,
         headers: Headers,
-        bodyData: Uint8Array | null,
+        bodyData: Promise<Uint8Array | null>,
         timeoutMs: number,
     ): FutureIncomingResponse {
         const future = new FutureIncomingResponse();
@@ -809,41 +831,44 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
             timer = setTimeout(() => controller.abort(), timeoutMs);
         }
 
-        const init: RequestInit = {
-            method,
-            headers,
-            signal: controller.signal,
-        };
-        if (bodyData && method !== "GET" && method !== "HEAD") {
-            init.body = bodyData as BodyInit;
-        }
-
-        future.#promise = fetch(url, init).then(
-            (response) => {
-                if (timer) {
-                    clearTimeout(timer);
+        future.#promise = bodyData
+            .then((bodyData) => {
+                const init: RequestInit = {
+                    method,
+                    headers,
+                    signal: controller.signal,
+                };
+                if (bodyData && method !== "GET" && method !== "HEAD") {
+                    init.body = bodyData as BodyInit;
                 }
-                future.#result = {
-                    tag: "ok",
-                    val: {
+                return globalThis.fetch(url, init);
+            })
+            .then(
+                (response) => {
+                    if (timer) {
+                        clearTimeout(timer);
+                    }
+                    future.#result = {
                         tag: "ok",
-                        val: incomingResponseCreate(response),
-                    },
-                };
-            },
-            (err) => {
-                if (timer) {
-                    clearTimeout(timer);
-                }
-                future.#result = {
-                    tag: "ok",
-                    val: {
-                        tag: "err",
-                        val: mapFetchError(err),
-                    },
-                };
-            },
-        );
+                        val: {
+                            tag: "ok",
+                            val: incomingResponseCreate(response),
+                        },
+                    };
+                },
+                (err) => {
+                    if (timer) {
+                        clearTimeout(timer);
+                    }
+                    future.#result = {
+                        tag: "ok",
+                        val: {
+                            tag: "err",
+                            val: mapFetchError(err),
+                        },
+                    };
+                },
+            );
 
         return future;
     }
