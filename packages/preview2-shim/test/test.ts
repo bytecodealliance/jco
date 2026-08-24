@@ -856,6 +856,19 @@ suite("Instantiation", () => {
         assert.strictEqual(imports["wasi:filesystem/types"], filesystem.types);
         assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
     });
+
+    test("WASIShim does not reinterpret custom filesystem preopens", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const { filesystem } = await import("@bytecodealliance/preview2-shim");
+        assert.throws(
+            () =>
+                new WASIShim({
+                    filesystem,
+                    sandbox: { preopens: { "/guest": "/host" } },
+                }),
+            /provide its preopens namespace directly/,
+        );
+    });
 });
 
 suite("Sandboxing", () => {
