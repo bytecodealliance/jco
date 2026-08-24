@@ -1338,6 +1338,30 @@ suite("Browser filesystem", () => {
         assert.strictEqual(root.statAt({}, "empty/child").type, "regular-file");
     });
 
+    test("shares identity and metadata across descriptors and hard links", async () => {
+        const { _setFileData, preopens } = await import("../src/browser/filesystem.js");
+        _setFileData({ dir: { file: { source: "value" } } });
+        const [[root]] = preopens.getDirectories();
+        const first = root.openAt({}, "file", {}, { read: true, write: true });
+        const second = root.openAt({}, "file", {}, { read: true, write: true });
+
+        assert.strictEqual(first.isSameObject(second), true);
+        assert.deepStrictEqual(root.metadataHashAt({}, "file"), first.metadataHash());
+        const before = first.metadataHash();
+        second.write(new Uint8Array([1]), 0n);
+        assert.notDeepEqual(first.metadataHash(), before);
+        assert.deepStrictEqual(first.metadataHash(), second.metadataHash());
+
+        root.linkAt({}, "file", root, "link");
+        const link = root.openAt({}, "link", {}, { read: true });
+        assert.strictEqual(first.isSameObject(link), true);
+        assert.strictEqual(first.stat().linkCount, 2n);
+        assert.strictEqual(link.stat().linkCount, 2n);
+        root.unlinkFileAt("file");
+        assert.strictEqual(link.stat().linkCount, 1n);
+        assert.deepStrictEqual(root.metadataHashAt({}, "link"), link.metadataHash());
+    });
+
     test("createFilesystem isolates explicitly selected in-memory roots", async () => {
         const { createFilesystem, InMemoryFilesystemAdapter } =
             await import("../src/browser/filesystem.js");
