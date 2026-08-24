@@ -144,7 +144,14 @@ export class WASIShim {
         this.#io = shims?.io ?? wasi.io;
         this.#random = shims?.random ?? wasi.random;
         this.#clocks = shims?.clocks ?? wasi.clocks;
-        this.#sockets = shims?.sockets ?? wasi.sockets;
+        const defaultSockets = wasi.sockets as any;
+        this.#sockets =
+            shims?.sockets ??
+            (defaultSockets.createSockets
+                ? defaultSockets.createSockets({
+                      enableNetwork: shims?.sandbox?.enableNetwork,
+                  })
+                : defaultSockets);
         this.#http = shims?.http ?? wasi.http;
 
         // Extract sandbox options
@@ -158,20 +165,6 @@ export class WASIShim {
         // Create isolated environment if env or args are configured
         if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
             this.#environment = createIsolatedEnvironment(sandbox?.env, sandbox?.args, this.#cli);
-        }
-
-        // Apply network restrictions if disabled
-        if (sandbox?.enableNetwork === false) {
-            // Use the sockets module's built-in deny functions
-            if (this.#sockets._denyTcp) {
-                this.#sockets._denyTcp();
-            }
-            if (this.#sockets._denyUdp) {
-                this.#sockets._denyUdp();
-            }
-            if (this.#sockets._denyDnsLookup) {
-                this.#sockets._denyDnsLookup();
-            }
         }
     }
 

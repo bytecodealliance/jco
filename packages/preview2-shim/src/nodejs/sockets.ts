@@ -585,3 +585,28 @@ export const udp: typeof UdpNamespace = {
     OutgoingDatagramStream,
     IncomingDatagramStream,
 };
+
+export interface SocketsConfig {
+    enableNetwork?: boolean;
+}
+
+/** Create socket namespaces with an instance-local network capability. */
+export function createSockets(config: SocketsConfig = {}) {
+    const localNetwork = new Network();
+    if (config.enableNetwork === false) {
+        _denyDnsLookup(localNetwork);
+        _denyTcp(localNetwork);
+        _denyUdp(localNetwork);
+    }
+    return {
+        instanceNetwork: {
+            instanceNetwork: () => localNetwork,
+        } as typeof InstanceNetworkNamespace,
+        network,
+        ipNameLookup,
+        tcpCreateSocket,
+        tcp,
+        udpCreateSocket,
+        udp,
+    };
+}
