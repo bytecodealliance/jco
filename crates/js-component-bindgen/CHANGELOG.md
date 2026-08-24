@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.8.1] - 2026-08-24
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ preserve task context across core helper calls by @vados-cosmonic
+
+- _(bindgen)_ run resource destructors in guest task context by @vados-cosmonic
+
+
+
+
 ## [2.8.0] - 2026-08-23
 
 ### 🚀 Features
