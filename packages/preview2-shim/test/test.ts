@@ -1283,6 +1283,61 @@ suite("Browser filesystem", () => {
         assert.strictEqual(error, "exist");
     });
 
+    test("renames entries without deleting or corrupting the tree", async () => {
+        const { _setFileData, preopens } = await import("../src/browser/filesystem.js");
+        _setFileData({
+            dir: {
+                file: { source: "source" },
+                target: { source: "target" },
+                directory: { dir: { child: { source: "child" } } },
+                empty: { dir: {} },
+                nonempty: { dir: { value: { source: "value" } } },
+            },
+        });
+        const [[root]] = preopens.getDirectories();
+        const thrownValue = (fn: () => void) => {
+            try {
+                fn();
+            } catch (error) {
+                return error;
+            }
+            assert.fail("operation should have thrown");
+        };
+
+        root.renameAt("file", root, "file");
+        assert.strictEqual(root.statAt({}, "file").type, "regular-file");
+
+        root.renameAt("file", root, "target");
+        assert.strictEqual(root.statAt({}, "target").size, 6n);
+        assert.strictEqual(
+            thrownValue(() => root.statAt({}, "file")),
+            "no-entry",
+        );
+
+        assert.strictEqual(
+            thrownValue(() => root.renameAt("target", root, "empty")),
+            "is-directory",
+        );
+        assert.strictEqual(
+            thrownValue(() => root.renameAt("directory", root, "target")),
+            "not-directory",
+        );
+        assert.strictEqual(
+            thrownValue(() => root.renameAt("directory", root, "nonempty")),
+            "not-empty",
+        );
+
+        const directory = root.openAt({}, "directory", { directory: true }, {});
+        assert.strictEqual(
+            thrownValue(() => root.renameAt("directory", directory, "descendant")),
+            "invalid",
+        );
+        assert.strictEqual(root.statAt({}, "directory/child").type, "regular-file");
+
+        root.renameAt("directory", root, "empty");
+        assert.strictEqual(root.statAt({}, "empty/child").type, "regular-file");
+    });
+
     test("createFilesystem isolates explicitly selected in-memory roots", async () => {
         const { createFilesystem, InMemoryFilesystemAdapter } =
             await import("../src/browser/filesystem.js");
