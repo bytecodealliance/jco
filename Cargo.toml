@@ -5,14 +5,14 @@ default-members = [
   "crates/js-component-bindgen-component",
   "crates/wasm-tools-component",
   "crates/xtask",
-  "crates/jco",
+  "crates/jco-tests",
 ]
 members = [
   "crates/js-component-bindgen",
   "crates/js-component-bindgen-component",
   "crates/wasm-tools-component",
   "crates/xtask",
-  "crates/jco",
+  "crates/jco-tests",
   "packages/jco-node-fs",
 ]
 
