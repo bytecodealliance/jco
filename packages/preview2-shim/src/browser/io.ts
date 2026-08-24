@@ -407,7 +407,20 @@ function pollList(list: Pollable[]): Uint32Array | Promise<Uint32Array> {
         }
     }
     if (ready.length > 0) {
-        return new Uint32Array(ready);
+        // Browser guests commonly use an immediately-ready timer alongside an
+        // asynchronous Web API pollable. Yield a host task so Fetch, timers, and
+        // other event sources can progress instead of starving in a sync loop.
+        return new Promise((resolve) =>
+            setTimeout(() => {
+                const result: number[] = [];
+                for (let i = 0; i < list.length; i++) {
+                    if (list[i].ready()) {
+                        result.push(i);
+                    }
+                }
+                resolve(new Uint32Array(result));
+            }, 0),
+        );
     }
     // None ready synchronously. Wait for the first to resolve via Promise.race,
     // then sweep for any others that became ready concurrently.

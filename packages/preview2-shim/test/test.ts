@@ -1473,7 +1473,7 @@ suite("Browser shim guards", () => {
             wait: () => new Promise<void>((resolve) => (resolveSecond = resolve)),
         });
 
-        assert.deepStrictEqual(poll.poll([first, second, first]), new Uint32Array([1]));
+        assert.deepStrictEqual(await poll.poll([first, second, first]), new Uint32Array([1]));
         secondReady = false;
         const next = poll.poll([first, second, first]);
         firstReady = true;
