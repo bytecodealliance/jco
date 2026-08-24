@@ -166,6 +166,28 @@ function containsEntry(root: FileDataEntry, target: FileDataEntry): boolean {
 // Keep spare capacity separate so FileDataEntry.source always reflects the logical file size.
 const fileWriteBuffers = new WeakMap<FileDataEntry, Uint8Array>();
 
+interface EntryMetadata {
+    id: bigint;
+    version: bigint;
+    linkCount: bigint;
+}
+
+let nextEntryId = 0n;
+const entryMetadata = new WeakMap<FileDataEntry, EntryMetadata>();
+
+function metadata(entry: FileDataEntry): EntryMetadata {
+    let value = entryMetadata.get(entry);
+    if (!value) {
+        value = { id: ++nextEntryId, version: 0n, linkCount: 1n };
+        entryMetadata.set(entry, value);
+    }
+    return value;
+}
+
+function touch(entry: FileDataEntry): void {
+    metadata(entry).version++;
+}
+
 function getFileWriteBuffer(
     entry: FileDataEntry,
     source: Uint8Array,
@@ -215,7 +237,6 @@ delete DirectoryEntryStream._create;
 class Descriptor implements TypesNamespace.Descriptor {
     #stream: any;
     #entry!: FileDataEntry;
-    #mtime = 0;
     #flags: TypesNamespace.DescriptorFlags = {
         read: true,
         write: true,
@@ -271,6 +292,7 @@ class Descriptor implements TypesNamespace.Descriptor {
                 buffer.set(buf, offset);
                 entry.source = buffer.subarray(0, Math.max(source.byteLength, end));
                 offset = end;
+                touch(entry);
             },
         }) as IOutputStream;
     }
@@ -313,12 +335,15 @@ class Descriptor implements TypesNamespace.Descriptor {
         const resized = new Uint8Array(length);
         resized.set(source.subarray(0, length));
         this.#entry.source = resized;
-        this.#mtime++;
+        touch(this.#entry);
     }
 
-    setTimes(_dataAccessTimestamp: any, dataModificationTimestamp: any) {
-        if (dataModificationTimestamp?.tag !== "no-change") {
-            this.#mtime++;
+    setTimes(dataAccessTimestamp: any, dataModificationTimestamp: any) {
+        if (
+            dataAccessTimestamp?.tag !== "no-change" ||
+            dataModificationTimestamp?.tag !== "no-change"
+        ) {
+            touch(this.#entry);
         }
     }
 
@@ -347,7 +372,7 @@ class Descriptor implements TypesNamespace.Descriptor {
         target.set(source);
         target.set(buffer, off);
         this.#entry.source = target;
-        this.#mtime++;
+        touch(this.#entry);
         return BigInt(buffer.byteLength);
     }
 
@@ -373,6 +398,7 @@ class Descriptor implements TypesNamespace.Descriptor {
         }
         const [parent, name] = getParentEntry(this.#entry, path);
         parent.dir![name] = { dir: {} };
+        touch(parent);
     }
 
     stat() {
@@ -387,7 +413,7 @@ class Descriptor implements TypesNamespace.Descriptor {
         }
         return {
             type,
-            linkCount: 0n,
+            linkCount: metadata(this.#entry).linkCount,
             size,
             dataAccessTimestamp: timeZero,
             dataModificationTimestamp: timeZero,
@@ -408,7 +434,7 @@ class Descriptor implements TypesNamespace.Descriptor {
         }
         return {
             type,
-            linkCount: 0n,
+            linkCount: metadata(entry).linkCount,
             size,
             dataAccessTimestamp: timeZero,
             dataModificationTimestamp: timeZero,
@@ -422,7 +448,7 @@ class Descriptor implements TypesNamespace.Descriptor {
             // Metadata is currently descriptor-local; touching the entry makes
             // the mutation visible through metadata hashes on newly opened handles.
             fileWriteBuffers.delete(entry);
-            this.#mtime++;
+            touch(entry);
         }
     }
 
@@ -444,6 +470,8 @@ class Descriptor implements TypesNamespace.Descriptor {
             throw "exist";
         }
         newParent.dir![newName] = entry;
+        metadata(entry).linkCount++;
+        touch(newParent);
     }
 
     openAt(
@@ -466,6 +494,7 @@ class Descriptor implements TypesNamespace.Descriptor {
             childEntry = parent.dir![name] = openFlags.directory
                 ? { dir: {} }
                 : { source: new Uint8Array() };
+            touch(parent);
         }
         if (openFlags.directory && !childEntry.dir) {
             throw "not-directory";
@@ -475,6 +504,7 @@ class Descriptor implements TypesNamespace.Descriptor {
                 throw "is-directory";
             }
             childEntry.source = new Uint8Array();
+            touch(childEntry);
         }
         return descriptorCreate(childEntry);
     }
@@ -496,6 +526,8 @@ class Descriptor implements TypesNamespace.Descriptor {
             throw "not-empty";
         }
         delete parent.dir![name];
+        metadata(entry).linkCount--;
+        touch(parent);
     }
 
     renameAt(oldPath: string, newDescriptor: TypesNamespace.Descriptor, newPath: string) {
@@ -525,9 +557,14 @@ class Descriptor implements TypesNamespace.Descriptor {
             if (replaced.dir && Object.keys(replaced.dir).length > 0) {
                 throw "not-empty";
             }
+            metadata(replaced).linkCount--;
         }
         newParent.dir![newName] = entry;
         delete oldParent.dir![oldName];
+        touch(oldParent);
+        if (newParent !== oldParent) {
+            touch(newParent);
+        }
     }
 
     symlinkAt() {
@@ -544,20 +581,22 @@ class Descriptor implements TypesNamespace.Descriptor {
             throw "is-directory";
         }
         delete parent.dir![name];
+        metadata(entry).linkCount--;
+        touch(parent);
     }
 
     isSameObject(other: TypesNamespace.Descriptor) {
-        return other === this;
+        return descriptorGetEntry(other as Descriptor) === this.#entry;
     }
 
     metadataHash() {
-        let upper = 0n;
-        upper += BigInt(this.#mtime);
-        return { upper, lower: 0n };
+        const value = metadata(this.#entry);
+        return { upper: value.id, lower: value.version };
     }
 
-    metadataHashAt(_pathFlags: any, _path: string) {
-        return this.metadataHash();
+    metadataHashAt(_pathFlags: any, path: string) {
+        const value = metadata(getChildEntry(this.#entry, path));
+        return { upper: value.id, lower: value.version };
     }
 }
 
