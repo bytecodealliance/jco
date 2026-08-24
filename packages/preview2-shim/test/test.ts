@@ -1,5 +1,5 @@
 import { env } from "node:process";
-import { throws } from "node:assert";
+import { rejects, throws } from "node:assert";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { suite, test, assert, beforeEach, afterEach } from "vitest";
@@ -1585,6 +1585,35 @@ suite("Browser shim guards", () => {
         );
         assert.strictEqual(response.status, 201);
         assert.strictEqual(await response.text(), "created");
+    });
+
+    test("browser incoming HTTP rejects an unset response outparam", async () => {
+        const { handleIncomingRequest } = await import("../src/browser/http.js");
+        await rejects(
+            handleIncomingRequest(new Request("https://example.com/"), () => {}),
+            /without setting its response outparam/,
+        );
+    });
+
+    test("browser incoming HTTP exposes an injectable handler namespace", async () => {
+        const { createIncomingHandler, types } = await import("../src/browser/http.js");
+        let called = false;
+        const handler = createIncomingHandler((_request, responseOut) => {
+            called = true;
+            types.ResponseOutparam.set(responseOut, {
+                tag: "err",
+                val: { tag: "internal-error", val: "rejected" },
+            });
+        });
+        const response = await handleIncomingViaNamespace(handler);
+        assert.strictEqual(called, true);
+        assert.strictEqual(response.status, 500);
+        assert.match(await response.text(), /internal-error.*rejected/);
+
+        async function handleIncomingViaNamespace(namespace: typeof handler) {
+            const { handleIncomingRequest } = await import("../src/browser/http.js");
+            return handleIncomingRequest(new Request("https://example.com/"), namespace.handle);
+        }
     });
 
     test("browser outgoing HTTP waits for the complete request body", async () => {

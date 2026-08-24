@@ -223,6 +223,7 @@ export class WASIShim {
         obj[`wasi:clocks/wall-clock${versionSuffix}`] = this.#clocks.wallClock;
 
         obj[`wasi:http/types${versionSuffix}`] = this.#http.types;
+        obj[`wasi:http/incoming-handler${versionSuffix}`] = this.#http.incomingHandler;
         obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
 
         return obj as WASIImportObject;

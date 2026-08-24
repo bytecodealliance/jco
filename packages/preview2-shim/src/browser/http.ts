@@ -714,12 +714,15 @@ class OutgoingResponse implements TypesNamespace.OutgoingResponse {
         this.#bodyRequested = true;
         return this.#body;
     }
-    static _toResponse(response: OutgoingResponse) {
+    static async _toResponse(response: OutgoingResponse) {
         const headers = new Headers();
         for (const [name, value] of response.#headers.entries()) {
             headers.append(name, utf8Decoder.decode(value));
         }
-        return new Response(outgoingBodyData(response.#body) as BodyInit | null, {
+        const body = response.#bodyRequested
+            ? await outgoingBodyFinishedData(response.#body)
+            : null;
+        return new Response(body as BodyInit | null, {
             status: response.#status,
             headers,
         });
@@ -732,6 +735,7 @@ delete OutgoingResponse._toResponse;
 class ResponseOutparam implements TypesNamespace.ResponseOutparam {
     #used = false;
     #resolve!: (response: Response) => void;
+    #reject!: (cause: unknown) => void;
 
     static set(
         param: ResponseOutparam,
@@ -742,21 +746,38 @@ class ResponseOutparam implements TypesNamespace.ResponseOutparam {
         }
         param.#used = true;
         if (response.tag === "ok") {
-            param.#resolve(outgoingResponseToResponse(response.val as OutgoingResponse));
+            void outgoingResponseToResponse(response.val as OutgoingResponse).then(
+                param.#resolve,
+                param.#reject,
+            );
         } else {
-            param.#resolve(new Response("WASI HTTP handler error", { status: 500 }));
+            param.#resolve(
+                new Response(`WASI HTTP handler error: ${JSON.stringify(response.val)}`, {
+                    status: 500,
+                }),
+            );
         }
+    }
+
+    static _isUsed(param: ResponseOutparam): boolean {
+        return param.#used;
     }
 
     static _create(): [ResponseOutparam, Promise<Response>] {
         const param = new ResponseOutparam();
-        const response = new Promise<Response>((resolve) => (param.#resolve = resolve));
+        const response = new Promise<Response>((resolve, reject) => {
+            param.#resolve = resolve;
+            param.#reject = reject;
+        });
         return [param, response];
     }
 }
 const responseOutparamCreate = ResponseOutparam._create;
 // @ts-expect-error - Deleting static method
 delete ResponseOutparam._create;
+const responseOutparamIsUsed = ResponseOutparam._isUsed;
+// @ts-expect-error - Deleting static method
+delete ResponseOutparam._isUsed;
 
 class FutureTrailers implements TypesNamespace.FutureTrailers {
     #requested = false;
@@ -923,6 +944,13 @@ export type BrowserIncomingHandler = (
     responseOut: TypesNamespace.ResponseOutparam,
 ) => void | Promise<void>;
 
+/** Create a `wasi:http/incoming-handler` namespace backed by a host callback. */
+export function createIncomingHandler(
+    handler: BrowserIncomingHandler,
+): typeof IncomingHandlerNamespace {
+    return { handle: handler } as typeof IncomingHandlerNamespace;
+}
+
 /** Translate a browser Request through a host-provided WASI incoming handler. */
 export async function handleIncomingRequest(
     request: Request,
@@ -930,6 +958,9 @@ export async function handleIncomingRequest(
 ): Promise<Response> {
     const [responseOut, response] = responseOutparamCreate();
     await handler(incomingRequestCreate(request), responseOut);
+    if (!responseOutparamIsUsed(responseOut)) {
+        throw new Error("WASI HTTP handler returned without setting its response outparam");
+    }
     return response;
 }
 
