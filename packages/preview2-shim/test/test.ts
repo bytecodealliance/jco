@@ -1010,6 +1010,28 @@ suite("Sandboxing", () => {
         );
     });
 
+    test("WASIShim network capabilities are isolated per instance", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const restricted = new WASIShim({ sandbox: { enableNetwork: false } }).getImportObject();
+        const allowed = new WASIShim({ sandbox: { enableNetwork: true } }).getImportObject();
+        const restrictedNetwork = restricted["wasi:sockets/instance-network"].instanceNetwork();
+        const allowedNetwork = allowed["wasi:sockets/instance-network"].instanceNetwork();
+        assert.notStrictEqual(restrictedNetwork, allowedNetwork);
+
+        const restrictedSocket =
+            restricted["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
+        const allowedSocket = allowed["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
+        const address = {
+            tag: "ipv4" as const,
+            val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 0 },
+        };
+        assert.throws(
+            () => restrictedSocket.startBind(restrictedNetwork, address),
+            /access-denied/,
+        );
+        assert.doesNotThrow(() => allowedSocket.startBind(allowedNetwork, address));
+    });
+
     test("Fully sandboxed WASIShim", async () => {
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
