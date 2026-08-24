@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.12.0] - 2026-08-24
+
+### 🚀 Features
+
+- _(transpile)_ support wit unpacking from components by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ enable upstream WAST execution by @vados-cosmonic
+
+- _(transpile)_ cover may-leave enforcement by @vados-cosmonic in #1942
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update preview3-shim, preview3-shim by @vados-cosmonic
+
 ## [0.11.0] - 2026-08-21
 
 ### 🚀 Features
