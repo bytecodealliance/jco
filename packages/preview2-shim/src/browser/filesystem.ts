@@ -93,11 +93,7 @@ function coerceToSafeIntegerNumber(obj: number | bigint): number {
     return n;
 }
 
-function getChildEntry(
-    parentEntry: FileDataEntry,
-    subpath: string,
-    openFlags: OpenFlags,
-): FileDataEntry {
+function getChildEntry(parentEntry: FileDataEntry, subpath: string): FileDataEntry {
     if (subpath === "." && _rootPreopen && descriptorGetEntry(_rootPreopen[0]) === parentEntry) {
         subpath = _getCwd();
         if (subpath.startsWith("/") && subpath !== "/") {
@@ -116,12 +112,11 @@ function getChildEntry(
             throw "no-entry";
         }
         if (segment === "." || segment === "") {
-        } else if (!entry.dir[segment] && openFlags.create) {
-            entry = entry.dir[segment] = openFlags.directory
-                ? { dir: {} }
-                : { source: new Uint8Array([]) };
         } else {
             entry = entry.dir[segment];
+            if (!entry) {
+                throw "no-entry";
+            }
         }
         subpath = subpath.slice(segmentIdx + 1);
     } while (segmentIdx !== -1);
@@ -361,13 +356,16 @@ class Descriptor implements TypesNamespace.Descriptor {
     sync() {}
 
     createDirectoryAt(path: string) {
-        const entry = getChildEntry(this.#entry, path, {
-            create: true,
-            directory: true,
-        });
-        if (entry.source) {
+        try {
+            getChildEntry(this.#entry, path);
             throw "exist";
+        } catch (error) {
+            if (error !== "no-entry") {
+                throw error;
+            }
         }
+        const [parent, name] = getParentEntry(this.#entry, path);
+        parent.dir![name] = { dir: {} };
     }
 
     stat() {
@@ -391,10 +389,7 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
 
     statAt(_pathFlags: PathFlags, path: string) {
-        const entry = getChildEntry(this.#entry, path, {
-            create: false,
-            directory: false,
-        });
+        const entry = getChildEntry(this.#entry, path);
         let type: TypesNamespace.DescriptorType = "unknown";
         let size = 0n;
         if (entry.source) {
@@ -415,7 +410,7 @@ class Descriptor implements TypesNamespace.Descriptor {
     }
 
     setTimesAt(_pathFlags: PathFlags, path: string, _atime: any, mtime: any) {
-        const entry = getChildEntry(this.#entry, path, { create: false, directory: false });
+        const entry = getChildEntry(this.#entry, path);
         if (mtime?.tag !== "no-change") {
             // Metadata is currently descriptor-local; touching the entry makes
             // the mutation visible through metadata hashes on newly opened handles.
@@ -430,7 +425,7 @@ class Descriptor implements TypesNamespace.Descriptor {
         newDescriptor: TypesNamespace.Descriptor,
         newPath: string,
     ) {
-        const entry = getChildEntry(this.#entry, oldPath, { create: false, directory: false });
+        const entry = getChildEntry(this.#entry, oldPath);
         if (entry.dir) {
             throw "not-permitted";
         }
@@ -452,10 +447,7 @@ class Descriptor implements TypesNamespace.Descriptor {
     ) {
         let childEntry: FileDataEntry;
         try {
-            childEntry = getChildEntry(this.#entry, path, {
-                create: false,
-                directory: false,
-            });
+            childEntry = getChildEntry(this.#entry, path);
             if (openFlags.create && openFlags.exclusive) {
                 throw "exist";
             }
@@ -463,7 +455,10 @@ class Descriptor implements TypesNamespace.Descriptor {
             if (error !== "no-entry" || !openFlags.create) {
                 throw error;
             }
-            childEntry = getChildEntry(this.#entry, path, openFlags);
+            const [parent, name] = getParentEntry(this.#entry, path);
+            childEntry = parent.dir![name] = openFlags.directory
+                ? { dir: {} }
+                : { source: new Uint8Array() };
         }
         if (openFlags.directory && !childEntry.dir) {
             throw "not-directory";
