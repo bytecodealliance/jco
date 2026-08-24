@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.32.0] - 2026-08-24
+
+### 🚀 Features
+
+- _(jco)_ prewarm isolated request workers by @vados-cosmonic
+
+- _(jco)_ isolate served requests by @vados-cosmonic
+
+- _(jco)_ support pulling WIT OCI during scaffold by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ unskip scaffold OCI WIT tests by @vados-cosmonic
+
+- _(jco)_ compare larger worker pool by @vados-cosmonic
+
+- _(jco)_ compare serve isolation modes by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.12.0 by @vados-cosmonic
+
+- _(jco)_ update p2-shim to v0.22.0 by @vados-cosmonic
+
+- _(jco)_ remove unused preview3-shim dep by @vados-cosmonic in #1965
+
 ## [1.31.0] - 2026-08-21
 
 ### 🚀 Features
