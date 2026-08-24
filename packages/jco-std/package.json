@@ -111,7 +111,7 @@
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.22.0",
     "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
-    "@bytecodealliance/jco-transpile": "^0.6.0",
+    "@bytecodealliance/jco-transpile": "^0.12.1",
     "@bytecodealliance/preview2-shim": "^0.21.0",
     "@types/which": "^3.0.4",
     "hono": "^4.12.34",
