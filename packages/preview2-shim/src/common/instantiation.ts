@@ -134,16 +134,22 @@ export class WASIShim {
                   })
                 : defaultCli);
         const defaultFilesystem = wasi.filesystem as any;
-        if (shims?.filesystem && sandbox?.preopens !== undefined) {
-            throw new TypeError(
-                "sandbox.preopens cannot configure an application-provided filesystem; provide its preopens namespace directly",
-            );
-        }
         if (shims?.browserFilesystem && !defaultFilesystem.createFilesystem) {
             throw new TypeError("the selected filesystem does not support browser adapters");
         }
         this.#filesystem = shims?.filesystem ?? defaultFilesystem;
-        if (shims?.browserFilesystem) {
+        if (shims?.filesystem && sandbox?.preopens !== undefined) {
+            if (!shims.filesystem.createPreopens) {
+                throw new TypeError(
+                    "an application-provided filesystem must implement createPreopens to use sandbox.preopens",
+                );
+            }
+            this.#filesystem = {
+                types: shims.filesystem.types,
+                preopens: shims.filesystem.createPreopens(sandbox.preopens),
+                dispose: shims.filesystem.dispose?.bind(shims.filesystem),
+            };
+        } else if (shims?.browserFilesystem) {
             this.#filesystem = defaultFilesystem.createFilesystem({
                 adapter: shims.browserFilesystem.adapter,
                 preopens: sandbox?.preopens ?? shims.browserFilesystem.preopens,

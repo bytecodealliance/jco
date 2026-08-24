@@ -207,8 +207,9 @@ const component = await instantiate(loader, sandboxedShim.getImportObject());
   explicitly injects filesystem namespaces or selects the ephemeral file-data adapter.
 - `sandbox.preopens` maps guest paths to Node.js host paths on Node.js. With
   `browserFilesystem`, the same option maps guest paths to capabilities understood by its adapter
-  and overrides `browserFilesystem.preopens`. A fully custom `filesystem` namespace owns its
-  preopens directly and cannot be combined with `sandbox.preopens`.
+  and overrides `browserFilesystem.preopens`. A custom `filesystem` can implement
+  `createPreopens(preopens)` to interpret the provided properties and return its own
+  `wasi:filesystem/preopens` namespace. The shim passes those properties through unchanged.
 - Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
   Multiple instances with different configurations will not affect each other.
 - The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and

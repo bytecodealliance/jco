@@ -857,7 +857,32 @@ suite("Instantiation", () => {
         assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
     });
 
-    test("WASIShim does not reinterpret custom filesystem preopens", async () => {
+    test("WASIShim delegates sandbox preopens to a custom filesystem", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const { filesystem } = await import("@bytecodealliance/preview2-shim");
+        const capability = { root: "application-owned" };
+        const configuredPreopens = { "/guest": capability };
+        const customPreopens = { getDirectories: () => [] };
+        let receivedPreopens: Record<string, unknown> | undefined;
+        const shim = new WASIShim({
+            filesystem: {
+                types: filesystem.types,
+                preopens: { getDirectories: () => assert.fail("default preopens used") },
+                createPreopens(preopens) {
+                    receivedPreopens = preopens;
+                    return customPreopens;
+                },
+            },
+            sandbox: { preopens: configuredPreopens },
+        });
+        const imports = shim.getImportObject();
+        assert.strictEqual(receivedPreopens, configuredPreopens);
+        assert.strictEqual(receivedPreopens["/guest"], capability);
+        assert.strictEqual(imports["wasi:filesystem/types"], filesystem.types);
+        assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
+    });
+
+    test("WASIShim requires custom filesystems to interpret sandbox preopens", async () => {
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
         const { filesystem } = await import("@bytecodealliance/preview2-shim");
         assert.throws(
@@ -866,7 +891,7 @@ suite("Instantiation", () => {
                     filesystem,
                     sandbox: { preopens: { "/guest": "/host" } },
                 }),
-            /provide its preopens namespace directly/,
+            /must implement createPreopens/,
         );
     });
 });

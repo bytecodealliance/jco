@@ -66,8 +66,8 @@ type AppendVersion<Key extends string | number | symbol, Version extends string>
  * Sandbox configuration options for WASIShim
  */
 interface SandboxConfig {
-    /** Node.js filesystem preopens mapping (virtual path -> host path). */
-    preopens?: Record<string, string>;
+    /** Filesystem-specific preopens mapping (virtual path -> host path or capability). */
+    preopens?: Record<string, unknown>;
     /** Environment variables visible to the guest */
     env?: Record<string, string>;
     /** Command-line arguments */
@@ -84,6 +84,10 @@ interface SandboxConfig {
 export interface FilesystemShim {
     preopens: typeof import('./interfaces/wasi-filesystem-preopens.d.ts');
     types: typeof import('./interfaces/wasi-filesystem-types.d.ts');
+    /** Interpret sandbox preopen properties and return this filesystem's preopens namespace. */
+    createPreopens?(
+        preopens: Record<string, unknown>,
+    ): typeof import('./interfaces/wasi-filesystem-preopens.d.ts');
     dispose?(): void;
 }
 
