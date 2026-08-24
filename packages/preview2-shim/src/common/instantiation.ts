@@ -1,5 +1,4 @@
 import * as wasi from "@bytecodealliance/preview2-shim";
-import { types, _createPreopenDescriptor } from "@bytecodealliance/preview2-shim/filesystem";
 import type {
     WASIShimConfig,
     GetImportObjectArgs,
@@ -102,8 +101,6 @@ export class WASIShim {
     #sockets: any;
     /** Object that confirms to the shim interface for `wasi:http` */
     #http: any;
-    /** Isolated preopens for this instance */
-    #preopens: any;
     /** Isolated environment for this instance */
     #environment: any;
 
@@ -115,6 +112,7 @@ export class WASIShim {
     constructor(config?: WASIShimConfig) {
         // Support both old 'shims' parameter name and new 'config' style
         const shims = config;
+        const sandbox = shims?.sandbox;
 
         const defaultCli = wasi.cli as any;
         this.#cli =
@@ -136,11 +134,28 @@ export class WASIShim {
                   })
                 : defaultCli);
         const defaultFilesystem = wasi.filesystem as any;
-        this.#filesystem =
-            shims?.filesystem ??
-            (shims?.browserFilesystem && defaultFilesystem.createFilesystem
-                ? defaultFilesystem.createFilesystem(shims.browserFilesystem)
-                : defaultFilesystem);
+        if (shims?.filesystem && sandbox?.preopens !== undefined) {
+            throw new TypeError(
+                "sandbox.preopens cannot configure an application-provided filesystem; provide its preopens namespace directly",
+            );
+        }
+        if (shims?.browserFilesystem && !defaultFilesystem.createFilesystem) {
+            throw new TypeError("the selected filesystem does not support browser adapters");
+        }
+        this.#filesystem = shims?.filesystem ?? defaultFilesystem;
+        if (shims?.browserFilesystem) {
+            this.#filesystem = defaultFilesystem.createFilesystem({
+                adapter: shims.browserFilesystem.adapter,
+                preopens: sandbox?.preopens ?? shims.browserFilesystem.preopens,
+            });
+        } else if (sandbox?.preopens !== undefined) {
+            if (!defaultFilesystem.createFilesystem) {
+                throw new TypeError("the selected filesystem cannot create isolated preopens");
+            }
+            this.#filesystem = defaultFilesystem.createFilesystem({
+                preopens: sandbox.preopens,
+            });
+        }
         this.#io = shims?.io ?? wasi.io;
         this.#random = shims?.random ?? wasi.random;
         this.#clocks = shims?.clocks ?? wasi.clocks;
@@ -153,14 +168,6 @@ export class WASIShim {
                   })
                 : defaultSockets);
         this.#http = shims?.http ?? wasi.http;
-
-        // Extract sandbox options
-        const sandbox = shims?.sandbox;
-
-        // Create isolated preopens if configured
-        if (sandbox?.preopens !== undefined) {
-            this.#preopens = createIsolatedPreopens(sandbox.preopens);
-        }
 
         // Create isolated environment if env or args are configured
         if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
@@ -200,8 +207,7 @@ export class WASIShim {
         obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
         obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
 
-        obj[`wasi:filesystem/preopens${versionSuffix}`] =
-            this.#preopens ?? this.#filesystem.preopens;
+        obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#filesystem.preopens;
         obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.types;
 
         obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
@@ -221,31 +227,6 @@ export class WASIShim {
 
         return obj as WASIImportObject;
     }
-}
-
-/**
- * Create an isolated preopens object with its own preopen entries.
- *
- * @param preopensConfig - Map of virtual paths to host paths
- * @returns A preopens object with Descriptor and getDirectories()
- */
-function createIsolatedPreopens(preopensConfig: Record<string, string>) {
-    const entries: any[] = [];
-
-    // Populate entries using the filesystem's descriptor creation
-    if (_createPreopenDescriptor) {
-        for (const [virtualPath, hostPath] of Object.entries(preopensConfig)) {
-            const descriptor = _createPreopenDescriptor(hostPath);
-            entries.push([descriptor, virtualPath]);
-        }
-    }
-
-    return {
-        Descriptor: types.Descriptor,
-        getDirectories() {
-            return entries;
-        },
-    };
 }
 
 /**

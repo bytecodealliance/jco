@@ -721,6 +721,19 @@ export const types: typeof TypesNamespace = {
     },
 };
 
+/** Create isolated filesystem namespaces from Node.js host-path preopens. */
+export function createFilesystem({ preopens }: { preopens: Record<string, string> }) {
+    const entries: Array<[Descriptor, string]> = Object.entries(preopens).map(
+        ([virtualPath, hostPath]) => [descriptorCreatePreopen(hostPath), virtualPath],
+    );
+    return {
+        types,
+        preopens: {
+            getDirectories: () => [...entries],
+        } as typeof PreopensNamespace,
+    };
+}
+
 /**
  * Replace all preopens with the given set.
  * @param {Record<string, string>} preopens - Map of virtual paths to host paths
