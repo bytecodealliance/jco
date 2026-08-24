@@ -36,13 +36,6 @@
     "type": "module",
     "main": "dist/jco.js",
     "types": "dist/jco.d.ts",
-    "imports": {
-        "#ora": {
-            "types": "./dist/ora-shim.d.ts",
-            "browser": "./dist/ora-shim.js",
-            "default": "ora"
-        }
-    },
     "exports": {
         ".": {
             "types": "./dist/api.d.ts",
@@ -79,7 +72,6 @@
         "commander": "^14",
         "componentize-qjs": "^0.4.2",
         "mkdirp": "^3",
-        "ora": "^8",
         "rolldown": "^1.2.4",
         "typescript": "7.0.2",
         "typescript-compiler-api": "npm:typescript@6.0.3"

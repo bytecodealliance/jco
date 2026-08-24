@@ -26,16 +26,6 @@ export const DEFAULT_ASYNC_MODE = "sync";
 /** Path of WIT files by default when one is not specified */
 export const DEFAULT_WIT_PATH = "./wit";
 
-let _showSpinner = false;
-export function setShowSpinner(val: boolean): void {
-    _showSpinner = val;
-}
-export function getShowSpinner(): boolean {
-    const showSpinner = _showSpinner;
-    _showSpinner = false;
-    return showSpinner;
-}
-
 export function sizeStr(num: number): string {
     num /= 1024;
     if (num < 1000) {

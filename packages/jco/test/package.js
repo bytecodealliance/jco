@@ -18,8 +18,6 @@ describe("package output", () => {
             packageJson.exports["."].default,
             packageJson.exports["./component"].types,
             packageJson.exports["./component"].default,
-            packageJson.imports["#ora"].types,
-            packageJson.imports["#ora"].browser,
         ];
 
         await Promise.all(targets.map((target) => access(resolve(packageDir, target))));

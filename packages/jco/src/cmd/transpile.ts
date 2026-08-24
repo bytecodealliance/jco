@@ -2,7 +2,7 @@
 
 import { transpile, transpileBytes } from "@bytecodealliance/jco-transpile";
 
-import { setShowSpinner, writeFiles } from "../common.js";
+import { writeFiles } from "../common.js";
 
 declare const __vite_ssr_import_meta__: ImportMeta;
 declare const globalCreateRequire: typeof import("node:module").createRequire;
@@ -82,10 +82,6 @@ function prepOpts(opts: any, program?: any) {
     const varIdx = program?.parent.rawArgs.indexOf("--");
     if (varIdx !== undefined && varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
-    }
-
-    if (!opts.quiet) {
-        setShowSpinner(true);
     }
 
     if (opts.map) {
