@@ -151,7 +151,7 @@ pub fn run() -> Result<()> {
     let output_dir = project_dir.join(format!("submodules/wasmtime/target/{target}/debug"));
 
     // Tidy up the dir and recreate it.
-    let jco_crate_dir = project_dir.join("crates/jco");
+    let jco_crate_dir = project_dir.join("crates/jco-tests");
     let _ = fs::remove_dir_all(jco_crate_dir.join("tests/generated"));
     let _ = fs::remove_dir_all(jco_crate_dir.join("tests/output"));
     fs::create_dir_all(jco_crate_dir.join("tests/generated"))
@@ -545,7 +545,7 @@ struct GenerateCommandArgs<'a> {
     cmd_name: &'a str,
     /// Path to JCO script (i.e. packages/jco/dist/jco.js)
     jco_script_path: &'a Path,
-    /// Path to the jco crate (i.e. crates/jco)
+    /// Path to the jco test crate (i.e. crates/jco-tests)
     jco_crate_dir: &'a Path,
     /// Path to the WASI component under text
     component_path: &'a Path,
@@ -726,7 +726,7 @@ mod tests {
             windows_skip,
             deno,
             jco_script_path: Path::new("packages/jco/dist/jco.js"),
-            jco_crate_dir: Path::new("crates/jco"),
+            jco_crate_dir: Path::new("crates/jco-tests"),
         })
         .unwrap()
     }

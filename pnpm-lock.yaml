@@ -66,7 +66,7 @@ importers:
         specifier: ^7.8.5
         version: 7.8.5
 
-  crates/jco:
+  crates/jco-tests:
     dependencies:
       '@bytecodealliance/jco-node-fs':
         specifier: 0.2.0
