@@ -35,6 +35,29 @@ An operation is not considered supported merely because its interface shape exis
 rows require the embedding application to provide that capability; unavailable operations fail with
 a WASI-domain error instead of logging or returning a placeholder resource.
 
+### Detailed browser capabilities
+
+The following table describes the built-in browser implementation. An application-provided
+namespace can replace any row through `WASIShim`.
+
+| Interface                     | Implemented                                                                                       | Host adapter required                                      | Unsupported by browser implementation          |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------- |
+| `wasi:cli`                    | environment, arguments, initial cwd, exit, stream and terminal accessors                          | stdin/stdout/stderr handlers and terminal resources        | —                                              |
+| `wasi:clocks`                 | wall clock, monotonic clock, timer subscriptions                                                  | —                                                          | timezone APIs (not part of Preview 2)          |
+| `wasi:random`                 | secure and insecure bytes, insecure seed                                                          | —                                                          | —                                              |
+| `wasi:io`                     | errors, input/output streams, poll and pollables                                                  | readiness and I/O behavior for injected stream handlers    | synchronous blocking of the browser event loop |
+| `wasi:filesystem`             | descriptors, files, directories, links, metadata, streams, preopens through the ephemeral adapter | persistent storage, permissions, and external file handles | symbolic-link creation and reading             |
+| `wasi:http/outgoing-handler`  | Fetch-backed requests and buffered request bodies                                                 | Fetch implementation and network permission                | request/response trailers; streaming uploads   |
+| `wasi:http/incoming-handler`  | request/response translation and injectable handler namespace                                     | HTTP server, service worker, or other request source       | direct browser listening                       |
+| `wasi:sockets/ip-name-lookup` | interface shape only                                                                              | complete interface replacement                             | built-in DNS lookup                            |
+| `wasi:sockets/tcp*`           | interface shape only                                                                              | complete interface replacement                             | built-in raw TCP                               |
+| `wasi:sockets/udp*`           | interface shape only                                                                              | complete interface replacement                             | built-in raw UDP                               |
+
+Outbound HTTP buffers a requested body until `outgoing-body.finish` before calling `fetch`.
+This preserves complete-body semantics across browsers but does not provide streaming upload or
+upload backpressure. Incoming Fetch bodies retain their asynchronous stream behavior. HTTP
+trailers are not implemented.
+
 Browser applications select storage explicitly. The bundled file-data adapter is ephemeral and must
 be opted into:
 
@@ -71,6 +94,15 @@ const shim = new WASIShim({
 This keeps permission prompts, handle acquisition, persistence, and synchronization policy in
 application code. Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate
 `fetch` capability.
+
+Browser filesystem adapters own the capabilities passed in `preopens` and the roots returned from
+`getRoot`. A root may be shared by multiple descriptors and preopen names; the adapter is therefore
+responsible for persistence and synchronization of shared mutations. Calling `dispose` on the
+namespace returned by `createFilesystem` calls the adapter's optional `dispose` method once and
+invalidates further preopen access. `WASIShim` does not currently cascade disposal, so embeddings
+using external handles must retain and dispose their application-owned filesystem namespace or
+adapter themselves. The bundled in-memory adapter keeps all state in memory and shares mutations
+for the same file-data object.
 
 # Features
 
@@ -159,14 +191,18 @@ const component = await instantiate(loader, sandboxedShim.getImportObject());
 - By default (when no options are passed), the shim is providing full access to match typical
   Node.js library behavior. In browsers, filesystem preopens remain empty until the application
   explicitly injects filesystem namespaces or selects the ephemeral file-data adapter.
-- `sandbox.preopens` maps guest paths to Node.js host paths. Browser applications use the
-  `filesystem` or `browserFilesystem` options shown above; host paths are rejected in browsers.
+- `sandbox.preopens` maps guest paths to Node.js host paths on Node.js. With
+  `browserFilesystem`, the same option maps guest paths to capabilities understood by its adapter
+  and overrides `browserFilesystem.preopens`. A fully custom `filesystem` namespace owns its
+  preopens directly and cannot be combined with `sandbox.preopens`.
 - Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
   Multiple instances with different configurations will not affect each other.
 - The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and
   affect all components not using `WASIShim` with explicit configuration. For isolation, prefer
   using `WASIShim` with the `sandbox` option containing `preopens` and `env`.
-- When `sandbox.enableNetwork: false`, all socket and HTTP operations will throw "access-denied" errors.
+- When `sandbox.enableNetwork: false`, Node.js socket operations receive an instance-local denied
+  network capability. Outbound HTTP is a separate Fetch capability; replace or omit the HTTP
+  namespace when the embedding must deny it as well.
 
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
