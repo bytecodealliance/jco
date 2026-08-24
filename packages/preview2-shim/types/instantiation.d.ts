@@ -43,6 +43,7 @@ type _WASIImportObject = {
     'wasi:clocks/wall-clock': typeof import('./interfaces/wasi-clocks-wall-clock.d.ts');
 
     'wasi:http/types': typeof import('./interfaces/wasi-http-types.d.ts');
+    'wasi:http/incoming-handler': typeof import('./interfaces/wasi-http-incoming-handler.d.ts');
     'wasi:http/outgoing-handler': typeof import('./interfaces/wasi-http-outgoing-handler.d.ts');
 };
 
