@@ -25,4 +25,32 @@ suite('jco issue 1887', () => {
             await rm(outputDir, { recursive: true, force: true });
         }
     });
+
+    test('WASI P3 reactor has a current task while dropping an exported resource', async () => {
+        const componentPath = join(EXTENDED_TEST_COMPONENTS_DIR, 'jco-issue-1887-resource-drop/component.wasm');
+        const outputDir = await getTmpDir();
+
+        try {
+            const { files } = await transpile(componentPath, { name: 'out' });
+            const source = new TextDecoder().decode(files['out.js']);
+            assert.match(
+                source,
+                /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?callResourceDestructor\(\{ componentIdx: 0, dtor: exports\d+\['\d+'\], rep: handleEntry\.rep \}\);/,
+            );
+            assert.match(
+                source,
+                /finalizationRegistryCreate\(\(handle\) => \{[\s\S]{0,300}?callResourceDestructor\(\{ componentIdx: 0, dtor: exports\d+\['\d+'\], rep \}\);/,
+            );
+            await writeFiles(files, { baseDir: outputDir });
+
+            const { api, check } = await import(pathToFileURL(join(outputDir, 'out.js')).href);
+            assert.strictEqual(check(), 3);
+            const thing = new api.Thing();
+            const dispose = Symbol.dispose || Symbol.for('dispose');
+            assert.doesNotThrow(() => thing[dispose]());
+            assert.doesNotThrow(() => thing[dispose]());
+        } finally {
+            await rm(outputDir, { recursive: true, force: true });
+        }
+    });
 });

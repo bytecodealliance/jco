@@ -71,13 +71,18 @@ suite('resources', () => {
 
         assert.match(
             source,
-            /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]*?\['0'\]\(handleEntry\.rep\);/,
+            /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?\['0'\]\(handleEntry\.rep\);/,
             'explicit disposal should call the destructor with the representation returned while removing the handle',
         );
         assert.notMatch(
             source,
             /rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?handleTable\d+\[\(handle\d+ << 1\) \+ 1\]/,
             'explicit disposal must not read a representation from a removed handle-table entry',
+        );
+        assert.notMatch(
+            source,
+            /callResourceDestructor/,
+            'a component without context intrinsics should retain lightweight destructor calls',
         );
     });
 

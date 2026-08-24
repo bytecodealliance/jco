@@ -1,0 +1,13 @@
+package foo:bar;
+
+interface api {
+  resource thing {
+    constructor();
+  }
+}
+
+world biz {
+  export api;
+
+  export check: func() -> u32;
+}
