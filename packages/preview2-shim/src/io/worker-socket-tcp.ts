@@ -9,7 +9,6 @@ import {
     pollStateReady,
     verifyPollsDroppedForDrop,
 } from "./worker-thread.js";
-import process from "node:process";
 import {
     convertSocketError,
     ipSocketAddress,
@@ -30,8 +29,6 @@ import {
 } from "./worker-sockets.js";
 import { Server, Socket as TcpSocket } from "node:net";
 import { IpSocketAddress } from "../../types/interfaces/wasi-sockets-network.js";
-
-const win = process.platform === "win32";
 
 interface PendingAccept {
     tcpSocket: TcpSocket | null;
@@ -89,7 +86,15 @@ export function socketTcpFinish(id: number, fromState, toState) {
     futureDispose(socket.future, false);
     socket.future = null;
     if (tag === "err") {
-        socket.state = SOCKET_STATE_CLOSED;
+        // A failed bind does not consume the socket. In particular, callers may
+        // retry after `address-in-use` with another address or port.
+        if (fromState === SOCKET_STATE_BIND) {
+            socket.server = null;
+            socket.localAddress = null;
+            socket.state = SOCKET_STATE_INIT;
+        } else {
+            socket.state = SOCKET_STATE_CLOSED;
+        }
         throw val;
     } else {
         socket.state = toState;
@@ -340,11 +345,7 @@ export function socketTcpShutdown(id: number, _shutdownType) {
     if (socket.state !== SOCKET_STATE_CONNECTION) {
         throw "invalid-state";
     }
-    if (win && socket.tcpSocket?.destroySoon) {
-        socket.tcpSocket.destroySoon();
-    } else {
-        socket.tcpSocket?.destroy();
-    }
+    socket.tcpSocket?.destroy();
 }
 
 export function socketTcpSetKeepAlive(id: number, { keepAlive, keepAliveIdleTime }) {
