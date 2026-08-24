@@ -73,7 +73,7 @@
     "dependencies": {
         "@bytecodealliance/componentize-js": "^0.22.0",
         "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
-        "@bytecodealliance/jco-transpile": "^0.11.0",
+        "@bytecodealliance/jco-transpile": "^0.12.0",
         "@bytecodealliance/preview2-shim": "^0.22.0",
         "binaryen": "^130.0.0",
         "commander": "^14",
