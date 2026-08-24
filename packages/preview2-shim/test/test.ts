@@ -1255,6 +1255,34 @@ suite("Browser filesystem", () => {
         assert.throws(() => root.statAt({}, "empty"));
     });
 
+    test("creates only the final path component", async () => {
+        const { _setFileData, preopens } = await import("../src/browser/filesystem.js");
+        const fileData = { dir: { parent: { dir: {} }, existing: { dir: {} } } };
+        _setFileData(fileData);
+        const [[root]] = preopens.getDirectories();
+
+        let error: unknown;
+        try {
+            root.openAt({}, "missing/file", { create: true }, { write: true });
+        } catch (caught) {
+            error = caught;
+        }
+        assert.strictEqual(error, "no-entry");
+        assert.strictEqual((fileData.dir as Record<string, unknown>).missing, undefined);
+
+        const created = root.openAt({}, "parent/file", { create: true }, { write: true });
+        assert.strictEqual(created.getType(), "regular-file");
+        root.createDirectoryAt("parent/child");
+        assert.strictEqual(root.statAt({}, "parent/child").type, "directory");
+        error = undefined;
+        try {
+            root.createDirectoryAt("existing");
+        } catch (caught) {
+            error = caught;
+        }
+        assert.strictEqual(error, "exist");
+    });
+
     test("createFilesystem isolates explicitly selected in-memory roots", async () => {
         const { createFilesystem, InMemoryFilesystemAdapter } =
             await import("../src/browser/filesystem.js");
