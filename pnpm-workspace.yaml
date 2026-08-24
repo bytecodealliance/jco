@@ -5,6 +5,7 @@ allowBuilds:
   puppeteer: true
 
 packages:
+  - crates/jco
   - packages/jco
   - packages/bare-jco
   - packages/jco-transpile

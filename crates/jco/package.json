@@ -1,0 +1,9 @@
+{
+  "name": "@bytecodealliance/jco-rust-tests",
+  "private": true,
+  "description": "JavaScript dependencies for the Rust jco test suite",
+  "dependencies": {
+    "@bytecodealliance/jco-node-fs": "0.2.0",
+    "@bytecodealliance/preview2-shim": "0.22.0"
+  }
+}
