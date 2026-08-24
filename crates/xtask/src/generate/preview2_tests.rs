@@ -118,6 +118,16 @@ const FLAKY_TESTS: &[&str] = &[
     "preview2_udp_bind",
 ];
 
+/// Tests that should run outside the parallel conformance suite on Windows.
+const WINDOWS_SERIAL_TESTS: &[&str] = &[
+    "preview2_tcp_bind",
+    "preview2_tcp_connect",
+    "preview2_tcp_sample_application",
+    "preview2_tcp_sockopts",
+    "preview2_tcp_states",
+    "preview2_tcp_streams",
+];
+
 /// Build test programs that are organized as a cargo (work)space
 pub fn build_test_programs(project_dir: impl AsRef<Path>, target: &str) -> Result<()> {
     let project_dir = project_dir.as_ref();
@@ -455,6 +465,11 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
     } else {
         Default::default()
     };
+    let windows_serial_attr = if WINDOWS_SERIAL_TESTS.contains(&test_name) {
+        "#[cfg_attr(windows, ignore = \"run separately to avoid socket contention\")]"
+    } else {
+        Default::default()
+    };
     let deno_prefix = if deno { "deno_" } else { Default::default() };
     let deno_test_file = format!(
         "{}",
@@ -528,6 +543,7 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
 use std::fs;
 {maybe_include_write}use std::process::{{Command, Stdio}};
 
+{windows_serial_attr}
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
     let _ = fs::remove_dir_all(r#"{deno_test_file}"#);
@@ -745,8 +761,22 @@ mod tests {
     fn flaky_test_retains_the_last_error() {
         let src = generated_test("preview2_tcp_streams", false, false);
 
+        assert!(src.contains(
+            "#[cfg_attr(windows, ignore = \"run separately to avoid socket contention\")]"
+        ));
         assert!(src.contains("for _n in 0..5"));
         assert!(src.contains("Err(e) => _last_err = Some(e)"));
         assert!(src.contains("test execution failed after 5 attempts: {_last_err:#}"));
+    }
+
+    #[test]
+    fn windows_tcp_tests_run_serially() {
+        let tcp_src = generated_test("preview2_tcp_bind", false, false);
+        let udp_src = generated_test("preview2_udp_bind", false, false);
+
+        assert!(tcp_src.contains(
+            "#[cfg_attr(windows, ignore = \"run separately to avoid socket contention\")]"
+        ));
+        assert!(!udp_src.contains("run separately to avoid socket contention"));
     }
 }

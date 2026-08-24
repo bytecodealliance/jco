@@ -326,3 +326,6 @@ jobs:
       - name: WASI Preview 2 Conformance
         run: |
           cargo test node_
+          cargo test -p jco-tests --test mod \
+            generated::node_preview2_tcp \
+            -- --ignored --test-threads=1
