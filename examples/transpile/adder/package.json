@@ -7,6 +7,6 @@
         "all": "pnpm run demo"
     },
     "dependencies": {
-        "@bytecodealliance/jco-transpile": "^0.6.0"
+        "@bytecodealliance/jco-transpile": "^0.12.1"
     }
 }
