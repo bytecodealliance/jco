@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>jco browser test</title>
+<script type="importmap">
+    {
+        "imports": {
+            "@bytecodealliance/preview2-shim/cli": "../../../preview2-shim/dist/browser/cli.js",
+            "@bytecodealliance/preview2-shim/clocks": "../../../preview2-shim/dist/browser/clocks.js",
+            "@bytecodealliance/preview2-shim/filesystem": "../../../preview2-shim/dist/browser/filesystem.js",
+            "@bytecodealliance/preview2-shim/http": "../../../preview2-shim/dist/browser/http.js",
+            "@bytecodealliance/preview2-shim/io": "../../../preview2-shim/dist/browser/io.js",
+            "@bytecodealliance/preview2-shim/random": "../../../preview2-shim/dist/browser/random.js",
+            "@bytecodealliance/preview2-shim/sockets": "../../../preview2-shim/dist/browser/sockets.js"
+        }
+    }
+</script>
+<body>
+    <h1>Running</h1>
+    <script type="module">
+        const params = new URLSearchParams(location.hash.slice(1));
+
+        window.__jcoTest = (async () => {
+            try {
+                const modulePath = params.get('module');
+                const exportName = params.get('export') ?? 'test';
+                const args = JSON.parse(params.get('args') ?? '[]');
+                if (!modulePath) throw new Error('missing browser test module');
+
+                const module = await import(modulePath);
+                const test = module[exportName];
+                if (typeof test !== 'function') {
+                    throw new Error(
+                        `Expected ${JSON.stringify(modulePath)} to export ${JSON.stringify(exportName)}; found [${Object.keys(module)}]`,
+                    );
+                }
+
+                return { ok: true, value: await test(...args) };
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: {
+                        name: error?.name ?? 'Error',
+                        message: error?.message ?? String(error),
+                        stack: error?.stack,
+                    },
+                };
+            }
+        })();
+
+        document.body.textContent = JSON.stringify(await window.__jcoTest);
+    </script>
+</body>

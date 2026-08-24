@@ -511,30 +511,32 @@ export async function startTestWebServer(args) {
     if (!args.routes) {
         throw new Error('missing serve paths');
     }
-    const serverPort = await getRandomPort();
-
     const server = createHttpServer(async (req, res) => {
-        // Build a utility function for returning an error
-        const returnError = (e) => {
-            log(`[webserver] failed to find file [${fileURL}]`);
-            res.writeHead(404);
-            res.end(e.message);
-        };
+        const requestUrl = req.url;
+        if (!requestUrl) {
+            res.writeHead(400);
+            res.end('missing request URL');
+            return;
+        }
 
         // Find route to serve incoming request
         const route = args.routes.find((dir) => {
-            return !dir.urlPrefix || (dir.urlPrefix && req.url.startsWith(dir.urlPrefix));
+            return !dir.urlPrefix || requestUrl.startsWith(dir.urlPrefix);
         });
         if (!route) {
-            log(`[webserver] failed to find route to serve [${req.url.path}]`);
-            returnError(new Error(`failed to resolve url [${req.url}] with any provided routes`));
+            log(`[webserver] failed to find route to serve [${requestUrl}]`);
+            res.writeHead(404);
+            res.end(`failed to resolve url [${requestUrl}] with any configured route`);
             return;
         }
         if (!route.basePathURL) {
             throw new Error('invalid/missing path in specified route');
         }
 
-        const fileURL = new URL(`./${req.url.slice(route.urlPrefix ? route.urlPrefix.length : '')}`, route.basePathURL);
+        const fileURL = new URL(
+            `./${requestUrl.slice(route.urlPrefix ? route.urlPrefix.length : '')}`,
+            route.basePathURL,
+        );
 
         log(`[webserver] attempting to read file on disk @ [${fileURL}]`);
 
@@ -542,13 +544,15 @@ export async function startTestWebServer(args) {
         try {
             const html = await readFile(fileURL);
             res.writeHead(200, {
-                'content-type': mime.getType(extname(req.url)),
+                'content-type': mime.getType(extname(requestUrl)) ?? 'application/octet-stream',
             });
             res.end(html);
             log(`[webserver] served file [${fileURL}]`);
         } catch (e) {
             if (e.code === 'ENOENT') {
-                returnError(e);
+                log(`[webserver] failed to find file [${fileURL}]`);
+                res.writeHead(404);
+                res.end(e.message);
             } else {
                 log(`[webserver] ERROR [${e}]`);
                 res.writeHead(500);
@@ -557,22 +561,34 @@ export async function startTestWebServer(args) {
         }
     });
 
-    const served = new Promise((resolve) => {
-        server.on('listening', () => {
+    const served = new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.once('listening', () => {
+            const address = server.address();
+            if (!address || typeof address === 'string') {
+                reject(new Error('test web server did not bind a TCP port'));
+                return;
+            }
             resolve({
-                serverPort,
+                serverPort: address.port,
                 server,
-                cleanup: async () => {
-                    log('[cleanup] cleaning up http server...');
-                    server.close(() => {
-                        log('server successfully closed');
-                    });
-                },
+                cleanup: () =>
+                    new Promise((resolve, reject) => {
+                        log('[cleanup] cleaning up http server...');
+                        server.close((error) => {
+                            if (error) {
+                                reject(error);
+                            } else {
+                                log('server successfully closed');
+                                resolve();
+                            }
+                        });
+                    }),
             });
         });
     });
 
-    server.listen(serverPort);
+    server.listen(0);
 
     return await served;
 }
