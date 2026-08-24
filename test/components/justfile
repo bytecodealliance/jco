@@ -18,6 +18,7 @@ build:
     {{just}} build-jco-issue-1390
     {{just}} build-jco-issue-1887
     {{just}} build-jco-issue-1887-list-param
+    {{just}} build-jco-issue-1887-resource-drop
 
 # Build the wstd P2 HTTP client required to test jco issue #577
 [group('build')]
@@ -47,6 +48,14 @@ build:
     mkdir -p output/jco-issue-1887-list-param
     {{just}} -f c/jco-issue-1887-list-param/justfile build
     mv c/jco-issue-1887-list-param/component.wasm output/jco-issue-1887-list-param/component.wasm
+
+# Build the wasi-sdk P3 reactor required to test the resource-drop follow-up to jco issue #1887
+[group('build')]
+@build-jco-issue-1887-resource-drop:
+    echo "==> building jco-issue-1887-resource-drop reactor (c)..."
+    mkdir -p output/jco-issue-1887-resource-drop
+    {{just}} -f c/jco-issue-1887-resource-drop/justfile build
+    mv c/jco-issue-1887-resource-drop/component.wasm output/jco-issue-1887-resource-drop/component.wasm
 
 # Build the components required to test jco issue #1380
 [group('build')]
