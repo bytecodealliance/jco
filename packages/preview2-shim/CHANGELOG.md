@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.23.0] - 2026-08-24
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ correct TCP socket state transitions by @vados-cosmonic in #1975
+
 ## [0.22.0] - 2026-08-23
 
 ### ⚙️ Miscellaneous Tasks
