@@ -1652,7 +1652,9 @@ suite("Browser shim guards", () => {
     });
 
     test("browser outgoing HTTP waits for the complete request body", async () => {
-        const { outgoingHandler, types } = await import("../src/browser/http.js");
+        const { _setRequestStreaming, outgoingHandler, types } =
+            await import("../src/browser/http.js");
+        _setRequestStreaming(false);
         const originalFetch = globalThis.fetch;
         let requestedBody: Uint8Array | undefined;
         let fetchCalls = 0;
@@ -1686,6 +1688,47 @@ suite("Browser shim guards", () => {
                 ({ tag }) => tag === "closed",
             );
         } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    test("browser outgoing HTTP can stream request bodies to Fetch", async () => {
+        const { _setRequestStreaming, outgoingHandler, types } =
+            await import("../src/browser/http.js");
+        const originalFetch = globalThis.fetch;
+        let fetchCalls = 0;
+        let duplex: string | undefined;
+        let bodyText: Promise<string> | undefined;
+        globalThis.fetch = async (_input, init) => {
+            fetchCalls++;
+            duplex = (init as RequestInit & { duplex?: string }).duplex;
+            bodyText = new Response(init?.body).text();
+            return new Response("ok");
+        };
+        _setRequestStreaming(true);
+        try {
+            const request = new types.OutgoingRequest(new types.Fields());
+            request.setMethod({ tag: "post" });
+            request.setScheme({ tag: "HTTPS" });
+            request.setAuthority("example.com");
+            request.setPathWithQuery("/");
+            const body = request.body();
+            const stream = body.write();
+            stream.checkWrite();
+            stream.write(new TextEncoder().encode("before "));
+
+            const response = outgoingHandler.handle(request, undefined);
+            await Promise.resolve();
+            assert.strictEqual(fetchCalls, 1);
+            assert.strictEqual(duplex, "half");
+
+            stream.checkWrite();
+            stream.write(new TextEncoder().encode("finish"));
+            types.OutgoingBody.finish(body, undefined);
+            assert.strictEqual(await bodyText, "before finish");
+            await response.subscribe().block();
+        } finally {
+            _setRequestStreaming(false);
             globalThis.fetch = originalFetch;
         }
     });

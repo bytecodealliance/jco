@@ -58,6 +58,20 @@ This preserves complete-body semantics across browsers but does not provide stre
 upload backpressure. Incoming Fetch bodies retain their asynchronous stream behavior. HTTP
 trailers are not implemented.
 
+Chromium-based browsers can opt into Fetch request streaming. This setting uses a
+`ReadableStream` request body with `duplex: "half"`; unsupported browsers reject the request, so
+applications should enable it only after applying their own browser support policy or feature
+detection:
+
+```js
+import { http } from "@bytecodealliance/preview2-shim";
+
+http._setRequestStreaming(true);
+```
+
+The setting affects subsequent requests made through the browser HTTP shim. Call
+`http._setRequestStreaming(false)` to restore portable completion buffering.
+
 Browser applications select storage explicitly. The bundled file-data adapter is ephemeral and must
 be opted into:
 

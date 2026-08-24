@@ -211,6 +211,9 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
     #finished = false;
     #resolveFinished!: () => void;
     #finishedPromise = new Promise<void>((resolve) => (this.#resolveFinished = resolve));
+    #requestStream: ReadableStream<Uint8Array> | null = null;
+    #requestStreamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    #requestStreamCancelled = false;
 
     write() {
         const outputStream = this.#outputStream;
@@ -229,6 +232,9 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
             throw { tag: "internal-error", val: "body already finished" };
         }
         body.#finished = true;
+        if (!body.#requestStreamCancelled) {
+            body.#requestStreamController?.close();
+        }
         body.#resolveFinished();
     }
 
@@ -254,15 +260,41 @@ class OutgoingBody implements TypesNamespace.OutgoingBody {
         return outgoingBody.#bodyData();
     }
 
+    static _requestBodyStream(outgoingBody: OutgoingBody): ReadableStream<Uint8Array> {
+        if (outgoingBody.#requestStream === null) {
+            outgoingBody.#requestStream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    outgoingBody.#requestStreamController = controller;
+                    for (const chunk of outgoingBody.#chunks) {
+                        controller.enqueue(chunk);
+                    }
+                    outgoingBody.#chunks.length = 0;
+                    if (outgoingBody.#finished) {
+                        controller.close();
+                    }
+                },
+                cancel() {
+                    outgoingBody.#requestStreamCancelled = true;
+                },
+            });
+        }
+        return outgoingBody.#requestStream;
+    }
+
     static _create(): OutgoingBody {
         const outgoingBody = new OutgoingBody();
         const chunks = outgoingBody.#chunks;
         outgoingBody.#outputStream = outputStreamCreate({
             write(buf: Uint8Array): void {
-                if (outgoingBody.#finished) {
+                if (outgoingBody.#finished || outgoingBody.#requestStreamCancelled) {
                     throw { tag: "closed" };
                 }
-                chunks.push(new Uint8Array(buf));
+                const chunk = new Uint8Array(buf);
+                if (outgoingBody.#requestStreamController) {
+                    outgoingBody.#requestStreamController.enqueue(chunk);
+                } else {
+                    chunks.push(chunk);
+                }
             },
             blockingFlush() {},
             subscribe(): any {
@@ -280,6 +312,13 @@ delete OutgoingBody._create;
 const outgoingBodyFinishedData = OutgoingBody._finishedBodyData;
 // @ts-expect-error - Deleting static method
 delete OutgoingBody._finishedBodyData;
+const outgoingBodyRequestStream = OutgoingBody._requestBodyStream;
+// @ts-expect-error - Deleting static method
+delete OutgoingBody._requestBodyStream;
+
+interface BrowserHttpConfig {
+    streamingRequestBodies?: boolean;
+}
 
 type Method = TypesNamespace.Method;
 type Scheme = TypesNamespace.Scheme;
@@ -370,7 +409,11 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
 
     [symbolDispose]() {}
 
-    static _handle(request: OutgoingRequest, options?: RequestOptions): FutureIncomingResponse {
+    static _handle(
+        request: OutgoingRequest,
+        options?: RequestOptions,
+        config: BrowserHttpConfig = {},
+    ): FutureIncomingResponse {
         const scheme = schemeString(request.#scheme);
         const method = "val" in request.#method ? request.#method.val : request.#method.tag;
 
@@ -388,11 +431,13 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
             }
         }
 
-        // Fetch request streams are not consistently supported by browsers. Buffer the body,
-        // but do not dispatch until the guest has explicitly finished it.
+        // Request streams are opt-in because Firefox and Safari do not yet support them.
+        // The portable default buffers until the guest explicitly finishes the body.
         const bodyData = request.#bodyRequested
-            ? outgoingBodyFinishedData(request.#body)
-            : Promise.resolve(null);
+            ? config.streamingRequestBodies
+                ? outgoingBodyRequestStream(request.#body)
+                : outgoingBodyFinishedData(request.#body)
+            : null;
 
         let timeoutMs = Number(DEFAULT_HTTP_TIMEOUT_NS / 1_000_000n);
         if (options) {
@@ -838,7 +883,7 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
         url: string,
         method: string,
         headers: Headers,
-        bodyData: Promise<Uint8Array | null>,
+        bodyData: Promise<Uint8Array | null> | ReadableStream<Uint8Array> | null,
         timeoutMs: number,
     ): FutureIncomingResponse {
         const future = new FutureIncomingResponse();
@@ -850,15 +895,18 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
             timer = setTimeout(() => controller.abort(), timeoutMs);
         }
 
-        future.#promise = bodyData
+        future.#promise = Promise.resolve(bodyData)
             .then((bodyData) => {
-                const init: RequestInit = {
+                const init: RequestInit & { duplex?: "half" } = {
                     method,
                     headers,
                     signal: controller.signal,
                 };
                 if (bodyData && method !== "GET" && method !== "HEAD") {
                     init.body = bodyData as BodyInit;
+                    if (bodyData instanceof ReadableStream) {
+                        init.duplex = "half";
+                    }
                 }
                 return globalThis.fetch(url, init);
             })
@@ -921,9 +969,22 @@ function httpErrorCode(err: IoError): TypesNamespace.ErrorCode | undefined {
     };
 }
 
+let requestStreamingEnabled = false;
+
+/** Enable or disable Fetch `ReadableStream` request bodies. Disabled by default. */
+export function _setRequestStreaming(enabled: boolean): void {
+    if (typeof enabled !== "boolean") {
+        throw new TypeError("request streaming setting must be a boolean");
+    }
+    requestStreamingEnabled = enabled;
+}
+
 export const outgoingHandler: typeof OutgoingHandlerNamespace = {
-    // @ts-expect-error Not matching signature in WIT
-    handle: outgoingRequestHandle,
+    handle(request, options) {
+        return outgoingRequestHandle(request as OutgoingRequest, options as RequestOptions, {
+            streamingRequestBodies: requestStreamingEnabled,
+        });
+    },
 };
 
 export const incomingHandler: typeof IncomingHandlerNamespace = {
