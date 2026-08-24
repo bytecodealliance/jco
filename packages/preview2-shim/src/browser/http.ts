@@ -17,6 +17,8 @@ const DEFAULT_HTTP_TIMEOUT_NS = 600_000_000_000n;
 // RFC 9110 compliant header validation
 const TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const FIELD_VALUE_RE = /^[\t\x20-\x7E\x80-\xFF]*$/;
+const BRACKETED_IPV6_AUTHORITY_RE = /^\[([0-9A-Fa-f:.]+)\](?::([0-9]+))?$/;
+const DNS_OR_IPV4_AUTHORITY_RE = /^([a-zA-Z0-9.-]+)(?::([0-9]+))?$/;
 
 function validateHeaderName(name: string): void {
     if (!TOKEN_RE.test(name)) {
@@ -386,8 +388,8 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
     setAuthority(authority: string | undefined) {
         if (authority !== undefined) {
             const match = authority.startsWith("[")
-                ? authority.match(/^\[([0-9A-Fa-f:.]+)\](?::([0-9]+))?$/)
-                : authority.match(/^([a-zA-Z0-9.-]+)(?::([0-9]+))?$/);
+                ? authority.match(BRACKETED_IPV6_AUTHORITY_RE)
+                : authority.match(DNS_OR_IPV4_AUTHORITY_RE);
             if (!match || (match[2] !== undefined && Number(match[2]) > 65535)) {
                 throw undefined;
             }
