@@ -109,6 +109,13 @@ This keeps permission prompts, handle acquisition, persistence, and synchronizat
 application code. Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate
 `fetch` capability.
 
+For a small application-owned implementation, see the
+[Map-backed browser filesystem test shim](./test/fixtures/filesystem-shim/in-memory-map.ts). It keeps named
+roots in an in-memory `Map`, implements `createPreopens`, and is intentionally example code rather
+than a published or supported filesystem package. The example is exercised through the reusable
+[filesystem implementation test suite](./test/filesystem-conformance.ts), which can also be pointed
+at other implementations.
+
 Browser filesystem adapters own the capabilities passed in `preopens` and the roots returned from
 `getRoot`. A root may be shared by multiple descriptors and preopen names; the adapter is therefore
 responsible for persistence and synchronization of shared mutations. Calling `dispose` on the
