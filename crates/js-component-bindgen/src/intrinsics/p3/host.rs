@@ -293,6 +293,8 @@ impl HostIntrinsic {
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                let with_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 let get_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
@@ -406,7 +408,12 @@ impl HostIntrinsic {
                                 // TODO: centralize calling of returnFn to *one place* (if possible)
                                 if (subtaskCallMeta.returnFnCalled) {{ return; }}
 
-                                const res = subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]);
+                                const res = {with_global_current_task_meta_fn}({{
+                                    taskID: callerTask.id(),
+                                    componentIdx: callerTask.componentIdx(),
+                                    fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),
+                                }});
+                                subtaskCallMeta.returnFnCalled = true;
 
                                 {debug_log_fn}('[{async_start_call_fn}()] finished calling return fn', {{
                                     calleeTaskID: calleeTask.id(),
@@ -628,6 +635,8 @@ impl HostIntrinsic {
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                let with_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 let get_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let set_global_current_task_meta_fn =
@@ -706,7 +715,12 @@ impl HostIntrinsic {
                             if (!subtask.isReturned()) {{ return; }}
                             const subtaskCallMeta = subtask.getCallMetadata();
                             if (subtaskCallMeta?.returnFn && !subtaskCallMeta.returnFnCalled) {{
-                                subtaskCallMeta.returnFnResult = subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]);
+                                const callerTask = subtask.getParentTask();
+                                subtaskCallMeta.returnFnResult = {with_global_current_task_meta_fn}({{
+                                    taskID: callerTask.id(),
+                                    componentIdx: callerTask.componentIdx(),
+                                    fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),
+                                }});
                                 subtaskCallMeta.returnFnCalled = true;
                             }}
                         }});

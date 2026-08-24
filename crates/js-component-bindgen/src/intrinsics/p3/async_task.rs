@@ -448,6 +448,8 @@ impl AsyncTaskIntrinsic {
                 let get_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let with_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
@@ -495,7 +497,12 @@ impl AsyncTaskIntrinsic {
                                 subtaskID: task.getParentSubtask()?.id(),
                                 returnFnParams: [...params, subtaskCallMetadata.resultPtr],
                             }});
-                            const res = subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]);
+                            const callerTask = task.getParentSubtask().getParentTask();
+                            const res = {with_global_current_task_meta_fn}({{
+                                taskID: callerTask.id(),
+                                componentIdx: callerTask.componentIdx(),
+                                fn: () => subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]),
+                            }});
                             // For sync-lowered calls the fused [return-call] helper returns
                             // the lowering's flat result directly; stash it for
                             // _syncStartCall to return to the blocked caller.
@@ -869,6 +876,8 @@ impl AsyncTaskIntrinsic {
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask));
                 let with_global_current_task_meta_async_fn =
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                let with_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let future_value_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
@@ -1425,8 +1434,12 @@ impl AsyncTaskIntrinsic {
                                         taskID: this.#id,
                                         subtaskID: this.#parentSubtask.id(),
                                     }});
-                                    const memory = meta.getMemoryFn();
-                                    meta.returnFn.apply(null, [taskValue, meta.resultPtr]);
+                                    const callerTask = this.#parentSubtask.getParentTask();
+                                    {with_global_current_task_meta_fn}({{
+                                        taskID: callerTask.id(),
+                                        componentIdx: callerTask.componentIdx(),
+                                        fn: () => meta.returnFn.apply(null, [taskValue, meta.resultPtr]),
+                                    }});
                                     meta.returnFnCalled = true;
                                 }}
                             }}
@@ -1437,7 +1450,11 @@ impl AsyncTaskIntrinsic {
                                     taskID: this.#id,
                                 }});
                                 try {{
-                                    this.#postReturnFn(taskValue);
+                                    {with_global_current_task_meta_fn}({{
+                                        taskID: this.#id,
+                                        componentIdx: this.#componentIdx,
+                                        fn: () => this.#postReturnFn(taskValue),
+                                    }});
                                 }} catch (err) {{
                                     {debug_log_fn}("[{task_class}#onResolve] error during task resolve handler", err);
                                     throw err;
