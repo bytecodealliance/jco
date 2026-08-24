@@ -264,6 +264,15 @@ suite('future<T> lowers', () => {
             }
         });
 
+        test.concurrent('string (slow writer)', async () => {
+            const instance = await getInstance();
+            const delayed = new Promise((resolve) => setTimeout(() => resolve('delayed'), 300));
+            assert.strictEqual(
+                await instance['jco:test-components/future-lower-async'].readFutureValueString(delayed),
+                'delayed',
+            );
+        });
+
         test.concurrent('record', async () => {
             assert.instanceOf(instance['jco:test-components/future-lower-async'].readFutureValueRecord, AsyncFunction);
 
