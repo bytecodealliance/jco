@@ -362,7 +362,7 @@ pub fn transpile_bindgen(
         future_tables,
         err_ctx_tables,
         init_current_module: None,
-        init_context_components: Default::default(),
+        context_components: Default::default(),
     };
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
@@ -781,9 +781,9 @@ pub(crate) struct Instantiator<'a, 'b> {
     init_current_module: Option<RuntimeComponentInstanceIndex>,
 
     /// Component instances whose core modules import `context.get`/`context.set`.
-    /// These need a temporary task while core start functions run during
-    /// component initialization.
-    init_context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
+    /// These need a task whenever generated host-side JS enters guest core
+    /// Wasm, including core start functions and resource destructors.
+    context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -1084,7 +1084,7 @@ impl<'a> Instantiator<'a, '_> {
 
     fn wrap_initialization_in_context_tasks(&mut self) {
         let component_indices = self
-            .init_context_components
+            .context_components
             .borrow()
             .iter()
             .copied()
@@ -1239,27 +1239,45 @@ impl<'a> Instantiator<'a, '_> {
 
         let resource_table_ty = &self.types[resource_table_idx];
         let resource_idx = resource_table_ty.unwrap_concrete_ty();
+        let component_idx = resource_table_ty.unwrap_concrete_instance().as_u32();
 
-        let (is_imported, maybe_dtor) =
-            if let Some(resource_idx) = self.component.defined_resource_index(resource_idx) {
-                let resource_def = self
-                    .component
-                    .initializers
-                    .iter()
-                    .find_map(|i| match i {
-                        GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
-                        _ => None,
-                    })
-                    .unwrap();
+        let (is_imported, maybe_dtor) = if let Some(resource_idx) =
+            self.component.defined_resource_index(resource_idx)
+        {
+            let resource_def = self
+                .component
+                .initializers
+                .iter()
+                .find_map(|i| match i {
+                    GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
+                    _ => None,
+                })
+                .unwrap();
 
-                if let Some(dtor) = &resource_def.dtor {
-                    (false, format!("\n{}(rep);", self.core_def(dtor)))
+            if let Some(dtor) = &resource_def.dtor {
+                let dtor = self.core_def(dtor);
+                let maybe_dtor = if self
+                    .context_components
+                    .borrow()
+                    .contains(&resource_table_ty.unwrap_concrete_instance())
+                {
+                    let call_resource_destructor = self.bindgen.intrinsic(Intrinsic::Resource(
+                        ResourceIntrinsic::ResourceDestructorCall,
+                    ));
+                    format!(
+                        "\n{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {}, rep }});",
+                        dtor,
+                    )
                 } else {
-                    (false, "".into())
-                }
+                    format!("\n{dtor}(rep);")
+                };
+                (false, maybe_dtor)
             } else {
-                (true, "".into())
-            };
+                (false, "".into())
+            }
+        } else {
+            (true, "".into())
+        };
 
         let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
         let rsc_table_flag = self
@@ -4139,6 +4157,11 @@ impl<'a> Instantiator<'a, '_> {
             data: ResourceData::Host {
                 tid: resource_table_ty_idx,
                 rid: resource_idx,
+                component_idx: resource_table_ty.unwrap_concrete_instance(),
+                needs_task_context: self
+                    .context_components
+                    .borrow()
+                    .contains(&resource_table_ty.unwrap_concrete_instance()),
                 local_name,
                 dtor_name: dtor_str,
             },
@@ -4764,9 +4787,7 @@ impl<'a> Instantiator<'a, '_> {
                         .bindgen
                         .intrinsic(AsyncTaskIntrinsic::ContextGet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
-                    self.init_context_components
-                        .borrow_mut()
-                        .insert(component_idx);
+                    self.context_components.borrow_mut().insert(component_idx);
                     format!(
                         "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
                         component_idx.as_u32(),
@@ -4777,9 +4798,7 @@ impl<'a> Instantiator<'a, '_> {
                         .bindgen
                         .intrinsic(AsyncTaskIntrinsic::ContextSet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
-                    self.init_context_components
-                        .borrow_mut()
-                        .insert(component_idx);
+                    self.context_components.borrow_mut().insert(component_idx);
                     format!(
                         "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
                         component_idx.as_u32(),
@@ -4790,9 +4809,7 @@ impl<'a> Instantiator<'a, '_> {
                         .bindgen
                         .intrinsic(AsyncTaskIntrinsic::ContextGet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
-                    self.init_context_components
-                        .borrow_mut()
-                        .insert(component_idx);
+                    self.context_components.borrow_mut().insert(component_idx);
                     format!(
                         "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
                         component_idx.as_u32(),
@@ -4803,9 +4820,7 @@ impl<'a> Instantiator<'a, '_> {
                         .bindgen
                         .intrinsic(AsyncTaskIntrinsic::ContextSet.into());
                     let component_idx = self.init_current_module.expect("missing current module");
-                    self.init_context_components
-                        .borrow_mut()
-                        .insert(component_idx);
+                    self.context_components.borrow_mut().insert(component_idx);
                     format!(
                         "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
                         component_idx.as_u32(),
@@ -6211,7 +6226,17 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
             let table_ty = &component_types[*ty_idx];
-            let component_idx = table_ty.unwrap_concrete_instance().as_u32();
+            let resource_component_idx = table_ty.unwrap_concrete_instance();
+            let component_idx = resource_component_idx.as_u32();
+            if instantiator
+                .context_components
+                .borrow()
+                .contains(&resource_component_idx)
+            {
+                instantiator.add_intrinsic(Intrinsic::Resource(
+                    ResourceIntrinsic::ResourceDestructorCall,
+                ));
+            }
             let resource_idx = table_ty.unwrap_concrete_ty();
 
             // Attempt to find information about the owned resource
@@ -6253,6 +6278,8 @@ pub fn gen_flat_lift_fn_js_expr(
                             ResourceData::Host {
                                 tid,
                                 rid,
+                                component_idx,
+                                needs_task_context,
                                 local_name,
                                 dtor_name,
                             } => {
@@ -6263,6 +6290,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                     ResourceIntrinsic::ResourceTableRemove.name();
                                 let tid = tid.as_u32();
                                 let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
+                                let component_idx = component_idx.as_u32();
 
                                 // Mirrors `Instruction::HandleLift` in `function_bindgen.rs`:
                                 let create_resource_fn_js = if *imported {
@@ -6287,9 +6315,18 @@ pub fn gen_flat_lift_fn_js_expr(
                                     )
                                 } else {
                                     let dtor_setup_js = dtor_name
-                                    .as_ref()
-                                    .map(|dtor|
-                                         format!(
+                                        .as_ref()
+                                        .map(|dtor| {
+                                            let dtor_call = if *needs_task_context {
+                                                let call_resource_destructor =
+                                                    ResourceIntrinsic::ResourceDestructorCall.name();
+                                                format!(
+                                                    "{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }});"
+                                                )
+                                            } else {
+                                                format!("{dtor}(handleEntry.rep);")
+                                            };
+                                            format!(
                                              r#"
                                                Object.defineProperty(
                                                    resourceObj,
@@ -6298,16 +6335,17 @@ pub fn gen_flat_lift_fn_js_expr(
                                                        writable: true,
                                                        value: function() {{
                                                            finalizationRegistry{tid}.unregister(resourceObj);
-                                                           {rsc_table_remove}(handleTable{tid}, handle);
+                                                           const handleEntry = {rsc_table_remove}(handleTable{tid}, handle);
                                                            resourceObj[{symbol_dispose}] = {empty_func};
                                                            resourceObj[{symbol_resource_handle}] = undefined;
-                                                           {dtor}(handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag});
+                                                           {dtor_call}
                                                        }}
                                                   }}
                                               );
                                         "#
-                                         )
-                                    ).unwrap_or_default();
+                                            )
+                                        })
+                                        .unwrap_or_default();
 
                                     format!(
                                         r#"

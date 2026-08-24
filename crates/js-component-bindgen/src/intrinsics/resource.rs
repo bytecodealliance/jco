@@ -2,6 +2,7 @@
 
 use std::fmt::Write;
 
+use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
@@ -64,6 +65,7 @@ pub enum ResourceIntrinsic {
     ResourceTransferBorrowValidLifting,
     ResourceTransferOwn,
     CurResourceBorrows,
+    ResourceDestructorCall,
 }
 
 impl ResourceIntrinsic {
@@ -81,6 +83,7 @@ impl ResourceIntrinsic {
             Self::ResourceTransferBorrowValidLifting.name(),
             Self::ResourceTransferOwn.name(),
             Self::CurResourceBorrows.name(),
+            Self::ResourceDestructorCall.name(),
         ]
     }
 
@@ -98,12 +101,69 @@ impl ResourceIntrinsic {
             Self::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",
             Self::ResourceTransferOwn => "resourceTransferOwn",
             Self::CurResourceBorrows => "curResourceBorrows",
+            Self::ResourceDestructorCall => "callResourceDestructor",
         }
     }
 
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::ResourceDestructorCall => {
+                let get_current_task_meta =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let create_current_task = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::CreateNewCurrentTask,
+                ));
+                let with_current_task =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+                let name = self.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      function {name}(args) {{
+                          const {{ componentIdx, dtor, rep }} = args;
+
+                          // A resource can be disposed re-entrantly while its component
+                          // already has a current task. In that case the destructor is part
+                          // of that task and must not replace its current-task register.
+                          if ({get_current_task_meta}(componentIdx)) {{
+                              return dtor(rep);
+                          }}
+
+                          const [task] = {create_current_task}({{
+                              componentIdx,
+                              isAsync: false,
+                              callingWasmExport: true,
+                              entryFnName: '<resource-drop>',
+                          }});
+                          task.enterSync();
+
+                          return {with_current_task}({{
+                              taskID: task.id(),
+                              componentIdx,
+                              fn: () => {{
+                                  try {{
+                                      const result = dtor(rep);
+                                      task.resolve([]);
+                                      task.exit();
+                                      return result;
+                                  }} catch (err) {{
+                                      if (!task.isResolvedState()) {{
+                                          task.setErrored(err);
+                                          task.reject(err);
+                                      }}
+                                      if (!task.isExited()) {{
+                                          task.exit({{ skipExclusiveLockCheck: true }});
+                                      }}
+                                      throw err;
+                                  }}
+                              }},
+                          }});
+                      }}
+                    "#,
+                );
+            }
+
             Self::CurResourceBorrows => output.push_str(
                 "
                 let curResourceBorrows = [];

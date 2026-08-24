@@ -55,6 +55,8 @@ pub enum ResourceData {
     Host {
         tid: TypeResourceTableIndex,
         rid: ResourceIndex,
+        component_idx: RuntimeComponentInstanceIndex,
+        needs_task_context: bool,
         local_name: String,
         dtor_name: Option<String>,
     },
@@ -2439,6 +2441,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Host {
                         tid,
                         rid,
+                        component_idx,
+                        needs_task_context,
                         local_name,
                         dtor_name,
                     } => {
@@ -2465,10 +2469,19 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(self.src,
                                             "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                     finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});");
-                                let dtor_call = dtor_name
-                                    .as_ref()
-                                    .map(|dtor| format!("{dtor}(handleEntry.rep);"))
-                                    .unwrap_or_default();
+                                let component_idx = component_idx.as_u32();
+                                let dtor_call = dtor_name.as_ref().map(|dtor| {
+                                    if *needs_task_context {
+                                        let call_resource_destructor = self.intrinsic(
+                                            Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall),
+                                        );
+                                        format!(
+                                            "{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }});"
+                                        )
+                                    } else {
+                                        format!("{dtor}(handleEntry.rep);")
+                                    }
+                                }).unwrap_or_default();
                                 // Explicitly dropping an own handle must always release the host-side
                                 // handle and finalizer registration. A component-defined destructor is
                                 // an additional callback, not a prerequisite for resource cleanup.
