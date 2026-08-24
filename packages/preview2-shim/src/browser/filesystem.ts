@@ -156,6 +156,13 @@ function getSource(fileEntry: FileDataEntry): Uint8Array {
     return fileEntry.source!;
 }
 
+function containsEntry(root: FileDataEntry, target: FileDataEntry): boolean {
+    if (root === target) {
+        return true;
+    }
+    return root.dir ? Object.values(root.dir).some((entry) => containsEntry(entry, target)) : false;
+}
+
 // Keep spare capacity separate so FileDataEntry.source always reflects the logical file size.
 const fileWriteBuffers = new WeakMap<FileDataEntry, Uint8Array>();
 
@@ -501,6 +508,24 @@ class Descriptor implements TypesNamespace.Descriptor {
             descriptorGetEntry(newDescriptor as Descriptor),
             newPath,
         );
+        const replaced = newParent.dir![newName];
+        if ((oldParent === newParent && oldName === newName) || replaced === entry) {
+            return;
+        }
+        if (entry.dir && containsEntry(entry, newParent)) {
+            throw "invalid";
+        }
+        if (replaced) {
+            if (entry.dir && !replaced.dir) {
+                throw "not-directory";
+            }
+            if (!entry.dir && replaced.dir) {
+                throw "is-directory";
+            }
+            if (replaced.dir && Object.keys(replaced.dir).length > 0) {
+                throw "not-empty";
+            }
+        }
         newParent.dir![newName] = entry;
         delete oldParent.dir![oldName];
     }
