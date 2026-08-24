@@ -246,6 +246,7 @@ export async function startTestServer(args: StartTestServerArgs): Promise<StartT
         args: [
             ...(env.TEST_PUPPETEER_LAUNCH_ARGS ?? "").split(","),
             "--enable-experimental-webassembly-jspi",
+            "--ignore-certificate-errors",
             "--flag-switches-begin",
             "--enable-features=WebAssemblyExperimentalJSPI",
             "--flag-switches-end",

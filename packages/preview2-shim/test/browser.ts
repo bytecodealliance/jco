@@ -1,5 +1,8 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createSecureServer } from "node:http2";
 import { dirname } from "node:path";
+import { promisify } from "node:util";
 
 import { suite, test, assert } from "vitest";
 import { componentize, ComponentizeOptions } from "@bytecodealliance/componentize-js";
@@ -8,6 +11,7 @@ import { transpile } from "@bytecodealliance/jco";
 import { getTmpDir, FIXTURES_WIT_DIR, startTestServer, runBasicHarnessPageTest } from "./common.js";
 
 type TranspileOutput = { files: { [filename: string]: Uint8Array } };
+const execFileAsync = promisify(execFile);
 
 suite("browser", () => {
     test("native-fetch", async () => {
@@ -35,6 +39,128 @@ suite("browser", () => {
         assert.strictEqual(result.json.message, "hello from test server");
 
         await page.close();
+        await cleanup();
+    });
+
+    test("native-fetch-request-streaming", async () => {
+        const outDir = await getTmpDir();
+        const keyPath = `${outDir}/localhost.key`;
+        const certPath = `${outDir}/localhost.crt`;
+        await execFileAsync("openssl", [
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            keyPath,
+            "-out",
+            certPath,
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost",
+            "-days",
+            "1",
+        ]);
+        const streamingServer = createSecureServer({
+            key: await readFile(keyPath),
+            cert: await readFile(certPath),
+        });
+        streamingServer.on("stream", (stream, headers) => {
+            if (headers[":method"] === "OPTIONS") {
+                stream.respond({
+                    ":status": 204,
+                    "access-control-allow-origin": "*",
+                    "access-control-allow-methods": "POST, OPTIONS",
+                    "access-control-allow-headers": "*",
+                });
+                stream.end();
+                return;
+            }
+            const chunks: Uint8Array[] = [];
+            stream.on("data", (chunk) => chunks.push(chunk));
+            stream.on("end", () => {
+                stream.respond({
+                    ":status": 200,
+                    "content-type": "application/octet-stream",
+                    "access-control-allow-origin": "*",
+                });
+                stream.end(Buffer.concat(chunks));
+            });
+        });
+        await new Promise<void>((resolve) => streamingServer.listen(0, "localhost", resolve));
+        const address = streamingServer.address();
+        if (!address || typeof address === "string") {
+            throw new Error("unexpected HTTP/2 server address");
+        }
+        const { baseURL, browser, cleanup } = await startTestServer({
+            transpiledOutputDir: outDir,
+        });
+
+        const page = await browser.newPage();
+        await page.goto(`${baseURL}/index.html`);
+        const result = await page.evaluate(async (serverPort) => {
+            const http = (
+                globalThis as typeof globalThis & {
+                    preview2ShimHttp: typeof import("../src/browser/http.js");
+                }
+            ).preview2ShimHttp;
+            http._setRequestStreaming(true);
+            try {
+                const request = new http.types.OutgoingRequest(new http.types.Fields());
+                request.setMethod({ tag: "post" });
+                request.setScheme({ tag: "HTTPS" });
+                request.setAuthority(`localhost:${serverPort}`);
+                request.setPathWithQuery("/post");
+                const body = request.body();
+                const stream = body.write();
+                stream.checkWrite();
+                stream.write(new TextEncoder().encode("before "));
+
+                const responseFuture = http.outgoingHandler.handle(request, undefined);
+                await Promise.resolve();
+                stream.checkWrite();
+                stream.write(new TextEncoder().encode("after"));
+                http.types.OutgoingBody.finish(body, undefined);
+
+                await responseFuture.subscribe().block();
+                const result = responseFuture.get();
+                if (!result || result.tag === "err" || result.val.tag === "err") {
+                    throw new Error(`streaming request failed: ${JSON.stringify(result)}`);
+                }
+                const response = result.val.val;
+                const incoming = response.consume();
+                const input = incoming.stream();
+                const chunks: Uint8Array[] = [];
+                try {
+                    while (true) {
+                        chunks.push(await input.blockingRead(65_536n));
+                    }
+                } catch (error) {
+                    if ((error as { tag?: string }).tag !== "closed") {
+                        throw error;
+                    }
+                }
+                const length = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+                const bytes = new Uint8Array(length);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    bytes.set(chunk, offset);
+                    offset += chunk.byteLength;
+                }
+                return {
+                    status: response.status(),
+                    body: new TextDecoder().decode(bytes),
+                };
+            } finally {
+                http._setRequestStreaming(false);
+            }
+        }, address.port);
+
+        assert.deepStrictEqual(result, { status: 200, body: "before after" });
+        await page.close();
+        await new Promise<void>((resolve) => streamingServer.close(() => resolve()));
         await cleanup();
     });
 
