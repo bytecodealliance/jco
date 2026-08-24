@@ -19,8 +19,7 @@ import {
 import { renderComponent } from "../dist/cmd/new/render.js";
 
 suite("jco scaffold", () => {
-    // TODO(unskip): enable once OCI network fixtures and the wasm-pkg-tools component are available in CI.
-    test.skip("scaffolds a versioned WASI package from OCI", async () => {
+    test.concurrent("scaffolds a versioned WASI package from OCI", async () => {
         const root = await getTmpDir();
         const project = join(root, "oci-command");
         try {
@@ -43,8 +42,7 @@ suite("jco scaffold", () => {
         }
     });
 
-    // TODO(unskip): enable once OCI network fixtures and the wasm-pkg-tools component are available in CI.
-    test.skip("scaffolds an arbitrary WIT package from an explicit OCI reference", async () => {
+    test.concurrent("scaffolds an arbitrary WIT package from an explicit OCI reference", async () => {
         const root = await getTmpDir();
         const project = join(root, "oci-adder");
         try {
