@@ -1,0 +1,22 @@
+package local:node-querystring;
+
+world test {
+  record report {
+    repeated: list<string>,
+    empty: string,
+    flag: string,
+    malformed-fallback: bool,
+    custom-first: string,
+    custom-second: string,
+    limited-keys: u32,
+    encoded: string,
+    custom-encoded: string,
+    escaped: string,
+    unescaped: string,
+    buffer-bytes: list<u8>,
+    null-prototype: bool,
+    namespace-checks: u32,
+  }
+
+  export run: func() -> report;
+}
