@@ -1,0 +1,18 @@
+package local:node-assert;
+
+world test {
+  record report {
+    scalar-checks: u32,
+    deep-checks: u32,
+    matcher-checks: u32,
+    module-checks: u32,
+    promise-checks: u32,
+    deprecated-checks: u32,
+    failure-code: string,
+    failure-operator: string,
+    strict-subpath: bool,
+    deprecated-code: string,
+  }
+
+  export run: func() -> report;
+}
