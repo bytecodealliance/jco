@@ -1,10 +1,14 @@
 # Node.js built-in compatibility
 
+## Goal
+
 Jco's long-term goal is to let existing Node.js programs become WebAssembly
 components with as few source changes as possible. In the ideal case, application
 code can keep an ordinary import such as `import { Buffer } from "node:buffer"`,
 and `jco componentize` supplies a portable implementation while producing the
 component.
+
+## Compatibility boundaries
 
 This is a compatibility layer, not a Node.js process inside WebAssembly. Node APIs
 often assume access to an operating system, threads, subprocesses, native addons,
@@ -13,7 +17,7 @@ world, and its JavaScript engine does not automatically provide Node internals.
 Compatibility therefore grows API by API, with explicit behavior and tests for
 each supported module.
 
-## How the compatibility layer works
+## Enabling Node.js built-ins
 
 Node built-ins are replaced while Jco bundles component source. JavaScript entry
 points must pass `--bundle`; TypeScript entry points are bundled automatically:
@@ -23,10 +27,18 @@ jco componentize app.js --bundle --wit wit -o app.wasm
 jco componentize app.ts --wit wit -o app.wasm
 ```
 
+### Bundling behavior
+
 During bundling, Jco's Node built-in plugin resolves supported `node:` imports to
 virtual ES modules. Those modules and their portable dependencies are included in
 the guest JavaScript before [ComponentizeJS][componentize-js] or
 `componentize-qjs` embeds it in a WebAssembly component.
+
+Application source should keep its normal `node:` imports. Direct imports of the
+underlying `jco-std` implementation are not the recommended application-facing
+interface for Node.js compatibility.
+
+## Implementation selection
 
 Resolution follows a deliberate quality order:
 
@@ -42,6 +54,8 @@ Resolution follows a deliberate quality order:
 
 Only `node:` specifiers participate in this mechanism. Legacy bare specifiers such
 as `buffer`, `path`, and `querystring` are not rewritten.
+
+## Combining built-ins with `jco-std`
 
 Node built-in compatibility can be mixed freely with direct imports from
 [`@bytecodealliance/jco-std`](./jco-std.md) and other portable packages. They are
@@ -106,6 +120,8 @@ filling, concatenation, comparison, integer and floating-point IO, searching,
 slicing, copying, swapping, and JSON conversion. `atob()` and `btoa()` use runtime
 globals when available and portable Buffer fallbacks otherwise.
 
+#### Behavioral limits
+
 There are intentional limits:
 
 - `Buffer()` and `new Buffer()` are deprecated in Node and throw
@@ -131,6 +147,8 @@ malformed-percent fallback and `unescapeBuffer`, which use Buffer internally.
 
 ## How Jco evaluates unenv modules
 
+### Different compatibility goals
+
 unenv provides a valuable cross-runtime foundation used by browsers, edge
 workers, server frameworks, and other non-Node environments. Its scope is broader
 than Jco's: for many consumers, preserving an import and providing a conservative
@@ -143,6 +161,8 @@ internals, or intentionally mocked. Consequently, an unenv compatibility marker
 or alias is a starting point for review rather than an automatic promise of full
 Node behavior.
 
+### Audit criteria
+
 For each candidate, Jco checks:
 
 - Node 24 export names, aliases, descriptors, types, and deprecations;
@@ -152,6 +172,8 @@ For each candidate, Jco checks:
 - differential behavior against Node 24; and
 - execution through an actual guest component, not only source inspection or
   generated-bundle string checks.
+
+### Upstream improvements
 
 General correctness improvements should be contributed upstream when practical.
 Until an improvement is in the pinned unenv release and passes Jco's guest tests,
@@ -193,6 +215,8 @@ set of coordinated shims:
 `node:tls`, `node:util`, `node:util/types`, `node:v8`, `node:vm`, `node:wasi`,
 `node:worker_threads`, and `node:zlib`.
 
+#### Future composition
+
 This group is not all-or-nothing. For example, a future filesystem implementation
 could combine portable upstream algorithms with explicit WASI filesystem
 providers, just as Jco's path implementation combines portable path logic with a
@@ -211,6 +235,8 @@ An unsupported `node:` import is left unresolved during bundling. This makes the
 missing compatibility visible instead of silently substituting a mock. An
 explicit unsupported function inside an admitted module is different: the module
 can be imported, but calling that particular function throws a stable Jco error.
+
+### Expanding support
 
 This distinction lets applications use well-supported portions of modules such as
 Buffer while keeping unavailable behavior easy to diagnose. It also gives Jco a
