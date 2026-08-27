@@ -27,6 +27,11 @@
   ],
   "type": "module",
   "exports": {
+    "./node/assert": {
+      "types": "./dist/node/assert/index.d.ts",
+      "browser": "./dist/node/assert/index.js",
+      "default": "./dist/node/assert/index.js"
+    },
     "./node/path": {
       "types": "./dist/node/path.d.ts",
       "browser": "./dist/node/path.js",
@@ -116,6 +121,7 @@
     "@types/which": "^3.0.4",
     "hono": "^4.12.34",
     "rolldown": "^1.0.0-beta.46",
+    "typescript": "catalog:",
     "vitest": "^4.0.8",
     "which": "^5.0.0"
   }
