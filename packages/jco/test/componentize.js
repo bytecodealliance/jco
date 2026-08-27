@@ -156,4 +156,34 @@ suite("componentize", () => {
             await cleanup();
         }
     });
+
+    test("bundles and executes Node assert APIs guest-side", async () => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-assert",
+            entry: "source.js",
+            wit: "source.wit",
+            bundle: true,
+            extraArgs: ["--backend", "qjs"],
+        });
+        const { instance, cleanup } = await setupAsyncTest({
+            component: { name: "node-assert", path: componentPath },
+        });
+
+        try {
+            assert.deepEqual(instance.run(), {
+                scalarChecks: 19,
+                deepChecks: 14,
+                matcherChecks: 12,
+                moduleChecks: 7,
+                promiseChecks: 2,
+                deprecatedChecks: 2,
+                failureCode: "ERR_ASSERTION",
+                failureOperator: "strictEqual",
+                strictSubpath: true,
+                deprecatedCode: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
+            });
+        } finally {
+            await cleanup();
+        }
+    });
 });
