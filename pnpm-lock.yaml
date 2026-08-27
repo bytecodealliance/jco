@@ -349,6 +349,9 @@ importers:
       typescript-compiler-api:
         specifier: npm:typescript@6.0.3
         version: typescript@6.0.3
+      unenv:
+        specifier: 2.0.0-rc.24
+        version: 2.0.0-rc.24
     devDependencies:
       '@commitlint/config-conventional':
         specifier: ^19.8.1

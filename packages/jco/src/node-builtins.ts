@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import type { Plugin } from "rolldown";
+import { defineEnv } from "unenv";
 
 const PATH_SPECIFIERS = new Map([
     ["node:path", "default"],
@@ -8,7 +9,121 @@ const PATH_SPECIFIERS = new Map([
     ["node:path/win32", "win32"],
 ]);
 const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
+const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
+const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
+
+let defaultUnenvAliases: Readonly<Record<string, string>> | undefined;
+
+function getUnenvAliases(options: NodeBuiltinOptions): Readonly<Record<string, string>> {
+    if (options.unenvAliases) {
+        return options.unenvAliases;
+    }
+    defaultUnenvAliases ??= {
+        ...defineEnv({ resolve: true }).env.alias,
+        "unenv:buffer-core": fileURLToPath(import.meta.resolve("unenv/node/internal/buffer/buffer")),
+    };
+    return defaultUnenvAliases;
+}
+
+function unenvModule(specifier: string, options: NodeBuiltinOptions): string {
+    const resolved = getUnenvAliases(options)[specifier];
+    if (!resolved || resolved.startsWith("node:")) {
+        throw new Error(`unenv did not provide a bundleable implementation for audited builtin ${specifier}`);
+    }
+    return resolved;
+}
+
+function unenvAdapter(specifier: string, options: NodeBuiltinOptions): string {
+    if (specifier === "node:buffer") {
+        return `
+export { default } from ${JSON.stringify(UNENV_BUFFER_CORE)};
+export * from ${JSON.stringify(UNENV_BUFFER_CORE)};
+`;
+    }
+    if (specifier === "node:querystring") {
+        const querystringModule = unenvModule(specifier, options);
+        return `
+import ${JSON.stringify(UNENV_BUFFER_CORE)};
+import querystring from ${JSON.stringify(querystringModule)};
+export * from ${JSON.stringify(querystringModule)};
+export default querystring;
+`;
+    }
+    throw new Error(`missing Jco adapter for audited unenv builtin ${specifier}`);
+}
+
+function unenvBufferCore(options: NodeBuiltinOptions): string {
+    // Implementation source: unenv@2.0.0-rc.24's
+    // runtime/node/internal/buffer/buffer module, which wraps the MIT-licensed
+    // Feross buffer implementation. Node-facing constants and the public export
+    // shape follow Node.js v24 lib/buffer.js.
+    const bufferModule = unenvModule("unenv:buffer-core", options);
+    return `
+import {
+    Buffer as UnenvBuffer,
+    INSPECT_MAX_BYTES,
+    kMaxLength,
+} from ${JSON.stringify(bufferModule)};
+function deprecatedBufferConstructor() {
+    const error = new Error("The deprecated Buffer() constructor is not supported; use Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() instead");
+    error.code = "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API";
+    throw error;
+}
+function unsupported(api) {
+    const error = new Error(api + " is not supported by the Jco component runtime");
+    error.code = "ERR_JCO_UNSUPPORTED_NODE_API";
+    throw error;
+}
+export const Buffer = new Proxy(UnenvBuffer, {
+    apply: deprecatedBufferConstructor,
+    construct: deprecatedBufferConstructor,
+});
+Buffer.prototype.constructor = Buffer;
+// TypedArray-derived methods must allocate through the upstream implementation,
+// not the deprecated-constructor guard exposed to users.
+Object.defineProperty(Buffer, Symbol.species, { value: UnenvBuffer });
+export const SlowBuffer = new Proxy(function SlowBuffer() {}, {
+    apply: deprecatedBufferConstructor,
+    construct: deprecatedBufferConstructor,
+});
+export const Blob = globalThis.Blob ?? class Blob {
+    constructor() { unsupported("buffer.Blob"); }
+};
+export const File = globalThis.File ?? class File {
+    constructor() { unsupported("buffer.File"); }
+};
+export { INSPECT_MAX_BYTES, kMaxLength };
+export const kStringMaxLength = 536870888;
+export const constants = {
+    MAX_LENGTH: Number.MAX_SAFE_INTEGER,
+    MAX_STRING_LENGTH: kStringMaxLength,
+};
+export const atob = globalThis.atob?.bind(globalThis) ?? ((value) => UnenvBuffer.from(value, "base64").toString("latin1"));
+export const btoa = globalThis.btoa?.bind(globalThis) ?? ((value) => UnenvBuffer.from(value, "latin1").toString("base64"));
+export const isAscii = () => unsupported("buffer.isAscii");
+export const isUtf8 = () => unsupported("buffer.isUtf8");
+export const resolveObjectURL = () => unsupported("buffer.resolveObjectURL");
+export const transcode = () => unsupported("buffer.transcode");
+globalThis.Buffer = Buffer;
+export default {
+    atob,
+    Blob,
+    Buffer,
+    btoa,
+    constants,
+    File,
+    INSPECT_MAX_BYTES,
+    isAscii,
+    isUtf8,
+    kMaxLength,
+    kStringMaxLength,
+    resolveObjectURL,
+    SlowBuffer,
+    transcode,
+};
+`;
+}
 
 /** Interface of a WIT world, as reported by `componentWitMetadataForWorld` */
 interface WorldInterface {
@@ -29,6 +144,8 @@ export interface NodeBuiltinOptions {
     pathFactory?: string;
     /** Path to jco-std's `node/assert` module (overridable for tests) */
     assertModule?: string;
+    /** unenv aliases to resolve audited builtins against (overridable for tests) */
+    unenvAliases?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -170,19 +287,29 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             if (ASSERT_SPECIFIERS.has(id)) {
                 return `${VIRTUAL_PREFIX}${id}`;
             }
-            if (!PATH_SPECIFIERS.has(id)) {
-                return null;
+            if (PATH_SPECIFIERS.has(id)) {
+                const version = environmentVersion(worldMetadata);
+                return `${VIRTUAL_PREFIX}${id}@${version}`;
             }
-            const version = environmentVersion(worldMetadata);
-            return `${VIRTUAL_PREFIX}${id}@${version}`;
+            if (AUDITED_UNENV_SPECIFIERS.has(id)) {
+                unenvAdapter(id, options);
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            return null;
         },
         load(id) {
             if (!id.startsWith(VIRTUAL_PREFIX)) {
                 return null;
             }
             const value = id.slice(VIRTUAL_PREFIX.length);
+            if (id === UNENV_BUFFER_CORE) {
+                return unenvBufferCore(options);
+            }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (AUDITED_UNENV_SPECIFIERS.has(value)) {
+                return unenvAdapter(value, options);
             }
             const separator = value.lastIndexOf("@");
             const specifier = value.slice(0, separator);
