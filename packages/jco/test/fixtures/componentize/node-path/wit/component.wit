@@ -1,0 +1,8 @@
+package jco-fixtures:node-path;
+
+world component {
+    import wasi:cli/environment@0.2.12;
+
+    export lexical: func() -> string;
+    export from-cwd: func() -> string;
+}

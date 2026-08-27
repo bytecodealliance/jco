@@ -5,6 +5,7 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
+import { nodeBuiltinPlugin, type WorldMetadata } from "../node-builtins.js";
 
 /** All features that can be enabled/disabled */
 const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
@@ -79,9 +80,13 @@ const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
  * @param {string} witPath
  * @returns bool
  */
+async function worldMetadataFor(witPath: string, worldName?: string): Promise<WorldMetadata> {
+    const path = (isWindows ? "//?/" : "") + resolve(witPath);
+    return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
+}
+
 async function usesOlderWasiHTTP(witPath: string, worldName?: string) {
-    witPath = (isWindows ? "//?/" : "") + resolve(witPath);
-    const worldMetadata = await componentWitMetadataForWorld({ tag: "path", val: witPath }, worldName);
+    const worldMetadata = await worldMetadataFor(witPath, worldName);
 
     // Check if the an old `wasi:http/incoming-handler` version is exported
     const exportsOldIncomingHandler = worldMetadata.exports.some((iface) => {
@@ -133,10 +138,16 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         throw new Error("--bundle-config requires --bundle");
     }
     const bundleConfig = opts.bundleConfig ? await loadBundleConfig(opts.bundleConfig) : undefined;
-    const source = shouldBundle
-        ? await bundleComponentSource(jsSource, { config: bundleConfig, typescript: isTypeScript })
-        : await readFile(jsSource, "utf8");
     const witPath = resolve(opts.wit);
+    const source = shouldBundle
+        ? await bundleComponentSource(jsSource, {
+              config: bundleConfig,
+              typescript: isTypeScript,
+              // Node builtin adapters are supplied while the source graph is bundled, which is
+              // why `node:path` only works together with `--bundle`.
+              plugins: [nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName))],
+          })
+        : await readFile(jsSource, "utf8");
     const sourceName = isTypeScript ? `${basename(jsSource, extname(jsSource))}.js` : basename(jsSource);
 
     // Build the component

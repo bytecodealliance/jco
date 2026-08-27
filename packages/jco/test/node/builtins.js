@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { nodeBuiltinPlugin } from "../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 
 const environment = (patch = 6n) => ({
     imports: [

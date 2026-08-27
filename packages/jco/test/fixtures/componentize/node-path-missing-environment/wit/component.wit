@@ -1,0 +1,6 @@
+// A world that uses node:path without importing the WASI interface it needs.
+package jco-fixtures:node-path-missing-environment;
+
+world component {
+    export lexical: func() -> string;
+}

@@ -319,6 +319,9 @@ importers:
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-std':
+        specifier: ^0.2.1
+        version: 0.2.1
       '@bytecodealliance/jco-transpile':
         specifier: ^0.12.1
         version: 0.12.1
@@ -688,6 +691,9 @@ packages:
 
   '@bytecodealliance/jco-std@0.2.0':
     resolution: {integrity: sha512-/GJoiSS6jVerxqAZOlm0CqbU64tokRLVdLtJeF9gnC9YVlYZA8PC/RUIW6pEtx9Np2hwHzPUTwb4RSzobaRIBw==}
+
+  '@bytecodealliance/jco-std@0.2.1':
+    resolution: {integrity: sha512-pJtu+dQ8RTlHCtAAhY6wwguNa196Td5T30stnXKCJvfc0mhxKNTszdosKR1YxqR4mktAVYiCn9Uvzjw8ffF5HA==}
 
   '@bytecodealliance/jco-transpile@0.11.0':
     resolution: {integrity: sha512-0mTr0qGd3Y55BczPO127NTgfY/lSpRgDMElifTnSzbidsyAo4wa4zrSoqwQpBrSiJvXqTLGm1sRT2zkwGaGelw==}
@@ -4747,6 +4753,8 @@ snapshots:
       '@bytecodealliance/jco-node-fs-win32-x64-msvc': 0.2.0
 
   '@bytecodealliance/jco-std@0.2.0': {}
+
+  '@bytecodealliance/jco-std@0.2.1': {}
 
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:

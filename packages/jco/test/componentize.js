@@ -1,12 +1,10 @@
 /* global Buffer */
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { suite, test, assert, expect } from "vitest";
 import { componentize } from "../src/cmd/componentize.js";
-import { COMPONENT_JS_FIXTURES_DIR } from "./common.js";
-import { exec, getTmpDir, jcoPath } from "./helpers.js";
+import { componentizeFixture, getTmpDir, setupAsyncTest } from "./helpers.js";
 
 // NOTE: we test componentization with the jco CLI to avoid
 // triggering errors for the the eval(import) call(s) in cmd/componentize.js
@@ -16,50 +14,34 @@ import { exec, getTmpDir, jcoPath } from "./helpers.js";
 // versions are real dependencies now.
 suite("componentize", () => {
     test("componentized exported resource invokes its guest destructor", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "resource-disposal");
-        const outputDir = await getTmpDir();
-        const componentPath = join(outputDir, "component.wasm");
-        const transpiledDir = join(outputDir, "transpiled");
+        const { componentPath } = await componentizeFixture({
+            fixture: "resource-disposal",
+            entry: "source.js",
+            wit: "source.wit",
+            extraArgs: ["--disable", "all"],
+        });
+        const { instance, cleanup } = await setupAsyncTest({
+            component: { name: "resource-disposal", path: componentPath },
+        });
 
-        await exec(
-            jcoPath,
-            "componentize",
-            join(fixtureDir, "source.js"),
-            "--disable",
-            "all",
-            "-w",
-            join(fixtureDir, "source.wit"),
-            "-o",
-            componentPath,
-        );
-        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "resource-disposal");
-        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
-
-        const { resources } = await import(`${pathToFileURL(transpiledDir)}/resource-disposal.js`);
-        const resource = new resources.Example(42);
-        assert.strictEqual(resource.getId(), 42);
-        resource[Symbol.dispose || Symbol.for("dispose")]();
-        assert.strictEqual(resources.disposeCount(), 1);
+        try {
+            const resource = new instance.resources.Example(42);
+            assert.strictEqual(resource.getId(), 42);
+            resource[Symbol.dispose || Symbol.for("dispose")]();
+            assert.strictEqual(instance.resources.disposeCount(), 1);
+        } finally {
+            await cleanup();
+        }
     });
 
     test("rejects a custom StarlingMonkey engine with the QuickJS backend", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
-        const outputDir = await getTmpDir();
-
         await expect(
-            exec(
-                jcoPath,
-                "componentize",
-                join(fixtureDir, "source.ts"),
-                "--backend",
-                "qjs",
-                "--engine",
-                "custom-engine.wasm",
-                "-w",
-                join(fixtureDir, "source.wit"),
-                "-o",
-                join(outputDir, "component.wasm"),
-            ),
+            componentizeFixture({
+                fixture: "typescript-direct",
+                entry: "source.ts",
+                wit: "source.wit",
+                extraArgs: ["--backend", "qjs", "--engine", "custom-engine.wasm"],
+            }),
         ).rejects.toThrow();
 
         await expect(
@@ -73,11 +55,7 @@ suite("componentize", () => {
     });
 
     test.concurrent("detect older wasi:http", async () => {
-        const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "wasi-http-detection-old/component.js");
-        const witPath = join(COMPONENT_JS_FIXTURES_DIR, "wasi-http-detection-old/wit");
-        const outputDir = await getTmpDir();
-        const outputPath = join(outputDir, "component.wasm");
-        const { stderr } = await exec(jcoPath, "componentize", jsPath, "-w", witPath, "-o", outputPath);
+        const { stderr } = await componentizeFixture({ fixture: "wasi-http-detection-old" });
         assert.match(
             stderr,
             /Falling back to componentize-js 0\.19\.3 because this component requests Preview 2 WASI packages older than 0\.2\.10\./,
@@ -89,131 +67,93 @@ suite("componentize", () => {
     });
 
     test.concurrent("detect newer wasi:http", async () => {
-        const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "wasi-http-detection-new/component.js");
-        const witPath = join(COMPONENT_JS_FIXTURES_DIR, "wasi-http-detection-new/wit");
-        const outputDir = await getTmpDir();
-        const outputPath = join(outputDir, "component.wasm");
-        const { stderr } = await exec(jcoPath, "componentize", jsPath, "-w", witPath, "-o", outputPath);
+        const { stderr } = await componentizeFixture({ fixture: "wasi-http-detection-new" });
         assert.strictEqual(stderr, "");
     });
 
     test("uses the non-bundled compatibility path by default", async () => {
-        const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.js");
-        const witPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.wit");
-        const outputDir = await getTmpDir();
-        const outputPath = join(outputDir, "component.wasm");
-
-        const { stderr } = await exec(jcoPath, "componentize", jsPath, "-w", witPath, "-o", outputPath);
+        const { stderr } = await componentizeFixture({
+            fixture: "simple-resource",
+            entry: "source.js",
+            wit: "source.wit",
+        });
 
         assert.strictEqual(stderr, "");
     });
 
     test("requires bundling when a bundle config is provided", async () => {
-        const jsPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.js");
-        const witPath = join(COMPONENT_JS_FIXTURES_DIR, "simple-resource/source.wit");
         const outputDir = await getTmpDir();
-        const outputPath = join(outputDir, "component.wasm");
 
         await expect(
-            exec(
-                jcoPath,
-                "componentize",
-                jsPath,
-                "--bundle-config",
-                join(outputDir, "rolldown.config.mjs"),
-                "-w",
-                witPath,
-                "-o",
-                outputPath,
-            ),
+            componentizeFixture({
+                fixture: "simple-resource",
+                entry: "source.js",
+                wit: "source.wit",
+                outputDir,
+                extraArgs: ["--bundle-config", join(outputDir, "rolldown.config.mjs")],
+            }),
         ).rejects.toThrow(/--bundle-config requires --bundle/);
     });
 
     test("componentizes a TypeScript entry without an explicit bundle flag", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
-        const outputDir = await getTmpDir();
-        const outputPath = join(outputDir, "component.wasm");
-
-        const { stderr } = await exec(
-            jcoPath,
-            "componentize",
-            join(fixtureDir, "source.ts"),
-            "-w",
-            join(fixtureDir, "source.wit"),
-            "-o",
-            outputPath,
-        );
-        const component = await readFile(outputPath);
+        const { componentPath, stderr } = await componentizeFixture({
+            fixture: "typescript-direct",
+            entry: "source.ts",
+            wit: "source.wit",
+        });
+        const component = await readFile(componentPath);
 
         assert.strictEqual(stderr, "");
         assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
     });
 
     test("componentizes with the QuickJS backend alias", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
-        const outputDir = await getTmpDir();
-        const outputPath = join(outputDir, "component.wasm");
-        const transpiledDir = join(outputDir, "transpiled");
-
-        const { stderr } = await exec(
-            jcoPath,
-            "componentize",
-            join(fixtureDir, "source.ts"),
-            "--backend",
-            "qjs",
-            "-w",
-            join(fixtureDir, "source.wit"),
-            "-o",
-            outputPath,
-        );
-        const component = await readFile(outputPath);
+        const { componentPath, stderr } = await componentizeFixture({
+            fixture: "typescript-direct",
+            entry: "source.ts",
+            wit: "source.wit",
+            extraArgs: ["--backend", "qjs"],
+        });
+        const component = await readFile(componentPath);
 
         assert.strictEqual(stderr, "");
         assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
 
-        await exec(jcoPath, "transpile", outputPath, "-o", transpiledDir, "--name", "quickjs");
-        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
-        const transpiled = await import(`${pathToFileURL(transpiledDir)}/quickjs.js`);
-        assert.strictEqual(transpiled.hello("world"), "hello, world");
+        const { instance, cleanup } = await setupAsyncTest({
+            component: { name: "quickjs", path: componentPath },
+        });
+        try {
+            assert.strictEqual(instance.hello("world"), "hello, world");
+        } finally {
+            await cleanup();
+        }
     });
 
     test("rejects TypeScript declarations as component entries", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "typescript-direct");
-        const outputDir = await getTmpDir();
-
         await expect(
-            exec(
-                jcoPath,
-                "componentize",
-                join(fixtureDir, "declaration.d.ts"),
-                "-w",
-                join(fixtureDir, "source.wit"),
-                "-o",
-                join(outputDir, "component.wasm"),
-            ),
+            componentizeFixture({
+                fixture: "typescript-direct",
+                entry: "declaration.d.ts",
+                wit: "source.wit",
+            }),
         ).rejects.toThrow(/TypeScript declaration files cannot be componentized directly/);
     });
 
     test("bundles and executes a local dependency graph", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "local-dependency");
-        const outputDir = await getTmpDir();
-        const componentPath = join(outputDir, "component.wasm");
-        const transpiledDir = join(outputDir, "transpiled");
+        const { componentPath } = await componentizeFixture({
+            fixture: "local-dependency",
+            entry: "source.js",
+            wit: "source.wit",
+            bundle: true,
+        });
+        const { instance, cleanup } = await setupAsyncTest({
+            component: { name: "local-dependency", path: componentPath },
+        });
 
-        await exec(
-            jcoPath,
-            "componentize",
-            join(fixtureDir, "source.js"),
-            "--bundle",
-            "-w",
-            join(fixtureDir, "source.wit"),
-            "-o",
-            componentPath,
-        );
-        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "local-dependency");
-        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
-
-        const component = await import(`${pathToFileURL(transpiledDir)}/local-dependency.js`);
-        assert.strictEqual(component.hello(), "world from a dependency");
+        try {
+            assert.strictEqual(instance.hello(), "world from a dependency");
+        } finally {
+            await cleanup();
+        }
     });
 });
