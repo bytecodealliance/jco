@@ -58,7 +58,21 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - `node:assert` and `node:assert/strict`, implemented by
   `@bytecodealliance/jco-std/node/assert`;
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
-  `@bytecodealliance/jco-std/node/path`.
+  `@bytecodealliance/jco-std/node/path`;
+- `node:buffer`, with its modern core provided by Jco's audited unenv
+  compatibility layer;
+- `node:querystring`, provided by Jco's audited unenv compatibility layer.
+
+Jco resolves Node compatibility modules in quality order: higher-fidelity or
+WASI-aware Jco implementations take precedence, followed by explicitly audited
+unenv modules. Jco does not automatically enable unenv's complete alias list or
+treat mocked and unimplemented exports as supported APIs.
+
+The buffer adapter uses unenv's Feross `buffer` implementation for the portable
+core API. Deprecated `Buffer()`/`new Buffer()` and `SlowBuffer` entry points throw
+immediately. Runtime-dependent APIs without a compatible guest implementation
+also throw explicit unsupported-API errors. The current implementation does not
+support the `base64url` encoding accepted by Node's Buffer.
 
 The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. Its
 comparison and assertion behavior is adapted from the corresponding MIT-licensed
