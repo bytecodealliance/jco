@@ -43,7 +43,7 @@ importers:
         version: 21.2.0
       '@commitlint/load':
         specifier: ^21.2.0
-        version: 21.2.0(@types/node@24.13.3)(typescript@6.0.3)
+        version: 21.2.0(@types/node@24.13.3)(typescript@7.0.2)
       '@commitlint/read':
         specifier: ^21.2.1
         version: 21.2.1(conventional-commits-parser@7.1.2)
@@ -280,7 +280,7 @@ importers:
         version: 16.0.3(rollup@4.62.3)
       '@rollup/plugin-typescript':
         specifier: ^12.1.4
-        version: 12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@6.0.3)
+        version: 12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@7.0.2)
       rollup:
         specifier: ^4.61.1
         version: 4.62.3
@@ -336,8 +336,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: ^0.2.1
-        version: 0.2.1
+        specifier: workspace:^
+        version: link:../jco-std
       '@bytecodealliance/jco-transpile':
         specifier: ^0.12.1
         version: 0.12.1
@@ -432,6 +432,9 @@ importers:
       rolldown:
         specifier: ^1.0.0-beta.46
         version: 1.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
       vitest:
         specifier: ^4.0.8
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
@@ -4996,14 +4999,14 @@ snapshots:
       - '@types/node'
       - typescript
 
-  '@commitlint/load@21.2.0(@types/node@24.13.3)(typescript@6.0.3)':
+  '@commitlint/load@21.2.0(@types/node@24.13.3)(typescript@7.0.2)':
     dependencies:
       '@commitlint/config-validator': 21.2.0
       '@commitlint/execute-rule': 21.0.1
       '@commitlint/resolve-extends': 21.2.0
       '@commitlint/types': 21.2.0
-      cosmiconfig: 9.0.2(typescript@6.0.3)
-      cosmiconfig-typescript-loader: 6.3.0(@types/node@24.13.3)(cosmiconfig@9.0.2(typescript@6.0.3))(typescript@6.0.3)
+      cosmiconfig: 9.0.2(typescript@7.0.2)
+      cosmiconfig-typescript-loader: 6.3.0(@types/node@24.13.3)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2)
       es-toolkit: 1.50.0
       is-plain-obj: 4.1.0
       picocolors: 1.1.1
@@ -6248,11 +6251,11 @@ snapshots:
       rollup: 4.62.3
       tslib: 2.8.1
 
-  '@rollup/plugin-typescript@12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@6.0.3)':
+  '@rollup/plugin-typescript@12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@7.0.2)':
     dependencies:
       '@rollup/pluginutils': 5.4.0(rollup@4.62.3)
       resolve: 1.22.12
-      typescript: 6.0.3
+      typescript: 7.0.2
     optionalDependencies:
       rollup: 4.62.3
       tslib: 2.8.1
@@ -6731,28 +6734,12 @@ snapshots:
 
   core-util-is@1.0.3: {}
 
-  cosmiconfig-typescript-loader@6.3.0(@types/node@24.13.3)(cosmiconfig@9.0.2(typescript@6.0.3))(typescript@6.0.3):
-    dependencies:
-      '@types/node': 24.13.3
-      cosmiconfig: 9.0.2(typescript@6.0.3)
-      jiti: 2.6.1
-      typescript: 6.0.3
-
   cosmiconfig-typescript-loader@6.3.0(@types/node@24.13.3)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2):
     dependencies:
       '@types/node': 24.13.3
       cosmiconfig: 9.0.2(typescript@7.0.2)
       jiti: 2.6.1
       typescript: 7.0.2
-
-  cosmiconfig@9.0.2(typescript@6.0.3):
-    dependencies:
-      env-paths: 2.2.1
-      import-fresh: 3.3.1
-      js-yaml: 4.3.1
-      parse-json: 5.2.0
-    optionalDependencies:
-      typescript: 6.0.3
 
   cosmiconfig@9.0.2(typescript@7.0.2):
     dependencies:

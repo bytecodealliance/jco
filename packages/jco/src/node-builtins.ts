@@ -7,6 +7,7 @@ const PATH_SPECIFIERS = new Map([
     ["node:path/posix", "posix"],
     ["node:path/win32", "win32"],
 ]);
+const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 
 /** Interface of a WIT world, as reported by `componentWitMetadataForWorld` */
@@ -26,6 +27,8 @@ export interface WorldMetadata {
 export interface NodeBuiltinOptions {
     /** Path to jco-std's `node/path` module (overridable for tests) */
     pathFactory?: string;
+    /** Path to jco-std's `node/assert` module (overridable for tests) */
+    assertModule?: string;
 }
 
 /**
@@ -92,15 +95,80 @@ export const win32 = path.win32;
 `;
 }
 
+/** Source of a `node:assert` or `node:assert/strict` adapter */
+function assertAdapter(specifier: string, assertModule: string): string {
+    if (specifier === "node:assert") {
+        return `
+import assert from ${JSON.stringify(assertModule)};
+export default assert;
+export {
+    Assert,
+    AssertionError,
+    CallTracker,
+    deepEqual,
+    deepStrictEqual,
+    doesNotMatch,
+    doesNotReject,
+    doesNotThrow,
+    equal,
+    fail,
+    ifError,
+    match,
+    notDeepEqual,
+    notDeepStrictEqual,
+    notEqual,
+    notStrictEqual,
+    ok,
+    partialDeepStrictEqual,
+    rejects,
+    strict,
+    strictEqual,
+    throws,
+} from ${JSON.stringify(assertModule)};
+`;
+    }
+    return `
+import { strict } from ${JSON.stringify(assertModule)};
+export default strict;
+export const Assert = strict.Assert;
+export const AssertionError = strict.AssertionError;
+export const CallTracker = strict.CallTracker;
+export const deepEqual = strict.deepEqual;
+export const deepStrictEqual = strict.deepStrictEqual;
+export const doesNotMatch = strict.doesNotMatch;
+export const doesNotReject = strict.doesNotReject;
+export const doesNotThrow = strict.doesNotThrow;
+export const equal = strict.equal;
+export const fail = strict.fail;
+export const ifError = strict.ifError;
+export const match = strict.match;
+export const notDeepEqual = strict.notDeepEqual;
+export const notDeepStrictEqual = strict.notDeepStrictEqual;
+export const notEqual = strict.notEqual;
+export const notStrictEqual = strict.notStrictEqual;
+export const ok = strict.ok;
+export const partialDeepStrictEqual = strict.partialDeepStrictEqual;
+export const rejects = strict.rejects;
+export { strict };
+export const strictEqual = strict.strictEqual;
+export const throws = strict.throws;
+`;
+}
+
 /** Create Jco's virtual adapters for supported Node builtins. */
 export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBuiltinOptions = {}): Plugin {
-    const factoryPath =
+    const pathFactory = () =>
         options.pathFactory ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node/path"));
+    const assertModule = () =>
+        options.assertModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node/assert"));
     return {
         name: "jco-node-builtins",
         resolveId(id) {
             if (id.startsWith(VIRTUAL_PREFIX)) {
                 return id;
+            }
+            if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
             }
             if (!PATH_SPECIFIERS.has(id)) {
                 return null;
@@ -113,10 +181,13 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return null;
             }
             const value = id.slice(VIRTUAL_PREFIX.length);
+            if (ASSERT_SPECIFIERS.has(value)) {
+                return assertAdapter(value, assertModule());
+            }
             const separator = value.lastIndexOf("@");
             const specifier = value.slice(0, separator);
             const version = value.slice(separator + 1);
-            return specifier === "path-core" ? pathCore(version, factoryPath) : pathAdapter(specifier, version);
+            return specifier === "path-core" ? pathCore(version, pathFactory()) : pathAdapter(specifier, version);
         },
     };
 }
