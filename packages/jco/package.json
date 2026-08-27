@@ -75,7 +75,8 @@
         "mkdirp": "^3",
         "rolldown": "^1.2.4",
         "typescript": "7.0.2",
-        "typescript-compiler-api": "npm:typescript@6.0.3"
+        "typescript-compiler-api": "npm:typescript@6.0.3",
+        "unenv": "2.0.0-rc.24"
     },
     "devDependencies": {
         "@commitlint/config-conventional": "^19.8.1",
