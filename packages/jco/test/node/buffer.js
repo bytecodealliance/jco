@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { Buffer as NodeBuffer } from "node:buffer";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { Buffer as UnenvBuffer } from "unenv/node/internal/buffer/buffer";
 import { suite, test } from "vitest";
+import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
+import { exec, getTmpDir, jcoPath } from "../helpers.js";
 
 function bytes(value) {
     return [...value];
 }
 
-suite("unenv node:buffer compatibility", () => {
+suite("node:buffer", () => {
     test.each(["utf8", "utf16le", "latin1", "ascii", "base64", "hex"])(
         "matches Node string conversion for %s",
         (encoding) => {
@@ -70,5 +75,44 @@ suite("unenv node:buffer compatibility", () => {
         const expectedTarget = NodeBuffer.alloc(4);
         assert.strictEqual(actual.copy(actualTarget, 0, 1, 5), expected.copy(expectedTarget, 0, 1, 5));
         assert.deepEqual(bytes(actualTarget), bytes(expectedTarget));
+    });
+
+    test("bundles and executes APIs guest-side", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-buffer");
+        const outputDir = await getTmpDir();
+        const componentPath = join(outputDir, "component.wasm");
+        const transpiledDir = join(outputDir, "transpiled");
+
+        await exec(
+            jcoPath,
+            "componentize",
+            join(fixtureDir, "source.js"),
+            "--bundle",
+            "--backend",
+            "qjs",
+            "-w",
+            join(fixtureDir, "source.wit"),
+            "-o",
+            componentPath,
+        );
+        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "node-buffer");
+        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+
+        const component = await import(`${pathToFileURL(transpiledDir)}/node-buffer.js`);
+        assert.deepEqual(component.run(), {
+            text: "component ✓",
+            hex: "636f6d706f6e656e7420e29c93",
+            base64: "Y29tcG9uZW50IOKckw==",
+            byteLength: 13,
+            combined: "onetwo",
+            numericBytes: new Uint8Array([239, 205, 171, 137, 255, 237, 41, 121, 219, 15, 73, 64]),
+            swappedBytes: new Uint8Array([17, 0, 51, 34]),
+            searchIndex: 3,
+            moduleIdentity: true,
+            instanceIdentity: true,
+            callCode: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
+            constructCode: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
+            slowCode: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
+        });
     });
 });
