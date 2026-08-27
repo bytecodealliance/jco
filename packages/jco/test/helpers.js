@@ -6,11 +6,12 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import mime from "mime";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
-import { JCO_JS_PATH } from "./common.js";
+import { COMPONENT_JS_FIXTURES_DIR, JCO_JS_PATH } from "./common.js";
 import { getRandomPort } from "./bench/server-helpers.js";
 
 export { getRandomPort, terminateServer, waitForServer } from "./bench/server-helpers.js";
@@ -267,7 +268,9 @@ export async function setupAsyncTest(args) {
     // elsewhere (ex. in a browser window)
     let instance = null;
     if (!component.skipInstantiation) {
-        instance = await esModule.instantiate(undefined, componentImports || {});
+        // Components transpiled for explicit instantiation get no imports wired up for them,
+        // so default to the WASI shim rather than leaving WASI imports undefined.
+        instance = await esModule.instantiate(undefined, componentImports ?? new WASIShim().getImportObject());
     }
 
     return {
@@ -284,6 +287,51 @@ export async function setupAsyncTest(args) {
             path: componentPath,
         },
     };
+}
+
+/**
+ * Componentize a fixture directory with the Jco CLI.
+ *
+ * Fixture directories live under `test/fixtures/componentize` and hold an entry module next to
+ * either a `wit` directory or a single WIT file. The CLI is used rather than the
+ * `componentize()` export so that tests cover the same path users take, and so that tests can
+ * assert on CLI output.
+ *
+ * Pair this with `setupAsyncTest` to run the component that comes out of it.
+ *
+ * @param {object} args
+ * @param {string} args.fixture - Fixture directory name, under `test/fixtures/componentize`
+ * @param {string} [args.entry] - Entry module within the fixture (default: `component.js`)
+ * @param {string} [args.wit] - WIT file or directory within the fixture (default: `wit`)
+ * @param {string} [args.world] - WIT world to build (`-n`)
+ * @param {boolean} [args.bundle] - Bundle the source and its dependencies (`--bundle`)
+ * @param {string[]} [args.extraArgs] - Additional CLI arguments
+ * @param {string} [args.outputDir] - Directory to write into (default: a fresh temporary dir)
+ * @returns {Promise<{ componentPath: string, outputDir: string, fixtureDir: string, stdout: string, stderr: string }>}
+ */
+export async function componentizeFixture(args) {
+    const { fixture, entry = "component.js", wit = "wit", world, bundle = false, extraArgs = [] } = args ?? {};
+    if (!fixture) {
+        throw new Error("missing fixture directory name");
+    }
+    const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, fixture);
+    const outputDir = args.outputDir ?? (await getTmpDir());
+    const componentPath = join(outputDir, "component.wasm");
+
+    const { stdout, stderr } = await exec(
+        jcoPath,
+        "componentize",
+        join(fixtureDir, entry),
+        ...(bundle ? ["--bundle"] : []),
+        "-w",
+        join(fixtureDir, wit),
+        ...(world ? ["-n", world] : []),
+        "-o",
+        componentPath,
+        ...extraArgs,
+    );
+
+    return { componentPath, outputDir, fixtureDir, stdout, stderr };
 }
 
 /**

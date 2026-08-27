@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
 
+import type { Plugin } from "rolldown";
+
 const PATH_SPECIFIERS = new Map([
     ["node:path", "default"],
     ["node:path/posix", "posix"],
@@ -7,8 +9,33 @@ const PATH_SPECIFIERS = new Map([
 ]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 
-function environmentVersion(worldMetadata) {
-    const matches = worldMetadata.imports.filter(
+/** Interface of a WIT world, as reported by `componentWitMetadataForWorld` */
+interface WorldInterface {
+    namespace?: string;
+    package?: string;
+    interface?: string;
+    version?: { major: bigint; minor: bigint; patch: bigint; pre?: string } | null;
+}
+
+/** Metadata of the WIT world a component is being built against */
+export interface WorldMetadata {
+    imports: WorldInterface[];
+    exports: WorldInterface[];
+}
+
+export interface NodeBuiltinOptions {
+    /** Path to jco-std's `node/path` module (overridable for tests) */
+    pathFactory?: string;
+}
+
+/**
+ * Determine the `wasi:cli/environment` version a WIT world imports.
+ *
+ * `node:path` is backed by WASI, so the world has to import the interface it needs, at exactly
+ * one version.
+ */
+function environmentVersion(worldMetadata: WorldMetadata): string {
+    const matches = (worldMetadata?.imports ?? []).filter(
         (iface) =>
             iface.namespace === "wasi" &&
             iface.package === "cli" &&
@@ -26,11 +53,12 @@ function environmentVersion(worldMetadata) {
             "node:path cannot select a WASI environment adapter because the selected WIT world imports multiple wasi:cli/environment@0.2.x versions",
         );
     }
-    const { major, minor, patch, pre } = matches[0].version;
+    const { major, minor, patch, pre } = matches[0].version!;
     return `${major}.${minor}.${patch}${pre ? `-${pre}` : ""}`;
 }
 
-function pathCore(version, factoryPath) {
+/** Source of the shared `node:path` core, which owns the single WASI-backed path instance */
+function pathCore(version: string, factoryPath: string) {
     return `
 import { initialCwd, getEnvironment } from "wasi:cli/environment@${version}";
 import { createPath } from ${JSON.stringify(factoryPath)};
@@ -38,7 +66,8 @@ export const portablePath = createPath({ initialCwd, getEnvironment });
 `;
 }
 
-function pathAdapter(specifier, version) {
+/** Source of a `node:path`, `node:path/posix`, or `node:path/win32` adapter */
+function pathAdapter(specifier: string, version: string) {
     const namespace = PATH_SPECIFIERS.get(specifier);
     return `
 import { portablePath } from ${JSON.stringify(`${VIRTUAL_PREFIX}path-core@${version}`)};
@@ -64,7 +93,7 @@ export const win32 = path.win32;
 }
 
 /** Create Jco's virtual adapters for supported Node builtins. */
-export function nodeBuiltinPlugin(worldMetadata, options = {}) {
+export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBuiltinOptions = {}): Plugin {
     const factoryPath =
         options.pathFactory ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node/path"));
     return {
