@@ -5,6 +5,8 @@ TypeScript building blocks for WebAssembly components. It gives component author
 portable implementations and ecosystem adapters that are useful across projects
 but do not belong in generated WIT bindings or in a particular application.
 
+## Relationship to componentization
+
 The package complements `jco componentize`:
 
 - `jco componentize` bundles an application and embeds it in a WebAssembly
@@ -16,27 +18,43 @@ The package complements `jco componentize`:
   helper does not implicitly grant filesystem, network, environment, or other
   host access.
 
-## Installing and importing
+## Installing `jco-std`
 
-Install `jco-std` when application source imports one of its package exports
-directly:
+Install `jco-std` when application source directly uses a package export such as
+a WASI HTTP framework adapter:
 
 ```console
 pnpm add @bytecodealliance/jco-std
 ```
 
-`jco-std` is ordinary ESM and can be bundled with the rest of the component:
+`jco-std` is ordinary ESM, so Jco bundles those explicit imports with the rest of
+the component.
+
+## Use normal imports for Node.js built-ins
+
+Application code should import supported Node.js APIs exactly as it would under
+Node.js. Do not rewrite a Node.js built-in import to an internal `jco-std` export:
 
 ```ts
-import assert from '@bytecodealliance/jco-std/node/assert';
+import assert from 'node:assert/strict';
 
 assert.equal(1 + 1, 2);
 ```
 
-Jco also consumes parts of `jco-std` internally. When bundled source imports a
-supported specifier such as `node:assert`, Jco automatically redirects it to the
-appropriate compatibility implementation. Applications do not need to rewrite
-those imports to a `jco-std` package path. See [Node.js built-in
+### Componentizing the source
+
+Componentize the source with Jco's Node.js built-in support. TypeScript entry
+points are bundled automatically; JavaScript entry points need `--bundle`:
+
+```console
+jco componentize app.ts --wit wit -o app.wasm
+jco componentize app.js --bundle --wit wit -o app.wasm
+```
+
+Jco consumes selected `jco-std` implementations internally and redirects the
+supported `node:` specifier while bundling. The application retains normal
+Node.js source code and does not need `jco-std` as a direct dependency solely for
+built-in compatibility. See [Node.js built-in
 compatibility](./nodejs-builtins.md) for the resolution model and current support
 matrix.
 
@@ -47,6 +65,8 @@ complementary. They can be used in the same source graph and bundled into the sa
 component. Enabling a supported `node:` import does not disable or replace
 `jco-std` adapters, and importing a `jco-std` adapter does not disable Node
 compatibility.
+
+### Example
 
 For example, a Hono component can use the jco-std server adapter while ordinary
 application modules use Node's assert and Buffer APIs:
