@@ -1,0 +1,21 @@
+package local:node-buffer;
+
+world test {
+  record report {
+    text: string,
+    hex: string,
+    base64: string,
+    byte-length: u32,
+    combined: string,
+    numeric-bytes: list<u8>,
+    swapped-bytes: list<u8>,
+    search-index: s32,
+    module-identity: bool,
+    instance-identity: bool,
+    call-code: string,
+    construct-code: string,
+    slow-code: string,
+  }
+
+  export run: func() -> report;
+}
