@@ -48,6 +48,32 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 
 [hono]: https://hono.dev
 
+## Node.js compatibility APIs
+
+Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
+
+- `node:assert` and `node:assert/strict`, implemented by
+  `@bytecodealliance/jco-std/node/assert`;
+- `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
+  `@bytecodealliance/jco-std/node/path`.
+
+The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. Its
+comparison and assertion behavior is adapted from the corresponding MIT-licensed
+Node.js sources. Error fields and assertion outcomes are compatibility targets;
+some generated diff text and JavaScript engine stack frames can differ from Node.
+Deprecated APIs remain importable but immediately throw a clear unsupported-API
+error rather than running their deprecated implementation.
+
+The `node:` specifiers are replaced when Jco bundles source during
+componentization. The package export can also be imported directly:
+
+```ts
+import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/node/assert";
+
+assert(true);
+deepStrictEqual({ ready: true }, { ready: true });
+```
+
 # Utilites
 
 Below is a list of utilties provided by `@bytecodealliance/jco-std`:

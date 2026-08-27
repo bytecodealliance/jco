@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### 🚀 Features
+
+- Add Node.js 24-compatible `node:assert` and `node:assert/strict` shims with
+  componentization support and capability-free guest-side coverage.
+
 ## [0.2.1] - 2026-08-04
 
 ### 🚀 Features
