@@ -22,9 +22,18 @@ describe("Node builtin adapters", () => {
         expect(core).toContain('from "/jco/node/path.js"');
     });
 
+    test.each(["node:assert", "node:assert/strict"])("generates a capability-free adapter for %s", (specifier) => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { assertModule: "/jco/node/assert.js" });
+        const id = plugin.resolveId(specifier);
+        expect(id).toBe(`\0jco-node-builtin:${specifier}`);
+        expect(plugin.load(id)).toEqual(expect.any(String));
+    });
+
     test("ignores unsupported and legacy bare specifiers", () => {
         const plugin = nodeBuiltinPlugin(environment(), { pathFactory: "/jco/node/path.js" });
         expect(plugin.resolveId("path")).toBeNull();
+        expect(plugin.resolveId("assert")).toBeNull();
+        expect(plugin.resolveId("assert/strict")).toBeNull();
         expect(plugin.resolveId("node:fs")).toBeNull();
     });
 
