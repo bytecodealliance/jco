@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import * as nodeQuerystring from "node:querystring";
+import { pathToFileURL } from "node:url";
 
 import unenvDefault, * as unenvQuerystring from "unenv/node/querystring";
 import { suite, test } from "vitest";
+import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
+import { exec, getTmpDir, jcoPath } from "../helpers.js";
 
-suite("unenv node:querystring compatibility", () => {
+suite("node:querystring", () => {
     test("matches the Node 24 module and alias contract", () => {
         assert.deepEqual(Object.keys(unenvQuerystring).sort(), Object.keys(nodeQuerystring).sort());
         assert.strictEqual(unenvQuerystring.default, unenvDefault);
@@ -81,4 +86,44 @@ suite("unenv node:querystring compatibility", () => {
             );
         },
     );
+
+    test("bundles and executes APIs guest-side", async () => {
+        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-querystring");
+        const outputDir = await getTmpDir();
+        const componentPath = join(outputDir, "component.wasm");
+        const transpiledDir = join(outputDir, "transpiled");
+
+        await exec(
+            jcoPath,
+            "componentize",
+            join(fixtureDir, "source.js"),
+            "--bundle",
+            "--backend",
+            "qjs",
+            "-w",
+            join(fixtureDir, "source.wit"),
+            "-o",
+            componentPath,
+        );
+        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "node-querystring");
+        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+
+        const component = await import(`${pathToFileURL(transpiledDir)}/node-querystring.js`);
+        assert.deepEqual(component.run(), {
+            repeated: ["one", "two words"],
+            empty: "",
+            flag: "",
+            malformedFallback: true,
+            customFirst: "one",
+            customSecond: "two words",
+            limitedKeys: 2,
+            encoded: "value=one&value=two%20words&empty=&enabled=true&nil=",
+            customEncoded: "[first]:[one];[second]:[two words]",
+            escaped: "a%20b%2Bc%2F%E2%9C%93",
+            unescaped: "a+b+c/✓",
+            bufferBytes: new Uint8Array([65, 32, 66]),
+            nullPrototype: true,
+            namespaceChecks: 4,
+        });
+    });
 });
