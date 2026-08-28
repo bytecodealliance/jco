@@ -103,6 +103,7 @@ is planned.
 | `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`        | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`          | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
 | `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` | Synchronous APIs over an explicit application-provided host capability; denied by default.                               |
+| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`       | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter           | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
 | `node:querystring`                                | unenv's Node-derived querystring implementation                  | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
 
@@ -180,6 +181,36 @@ and `execFile`, `ChildProcess`, and `fork`/IPC are present but throw
 carry Node callbacks, lifecycle events, or interactive streams; those APIs stay
 explicitly unavailable until the capability grows an asynchronous resource and
 stream model.
+
+### Clusters and host capabilities
+
+A guest has no process model, so `node:cluster` follows the same pattern as
+`node:child_process`: bundled source that imports it causes Jco to ensure the world
+declares `jco:node/cluster@0.1.0`, and the application decides separately whether to
+grant it by mapping a host adapter at transpile time.
+
+Because a transpiled component is itself a Node process, `cluster.fork()` re-executes
+the entry, so a forked worker runs the component again and observes itself as a worker.
+
+Two differences from Node are unavoidable:
+
+- **Event timing.** Node delivers cluster events on its event loop. A guest cannot be
+  called back across the host boundary, so events are queued by the host and emitted
+  when the guest next touches the module; `cluster.pump()` drains them on demand.
+- **Messages cross as JSON.** WIT has no dynamic value type, so values JSON cannot
+  represent -- functions, symbols, cycles, `BigInt` -- are rejected rather than
+  silently altered.
+
+These throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than failing quietly:
+
+| API | Why |
+| --- | --- |
+| `worker.process` | A `ChildProcess` handle cannot cross the component boundary. |
+| `listening` event, handle sharing | Cluster distributes Node `net` handles; guest servers are `wasi:sockets`, so nothing hooks them. `SCHED_RR` is accepted but does not distribute guest connections. |
+| `setupPrimary({ exec, execArgv, stdio, uid, gid, inspectPort, serialization })` | These configure the host runner executing the component, not a guest file. |
+
+`cluster.isMaster` and `cluster.setupMaster()` are deprecated in Node, so they throw
+`ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API` and point at `isPrimary`/`setupPrimary`.
 
 ### Buffer
 
@@ -279,7 +310,7 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:cluster`, `node:console`, `node:crypto`, `node:dgram`,
+`node:console`, `node:crypto`, `node:dgram`,
 `node:dns`, `node:dns/promises`, `node:fs`, `node:fs/promises`, `node:http`,
 `node:http2`, `node:https`, `node:inspector`, `node:inspector/promises`,
 `node:module`, `node:net`, `node:os`, `node:perf_hooks`, `node:process`,
