@@ -12,6 +12,21 @@ WebAssembly components can be used from server side applications _and_ in the br
 [cm-book]: https://component-model.bytecodealliance.org/
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
+# Utilites
+
+Below is a list of utilties provided by `@bytecodealliance/jco-std`:
+
+## HTTP
+
+| Export                  | Description                                                                   |
+|-------------------------|-------------------------------------------------------------------------------|
+| `http/adapters/hono`    | Enables easier building of [Hono][hono] HTTP servers                          |
+| `http/adapters/express` | Provides a simple [Express][express]-like interface for building HTTP servers |
+| `node24.x/assert`       | `node:assert` adapter pinned at Node 24                                       |
+| `node24.x/path`         | `node:assert` adapter pinned at Node 24                                       |
+
+[express]: https://expressjs.com
+
 # Quickstart
 
 `@bytecodealliance/jco-std` can be used in varied ways via it's exports, this section
@@ -60,29 +75,43 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.
 
-Jco resolves Node compatibility modules in quality order: higher-fidelity or
-WASI-aware Jco implementations take precedence, followed by explicitly audited
-unenv modules. Jco does not automatically enable unenv's complete alias list or
+Jco resolves Node compatibility modules in quality order:
+
+- Custom/Higher-fidelity or WASI-aware Jco implementations
+- Explicitly audited `unenv` modules.
+
+Jco does not automatically enable unenv's complete alias list or
 treat mocked and unimplemented exports as supported APIs.
 
 The buffer adapter uses unenv's Feross `buffer` implementation for the portable
-core API. Deprecated `Buffer()`/`new Buffer()` and `SlowBuffer` entry points throw
-immediately. Runtime-dependent APIs without a compatible guest implementation
-also throw explicit unsupported-API errors. The current implementation does not
-support the `base64url` encoding accepted by Node's Buffer.
+core API. Deprecated entry points (e.g. `Buffer()`/`new Buffer()` and `SlowBuffer`)
+ throw immediately.
 
-The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. It is
-published under the `node24.x` entry point, which imports pin; Node majors are not
-interchangeable, so a future major is added as its own entry point rather than
-replacing this one. There is no unversioned alias for it -- `node/path` keeps one
-only because it predates the versioned entry points. Its
-comparison and assertion behavior is adapted from the corresponding MIT-licensed
-Node.js sources. Error fields and assertion outcomes are compatibility targets;
-some generated diff text and JavaScript engine stack frames can differ from Node.
+Runtime-dependent APIs without a compatible guest implementation
+also throw explicit unsupported-API errors.
+
+The current implementation does not support the `base64url` encoding accepted by
+Node's Buffer.
+
+> [!NOTE]
+> The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. It is
+> published under the `node24.x` entry point, which should be used explicitly; Node majors
+> are not interchangeable, so a future major is added as its own entry point rather than
+> replacing this one.
+
+There is no unversioned alias for it -- `node/path` keeps one
+only for backwards compatibility (that will be removed in a future breaking-change version
+of `jco-std`).
+
+`jco-std`'s node shimcomparison and assertion behavior is adapted from the corresponding
+MIT-licensed Node.js sources. Error fields and assertion outcomes are compatibility
+targets; some generated diff text and JavaScript engine stack frames can differ
+from Node.
+
 Deprecated APIs remain importable but immediately throw a clear unsupported-API
 error rather than running their deprecated implementation.
 
-The `node:` specifiers are replaced when Jco bundles source during
+Note that the `node:` specifiers are replaced when Jco bundles source during
 componentization. The package export can also be imported directly:
 
 ```ts
@@ -91,19 +120,6 @@ import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/node24.x/asse
 assert(true);
 deepStrictEqual({ ready: true }, { ready: true });
 ```
-
-# Utilites
-
-Below is a list of utilties provided by `@bytecodealliance/jco-std`:
-
-## HTTP
-
-| Export                  | Description                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `http/adapters/hono`    | Enables easier building of [Hono][hono] HTTP servers                          |
-| `http/adapters/express` | Provides a simple [Express][express]-like interface for building HTTP servers |
-
-[express]: https://expressjs.com
 
 # License
 
