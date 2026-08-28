@@ -338,6 +338,7 @@ async function runComponent(
                 throw e;
             }
         }
+        // Expose jco-std's default-deny child-process host shim to the transpiled component.
         try {
             const jcoStdPath = resolve(
                 fileURLToPath(

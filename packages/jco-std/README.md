@@ -74,7 +74,7 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`;
 - synchronous `node:child_process` operations, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` and the
-  application-provided `jco:node/child-process@0.1.0` capability;
+  `jco:node/child-process@0.1.0` host capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.
@@ -115,10 +115,64 @@ from Node.
 Deprecated APIs remain importable but immediately throw a clear unsupported-API
 error rather than running their deprecated implementation.
 
-The child-process capability is denied by default. The component world must
-declare `jco:node/child-process@0.1.0`, and Jco maps that import to a host shim
-that throws `ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED`; applications that intend
-to grant process spawning must explicitly map the opt-in Node host adapter:
+### Child processes
+
+Source that uses `node:child_process` must be bundled so Jco can replace the
+Node import with the guest adapter. For example, `component.js` can export a
+function backed by Node's synchronous API:
+
+```js
+import { execFileSync } from "node:child_process";
+
+export function nodeVersion() {
+    return execFileSync("node", ["--version"], { encoding: "utf8" }).trim();
+}
+```
+
+The starting `wit/component.wit` does not need to declare the child-process
+capability itself:
+
+```wit
+package example:child-process;
+
+world app {
+  export node-version: func() -> string;
+}
+```
+
+Build the component with bundling enabled and, when needed, select the world
+that Jco should update:
+
+```console
+jco componentize component.js \
+  --wit wit \
+  --world-name app \
+  --bundle \
+  -o component.wasm
+```
+
+When Jco detects `node:child_process`, it edits the selected world in place if
+the import is missing:
+
+```wit
+world app {
+  // Added by Jco because bundled source imports node:child_process.
+  import jco:node/child-process@0.1.0;
+  export node-version: func() -> string;
+}
+```
+
+Jco also adds the interface definition at
+`wit/deps/jco-node-0.1.0/package.wit` and prints a warning naming the modified
+files so the generated changes are visible for review and commit. An existing
+import or dependency is preserved, and running the command again does not add a
+duplicate.
+
+Adding the WIT import does not grant permission to spawn processes. By default,
+Jco maps it to a host shim that throws
+`ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED`. Applications that intend to grant
+process spawning must explicitly map the opt-in Node host adapter when
+transpiling the component:
 
 ```console
 jco transpile component.wasm \
