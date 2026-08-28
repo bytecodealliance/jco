@@ -10,7 +10,7 @@ export default defineConfig({
     disableConsoleIntercept: true,
     printConsoleTrace: true,
     passWithNoTests: false,
-    include: ["test/e2e/**/*.ts", "test/node/assert/**/*.ts"],
+    include: ["test/e2e/**/*.ts", "test/node24.x/assert/**/*.ts"],
     exclude: [],
     setupFiles: ["test/meta-resolve-stub.ts"],
     testTimeout: DEFAULT_TIMEOUT_MS,

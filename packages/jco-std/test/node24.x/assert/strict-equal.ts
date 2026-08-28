@@ -1,8 +1,13 @@
-import { describe, expect, test } from "vitest";
-import assert from "../../../src/node/assert/index.js";
-import { compareOutcome, expectAssertion, nodeAssert } from "../helpers/assert.js";
+import { expect, test } from "vitest";
+import assert from "../../../src/node24.x/assert/index.js";
+import {
+  compareOutcome,
+  describeDifferential,
+  expectAssertion,
+  nodeAssert,
+} from "../helpers/assert.js";
 
-describe("assert.strictEqual", () => {
+describeDifferential("assert.strictEqual", () => {
   test.each([
     [1, 1],
     [Number.NaN, Number.NaN],

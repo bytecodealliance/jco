@@ -1,6 +1,6 @@
 import nodeAssert from "node:assert";
-import { expect } from "vitest";
-import { AssertionError } from "../../../src/node/assert/index.js";
+import { describe, expect } from "vitest";
+import { AssertionError } from "../../../src/node24.x/assert/index.js";
 
 export interface CapturedResult {
   passed: boolean;
@@ -66,3 +66,20 @@ export function expectAssertion(
 }
 
 export { nodeAssert };
+
+/**
+ * Node major version this shim is written against.
+ *
+ * Node's assert semantics change across majors, so comparing against the host's
+ * `node:assert` only says anything about the shim when the host is that major.
+ */
+export const TARGET_NODE_MAJOR = 24;
+
+export const hostIsTargetNode = Number.parseInt(process.versions.node, 10) === TARGET_NODE_MAJOR;
+
+/**
+ * Suite of differential tests, which compare this shim against the host's `node:assert`.
+ *
+ * Skipped off the target major, where a mismatch would say nothing about the shim.
+ */
+export const describeDifferential = describe.skipIf(!hostIsTargetNode);

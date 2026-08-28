@@ -1,8 +1,8 @@
-import { describe, expect, test } from "vitest";
-import assert from "../../../src/node/assert/index.js";
-import { compareOutcome, nodeAssert } from "../helpers/assert.js";
+import { expect, test } from "vitest";
+import assert from "../../../src/node24.x/assert/index.js";
+import { compareOutcome, describeDifferential, nodeAssert } from "../helpers/assert.js";
 
-describe("assert.throws", () => {
+describeDifferential("assert.throws", () => {
   test("supports no matcher, constructors, regexps, predicates, and objects", () => {
     const cases: Array<[() => unknown, Parameters<typeof assert.throws>[1]]> = [
       [

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import assert from "../../../src/node/assert/index.js";
+import assert from "../../../src/node24.x/assert/index.js";
 
 describe("assert.doesNotReject", () => {
   test("accepts fulfilled promises", async () => {

@@ -1,8 +1,8 @@
-import { describe, test } from "vitest";
-import assert from "../../../src/node/assert/index.js";
-import { compareOutcome, nodeAssert } from "../helpers/assert.js";
+import { test } from "vitest";
+import assert from "../../../src/node24.x/assert/index.js";
+import { compareOutcome, describeDifferential, nodeAssert } from "../helpers/assert.js";
 
-describe("assert.partialDeepStrictEqual", () => {
+describeDifferential("assert.partialDeepStrictEqual", () => {
   test.each([
     [{ a: 1, b: 2 }, { a: 1 }],
     [{ a: { b: 1, c: 2 } }, { a: { b: 1 } }],

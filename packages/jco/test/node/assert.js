@@ -7,9 +7,9 @@ import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
 import { exec, getTmpDir, jcoPath } from "../helpers.js";
 
 suite("node:assert", () => {
-    // TODO(unskip): this componentizes against @bytecodealliance/jco-std/node/assert, which only
-    // exists in the workspace copy of jco-std. Unskip once a jco-std release carrying the
-    // node:assert shim is published and jco depends on it.
+    // TODO(unskip): jco pins @bytecodealliance/jco-std/node24.x/assert, and no published
+    // jco-std exports the assert shim at all -- it only exists in the workspace copy. Unskip once
+    // a jco-std release carrying it is published and jco's range is bumped to it.
     test.skip("bundles and executes APIs guest-side", async () => {
         const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-assert");
         const outputDir = await getTmpDir();

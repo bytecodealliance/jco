@@ -1,8 +1,8 @@
-import { describe, test } from "vitest";
-import assert from "../../../src/node/assert/index.js";
-import { compareOutcome, nodeAssert } from "../helpers/assert.js";
+import { test } from "vitest";
+import assert from "../../../src/node24.x/assert/index.js";
+import { compareOutcome, describeDifferential, nodeAssert } from "../helpers/assert.js";
 
-describe("assert.deepStrictEqual", () => {
+describeDifferential("assert.deepStrictEqual", () => {
   test.each([
     [{ nested: { value: 1 } }, { nested: { value: 1 } }],
     [{ value: 1 }, { value: "1" }],
