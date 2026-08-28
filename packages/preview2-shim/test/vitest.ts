@@ -10,7 +10,7 @@ export default defineConfig({
         disableConsoleIntercept: true,
         printConsoleTrace: true,
         passWithNoTests: false,
-        include: ["test/*.ts"],
+        include: ["test/*.ts", "test/browser/**/*.ts"],
         exclude: ["test/common.ts", "test/vitest.ts"],
         testTimeout: DEFAULT_TIMEOUT_MS,
         hookTimeout: DEFAULT_TIMEOUT_MS,
