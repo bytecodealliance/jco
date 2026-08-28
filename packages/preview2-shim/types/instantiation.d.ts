@@ -97,6 +97,12 @@ export interface TcpSocketsShim {
     tcpCreateSocket: typeof import('./interfaces/wasi-sockets-tcp-create-socket.d.ts');
 }
 
+/** Application-provided implementation of the WASI UDP namespaces. */
+export interface UdpSocketsShim {
+    udp: typeof import('./interfaces/wasi-sockets-udp.d.ts');
+    udpCreateSocket: typeof import('./interfaces/wasi-sockets-udp-create-socket.d.ts');
+}
+
 /**
  * Configuration options for WASIShim
  */
@@ -120,6 +126,8 @@ interface WASIShimConfig {
     sockets?: object;
     /** Custom TCP socket namespaces. */
     tcpSockets?: TcpSocketsShim;
+    /** Custom UDP socket namespaces. */
+    udpSockets?: UdpSocketsShim;
     /** Custom HTTP shim */
     http?: object;
     /** Browser-only isolated environment variables. */
