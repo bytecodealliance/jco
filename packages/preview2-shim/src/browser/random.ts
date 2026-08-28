@@ -3,19 +3,9 @@ import type {
     insecureSeed as InsecureSeedNamespace,
     random as RandomNamespace,
 } from "../../types/random.js";
+import { checkedU64AsNumber } from "./common.js";
 
 const MAX_BYTES = 65536;
-const MAX_U64 = (1n << 64n) - 1n;
-
-function checkedByteLength(len: bigint): number {
-    if (typeof len !== "bigint" || len < 0n || len > MAX_U64) {
-        throw new TypeError("random byte length must be a valid u64");
-    }
-    if (len > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new RangeError("random byte length exceeds JavaScript's safe integer range");
-    }
-    return Number(len);
-}
 
 let insecureRandomValue1: bigint | undefined, insecureRandomValue2: bigint | undefined;
 
@@ -42,7 +32,7 @@ export const insecureSeed: typeof InsecureSeedNamespace = {
 
 export const random: typeof RandomNamespace = {
     getRandomBytes(len: bigint) {
-        const byteLength = checkedByteLength(len);
+        const byteLength = checkedU64AsNumber(len, "random byte length");
         const bytes = new Uint8Array(byteLength);
 
         if (byteLength > MAX_BYTES) {
