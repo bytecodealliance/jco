@@ -19,11 +19,12 @@ function getUnenvAliases(options: NodeBuiltinOptions): Readonly<Record<string, s
     if (options.unenvAliases) {
         return options.unenvAliases;
     }
-    defaultUnenvAliases ??= {
+    // NOTE: read back through the assignment rather than the module-level binding, which is
+    // only non-nullable here by narrowing
+    return (defaultUnenvAliases ??= {
         ...defineEnv({ resolve: true }).env.alias,
         "unenv:buffer-core": fileURLToPath(import.meta.resolve("unenv/node/internal/buffer/buffer")),
-    };
-    return defaultUnenvAliases;
+    });
 }
 
 function unenvModule(specifier: string, options: NodeBuiltinOptions): string {
