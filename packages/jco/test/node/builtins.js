@@ -61,6 +61,37 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("spawnSync");
     });
 
+    test("generates an adapter for node:cluster", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { clusterModule: "/jco/node/cluster.js" });
+        const id = plugin.resolveId("node:cluster");
+        expect(id).toBe("\0jco-node-builtin:node:cluster");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/cluster.js"');
+        expect(source).toContain("export default cluster");
+        expect(source).toContain("SCHED_RR");
+    });
+
+    test("reports the WIT capability required by node:cluster", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { clusterModule: "/jco/node/cluster.js", onWitRequirement },
+        );
+        expect(plugin.resolveId("node:cluster")).toBe("\0jco-node-builtin:node:cluster");
+        expect(onWitRequirement).toHaveBeenCalledOnce();
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({
+                nodeSpecifier: "node:cluster",
+                witImport: "jco:node/cluster@0.1.0",
+            }),
+        );
+    });
+
+    test("does not intercept the bare cluster specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { clusterModule: "/jco/node/cluster.js" });
+        expect(plugin.resolveId("cluster")).toBeNull();
+    });
+
     test("reports the WIT capability required by node:child_process", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(

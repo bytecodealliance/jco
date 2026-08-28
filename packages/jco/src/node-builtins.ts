@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Plugin } from "rolldown";
 import { defineEnv } from "unenv";
 
-import { CHILD_PROCESS_WIT_REQUIREMENT, type NodeWitRequirement } from "./node-wit.js";
+import { CHILD_PROCESS_WIT_REQUIREMENT, CLUSTER_WIT_REQUIREMENT, type NodeWitRequirement } from "./node-wit.js";
 
 const PATH_SPECIFIERS = new Map([
     ["node:path", "default"],
@@ -12,6 +12,7 @@ const PATH_SPECIFIERS = new Map([
 ]);
 const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
 const CHILD_PROCESS_SPECIFIER = "node:child_process";
+const CLUSTER_SPECIFIER = "node:cluster";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -150,10 +151,34 @@ export interface NodeBuiltinOptions {
     assertModule?: string;
     /** Path to jco-std's versioned `node:child_process` module (overridable for tests) */
     childProcessModule?: string;
+    /** Path to jco-std's versioned `node:cluster` module (overridable for tests) */
+    clusterModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Source of the `node:cluster` adapter.
+ *
+ * Like `node:child_process`, the jco-std module imports the host interface itself, so the adapter
+ * only has to re-export Node's module shape.
+ */
+function clusterAdapter(clusterModule: string): string {
+    return `
+import cluster from ${JSON.stringify(clusterModule)};
+export default cluster;
+export {
+    SCHED_NONE,
+    SCHED_RR,
+    Worker,
+    disconnect,
+    fork,
+    setupMaster,
+    setupPrimary,
+} from ${JSON.stringify(clusterModule)};
+`;
 }
 
 function childProcessAdapter(childProcessModule: string): string {
@@ -310,6 +335,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const assertModule = () =>
         options.assertModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
+    const clusterModule = () =>
+        options.clusterModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
     const childProcessModule = () =>
         options.childProcessModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process"));
@@ -320,6 +348,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return id;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === CLUSTER_SPECIFIER) {
+                options.onWitRequirement?.(CLUSTER_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CHILD_PROCESS_SPECIFIER) {
@@ -346,6 +378,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (value === CLUSTER_SPECIFIER) {
+                return clusterAdapter(clusterModule());
             }
             if (value === CHILD_PROCESS_SPECIFIER) {
                 return childProcessAdapter(childProcessModule());
