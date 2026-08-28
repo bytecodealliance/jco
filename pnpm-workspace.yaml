@@ -17,6 +17,7 @@ packages:
   - examples/components/add
   - examples/components/adder
   - examples/components/builtin-bundle-ts
+  - examples/components/browser-p2-shims
   - examples/components/fs-write-file
   - examples/components/host-logging
   - examples/components/http-hello-world

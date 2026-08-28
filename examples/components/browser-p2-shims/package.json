@@ -1,0 +1,24 @@
+{
+    "name": "browser-p2-shims",
+    "version": "0.0.1",
+    "private": true,
+    "description": "Interactive browser demo for WASI Preview 2 shims",
+    "type": "module",
+    "scripts": {
+        "build:component": "jco componentize src/component.js --wit wit --world-name component --out dist/component.wasm --disable clocks http random",
+        "transpile": "jco transpile dist/component.wasm --instantiation async -o demo/transpiled",
+        "build": "pnpm run build:component && pnpm run transpile",
+        "demo": "vite demo",
+        "demo:open": "vite --open demo",
+        "test": "node test/browser.mjs",
+        "all": "pnpm run build && pnpm run test"
+    },
+    "dependencies": {
+        "@bytecodealliance/preview2-shim": "workspace:*"
+    },
+    "devDependencies": {
+        "@bytecodealliance/jco": "workspace:*",
+        "puppeteer": "catalog:",
+        "vite": "^7.3.6"
+    }
+}

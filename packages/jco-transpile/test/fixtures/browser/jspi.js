@@ -14,6 +14,17 @@ export async function jspi(modulePath) {
         },
     });
 
+    const AsyncFunction = (async () => {}).constructor;
+    if (instance.runSync instanceof AsyncFunction) {
+        throw new Error('runSync() should be a sync function');
+    }
+    if (!(instance.runAsync instanceof AsyncFunction)) {
+        throw new Error('runAsync() should be an async function');
+    }
+    if (instance.runSync() !== 'callSync') {
+        throw new Error('runSync() did not return the synchronous import result');
+    }
+
     let ticks = 0;
     const interval = setInterval(() => ticks++, 5);
     try {

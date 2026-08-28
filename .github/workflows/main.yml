@@ -761,6 +761,9 @@ jobs:
             workspace: examples/components/node-compat
           - name: fs-write-file
             workspace: examples/components/fs-write-file
+          - name: browser-p2-shims
+            workspace: examples/components/browser-p2-shims
+            setup-p2-shim: true
           - name: wintertc
             workspace: examples/components/wintertc
           - name: p3-stream-chat
@@ -839,11 +842,19 @@ jobs:
 
       - run: pnpm install
 
+      - name: Install Puppeteer browser
+        if: ${{ matrix.project.name == 'browser-p2-shims' }}
+        run: pnpm run test:setup:puppeteer
+
       - name: Build required deps
         env:
+          SETUP_P2_SHIM: ${{ matrix.project.setup-p2-shim }}
           SETUP_TRANSPILE: ${{ matrix.project.setup-transpile }}
           SETUP_STD: ${{ matrix.project.setup-std }}
         run: |
+          if [ "true" == "$SETUP_P2_SHIM" ]; then
+              pnpm run --filter '@bytecodealliance/preview2-shim' build
+          fi
           if [ "true" == "$SETUP_TRANSPILE" ]; then
               pnpm run --filter '@bytecodealliance/jco-transpile' build
           fi
@@ -852,6 +863,8 @@ jobs:
           fi
 
       - name: Run all script for (${{ matrix.project.name }})
+        env:
+          TEST_PUPPETEER_LAUNCH_ARGS: --no-sandbox
         run: |
           pnpm --filter '${{ matrix.project.workspace }}' run all
 
