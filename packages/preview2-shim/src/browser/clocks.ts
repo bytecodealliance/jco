@@ -2,17 +2,10 @@ import type {
     monotonicClock as MonotonicClockNamespace,
     wallClock as WallClockNamespace,
 } from "../../types/clocks.js";
+import { checkedU64 } from "./common.js";
 import { pollableCreate } from "./io.js";
 
 const MAX_TIMEOUT_MS = 0x7fffffff;
-const MAX_U64 = (1n << 64n) - 1n;
-
-function checkedInstant(value: bigint, name: string): bigint {
-    if (typeof value !== "bigint" || value < 0n || value > MAX_U64) {
-        throw new TypeError(`${name} must be a valid u64`);
-    }
-    return value;
-}
 
 function timeout(durationNs: bigint): Promise<void> {
     let remainingMs = Number((durationNs + 999_999n) / 1_000_000n);
@@ -41,7 +34,7 @@ export const monotonicClock: typeof MonotonicClockNamespace = {
         return BigInt(Math.floor(performance.now() * 1e6));
     },
     subscribeInstant(instant: bigint) {
-        instant = checkedInstant(instant, "instant");
+        instant = checkedU64(instant, "instant");
         const now = monotonicClock.now();
         if (instant <= now) {
             return pollableCreate();
@@ -49,7 +42,7 @@ export const monotonicClock: typeof MonotonicClockNamespace = {
         return monotonicClock.subscribeDuration(instant - now);
     },
     subscribeDuration(duration: bigint) {
-        duration = checkedInstant(duration, "duration");
+        duration = checkedU64(duration, "duration");
         if (duration === 0n) {
             return pollableCreate();
         }

@@ -3,10 +3,9 @@ import type {
     poll as PollNamespace,
     streams as StreamsNamespace,
 } from "../../types/io.js";
+import { checkedU64AsNumber } from "./common.js";
 
 let id = 0;
-
-const MAX_U64 = (1n << 64n) - 1n;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -26,15 +25,7 @@ export interface PollableSource {
     wait(): Promise<void>;
 }
 
-function checkedLength(len: bigint, name = "length"): number {
-    if (typeof len !== "bigint" || len < 0n || len > MAX_U64) {
-        throw new TypeError(`${name} must be a valid u64`);
-    }
-    if (len > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new RangeError(`${name} exceeds JavaScript's safe integer range`);
-    }
-    return Number(len);
-}
+const checkedLength = (len: bigint, name = "length") => checkedU64AsNumber(len, name);
 
 function closed(): never {
     throw { tag: "closed" } satisfies StreamsNamespace.StreamError;
