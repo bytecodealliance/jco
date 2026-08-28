@@ -3,7 +3,7 @@
 This example turns a small JavaScript program into a WebAssembly component and runs it in a browser
 with `@bytecodealliance/preview2-shim`.
 
-## Run the demo
+## Quickstart
 
 From this directory:
 
@@ -15,6 +15,8 @@ pnpm run demo:open
 
 `pnpm run all` follows the repository's example convention: it builds and transpiles the component,
 then runs the Puppeteer browser test.
+
+## Build
 
 The build has two stages:
 
