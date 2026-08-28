@@ -173,6 +173,13 @@ export class WASIShim {
                       enableNetwork: shims?.sandbox?.enableNetwork,
                   })
                 : defaultSockets);
+        if (shims?.tcpSockets) {
+            this.#sockets = {
+                ...this.#sockets,
+                tcp: shims.tcpSockets.tcp,
+                tcpCreateSocket: shims.tcpSockets.tcpCreateSocket,
+            };
+        }
         this.#http = shims?.http ?? wasi.http;
 
         // Create isolated environment if env or args are configured
