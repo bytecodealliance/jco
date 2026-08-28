@@ -9,6 +9,52 @@ interface cli-demo {
     write-to-stderr: func(message: string);
 }
 
+interface clocks-demo {
+    record clock-snapshot {
+        wall-seconds: u64,
+        wall-nanoseconds: u32,
+        monotonic-nanoseconds: u64,
+    }
+
+    /// Read both browser-backed WASI clocks.
+    read-clocks: func() -> clock-snapshot;
+}
+
+interface filesystem-demo {
+    /// Store and read `hello world` through the configured filesystem adapter.
+    write-hello-world: func() -> string;
+}
+
+/// Browser host bridge used because ComponentizeJS does not expose imported
+/// WASI socket resources as JavaScript modules.
+interface socket-host {
+    tcp-receive: func() -> string;
+    tcp-send: func(message: string);
+    udp-receive: func() -> string;
+    udp-send: func(message: string);
+}
+
+interface tcp-demo {
+    /// Accept one queued client connection and echo its message.
+    serve-once: func();
+}
+
+interface udp-demo {
+    /// Receive one queued client datagram and echo its message.
+    serve-once: func();
+}
+
 world component {
+    import wasi:clocks/monotonic-clock@0.2.12;
+    import wasi:clocks/wall-clock@0.2.12;
+    import wasi:filesystem/preopens@0.2.12;
+    import wasi:filesystem/types@0.2.12;
+    import socket-host;
+
     export cli-demo;
+    export clocks-demo;
+    export filesystem-demo;
+    export tcp-demo;
+    export udp-demo;
+    export wasi:http/incoming-handler@0.2.12;
 }

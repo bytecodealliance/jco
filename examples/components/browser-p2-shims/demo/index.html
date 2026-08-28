@@ -3,81 +3,59 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="description" content="Interactive WASI Preview 2 browser CLI shim demo" />
-        <title>Browser Preview 2 CLI shim demo</title>
+        <meta name="description" content="Interactive WASI Preview 2 browser shim examples" />
+        <title>Browser WASI Preview 2 shim examples</title>
         <style>
             :root {
                 color-scheme: light;
-                font-family:
-                    Inter,
-                    ui-sans-serif,
-                    system-ui,
-                    -apple-system,
-                    BlinkMacSystemFont,
-                    'Segoe UI',
-                    sans-serif;
+                font-family: Inter, ui-sans-serif, system-ui, sans-serif;
                 color: #172033;
                 background: #f4f6fb;
             }
-
             * {
                 box-sizing: border-box;
             }
-
             body {
                 margin: 0;
-                min-height: 100vh;
             }
-
             main {
-                width: min(960px, calc(100% - 2rem));
-                margin: 0 auto;
+                width: min(1000px, calc(100% - 2rem));
+                margin: auto;
                 padding: 4rem 0;
             }
-
             header {
                 margin-bottom: 2rem;
             }
-
             h1,
             h2,
+            h3,
             p {
                 margin-top: 0;
             }
-
             h1 {
-                max-width: 760px;
                 margin-bottom: 0.75rem;
                 font-size: clamp(2rem, 6vw, 3.75rem);
                 line-height: 1;
-                letter-spacing: -0.04em;
             }
-
             h2 {
-                margin-bottom: 0.5rem;
-                font-size: 1.15rem;
+                margin-bottom: 0.4rem;
             }
-
-            .lede {
-                max-width: 720px;
-                color: #536078;
-                font-size: 1.05rem;
-                line-height: 1.65;
+            .lede,
+            .demo-section > p,
+            .card p {
+                color: #5e6980;
+                line-height: 1.55;
             }
-
             .status {
                 display: inline-flex;
                 align-items: center;
                 gap: 0.5rem;
-                margin-top: 0.5rem;
                 padding: 0.45rem 0.75rem;
                 border: 1px solid #cbd3e1;
                 border-radius: 999px;
-                background: #fff;
+                background: white;
                 color: #536078;
-                font-size: 0.875rem;
             }
-
             .status::before {
                 width: 0.55rem;
                 height: 0.55rem;
@@ -85,152 +63,110 @@
                 background: #d49b16;
                 content: '';
             }
-
             .status[data-state='ready']::before {
                 background: #16865d;
             }
-
             .status[data-state='error']::before {
                 background: #c93030;
             }
-
+            .demo-section {
+                margin-top: 1.25rem;
+                padding: 1.4rem;
+                border: 1px solid #dce1ea;
+                border-radius: 1rem;
+                background: white;
+                box-shadow: 0 12px 30px rgb(28 39 64 / 7%);
+            }
             .grid {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 1rem;
             }
-
             .card {
-                padding: 1.4rem;
-                border: 1px solid #dce1ea;
-                border-radius: 1rem;
-                background: #fff;
-                box-shadow: 0 12px 30px rgb(28 39 64 / 7%);
+                padding: 1rem;
+                border: 1px solid #e1e5ed;
+                border-radius: 0.8rem;
             }
-
-            .card p {
-                min-height: 3rem;
-                color: #68738a;
-                line-height: 1.5;
-            }
-
             label {
                 display: block;
-                margin-bottom: 0.45rem;
-                color: #303b52;
+                margin-bottom: 0.4rem;
                 font-size: 0.875rem;
                 font-weight: 650;
             }
-
             textarea {
                 display: block;
                 width: 100%;
-                min-height: 7rem;
+                min-height: 5rem;
                 resize: vertical;
-                padding: 0.8rem;
+                padding: 0.75rem;
                 border: 1px solid #bdc6d6;
                 border-radius: 0.65rem;
                 color: inherit;
                 background: #fbfcff;
                 font: inherit;
-                line-height: 1.5;
             }
-
             textarea:focus {
                 outline: 3px solid rgb(56 103 214 / 20%);
                 border-color: #3867d6;
             }
-
             button {
-                width: 100%;
                 margin-top: 0.75rem;
-                padding: 0.75rem 1rem;
+                padding: 0.7rem 1rem;
                 border: 0;
                 border-radius: 0.65rem;
-                color: #fff;
+                color: white;
                 background: #2855bd;
                 font: inherit;
                 font-weight: 700;
                 cursor: pointer;
             }
-
             button:hover:not(:disabled) {
                 background: #1f469f;
             }
-
-            button:focus-visible {
-                outline: 3px solid rgb(56 103 214 / 35%);
-                outline-offset: 2px;
-            }
-
             button:disabled {
                 cursor: wait;
                 opacity: 0.55;
             }
-
+            .output {
+                min-height: 3rem;
+                margin: 0.9rem 0 0;
+                padding: 0.85rem;
+                border-radius: 0.6rem;
+                background: #f0f3f8;
+                overflow-wrap: anywhere;
+                white-space: pre-wrap;
+            }
             .stderr-panel {
-                grid-column: 1 / -1;
-                min-height: 8rem;
-                padding: 1rem;
                 border: 2px solid #cc3434;
-                border-radius: 0.8rem;
                 background: #fff8f8;
             }
-
-            .stderr-panel header {
+            .stderr-panel h3 {
+                color: #9b2020;
+            }
+            .stderr-panel .output {
+                color: #7b2424;
+                background: transparent;
+            }
+            .clear-button {
+                margin: 0;
+                padding: 0.35rem 0.6rem;
+                color: #8c2929;
+                background: #ffeaea;
+            }
+            .output-heading {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                margin-bottom: 0.8rem;
             }
-
-            .stderr-panel h2 {
-                margin: 0;
-                color: #9b2020;
-                font-size: 0.85rem;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-            }
-
-            .clear-button {
-                width: auto;
-                margin: 0;
-                padding: 0.35rem 0.6rem;
-                border: 1px solid #e1a4a4;
-                color: #8c2929;
-                background: transparent;
-                font-size: 0.8rem;
-            }
-
-            .clear-button:hover:not(:disabled) {
-                background: #ffeaea;
-            }
-
-            pre {
-                min-height: 3rem;
-                margin: 0;
-                overflow-wrap: anywhere;
-                color: #7b2424;
-                white-space: pre-wrap;
-            }
-
-            .empty-output {
-                color: #a76b6b;
-                font-style: italic;
-            }
-
             code {
                 padding: 0.08rem 0.28rem;
                 border-radius: 0.3rem;
                 background: #edf0f7;
-                font-size: 0.9em;
             }
-
             @media (max-width: 700px) {
                 main {
                     padding: 2rem 0;
                 }
-
                 .grid {
                     grid-template-columns: 1fr;
                 }
@@ -240,47 +176,82 @@
     <body>
         <main>
             <header>
-                <h1>WASI Preview 2 CLI, hosted by your browser.</h1>
-                <p class="lede">
-                    Both buttons call a WebAssembly component. Standard output uses the shim's default
-                    <code>console.log</code> destination, while standard error is replaced at instantiation time with
-                    the page output below.
-                </p>
+                <h1>WASI Preview 2, hosted by your browser.</h1>
+                <p class="lede">Each control crosses a WebAssembly component boundary and a browser Preview 2 shim.</p>
                 <div id="status" class="status" role="status" aria-live="polite">Loading component…</div>
             </header>
 
-            <section class="grid" aria-label="CLI stream controls">
-                <article class="card">
-                    <h2>Default stdout</h2>
-                    <p>Open the browser console, enter a message, and send it through the component's stdout stream.</p>
-                    <label for="stdout-message">Message for stdout</label>
-                    <textarea id="stdout-message" maxlength="4000">Hello from the component's stdout!</textarea>
-                    <button id="write-stdout" type="button" disabled>Write to console.log</button>
-                </article>
+            <section class="demo-section" aria-labelledby="cli-heading">
+                <h2 id="cli-heading"><code>wasi:cli</code></h2>
+                <p>Compare default console-backed stdout with an application-provided stderr destination.</p>
+                <div class="grid">
+                    <article class="card">
+                        <h3>Default stdout</h3>
+                        <label for="stdout-message">Message for stdout</label>
+                        <textarea id="stdout-message">Hello from the component's stdout!</textarea>
+                        <button id="write-stdout" type="button" disabled>Write to console.log</button>
+                    </article>
+                    <article class="card">
+                        <h3>Customized stderr</h3>
+                        <label for="stderr-message">Message for stderr</label>
+                        <textarea id="stderr-message">Something useful happened on stderr.</textarea>
+                        <button id="write-stderr" type="button" disabled>Write to the page</button>
+                    </article>
+                    <article class="card stderr-panel">
+                        <div class="output-heading">
+                            <h3>STDERR output</h3>
+                            <button id="clear-stderr" class="clear-button" type="button">Clear</button>
+                        </div>
+                        <pre
+                            id="stderr-output"
+                            class="output"
+                            aria-live="polite"
+                        ><span class="empty-output">No stderr output yet.</span></pre>
+                    </article>
+                </div>
+            </section>
 
-                <article class="card">
-                    <h2>Customized stderr</h2>
-                    <p>
-                        This component instance receives an application-owned stderr handler that writes into the page.
-                    </p>
-                    <label for="stderr-message">Message for stderr</label>
-                    <textarea id="stderr-message" maxlength="4000">Something useful happened on stderr.</textarea>
-                    <button id="write-stderr" type="button" disabled>Write to the page</button>
-                </article>
+            <section class="demo-section" aria-labelledby="clocks-heading">
+                <h2 id="clocks-heading"><code>wasi:clocks</code></h2>
+                <p>Read the wall clock and monotonic clock supplied by the browser shim.</p>
+                <button id="read-clocks" type="button" disabled>Read clocks</button>
+                <pre id="clocks-output" class="output" aria-live="polite">No clock reading yet.</pre>
+            </section>
 
-                <section class="stderr-panel" aria-labelledby="stderr-heading">
-                    <header>
-                        <h2 id="stderr-heading">STDERR output</h2>
-                        <button id="clear-stderr" class="clear-button" type="button">Clear</button>
-                    </header>
-                    <pre
-                        id="stderr-output"
-                        aria-live="polite"
-                    ><span class="empty-output">No stderr output yet.</span></pre>
-                </section>
+            <section class="demo-section" aria-labelledby="filesystem-heading">
+                <h2 id="filesystem-heading"><code>wasi:filesystem</code></h2>
+                <p>Write <code>hello world</code> through an adapter that stores bytes in reverse.</p>
+                <button id="write-file" type="button" disabled>Write hello.txt</button>
+                <pre id="filesystem-output" class="output" aria-live="polite">No file written yet.</pre>
+            </section>
+
+            <section class="demo-section" aria-labelledby="http-heading">
+                <h2 id="http-heading"><code>wasi:http/incoming-handler</code></h2>
+                <p>Send a fabricated Web Request into the component and receive a Web Response.</p>
+                <label for="http-message">POST body</label>
+                <textarea id="http-message">hello over HTTP</textarea>
+                <button id="send-http" type="button" disabled>Send request</button>
+                <pre id="http-output" class="output" aria-live="polite">No response yet.</pre>
+            </section>
+
+            <section class="demo-section" aria-labelledby="tcp-heading">
+                <h2 id="tcp-heading"><code>wasi:sockets/tcp</code></h2>
+                <p>The page acts as a fake client; the component directs a WASI host bridge to accept and echo.</p>
+                <label for="tcp-message">TCP client message</label>
+                <textarea id="tcp-message">hello over TCP</textarea>
+                <button id="send-tcp" type="button" disabled>Send to TCP server</button>
+                <pre id="tcp-output" class="output" aria-live="polite">No response yet.</pre>
+            </section>
+
+            <section class="demo-section" aria-labelledby="udp-heading">
+                <h2 id="udp-heading"><code>wasi:sockets/udp</code></h2>
+                <p>The page sends a fake datagram; the component directs a WASI host bridge to receive and echo.</p>
+                <label for="udp-message">UDP client message</label>
+                <textarea id="udp-message">hello over UDP</textarea>
+                <button id="send-udp" type="button" disabled>Send to UDP server</button>
+                <pre id="udp-output" class="output" aria-live="polite">No response yet.</pre>
             </section>
         </main>
-
         <script type="module" src="./demo.js"></script>
     </body>
 </html>
