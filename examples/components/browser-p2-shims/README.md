@@ -42,8 +42,18 @@ application-owned behavior without changing the component. The Puppeteer test la
 through Vite, clicks both controls, and verifies that stdout reaches `console.log` while customized
 stderr reaches the page.
 
-The component uses `console.log` and `console.error`. ComponentizeJS lowers those calls to WASI CLI
-stdout and stderr. The demo creates two `WASIShim` instances:
+The call path from the component to the browser is:
+
+1. **Guest code:** `src/component.js` calls `console.log(message)` or `console.error(message)`.
+2. **ComponentizeJS:** the componentized JavaScript runtime lowers that call to a write on the output
+   stream returned by `wasi:cli/stdout.get-stdout` or `wasi:cli/stderr.get-stderr`. The stream itself
+   is a `wasi:io/streams.output-stream` resource.
+3. **Jco transpilation:** the generated component wrapper routes those WASI imports through the object
+   returned by `WASIShim.getImportObject()`.
+4. **Browser host:** the shim's default stdout handler decodes the bytes and calls `console.log`; the
+   second shim instance instead sends stderr bytes to the page-owned handler.
+
+The demo configures those two host behaviors with separate `WASIShim` instances:
 
 ```js
 const defaultShim = new WASIShim();
