@@ -135,7 +135,7 @@ function hostOptions(options: SpawnSyncOptions): HostSpawnOptions {
   const killSignal = options.killSignal === undefined ? "SIGTERM" : String(options.killSignal);
   return {
     cwd,
-    cwdIsUrl: options.cwd instanceof URL,
+    cwdIsUrl: typeof URL !== "undefined" && options.cwd instanceof URL,
     env,
     input: toBytes(options.input),
     timeout: BigInt(timeout),

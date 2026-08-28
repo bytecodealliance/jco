@@ -122,6 +122,21 @@ describe("node:child_process guest adapter", () => {
     });
   });
 
+  test("does not require a URL global when cwd is omitted", () => {
+    const spawnSync = vi.fn<ChildProcessHost["spawnSync"]>(() => ({ status: 0 }));
+    vi.stubGlobal("URL", undefined);
+    try {
+      createChildProcess({ spawnSync }).spawnSync("command");
+      expect(spawnSync).toHaveBeenCalledWith(
+        "command",
+        [],
+        expect.objectContaining({ cwdIsUrl: false }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test.each([
     ["spawn", () => childProcess.spawn(process.execPath)],
     ["exec", () => childProcess.exec("true")],
