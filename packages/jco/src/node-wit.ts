@@ -16,6 +16,13 @@ export const CHILD_PROCESS_WIT_REQUIREMENT: NodeWitRequirement = {
     dependencySource: fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/package.wit", import.meta.url)),
 };
 
+export const CLUSTER_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:cluster",
+    witImport: "jco:node/cluster@0.1.0",
+    dependencyDirectory: "jco-node-0.1.0",
+    dependencySource: fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/package.wit", import.meta.url)),
+};
+
 export interface WitInjectionResult {
     witPath: string;
     worldFile: string;

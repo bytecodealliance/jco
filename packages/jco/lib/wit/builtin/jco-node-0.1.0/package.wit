@@ -38,3 +38,111 @@ interface child-process {
 
   spawn-sync: func(command: string, args: list<string>, options: spawn-options) -> spawn-output;
 }
+
+/// Host-backed adapter for Node's `cluster` module.
+///
+/// WASI has no process model, so unlike Jco's other Node builtins this cannot be a portable
+/// shim. The host owns a real `node:cluster` and this interface exposes just enough of it to
+/// rebuild the observable JS surface guest-side.
+///
+/// Cluster is push-based and WIT is pull-based, so host events are queued and the guest drains
+/// them with `drain-events`. See `docs/src/interop/nodejs-builtins.md` for the delivery-timing
+/// difference this creates.
+interface cluster {
+    /// Lifecycle state of a worker, mirroring Node's `worker.state`.
+    enum worker-state {
+        none,
+        online,
+        listening,
+        disconnected,
+        dead,
+    }
+
+    /// Snapshot of a worker. `process` is deliberately absent: it is a `ChildProcess`, which
+    /// cannot cross this boundary. The guest surfaces an explicit error for it instead.
+    record worker-info {
+        id: u32,
+        state: worker-state,
+        exited-after-disconnect: bool,
+        connected: bool,
+        dead: bool,
+    }
+
+    /// How a worker exited. `signal` is empty when the worker exited normally.
+    record exit-info {
+        id: u32,
+        code: s32,
+        signal: string,
+    }
+
+    /// A message sent by a worker, carried as JSON because WIT has no dynamic value type.
+    record message-info {
+        id: u32,
+        json: string,
+    }
+
+    /// Settings the host applies to newly forked workers.
+    record settings {
+        silent: bool,
+        args: list<string>,
+        cwd: string,
+        scheduling-policy: u8,
+    }
+
+    /// An event the host observed since the last drain, in emission order.
+    variant event {
+        fork(u32),
+        online(u32),
+        disconnect(u32),
+        exit(exit-info),
+        message(message-info),
+        setup,
+    }
+
+    /// Why an operation the guest asked for cannot be carried out.
+    variant error {
+        /// The runtime has no process model at all (for example, a browser host).
+        unsupported(string),
+        /// No worker with this id is known.
+        no-such-worker(u32),
+        /// The host's cluster call failed.
+        failed(string),
+    }
+
+    /// Whether this instance is the cluster primary. False in a forked worker.
+    is-primary: func() -> bool;
+
+    /// The current worker's info, or none when running as the primary.
+    current-worker: func() -> option<worker-info>;
+
+    /// Fork a worker, re-executing the host entry so the component runs again as a worker.
+    fork: func(env: list<tuple<string, string>>) -> result<worker-info, error>;
+
+    /// Every worker the host currently knows about.
+    list-workers: func() -> list<worker-info>;
+
+    /// Re-read one worker, so guest-side state can be refreshed after events.
+    get-worker: func(id: u32) -> result<worker-info, error>;
+
+    /// Send a JSON-encoded message to a worker, or to the primary when called from a worker.
+    send: func(id: u32, json: string) -> result<_, error>;
+
+    /// Disconnect one worker.
+    disconnect-worker: func(id: u32) -> result<_, error>;
+
+    /// Disconnect every worker.
+    disconnect-all: func() -> result<_, error>;
+
+    /// Signal a worker. An empty signal means the host default (`SIGTERM`).
+    kill: func(id: u32, signal: string) -> result<_, error>;
+
+    /// Read the settings the host will apply to new workers.
+    get-settings: func() -> settings;
+
+    /// Apply settings for subsequent forks. Fails for settings the host cannot honour, such as
+    /// `exec`, which is the host runner rather than a guest file.
+    set-settings: func(value: settings) -> result<_, error>;
+
+    /// Take every event queued since the last call, oldest first.
+    drain-events: func() -> list<event>;
+}
