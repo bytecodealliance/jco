@@ -103,6 +103,9 @@ export interface UdpSocketsShim {
     udpCreateSocket: typeof import('./interfaces/wasi-sockets-udp-create-socket.d.ts');
 }
 
+/** Browser HTTP handler using standard Web Request and Response objects. */
+export type WebIncomingHandler = (request: Request) => Response | Promise<Response>;
+
 /**
  * Configuration options for WASIShim
  */
@@ -130,6 +133,8 @@ interface WASIShimConfig {
     udpSockets?: UdpSocketsShim;
     /** Custom HTTP shim */
     http?: object;
+    /** Browser incoming HTTP handler. */
+    incomingHandler?: WebIncomingHandler;
     /** Browser-only isolated environment variables. */
     environment?: Record<string, string>;
     /** Browser-only isolated command-line arguments. */
