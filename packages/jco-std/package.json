@@ -27,15 +27,20 @@
   ],
   "type": "module",
   "exports": {
-    "./node/assert": {
-      "types": "./dist/node/assert/index.d.ts",
-      "browser": "./dist/node/assert/index.js",
-      "default": "./dist/node/assert/index.js"
+    "./node24.x/assert": {
+      "types": "./dist/node24.x/assert/index.d.ts",
+      "browser": "./dist/node24.x/assert/index.js",
+      "default": "./dist/node24.x/assert/index.js"
+    },
+    "./node24.x/path": {
+      "types": "./dist/node24.x/path.d.ts",
+      "browser": "./dist/node24.x/path.js",
+      "default": "./dist/node24.x/path.js"
     },
     "./node/path": {
-      "types": "./dist/node/path.d.ts",
-      "browser": "./dist/node/path.js",
-      "default": "./dist/node/path.js"
+      "types": "./dist/node24.x/path.d.ts",
+      "browser": "./dist/node24.x/path.js",
+      "default": "./dist/node24.x/path.js"
     },
     "./wasi/0.2.x/http/adapters/hono/server": {
       "types": "./dist/wasi/0.2.12/http/adapters/hono/server.d.ts",

@@ -56,9 +56,9 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
 
 - `node:assert` and `node:assert/strict`, implemented by
-  `@bytecodealliance/jco-std/node/assert`;
+  `@bytecodealliance/jco-std/node24.x/assert`;
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
-  `@bytecodealliance/jco-std/node/path`;
+  `@bytecodealliance/jco-std/node24.x/path`;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.
@@ -74,7 +74,11 @@ immediately. Runtime-dependent APIs without a compatible guest implementation
 also throw explicit unsupported-API errors. The current implementation does not
 support the `base64url` encoding accepted by Node's Buffer.
 
-The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. Its
+The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. It is
+published under the `node24.x` entry point, which imports pin; Node majors are not
+interchangeable, so a future major is added as its own entry point rather than
+replacing this one. There is no unversioned alias for it -- `node/path` keeps one
+only because it predates the versioned entry points. Its
 comparison and assertion behavior is adapted from the corresponding MIT-licensed
 Node.js sources. Error fields and assertion outcomes are compatibility targets;
 some generated diff text and JavaScript engine stack frames can differ from Node.
@@ -85,7 +89,7 @@ The `node:` specifiers are replaced when Jco bundles source during
 componentization. The package export can also be imported directly:
 
 ```ts
-import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/node/assert";
+import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/node24.x/assert";
 
 assert(true);
 deepStrictEqual({ ready: true }, { ready: true });

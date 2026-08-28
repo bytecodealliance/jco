@@ -1,6 +1,6 @@
 import nodePath from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { createPath, type PathModule } from "../../src/node/path.js";
+import { createPath, type PathModule } from "../../src/node24.x/path.js";
 
 const lexicalCases = ["", ".", "..", "/", "/foo//bar/..", "foo/bar/", ".bashrc", "a.tar.gz"];
 const windowsCases = [

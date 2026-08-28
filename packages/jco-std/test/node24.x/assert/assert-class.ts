@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { Assert, AssertionError } from "../../../src/node/assert/index.js";
+import { Assert, AssertionError } from "../../../src/node24.x/assert/index.js";
 
 describe("assert.Assert", () => {
   test("defaults legacy-named methods to strict behavior", () => {

@@ -69,10 +69,22 @@ The current compatibility target is Node.js 24.19.0. The unenv-backed modules ar
 audited against `unenv@2.0.0-rc.24`; upgrading unenv requires rerunning the
 compatibility suites.
 
+Node's builtin semantics change across major versions, so `jco-std` publishes one
+entry point per supported Node major: the modules below live under `node24.x`, and
+a future Node major is added alongside as its own entry point rather than replacing
+it. Imports pin the major they target, and Jco pins `node24.x` when it bundles, so
+the version being built for is always explicit. Selecting that major at build time,
+or detecting it, is future work.
+
+`node/path` remains as an alias for `node24.x/path`, so imports written before the
+entry points were versioned keep resolving. It is the only such alias: modules added
+after the split, including `node:assert`, are available only under a versioned entry
+point.
+
 | Imports                                           | Implementation                                         | Notes                                                                                                                    |
 | ------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/node/assert`                | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/node/path`                  | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/node24.x/assert`                | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/node24.x/path`                  | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
 | `node:querystring`                                | unenv's Node-derived querystring implementation        | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
 

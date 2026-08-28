@@ -141,9 +141,9 @@ export interface WorldMetadata {
 }
 
 export interface NodeBuiltinOptions {
-    /** Path to jco-std's `node/path` module (overridable for tests) */
+    /** Path to jco-std's `node24.x/path` module (overridable for tests) */
     pathFactory?: string;
-    /** Path to jco-std's `node/assert` module (overridable for tests) */
+    /** Path to jco-std's `node24.x/assert` module (overridable for tests) */
     assertModule?: string;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
@@ -275,10 +275,14 @@ export const throws = strict.throws;
 
 /** Create Jco's virtual adapters for supported Node builtins. */
 export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBuiltinOptions = {}): Plugin {
+    // NOTE: jco-std publishes one entry point per supported Node major (`node24.x`, ...),
+    // because Node's builtin semantics do change across majors. The major is pinned here rather
+    // than resolved through jco-std's `node/*` alias, so that the version being built for is
+    // explicit; selecting it at build time, or detecting it, is future work.
     const pathFactory = () =>
-        options.pathFactory ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node/path"));
+        options.pathFactory ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node24.x/path"));
     const assertModule = () =>
-        options.assertModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node/assert"));
+        options.assertModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/node24.x/assert"));
     return {
         name: "jco-node-builtins",
         resolveId(id) {
