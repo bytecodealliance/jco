@@ -1,0 +1,5 @@
+package local:node-cluster-missing-capability;
+
+world test {
+  export run: func() -> bool;
+}
