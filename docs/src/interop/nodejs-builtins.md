@@ -78,19 +78,21 @@ The current compatibility target is Node.js 24.19.0. The unenv-backed modules ar
 audited against `unenv@2.0.0-rc.24`; upgrading unenv requires rerunning the
 compatibility suites.
 
-Node's builtin semantics change across major versions, so `jco-std` publishes one
-entry point per supported Node major: the modules below live under `node24.x`, and
-a future Node major is added alongside as its own entry point rather than replacing
-it.
+These entry points are namespaced by two independent versions: the WASI version they adapt
+Node to, and the Node major they implement. The modules below live under
+`wasi/0.2.x/node/24.x.x`, where `0.2.x` means the latest WASI p2 release and `24.x.x` means any
+Node 24. Both axes move on their own -- Node's builtin semantics change across majors, and the
+same module adapted to WASI p3 is a different implementation -- so a new Node major or a p3
+adaptation is added alongside rather than replacing what is there.
 
-Downstream projects should use explciit versions that match the major they target, and
-Jco pins `node24.x` when it bundles, so the version being built for is always explicit.
+Downstream projects should use explicit versions matching what they target, and Jco pins both
+when it bundles, so what is being built for is always explicit.
 
-Automatically detecting the correct NodeJS major version to use at build time or
-detecting is planned.
+Automatically selecting the right WASI and NodeJS versions at build time, or detecting them,
+is planned.
 
 > [!NOTE]
-> To support `node/path` remains as an alias for `node24.x/path`, so imports written before the
+> To support `node/path` remains as an alias for `wasi/0.2.x/node/24.x.x/path`, so imports written before the
 > entry points were versioned keep resolving.
 >
 > It is the only such alias: modules added after the split, including `node:assert`, are
@@ -98,8 +100,8 @@ detecting is planned.
 
 | Imports                                           | Implementation                                         | Notes                                                                                                                    |
 |---------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/node24.x/assert`            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/node24.x/path`              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
 | `node:querystring`                                | unenv's Node-derived querystring implementation        | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
 

@@ -18,12 +18,12 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 
 ## HTTP
 
-| Export                  | Description                                                                   |
-|-------------------------|-------------------------------------------------------------------------------|
-| `http/adapters/hono`    | Enables easier building of [Hono][hono] HTTP servers                          |
-| `http/adapters/express` | Provides a simple [Express][express]-like interface for building HTTP servers |
-| `node24.x/assert`       | `node:assert` adapter pinned at Node 24                                       |
-| `node24.x/path`         | `node:assert` adapter pinned at Node 24                                       |
+| Export                          | Description                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------------- |
+| `http/adapters/hono`            | Enables easier building of [Hono][hono] HTTP servers                          |
+| `http/adapters/express`         | Provides a simple [Express][express]-like interface for building HTTP servers |
+| `wasi/0.2.x/node/24.x.x/assert` | `node:assert` adapter, Node 24 on WASI p2                                     |
+| `wasi/0.2.x/node/24.x.x/path`   | `node:path` adapter, Node 24 on WASI p2                                       |
 
 [express]: https://expressjs.com
 
@@ -68,9 +68,9 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
 
 - `node:assert` and `node:assert/strict`, implemented by
-  `@bytecodealliance/jco-std/node24.x/assert`;
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`;
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
-  `@bytecodealliance/jco-std/node24.x/path`;
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.
@@ -85,7 +85,7 @@ treat mocked and unimplemented exports as supported APIs.
 
 The buffer adapter uses unenv's Feross `buffer` implementation for the portable
 core API. Deprecated entry points (e.g. `Buffer()`/`new Buffer()` and `SlowBuffer`)
- throw immediately.
+throw immediately.
 
 Runtime-dependent APIs without a compatible guest implementation
 also throw explicit unsupported-API errors.
@@ -95,9 +95,9 @@ Node's Buffer.
 
 > [!NOTE]
 > The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. It is
-> published under the `node24.x` entry point, which should be used explicitly; Node majors
-> are not interchangeable, so a future major is added as its own entry point rather than
-> replacing this one.
+> published under the `wasi/0.2.x/node/24.x.x` entry point, which should be used explicitly. Neither WASI
+> versions nor Node majors are interchangeable, so a new Node major or a WASI p3 adaptation
+> is added as its own entry point rather than replacing this one.
 
 There is no unversioned alias for it -- `node/path` keeps one
 only for backwards compatibility (that will be removed in a future breaking-change version
@@ -115,7 +115,7 @@ Note that the `node:` specifiers are replaced when Jco bundles source during
 componentization. The package export can also be imported directly:
 
 ```ts
-import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/node24.x/assert";
+import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert";
 
 assert(true);
 deepStrictEqual({ ready: true }, { ready: true });

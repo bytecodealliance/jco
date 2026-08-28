@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import assert, * as namespace from "../../../src/node24.x/assert/index.js";
+import assert, * as namespace from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("node:assert module", () => {
   test("exposes the Node 24 public surface", () => {

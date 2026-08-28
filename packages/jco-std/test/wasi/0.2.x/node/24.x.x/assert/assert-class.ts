@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { Assert, AssertionError } from "../../../src/node24.x/assert/index.js";
+import {
+  Assert,
+  AssertionError,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.Assert", () => {
   test("defaults legacy-named methods to strict behavior", () => {

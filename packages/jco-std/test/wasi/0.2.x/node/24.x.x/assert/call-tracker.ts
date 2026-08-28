@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { CallTracker } from "../../../src/node24.x/assert/index.js";
+import { CallTracker } from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.CallTracker deprecated stub", () => {
   test("throws immediately from construction", () => {
