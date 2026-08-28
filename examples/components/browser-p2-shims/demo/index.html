@@ -8,23 +8,32 @@
         <style>
             :root {
                 color-scheme: light;
-                font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-                color: #172033;
-                background: #f4f6fb;
+                font-family: Arial, Helvetica, sans-serif;
+                color: #333;
+                background: #fbfbfb;
+                --alliance-teal: #00a0ad;
+                --alliance-teal-dark: #387e89;
+                --alliance-slate: #373753;
+                --alliance-rule: #e7e7e9;
+                --alliance-muted: #62626d;
             }
             * {
                 box-sizing: border-box;
             }
             body {
                 margin: 0;
+                border-top: 4px solid transparent;
+                border-image: linear-gradient(90deg, #a47ed5 15%, #6ba6dd 40%, #6ce3cc 65%, #3ef699 90%) 1;
             }
             main {
-                width: min(1000px, calc(100% - 2rem));
+                width: min(960px, calc(100% - 2rem));
                 margin: auto;
-                padding: 4rem 0;
+                padding: 4.5rem 0;
             }
             header {
-                margin-bottom: 2rem;
+                margin-bottom: 2.5rem;
+                padding-bottom: 2.5rem;
+                border-bottom: 1px solid var(--alliance-rule);
             }
             h1,
             h2,
@@ -33,17 +42,27 @@
                 margin-top: 0;
             }
             h1 {
-                margin-bottom: 0.75rem;
-                font-size: clamp(2rem, 6vw, 3.75rem);
-                line-height: 1;
+                margin-bottom: 1rem;
+                color: var(--alliance-slate);
+                font-size: clamp(2.25rem, 6vw, 4rem);
+                font-weight: 650;
+                line-height: 1.05;
+                letter-spacing: -0.025em;
             }
             h2 {
-                margin-bottom: 0.4rem;
+                margin-bottom: 0.5rem;
+                color: #000;
+                font-size: 1.5rem;
+                font-weight: 500;
+            }
+            h3 {
+                color: var(--alliance-slate);
+                font-weight: 600;
             }
             .lede,
             .demo-section > p,
             .card p {
-                color: #5e6980;
+                color: var(--alliance-muted);
                 line-height: 1.55;
             }
             .status {
@@ -51,10 +70,12 @@
                 align-items: center;
                 gap: 0.5rem;
                 padding: 0.45rem 0.75rem;
-                border: 1px solid #cbd3e1;
-                border-radius: 999px;
-                background: white;
-                color: #536078;
+                border: 1px solid var(--alliance-rule);
+                border-radius: 0.35rem;
+                background: #fff;
+                color: var(--alliance-slate);
+                font-size: 0.9rem;
+                font-weight: 600;
             }
             .status::before {
                 width: 0.55rem;
@@ -64,18 +85,17 @@
                 content: '';
             }
             .status[data-state='ready']::before {
-                background: #16865d;
+                background: var(--alliance-teal);
             }
             .status[data-state='error']::before {
                 background: #c93030;
             }
             .demo-section {
-                margin-top: 1.25rem;
-                padding: 1.4rem;
-                border: 1px solid #dce1ea;
-                border-radius: 1rem;
-                background: white;
-                box-shadow: 0 12px 30px rgb(28 39 64 / 7%);
+                margin-top: 1rem;
+                padding: 1.5rem;
+                border: 1px solid var(--alliance-rule);
+                border-radius: 0.5rem;
+                background: #fff;
             }
             .grid {
                 display: grid;
@@ -84,8 +104,9 @@
             }
             .card {
                 padding: 1rem;
-                border: 1px solid #e1e5ed;
-                border-radius: 0.8rem;
+                border: 1px solid var(--alliance-rule);
+                border-radius: 0.35rem;
+                background: #fbfbfb;
             }
             label {
                 display: block;
@@ -99,29 +120,35 @@
                 min-height: 5rem;
                 resize: vertical;
                 padding: 0.75rem;
-                border: 1px solid #bdc6d6;
-                border-radius: 0.65rem;
+                border: 1px solid #c9c9ce;
+                border-radius: 0.3rem;
                 color: inherit;
-                background: #fbfcff;
+                background: #fff;
                 font: inherit;
             }
             textarea:focus {
-                outline: 3px solid rgb(56 103 214 / 20%);
-                border-color: #3867d6;
+                outline: 3px solid rgb(0 160 173 / 18%);
+                border-color: var(--alliance-teal);
             }
             button {
                 margin-top: 0.75rem;
                 padding: 0.7rem 1rem;
                 border: 0;
-                border-radius: 0.65rem;
-                color: white;
-                background: #2855bd;
+                border-radius: 0.3rem;
+                color: #fff;
+                background: var(--alliance-teal-dark);
                 font: inherit;
-                font-weight: 700;
+                font-size: 0.925rem;
+                font-weight: 650;
                 cursor: pointer;
+                transition: background-color 160ms ease;
             }
             button:hover:not(:disabled) {
-                background: #1f469f;
+                background: #2d6871;
+            }
+            button:focus-visible {
+                outline: 3px solid rgb(0 160 173 / 24%);
+                outline-offset: 2px;
             }
             button:disabled {
                 cursor: wait;
@@ -131,8 +158,9 @@
                 min-height: 3rem;
                 margin: 0.9rem 0 0;
                 padding: 0.85rem;
-                border-radius: 0.6rem;
-                background: #f0f3f8;
+                border: 1px solid var(--alliance-rule);
+                border-radius: 0.3rem;
+                background: #fafafa;
                 overflow-wrap: anywhere;
                 white-space: pre-wrap;
             }
@@ -160,12 +188,14 @@
             }
             code {
                 padding: 0.08rem 0.28rem;
-                border-radius: 0.3rem;
-                background: #edf0f7;
+                border-radius: 0.2rem;
+                color: var(--alliance-slate);
+                background: #eef8f8;
+                font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
             }
             @media (max-width: 700px) {
                 main {
-                    padding: 2rem 0;
+                    padding: 2.5rem 0;
                 }
                 .grid {
                     grid-template-columns: 1fr;
