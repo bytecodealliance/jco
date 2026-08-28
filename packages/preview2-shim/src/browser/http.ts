@@ -7,6 +7,8 @@ import type { Error as IoError } from "../../types/interfaces/wasi-io-error.js";
 import type { Pollable } from "../../types/interfaces/wasi-io-poll.js";
 import { inputStreamCreate, ioErrorCreate, outputStreamCreate, pollableCreate } from "./io.js";
 
+export { InMemoryHttpClient } from "./in-memory-http.js";
+
 type Result<T, E> = TypesNamespace.Result<T, E>;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
@@ -486,11 +488,11 @@ class IncomingBody implements TypesNamespace.IncomingBody {
 
     [symbolDispose]() {}
 
-    static _create(fetchResponse: Response): IncomingBody {
+    static _create(fetchResponse: Response, bufferedBody?: Uint8Array): IncomingBody {
         const incomingBody = new IncomingBody();
-        let buffer: Uint8Array | null = null;
+        let buffer: Uint8Array | null = bufferedBody ?? null;
         let bufferOffset = 0;
-        let done = false;
+        let done = bufferedBody !== undefined;
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         let readPromise: Promise<void> | null = null;
         let readError: IoError | null = null;
@@ -619,7 +621,9 @@ class IncomingBody implements TypesNamespace.IncomingBody {
             },
         });
 
-        startRead();
+        if (bufferedBody === undefined) {
+            startRead();
+        }
         return incomingBody;
     }
 }
@@ -706,7 +710,7 @@ class IncomingRequest implements TypesNamespace.IncomingRequest {
         this.#body = undefined;
         return body;
     }
-    static _create(request: Request) {
+    static _create(request: Request, bufferedBody?: Uint8Array) {
         const incoming = new IncomingRequest();
         incoming.#request = request.clone();
         const encoder = new TextEncoder();
@@ -718,7 +722,7 @@ class IncomingRequest implements TypesNamespace.IncomingRequest {
                 ]),
             ),
         );
-        incoming.#body = incomingBodyCreate(new Response(request.body));
+        incoming.#body = incomingBodyCreate(new Response(request.body), bufferedBody);
         return incoming;
     }
 
@@ -1067,13 +1071,16 @@ async function responseToOutgoingResponse(response: Response): Promise<OutgoingR
     return outgoing;
 }
 
-/** Translate a browser Request through a host-provided WASI incoming handler. */
+/** Translate a browser Request through a WASI handler with a synchronously readable body. */
 export async function handleIncomingRequest(
     request: Request,
     handler: WasiIncomingHandler,
 ): Promise<Response> {
     const [responseOut, response] = responseOutparamCreate();
-    await handler(incomingRequestCreate(request), responseOut);
+    const body = request.body
+        ? new Uint8Array(await request.clone().arrayBuffer())
+        : new Uint8Array();
+    await handler(incomingRequestCreate(request, body), responseOut);
     if (!responseOutparamIsUsed(responseOut)) {
         throw new Error("WASI HTTP handler returned without setting its response outparam");
     }

@@ -27,8 +27,9 @@ configured explicitly, and raw sockets are unavailable unless an embedding suppl
 | I/O streams and poll          | Implemented browser resources                                 | Non-blocking streams depend on their injected handlers            |
 | Filesystem                    | Adapter-backed; opt-in in-memory compatibility implementation | No persistent storage is selected implicitly                      |
 | Outbound HTTP                 | Web API                                                       | Delegates to `fetch`                                              |
-| Incoming HTTP                 | Host adapter required                                         | Browsers cannot listen for arbitrary inbound HTTP                 |
-| TCP, UDP, and DNS             | Host adapter required                                         | Raw sockets are not exposed by standard browsers                  |
+| Incoming HTTP                 | Adapter-backed; opt-in in-memory client                       | Browsers cannot listen for arbitrary inbound HTTP                 |
+| TCP and UDP                   | Adapter-backed; opt-in in-memory implementations              | Raw sockets are not exposed by standard browsers                  |
+| DNS                           | Host adapter required                                         | DNS is not exposed independently by standard browsers             |
 | `WASIShim` instantiation      | Implemented                                                   | Interface namespaces can be overridden per instance               |
 
 An operation is not considered supported merely because its interface shape exists. Adapter-backed
@@ -48,10 +49,10 @@ namespace can replace any row through `WASIShim`.
 | `wasi:io`                     | errors, input/output streams, poll and pollables                                                  | readiness and I/O behavior for injected stream handlers    | synchronous blocking of the browser event loop |
 | `wasi:filesystem`             | descriptors, files, directories, links, metadata, streams, preopens through the ephemeral adapter | persistent storage, permissions, and external file handles | symbolic-link creation and reading             |
 | `wasi:http/outgoing-handler`  | Fetch-backed requests and buffered request bodies                                                 | Fetch implementation and network permission                | request/response trailers; streaming uploads   |
-| `wasi:http/incoming-handler`  | request/response translation and injectable handler namespace                                     | HTTP server, service worker, or other request source       | direct browser listening                       |
+| `wasi:http/incoming-handler`  | request/response translation, injectable handler, and in-memory client                            | HTTP server, service worker, or other request source       | direct browser listening                       |
 | `wasi:sockets/ip-name-lookup` | interface shape only                                                                              | complete interface replacement                             | built-in DNS lookup                            |
-| `wasi:sockets/tcp*`           | interface shape only                                                                              | complete interface replacement                             | built-in raw TCP                               |
-| `wasi:sockets/udp*`           | interface shape only                                                                              | complete interface replacement                             | built-in raw UDP                               |
+| `wasi:sockets/tcp*`           | opt-in in-memory server/client implementation                                                     | adapter for external connectivity                          | built-in raw TCP                               |
+| `wasi:sockets/udp*`           | opt-in in-memory server/client implementation                                                     | adapter for external connectivity                          | built-in raw UDP                               |
 
 Outbound HTTP buffers a requested body until `outgoing-body.finish` before calling `fetch`.
 This preserves complete-body semantics across browsers but does not provide streaming upload or
@@ -108,6 +109,23 @@ const shim = new WASIShim({
 This keeps permission prompts, handle acquisition, persistence, and synchronization policy in
 application code. Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate
 `fetch` capability.
+
+Deterministic in-memory transports are available for components that act as servers and for tests:
+
+```js
+import { http, sockets } from "@bytecodealliance/preview2-shim";
+
+const tcpSockets = new sockets.InMemoryTcpSockets();
+const tcpClient = tcpSockets.connect(serverAddress);
+const udpSockets = new sockets.InMemoryUdpSockets();
+const udpClient = udpSockets.createClient(clientAddress);
+const httpClient = new http.InMemoryHttpClient(component.incomingHandler);
+
+const shim = new WASIShim({ tcpSockets, udpSockets });
+```
+
+These implementations route bytes only within the current JavaScript realm; they do not grant raw
+browser network access. `InMemoryHttpClient.fetch(request)` returns a standard Web `Response`.
 
 For a small application-owned implementation, see the
 [Map-backed browser filesystem test shim](./test/fixtures/filesystem-shim/in-memory-map.ts). It keeps named
