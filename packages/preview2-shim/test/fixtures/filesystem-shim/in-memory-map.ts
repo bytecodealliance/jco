@@ -3,7 +3,7 @@ import type { FileData } from "../../../src/browser/filesystem.js";
 
 type BrowserFilesystemModule = Pick<
     typeof import("../../../src/browser/filesystem.js"),
-    "createFilesystem"
+    "createFilesystem" | "InMemoryFilesystemAdapter"
 >;
 
 /**
@@ -18,9 +18,11 @@ export class MapFilesystemShim implements FilesystemShim {
     readonly types;
     readonly preopens;
     readonly #browserFilesystem: BrowserFilesystemModule;
+    readonly #adapter: InstanceType<BrowserFilesystemModule["InMemoryFilesystemAdapter"]>;
 
     constructor(browserFilesystem: BrowserFilesystemModule) {
         this.#browserFilesystem = browserFilesystem;
+        this.#adapter = new browserFilesystem.InMemoryFilesystemAdapter();
         const empty = this.#createFilesystem({});
         this.types = empty.types;
         this.preopens = empty.preopens;
@@ -45,7 +47,7 @@ export class MapFilesystemShim implements FilesystemShim {
                     if (!root) {
                         throw new TypeError(`unknown Map filesystem root ${JSON.stringify(name)}`);
                     }
-                    return root;
+                    return this.#adapter.getRoot(root);
                 },
             },
             preopens,

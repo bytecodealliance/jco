@@ -1,42 +1,45 @@
 import { types as TypesNamespace, preopens as PreopensNamespace } from "../../types/filesystem.js";
 import { Error as IoError } from "../../types/interfaces/wasi-io-error.js";
-import {
-    InputStream as IInputStream,
-    OutputStream as IOutputStream,
-} from "../../types/interfaces/wasi-io-streams.js";
-import { inputStreamCreate, outputStreamCreate } from "./io.js";
 import { environment } from "./environment.js";
-import { _setCwd, _getCwd } from "./config.js";
+import { InMemoryFilesystemAdapter } from "./in-memory-filesystem.js";
+import type { FileData } from "./in-memory-filesystem.js";
+import { _setCwd } from "./config.js";
 
 export { _setCwd } from "./config.js";
 export { InMemoryFilesystemAdapter } from "./in-memory-filesystem.js";
+export type { FileData, FileDataEntry } from "./in-memory-filesystem.js";
 
 type Filesize = TypesNamespace.Filesize;
 type OpenFlags = TypesNamespace.OpenFlags;
 type PathFlags = TypesNamespace.PathFlags;
 
-export interface FileDataEntry {
-    // Directory contents (present for directories)
-    dir?: Record<string, FileDataEntry>;
-    // File contents (present for files)
-    source?: Uint8Array | string;
+export interface BrowserDirectoryEntryStream {
+    readDirectoryEntry(): TypesNamespace.DirectoryEntry | undefined;
 }
 
-/**
- * Root file data structure representing a filesystem tree.
- * Each entry is either a directory (has `dir` property) or a file (has `source` property).
- * @example
- * // A simple filesystem with one directory containing one file:
- * const fileData = {
- *   dir: {
- *     'myfile.txt': { source: new Uint8Array([72, 101, 108, 108, 111]) }
- *   }
- * };
- */
-export type FileData = FileDataEntry;
+export interface BrowserFilesystemDescriptor extends Omit<
+    TypesNamespace.Descriptor,
+    "isSameObject" | "linkAt" | "openAt" | "readDirectory" | "renameAt"
+> {
+    readDirectory(): BrowserDirectoryEntryStream;
+    linkAt(
+        oldPathFlags: PathFlags,
+        oldPath: string,
+        newDescriptor: BrowserFilesystemDescriptor,
+        newPath: string,
+    ): void;
+    openAt(
+        pathFlags: PathFlags,
+        path: string,
+        openFlags: OpenFlags,
+        flags: TypesNamespace.DescriptorFlags,
+    ): BrowserFilesystemDescriptor;
+    renameAt(oldPath: string, newDescriptor: BrowserFilesystemDescriptor, newPath: string): void;
+    isSameObject(other: BrowserFilesystemDescriptor): boolean;
+}
 
 export interface BrowserFilesystemAdapter<Capability = unknown> {
-    getRoot(capability: Capability): FileData;
+    getRoot(capability: Capability): BrowserFilesystemDescriptor;
     dispose?(): void;
 }
 
@@ -45,559 +48,187 @@ export interface BrowserFilesystemConfig<Capability> {
     preopens: Record<string, Capability>;
 }
 
-export function _setFileData(fileData: FileData): void {
-    _fileData = fileData;
-    if (_rootPreopen) {
-        const descriptor = descriptorCreate(fileData);
-        _rootPreopen[0] = descriptor;
-    } else {
-        _setPreopens({ "/": fileData });
-    }
-    const cwd = environment.initialCwd();
-    _setCwd(cwd || "/");
-}
-
-export function _getFileData(): string {
-    return JSON.stringify(_fileData);
-}
-
-let _fileData: FileData = { dir: {} };
-
-const timeZero = {
-    seconds: 0n,
-    nanoseconds: 0,
-};
-
-/** Coerce the given object to a safe integer */
-function coerceToSafeIntegerNumber(obj: number | bigint): number {
-    let n: number;
-    if (typeof obj === "number") {
-        n = obj;
-    } else if (typeof obj == "bigint") {
-        n = Number(obj);
-    } else {
-        throw new TypeError(`unexpected non-numeric type: ${obj}`);
-    }
-    if (n > Number.MAX_SAFE_INTEGER) {
-        throw new TypeError(`excessively large number: ${n}`);
-    }
-    return n;
-}
-
-function getChildEntry(parentEntry: FileDataEntry, subpath: string): FileDataEntry {
-    if (subpath === "." && _rootPreopen && descriptorGetEntry(_rootPreopen[0]) === parentEntry) {
-        subpath = _getCwd();
-        if (subpath.startsWith("/") && subpath !== "/") {
-            subpath = subpath.slice(1);
-        }
-    }
-    let entry: FileDataEntry | undefined = parentEntry;
-    let segmentIdx: number;
-    do {
-        if (!entry?.dir) {
-            throw "not-directory";
-        }
-        segmentIdx = subpath.indexOf("/");
-        const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
-        if (segment === "..") {
-            throw "no-entry";
-        }
-        if (segment === "." || segment === "") {
-        } else {
-            entry = entry.dir[segment];
-            if (!entry) {
-                throw "no-entry";
-            }
-        }
-        subpath = subpath.slice(segmentIdx + 1);
-    } while (segmentIdx !== -1);
-    if (!entry) {
-        throw "no-entry";
-    }
-    return entry;
-}
-
-function getParentEntry(root: FileDataEntry, path: string): [FileDataEntry, string] {
-    const segments = path.split("/").filter((segment) => segment !== "" && segment !== ".");
-    if (segments.length === 0 || segments.some((segment) => segment === "..")) {
-        throw "invalid";
-    }
-    const name = segments.pop()!;
-    let parent = root;
-    for (const segment of segments) {
-        const child = parent.dir?.[segment];
-        if (!child) {
-            throw "no-entry";
-        }
-        if (!child.dir) {
-            throw "not-directory";
-        }
-        parent = child;
-    }
-    if (!parent.dir) {
-        throw "not-directory";
-    }
-    return [parent, name];
-}
-
-function getSource(fileEntry: FileDataEntry): Uint8Array {
-    if (typeof fileEntry.source === "string") {
-        fileEntry.source = new TextEncoder().encode(fileEntry.source);
-    }
-    return fileEntry.source!;
-}
-
-function containsEntry(root: FileDataEntry, target: FileDataEntry): boolean {
-    if (root === target) {
-        return true;
-    }
-    return root.dir ? Object.values(root.dir).some((entry) => containsEntry(entry, target)) : false;
-}
-
-// Keep spare capacity separate so FileDataEntry.source always reflects the logical file size.
-const fileWriteBuffers = new WeakMap<FileDataEntry, Uint8Array>();
-
-interface EntryMetadata {
-    id: bigint;
-    version: bigint;
-    linkCount: bigint;
-}
-
-let nextEntryId = 0n;
-const entryMetadata = new WeakMap<FileDataEntry, EntryMetadata>();
-
-function metadata(entry: FileDataEntry): EntryMetadata {
-    let value = entryMetadata.get(entry);
-    if (!value) {
-        value = { id: ++nextEntryId, version: 0n, linkCount: 1n };
-        entryMetadata.set(entry, value);
-    }
-    return value;
-}
-
-function touch(entry: FileDataEntry): void {
-    metadata(entry).version++;
-}
-
-function getFileWriteBuffer(
-    entry: FileDataEntry,
-    source: Uint8Array,
-    requiredLength: number,
-): Uint8Array {
-    let buffer = fileWriteBuffers.get(entry);
-    if (!buffer || buffer.buffer !== source.buffer || buffer.byteOffset !== source.byteOffset) {
-        buffer = source;
-    }
-    if (requiredLength <= buffer.byteLength) {
-        return buffer;
-    }
-
-    const newBuffer = new Uint8Array(Math.max(requiredLength, source.byteLength * 2));
-    newBuffer.set(source);
-    fileWriteBuffers.set(entry, newBuffer);
-    return newBuffer;
-}
-
 class DirectoryEntryStream implements TypesNamespace.DirectoryEntryStream {
-    idx = 0;
-    entries: [string, FileDataEntry][] = [];
+    #implementation!: BrowserDirectoryEntryStream;
 
-    static _create(entries: [string, FileDataEntry][]) {
+    static _create(implementation: BrowserDirectoryEntryStream) {
         const stream = new DirectoryEntryStream();
-        stream.entries = entries;
+        stream.#implementation = implementation;
         return stream;
     }
 
     readDirectoryEntry() {
-        if (this.idx === this.entries.length) {
-            return undefined;
-        }
-        const [name, entry] = this.entries[this.idx];
-        this.idx += 1;
-        return {
-            name,
-            type: entry.dir ? "directory" : "regular-file",
-        } as TypesNamespace.DirectoryEntry;
+        return this.#implementation.readDirectoryEntry();
     }
 }
 
-const descriptorEntryStreamCreate = DirectoryEntryStream._create;
+const directoryEntryStreamCreate = DirectoryEntryStream._create;
 // @ts-expect-error - Deleting static method
 delete DirectoryEntryStream._create;
 
 class Descriptor implements TypesNamespace.Descriptor {
-    #stream: any;
-    #entry!: FileDataEntry;
-    #flags: TypesNamespace.DescriptorFlags = {
-        read: true,
-        write: true,
-        mutateDirectory: true,
-    };
+    #implementation!: BrowserFilesystemDescriptor;
 
-    _getEntry(descriptor: Descriptor): FileDataEntry {
-        return descriptor.#entry;
+    _getImplementation(descriptor: Descriptor) {
+        return descriptor.#implementation;
     }
 
-    static _create(entry: FileDataEntry | any, isStream?: boolean) {
+    static _create(implementation: BrowserFilesystemDescriptor) {
         const descriptor = new Descriptor();
-        if (isStream) {
-            descriptor.#stream = entry;
-        } else {
-            descriptor.#entry = entry;
-        }
+        descriptor.#implementation = implementation;
         return descriptor;
     }
 
-    readViaStream(_offset: bigint) {
-        const source = getSource(this.#entry);
-        let offset = Number(_offset);
-        return inputStreamCreate({
-            blockingRead(len: bigint): Uint8Array {
-                if (offset === source.byteLength) {
-                    throw { tag: "closed" };
-                }
-                const bytes = source.slice(offset, offset + Number(len));
-                offset += bytes.byteLength;
-                return bytes;
-            },
-        }) as IInputStream;
+    readViaStream(offset: Filesize) {
+        return this.#implementation.readViaStream(offset);
     }
 
-    writeViaStream(_offset: bigint) {
-        const entry = this.#entry;
-        let offset = coerceToSafeIntegerNumber(_offset);
-        return outputStreamCreate({
-            write(buf: Uint8Array): void {
-                if (buf.byteLength === 0) {
-                    return;
-                }
-                const source = getSource(entry);
-                const end = offset + buf.byteLength;
-                if (!Number.isSafeInteger(end)) {
-                    throw new TypeError(`excessively large number: ${end}`);
-                }
-                const buffer = getFileWriteBuffer(entry, source, end);
-                if (offset > source.byteLength) {
-                    buffer.fill(0, source.byteLength, offset);
-                }
-                buffer.set(buf, offset);
-                entry.source = buffer.subarray(0, Math.max(source.byteLength, end));
-                offset = end;
-                touch(entry);
-            },
-        }) as IOutputStream;
+    writeViaStream(offset: Filesize) {
+        return this.#implementation.writeViaStream(offset);
     }
 
     appendViaStream() {
-        return this.writeViaStream(this.stat().size);
+        return this.#implementation.appendViaStream();
     }
 
-    advise(_offset: Filesize, _length: Filesize, _advice: TypesNamespace.Advice) {
-        if (this.getType() === "directory") {
-            throw "bad-descriptor";
-        }
+    advise(offset: Filesize, length: Filesize, advice: TypesNamespace.Advice) {
+        return this.#implementation.advise(offset, length, advice);
     }
 
-    syncData() {}
+    syncData() {
+        return this.#implementation.syncData();
+    }
 
     getFlags() {
-        return { ...this.#flags };
+        return this.#implementation.getFlags();
     }
 
     getType() {
-        if (this.#stream) {
-            return "fifo";
-        }
-        if (this.#entry.dir) {
-            return "directory";
-        }
-        if (this.#entry.source) {
-            return "regular-file";
-        }
-        return "unknown";
+        return this.#implementation.getType();
     }
 
-    setSize(size: bigint) {
-        if (this.getType() === "directory") {
-            throw "is-directory";
-        }
-        const length = coerceToSafeIntegerNumber(size);
-        const source = getSource(this.#entry);
-        const resized = new Uint8Array(length);
-        resized.set(source.subarray(0, length));
-        this.#entry.source = resized;
-        touch(this.#entry);
+    setSize(size: Filesize) {
+        return this.#implementation.setSize(size);
     }
 
-    setTimes(dataAccessTimestamp: any, dataModificationTimestamp: any) {
-        if (
-            dataAccessTimestamp?.tag !== "no-change" ||
-            dataModificationTimestamp?.tag !== "no-change"
-        ) {
-            touch(this.#entry);
-        }
+    setTimes(
+        dataAccessTimestamp: TypesNamespace.NewTimestamp,
+        dataModificationTimestamp: TypesNamespace.NewTimestamp,
+    ) {
+        return this.#implementation.setTimes(dataAccessTimestamp, dataModificationTimestamp);
     }
 
-    read(length: bigint, offset: bigint) {
-        const source = getSource(this.#entry);
-        const off = coerceToSafeIntegerNumber(offset);
-        const len = coerceToSafeIntegerNumber(length);
-        const result: [Uint8Array, boolean] = [
-            source.slice(off, off + len),
-            off + len >= source.byteLength,
-        ];
-        return result;
+    read(length: Filesize, offset: Filesize) {
+        return this.#implementation.read(length, offset);
     }
 
     write(buffer: Uint8Array, offset: Filesize) {
-        if (this.getType() === "directory") {
-            throw "is-directory";
-        }
-        const off = coerceToSafeIntegerNumber(offset);
-        const source = getSource(this.#entry);
-        const end = off + buffer.byteLength;
-        if (!Number.isSafeInteger(end)) {
-            throw "file-too-large";
-        }
-        const target = new Uint8Array(Math.max(source.byteLength, end));
-        target.set(source);
-        target.set(buffer, off);
-        this.#entry.source = target;
-        touch(this.#entry);
-        return BigInt(buffer.byteLength);
+        return this.#implementation.write(buffer, offset);
     }
 
     readDirectory() {
-        if (!this.#entry?.dir) {
-            throw "bad-descriptor";
-        }
-        return descriptorEntryStreamCreate(
-            Object.entries(this.#entry.dir).sort(([a], [b]) => (a > b ? 1 : -1)),
-        );
+        return directoryEntryStreamCreate(this.#implementation.readDirectory());
     }
 
-    sync() {}
+    sync() {
+        return this.#implementation.sync();
+    }
 
     createDirectoryAt(path: string) {
-        try {
-            getChildEntry(this.#entry, path);
-            throw "exist";
-        } catch (error) {
-            if (error !== "no-entry") {
-                throw error;
-            }
-        }
-        const [parent, name] = getParentEntry(this.#entry, path);
-        parent.dir![name] = { dir: {} };
-        touch(parent);
+        return this.#implementation.createDirectoryAt(path);
     }
 
     stat() {
-        let type: TypesNamespace.DescriptorType = "unknown";
-        let size = 0n;
-        if (this.#entry.source) {
-            type = "regular-file";
-            const source = getSource(this.#entry);
-            size = BigInt(source.byteLength);
-        } else if (this.#entry.dir) {
-            type = "directory";
-        }
-        return {
-            type,
-            linkCount: metadata(this.#entry).linkCount,
-            size,
-            dataAccessTimestamp: timeZero,
-            dataModificationTimestamp: timeZero,
-            statusChangeTimestamp: timeZero,
-        };
+        return this.#implementation.stat();
     }
 
-    statAt(_pathFlags: PathFlags, path: string) {
-        const entry = getChildEntry(this.#entry, path);
-        let type: TypesNamespace.DescriptorType = "unknown";
-        let size = 0n;
-        if (entry.source) {
-            type = "regular-file";
-            const source = getSource(entry);
-            size = BigInt(source.byteLength);
-        } else if (entry.dir) {
-            type = "directory";
-        }
-        return {
-            type,
-            linkCount: metadata(entry).linkCount,
-            size,
-            dataAccessTimestamp: timeZero,
-            dataModificationTimestamp: timeZero,
-            statusChangeTimestamp: timeZero,
-        };
+    statAt(pathFlags: PathFlags, path: string) {
+        return this.#implementation.statAt(pathFlags, path);
     }
 
-    setTimesAt(_pathFlags: PathFlags, path: string, _atime: any, mtime: any) {
-        const entry = getChildEntry(this.#entry, path);
-        if (mtime?.tag !== "no-change") {
-            // Metadata is currently descriptor-local; touching the entry makes
-            // the mutation visible through metadata hashes on newly opened handles.
-            fileWriteBuffers.delete(entry);
-            touch(entry);
-        }
+    setTimesAt(
+        pathFlags: PathFlags,
+        path: string,
+        dataAccessTimestamp: TypesNamespace.NewTimestamp,
+        dataModificationTimestamp: TypesNamespace.NewTimestamp,
+    ) {
+        return this.#implementation.setTimesAt(
+            pathFlags,
+            path,
+            dataAccessTimestamp,
+            dataModificationTimestamp,
+        );
     }
 
     linkAt(
-        _pathFlags: PathFlags,
+        oldPathFlags: PathFlags,
         oldPath: string,
         newDescriptor: TypesNamespace.Descriptor,
         newPath: string,
     ) {
-        const entry = getChildEntry(this.#entry, oldPath);
-        if (entry.dir) {
-            throw "not-permitted";
-        }
-        const [newParent, newName] = getParentEntry(
-            descriptorGetEntry(newDescriptor as Descriptor),
+        return this.#implementation.linkAt(
+            oldPathFlags,
+            oldPath,
+            descriptorGetImplementation(newDescriptor as Descriptor),
             newPath,
         );
-        if (newParent.dir![newName]) {
-            throw "exist";
-        }
-        newParent.dir![newName] = entry;
-        metadata(entry).linkCount++;
-        touch(newParent);
     }
 
     openAt(
-        _pathFlags: PathFlags,
+        pathFlags: PathFlags,
         path: string,
         openFlags: OpenFlags,
-        _flags: TypesNamespace.DescriptorFlags,
+        flags: TypesNamespace.DescriptorFlags,
     ) {
-        let childEntry: FileDataEntry;
-        try {
-            childEntry = getChildEntry(this.#entry, path);
-            if (openFlags.create && openFlags.exclusive) {
-                throw "exist";
-            }
-        } catch (error) {
-            if (error !== "no-entry" || !openFlags.create) {
-                throw error;
-            }
-            const [parent, name] = getParentEntry(this.#entry, path);
-            childEntry = parent.dir![name] = openFlags.directory
-                ? { dir: {} }
-                : { source: new Uint8Array() };
-            touch(parent);
-        }
-        if (openFlags.directory && !childEntry.dir) {
-            throw "not-directory";
-        }
-        if (openFlags.truncate) {
-            if (childEntry.dir) {
-                throw "is-directory";
-            }
-            childEntry.source = new Uint8Array();
-            touch(childEntry);
-        }
-        return descriptorCreate(childEntry);
+        return descriptorCreate(this.#implementation.openAt(pathFlags, path, openFlags, flags));
     }
 
-    readlinkAt(_path: string): string {
-        throw "unsupported";
+    readlinkAt(path: string) {
+        return this.#implementation.readlinkAt(path);
     }
 
     removeDirectoryAt(path: string) {
-        const [parent, name] = getParentEntry(this.#entry, path);
-        const entry = parent.dir?.[name];
-        if (!entry) {
-            throw "no-entry";
-        }
-        if (!entry.dir) {
-            throw "not-directory";
-        }
-        if (Object.keys(entry.dir).length) {
-            throw "not-empty";
-        }
-        delete parent.dir![name];
-        metadata(entry).linkCount--;
-        touch(parent);
+        return this.#implementation.removeDirectoryAt(path);
     }
 
     renameAt(oldPath: string, newDescriptor: TypesNamespace.Descriptor, newPath: string) {
-        const [oldParent, oldName] = getParentEntry(this.#entry, oldPath);
-        const entry = oldParent.dir?.[oldName];
-        if (!entry) {
-            throw "no-entry";
-        }
-        const [newParent, newName] = getParentEntry(
-            descriptorGetEntry(newDescriptor as Descriptor),
+        return this.#implementation.renameAt(
+            oldPath,
+            descriptorGetImplementation(newDescriptor as Descriptor),
             newPath,
         );
-        const replaced = newParent.dir![newName];
-        if ((oldParent === newParent && oldName === newName) || replaced === entry) {
-            return;
-        }
-        if (entry.dir && containsEntry(entry, newParent)) {
-            throw "invalid";
-        }
-        if (replaced) {
-            if (entry.dir && !replaced.dir) {
-                throw "not-directory";
-            }
-            if (!entry.dir && replaced.dir) {
-                throw "is-directory";
-            }
-            if (replaced.dir && Object.keys(replaced.dir).length > 0) {
-                throw "not-empty";
-            }
-            metadata(replaced).linkCount--;
-        }
-        newParent.dir![newName] = entry;
-        delete oldParent.dir![oldName];
-        touch(oldParent);
-        if (newParent !== oldParent) {
-            touch(newParent);
-        }
     }
 
-    symlinkAt() {
-        throw "unsupported";
+    symlinkAt(oldPath: string, newPath: string) {
+        return this.#implementation.symlinkAt(oldPath, newPath);
     }
 
     unlinkFileAt(path: string) {
-        const [parent, name] = getParentEntry(this.#entry, path);
-        const entry = parent.dir?.[name];
-        if (!entry) {
-            throw "no-entry";
-        }
-        if (entry.dir) {
-            throw "is-directory";
-        }
-        delete parent.dir![name];
-        metadata(entry).linkCount--;
-        touch(parent);
+        return this.#implementation.unlinkFileAt(path);
     }
 
     isSameObject(other: TypesNamespace.Descriptor) {
-        return descriptorGetEntry(other as Descriptor) === this.#entry;
+        return this.#implementation.isSameObject(descriptorGetImplementation(other as Descriptor));
     }
 
     metadataHash() {
-        const value = metadata(this.#entry);
-        return { upper: value.id, lower: value.version };
+        return this.#implementation.metadataHash();
     }
 
-    metadataHashAt(_pathFlags: any, path: string) {
-        const value = metadata(getChildEntry(this.#entry, path));
-        return { upper: value.id, lower: value.version };
+    metadataHashAt(pathFlags: PathFlags, path: string) {
+        return this.#implementation.metadataHashAt(pathFlags, path);
     }
 }
 
-const descriptorGetEntry = Descriptor.prototype._getEntry;
+const descriptorGetImplementation = Descriptor.prototype._getImplementation;
 // @ts-expect-error - Deleting prototype method
-delete Descriptor.prototype._getEntry;
+delete Descriptor.prototype._getImplementation;
 const descriptorCreate = Descriptor._create;
 // @ts-expect-error - Deleting static method
 delete Descriptor._create;
 
+const defaultAdapter = new InMemoryFilesystemAdapter();
+let _fileData: FileData = { dir: {} };
 let _preopens: [Descriptor, string][] = [];
 let _rootPreopen: [Descriptor, string] | null = null;
 
@@ -636,12 +267,28 @@ export function createFilesystem<Capability>({
     };
 }
 
+export function _setFileData(fileData: FileData): void {
+    _fileData = fileData;
+    if (_rootPreopen) {
+        _rootPreopen[0] = descriptorCreate(defaultAdapter.getRoot(fileData));
+    } else {
+        _setPreopens({ "/": fileData });
+    }
+    const cwd = environment.initialCwd();
+    _setCwd(cwd || "/");
+}
+
+export function _getFileData(): string {
+    return JSON.stringify(_fileData);
+}
+
 /**
  * Replace all preopens with the given set.
  * @param preopensConfig - Map of virtual paths to file data entries
  */
 export function _setPreopens(preopensConfig: Record<string, FileData>): void {
     _preopens = [];
+    _rootPreopen = null;
     for (const [virtualPath, fileData] of Object.entries(preopensConfig)) {
         _addPreopen(virtualPath, fileData);
     }
@@ -653,7 +300,7 @@ export function _setPreopens(preopensConfig: Record<string, FileData>): void {
  * @param fileData - The file data object representing the directory
  */
 export function _addPreopen(virtualPath: string, fileData: FileData): void {
-    const descriptor = descriptorCreate(fileData);
+    const descriptor = descriptorCreate(defaultAdapter.getRoot(fileData));
     const entry: [Descriptor, string] = [descriptor, virtualPath];
     _preopens.push(entry);
     if (virtualPath === "/") {
@@ -661,31 +308,18 @@ export function _addPreopen(virtualPath: string, fileData: FileData): void {
     }
 }
 
-/**
- * Clear all preopens, giving the guest no filesystem access.
- *
- * This functionality exists mostly to maintain backwards compatibility. Prefer setting preopens
- * via `WASIShim` rather than making top level changes to preopens using these functions.
- */
+/** Clear all preopens, giving the guest no filesystem access. */
 export function _clearPreopens(): void {
     _preopens = [];
     _rootPreopen = null;
 }
 
-/**
- * Get current preopens configuration.
- * @returns Array of [descriptor, virtualPath] pairs
- */
+/** Get current preopens configuration. */
 export function _getPreopens(): [Descriptor, string][] {
     return [..._preopens];
 }
 
-/**
- * Create a preopen descriptor for a host path.
- * This is used internally to create isolated preopen instances.
- * @param  hostPreopen - The host filesystem path
- * @returns A preopen descriptor
- */
+/** Reject host paths because browser filesystems require explicit capabilities. */
 export function _createPreopenDescriptor(hostPreopen: string) {
     throw new TypeError(
         `browser preopen ${JSON.stringify(hostPreopen)} is a host path; configure browser file data or an adapter instead`,
