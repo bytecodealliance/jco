@@ -80,11 +80,12 @@ the component's exported incoming handler, and return its result as a Web `Respo
 
 ### `wasi:sockets/tcp`
 
-`InMemoryTcpSockets` gives the page a fake client and the host bridge a WASI server socket. The
-component owns the `TCP:` echo logic; its small `socket-host` WIT import lets the bridge bind, listen,
-accept, and move bytes because ComponentizeJS does not expose imported socket resources to JS guests.
+`InMemoryTcpSockets` gives the page a fake client. The component constructs the server resource and
+drives bind, listen, accept, read, and write itself. A small constructor-shaped adapter maps those
+guest operations to WASI because ComponentizeJS cannot pass function-returned socket resources into
+a JavaScript guest.
 
 ### `wasi:sockets/udp`
 
-`InMemoryUdpSockets` routes datagrams between a page-side client and the bridge's bound WASI socket.
-The same WIT bridge moves the datagram while the component owns the `UDP:` echo logic.
+`InMemoryUdpSockets` gives the page a fake datagram client. The component constructs and binds the
+server resource, creates its streams, receives the request, and sends the `UDP:` response.

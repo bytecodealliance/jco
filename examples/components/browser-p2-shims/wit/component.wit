@@ -25,13 +25,29 @@ interface filesystem-demo {
     write-hello-world: func() -> string;
 }
 
-/// Browser host bridge used because ComponentizeJS does not expose imported
-/// WASI socket resources as JavaScript modules.
-interface socket-host {
-    tcp-receive: func() -> string;
-    tcp-send: func(message: string);
-    udp-receive: func() -> string;
-    udp-send: func(message: string);
+/// Guest-owned socket resources backed by the host's injected WASI sockets.
+/// This constructor-shaped bridge works around ComponentizeJS trapping when a
+/// `wasi:sockets` resource is returned from an imported function.
+interface socket-server {
+    resource tcp-server {
+        constructor();
+        start-bind: func(port: u16);
+        finish-bind: func();
+        start-listen: func();
+        finish-listen: func();
+        accept: func();
+        read: func() -> string;
+        write: func(message: string);
+    }
+
+    resource udp-server {
+        constructor();
+        start-bind: func(port: u16);
+        finish-bind: func();
+        %stream: func();
+        receive: func() -> string;
+        send: func(message: string);
+    }
 }
 
 interface tcp-demo {
@@ -49,7 +65,7 @@ world component {
     import wasi:clocks/wall-clock@0.2.12;
     import wasi:filesystem/preopens@0.2.12;
     import wasi:filesystem/types@0.2.12;
-    import socket-host;
+    import socket-server;
 
     export cli-demo;
     export clocks-demo;
