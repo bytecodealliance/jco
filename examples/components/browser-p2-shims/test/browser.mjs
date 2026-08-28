@@ -6,6 +6,9 @@ import { createServer } from 'vite';
 
 const STDOUT_MESSAGE = 'Puppeteer reached component stdout';
 const STDERR_MESSAGE = 'Puppeteer reached customized component stderr';
+const HTTP_MESSAGE = 'Puppeteer fabricated this request';
+const TCP_MESSAGE = 'Puppeteer TCP client';
+const UDP_MESSAGE = 'Puppeteer UDP client';
 const demoRoot = fileURLToPath(new URL('../demo/', import.meta.url));
 
 let browser;
@@ -85,8 +88,51 @@ try {
     );
     assert.equal(await page.$eval('#stderr-output', (element) => element.textContent.trim()), STDERR_MESSAGE);
 
-    console.log('browser CLI shim demo passed');
+    await page.click('#read-clocks');
+    await page.waitForFunction(() => document.querySelector('#clocks-output')?.textContent.startsWith('{'));
+    const clocks = JSON.parse(await page.$eval('#clocks-output', (element) => element.textContent));
+    assert.match(clocks.wall, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(typeof clocks.monotonicMilliseconds, 'number');
+
+    await page.click('#write-file');
+    await page.waitForFunction(() => document.querySelector('#filesystem-output')?.textContent.startsWith('{'));
+    assert.deepEqual(JSON.parse(await page.$eval('#filesystem-output', (element) => element.textContent)), {
+        componentReads: 'hello world',
+        adapterStores: 'dlrow olleh',
+    });
+
+    await setTextAndClick(page, '#http-message', HTTP_MESSAGE, '#send-http');
+    await expectOutput(page, '#http-output', `200 HTTP POST /demo?source=browser: ${HTTP_MESSAGE}`);
+
+    await setTextAndClick(page, '#tcp-message', TCP_MESSAGE, '#send-tcp');
+    await expectOutput(page, '#tcp-output', `TCP: ${TCP_MESSAGE}`);
+
+    await setTextAndClick(page, '#udp-message', UDP_MESSAGE, '#send-udp');
+    await expectOutput(page, '#udp-output', `UDP: ${UDP_MESSAGE}`);
+
+    console.log('browser Preview 2 shim examples passed');
 } finally {
     await browser?.close();
     await server.close();
+}
+
+async function setTextAndClick(page, input, message, button) {
+    await page.$eval(
+        input,
+        (element, value) => {
+            element.value = value;
+        },
+        message,
+    );
+    await page.click(button);
+}
+
+async function expectOutput(page, selector, expected) {
+    await page.waitForFunction(
+        (outputSelector, text) => document.querySelector(outputSelector)?.textContent === text,
+        {},
+        selector,
+        expected,
+    );
+    assert.equal(await page.$eval(selector, (element) => element.textContent), expected);
 }

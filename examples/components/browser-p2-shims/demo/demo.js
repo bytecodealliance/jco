@@ -1,18 +1,21 @@
+import { http, sockets } from '@bytecodealliance/preview2-shim';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { instantiate } from './transpiled/component.js';
+import { createReverseFilesystem } from './reverse-filesystem.js';
+import { createSocketHost } from './socket-host.js';
 
 const status = document.querySelector('#status');
-const stdoutMessage = document.querySelector('#stdout-message');
-const stderrMessage = document.querySelector('#stderr-message');
-const writeStdout = document.querySelector('#write-stdout');
-const writeStderr = document.querySelector('#write-stderr');
-const clearStderr = document.querySelector('#clear-stderr');
-const stderrOutput = document.querySelector('#stderr-output');
+const decoder = new TextDecoder();
+const encoder = new TextEncoder();
+const coreModules = new Map();
+const serverAddress = (port) => ({
+    tag: 'ipv4',
+    val: { address: [127, 0, 0, 1], port },
+});
+const clientAddress = serverAddress(8001);
 
 let hasStderrOutput = false;
-const decoder = new TextDecoder();
-const coreModules = new Map();
-
+const stderrOutput = document.querySelector('#stderr-output');
 const pageStderr = {
     write(bytes) {
         appendStderr(decoder.decode(bytes, { stream: true }));
@@ -26,23 +29,69 @@ const pageStderr = {
 };
 
 try {
-    const defaultInstance = await instantiate(loadCoreModule, new WASIShim().getImportObject());
-    const customizedInstance = await instantiate(
-        loadCoreModule,
-        new WASIShim({ stderr: pageStderr }).getImportObject(),
-    );
-
-    writeStdout.addEventListener('click', () => {
-        defaultInstance.cliDemo.writeToStdout(stdoutMessage.value);
+    const reverseFilesystem = createReverseFilesystem();
+    const tcpSockets = new sockets.InMemoryTcpSockets();
+    const udpSockets = new sockets.InMemoryUdpSockets();
+    const udpClient = udpSockets.createClient(clientAddress);
+    const shim = new WASIShim({
+        stderr: pageStderr,
+        browserFilesystem: {
+            adapter: reverseFilesystem.adapter,
+            preopens: { '/demo': reverseFilesystem.data },
+        },
+        tcpSockets,
+        udpSockets,
     });
-    writeStderr.addEventListener('click', () => {
-        customizedInstance.cliDemo.writeToStderr(stderrMessage.value);
-    });
-    clearStderr.addEventListener('click', resetStderr);
+    const imports = shim.getImportObject();
+    imports['example:browser-p2-shims/socket-host'] = createSocketHost(imports);
+    const instance = await instantiate(loadCoreModule, imports);
+    const httpClient = new http.InMemoryHttpClient(instance.incomingHandler);
 
-    for (const button of [writeStdout, writeStderr]) {
-        button.disabled = false;
-    }
+    onClick('#write-stdout', () => instance.cliDemo.writeToStdout(value('#stdout-message')));
+    onClick('#write-stderr', () => instance.cliDemo.writeToStderr(value('#stderr-message')));
+    onClick('#clear-stderr', resetStderr);
+
+    onClick('#read-clocks', () => {
+        const snapshot = instance.clocksDemo.readClocks();
+        const wallMilliseconds = Number(snapshot.wallSeconds) * 1_000 + snapshot.wallNanoseconds / 1_000_000;
+        output('#clocks-output', {
+            wall: new Date(wallMilliseconds).toISOString(),
+            monotonicMilliseconds: Number(snapshot.monotonicNanoseconds) / 1_000_000,
+        });
+    });
+
+    onClick('#write-file', () => {
+        const logical = instance.filesystemDemo.writeHelloWorld();
+        output('#filesystem-output', {
+            componentReads: logical,
+            adapterStores: reverseFilesystem.storedText('hello.txt'),
+        });
+    });
+
+    onClick('#send-http', async () => {
+        const response = await httpClient.fetch(
+            new Request('https://example.invalid/demo?source=browser', {
+                method: 'POST',
+                body: value('#http-message'),
+            }),
+        );
+        output('#http-output', `${response.status} ${await response.text()}`);
+    });
+
+    onClick('#send-tcp', () => {
+        const client = tcpSockets.connect(serverAddress(7000));
+        client.write(encoder.encode(value('#tcp-message')));
+        instance.tcpDemo.serveOnce();
+        output('#tcp-output', decoder.decode(client.read()));
+    });
+
+    onClick('#send-udp', () => {
+        udpClient.send(encoder.encode(value('#udp-message')), serverAddress(7001));
+        instance.udpDemo.serveOnce();
+        output('#udp-output', decoder.decode(udpClient.read()));
+    });
+
+    for (const button of document.querySelectorAll('button[disabled]')) button.disabled = false;
     status.dataset.state = 'ready';
     status.textContent = 'Component ready';
 } catch (error) {
@@ -54,17 +103,27 @@ try {
 async function loadCoreModule(path) {
     let module = coreModules.get(path);
     if (!module) {
-        const response = fetch(new URL(`./transpiled/${path}`, import.meta.url));
-        module = WebAssembly.compileStreaming(response);
+        module = WebAssembly.compileStreaming(fetch(new URL(`./transpiled/${path}`, import.meta.url)));
         coreModules.set(path, module);
     }
     return module;
 }
 
+function onClick(selector, callback) {
+    document.querySelector(selector).addEventListener('click', callback);
+}
+
+function value(selector) {
+    return document.querySelector(selector).value;
+}
+
+function output(selector, result) {
+    document.querySelector(selector).textContent =
+        typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+}
+
 function appendStderr(text) {
-    if (!text) {
-        return;
-    }
+    if (!text) return;
     if (!hasStderrOutput) {
         stderrOutput.textContent = '';
         hasStderrOutput = true;
@@ -74,9 +133,5 @@ function appendStderr(text) {
 
 function resetStderr() {
     hasStderrOutput = false;
-    stderrOutput.replaceChildren();
-    const empty = document.createElement('span');
-    empty.className = 'empty-output';
-    empty.textContent = 'No stderr output yet.';
-    stderrOutput.append(empty);
+    stderrOutput.innerHTML = '<span class="empty-output">No stderr output yet.</span>';
 }

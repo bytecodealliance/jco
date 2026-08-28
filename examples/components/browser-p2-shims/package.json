@@ -5,7 +5,7 @@
     "description": "Interactive browser demo for WASI Preview 2 shims",
     "type": "module",
     "scripts": {
-        "build:component": "jco componentize src/component.js --wit wit --world-name component --out component.wasm --disable clocks http random",
+        "build:component": "jco componentize src/component.js --wit wit --world-name component --out component.wasm --disable random",
         "transpile": "jco transpile component.wasm --instantiation async -o demo/transpiled",
         "build": "pnpm run build:component && pnpm run transpile",
         "demo": "vite demo",
