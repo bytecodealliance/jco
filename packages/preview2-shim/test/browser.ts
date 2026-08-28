@@ -8,8 +8,6 @@ import { componentize, ComponentizeOptions } from "@bytecodealliance/componentiz
 import { transpile } from "@bytecodealliance/jco";
 
 import { getTmpDir, FIXTURES_WIT_DIR, startTestServer, runBasicHarnessPageTest } from "./common.js";
-import { createInMemoryTcpSockets } from "./fixtures/sockets/in-memory-tcp.js";
-import { createInMemoryUdpSockets } from "./fixtures/sockets/in-memory-udp.js";
 
 type TranspileOutput = { files: { [filename: string]: Uint8Array } };
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
@@ -1611,52 +1609,63 @@ suite("Browser shim guards", () => {
 
     test("browser TCP namespaces can be supplied by an application", async () => {
         const { WASIShim } = await import("../src/common/instantiation.js");
-        const shim = new WASIShim({ tcpSockets: createInMemoryTcpSockets() });
+        const { InMemoryTcpSockets } = await import("../src/browser/sockets.js");
+        const tcpSockets = new InMemoryTcpSockets();
+        const shim = new WASIShim({ tcpSockets });
         const imports = shim.getImportObject();
-        const socket = imports["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
-        const remoteAddress = {
+        const serverAddress = {
             tag: "ipv4" as const,
             val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 8080 },
         };
-
-        socket.startConnect(
-            imports["wasi:sockets/instance-network"].instanceNetwork(),
-            remoteAddress,
-        );
-        const [input, output] = socket.finishConnect();
+        const client = tcpSockets.connect(serverAddress);
+        client.write(new TextEncoder().encode("in-memory TCP"));
+        const socket = imports["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
+        socket.startBind(imports["wasi:sockets/instance-network"].instanceNetwork(), serverAddress);
+        socket.finishBind();
+        socket.startListen();
+        socket.finishListen();
+        const [, input, output] = socket.accept();
+        const message = input.blockingRead(64n);
         output.checkWrite();
-        output.write(new TextEncoder().encode("in-memory TCP"));
+        output.write(message);
 
-        assert.strictEqual(new TextDecoder().decode(input.blockingRead(64n)), "in-memory TCP");
-        assert.deepStrictEqual(socket.remoteAddress(), remoteAddress);
+        assert.strictEqual(new TextDecoder().decode(client.read()), "in-memory TCP");
+        assert.deepStrictEqual(socket.localAddress(), serverAddress);
     });
 
     test("browser UDP namespaces can be supplied by an application", async () => {
         const { WASIShim } = await import("../src/common/instantiation.js");
-        const shim = new WASIShim({ udpSockets: createInMemoryUdpSockets() });
+        const { InMemoryUdpSockets } = await import("../src/browser/sockets.js");
+        const udpSockets = new InMemoryUdpSockets();
+        const shim = new WASIShim({ udpSockets });
         const imports = shim.getImportObject();
         const socket = imports["wasi:sockets/udp-create-socket"].createUdpSocket("ipv4");
         const localAddress = {
             tag: "ipv4" as const,
             val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 8080 },
         };
-        const remoteAddress = {
+        const clientAddress = {
             tag: "ipv4" as const,
             val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 9090 },
         };
+        const client = udpSockets.createClient(clientAddress);
+        client.send(new TextEncoder().encode("in-memory UDP"), localAddress);
 
         socket.startBind(imports["wasi:sockets/instance-network"].instanceNetwork(), localAddress);
         socket.finishBind();
-        const [incoming, outgoing] = socket.stream(remoteAddress);
+        const [incoming, outgoing] = socket.stream(undefined);
         assert.strictEqual(outgoing.checkSend(), 1_024n);
         assert.strictEqual(
-            outgoing.send([{ data: new TextEncoder().encode("in-memory UDP") }]),
+            outgoing.send([
+                {
+                    data: incoming.receive(1n)[0].data,
+                    remoteAddress: clientAddress,
+                },
+            ]),
             1n,
         );
 
-        const [datagram] = incoming.receive(1n);
-        assert.strictEqual(new TextDecoder().decode(datagram.data), "in-memory UDP");
-        assert.deepStrictEqual(datagram.remoteAddress, remoteAddress);
+        assert.strictEqual(new TextDecoder().decode(client.read()), "in-memory UDP");
         assert.deepStrictEqual(socket.localAddress(), localAddress);
     });
 
@@ -1667,6 +1676,10 @@ suite("Browser shim guards", () => {
             (request, responseOut) => {
                 assert.deepStrictEqual(request.method(), { tag: "post" });
                 assert.strictEqual(request.pathWithQuery(), "/test?value=1");
+                assert.strictEqual(
+                    new TextDecoder().decode(request.consume().stream().blockingRead(64n)),
+                    "request",
+                );
                 const outgoing = new types.OutgoingResponse(new types.Fields());
                 outgoing.setStatusCode(201);
                 const body = outgoing.body();
@@ -1718,6 +1731,22 @@ suite("Browser shim guards", () => {
         assert.strictEqual(response.status, 202);
         assert.strictEqual(response.headers.get("x-handler"), "web");
         assert.strictEqual(await response.text(), "accepted");
+    });
+
+    test("in-memory HTTP client invokes a WASI incoming handler", async () => {
+        const { createIncomingHandler, InMemoryHttpClient } =
+            await import("../src/browser/http.js");
+        const client = new InMemoryHttpClient(
+            createIncomingHandler(
+                async (request) => new Response(`echo: ${await request.text()}`, { status: 201 }),
+            ),
+        );
+        const response = await client.fetch(
+            new Request("https://example.com/echo", { method: "POST", body: "hello" }),
+        );
+
+        assert.strictEqual(response.status, 201);
+        assert.strictEqual(await response.text(), "echo: hello");
     });
 
     test("browser incoming HTTP maps Web handler failures to error responses", async () => {

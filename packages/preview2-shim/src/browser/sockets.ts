@@ -8,6 +8,13 @@ import type {
     udp as UdpNamespace,
 } from "../../types/sockets.js";
 
+export {
+    InMemoryTcpClient,
+    InMemoryTcpSockets,
+    InMemoryUdpClient,
+    InMemoryUdpSockets,
+} from "./in-memory-sockets.js";
+
 const unsupported = (): never => {
     throw "not-supported";
 };
