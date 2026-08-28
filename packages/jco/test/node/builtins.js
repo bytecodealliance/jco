@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 
 const environment = (patch = 6n) => ({
@@ -61,14 +61,23 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("spawnSync");
     });
 
-    test("requires the child_process capability in the selected world", () => {
+    test("reports the WIT capability required by node:child_process", () => {
+        const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             {
                 childProcessModule: "/jco/node/child-process.js",
+                onWitRequirement,
             },
         );
-        expect(() => plugin.resolveId("node:child_process")).toThrow(/import jco:node\/child-process@0\.1\.0/);
+        expect(plugin.resolveId("node:child_process")).toBe("\0jco-node-builtin:node:child_process");
+        expect(onWitRequirement).toHaveBeenCalledOnce();
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({
+                nodeSpecifier: "node:child_process",
+                witImport: "jco:node/child-process@0.1.0",
+            }),
+        );
     });
 
     test("layers audited unenv modules below Jco overrides", () => {

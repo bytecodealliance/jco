@@ -6,6 +6,7 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
 import { nodeBuiltinPlugin, type WorldMetadata } from "../node-builtins.js";
+import { injectNodeWitImports, witInjectionWarnings, type NodeWitRequirement } from "../node-wit.js";
 
 /** All features that can be enabled/disabled */
 const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
@@ -138,16 +139,31 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         throw new Error("--bundle-config requires --bundle");
     }
     const bundleConfig = opts.bundleConfig ? await loadBundleConfig(opts.bundleConfig) : undefined;
-    const witPath = resolve(opts.wit);
+    let witPath = resolve(opts.wit);
+    const witRequirements = new Map<string, NodeWitRequirement>();
     const source = shouldBundle
         ? await bundleComponentSource(jsSource, {
               config: bundleConfig,
               typescript: isTypeScript,
               // Node builtin adapters are supplied while the source graph is bundled, which is
               // why `node:path` only works together with `--bundle`.
-              plugins: [nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName))],
+              plugins: [
+                  nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
+                      onWitRequirement(requirement) {
+                          witRequirements.set(requirement.witImport, requirement);
+                      },
+                  }),
+              ],
           })
         : await readFile(jsSource, "utf8");
+    const injection = await injectNodeWitImports(witPath, opts.worldName, [...witRequirements.values()]);
+    if (injection) {
+        witPath = injection.witPath;
+        const warning = styleText(["yellow", "bold"], "warning");
+        for (const message of witInjectionWarnings(injection)) {
+            console.error(`${warning} ${message}`);
+        }
+    }
     const sourceName = isTypeScript ? `${basename(jsSource, extname(jsSource))}.js` : basename(jsSource);
 
     // Build the component
