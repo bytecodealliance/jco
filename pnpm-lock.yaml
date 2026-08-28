@@ -87,6 +87,22 @@ importers:
         specifier: 1.31.0
         version: 1.31.0
 
+  examples/components/browser-p2-shims:
+    dependencies:
+      '@bytecodealliance/preview2-shim':
+        specifier: workspace:*
+        version: link:../../../packages/preview2-shim
+    devDependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+      puppeteer:
+        specifier: 'catalog:'
+        version: 25.4.0(yauzl@2.10.0)
+      vite:
+        specifier: ^7.3.6
+        version: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
+
   examples/components/builtin-bundle-ts:
     dependencies:
       '@bytecodealliance/jco':

@@ -1,0 +1,14 @@
+package example:browser-p2-shims;
+
+/// Operations invoked by the interactive browser demo.
+interface cli-demo {
+    /// Write a line through the guest's WASI CLI stdout stream.
+    write-to-stdout: func(message: string);
+
+    /// Write a line through the guest's WASI CLI stderr stream.
+    write-to-stderr: func(message: string);
+}
+
+world component {
+    export cli-demo;
+}

@@ -1,0 +1,3 @@
+dist/*
+!dist/.gitkeep
+demo/transpiled/
