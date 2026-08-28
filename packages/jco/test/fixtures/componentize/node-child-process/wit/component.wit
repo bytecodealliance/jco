@@ -1,0 +1,12 @@
+package local:node-child-process;
+
+world test {
+  record report {
+    exec-file: string,
+    spawn: string,
+    status: s32,
+    shell: string,
+  }
+
+  export run: func() -> report;
+}
