@@ -25,6 +25,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/assert`        | `node:assert` adapter, Node 24 on WASI p2                                     |
 | `wasi/0.2.x/node/24.x.x/path`          | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/child-process` | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
+| `wasi/0.2.x/node/24.x.x/cluster`       | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
 
 [express]: https://expressjs.com
 
@@ -75,6 +76,9 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - synchronous `node:child_process` operations, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` and the
   `jco:node/child-process@0.1.0` host capability;
+- `node:cluster`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster` and the
+  `jco:node/cluster@0.1.0` host capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.

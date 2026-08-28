@@ -1,0 +1,21 @@
+package local:node-cluster;
+
+world test {
+  import jco:node/cluster@0.1.0;
+
+  record report {
+    role-checks: u32,
+    constant-checks: u32,
+    emitter-checks: u32,
+    settings-checks: u32,
+    fork-checks: u32,
+    worker-process-code: string,
+    setup-master-code: string,
+    is-master-code: string,
+    host-setting-code: string,
+    non-json-message-code: string,
+    meta-event-code: string,
+  }
+
+  export run: func() -> report;
+}

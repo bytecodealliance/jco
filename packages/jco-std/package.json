@@ -33,6 +33,11 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/assert/index.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/assert/index.js"
     },
+    "./wasi/0.2.x/node/24.x.x/cluster": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/cluster.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/cluster.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/cluster.js"
+    },
     "./wasi/0.2.x/node/24.x.x/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
