@@ -1386,6 +1386,41 @@ suite("Browser filesystem", () => {
         assert.throws(() => first.preopens.getDirectories(), /disposed/);
         assert.strictEqual(second.preopens.getDirectories().length, 1);
     });
+
+    test("createFilesystem delegates descriptor operations to the adapter", async () => {
+        const { createFilesystem, InMemoryFilesystemAdapter } =
+            await import("../src/browser/filesystem.js");
+        const backing = new InMemoryFilesystemAdapter();
+        const calls: string[] = [];
+        const wrap = (descriptor: any): any =>
+            new Proxy(descriptor, {
+                get(target, property) {
+                    const value = Reflect.get(target, property, target);
+                    if (typeof value !== "function") {
+                        return value;
+                    }
+                    return (...args: any[]) => {
+                        calls.push(String(property));
+                        const result = Reflect.apply(value, target, args);
+                        return property === "openAt" ? wrap(result) : result;
+                    };
+                },
+            });
+        const filesystem = createFilesystem({
+            adapter: {
+                getRoot: (root: any) => wrap(backing.getRoot(root)),
+            },
+            preopens: { "/": { dir: { file: { source: "value" } } } },
+        });
+
+        const [[root]] = filesystem.preopens.getDirectories();
+        const file = root.openAt({}, "file", {}, { read: true, write: true });
+        file.advise(0n, 5n, "sequential");
+        file.syncData();
+        file.sync();
+
+        assert.deepStrictEqual(calls, ["openAt", "advise", "syncData", "sync"]);
+    });
 });
 
 suite("Browser shim guards", () => {
