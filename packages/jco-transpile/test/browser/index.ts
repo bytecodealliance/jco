@@ -11,8 +11,35 @@ import { transpileBytes, writeFiles } from '../../src/index.js';
 import { WEBIDL_FIXTURES_DIR, COMPONENT_FIXTURES_DIR } from '../common.js';
 import { getTmpDir, setupAsyncTest, startTestWebServer } from '../helpers.js';
 
-const HARNESS_PATH = 'jco-transpile/test/browser/harness.html';
-const CASES_MODULE = '/jco-transpile/test/browser/cases.js';
+const HARNESS_PATH = 'jco-transpile/test/fixtures/browser/harness.html';
+const TRANSPILE_CASE_MODULE = '/jco-transpile/test/fixtures/browser/transpile.js';
+const JSPI_CASE_MODULE = '/jco-transpile/test/fixtures/browser/jspi.js';
+const RUNTIME_COMPONENTS_URL = '/jco-transpile/test/fixtures/components/runtime';
+
+/**
+ * Components transpiled by the in-browser transpilation test.
+ *
+ * Each one is transpiled, evaluated and instantiated against the preview2-shim browser
+ * build. This covers running bindgen in a browser rather than codegen correctness, which
+ * codegen.ts already covers for every fixture in Node, so the default is a small set picked
+ * for distinct component shapes rather than every fixture on disk.
+ *
+ * As elsewhere in the suite, COMPONENT_FIXTURES can be set to a comma-separated list of
+ * file names to transpile a different set.
+ */
+const DEFAULT_BROWSER_COMPONENTS = [
+    'lists.component.wasm',
+    'records.component.wasm',
+    'resources.component.wasm',
+    'flavorful.component.wasm',
+    'results.component.wasm',
+    'many_arguments.component.wasm',
+];
+
+const BROWSER_COMPONENTS = (env.COMPONENT_FIXTURES?.split(',') ?? DEFAULT_BROWSER_COMPONENTS)
+    .map((name) => name.trim())
+    // NOTE: bindgen takes binary components, so WAT fixtures cannot be used here
+    .filter((name) => name.endsWith('.wasm'));
 
 suite('Browser', () => {
     let browser: Browser;
@@ -47,8 +74,31 @@ suite('Browser', () => {
         await rm(tmpDir, { recursive: true, force: true });
     });
 
-    test('transpiles a component in the browser', async () => {
-        await runBrowserCase({ module: CASES_MODULE, exportName: 'transpile' });
+    test('transpiles and instantiates components in the browser', async () => {
+        assert.isNotEmpty(BROWSER_COMPONENTS, 'no components selected for browser transpilation');
+
+        // NOTE: all components are handled by a single page, so the bindgen component
+        // is only fetched and instantiated once for the whole set
+        const results = (await runBrowserCase({
+            module: TRANSPILE_CASE_MODULE,
+            exportName: 'transpile',
+            args: [BROWSER_COMPONENTS.map((name) => `${RUNTIME_COMPONENTS_URL}/${name}`)],
+        })) as { path: string; ok: boolean; exports?: string[]; error?: string }[];
+
+        const failures = results.filter((result) => !result.ok);
+        assert.deepStrictEqual(
+            failures.map(({ path }) => path),
+            [],
+            `failed in the browser:\n${failures.map(({ path, error }) => `  ${path}: ${error}`).join('\n')}`,
+        );
+        assert.deepStrictEqual(
+            results.map(({ path }) => path),
+            BROWSER_COMPONENTS.map((name) => `${RUNTIME_COMPONENTS_URL}/${name}`),
+            'not every selected component was reported on',
+        );
+        for (const { path, exports } of results) {
+            assert.isNotEmpty(exports, `instantiating [${path}] produced no exports`);
+        }
     });
 
     for (const fixture of ['dom', 'console']) {
@@ -88,7 +138,7 @@ suite('Browser', () => {
         });
         try {
             const value = await runBrowserCase({
-                module: CASES_MODULE,
+                module: JSPI_CASE_MODULE,
                 exportName: 'jspi',
                 args: [`/tmpdir/jspi/async_call/async_call.js`],
             });
@@ -98,7 +148,15 @@ suite('Browser', () => {
         }
     });
 
-    async function runBrowserCase({ module, exportName = 'test', args = [] }) {
+    async function runBrowserCase({
+        module,
+        exportName = 'test',
+        args = [],
+    }: {
+        module: string;
+        exportName?: string;
+        args?: unknown[];
+    }) {
         const page = await browser.newPage();
         const diagnostics: string[] = [];
         page.on('console', (message) => diagnostics.push(`console.${message.type()}: ${message.text()}`));
