@@ -10,6 +10,7 @@ import { inputStreamCreate, ioErrorCreate, outputStreamCreate, pollableCreate } 
 type Result<T, E> = TypesNamespace.Result<T, E>;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
+const utf8Encoder = new TextEncoder();
 const utf8Decoder = new TextDecoder();
 const forbiddenHeaders = new Set(["connection", "keep-alive", "host"]);
 const DEFAULT_HTTP_TIMEOUT_NS = 600_000_000_000n;
@@ -707,7 +708,7 @@ class IncomingRequest implements TypesNamespace.IncomingRequest {
     }
     static _create(request: Request) {
         const incoming = new IncomingRequest();
-        incoming.#request = request;
+        incoming.#request = request.clone();
         const encoder = new TextEncoder();
         incoming.#headers = fieldsLock(
             fieldsFromEntriesChecked(
@@ -720,10 +721,17 @@ class IncomingRequest implements TypesNamespace.IncomingRequest {
         incoming.#body = incomingBodyCreate(new Response(request.body));
         return incoming;
     }
+
+    static _toRequest(request: IncomingRequest) {
+        return request.#request;
+    }
 }
 const incomingRequestCreate = IncomingRequest._create;
 // @ts-expect-error - Deleting static method
 delete IncomingRequest._create;
+const incomingRequestToRequest = IncomingRequest._toRequest;
+// @ts-expect-error - Deleting static method
+delete IncomingRequest._toRequest;
 
 class OutgoingResponse implements TypesNamespace.OutgoingResponse {
     #headers: Fields;
@@ -995,22 +1003,74 @@ export const incomingHandler: typeof IncomingHandlerNamespace = {
     },
 };
 
-export type BrowserIncomingHandler = (
+export type WasiIncomingHandler = (
     request: TypesNamespace.IncomingRequest,
     responseOut: TypesNamespace.ResponseOutparam,
 ) => void | Promise<void>;
 
-/** Create a `wasi:http/incoming-handler` namespace backed by a host callback. */
+export type WebIncomingHandler = (request: Request) => Response | Promise<Response>;
+
+/** Create a `wasi:http/incoming-handler` namespace backed by a Web Request handler. */
 export function createIncomingHandler(
-    handler: BrowserIncomingHandler,
+    handler: WebIncomingHandler,
 ): typeof IncomingHandlerNamespace {
-    return { handle: handler } as typeof IncomingHandlerNamespace;
+    return {
+        async handle(request, responseOut) {
+            try {
+                const response = await handler(
+                    incomingRequestToRequest(request as IncomingRequest),
+                );
+                if (!(response instanceof Response)) {
+                    throw new TypeError("incoming HTTP handler must return a Response");
+                }
+                ResponseOutparam.set(responseOut as ResponseOutparam, {
+                    tag: "ok",
+                    val: await responseToOutgoingResponse(response),
+                });
+            } catch (error) {
+                ResponseOutparam.set(responseOut as ResponseOutparam, {
+                    tag: "err",
+                    val: {
+                        tag: "internal-error",
+                        val: error instanceof Error ? error.message : String(error),
+                    },
+                });
+            }
+        },
+    } as typeof IncomingHandlerNamespace;
+}
+
+async function responseToOutgoingResponse(response: Response): Promise<OutgoingResponse> {
+    const headers: [string, Uint8Array][] = [];
+    response.headers.forEach((value, name) => headers.push([name, utf8Encoder.encode(value)]));
+    const outgoing = new OutgoingResponse(fieldsFromEntriesChecked(headers));
+    outgoing.setStatusCode(response.status);
+    if (response.body) {
+        const body = outgoing.body();
+        const stream = body.write();
+        const reader = response.body.getReader();
+        for (let result = await reader.read(); !result.done; result = await reader.read()) {
+            let offset = 0;
+            while (offset < result.value.byteLength) {
+                const permit = stream.checkWrite();
+                if (permit === 0n) {
+                    await stream.subscribe().block();
+                    continue;
+                }
+                const length = Math.min(Number(permit), result.value.byteLength - offset);
+                stream.write(result.value.subarray(offset, offset + length));
+                offset += length;
+            }
+        }
+        OutgoingBody.finish(body, undefined);
+    }
+    return outgoing;
 }
 
 /** Translate a browser Request through a host-provided WASI incoming handler. */
 export async function handleIncomingRequest(
     request: Request,
-    handler: BrowserIncomingHandler,
+    handler: WasiIncomingHandler,
 ): Promise<Response> {
     const [responseOut, response] = responseOutparamCreate();
     await handler(incomingRequestCreate(request), responseOut);

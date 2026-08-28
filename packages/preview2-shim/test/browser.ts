@@ -1690,24 +1690,48 @@ suite("Browser shim guards", () => {
     });
 
     test("browser incoming HTTP exposes an injectable handler namespace", async () => {
-        const { createIncomingHandler, types } = await import("../src/browser/http.js");
+        const http = await import("../src/browser/http.js");
+        const { WASIShim } = await import("../src/common/instantiation.js");
         let called = false;
-        const handler = createIncomingHandler((_request, responseOut) => {
-            called = true;
-            types.ResponseOutparam.set(responseOut, {
-                tag: "err",
-                val: { tag: "internal-error", val: "rejected" },
-            });
+        const shim = new WASIShim({
+            http,
+            incomingHandler: async (request) => {
+                called = true;
+                assert.strictEqual(request.method, "POST");
+                assert.strictEqual(await request.text(), "request body");
+                return new Response("accepted", {
+                    status: 202,
+                    headers: { "x-handler": "web" },
+                });
+            },
         });
-        const response = await handleIncomingViaNamespace(handler);
+        const handler = shim.getImportObject()["wasi:http/incoming-handler"];
+        const response = await http.handleIncomingRequest(
+            new Request("https://example.com/submit", {
+                method: "POST",
+                body: "request body",
+            }),
+            handler.handle,
+        );
+
         assert.strictEqual(called, true);
+        assert.strictEqual(response.status, 202);
+        assert.strictEqual(response.headers.get("x-handler"), "web");
+        assert.strictEqual(await response.text(), "accepted");
+    });
+
+    test("browser incoming HTTP maps Web handler failures to error responses", async () => {
+        const { createIncomingHandler, handleIncomingRequest } =
+            await import("../src/browser/http.js");
+        const handler = createIncomingHandler(() => {
+            throw new Error("rejected");
+        });
+        const response = await handleIncomingRequest(
+            new Request("https://example.com/"),
+            handler.handle,
+        );
         assert.strictEqual(response.status, 500);
         assert.match(await response.text(), /internal-error.*rejected/);
-
-        async function handleIncomingViaNamespace(namespace: typeof handler) {
-            const { handleIncomingRequest } = await import("../src/browser/http.js");
-            return handleIncomingRequest(new Request("https://example.com/"), namespace.handle);
-        }
     });
 
     test("browser outgoing HTTP waits for the complete request body", async () => {

@@ -188,6 +188,17 @@ export class WASIShim {
             };
         }
         this.#http = shims?.http ?? wasi.http;
+        if (shims?.incomingHandler) {
+            if (!this.#http.createIncomingHandler) {
+                throw new TypeError(
+                    "the selected HTTP shim does not support Web incoming handlers",
+                );
+            }
+            this.#http = {
+                ...this.#http,
+                incomingHandler: this.#http.createIncomingHandler(shims.incomingHandler),
+            };
+        }
 
         // Create isolated environment if env or args are configured
         if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
