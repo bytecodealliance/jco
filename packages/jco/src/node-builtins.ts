@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import type { Plugin } from "rolldown";
 import { defineEnv } from "unenv";
 
+import { CHILD_PROCESS_WIT_REQUIREMENT, type NodeWitRequirement } from "./node-wit.js";
+
 const PATH_SPECIFIERS = new Map([
     ["node:path", "default"],
     ["node:path/posix", "posix"],
@@ -148,21 +150,10 @@ export interface NodeBuiltinOptions {
     assertModule?: string;
     /** Path to jco-std's versioned `node:child_process` module (overridable for tests) */
     childProcessModule?: string;
+    /** Reports WIT imports required by builtins found while bundling. */
+    onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
-}
-
-/** Require the explicit, application-provided child-process capability. */
-function hasChildProcessCapability(worldMetadata: WorldMetadata): boolean {
-    return (worldMetadata?.imports ?? []).some(
-        (iface) =>
-            iface.namespace === "jco" &&
-            iface.package === "node" &&
-            iface.interface === "child-process" &&
-            iface.version?.major === 0n &&
-            iface.version?.minor === 1n &&
-            iface.version?.patch === 0n,
-    );
 }
 
 function childProcessAdapter(childProcessModule: string): string {
@@ -332,11 +323,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CHILD_PROCESS_SPECIFIER) {
-                if (!hasChildProcessCapability(worldMetadata)) {
-                    throw new Error(
-                        "node:child_process requires the selected WIT world to import jco:node/child-process@0.1.0; add that interface or use Jco's Node capability injection support",
-                    );
-                }
+                options.onWitRequirement?.(CHILD_PROCESS_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (PATH_SPECIFIERS.has(id)) {
