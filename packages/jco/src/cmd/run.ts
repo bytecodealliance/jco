@@ -338,6 +338,27 @@ async function runComponent(
                 throw e;
             }
         }
+        try {
+            const jcoStdPath = resolve(
+                fileURLToPath(
+                    import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host"),
+                ),
+                "../../../../../../",
+            );
+            try {
+                await symlink(jcoStdPath, resolve(modulesDir, "jco-std"), "dir");
+            } catch (e) {
+                if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
+                    throw e;
+                }
+            }
+        } catch (e) {
+            // Older jco-std releases do not contain this optional capability.
+            // A component that imports it will surface the missing provider at runtime.
+            if ((e as NodeJS.ErrnoException).code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") {
+                throw e;
+            }
+        }
 
         const runPath = resolve(outDir, "_run.js");
         const sandboxSetup = getSandboxSetup(opts);

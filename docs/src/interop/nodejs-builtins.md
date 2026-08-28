@@ -9,7 +9,7 @@ a portable implementation while producing the component.
 
 > [!NOTE]
 > In the future, NodeJS compatibility will likely be built into the layer
-> *below* Jco -- ComponentizeJS. When that day comes, the NodeJS compatibility
+> _below_ Jco -- ComponentizeJS. When that day comes, the NodeJS compatibility
 > layer in Jco will likely be deprecated.
 
 ## Compatibility boundaries
@@ -98,12 +98,13 @@ is planned.
 > It is the only such alias: modules added after the split, including `node:assert`, are
 > available only under a versioned entry point.
 
-| Imports                                           | Implementation                                         | Notes                                                                                                                    |
-|---------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
-| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
-| `node:querystring`                                | unenv's Node-derived querystring implementation        | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
+| Imports                                           | Implementation                                                   | Notes                                                                                                                    |
+| ------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`        | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`          | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
+| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` | Synchronous APIs over an explicit application-provided host capability; denied by default.                               |
+| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter           | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
+| `node:querystring`                                | unenv's Node-derived querystring implementation                  | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
 
 ### Assert
 
@@ -136,6 +137,41 @@ world app {
 Jco selects the adapter matching the version in the world. A component that only
 uses capability-free built-ins such as assert, Buffer, or querystring does not
 need this import.
+
+### Child processes and host capabilities
+
+A WebAssembly guest cannot spawn a process itself. A component using
+`node:child_process` must declare the dedicated interface in its world:
+
+```wit
+world app {
+  import jco:node/child-process@0.1.0;
+  // component imports and exports...
+}
+```
+
+The interface definition ships in `jco-std` under `wit/node-0.1.0`. Declaring the
+import does not grant host access: Jco's default transpilation map uses a
+provider that throws `ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED`. An application
+must make the security decision explicitly, for example by mapping the Node host
+provider:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/child-process@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host/node'
+```
+
+That produces the call path guest `node:child_process` → WIT capability → host
+adapter → Node `node:child_process`.
+
+The current interface supports `spawnSync`, `execFileSync`, and `execSync`,
+including buffered input/output, encoding, cwd, environment, shell, stdio,
+timeout, signal, identity, and Windows options. `spawn`, callback-based `exec`
+and `execFile`, `ChildProcess`, and `fork`/IPC are present but throw
+`ERR_JCO_UNSUPPORTED_NODE_API`. A synchronous WIT function cannot faithfully
+carry Node callbacks, lifecycle events, or interactive streams; those APIs stay
+explicitly unavailable until the capability grows an asynchronous resource and
+stream model.
 
 ### Buffer
 
@@ -220,7 +256,7 @@ the module or upstream project.
 ### More semantic or dependency work needed
 
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
-|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `node:async_hooks`                        | The portable fallback does not preserve async context across asynchronous work, and `AsyncLocalStorage.snapshot()` is not implemented.                                                                                      |
 | `node:events`                             | Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.                                                                                         |
 | `node:diagnostics_channel`                | Core channel behavior exists, while tracing and async-context portions are incomplete.                                                                                                                                      |
@@ -235,7 +271,7 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:child_process`, `node:cluster`, `node:console`, `node:crypto`, `node:dgram`,
+`node:cluster`, `node:console`, `node:crypto`, `node:dgram`,
 `node:dns`, `node:dns/promises`, `node:fs`, `node:fs/promises`, `node:http`,
 `node:http2`, `node:https`, `node:inspector`, `node:inspector/promises`,
 `node:module`, `node:net`, `node:os`, `node:perf_hooks`, `node:process`,
