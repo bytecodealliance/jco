@@ -1,8 +1,6 @@
 import { writeFile, mkdir, readFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
 import { createSecureServer } from "node:http2";
 import { dirname } from "node:path";
-import { promisify } from "node:util";
 
 import { suite, test, assert } from "vitest";
 import { componentize, ComponentizeOptions } from "@bytecodealliance/componentize-js";
@@ -11,7 +9,8 @@ import { transpile } from "@bytecodealliance/jco";
 import { getTmpDir, FIXTURES_WIT_DIR, startTestServer, runBasicHarnessPageTest } from "./common.js";
 
 type TranspileOutput = { files: { [filename: string]: Uint8Array } };
-const execFileAsync = promisify(execFile);
+const LOCALHOST_KEY = new URL("./fixtures/tls/localhost.key", import.meta.url);
+const LOCALHOST_CERTIFICATE = new URL("./fixtures/tls/localhost.crt", import.meta.url);
 
 suite("browser", () => {
     test("native-fetch", async () => {
@@ -44,28 +43,9 @@ suite("browser", () => {
 
     test("native-fetch-request-streaming", async () => {
         const outDir = await getTmpDir();
-        const keyPath = `${outDir}/localhost.key`;
-        const certPath = `${outDir}/localhost.crt`;
-        await execFileAsync("openssl", [
-            "req",
-            "-x509",
-            "-newkey",
-            "rsa:2048",
-            "-nodes",
-            "-keyout",
-            keyPath,
-            "-out",
-            certPath,
-            "-subj",
-            "/CN=localhost",
-            "-addext",
-            "subjectAltName=DNS:localhost",
-            "-days",
-            "1",
-        ]);
         const streamingServer = createSecureServer({
-            key: await readFile(keyPath),
-            cert: await readFile(certPath),
+            key: await readFile(LOCALHOST_KEY),
+            cert: await readFile(LOCALHOST_CERTIFICATE),
         });
         streamingServer.on("stream", (stream, headers) => {
             if (headers[":method"] === "OPTIONS") {
