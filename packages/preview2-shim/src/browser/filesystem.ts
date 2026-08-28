@@ -9,6 +9,7 @@ import { environment } from "./environment.js";
 import { _setCwd, _getCwd } from "./config.js";
 
 export { _setCwd } from "./config.js";
+export { InMemoryFilesystemAdapter } from "./in-memory-filesystem.js";
 
 type Filesize = TypesNamespace.Filesize;
 type OpenFlags = TypesNamespace.OpenFlags;
@@ -42,16 +43,6 @@ export interface BrowserFilesystemAdapter<Capability = unknown> {
 export interface BrowserFilesystemConfig<Capability> {
     adapter: BrowserFilesystemAdapter<Capability>;
     preopens: Record<string, Capability>;
-}
-
-/** Explicit ephemeral storage adapter for browser applications and tests. */
-export class InMemoryFilesystemAdapter implements BrowserFilesystemAdapter<FileData> {
-    getRoot(capability: FileData): FileData {
-        if (!capability.dir) {
-            throw new TypeError("an in-memory preopen root must be a directory");
-        }
-        return capability;
-    }
 }
 
 export function _setFileData(fileData: FileData): void {
