@@ -78,6 +78,13 @@ new WASIShim({
 The page uses `InMemoryHttpClient` to turn a fabricated Web `Request` into WASI HTTP resources, invoke
 the component's exported incoming handler, and return its result as a Web `Response`.
 
+### `wasi:http/outgoing-handler`
+
+The component calls `fetch()`, which ComponentizeJS lowers to WASI HTTP. The browser shim turns that
+request into a host Fetch call; the demo intercepts it and returns a mocked `202 Response` with an
+`X-Intercepted-By` header. The component reads the status, header, and body and returns them for the page to
+display.
+
 ### `wasi:sockets/tcp`
 
 `InMemoryTcpSockets` gives the page a fake client. The component constructs the server resource and

@@ -7,6 +7,7 @@ import { createServer } from 'vite';
 const STDOUT_MESSAGE = 'Puppeteer reached component stdout';
 const STDERR_MESSAGE = 'Puppeteer reached customized component stderr';
 const HTTP_MESSAGE = 'Puppeteer fabricated this request';
+const OUTGOING_HTTP_MESSAGE = 'Puppeteer component request';
 const TCP_MESSAGE = 'Puppeteer TCP client';
 const UDP_MESSAGE = 'Puppeteer UDP client';
 const demoRoot = fileURLToPath(new URL('../demo/', import.meta.url));
@@ -103,6 +104,14 @@ try {
 
     await setTextAndClick(page, '#http-message', HTTP_MESSAGE, '#send-http');
     await expectOutput(page, '#http-output', `200 HTTP POST /demo?source=browser: ${HTTP_MESSAGE}`);
+
+    await setTextAndClick(page, '#outgoing-http-message', OUTGOING_HTTP_MESSAGE, '#send-outgoing-http');
+    await page.waitForFunction(() => document.querySelector('#outgoing-http-output')?.textContent.startsWith('{'));
+    assert.deepEqual(JSON.parse(await page.$eval('#outgoing-http-output', (element) => element.textContent)), {
+        status: 202,
+        interceptedBy: 'browser host',
+        body: `Mocked response to POST /outgoing: ${OUTGOING_HTTP_MESSAGE}`,
+    });
 
     await setTextAndClick(page, '#tcp-message', TCP_MESSAGE, '#send-tcp');
     await expectOutput(page, '#tcp-output', `TCP: ${TCP_MESSAGE}`);

@@ -47,8 +47,8 @@ try {
     const instance = await instantiate(loadCoreModule, imports);
     const httpClient = new http.InMemoryHttpClient(instance.incomingHandler);
 
-    onClick('#write-stdout', () => instance.cliDemo.writeToStdout(value('#stdout-message')));
-    onClick('#write-stderr', () => instance.cliDemo.writeToStderr(value('#stderr-message')));
+    onClick('#write-stdout', async () => await instance.cliDemo.writeToStdout(value('#stdout-message')));
+    onClick('#write-stderr', async () => await instance.cliDemo.writeToStderr(value('#stderr-message')));
     onClick('#clear-stderr', resetStderr);
 
     onClick('#read-clocks', () => {
@@ -76,6 +76,26 @@ try {
             }),
         );
         output('#http-output', `${response.status} ${await response.text()}`);
+    });
+
+    onClick('#send-outgoing-http', async () => {
+        const hostFetch = globalThis.fetch;
+        globalThis.fetch = async (input, init) => {
+            const request = new Request(input, init);
+            if (new URL(request.url).hostname !== 'mock.invalid') {
+                return hostFetch(input, init);
+            }
+            const body = await request.text();
+            return new Response(`Mocked response to ${request.method} ${new URL(request.url).pathname}: ${body}`, {
+                status: 202,
+                headers: { 'x-intercepted-by': 'browser host' },
+            });
+        };
+        try {
+            output('#outgoing-http-output', await instance.outgoingHttpDemo.request(value('#outgoing-http-message')));
+        } finally {
+            globalThis.fetch = hostFetch;
+        }
     });
 
     onClick('#send-tcp', () => {

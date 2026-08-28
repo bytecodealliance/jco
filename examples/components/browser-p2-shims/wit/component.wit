@@ -25,6 +25,17 @@ interface filesystem-demo {
     write-hello-world: func() -> string;
 }
 
+interface outgoing-http-demo {
+    record response {
+        status: u16,
+        intercepted-by: string,
+        body: string,
+    }
+
+    /// Make an outgoing request through the host's WASI HTTP implementation.
+    request: func(message: string) -> response;
+}
+
 /// Guest-owned socket resources backed by the host's injected WASI sockets.
 /// This constructor-shaped bridge works around ComponentizeJS trapping when a
 /// `wasi:sockets` resource is returned from an imported function.
@@ -70,6 +81,7 @@ world component {
     export cli-demo;
     export clocks-demo;
     export filesystem-demo;
+    export outgoing-http-demo;
     export tcp-demo;
     export udp-demo;
     export wasi:http/incoming-handler@0.2.12;

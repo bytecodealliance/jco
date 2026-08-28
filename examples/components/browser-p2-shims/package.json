@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "build:component": "jco componentize src/component.js --wit wit --world-name component --out component.wasm --disable random",
-        "transpile": "jco transpile component.wasm --instantiation async -o demo/transpiled",
+        "transpile": "jco transpile component.wasm --instantiation async --async-mode jspi --async-wasi-imports --async-wasi-exports --async-exports 'example:browser-p2-shims/cli-demo#write-to-stdout' 'example:browser-p2-shims/cli-demo#write-to-stderr' 'example:browser-p2-shims/outgoing-http-demo#request' -o demo/transpiled",
         "build": "pnpm run build:component && pnpm run transpile",
         "demo": "vite demo",
         "demo:open": "vite --open demo",

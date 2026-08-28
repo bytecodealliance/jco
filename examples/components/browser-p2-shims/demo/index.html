@@ -234,6 +234,19 @@
                 <pre id="http-output" class="output" aria-live="polite">No response yet.</pre>
             </section>
 
+            <section class="demo-section" aria-labelledby="outgoing-http-heading">
+                <h2 id="outgoing-http-heading"><code>wasi:http/outgoing-handler</code></h2>
+                <p>
+                    The component makes a request that the browser host intercepts and answers with a mocked Response.
+                    Its status, <code>X-Intercepted-By</code> header, and body return through the component for display
+                    here.
+                </p>
+                <label for="outgoing-http-message">Component request body</label>
+                <textarea id="outgoing-http-message">hello from the component</textarea>
+                <button id="send-outgoing-http" type="button" disabled>Make component request</button>
+                <pre id="outgoing-http-output" class="output" aria-live="polite">No response yet.</pre>
+            </section>
+
             <section class="demo-section" aria-labelledby="tcp-heading">
                 <h2 id="tcp-heading"><code>wasi:sockets/tcp</code></h2>
                 <p>The page acts as a fake client; the component directs a WASI host bridge to accept and echo.</p>
