@@ -1,21 +1,14 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { CHILD_PROCESS_WIT_REQUIREMENT, injectNodeWitImports, witInjectionWarnings } from "../../src/node-wit.js";
-
-const temporaryDirectories = [];
-
-afterEach(async () => {
-    await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
+import { getTmpDir } from "../helpers.js";
 
 async function fixture(files) {
-    const root = await mkdtemp(join(tmpdir(), "jco-node-wit-test-"));
-    temporaryDirectories.push(root);
+    const root = await getTmpDir();
     for (const [name, source] of Object.entries(files)) {
         const path = join(root, name);
         await mkdir(join(path, ".."), { recursive: true });
