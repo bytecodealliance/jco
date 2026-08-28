@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cfb84caa.js";
+            window.path_to_searchindex_js = "searchindex-2e48ac52.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-68d52fa1.js"></script>
@@ -183,7 +183,7 @@
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <ul>
 <li><a href="#transpiling">Transpiling</a> Wasm Component binaries into <a href="https://nodejs.org/api/esm.html#modules-ecmascript-modules">ECMAScript modules</a> that can run in any JavaScript environment.</li>
-<li>WASI Preview2 support in Node.js &amp; browsers (experimental).</li>
+<li>WASI Preview2 support in Node.js &amp; browsers.</li>
 <li>Component builds of Wasm Tools helpers, available for use as a library or CLI commands for use in native JS environments</li>
 <li>Optimization helper for Components via Binaryen.</li>
 <li><code>componentize</code> command to easily create components written in JavaScript (wrapper of <a href="https://github.com/bytecodealliance/ComponentizeJS">ComponentizeJS</a>).</li>
@@ -488,7 +488,8 @@ feature to stability.</p>
 </code></pre>
 <p>For all subsystems - <code>cli</code>, <code>clocks</code>, <code>filesystem</code>, <code>http</code>, <code>io</code>, <code>random</code> and <code>sockets</code>.</p>
 <p>To disable this automatic WASI handling the <code>--no-wasi-shim</code> flag can be provided and WASI will be treated like any other import without special handling.</p>
-<p>Note that browser support for WASI is currently experimental.</p>
+<p>Browser WASI support is subject to web-platform capability limitations; some interfaces require
+application-provided adapters.</p>
 <h3 id="interface-implementation-example"><a class="header" href="#interface-implementation-example">Interface Implementation Example</a></h3>
 <p>Here’s an example of implementing a custom WIT interface in JavaScript:</p>
 <p>example.wit</p>
