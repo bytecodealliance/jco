@@ -7,6 +7,10 @@ import { writeFiles } from "../common.js";
 declare const __vite_ssr_import_meta__: ImportMeta;
 declare const globalCreateRequire: typeof import("node:module").createRequire;
 
+const DEFAULT_NODE_CAPABILITY_MAP = {
+    "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
+};
+
 export interface TranspileOpts {
     name?: string;
     instantiation?: "async" | "sync";
@@ -92,6 +96,9 @@ function prepOpts(opts: any, program?: any) {
             opts.map = Object.fromEntries(opts.map.map((s: string) => s.split("=")));
         }
     }
+    // Process spawning is never granted implicitly. Components resolve to the
+    // deny-by-default shim unless the application explicitly replaces this map.
+    opts.map = Object.assign({}, DEFAULT_NODE_CAPABILITY_MAP, opts.map);
 
     return opts;
 }

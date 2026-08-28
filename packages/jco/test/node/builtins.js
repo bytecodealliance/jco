@@ -8,6 +8,18 @@ const environment = (patch = 6n) => ({
     exports: [],
 });
 
+const childProcess = () => ({
+    imports: [
+        {
+            namespace: "jco",
+            package: "node",
+            interface: "child-process",
+            version: { major: 0n, minor: 1n, patch: 0n },
+        },
+    ],
+    exports: [],
+});
+
 const unenvAliases = {
     "node:assert": "/unenv/assert.js",
     "node:buffer": "/unenv/buffer.js",
@@ -38,6 +50,25 @@ describe("Node builtin adapters", () => {
         const id = plugin.resolveId(specifier);
         expect(id).toBe(`\0jco-node-builtin:${specifier}`);
         expect(plugin.load(id)).toEqual(expect.any(String));
+    });
+
+    test("generates an adapter for node:child_process when its capability is imported", () => {
+        const plugin = nodeBuiltinPlugin(childProcess(), { childProcessModule: "/jco/node/child-process.js" });
+        const id = plugin.resolveId("node:child_process");
+        expect(id).toBe("\0jco-node-builtin:node:child_process");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/child-process.js"');
+        expect(source).toContain("spawnSync");
+    });
+
+    test("requires the child_process capability in the selected world", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            {
+                childProcessModule: "/jco/node/child-process.js",
+            },
+        );
+        expect(() => plugin.resolveId("node:child_process")).toThrow(/import jco:node\/child-process@0\.1\.0/);
     });
 
     test("layers audited unenv modules below Jco overrides", () => {

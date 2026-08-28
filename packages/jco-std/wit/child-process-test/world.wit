@@ -1,0 +1,6 @@
+package jco-std:child-process-test;
+
+world child-process-test {
+  import jco:node/child-process@0.1.0;
+  export run: func() -> string;
+}

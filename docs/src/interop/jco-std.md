@@ -111,7 +111,11 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
   execution without a host capability; and
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented with portable
   path algorithms and a `wasi:cli/environment` provider for operations that need
-  the guest working directory.
+  the guest working directory; and
+- the synchronous `node:child_process` API, bridged through the explicit
+  `jco:node/child-process@0.1.0` host capability. Its default provider denies
+  access, while an opt-in Node host provider delegates to the real
+  `node:child_process` implementation.
 
 Not every Node compatibility module lives in `jco-std`. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For

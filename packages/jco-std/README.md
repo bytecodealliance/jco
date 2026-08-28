@@ -18,12 +18,13 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 
 ## HTTP
 
-| Export                          | Description                                                                   |
-| ------------------------------- | ----------------------------------------------------------------------------- |
-| `http/adapters/hono`            | Enables easier building of [Hono][hono] HTTP servers                          |
-| `http/adapters/express`         | Provides a simple [Express][express]-like interface for building HTTP servers |
-| `wasi/0.2.x/node/24.x.x/assert` | `node:assert` adapter, Node 24 on WASI p2                                     |
-| `wasi/0.2.x/node/24.x.x/path`   | `node:path` adapter, Node 24 on WASI p2                                       |
+| Export                                 | Description                                                                   |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| `http/adapters/hono`                   | Enables easier building of [Hono][hono] HTTP servers                          |
+| `http/adapters/express`                | Provides a simple [Express][express]-like interface for building HTTP servers |
+| `wasi/0.2.x/node/24.x.x/assert`        | `node:assert` adapter, Node 24 on WASI p2                                     |
+| `wasi/0.2.x/node/24.x.x/path`          | `node:path` adapter, Node 24 on WASI p2                                       |
+| `wasi/0.2.x/node/24.x.x/child-process` | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
 
 [express]: https://expressjs.com
 
@@ -71,6 +72,9 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`;
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`;
+- synchronous `node:child_process` operations, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` and the
+  application-provided `jco:node/child-process@0.1.0` capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.
@@ -110,6 +114,22 @@ from Node.
 
 Deprecated APIs remain importable but immediately throw a clear unsupported-API
 error rather than running their deprecated implementation.
+
+The child-process capability is denied by default. The component world must
+declare `jco:node/child-process@0.1.0`, and Jco maps that import to a host shim
+that throws `ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED`; applications that intend
+to grant process spawning must explicitly map the opt-in Node host adapter:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/child-process@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host/node'
+```
+
+The current WIT interface supports `spawnSync`, `execFileSync`, and `execSync`.
+The asynchronous `spawn`, `exec`, and `execFile` APIs, `ChildProcess`, and
+`fork`/IPC throw `ERR_JCO_UNSUPPORTED_NODE_API`: callbacks, lifecycle events,
+and interactive streams cannot be represented faithfully by the synchronous
+interface yet.
 
 Note that the `node:` specifiers are replaced when Jco bundles source during
 componentization. The package export can also be imported directly:

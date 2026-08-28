@@ -9,6 +9,7 @@ const PATH_SPECIFIERS = new Map([
     ["node:path/win32", "win32"],
 ]);
 const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
+const CHILD_PROCESS_SPECIFIER = "node:child_process";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -145,8 +146,40 @@ export interface NodeBuiltinOptions {
     pathFactory?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/assert` module (overridable for tests) */
     assertModule?: string;
+    /** Path to jco-std's versioned `node:child_process` module (overridable for tests) */
+    childProcessModule?: string;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
+}
+
+/** Require the explicit, application-provided child-process capability. */
+function hasChildProcessCapability(worldMetadata: WorldMetadata): boolean {
+    return (worldMetadata?.imports ?? []).some(
+        (iface) =>
+            iface.namespace === "jco" &&
+            iface.package === "node" &&
+            iface.interface === "child-process" &&
+            iface.version?.major === 0n &&
+            iface.version?.minor === 1n &&
+            iface.version?.patch === 0n,
+    );
+}
+
+function childProcessAdapter(childProcessModule: string): string {
+    return `
+import childProcess from ${JSON.stringify(childProcessModule)};
+export default childProcess;
+export {
+    ChildProcess,
+    exec,
+    execFile,
+    execFileSync,
+    execSync,
+    fork,
+    spawn,
+    spawnSync,
+} from ${JSON.stringify(childProcessModule)};
+`;
 }
 
 /**
@@ -286,6 +319,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const assertModule = () =>
         options.assertModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
+    const childProcessModule = () =>
+        options.childProcessModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process"));
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -293,6 +329,14 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return id;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === CHILD_PROCESS_SPECIFIER) {
+                if (!hasChildProcessCapability(worldMetadata)) {
+                    throw new Error(
+                        "node:child_process requires the selected WIT world to import jco:node/child-process@0.1.0; add that interface or use Jco's Node capability injection support",
+                    );
+                }
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (PATH_SPECIFIERS.has(id)) {
@@ -315,6 +359,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (value === CHILD_PROCESS_SPECIFIER) {
+                return childProcessAdapter(childProcessModule());
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);

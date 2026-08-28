@@ -64,3 +64,52 @@ suite("WASI HTTP adapter componentization", () => {
     });
   }
 });
+
+suite("Node child_process componentization", () => {
+  test("builds a guest that imports the dedicated host capability", async () => {
+    const entry = join(JCO_STD_DIR, "dist/wasi/0.2.x/node/24.x.x/child-process.js");
+    const bundle = await rolldown({
+      input: "virtual:child-process-entry",
+      external: [/^jco:node\/child-process@/],
+      plugins: [
+        {
+          name: "child-process-entry",
+          resolveId(id) {
+            if (id === "virtual:child-process-entry" || id === "node:buffer") {
+              return id;
+            }
+          },
+          load(id) {
+            if (id === "virtual:child-process-entry") {
+              return `
+                import { execFileSync } from ${JSON.stringify(entry)};
+                export function run() {
+                  return execFileSync("node", ["--version"], { encoding: "utf8" });
+                }
+              `;
+            }
+            if (id === "node:buffer") {
+              // Componentization exercises the capability wiring, not Buffer behavior.
+              return `export class Buffer extends Uint8Array {
+                static from(value) { return new Buffer(value); }
+                static alloc(length) { return new Buffer(length); }
+                static isBuffer(value) { return value instanceof Buffer; }
+                toString() { return ""; }
+              }`;
+            }
+          },
+        },
+      ],
+    });
+    const { output } = await bundle.generate({ format: "esm" });
+    const jsSource = output[0].code;
+    assert.include(jsSource, "jco:node/child-process@0.1.0");
+
+    const { component } = await componentizeCurrent(jsSource, {
+      sourceName: "component.js",
+      witPath: join(JCO_STD_DIR, "wit/child-process-test"),
+      worldName: "child-process-test",
+    });
+    assert.isAbove(component.byteLength, 0);
+  });
+});

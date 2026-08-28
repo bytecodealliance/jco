@@ -5,11 +5,13 @@
     "lib": ["esnext", "dom"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "types": ["node"],
     "allowJs": true,
     "declaration": true,
     "declarationMap": true,
     "skipLibCheck": true,
     "paths": {
+      "jco:node/child-process@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/child-process-interface.d.ts"],
       "wasi:http/types@0.2.3": ["./src/wasi/0.2.3/generated/types/interfaces/wasi-http-types.d.ts"],
       "wasi:cli/environment@0.2.3": [
         "./src/wasi/0.2.3/generated/types/interfaces/wasi-cli-environment.d.ts"
