@@ -180,6 +180,13 @@ export class WASIShim {
                 tcpCreateSocket: shims.tcpSockets.tcpCreateSocket,
             };
         }
+        if (shims?.udpSockets) {
+            this.#sockets = {
+                ...this.#sockets,
+                udp: shims.udpSockets.udp,
+                udpCreateSocket: shims.udpSockets.udpCreateSocket,
+            };
+        }
         this.#http = shims?.http ?? wasi.http;
 
         // Create isolated environment if env or args are configured

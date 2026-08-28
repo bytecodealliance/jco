@@ -9,6 +9,7 @@ import { transpile } from "@bytecodealliance/jco";
 
 import { getTmpDir, FIXTURES_WIT_DIR, startTestServer, runBasicHarnessPageTest } from "./common.js";
 import { createInMemoryTcpSockets } from "./fixtures/sockets/in-memory-tcp.js";
+import { createInMemoryUdpSockets } from "./fixtures/sockets/in-memory-udp.js";
 
 type TranspileOutput = { files: { [filename: string]: Uint8Array } };
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
@@ -1628,6 +1629,35 @@ suite("Browser shim guards", () => {
 
         assert.strictEqual(new TextDecoder().decode(input.blockingRead(64n)), "in-memory TCP");
         assert.deepStrictEqual(socket.remoteAddress(), remoteAddress);
+    });
+
+    test("browser UDP namespaces can be supplied by an application", async () => {
+        const { WASIShim } = await import("../src/common/instantiation.js");
+        const shim = new WASIShim({ udpSockets: createInMemoryUdpSockets() });
+        const imports = shim.getImportObject();
+        const socket = imports["wasi:sockets/udp-create-socket"].createUdpSocket("ipv4");
+        const localAddress = {
+            tag: "ipv4" as const,
+            val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 8080 },
+        };
+        const remoteAddress = {
+            tag: "ipv4" as const,
+            val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 9090 },
+        };
+
+        socket.startBind(imports["wasi:sockets/instance-network"].instanceNetwork(), localAddress);
+        socket.finishBind();
+        const [incoming, outgoing] = socket.stream(remoteAddress);
+        assert.strictEqual(outgoing.checkSend(), 1_024n);
+        assert.strictEqual(
+            outgoing.send([{ data: new TextEncoder().encode("in-memory UDP") }]),
+            1n,
+        );
+
+        const [datagram] = incoming.receive(1n);
+        assert.strictEqual(new TextDecoder().decode(datagram.data), "in-memory UDP");
+        assert.deepStrictEqual(datagram.remoteAddress, remoteAddress);
+        assert.deepStrictEqual(socket.localAddress(), localAddress);
     });
 
     test("host-driven browser incoming HTTP round trips a response", async () => {
