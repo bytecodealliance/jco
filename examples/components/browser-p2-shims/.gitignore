@@ -1,3 +1,2 @@
-dist/*
-!dist/.gitkeep
+component.wasm
 demo/transpiled/
