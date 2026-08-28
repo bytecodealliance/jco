@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import assert from "../../../src/node24.x/assert/index.js";
+import assert from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.rejects", () => {
   test("accepts rejected promises and async functions", async () => {

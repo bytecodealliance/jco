@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AssertionError } from "../../../src/node24.x/assert/index.js";
+import { AssertionError } from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.AssertionError", () => {
   test("exposes Node-compatible public fields", () => {

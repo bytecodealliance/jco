@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import assert from "../../../src/node24.x/assert/index.js";
+import assert from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 import { compareOutcome, describeDifferential, nodeAssert } from "../helpers/assert.js";
 
 describeDifferential("assert.match", () => {
