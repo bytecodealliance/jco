@@ -7,7 +7,10 @@ import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
 import { exec, getTmpDir, jcoPath } from "../helpers.js";
 
 suite("node:assert", () => {
-    test("bundles and executes APIs guest-side", async () => {
+    // TODO(unskip): this componentizes against @bytecodealliance/jco-std/node/assert, which only
+    // exists in the workspace copy of jco-std. Unskip once a jco-std release carrying the
+    // node:assert shim is published and jco depends on it.
+    test.skip("bundles and executes APIs guest-side", async () => {
         const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-assert");
         const outputDir = await getTmpDir();
         const componentPath = join(outputDir, "component.wasm");
