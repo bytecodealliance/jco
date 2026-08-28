@@ -1,20 +1,26 @@
-# Node.js built-in compatibility
-
-## Goal
+# NodeJS built-in compatibility
 
 Jco's long-term goal is to let existing Node.js programs become WebAssembly
-components with as few source changes as possible. In the ideal case, application
-code can keep an ordinary import such as `import { Buffer } from "node:buffer"`,
-and `jco componentize` supplies a portable implementation while producing the
-component.
+components with as few source changes as possible.
+
+In the ideal case, application code can keep an ordinary import such
+as `import { Buffer } from "node:buffer"`, and `jco componentize` supplies
+a portable implementation while producing the component.
+
+> [!NOTE]
+> In the future, NodeJS compatibility will likely be built into the layer
+> *below* Jco -- ComponentizeJS. When that day comes, the NodeJS compatibility
+> layer in Jco will likely be deprecated.
 
 ## Compatibility boundaries
 
-This is a compatibility layer, not a Node.js process inside WebAssembly. Node APIs
-often assume access to an operating system, threads, subprocesses, native addons,
-or Node's event loop. A component can only use capabilities declared by its WIT
-world, and its JavaScript engine does not automatically provide Node internals.
-Compatibility therefore grows API by API, with explicit behavior and tests for
+Note that this is a best-ieffort compatibility layer, not a Node.js process inside
+WebAssembly. Node APIs often assume access to an operating system, threads,
+subprocesses, native addons, or Node's event loop.
+
+JS WebAssembly components can only use capabilities declared by WIT worlds, given that
+the built-in JavaScript engine does not automatically provide Node internals, in Jco we
+support NodeJS compatibility API by API, with explicit behavior and tests for
 each supported module.
 
 ## Enabling Node.js built-ins
@@ -30,7 +36,9 @@ jco componentize app.ts --wit wit -o app.wasm
 ### Bundling behavior
 
 During bundling, Jco's Node built-in plugin resolves supported `node:` imports to
-virtual ES modules. Those modules and their portable dependencies are included in
+virtual ES modules.
+
+Virtual modules and their portable dependencies are included in
 the guest JavaScript before [ComponentizeJS][componentize-js] or
 `componentize-qjs` embeds it in a WebAssembly component.
 
@@ -58,8 +66,9 @@ as `buffer`, `path`, and `querystring` are not rewritten.
 ## Combining built-ins with `jco-std`
 
 Node built-in compatibility can be mixed freely with direct imports from
-[`@bytecodealliance/jco-std`](./jco-std.md) and other portable packages. They are
-resolved as separate parts of the same bundle, not selected as alternative
+[`@bytecodealliance/jco-std`](./jco-std.md) and other portable packages.
+
+They are resolved as separate parts of the same bundle, not selected as alternative
 componentization modes. For example, a component can use jco-std's Hono adapter
 while its application code imports `node:assert` and `node:buffer`.
 
@@ -72,19 +81,25 @@ compatibility suites.
 Node's builtin semantics change across major versions, so `jco-std` publishes one
 entry point per supported Node major: the modules below live under `node24.x`, and
 a future Node major is added alongside as its own entry point rather than replacing
-it. Imports pin the major they target, and Jco pins `node24.x` when it bundles, so
-the version being built for is always explicit. Selecting that major at build time,
-or detecting it, is future work.
+it.
 
-`node/path` remains as an alias for `node24.x/path`, so imports written before the
-entry points were versioned keep resolving. It is the only such alias: modules added
-after the split, including `node:assert`, are available only under a versioned entry
-point.
+Downstream projects should use explciit versions that match the major they target, and
+Jco pins `node24.x` when it bundles, so the version being built for is always explicit.
+
+Automatically detecting the correct NodeJS major version to use at build time or
+detecting is planned.
+
+> [!NOTE]
+> To support `node/path` remains as an alias for `node24.x/path`, so imports written before the
+> entry points were versioned keep resolving.
+>
+> It is the only such alias: modules added after the split, including `node:assert`, are
+> available only under a versioned entry point.
 
 | Imports                                           | Implementation                                         | Notes                                                                                                                    |
-| ------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/node24.x/assert`                | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/node24.x/path`                  | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
+|---------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/node24.x/assert`            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/node24.x/path`              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
 | `node:querystring`                                | unenv's Node-derived querystring implementation        | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
 
@@ -92,9 +107,8 @@ point.
 
 Jco keeps its own assert implementation because the assertion namespace is a
 coherent system: comparison semantics, callable/default/strict identities,
-`AssertionError`, and error matching must agree. Mixing individual functions from
-different implementations would make subtle identity and error differences more
-likely.
+`AssertionError`, and error matching must work together (and can change across
+versions).
 
 The implementation covers Node 24's public module surface and comparison of
 cycles, Maps, Sets, typed arrays, errors, symbols, and other built-in families.
@@ -105,9 +119,10 @@ one-argument forms remain available.
 ### Path and WASI capabilities
 
 Path manipulation is portable, but `path.resolve()` and related operations need a
-current working directory. Jco obtains that value through
-`wasi:cli/environment@0.2.x`, so the selected WIT world must import exactly one
-compatible version when it uses `node:path`:
+current working directory.
+
+Jco obtains that value through `wasi:cli/environment@0.2.x`, so the selected WIT
+world must import exactly one compatible version when it uses `node:path`:
 
 ```wit
 world app {
@@ -122,7 +137,7 @@ need this import.
 
 ### Buffer
 
-The Buffer core comes from unenv's wrapper around the MIT-licensed Feross
+The Buffer core comes from `unenv`'s wrapper around the MIT-licensed Feross
 [`buffer`][feross-buffer] implementation. Jco adds the Node-facing module shape,
 one shared `globalThis.Buffer`, and policy for exports that cannot be faithfully
 provided in the guest.
@@ -148,7 +163,7 @@ There are intentional limits:
 
 ### Querystring
 
-unenv's querystring implementation is adapted from Node's MIT-licensed
+`unenv`'s querystring implementation is adapted from Node's MIT-licensed
 implementation and is a strong fit for a component: it is deterministic, mostly
 algorithmic, and needs no operating-system capability. Jco exposes its default
 namespace and the named `decode`, `encode`, `escape`, `parse`, `stringify`,
@@ -161,17 +176,17 @@ malformed-percent fallback and `unescapeBuffer`, which use Buffer internally.
 
 ### Different compatibility goals
 
-unenv provides a valuable cross-runtime foundation used by browsers, edge
+`unenv` provides a valuable cross-runtime foundation used by browsers, edge
 workers, server frameworks, and other non-Node environments. Its scope is broader
 than Jco's: for many consumers, preserving an import and providing a conservative
-fallback or no-op is preferable to making a bundle impossible. Those are useful
-design choices for unenv's audience.
+fallback or no-op is preferable to making a bundle impossible.
 
-A WebAssembly component has a different contract. Jco must know whether an API is
+A WebAssembly component has a different contract: Jco must know whether an API is
 algorithmic, backed by a declared WASI capability, dependent on missing Node
-internals, or intentionally mocked. Consequently, an unenv compatibility marker
-or alias is a starting point for review rather than an automatic promise of full
-Node behavior.
+internals, or intentionally mocked.
+
+Consequently, an unenv compatibility marker or alias is a starting point for
+review rather than an automatic promise of full Node behavior.
 
 ### Audit criteria
 
@@ -203,7 +218,7 @@ the module or upstream project.
 ### More semantic or dependency work needed
 
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `node:async_hooks`                        | The portable fallback does not preserve async context across asynchronous work, and `AsyncLocalStorage.snapshot()` is not implemented.                                                                                      |
 | `node:events`                             | Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.                                                                                         |
 | `node:diagnostics_channel`                | Core channel behavior exists, while tracing and async-context portions are incomplete.                                                                                                                                      |
@@ -244,15 +259,17 @@ an immediate, explicit unsupported stub rather than execute the deprecated API.
 ## What happens for an unsupported import
 
 An unsupported `node:` import is left unresolved during bundling. This makes the
-missing compatibility visible instead of silently substituting a mock. An
-explicit unsupported function inside an admitted module is different: the module
-can be imported, but calling that particular function throws a stable Jco error.
+missing compatibility visible instead of silently substituting a mock.
+
+An explicit unsupported function inside an admitted module can be imported,
+but calling that particular function throws a stable Jco error.
 
 ### Expanding support
 
 This distinction lets applications use well-supported portions of modules such as
-Buffer while keeping unavailable behavior easy to diagnose. It also gives Jco a
-clear path to expand support: add or connect a faithful implementation, test it
+Buffer while keeping unavailable behavior easy to diagnose.
+
+Jco has a clear path to expand support: add or connect a faithful implementation, test it
 against Node and inside both JavaScript component backends, then add the specifier
 to the audited allowlist.
 

@@ -1,22 +1,26 @@
 # `jco-std`
 
 [`@bytecodealliance/jco-std`][jco-std] is Jco's library of reusable JavaScript and
-TypeScript building blocks for WebAssembly components. It gives component authors
-portable implementations and ecosystem adapters that are useful across projects
-but do not belong in generated WIT bindings or in a particular application.
+TypeScript building blocks for WebAssembly components.
+
+The goal of `jco-std` is to provide component authors portable implementations
+and ecosystem adapters that are useful across projects but do not belong in
+generated WIT bindings or in a particular application.
 
 ## Relationship to componentization
 
-The package complements `jco componentize`:
+`jco-std` is best used with `jco componentize`:
 
-- `jco componentize` bundles an application and embeds it in a WebAssembly
-  component with the interface described by its WIT world.
+- `jco componentize` builds JS code into a WebAssembly component matching a WIT world.
 - `jco-std` supplies guest-side library code that the application can bundle,
   including selected Node.js compatibility implementations and WASI HTTP
   adapters.
-- The WIT world remains the source of truth for host capabilities. Importing a
-  helper does not implicitly grant filesystem, network, environment, or other
-  host access.
+
+Note that the WIT world remains the source of truth for host capabilities. Importing a
+helper does not implicitly grant filesystem, network, environment, or other host access.
+
+Generally, helpers will be specific about the version of underlying dependencies (WASI, NodeJS)
+in use, and force users to pick a pinned version where appropriate.
 
 ## Installing `jco-std`
 
@@ -41,7 +45,7 @@ import assert from 'node:assert/strict';
 assert.equal(1 + 1, 2);
 ```
 
-### Componentizing the source
+### Componentizing JS code
 
 Componentize the source with Jco's Node.js built-in support. TypeScript entry
 points are bundled automatically; JavaScript entry points need `--bundle`:
@@ -52,17 +56,22 @@ jco componentize app.js --bundle --wit wit -o app.wasm
 ```
 
 Jco consumes selected `jco-std` implementations internally and redirects the
-supported `node:` specifier while bundling. The application retains normal
-Node.js source code and does not need `jco-std` as a direct dependency solely for
-built-in compatibility. See [Node.js built-in
-compatibility](./nodejs-builtins.md) for the resolution model and current support
-matrix.
+supported `node:` specifier while bundling.
+
+The application retains normal Node.js source code and does not need `jco-std`
+as a direct dependency solely for built-in compatibility.
+
+> [!NOTE]
+> See [Node.js built-in compatibility](./nodejs-builtins.md) for the resolution
+> model and current support matrix.
 
 ## Using `jco-std` and Node built-ins together
 
-Direct `jco-std` imports and automatic Node built-in compatibility are
-complementary. They can be used in the same source graph and bundled into the same
-component. Enabling a supported `node:` import does not disable or replace
+`jco-std` imports and automatic Node built-in compatibility (e.g. `node:path`) are
+complementary -- you can use both in the same source graph and bundled into the same
+component.
+
+Enabling a supported `node:` import does not disable or replace
 `jco-std` adapters, and importing a `jco-std` adapter does not disable Node
 compatibility.
 
@@ -106,10 +115,9 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
 
 Not every Node compatibility module lives in `jco-std`. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
-example, the current Buffer and querystring cores come from unenv and are wrapped
-by Jco during bundling. Keeping this boundary flexible lets Jco reuse mature
-upstream work while retaining WASI-aware or higher-fidelity local implementations
-where needed.
+example, the current Buffer and querystring cores come from `unenv` and are wrapped
+by Jco during bundling -- this allows Jco to use mature upstream work and sprinkle in
+WASI support where necessary.
 
 ## Hono and WASI HTTP
 
