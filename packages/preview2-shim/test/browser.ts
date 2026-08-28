@@ -8,6 +8,7 @@ import { componentize, ComponentizeOptions } from "@bytecodealliance/componentiz
 import { transpile } from "@bytecodealliance/jco";
 
 import { getTmpDir, FIXTURES_WIT_DIR, startTestServer, runBasicHarnessPageTest } from "./common.js";
+import { createInMemoryTcpSockets } from "./fixtures/sockets/in-memory-tcp.js";
 
 type TranspileOutput = { files: { [filename: string]: Uint8Array } };
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
@@ -1605,6 +1606,28 @@ suite("Browser shim guards", () => {
             () => sockets.ipNameLookup.resolveAddresses({} as any, "example.com"),
             /not-supported/,
         );
+    });
+
+    test("browser TCP namespaces can be supplied by an application", async () => {
+        const { WASIShim } = await import("../src/common/instantiation.js");
+        const shim = new WASIShim({ tcpSockets: createInMemoryTcpSockets() });
+        const imports = shim.getImportObject();
+        const socket = imports["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
+        const remoteAddress = {
+            tag: "ipv4" as const,
+            val: { address: [127, 0, 0, 1] as [number, number, number, number], port: 8080 },
+        };
+
+        socket.startConnect(
+            imports["wasi:sockets/instance-network"].instanceNetwork(),
+            remoteAddress,
+        );
+        const [input, output] = socket.finishConnect();
+        output.checkWrite();
+        output.write(new TextEncoder().encode("in-memory TCP"));
+
+        assert.strictEqual(new TextDecoder().decode(input.blockingRead(64n)), "in-memory TCP");
+        assert.deepStrictEqual(socket.remoteAddress(), remoteAddress);
     });
 
     test("host-driven browser incoming HTTP round trips a response", async () => {

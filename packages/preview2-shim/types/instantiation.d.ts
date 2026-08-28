@@ -91,6 +91,12 @@ export interface FilesystemShim {
     dispose?(): void;
 }
 
+/** Application-provided implementation of the WASI TCP namespaces. */
+export interface TcpSocketsShim {
+    tcp: typeof import('./interfaces/wasi-sockets-tcp.d.ts');
+    tcpCreateSocket: typeof import('./interfaces/wasi-sockets-tcp-create-socket.d.ts');
+}
+
 /**
  * Configuration options for WASIShim
  */
@@ -112,6 +118,8 @@ interface WASIShimConfig {
     clocks?: object;
     /** Custom sockets shim */
     sockets?: object;
+    /** Custom TCP socket namespaces. */
+    tcpSockets?: TcpSocketsShim;
     /** Custom HTTP shim */
     http?: object;
     /** Browser-only isolated environment variables. */
