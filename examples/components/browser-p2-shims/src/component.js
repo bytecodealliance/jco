@@ -80,6 +80,30 @@ export const filesystemDemo = {
 };
 
 /**
+ * Call path for `wasi:http/outgoing-handler`:
+ *
+ * 1. This component makes a normal Web `fetch()` request.
+ * 2. ComponentizeJS lowers it to `wasi:http/outgoing-handler`; the browser shim
+ *    converts the WASI request back into a host Fetch call.
+ * 3. The demo host intercepts that call and returns a mocked Web `Response`.
+ *    The shim translates it back into the response read here by the component.
+ */
+export const outgoingHttpDemo = {
+    async request(message) {
+        const response = await fetch('https://mock.invalid/outgoing?from=component', {
+            method: 'POST',
+            headers: { 'content-type': 'text/plain' },
+            body: message,
+        });
+        return {
+            status: response.status,
+            interceptedBy: response.headers.get('x-intercepted-by') ?? '',
+            body: await response.text(),
+        };
+    },
+};
+
+/**
  * Call path for `wasi:sockets/tcp`:
  *
  * 1. This component constructs the server socket resource and controls its
