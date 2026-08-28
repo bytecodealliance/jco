@@ -2,7 +2,7 @@ import { now as monotonicNow } from 'wasi:clocks/monotonic-clock@0.2.12';
 import { now as wallNow } from 'wasi:clocks/wall-clock@0.2.12';
 import { getDirectories } from 'wasi:filesystem/preopens@0.2.12';
 import { Fields, IncomingBody, OutgoingBody, OutgoingResponse, ResponseOutparam } from 'wasi:http/types@0.2.12';
-import { tcpReceive, tcpSend, udpReceive, udpSend } from 'example:browser-p2-shims/socket-host';
+import { TcpServer, UdpServer } from 'example:browser-p2-shims/socket-server';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -82,32 +82,44 @@ export const filesystemDemo = {
 /**
  * Call path for `wasi:sockets/tcp`:
  *
- * 1. This component asks the `socket-host` WIT bridge for one client message
- *    and sends back a prefixed response.
- * 2. The browser bridge creates, binds, and listens through the injected
- *    `wasi:sockets/tcp` namespaces, then accepts and reads the fake client.
- * 3. The reusable in-memory implementation carries the response back to the
- *    page without opening a real network port.
+ * 1. This component constructs the server socket resource and controls its
+ *    bind, listen, accept, read, and write sequence.
+ * 2. The imported resource maps those operations to the injected
+ *    `wasi:sockets/tcp` namespaces.
+ * 3. The page acts only as the client; the in-memory adapter carries its bytes
+ *    to this server without opening a real network port.
  */
 export const tcpDemo = {
     serveOnce() {
-        tcpSend(`TCP: ${tcpReceive()}`);
+        const socket = new TcpServer();
+        socket.startBind(7000);
+        socket.finishBind();
+        socket.startListen();
+        socket.finishListen();
+        socket.accept();
+        socket.write(`TCP: ${socket.read()}`);
+        socket[symbolDispose]();
     },
 };
 
 /**
  * Call path for `wasi:sockets/udp`:
  *
- * 1. This component asks the `socket-host` WIT bridge for one datagram and
- *    sends back a prefixed response.
- * 2. The browser bridge binds through the injected `wasi:sockets/udp`
- *    namespaces, then receives and sends through WASI datagram streams.
- * 3. The reusable in-memory implementation delivers the response to the page
- *    without using the browser network stack.
+ * 1. This component constructs and binds the server socket resource, creates
+ *    its datagram streams, and controls receive and send.
+ * 2. The imported resource maps those operations to the injected
+ *    `wasi:sockets/udp` namespaces.
+ * 3. The page acts only as the client; the in-memory adapter routes both
+ *    datagrams without using the browser network stack.
  */
 export const udpDemo = {
     serveOnce() {
-        udpSend(`UDP: ${udpReceive()}`);
+        const socket = new UdpServer();
+        socket.startBind(7001);
+        socket.finishBind();
+        socket.stream();
+        socket.send(`UDP: ${socket.receive()}`);
+        socket[symbolDispose]();
     },
 };
 

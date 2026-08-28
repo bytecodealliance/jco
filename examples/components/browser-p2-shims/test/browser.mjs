@@ -12,6 +12,7 @@ const UDP_MESSAGE = 'Puppeteer UDP client';
 const demoRoot = fileURLToPath(new URL('../demo/', import.meta.url));
 
 let browser;
+const diagnostics = [];
 const server = await createServer({
     root: demoRoot,
     logLevel: 'silent',
@@ -28,7 +29,6 @@ try {
         args: (process.env.TEST_PUPPETEER_LAUNCH_ARGS ?? '').split(/[\s,]+/).filter(Boolean),
     });
     const page = await browser.newPage();
-    const diagnostics = [];
     let resolveStdout;
     const stdoutReceived = new Promise((resolve, reject) => {
         const timeout = setTimeout(
@@ -111,6 +111,9 @@ try {
     await expectOutput(page, '#udp-output', `UDP: ${UDP_MESSAGE}`);
 
     console.log('browser Preview 2 shim examples passed');
+} catch (error) {
+    error.message = `${error.message}\n${diagnostics.join('\n')}`;
+    throw error;
 } finally {
     await browser?.close();
     await server.close();

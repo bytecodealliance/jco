@@ -2,7 +2,7 @@ import { http, sockets } from '@bytecodealliance/preview2-shim';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { instantiate } from './transpiled/component.js';
 import { createReverseFilesystem } from './reverse-filesystem.js';
-import { createSocketHost } from './socket-host.js';
+import { createSocketServer } from './socket-server.js';
 
 const status = document.querySelector('#status');
 const decoder = new TextDecoder();
@@ -43,7 +43,7 @@ try {
         udpSockets,
     });
     const imports = shim.getImportObject();
-    imports['example:browser-p2-shims/socket-host'] = createSocketHost(imports);
+    imports['example:browser-p2-shims/socket-server'] = createSocketServer(imports);
     const instance = await instantiate(loadCoreModule, imports);
     const httpClient = new http.InMemoryHttpClient(instance.incomingHandler);
 
