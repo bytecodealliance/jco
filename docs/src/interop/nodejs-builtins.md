@@ -102,6 +102,7 @@ is planned.
 | ------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`        | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`          | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
+| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`   | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below. |
 | `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` | Synchronous APIs over an explicit application-provided host capability; denied by default.                               |
 | `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`       | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter           | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
@@ -231,6 +232,25 @@ These throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than failing quietly:
 `cluster.isMaster` and `cluster.setupMaster()` are deprecated in Node, so they throw
 `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API` and point at `isPrimary`/`setupPrimary`.
 
+### Async hooks and synchronous scopes
+
+`AsyncLocalStorage` works within a synchronous scope: `run`, `getStore`, `exit`, `enterWith`,
+nesting, `snapshot` and `bind` all behave as Node does, and `AsyncResource` binds to the context it
+was constructed in.
+
+What it cannot do is carry a store across an asynchronous boundary. `await` resolves through the
+engine's internal `PerformPromiseThen`, which JavaScript cannot intercept -- patching
+`Promise.prototype.then` does not see it -- and StarlingMonkey exposes no TC39 `AsyncContext` to
+carry the value instead.
+
+Rather than return an empty store after an `await`, Jco refuses at the call site: any callback
+given to `run`, `exit`, `withScope` or a snapshot that returns a promise throws
+`ERR_JCO_UNSUPPORTED_NODE_API`, naming the reason. A failure at the call site is easier to act on
+than a store that silently disappears somewhere else.
+
+`createHook`, `executionAsyncId`, `triggerAsyncId` and `executionAsyncResource` describe the async
+resource graph and always throw: nothing tracks that graph in a component.
+
 ### Buffer
 
 The Buffer core comes from `unenv`'s wrapper around the MIT-licensed Feross
@@ -315,7 +335,6 @@ the module or upstream project.
 
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:async_hooks`                        | The portable fallback does not preserve async context across asynchronous work, and `AsyncLocalStorage.snapshot()` is not implemented.                                                                                      |
 | `node:events`                             | Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.                                                                                         |
 | `node:diagnostics_channel`                | Core channel behavior exists, while tracing and async-context portions are incomplete.                                                                                                                                      |
 | `node:readline`, `node:readline/promises` | Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.                                                                                                           |

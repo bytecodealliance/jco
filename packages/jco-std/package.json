@@ -66,6 +66,11 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/path.js"
     },
+    "./wasi/0.2.x/node/24.x.x/async-hooks": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/async-hooks.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/async-hooks.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/async-hooks.js"
+    },
     "./wasi/0.2.x/node/24.x.x/child-process": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/child-process.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/child-process.js",

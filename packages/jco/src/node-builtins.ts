@@ -19,6 +19,7 @@ const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
 const CHILD_PROCESS_SPECIFIER = "node:child_process";
 const CLUSTER_SPECIFIER = "node:cluster";
 const CONSOLE_SPECIFIER = "node:console";
+const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -161,10 +162,34 @@ export interface NodeBuiltinOptions {
     clusterModule?: string;
     /** Path to jco-std's versioned `node:console` module (overridable for tests) */
     consoleModule?: string;
+    /** Path to jco-std's versioned `node:async_hooks` module (overridable for tests) */
+    asyncHooksModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Source of the `node:async_hooks` adapter.
+ *
+ * Capability-free: synchronous context tracking with no host involvement, so it resolves for a
+ * world with no imports at all.
+ */
+function asyncHooksAdapter(asyncHooksModule: string): string {
+    return `
+import asyncHooks from ${JSON.stringify(asyncHooksModule)};
+export default asyncHooks;
+export {
+    AsyncLocalStorage,
+    AsyncResource,
+    asyncWrapProviders,
+    createHook,
+    executionAsyncId,
+    executionAsyncResource,
+    triggerAsyncId,
+} from ${JSON.stringify(asyncHooksModule)};
+`;
 }
 
 /**
@@ -376,6 +401,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const assertModule = () =>
         options.assertModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
+    const asyncHooksModule = () =>
+        options.asyncHooksModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks"));
     const clusterModule = () =>
         options.clusterModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
@@ -392,6 +420,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return id;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === ASYNC_HOOKS_SPECIFIER) {
+                // No onWitRequirement: this needs no host capability.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CLUSTER_SPECIFIER) {
@@ -426,6 +458,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (value === ASYNC_HOOKS_SPECIFIER) {
+                return asyncHooksAdapter(asyncHooksModule());
             }
             if (value === CLUSTER_SPECIFIER) {
                 return clusterAdapter(clusterModule());
