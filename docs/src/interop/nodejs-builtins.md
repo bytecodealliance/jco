@@ -104,6 +104,7 @@ is planned.
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`          | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
 | `node:domain`                                     | *(refused)*                                     | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`. |
 | `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`   | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below. |
+| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel` | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                        |
 | `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` | Synchronous APIs over an explicit application-provided host capability; denied by default.                               |
 | `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`       | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter           | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
@@ -266,6 +267,19 @@ forward instead of reading `Could not resolve 'node:domain'`. Importing is fine;
 `active` and `_stack` are reachable on the default import only. An ES module binding cannot throw
 on read, so `import { active } from "node:domain"` fails at build time instead.
 
+### Diagnostics channels
+
+Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
+are interned by name: a publisher and a subscriber that never share a reference still meet on the
+same object.
+
+`TracingChannel` is implemented in full -- `traceSync`, `tracePromise` and `traceCallback`, with
+the `start`/`end`/`asyncStart`/`asyncEnd`/`error` sub-channels emitted in Node's order.
+
+`Channel.bindStore` accepts anything offering `run(value, fn)`, which includes jco-std's
+`AsyncLocalStorage`. Stores are therefore scoped synchronously: a bound store is visible while
+subscribers run and does not follow an `await`. See the async hooks section above for why.
+
 ### Buffer
 
 The Buffer core comes from `unenv`'s wrapper around the MIT-licensed Feross
@@ -351,7 +365,6 @@ the module or upstream project.
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `node:events`                             | Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.                                                                                         |
-| `node:diagnostics_channel`                | Core channel behavior exists, while tracing and async-context portions are incomplete.                                                                                                                                      |
 | `node:readline`, `node:readline/promises` | Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.                                                                                                           |
 | `node:timers/promises`                    | A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.                                                                                                                       |
 | `node:trace_events`, `node:tty`           | The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.                                                                                                |

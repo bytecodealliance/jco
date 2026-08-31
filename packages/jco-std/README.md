@@ -18,17 +18,18 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 
 ## HTTP
 
-| Export                                 | Description                                                                   |
-| -------------------------------------- | ----------------------------------------------------------------------------- |
-| `http/adapters/hono`                   | Enables easier building of [Hono][hono] HTTP servers                          |
-| `http/adapters/express`                | Provides a simple [Express][express]-like interface for building HTTP servers |
-| `wasi/0.2.x/node/24.x.x/assert`        | `node:assert` adapter, Node 24 on WASI p2                                     |
-| `wasi/0.2.x/node/24.x.x/console`       | `node:console` guest adapter over an explicit host capability                 |
-| `wasi/0.2.x/node/24.x.x/path`          | `node:path` adapter, Node 24 on WASI p2                                       |
-| `wasi/0.2.x/node/24.x.x/domain`        | `node:domain`, deprecated upstream: every use throws                          |
-| `wasi/0.2.x/node/24.x.x/async-hooks`   | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
-| `wasi/0.2.x/node/24.x.x/child-process` | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
-| `wasi/0.2.x/node/24.x.x/cluster`       | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
+| Export                                       | Description                                                                   |
+| -------------------------------------------- | ----------------------------------------------------------------------------- |
+| `http/adapters/hono`                         | Enables easier building of [Hono][hono] HTTP servers                          |
+| `http/adapters/express`                      | Provides a simple [Express][express]-like interface for building HTTP servers |
+| `wasi/0.2.x/node/24.x.x/assert`              | `node:assert` adapter, Node 24 on WASI p2                                     |
+| `wasi/0.2.x/node/24.x.x/console`             | `node:console` guest adapter over an explicit host capability                 |
+| `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
+| `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
+| `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
+| `wasi/0.2.x/node/24.x.x/diagnostics-channel` | `node:diagnostics_channel` guest adapter, Node 24                             |
+| `wasi/0.2.x/node/24.x.x/child-process`       | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
+| `wasi/0.2.x/node/24.x.x/cluster`             | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
 
 [express]: https://expressjs.com
 
@@ -81,6 +82,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `jco:node/child-process@0.1.0` host capability;
 - `node:async_hooks`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`, for synchronous scopes;
+- `node:diagnostics_channel`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`;
 - `node:cluster`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster` and the
   `jco:node/cluster@0.1.0` host capability;
