@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cfab04a9.js";
+            window.path_to_searchindex_js = "../searchindex-1691cc4b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -183,6 +183,12 @@
                         <h1 id="nodejs-built-in-compatibility"><a class="header" href="#nodejs-built-in-compatibility">NodeJS built-in compatibility</a></h1>
 <p>Jco’s long-term goal is to let existing Node.js programs become WebAssembly
 components with as few source changes as possible.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Jco’s Node.js built-in compatibility for components is experimental and subject
+to change. APIs, behavior, and generated component interfaces may change
+incompatibly without a semver-major release.</p>
+</blockquote>
 <p>In the ideal case, application code can keep an ordinary import such
 as <code>import { Buffer } from "node:buffer"</code>, and <code>jco componentize</code> supplies
 a portable implementation while producing the component.</p>
@@ -275,6 +281,24 @@ available only under a versioned entry point.</p>
 </tbody>
 </table>
 </div>
+<h3 id="errors-globals"><a class="header" href="#errors-globals">Errors globals</a></h3>
+<p>The Node <a href="https://nodejs.org/docs/latest-v24.x/api/errors.html">Errors API</a> is
+cross-cutting behavior rather than a <code>node:errors</code> module. Standard error
+constructors are globals, while individual Node APIs create coded and system
+errors. Jco therefore does not resolve <code>node:errors</code>; Node 24 rejects that
+specifier as well.</p>
+<p>Bundled code can use <code>Error</code>, <code>AggregateError</code>, <code>DOMException</code>, <code>EvalError</code>,
+<code>RangeError</code>, <code>ReferenceError</code>, <code>SuppressedError</code>, <code>SyntaxError</code>, <code>TypeError</code>, and
+<code>URIError</code> without an import. Rolldown injects
+<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors</code> only for constructors
+actually referenced by the source graph. A graph that uses none of them contains
+none of the adapter after bundling.</p>
+<p>The adapter preserves the guest engine’s constructor identities, supplies
+portable fallbacks for missing newer constructors and V8 Error extensions, and
+provides the common coded/system-error core used by other jco-std Node shims. No
+WIT capability is required. Error classes, codes, and documented system fields
+are compatibility targets; exact stack frames and source positions remain
+engine-specific.</p>
 <h3 id="assert"><a class="header" href="#assert">Assert</a></h3>
 <p>Jco keeps its own assert implementation because the assertion namespace is a
 coherent system: comparison semantics, callable/default/strict identities,

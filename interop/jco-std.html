@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cfab04a9.js";
+            window.path_to_searchindex_js = "../searchindex-1691cc4b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -206,6 +206,12 @@ a WASI HTTP framework adapter:</p>
 <p><code>jco-std</code> is ordinary ESM, so Jco bundles those explicit imports with the rest of
 the component.</p>
 <h2 id="use-normal-imports-for-nodejs-built-ins"><a class="header" href="#use-normal-imports-for-nodejs-built-ins">Use normal imports for Node.js built-ins</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Jco’s Node.js built-in compatibility for components is experimental and subject
+to change. APIs, behavior, and generated component interfaces may change
+incompatibly without a semver-major release.</p>
+</blockquote>
 <p>Application code should import supported Node.js APIs exactly as it would under
 Node.js. Do not rewrite a Node.js built-in import to an internal <code>jco-std</code> export:</p>
 <pre><code class="language-ts">import assert from 'node:assert/strict';
