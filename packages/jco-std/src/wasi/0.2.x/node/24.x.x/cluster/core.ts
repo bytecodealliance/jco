@@ -1,7 +1,7 @@
 import { EventEmitter } from "./emitter.js";
 
 import { deprecated, unsupported } from "./errors.js";
-import type { ClusterHost, HostEvent, HostSettings } from "./host.js";
+import type { ClusterHost, HostEvent, HostSettings, WorkerInfo } from "./host.js";
 import { Worker } from "./worker.js";
 
 export { EventEmitter } from "./emitter.js";
@@ -68,14 +68,41 @@ export function createCluster(host: ClusterHost): Cluster {
   const cluster = new EventEmitter() as Cluster;
   const workers: Record<number, Worker> = {};
 
-  const track = (info: { id: number }): Worker => {
+  /** Track a worker from a snapshot the host already gave us. */
+  const track = (info: WorkerInfo): Worker => {
     const existing = workers[info.id];
+    if (existing) {
+      existing._update(info);
+      return existing;
+    }
+    const worker = new Worker(host, info);
+    workers[info.id] = worker;
+    return worker;
+  };
+
+  /**
+   * Track a worker known only by id, as events report it.
+   *
+   * Only the primary can look a worker up: a worker process has no `cluster.workers`, so the host
+   * cannot answer there. Fall back to a minimal record rather than failing, which is what lets a
+   * worker observe its own events.
+   */
+  const trackById = (id: number): Worker => {
+    const existing = workers[id];
     if (existing) {
       return existing;
     }
-    const worker = new Worker(host, host.getWorker(info.id));
-    workers[info.id] = worker;
-    return worker;
+    try {
+      return track(host.getWorker(id));
+    } catch {
+      return track({
+        id,
+        state: "none",
+        exitedAfterDisconnect: false,
+        connected: false,
+        dead: false,
+      });
+    }
   };
 
   /**
@@ -94,24 +121,24 @@ export function createCluster(host: ClusterHost): Cluster {
   const dispatch = (event: HostEvent): void => {
     switch (event.tag) {
       case "fork": {
-        const worker = track({ id: event.val });
+        const worker = trackById(event.val);
         cluster.emit("fork", worker);
         return;
       }
       case "online": {
-        const worker = track({ id: event.val });
+        const worker = trackById(event.val);
         worker.emit("online");
         cluster.emit("online", worker);
         return;
       }
       case "disconnect": {
-        const worker = track({ id: event.val });
+        const worker = trackById(event.val);
         worker.emit("disconnect");
         cluster.emit("disconnect", worker);
         return;
       }
       case "exit": {
-        const worker = track({ id: event.val.id });
+        const worker = trackById(event.val.id);
         worker._update({
           id: event.val.id,
           state: "dead",
@@ -126,7 +153,7 @@ export function createCluster(host: ClusterHost): Cluster {
         return;
       }
       case "message": {
-        const worker = track({ id: event.val.id });
+        const worker = trackById(event.val.id);
         const message: unknown = event.val.json === "" ? undefined : JSON.parse(event.val.json);
         worker.emit("message", message);
         cluster.emit("message", worker, message);

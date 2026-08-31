@@ -1,8 +1,6 @@
 package local:node-cluster;
 
 world test {
-  import jco:node/cluster@0.1.0;
-
   record report {
     role-checks: u32,
     constant-checks: u32,
@@ -16,6 +14,5 @@ world test {
     non-json-message-code: string,
     meta-event-code: string,
   }
-
   export run: func() -> report;
 }

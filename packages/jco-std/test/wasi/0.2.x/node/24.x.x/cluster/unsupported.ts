@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   createCluster,
   UNSUPPORTED_CODE,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/index.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/core.js";
 import { FakeClusterHost } from "../helpers/cluster.js";
 
 /**
