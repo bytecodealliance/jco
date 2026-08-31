@@ -12,6 +12,7 @@
     "lint": "pnpm run -r lint",
     "lint:fix": "pnpm run -r lint:fix",
     "test:setup:puppeteer": "node scripts/install-puppeteer.mjs",
+    "test:setup:firefox": "node scripts/install-puppeteer.mjs firefox",
     "test:examples": "pnpm run -r all"
   },
   "devDependencies": {

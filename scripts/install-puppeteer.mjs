@@ -4,11 +4,12 @@ import * as process from "node:process";
 
 import {
     Browser,
+    BrowserTag,
+    ChromeReleaseChannel,
     computeExecutablePath,
     detectBrowserPlatform,
     install,
     resolveBuildId,
-    ChromeReleaseChannel,
 } from "@puppeteer/browsers";
 
 /**
@@ -16,13 +17,19 @@ import {
  * exists but the executable is missing.
  */
 async function main() {
-    const browser = Browser.CHROME;
-    let buildId = process.env.PUPPETEER_VERSION;
+    const requestedBrowser = process.argv[2] ?? "chrome";
+    if (requestedBrowser !== "chrome" && requestedBrowser !== "firefox") {
+        throw new Error(`unsupported Puppeteer browser: ${requestedBrowser}`);
+    }
+
+    const browser = requestedBrowser === "firefox" ? Browser.FIREFOX : Browser.CHROME;
+    let buildId =
+        requestedBrowser === "firefox" ? process.env.PUPPETEER_FIREFOX_VERSION : process.env.PUPPETEER_VERSION;
     if (!buildId) {
         buildId = await resolveBuildId(
-            Browser.CHROME,
+            browser,
             process.platform,
-            ChromeReleaseChannel.STABLE,
+            requestedBrowser === "firefox" ? BrowserTag.NIGHTLY : ChromeReleaseChannel.STABLE,
         );
     }
 
@@ -48,7 +55,7 @@ async function main() {
 
     try {
         await fs.access(executablePath);
-        console.error(`[info] chrome already installed: ${executablePath}`);
+        console.error(`[info] ${requestedBrowser} already installed: ${executablePath}`);
         return;
     } catch {
         const browserDir = path.join(cacheDir, browser, `${platform}-${buildId}`);
@@ -64,7 +71,7 @@ async function main() {
     });
 
     await fs.access(installedBrowser.executablePath);
-    console.error(`[info] chrome installed: ${installedBrowser.executablePath}`);
+    console.error(`[info] ${requestedBrowser} installed: ${installedBrowser.executablePath}`);
 }
 
 main()
