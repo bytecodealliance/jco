@@ -6,5 +6,7 @@ package jco:node@0.1.0;
 /// interfaces agree on a single definition.
 interface types {
     /// Environment variables, as name/value pairs.
+    ///
+    /// TODO(map): change to `map<k, v>` when componentize-js gets support.
     type env-vars = list<tuple<string, string>>;
 }
