@@ -7,6 +7,8 @@ import {
     CHILD_PROCESS_WIT_REQUIREMENT,
     CLUSTER_WIT_REQUIREMENT,
     CONSOLE_WIT_REQUIREMENT,
+    DNS_PROMISES_WIT_REQUIREMENT,
+    DNS_WIT_REQUIREMENT,
     type NodeWitRequirement,
 } from "./node-wit.js";
 
@@ -23,6 +25,7 @@ const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const DOMAIN_SPECIFIER = "node:domain";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
+const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -208,6 +211,9 @@ export interface NodeBuiltinOptions {
     errorsModule?: string;
     /** Path to jco-std's versioned `node:events` module (overridable for tests) */
     eventsModule?: string;
+    /** Paths to jco-std's versioned DNS modules (overridable for tests) */
+    dnsModule?: string;
+    dnsPromisesModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -340,6 +346,14 @@ export {
     spawn,
     spawnSync,
 } from ${JSON.stringify(childProcessModule)};
+`;
+}
+
+function dnsAdapter(dnsModule: string): string {
+    return `
+import dns from ${JSON.stringify(dnsModule)};
+export default dns;
+export * from ${JSON.stringify(dnsModule)};
 `;
 }
 
@@ -537,6 +551,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const errorsModule = () =>
         options.errorsModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors"));
+    const dnsModule = (specifier: string) =>
+        specifier === "node:dns/promises"
+            ? (options.dnsPromisesModule ??
+              fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/promises")))
+            : (options.dnsModule ??
+              fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns")));
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -581,6 +601,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 options.onWitRequirement?.(CONSOLE_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (DNS_SPECIFIERS.has(id)) {
+                options.onWitRequirement?.(
+                    id === "node:dns/promises" ? DNS_PROMISES_WIT_REQUIREMENT : DNS_WIT_REQUIREMENT,
+                );
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             if (AUDITED_UNENV_SPECIFIERS.has(id)) {
                 unenvAdapter(id, options);
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -621,6 +647,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === CONSOLE_SPECIFIER) {
                 return consoleAdapter(consoleModule());
+            }
+            if (DNS_SPECIFIERS.has(value)) {
+                return dnsAdapter(dnsModule(value));
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);

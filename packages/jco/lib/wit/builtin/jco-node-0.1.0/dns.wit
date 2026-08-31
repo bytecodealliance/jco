@@ -1,0 +1,7 @@
+package jco:node@0.1.0;
+
+/// Runtime-neutral DNS request boundary. Requests and responses are validated
+/// JSON envelopes because DNS record payloads form a large evolving tagged union.
+interface dns {
+  query: func(request: string) -> string;
+}
