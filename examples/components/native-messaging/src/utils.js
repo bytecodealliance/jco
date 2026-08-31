@@ -1,5 +1,7 @@
-// Native-messaging hosts may write at most 1 MiB in one message. Leave a
-// little room below that boundary so browser implementations agree.
+/**
+ * Native-messaging hosts may write at most 1 MiB in one message. Leave a
+ * little room below that boundary so browser implementations agree.
+ */
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024 - 64;
 const WRITE_CHUNK_BYTES = 4096;
 const OPEN_BRACKET = 0x5b;
@@ -8,7 +10,7 @@ const COMMA = 0x2c;
 const QUOTE = 0x22;
 const BACKSLASH = 0x5c;
 
-// Read exactly the requested bytes, or return null if the input closes early.
+/** Read exactly the requested bytes, or return null if the input closes early. */
 function readExact(input, length) {
     const bytes = new Uint8Array(length);
     let offset = 0;
@@ -32,7 +34,7 @@ function readExact(input, length) {
     return bytes;
 }
 
-// Read one length-prefixed native-messaging payload from the input stream.
+/** Read one length-prefixed native-messaging payload from the input stream. */
 export function readMessage(input) {
     const header = readExact(input, 4);
     if (header === null) {
@@ -43,14 +45,14 @@ export function readMessage(input) {
     return readExact(input, length);
 }
 
-// Write bytes in chunks accepted by the WASI output stream.
+/** Write bytes in chunks accepted by the WASI output stream. */
 function writeAll(output, bytes) {
     for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
         output.blockingWriteAndFlush(bytes.subarray(offset, offset + WRITE_CHUNK_BYTES));
     }
 }
 
-// Prefix one payload with its native-messaging length and write it.
+/** Prefix one payload with its native-messaging length and write it. */
 function writeFrame(output, body) {
     const frame = new Uint8Array(4 + body.length);
     new DataView(frame.buffer).setUint32(0, body.length, true);
@@ -59,7 +61,7 @@ function writeFrame(output, body) {
     output.blockingFlush();
 }
 
-// Find a split between top-level array elements without splitting nested JSON.
+/** Find a split between top-level array elements without splitting nested JSON. */
 function findSplit(bytes, start, preferredEnd) {
     let depth = 0;
     let inString = false;
@@ -97,7 +99,7 @@ function findSplit(bytes, start, preferredEnd) {
     return bytes.length - 1 <= preferredEnd ? bytes.length - 1 : -1;
 }
 
-// Write one response, splitting oversized top-level arrays into valid frames.
+/** Write one response, splitting oversized top-level arrays into valid frames. */
 export function writeMessage(output, message) {
     if (message.length <= MAXIMUM_RESPONSE_BYTES) {
         writeFrame(output, message);
