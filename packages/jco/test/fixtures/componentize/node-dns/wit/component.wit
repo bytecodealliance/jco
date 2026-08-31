@@ -1,0 +1,12 @@
+package jco-fixtures:node-dns;
+
+world component {
+    record report {
+        server-count: u32,
+        namespace-identity: bool,
+        promises-identity: bool,
+        result-order: string,
+        cancel-code: string,
+    }
+    export run: func() -> report;
+}

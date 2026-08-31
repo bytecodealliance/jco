@@ -31,11 +31,12 @@ const unenvAliases = {
 };
 
 describe("Node builtin adapters", () => {
-    test("maps console to the deny host unless the application opts into another provider", () => {
+    test("maps host-backed Node APIs to deny providers unless the application opts in", () => {
         expect(withDefaultNodeCapabilityMap()).toEqual({
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
             "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
+            "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
         });
         expect(
             withDefaultNodeCapabilityMap({
@@ -45,6 +46,7 @@ describe("Node builtin adapters", () => {
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
             "jco:node/console@0.1.0": "/application/console-host.js",
+            "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
         });
     });
 
@@ -231,6 +233,31 @@ describe("Node builtin adapters", () => {
         expect(source).toContain('from "/jco/node/console.js"');
     });
 
+    test.each([
+        ["node:dns", "/jco/node/dns.js"],
+        ["node:dns/promises", "/jco/node/dns-promises.js"],
+    ])("generates a host-backed adapter for %s", (specifier, module) => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { dnsModule: "/jco/node/dns.js", dnsPromisesModule: "/jco/node/dns-promises.js" },
+        );
+        const id = plugin.resolveId(specifier);
+        expect(id).toBe(`\0jco-node-builtin:${specifier}`);
+        expect(plugin.load(id)).toContain(`from \"${module}\"`);
+    });
+
+    test.each(["node:dns", "node:dns/promises"])("reports the WIT capability required by %s", (specifier) => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { dnsModule: "/jco/node/dns.js", dnsPromisesModule: "/jco/node/dns-promises.js", onWitRequirement },
+        );
+        expect(plugin.resolveId(specifier)).toBe(`\0jco-node-builtin:${specifier}`);
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({ nodeSpecifier: specifier, witImport: "jco:node/dns@0.1.0" }),
+        );
+    });
+
     test("layers audited unenv modules below Jco overrides", () => {
         const plugin = nodeBuiltinPlugin(environment(), {
             assertModule: "/jco/node/assert.js",
@@ -317,6 +344,8 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("node:errors")).toBeNull();
         expect(plugin.resolveId("errors")).toBeNull();
         expect(plugin.resolveId("console")).toBeNull();
+        expect(plugin.resolveId("dns")).toBeNull();
+        expect(plugin.resolveId("dns/promises")).toBeNull();
     });
 
     test("reports a missing environment capability only when node:path is used", () => {
