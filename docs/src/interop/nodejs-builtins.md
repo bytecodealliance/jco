@@ -376,10 +376,14 @@ jco transpile component.wasm \
   --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
 ```
 
-The Node provider runs the real `node:dns/promises` operations in a worker so the
-preview2 WIT call can remain synchronous while c-ares progresses. Callback APIs
-retain callback delivery in the guest, and the promises subpath shares server and
-default-result-order state with the main module.
+The Node provider calls the real asynchronous `node:dns/promises` operations
+directly. When an application supplies a DNS host map, Jco automatically enables
+JSPI for `jco:node/dns@0.1.0#query`. The Preview 2 WIT call therefore remains
+synchronous from the guest's perspective without blocking Node's event loop or
+creating a worker for each query. Because any component export may transitively
+call DNS, mapped components expose promise-returning exports that JavaScript hosts
+must await. Callback APIs retain callback delivery in the guest, and the promises
+subpath shares server and default-result-order state with the main module.
 
 `Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`. The synchronous WIT
 boundary does not expose an outstanding c-ares request that a later guest call
