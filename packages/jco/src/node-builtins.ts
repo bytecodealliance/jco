@@ -20,6 +20,7 @@ const CHILD_PROCESS_SPECIFIER = "node:child_process";
 const CLUSTER_SPECIFIER = "node:cluster";
 const CONSOLE_SPECIFIER = "node:console";
 const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
+const DOMAIN_SPECIFIER = "node:domain";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -164,10 +165,26 @@ export interface NodeBuiltinOptions {
     consoleModule?: string;
     /** Path to jco-std's versioned `node:async_hooks` module (overridable for tests) */
     asyncHooksModule?: string;
+    /** Path to jco-std's versioned `node:domain` module (overridable for tests) */
+    domainModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Source of the `node:domain` adapter.
+ *
+ * Resolves so the failure can explain itself: `node:domain` is deprecated upstream and every use
+ * throws. Leaving it unresolved would fail the build with an unrelated-sounding message.
+ */
+function domainAdapter(domainModule: string): string {
+    return `
+import domain from ${JSON.stringify(domainModule)};
+export default domain;
+export { Domain, create, createDomain } from ${JSON.stringify(domainModule)};
+`;
 }
 
 /**
@@ -401,6 +418,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const assertModule = () =>
         options.assertModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
+    const domainModule = () =>
+        options.domainModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/domain"));
     const asyncHooksModule = () =>
         options.asyncHooksModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks"));
@@ -420,6 +440,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return id;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === DOMAIN_SPECIFIER) {
+                // No onWitRequirement: nothing here reaches the host.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === ASYNC_HOOKS_SPECIFIER) {
@@ -458,6 +482,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (value === DOMAIN_SPECIFIER) {
+                return domainAdapter(domainModule());
             }
             if (value === ASYNC_HOOKS_SPECIFIER) {
                 return asyncHooksAdapter(asyncHooksModule());
