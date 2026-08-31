@@ -76,6 +76,11 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/domain.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/domain.js"
     },
+    "./wasi/0.2.x/node/24.x.x/diagnostics-channel": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/diagnostics-channel.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/diagnostics-channel.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/diagnostics-channel.js"
+    },
     "./wasi/0.2.x/node/24.x.x/child-process": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/child-process.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/child-process.js",
