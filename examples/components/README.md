@@ -17,6 +17,7 @@ A brief description of the examples contained in this folder:
 | [`http-server-fetch-handler`](./http-server-fetch-handler) | HTTP server using standards-forward `fetch()` event handling built into [StarlingMonkey][sm]     |
 | [`http-server-hono`](./http-server-hono)                   | HTTP server using the standards-forward [Hono][hono] framework                                   |
 | [`node-fetch`](./node-fetch)                               | Performs a HTTP request using `fetch()`                                                          |
+| [`native-messaging`](./native-messaging)                   | Runs a Jco-built WASI command as a Firefox and Chromium native-messaging host                    |
 | [`string-reverse-upper`](./string-reverse-upper)           | `import`s functionality to build more advanced computation to `export`                           |
 | [`string-reverse`](./string-reverse)                       | `export`s basic functionality with a slightly more involved WIT interface and more complex types |
 | [`typegen-async-export`](./typegen-async-export)           | Showcases how to build that uses an async export, with types provided                            |

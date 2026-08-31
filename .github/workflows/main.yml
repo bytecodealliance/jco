@@ -764,6 +764,9 @@ jobs:
           - name: browser-p2-shims
             workspace: examples/components/browser-p2-shims
             setup-p2-shim: true
+          - name: native-messaging
+            workspace: examples/components/native-messaging
+            setup-p2-shim: true
           - name: wintertc
             workspace: examples/components/wintertc
           - name: p3-stream-chat
@@ -843,8 +846,12 @@ jobs:
       - run: pnpm install
 
       - name: Install Puppeteer browser
-        if: ${{ matrix.project.name == 'browser-p2-shims' }}
+        if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
         run: pnpm run test:setup:puppeteer
+
+      - name: Install Firefox
+        if: ${{ matrix.project.name == 'native-messaging' }}
+        run: pnpm run test:setup:firefox
 
       - name: Build required deps
         env:

@@ -1,0 +1,18 @@
+{
+    "manifest_version": 3,
+    "name": "Jco native messaging example",
+    "version": "1.0.0",
+    "description": "End-to-end native messaging test for a Jco-built component",
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkFoaRDNRmOjbkNHTImQNT8sHd0vit6aAGq0N9R749mIK7I/NnLOSm2l+sR/f0naNRzCGOWb5v+MnRjoPGhagsPvPQnq9A1O+q/YsSyCfw1bAUvpAjl0wGFasJygKPcC4O2LDvj/Qkg/ml6scKTC8KEkxt39s63K9tUz3vDuHAiiRxYx3L8WLyL3AjLdoom+RAPnoV3M1mzaFz1+5tKC5GrJIzsobKPLf0LTsuWNSuojrJ6yAxPw+MydVvRHgn+mQ1cxquWoaziGFJ4mBhNRj8nQUush+8TlHJ9pC/2O60Tifryc81mJhzTF7VWI6Zr3bqvMOI50Jkc3xIIlbfMDKnwIDAQAB",
+    "permissions": ["nativeMessaging"],
+    "host_permissions": ["http://127.0.0.1/*"],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": ["http://127.0.0.1/*"],
+            "js": ["config.js", "content.js"]
+        }
+    ]
+}

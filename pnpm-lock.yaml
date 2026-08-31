@@ -185,6 +185,19 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  examples/components/native-messaging:
+    dependencies:
+      '@bytecodealliance/preview2-shim':
+        specifier: workspace:*
+        version: link:../../../packages/preview2-shim
+    devDependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+      puppeteer:
+        specifier: 'catalog:'
+        version: 25.4.0(yauzl@2.10.0)
+
   examples/components/node-compat:
     dependencies:
       '@bytecodealliance/jco':

@@ -1,0 +1,21 @@
+{
+    "manifest_version": 2,
+    "name": "Jco native messaging example",
+    "version": "1.0.0",
+    "description": "End-to-end native messaging test for a Jco-built component",
+    "permissions": ["nativeMessaging", "http://127.0.0.1/*"],
+    "background": {
+        "scripts": ["config.js", "background.js"]
+    },
+    "content_scripts": [
+        {
+            "matches": ["http://127.0.0.1/*"],
+            "js": ["config.js", "content.js"]
+        }
+    ],
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "native-messaging@example.jco"
+        }
+    }
+}
