@@ -1,18 +1,21 @@
 /**
- * Minimal `EventEmitter` for the cluster shim.
+ * Minimal `EventEmitter` for jco-std's own shims.
  *
- * Node's `cluster` and `cluster.Worker` are both EventEmitters, but guest code may not import
- * `node:events`: it is not an admitted builtin, so the import would escape componentization or
- * recursively require another shim. This implements the subset cluster users actually reach.
+ * Several Node modules are EventEmitters -- `cluster` and `cluster.Worker` today, more later -- but
+ * shim code cannot get one from `node:events`. Guests reach that specifier through unenv, which
+ * jco-std does not depend on and deliberately does not: a shim importing a `node:*` builtin relies
+ * on a bundler rewriting it, which is not true of every way jco-std is consumed.
  *
- * Deliberately absent from Node's surface: `errorMonitor`, `captureRejections`, `[Symbol.for(
- * 'nodejs.rejection')]`, and the `newListener`/`removeListener` meta-events. Reaching for one of
- * those throws rather than silently doing nothing -- see `unsupportedMember`.
+ * So this is the internal one. It implements the subset the shims reach, not Node's full surface.
+ * Deliberately absent: `errorMonitor`, `captureRejections`, `[Symbol.for('nodejs.rejection')]`, and
+ * the `newListener`/`removeListener` meta-events -- reaching for one throws rather than silently
+ * doing nothing.
  *
- * When `node:events` becomes an admitted specifier this should be replaced by it wholesale.
+ * If a shim ever needs more of the surface, revisit whether jco-std should own a full
+ * implementation instead of tracking unenv's separately.
  */
 
-import { unsupported } from "./errors.js";
+import { unsupported } from "../cluster/errors.js";
 
 type Listener = (...args: unknown[]) => void;
 
