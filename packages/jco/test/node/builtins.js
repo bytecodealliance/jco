@@ -103,6 +103,36 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("domain")).toBeNull();
     });
 
+    test("generates a capability-free adapter for node:diagnostics_channel", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { diagnosticsChannelModule: "/jco/node/diagnostics-channel.js" },
+        );
+        const id = plugin.resolveId("node:diagnostics_channel");
+        expect(id).toBe("\0jco-node-builtin:node:diagnostics_channel");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/diagnostics-channel.js"');
+        expect(source).toContain("tracingChannel");
+    });
+
+    test("node:diagnostics_channel requires no WIT capability", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { diagnosticsChannelModule: "/jco/node/diagnostics-channel.js", onWitRequirement },
+        );
+        plugin.resolveId("node:diagnostics_channel");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test("does not intercept the bare diagnostics_channel specifier", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { diagnosticsChannelModule: "/jco/node/diagnostics-channel.js" },
+        );
+        expect(plugin.resolveId("diagnostics_channel")).toBeNull();
+    });
+
     test("generates a capability-free adapter for node:async_hooks", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
