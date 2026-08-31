@@ -1,101 +1,119 @@
-import { MessageChannel, Worker, receiveMessageOnPort } from "node:worker_threads";
+import { Buffer } from "node:buffer";
+import dns from "node:dns";
+import dnsPromises from "node:dns/promises";
 
-import type { DnsHost, DnsResponse } from "./dns/types.js";
+import type { DnsErrorData, DnsRequest, DnsResponse } from "./dns/types.js";
 
-const WORKER_SOURCE = String.raw`
-const { workerData } = require("node:worker_threads");
-const signal = new Int32Array(workerData.signal);
-const port = workerData.port;
-const replacer = (_key, value) => value instanceof ArrayBuffer
-  ? { __jcoDnsArrayBuffer: Buffer.from(value).toString("base64") }
-  : value;
-const serializeError = (error) => ({
-  name: error?.name ?? "Error",
-  message: error?.message ?? String(error),
-  code: error?.code,
-  errno: error?.errno,
-  syscall: error?.syscall,
-  hostname: error?.hostname,
-});
-(async () => {
-  let response;
+const ALLOWED_OPERATIONS = new Set([
+  "lookup",
+  "lookupService",
+  "resolve4",
+  "resolve6",
+  "resolveAny",
+  "resolveCaa",
+  "resolveCname",
+  "resolveMx",
+  "resolveNaptr",
+  "resolveNs",
+  "resolvePtr",
+  "resolveSoa",
+  "resolveSrv",
+  "resolveTlsa",
+  "resolveTxt",
+  "reverse",
+]);
+
+type DnsOperation = (...args: never[]) => Promise<unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function serializeError(error: unknown): DnsErrorData {
+  if (!isRecord(error)) {
+    return { name: "Error", message: String(error) };
+  }
+  return {
+    name: typeof error.name === "string" ? error.name : "Error",
+    message: typeof error.message === "string" ? error.message : String(error),
+    code: typeof error.code === "string" ? error.code : undefined,
+    errno:
+      typeof error.errno === "string" || typeof error.errno === "number" ? error.errno : undefined,
+    syscall: typeof error.syscall === "string" ? error.syscall : undefined,
+    hostname: typeof error.hostname === "string" ? error.hostname : undefined,
+  };
+}
+
+function replacer(_key: string, value: unknown): unknown {
+  return value instanceof ArrayBuffer
+    ? { __jcoDnsArrayBuffer: Buffer.from(value).toString("base64") }
+    : value;
+}
+
+function unsupported(operation: string): Error {
+  return Object.assign(new Error(`Unsupported DNS operation: ${operation}`), {
+    code: "ERR_JCO_UNSUPPORTED_NODE_API",
+  });
+}
+
+/**
+ * Opt-in provider that delegates to Node's real `node:dns` implementation.
+ * Jco lowers this promise-returning host function as a synchronous Preview 2
+ * WIT import with JSPI, so Node's event loop remains free while DNS completes.
+ */
+export async function query(requestJson: string): Promise<string> {
+  let response: DnsResponse;
   try {
-    const request = JSON.parse(workerData.request);
-    const dns = require("node:dns");
+    const request = JSON.parse(requestJson) as DnsRequest;
     if (request.operation === "getServers") {
       response = { ok: true, value: dns.getServers() };
     } else if (request.operation === "validateServers") {
       const resolver = new dns.Resolver();
-      resolver.setServers(request.args[0]);
+      resolver.setServers(request.args[0] as string[]);
       response = { ok: true, value: resolver.getServers() };
     } else {
-      const api = dns.promises;
-      const allowed = new Set([
-        "lookup", "lookupService", "resolve4", "resolve6", "resolveAny", "resolveCaa",
-        "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr", "resolveSoa",
-        "resolveSrv", "resolveTlsa", "resolveTxt", "reverse"
-      ]);
-      if (!allowed.has(request.operation)) throw Object.assign(new Error("Unsupported DNS operation: " + request.operation), { code: "ERR_JCO_UNSUPPORTED_NODE_API" });
-      let target = api;
-      if (request.resolver) {
-        target = new api.Resolver(request.resolver.options);
-        if (request.resolver.servers) target.setServers(request.resolver.servers);
-        if (request.resolver.localAddress) target.setLocalAddress(...request.resolver.localAddress);
+      if (!ALLOWED_OPERATIONS.has(request.operation)) {
+        throw unsupported(request.operation);
       }
-      if (request.operation === "lookup" && request.args[1]) {
+      let target: object = dnsPromises;
+      if (request.resolver) {
+        const resolver = new dnsPromises.Resolver(request.resolver.options);
+        if (request.resolver.servers) {
+          resolver.setServers(request.resolver.servers);
+        }
+        if (request.resolver.localAddress) {
+          resolver.setLocalAddress(...request.resolver.localAddress);
+        }
+        target = resolver;
+      }
+      if (request.operation === "lookup" && isRecord(request.args[1])) {
         const options = request.args[1];
+        const guestHints = typeof options.hints === "number" ? options.hints : 0;
         let hints = 0;
-        if (options.hints & 32) hints |= dns.ADDRCONFIG;
-        if (options.hints & 16) hints |= dns.ALL;
-        if (options.hints & 8) hints |= dns.V4MAPPED;
+        if (guestHints & 32) {
+          hints |= dns.ADDRCONFIG;
+        }
+        if (guestHints & 16) {
+          hints |= dns.ALL;
+        }
+        if (guestHints & 8) {
+          hints |= dns.V4MAPPED;
+        }
         request.args[1] = { ...options, hints };
       }
-      const operation = target[request.operation];
-      if (typeof operation !== "function") throw Object.assign(new Error("Unsupported DNS operation: " + request.operation), { code: "ERR_JCO_UNSUPPORTED_NODE_API" });
-      response = { ok: true, value: await operation.apply(target, request.args) };
+      const operation = (target as Record<string, unknown>)[request.operation];
+      if (typeof operation !== "function") {
+        throw unsupported(request.operation);
+      }
+      response = {
+        ok: true,
+        value: await (operation as DnsOperation).apply(target, request.args as never[]),
+      };
     }
   } catch (error) {
     response = { ok: false, error: serializeError(error) };
   }
-  port.postMessage(JSON.stringify(response, replacer));
-  Atomics.store(signal, 0, 1);
-  Atomics.notify(signal, 0);
-})().catch((error) => {
-  port.postMessage(JSON.stringify({ ok: false, error: serializeError(error) }, replacer));
-  Atomics.store(signal, 0, 1);
-  Atomics.notify(signal, 0);
-});
-`;
-
-/**
- * Opt-in provider that delegates to Node's real `node:dns` implementation.
- * A worker permits the preview2 WIT import to remain synchronous while c-ares
- * completes asynchronously without deadlocking the calling Node event loop.
- */
-export const query: DnsHost["query"] = (request) => {
-  const signal = new Int32Array(new SharedArrayBuffer(4));
-  const { port1, port2 } = new MessageChannel();
-  const worker = new Worker(WORKER_SOURCE, {
-    eval: true,
-    workerData: { request, signal: signal.buffer, port: port2 },
-    transferList: [port2],
-  });
-  worker.unref();
-  const wait = Atomics.wait(signal, 0, 0, 30_000);
-  if (wait === "timed-out") {
-    void worker.terminate();
-    const response: DnsResponse = {
-      ok: false,
-      error: { name: "Error", message: "node:dns host query timed out", code: "ETIMEOUT" },
-    };
-    return JSON.stringify(response);
-  }
-  const received = receiveMessageOnPort(port1);
-  void worker.terminate();
-  if (!received || typeof received.message !== "string") {
-    throw new TypeError("node:dns worker returned no response");
-  }
-  return received.message;
-};
+  return JSON.stringify(response, replacer);
+}
 
 export default { query };
