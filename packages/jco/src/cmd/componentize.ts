@@ -22,11 +22,8 @@ export interface ComponentizeOptions {
     /**
      * Directory componentization runs from.
      *
-     * Defaults to the entry module's directory rather than the process working directory, so a
-     * build does not depend on where the command was invoked from. componentize-js derives the
-     * path prefix a component sees, and the directory it preopens, from the working directory;
-     * leaving that ambient makes builds non-reproducible, and when the system temporary directory
-     * happens to sit inside it, componentization fails outright.
+     * We default to the entry module's directory here rather than a simple
+     * cwd() so a build does not depend on where the command was invoked from.
      */
     cwd?: string;
     worldName?: string;
