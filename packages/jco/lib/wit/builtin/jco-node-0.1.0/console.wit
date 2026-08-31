@@ -1,0 +1,12 @@
+package jco:node@0.1.0;
+
+interface console {
+  enum output-destination {
+    stdout,
+    stderr,
+  }
+
+  write: func(destination: output-destination, value: string);
+  is-terminal: func(destination: output-destination) -> bool;
+  color-depth: func(destination: output-destination) -> u8;
+}
