@@ -1,5 +1,10 @@
 # NodeJS compat example (via `unenv`)
 
+> [!WARNING]
+> Jco's Node.js built-in compatibility for components is experimental and subject
+> to change. APIs, behavior, and generated component interfaces may change
+> incompatibly without a semver-major release.
+
 JS WebAssembly components are built with [StarlingMonkey][sm] which is more aligned with the
 [WinterTC][wintertc] specification and Web platform primitives, so by default NodeJS platform
 primitives are not included by default.
@@ -13,19 +18,19 @@ toolchain (`jco`) that uses NodeJS imports shimmed by combining [`unenv`][unenv]
 ## How it works
 
 The source code in [`src/component.js`](./src/component.js) uses NodeJS imports like [`Buffer`][nodejs-docs-buffer]
-and [`URL`][nodejs-docs-url] which are normally *not* available to JS ecosystem components (for now).
+and [`URL`][nodejs-docs-url] which are normally _not_ available to JS ecosystem components (for now).
 
 The source code is transpiled with `rolldown` into a `dist/component.js` (with imports filled)
 which is then compiled to WebAssembly via `jco componentize`.
 
-To *use* our component from *actual* NodeJS environments, we can use `jco transpile` to run the
+To _use_ our component from _actual_ NodeJS environments, we can use `jco transpile` to run the
 component. This serves as a "virtual" WebAssembly + [WASI][wasi] host (see [`@bytecodealliance/preview2-shim`][p2-shims])
 that can run the component we created.
 
 See [`run-transpiled.js`](./run-transpiled.js) for more information.
 
 > [!NOTE]
-> WebAssembly components are *not* the same as WebAssembly Modules (asm.js, emscripten, etc),
+> WebAssembly components are _not_ the same as WebAssembly Modules (asm.js, emscripten, etc),
 > they are much more powerful and support many more features.
 >
 > If you don't know what any of the above means, don't worry about it -- check out the [Component Model Book][cm-book],
@@ -214,7 +219,7 @@ world root {
 ```
 
 > [!NOTE]
-> The *meaning* of all of these `import`s and `export`s is somewhat out of scope for this example, so we won't discuss
+> The _meaning_ of all of these `import`s and `export`s is somewhat out of scope for this example, so we won't discuss
 > further, but please check out the [Component Model Book][cm-book] for more details.
 
 [wasm-tools]: https://github.com/bytecodealliance/wasm-tools
@@ -223,12 +228,12 @@ world root {
 
 As we noted earlier, WebAssembly Components are built against the system interfaces available in [WASI][wasi].
 
-One of the benefits of using components and WASI is that we can *reimplement* those interfaces when
+One of the benefits of using components and WASI is that we can _reimplement_ those interfaces when
 the platform changes (this is sometimes called "virtual platform layering"). The host running the WebAssembly
 component can provide dependencies as necessary.
 
 Thanks to `jco transpile` we can take our WebAssembly component (or any other WebAssembly component) and use
-it *on NodeJS*, by converting the WebAssembly component into code that `node` *can run today* and
+it _on NodeJS_, by converting the WebAssembly component into code that `node` _can run today_ and
 [providing shims/polyfills][npm-p2-shim] for WASI functionality as necessary.
 
 In practice this means producing a bundle of JS + WebAssembly Modules that can run in NodeJS:

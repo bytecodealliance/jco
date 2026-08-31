@@ -1,5 +1,10 @@
 # Node.js platform capabilities
 
+> [!WARNING]
+> Jco's Node.js built-in compatibility for components is experimental and subject
+> to change. APIs, behavior, and generated component interfaces may change
+> incompatibly without a semver-major release.
+
 This example is the integration point for Node.js APIs supported by Jco components. It is intentionally
 named for the broader Node.js platform rather than a single builtin: additional `node:*` modules can be
 added here as compatibility grows.

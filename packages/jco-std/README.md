@@ -72,6 +72,11 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 
 ## Node.js compatibility APIs
 
+> [!WARNING]
+> Jco's Node.js built-in compatibility for components is experimental and subject
+> to change. APIs, behavior, and generated component interfaces may change
+> incompatibly without a semver-major release.
+
 Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
 
 - Node's global error constructors and coded-error foundation, implemented by
