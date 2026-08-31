@@ -65,6 +65,24 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/errors.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/errors.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/errors.js"
+    "./wasi/0.2.x/node/24.x.x/dns": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dns.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/dns.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dns.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dns/promises": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dns-promises.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/dns-promises.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dns-promises.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dns/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dns-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/dns-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dns-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dns/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dns-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/dns-host-node.js"
     },
     "./wasi/0.2.x/node/24.x.x/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
