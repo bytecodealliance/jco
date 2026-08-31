@@ -310,13 +310,29 @@ export async function setupAsyncTest(args) {
  * @returns {Promise<{ componentPath: string, outputDir: string, fixtureDir: string, stdout: string, stderr: string }>}
  */
 export async function componentizeFixture(args) {
-    const { fixture, entry = "component.js", wit = "wit", world, bundle = false, extraArgs = [] } = args ?? {};
+    const {
+        fixture,
+        entry = "component.js",
+        wit = "wit",
+        world,
+        bundle = false,
+        copy = false,
+        extraArgs = [],
+    } = args ?? {};
     if (!fixture) {
         throw new Error("missing fixture directory name");
     }
-    const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, fixture);
     const outputDir = args.outputDir ?? (await getTmpDir());
     const componentPath = join(outputDir, "component.wasm");
+
+    // Componentizing a Node builtin rewrites the world in place to add its WIT import, so those
+    // fixtures are built from a copy rather than mutating the checked-in one.
+    let fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, fixture);
+    if (copy) {
+        const appDir = join(outputDir, "app");
+        await cp(fixtureDir, appDir, { recursive: true });
+        fixtureDir = appDir;
+    }
 
     const { stdout, stderr } = await exec(
         jcoPath,
@@ -332,6 +348,27 @@ export async function componentizeFixture(args) {
     );
 
     return { componentPath, outputDir, fixtureDir, stdout, stderr };
+}
+
+/**
+ * Transpile a component and make the output importable from Node.
+ *
+ * @param {object} args
+ * @param {string} args.componentPath - component to transpile
+ * @param {string} args.name - transpiled module name
+ * @param {string} [args.outputDir] - directory to transpile into (default: a temporary directory)
+ * @param {string[]} [args.extraArgs] - additional arguments, such as `--map`
+ * @returns {Promise<{ transpiledDir: string, modulePath: string }>}
+ */
+export async function transpileComponent(args) {
+    const { componentPath, name, extraArgs = [] } = args ?? {};
+    if (!componentPath || !name) {
+        throw new Error("missing component path or name");
+    }
+    const transpiledDir = args.outputDir ?? (await getTmpDir());
+    await exec(jcoPath, "transpile", componentPath, "--name", name, "--out-dir", transpiledDir, ...extraArgs);
+    await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+    return { transpiledDir, modulePath: `${pathToFileURL(transpiledDir)}/${name}.js` };
 }
 
 /**

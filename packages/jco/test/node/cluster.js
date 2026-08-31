@@ -1,67 +1,47 @@
-import { cp, readFile, symlink, writeFile } from "node:fs/promises";
+import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { assert, suite, test } from "vitest";
 
-import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
-import { exec, getTmpDir, jcoPath } from "../helpers.js";
+import { componentizeFixture, exec, transpileComponent } from "../helpers.js";
 
 /** jco-std's Node host adapter, which an application must opt into explicitly. */
 const NODE_HOST = pathToFileURL(
     fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/cluster-host-node.js", import.meta.url)),
 ).href;
 
-/**
- * Componentize a cluster fixture from a copy, so the WIT import Jco injects lands in a temporary
- * directory rather than editing the fixture in the repository.
- */
+/** Build a cluster fixture from a copy, since componentizing rewrites its world in place. */
 async function buildClusterFixture(fixture, name) {
-    const outputDir = await getTmpDir();
-    const appDir = join(outputDir, "app");
-    const componentPath = join(outputDir, "component.wasm");
-    const transpiledDir = join(outputDir, "transpiled");
-    await cp(join(COMPONENT_JS_FIXTURES_DIR, fixture), appDir, { recursive: true });
-
-    const { stderr } = await exec(
-        jcoPath,
-        "componentize",
-        join(appDir, "source.js"),
-        "--bundle",
-        "--backend",
-        "starlingmonkey",
-        "--wit",
-        join(appDir, "wit"),
-        "--world-name",
-        "test",
-        "--out",
+    const { componentPath, fixtureDir, outputDir, stderr } = await componentizeFixture({
+        fixture,
+        entry: "source.js",
+        wit: "wit",
+        world: "test",
+        bundle: true,
+        copy: true,
+        extraArgs: ["--backend", "starlingmonkey"],
+    });
+    // Transpile beside the component so a test that spawns the output can put a node_modules
+    // next to it, which is how the generated JS resolves @bytecodealliance/preview2-shim.
+    const { transpiledDir, modulePath } = await transpileComponent({
         componentPath,
-    );
-
-    await exec(
-        jcoPath,
-        "transpile",
-        componentPath,
-        "--name",
         name,
-        "--map",
-        `jco:node/cluster@0.1.0=${NODE_HOST}`,
-        "--out-dir",
-        transpiledDir,
-    );
-    await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
-    return { appDir, outputDir, transpiledDir, stderr };
+        outputDir: join(outputDir, "transpiled"),
+        extraArgs: ["--map", `jco:node/cluster@0.1.0=${NODE_HOST}`],
+    });
+    return { appDir: fixtureDir, outputDir, transpiledDir, modulePath, stderr };
 }
 
 suite("node:cluster in a component", () => {
     // TODO(unskip): use the published jco-std cluster exports once a release containing them is available.
     test.skip("componentizes and calls through the opt-in Node host", async () => {
-        const { appDir, transpiledDir, stderr } = await buildClusterFixture("node-cluster", "node-cluster");
+        const { appDir, modulePath, stderr } = await buildClusterFixture("node-cluster", "node-cluster");
 
         assert.include(stderr, "Jco added generated WIT import jco:node/cluster@0.1.0");
         assert.include(await readFile(join(appDir, "wit/component.wit"), "utf8"), "import jco:node/cluster@0.1.0;");
 
-        const component = await import(`${pathToFileURL(transpiledDir)}/node-cluster.js`);
+        const component = await import(modulePath);
         assert.deepEqual(component.run(), {
             roleChecks: 3,
             constantChecks: 3,
@@ -84,7 +64,7 @@ suite("node:cluster in a component", () => {
     // Driven from a spawned script rather than in-process: cluster.fork() re-executes the current
     // entry, so forking from inside the test runner would fork the runner itself.
     test.skip("forks a worker that runs the component and reports back", async () => {
-        const { outputDir, transpiledDir } = await buildClusterFixture("node-cluster-roundtrip", "node-cluster-rt");
+        const { outputDir, modulePath } = await buildClusterFixture("node-cluster-roundtrip", "node-cluster-rt");
 
         // The runner is a bare node process outside the workspace, so give the transpiled output a
         // node_modules to resolve @bytecodealliance/preview2-shim through.
@@ -98,7 +78,7 @@ suite("node:cluster in a component", () => {
         await writeFile(
             runnerPath,
             `
-import * as component from "${pathToFileURL(transpiledDir)}/node-cluster-rt.js";
+import * as component from "${modulePath}";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
