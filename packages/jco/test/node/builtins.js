@@ -79,6 +79,36 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("spawnSync");
     });
 
+    test("generates a capability-free adapter for node:async_hooks", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { asyncHooksModule: "/jco/node/async-hooks.js" },
+        );
+        const id = plugin.resolveId("node:async_hooks");
+        expect(id).toBe("\0jco-node-builtin:node:async_hooks");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/async-hooks.js"');
+        expect(source).toContain("AsyncLocalStorage");
+    });
+
+    test("node:async_hooks requires no WIT capability", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { asyncHooksModule: "/jco/node/async-hooks.js", onWitRequirement },
+        );
+        plugin.resolveId("node:async_hooks");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test("does not intercept the bare async_hooks specifier", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { asyncHooksModule: "/jco/node/async-hooks.js" },
+        );
+        expect(plugin.resolveId("async_hooks")).toBeNull();
+    });
+
     test("generates an adapter for node:cluster", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { clusterModule: "/jco/node/cluster.js" });
         const id = plugin.resolveId("node:cluster");
