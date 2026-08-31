@@ -129,6 +129,37 @@ suite("componentize", () => {
         }
     });
 
+    test("componentizes the same regardless of the working directory", async () => {
+        // componentize-js derives the component's path prefix, and the directory it preopens, from
+        // the working directory. Leaving that ambient made builds depend on where jco was invoked:
+        // when the system temp directory sat inside the working directory, componentization failed
+        // with `Error loading module "./index.js"`. Componentization now runs from the entry's
+        // directory unless --cwd says otherwise.
+        const outputDir = await getTmpDir();
+        const componentPath = join(outputDir, "component.wasm");
+
+        const { componentPath: fromEntryDir } = await componentizeFixture({
+            fixture: "local-dependency",
+            entry: "source.js",
+            wit: "source.wit",
+            bundle: true,
+            outputDir,
+        });
+        assert.isOk(fromEntryDir);
+
+        // Building again with the working directory pointed at a temporary directory must produce
+        // a component all the same.
+        await componentizeFixture({
+            fixture: "local-dependency",
+            entry: "source.js",
+            wit: "source.wit",
+            bundle: true,
+            extraArgs: ["--cwd", outputDir],
+            outputDir: await getTmpDir(),
+        });
+        assert.isOk(componentPath);
+    });
+
     test("rejects TypeScript declarations as component entries", async () => {
         await expect(
             componentizeFixture({

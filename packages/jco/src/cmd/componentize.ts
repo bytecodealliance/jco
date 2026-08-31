@@ -1,5 +1,5 @@
 import { stat, readFile, writeFile } from "node:fs/promises";
-import { resolve, basename, extname } from "node:path";
+import { resolve, basename, dirname, extname } from "node:path";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
@@ -19,6 +19,16 @@ type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm";
 export interface ComponentizeOptions {
     wit: string;
     out: string;
+    /**
+     * Directory componentization runs from.
+     *
+     * Defaults to the entry module's directory rather than the process working directory, so a
+     * build does not depend on where the command was invoked from. componentize-js derives the
+     * path prefix a component sees, and the directory it preopens, from the working directory;
+     * leaving that ambient makes builds non-reproducible, and when the system temporary directory
+     * happens to sit inside it, componentization fails outright.
+     */
+    cwd?: string;
     worldName?: string;
     bundle?: boolean;
     bundleConfig?: string;
@@ -169,7 +179,13 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
     // Build the component
     let component;
     const backendArgs = { source, sourceName, jsSource, witPath, opts };
+    // componentize-js reads the process working directory to decide the path prefix baked into
+    // the component and the directory it preopens. Pin it so the build does not depend on where
+    // the command ran, restoring the caller's directory afterwards.
+    const componentizeCwd = resolve(opts.cwd ?? dirname(resolve(jsSource)));
+    const callerCwd = process.cwd();
     try {
+        process.chdir(componentizeCwd);
         switch (backend) {
             case "quickjs":
                 component = await componentizeQJS(backendArgs);
@@ -192,6 +208,8 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             }
         }
         throw err;
+    } finally {
+        process.chdir(callerCwd);
     }
 
     // Write out the component
