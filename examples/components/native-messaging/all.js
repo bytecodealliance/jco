@@ -5,6 +5,8 @@ import { testNativeHostProtocol } from './test/protocol.js';
 
 const launcher = fileURLToPath(new URL('./scripts/launch-host.mjs', import.meta.url));
 
-await testNativeHostProtocol(launcher);
-await testBrowser('firefox', launcher);
-await testBrowser('chromium', launcher);
+await Promise.all([
+    testNativeHostProtocol(launcher),
+    testBrowser('firefox', launcher),
+    testBrowser('chromium', launcher),
+]);

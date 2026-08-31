@@ -8,12 +8,49 @@ const COMMA = 0x2c;
 const QUOTE = 0x22;
 const BACKSLASH = 0x5c;
 
+// Read exactly the requested bytes, or return null if the input closes early.
+function readExact(input, length) {
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+
+    while (offset < length) {
+        let chunk;
+        try {
+            chunk = input.blockingRead(BigInt(length - offset));
+        } catch {
+            return null;
+        }
+
+        if (chunk.length === 0) {
+            return null;
+        }
+
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+    }
+
+    return bytes;
+}
+
+// Read one length-prefixed native-messaging payload from the input stream.
+export function readMessage(input) {
+    const header = readExact(input, 4);
+    if (header === null) {
+        return null;
+    }
+
+    const length = new DataView(header.buffer, header.byteOffset, 4).getUint32(0, true);
+    return readExact(input, length);
+}
+
+// Write bytes in chunks accepted by the WASI output stream.
 function writeAll(output, bytes) {
     for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
         output.blockingWriteAndFlush(bytes.subarray(offset, offset + WRITE_CHUNK_BYTES));
     }
 }
 
+// Prefix one payload with its native-messaging length and write it.
 function writeFrame(output, body) {
     const frame = new Uint8Array(4 + body.length);
     new DataView(frame.buffer).setUint32(0, body.length, true);
@@ -22,8 +59,7 @@ function writeFrame(output, body) {
     output.blockingFlush();
 }
 
-// Find a comma between top-level array elements. Commas inside nested values
-// or JSON strings are ignored, so every emitted chunk remains valid JSON.
+// Find a split between top-level array elements without splitting nested JSON.
 function findSplit(bytes, start, preferredEnd) {
     let depth = 0;
     let inString = false;
@@ -61,6 +97,7 @@ function findSplit(bytes, start, preferredEnd) {
     return bytes.length - 1 <= preferredEnd ? bytes.length - 1 : -1;
 }
 
+// Write one response, splitting oversized top-level arrays into valid frames.
 export function writeMessage(output, message) {
     if (message.length <= MAXIMUM_RESPONSE_BYTES) {
         writeFrame(output, message);
