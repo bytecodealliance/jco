@@ -185,12 +185,31 @@ stream model.
 ### Clusters and host capabilities
 
 A guest has no process model, so `node:cluster` follows the same pattern as
-`node:child_process`: bundled source that imports it causes Jco to ensure the world
-declares `jco:node/cluster@0.1.0`, and the application decides separately whether to
-grant it by mapping a host adapter at transpile time.
+`node:child_process`. When bundled source imports it, Jco ensures the selected world
+declares the interface, editing the `.wit` file in place, installing the definition under
+`deps/jco-node-0.1.0`, and printing a CLI warning naming the changed files:
 
-Because a transpiled component is itself a Node process, `cluster.fork()` re-executes
-the entry, so a forked worker runs the component again and observes itself as a worker.
+```wit
+world app {
+  import jco:node/cluster@0.1.0;
+  // component imports and exports...
+}
+```
+
+Declaring or generating the import does not grant host access. Jco's default
+transpilation map uses a provider that throws `ERR_JCO_CLUSTER_ADAPTER_REQUIRED`, so an
+application must make the security decision explicitly, for example by mapping the Node
+host provider:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/cluster@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host/node'
+```
+
+That produces the call path guest `node:cluster` → WIT capability → host adapter → Node
+`node:cluster`. Because a transpiled component is itself a Node process, `cluster.fork()`
+re-executes the entry, so a forked worker runs the component again and observes itself as
+a worker.
 
 Two differences from Node are unavoidable:
 

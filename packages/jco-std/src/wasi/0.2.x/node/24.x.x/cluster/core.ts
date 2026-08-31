@@ -1,12 +1,12 @@
 import { EventEmitter } from "./emitter.js";
 
 import { deprecated, unsupported } from "./errors.js";
-import type { ClusterHost, HostEvent, HostSettings, WorkerInfo } from "./host.js";
+import type { ClusterHost, HostEvent, HostSettings, WorkerInfo } from "./types.js";
 import { Worker } from "./worker.js";
 
 export { EventEmitter } from "./emitter.js";
 export { Worker } from "./worker.js";
-export type { ClusterHost, HostEvent, HostSettings, WorkerInfo, WorkerState } from "./host.js";
+export type { ClusterHost, HostEvent, HostSettings, WorkerInfo, WorkerState } from "./types.js";
 export { DEPRECATED_CODE, UNSUPPORTED_CODE } from "./errors.js";
 
 /** Node's scheduling policy constants. */
