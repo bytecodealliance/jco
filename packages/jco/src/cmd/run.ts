@@ -70,7 +70,7 @@ export async function run(componentPath: string, args: string[], opts: RunOption
       process.exit(1);
     }
     try {
-      mod.run.run();
+      await mod.run.run();
       // for stdout flushing
       await new Promise(resolve => setTimeout(resolve));
       process.exit(0);
