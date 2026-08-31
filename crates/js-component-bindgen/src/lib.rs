@@ -321,6 +321,10 @@ pub(crate) fn requires_async_porcelain(
     id: &str,
     async_funcs: &HashSet<String>,
 ) -> bool {
+    if async_funcs.contains("*") {
+        return true;
+    }
+
     let name = match func {
         FunctionIdentifier::Fn(func) => func.name.as_str(),
         FunctionIdentifier::CanonFnName(name) => name,
@@ -410,5 +414,20 @@ mod tests {
         assert!(source.contains("export const Permissions: {"));
         assert!(source.contains("readonly Read: bigint"));
         assert!(source.contains("readonly Write: bigint"));
+    }
+
+    #[test]
+    fn wildcard_marks_every_function_async() {
+        let async_funcs = HashSet::from(["*".to_string()]);
+        assert!(requires_async_porcelain(
+            FunctionIdentifier::CanonFnName("query"),
+            "jco:node/dns@0.1.0",
+            &async_funcs,
+        ));
+        assert!(requires_async_porcelain(
+            FunctionIdentifier::CanonFnName("run"),
+            "example:component/run@1.0.0",
+            &async_funcs,
+        ));
     }
 }
