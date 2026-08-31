@@ -103,17 +103,18 @@ is planned.
 > It is the only such alias: modules added after the split, including `node:assert`, are
 > available only under a versioned entry point.
 
-| Imports                                           | Implementation                                                         | Notes                                                                                                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`              | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                      |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                  |
-| `node:domain`                                     | _(refused)_                                                            | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`. |
-| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`         | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.      |
-| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel` | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                         |
-| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`       | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                |
-| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`             | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                 |
-| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                 | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                 |
-| `node:querystring`                                | unenv's Node-derived querystring implementation                        | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                      |
+| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                        |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                         |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                     |
+| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.    |
+| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.         |
+| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                            |
+| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                   |
+| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                    |
+| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                    |
+| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability. |
+| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                         |
 
 ### Errors globals
 
@@ -307,6 +308,35 @@ the `start`/`end`/`asyncStart`/`asyncEnd`/`error` sub-channels emitted in Node's
 `AsyncLocalStorage`. Stores are therefore scoped synchronously: a bound store is visible while
 subscribers run and does not follow an `await`. See the async hooks section above for why.
 
+### Events
+
+`node:events` is two pieces. The `EventEmitter` itself comes from unenv, audited against Node 24:
+`on`/`emit`, one-shot `once`, listener ordering under `prependListener`, `eventNames`,
+`removeAllListeners`, the per-emitter max-listener methods, and an unhandled `error` throwing all
+match Node, as do `once()`, `on()`'s async iterator, `getEventListeners`, `addAbortListener` and
+`EventEmitterAsyncResource`.
+
+Three module-level functions do not, and Jco implements them in jco-std rather than exporting
+something that fails when called:
+
+| Entry point | unenv | Jco |
+| --- | --- | --- |
+| `events.listenerCount(emitter, eventName)` | throws `[unenv] node:events.listenerCount is not implemented yet!` | delegates to the emitter's own `listenerCount`, as Node does, so a subclass that overrides it is honoured |
+| `events.setMaxListeners(n[, ...targets])` | throws `[unenv] node:events.setMaxListeners is not implemented yet!` | sets the limit on `EventEmitter`s and `EventTarget`s, or the process-wide default when given no targets |
+| `events.getMaxListeners(target)` | throws for an `EventTarget`; only handles emitters | reads either, falling back to the current default |
+
+Argument validation matches Node's, `ERR_INVALID_ARG_TYPE` and `ERR_OUT_OF_RANGE` messages
+included.
+
+Node's module object *is* the `EventEmitter` class, so `events === events.EventEmitter` holds here
+too: the adapter keeps the class as the default export, and installs the three functions above as
+statics on it so both access paths reach the working versions.
+
+Note for anyone reading jco-std: it carries a separate, deliberately minimal `EventEmitter` of its
+own for shims such as `node:cluster`. jco-std does not depend on unenv, and shim code importing a
+`node:*` builtin would rely on a bundler rewriting it, which is not true of every way jco-std is
+consumed. The two are independent by design.
+
 ### Buffer
 
 The Buffer core comes from `unenv`'s wrapper around the MIT-licensed Feross
@@ -391,7 +421,6 @@ the module or upstream project.
 
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:events`                             | Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.                                                                                         |
 | `node:readline`, `node:readline/promises` | Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.                                                                                                           |
 | `node:timers/promises`                    | A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.                                                                                                                       |
 | `node:trace_events`, `node:tty`           | The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.                                                                                                |
