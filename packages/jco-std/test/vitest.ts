@@ -11,7 +11,6 @@ export default defineConfig({
     printConsoleTrace: true,
     passWithNoTests: false,
     include: ["test/e2e/**/*.ts", "test/wasi/0.2.x/node/24.x.x/**/*.ts"],
-    // Helper modules live beside the suites they serve but define no tests of their own.
     exclude: ["test/**/helpers/**"],
     setupFiles: ["test/meta-resolve-stub.ts"],
     testTimeout: DEFAULT_TIMEOUT_MS,
