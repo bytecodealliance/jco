@@ -4,6 +4,7 @@ import type { ExternalOption, RolldownOptions, RolldownPluginOption } from "roll
 export interface BundleComponentSourceOptions {
     aliases?: Record<string, string | false | string[]>;
     external?: ExternalOption[];
+    inject?: Record<string, string | [string, string]>;
     plugins?: RolldownPluginOption[];
     config?: RolldownOptions;
     typescript?: boolean;
@@ -63,6 +64,7 @@ export async function loadBundleConfig(configPath: string): Promise<RolldownOpti
  * @param {{
  *   aliases?: Record<string, string | false | string[]>,
  *   external?: Array<string | RegExp>,
+ *   inject?: Record<string, string | [string, string]>,
  *   plugins?: Array<import("rolldown").RolldownPluginOption>,
  *   config?: import("rolldown").RolldownOptions,
  *   typescript?: boolean,
@@ -104,6 +106,12 @@ export async function bundleComponentSource(
         resolve: {
             ...config.resolve,
             alias: aliases,
+        },
+        transform: {
+            ...config.transform,
+            // Jco supplies defaults, while an explicit bundle configuration
+            // remains able to replace any individual injected global.
+            inject: { ...options.inject, ...config.transform?.inject },
         },
     });
 
