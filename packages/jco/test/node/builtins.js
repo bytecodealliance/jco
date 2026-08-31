@@ -79,6 +79,30 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("spawnSync");
     });
 
+    test("generates an adapter for node:domain that refuses at runtime", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { domainModule: "/jco/node/domain.js" });
+        const id = plugin.resolveId("node:domain");
+        expect(id).toBe("\0jco-node-builtin:node:domain");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/domain.js"');
+        expect(source).toContain("createDomain");
+    });
+
+    test("node:domain requires no WIT capability", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { domainModule: "/jco/node/domain.js", onWitRequirement },
+        );
+        plugin.resolveId("node:domain");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test("does not intercept the bare domain specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { domainModule: "/jco/node/domain.js" });
+        expect(plugin.resolveId("domain")).toBeNull();
+    });
+
     test("generates a capability-free adapter for node:async_hooks", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
