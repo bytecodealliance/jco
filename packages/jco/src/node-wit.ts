@@ -45,6 +45,18 @@ export const CONSOLE_WIT_REQUIREMENT: NodeWitRequirement = {
     dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/console.wit", import.meta.url))],
 };
 
+export const DNS_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:dns",
+    witImport: "jco:node/dns@0.1.0",
+    dependencyDirectory: "jco-node-0.1.0",
+    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/dns.wit", import.meta.url))],
+};
+
+export const DNS_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
+    ...DNS_WIT_REQUIREMENT,
+    nodeSpecifier: "node:dns/promises",
+};
+
 export interface WitInjectionResult {
     witPath: string;
     worldFile: string;
