@@ -22,6 +22,7 @@ const CONSOLE_SPECIFIER = "node:console";
 const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const DOMAIN_SPECIFIER = "node:domain";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
+const EVENTS_SPECIFIER = "node:events";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -205,6 +206,8 @@ export interface NodeBuiltinOptions {
     diagnosticsChannelModule?: string;
     /** Path to jco-std's versioned Errors globals module (overridable for tests) */
     errorsModule?: string;
+    /** Path to jco-std's versioned `node:events` module (overridable for tests) */
+    eventsModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -265,6 +268,39 @@ export {
     executionAsyncResource,
     triggerAsyncId,
 } from ${JSON.stringify(asyncHooksModule)};
+`;
+}
+
+/**
+ * Source of the `node:events` adapter.
+ *
+ * unenv's `EventEmitter` is faithful to Node and is reused whole, including `once`, `on`,
+ * `getEventListeners`, `addAbortListener` and `EventEmitterAsyncResource`. Three module-level
+ * functions are not: `listenerCount` and `setMaxListeners` are `notImplemented` stubs that throw
+ * when called, and `getMaxListeners` throws when handed an `EventTarget`. jco-std implements those
+ * three against the core, so guests get a complete module rather than one that fails at runtime.
+ *
+ * @param eventsCoreModule - unenv's `node:events`, supplying `EventEmitter`
+ * @param eventsModule - jco-std's `completeEvents`
+ */
+function eventsAdapter(eventsCoreModule: string, eventsModule: string): string {
+    return `
+import { completeEvents } from ${JSON.stringify(eventsModule)};
+import events from ${JSON.stringify(eventsCoreModule)};
+export * from ${JSON.stringify(eventsCoreModule)};
+const completed = completeEvents(events);
+// Explicit exports shadow the star re-export above, replacing the stubs with the real thing.
+export const getMaxListeners = completed.getMaxListeners;
+export const listenerCount = completed.listenerCount;
+export const setMaxListeners = completed.setMaxListeners;
+// Node's module object *is* the EventEmitter class, so \`events === events.EventEmitter\` holds and
+// every module export is also a static. Anything reaching these through the class -- or through a
+// captured default export -- has to see the completed versions too. Defined rather than assigned:
+// unenv exposes \`getMaxListeners\` as a getter-only accessor, so assigning to it throws.
+for (const [name, value] of Object.entries(completed)) {
+    Object.defineProperty(events, name, { configurable: true, value, writable: true });
+}
+export default events;
 `;
 }
 
@@ -486,6 +522,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const asyncHooksModule = () =>
         options.asyncHooksModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks"));
+    const eventsModule = () =>
+        options.eventsModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events"));
     const clusterModule = () =>
         options.clusterModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
@@ -520,6 +559,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === ASYNC_HOOKS_SPECIFIER) {
                 // No onWitRequirement: this needs no host capability.
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === EVENTS_SPECIFIER) {
+                // No onWitRequirement: in-process emitters need no host capability.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CLUSTER_SPECIFIER) {
@@ -566,6 +609,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === ASYNC_HOOKS_SPECIFIER) {
                 return asyncHooksAdapter(asyncHooksModule());
+            }
+            if (value === EVENTS_SPECIFIER) {
+                return eventsAdapter(unenvModule(EVENTS_SPECIFIER, options), eventsModule());
             }
             if (value === CLUSTER_SPECIFIER) {
                 return clusterAdapter(clusterModule());
