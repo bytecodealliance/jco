@@ -103,18 +103,19 @@ is planned.
 > It is the only such alias: modules added after the split, including `node:assert`, are
 > available only under a versioned entry point.
 
-| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                        |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                         |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                     |
-| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.    |
-| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.         |
-| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                            |
-| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                   |
-| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                    |
-| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                    |
-| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability. |
-| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                         |
+| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                               |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                            |
+| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.           |
+| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                |
+| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                                   |
+| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                          |
+| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                           |
+| `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider. |
+| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                           |
+| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.        |
+| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                |
 
 ### Errors globals
 
@@ -262,6 +263,31 @@ These throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than failing quietly:
 `cluster.isMaster` and `cluster.setupMaster()` are deprecated in Node, so they throw
 `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API` and point at `isPrimary`/`setupPrimary`.
 
+### Console and host capabilities
+
+Writing to a console is a host capability, not a portable one: a component has no
+stdout of its own. `node:console` therefore resolves against
+`jco:node/console@0.1.0`, which an application must provide.
+
+It is **denied by default**. Transpiling maps the capability to jco-std's deny
+host unless told otherwise, and every call -- `write`, `isTerminal`, `colorDepth`
+-- throws `ERR_JCO_CONSOLE_ADAPTER_REQUIRED`. That is deliberate: a component that
+silently discarded its output would be harder to diagnose than one that says the
+capability is missing.
+
+To grant it, map the interface to a provider. jco-std ships one for Node, which
+writes through to the real `process.stdout`/`process.stderr` and reports their TTY
+status and color depth:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/console@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host/node'
+```
+
+Formatting is done in the guest -- `Console`, the `log`/`warn`/`error` family,
+`group` indentation, `count`, `time`, `table` and `dir` all run guest-side, and only
+the finished string crosses the boundary.
+
 ### Async hooks and synchronous scopes
 
 `AsyncLocalStorage` works within a synchronous scope: `run`, `getStore`, `exit`, `enterWith`,
@@ -321,7 +347,7 @@ something that fails when called:
 
 | Entry point | unenv | Jco |
 | --- | --- | --- |
-| `events.listenerCount(emitter, eventName)` | throws `[unenv] node:events.listenerCount is not implemented yet!` | delegates to the emitter's own `listenerCount`, as Node does, so a subclass that overrides it is honoured |
+| `events.listenerCount(emitter, eventName)` | throws `[unenv] node:events.listenerCount is not implemented yet!` | delegates to the emitter's own `listenerCount`, as Node does, so a subclass that overrides it is honored |
 | `events.setMaxListeners(n[, ...targets])` | throws `[unenv] node:events.setMaxListeners is not implemented yet!` | sets the limit on `EventEmitter`s and `EventTarget`s, or the process-wide default when given no targets |
 | `events.getMaxListeners(target)` | throws for an `EventTarget`; only handles emitters | reads either, falling back to the current default |
 
@@ -410,9 +436,11 @@ Jco keeps a stronger local implementation or leaves the module disabled.
 
 ## Reviewed modules that are not enabled
 
-The pinned unenv release currently supplies 55 public `node:` aliases. Jco exposes
-seven of them: five through Jco implementations and two through audited unenv
-cores. The other aliases were reviewed but are not automatically resolved.
+The pinned unenv release currently supplies 55 public `node:` aliases. Jco resolves
+eleven modules: eight implemented in jco-std (one of which, `node:domain`, is a
+deliberate refusal), two layering a Jco implementation over an audited unenv core,
+and one audited unenv module used as-is. The other aliases were reviewed but are
+not automatically resolved.
 
 The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.
@@ -432,7 +460,7 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:console`, `node:crypto`, `node:dgram`,
+`node:crypto`, `node:dgram`,
 `node:dns`, `node:dns/promises`, `node:fs`, `node:fs/promises`, `node:http`,
 `node:http2`, `node:https`, `node:inspector`, `node:inspector/promises`,
 `node:module`, `node:net`, `node:os`, `node:perf_hooks`, `node:process`,
