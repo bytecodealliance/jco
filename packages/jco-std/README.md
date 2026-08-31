@@ -31,6 +31,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/diagnostics-channel` | `node:diagnostics_channel` guest adapter, Node 24                             |
 | `wasi/0.2.x/node/24.x.x/child-process`       | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
 | `wasi/0.2.x/node/24.x.x/cluster`             | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
+| `wasi/0.2.x/node/24.x.x/events`              | `node:events` entry points Jco implements over a supplied emitter core        |
 
 [express]: https://expressjs.com
 
@@ -100,7 +101,11 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   application-provided `jco:node/console@0.1.0` capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
-- `node:querystring`, provided by Jco's audited unenv compatibility layer.
+- `node:querystring`, provided by Jco's audited unenv compatibility layer;
+- `node:events`, whose `EventEmitter` comes from Jco's audited unenv
+  compatibility layer, completed by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` for the three
+  module-level functions unenv leaves unimplemented.
 
 Jco resolves Node compatibility modules in quality order:
 
