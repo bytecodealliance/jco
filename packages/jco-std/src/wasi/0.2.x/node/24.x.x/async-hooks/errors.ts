@@ -1,5 +1,7 @@
+import { unsupportedNodeApi } from "../errors/core.js";
+
 /** Error code carried by every unsupported-API failure Jco raises for Node builtins. */
-export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API";
+export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API" as const;
 
 /**
  * Thrown for `node:async_hooks` behavior that cannot work in a component.
@@ -7,14 +9,11 @@ export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API";
  * @param api - the public API being used, as a user would write it
  * @param reason - why it cannot work here
  */
-export function unsupported(api: string, reason: string): Error & { code: string } {
-  const error = new Error(
-    `${api} is not supported in a WebAssembly component: ${reason}`,
-  ) as Error & {
-    code: string;
-  };
-  error.code = UNSUPPORTED_CODE;
-  return error;
+export function unsupported(
+  api: string,
+  reason: string,
+): Error & { code: typeof UNSUPPORTED_CODE } {
+  return unsupportedNodeApi(api, reason);
 }
 
 /**
