@@ -1,43 +1,53 @@
 import { describe, expect, test } from "vitest";
-import { createCluster } from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/core.js";
-import { FakeClusterHost } from "../helpers/cluster.js";
 
-describe("cluster.Worker", () => {
-  test("send encodes the message as JSON for the host", () => {
-    const host = new FakeClusterHost();
-    const worker = createCluster(host).fork();
-    expect(worker.send({ hello: "world" })).toBe(true);
-    expect(host.sent).toEqual([{ id: worker.id, json: '{"hello":"world"}' }]);
+import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster-host-node.js";
+import { Worker } from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/worker.js";
+import type { WorkerInfo } from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/types.js";
+
+// A worker snapshot of the shape the Node host reports. Constructing one directly keeps these
+// tests off cluster.fork(), which would re-execute the test runner.
+const snapshot: WorkerInfo = {
+  id: 4242,
+  state: "online",
+  exitedAfterDisconnect: false,
+  connected: true,
+  dead: false,
+};
+
+describe("cluster.Worker against the Node host", () => {
+  test("exposes the id the host reported", () => {
+    expect(new Worker(nodeHost, snapshot).id).toBe(4242);
   });
 
-  test("kill defaults to SIGTERM and honours an explicit signal", () => {
-    const host = new FakeClusterHost();
-    const worker = createCluster(host).fork();
-    worker.kill();
-    worker.kill("SIGKILL");
-    expect(host.calls).toContain(`kill(${worker.id},SIGTERM)`);
-    expect(host.calls).toContain(`kill(${worker.id},SIGKILL)`);
-  });
-
-  test("destroy is an alias of kill", () => {
-    const host = new FakeClusterHost();
-    const worker = createCluster(host).fork();
-    worker.destroy("SIGHUP");
-    expect(host.calls).toContain(`kill(${worker.id},SIGHUP)`);
-  });
-
-  test("disconnect returns the worker for chaining", () => {
-    const host = new FakeClusterHost();
-    const worker = createCluster(host).fork();
-    expect(worker.disconnect()).toBe(worker);
-    expect(host.calls).toContain(`disconnectWorker(${worker.id})`);
-  });
-
-  test("state is read from the host, not cached", () => {
-    const host = new FakeClusterHost();
-    const worker = createCluster(host).fork();
-    expect(worker.state).toBe("none");
-    host.workers.set(worker.id, { ...host.getWorker(worker.id), state: "online" });
+  test("falls back to the last snapshot when the host no longer knows the worker", () => {
+    // The Node host cannot answer for an id it never forked, which is what a worker sees after
+    // it exits; the last known state has to remain readable.
+    const worker = new Worker(nodeHost, snapshot);
     expect(worker.state).toBe("online");
+    expect(worker.isConnected()).toBe(true);
+    expect(worker.isDead()).toBe(false);
+  });
+
+  test("worker.process explains that a ChildProcess cannot cross the boundary", () => {
+    const worker = new Worker(nodeHost, snapshot);
+    expect(() => worker.process).toThrow(
+      expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
+    );
+    expect(() => worker.process).toThrowError(/ChildProcess/);
+  });
+
+  test("send rejects values JSON cannot represent, before reaching the host", () => {
+    const worker = new Worker(nodeHost, snapshot);
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(() => worker.send(cyclic)).toThrowError(/JSON/);
+    expect(() => worker.send(() => undefined)).toThrowError(/JSON/);
+  });
+
+  test("operations on a worker the host does not know fail loudly", () => {
+    const worker = new Worker(nodeHost, snapshot);
+    expect(() => worker.send({ ok: true })).toThrow();
+    expect(() => worker.disconnect()).toThrow();
+    expect(() => worker.kill()).toThrow();
   });
 });
