@@ -25,6 +25,39 @@ const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
+const ERROR_GLOBALS_SPECIFIER = "jco:node-error-globals";
+const ERROR_GLOBALS_MODULE = `${VIRTUAL_PREFIX}error-globals`;
+
+const NODE_ERROR_GLOBAL_NAMES = [
+    "AggregateError",
+    "DOMException",
+    "Error",
+    "EvalError",
+    "RangeError",
+    "ReferenceError",
+    "SuppressedError",
+    "SyntaxError",
+    "TypeError",
+    "URIError",
+] as const;
+
+export interface NodeErrorGlobalsOptions {
+    /** Path to jco-std's versioned Errors globals module (overridable for tests). */
+    errorsModule?: string;
+}
+
+/**
+ * Rolldown injection map for Node's global error constructors.
+ *
+ * Injection is demand-driven: if source never references one of these globals,
+ * Rolldown does not include the errors module in the generated bundle.
+ */
+export function nodeErrorGlobals(
+    options: NodeErrorGlobalsOptions = {},
+): Record<string, [module: string, exportName: string]> {
+    const errorsModule = options.errorsModule ?? ERROR_GLOBALS_SPECIFIER;
+    return Object.fromEntries(NODE_ERROR_GLOBAL_NAMES.map((name) => [name, [errorsModule, name]]));
+}
 
 let defaultUnenvAliases: Readonly<Record<string, string>> | undefined;
 
@@ -170,6 +203,8 @@ export interface NodeBuiltinOptions {
     domainModule?: string;
     /** Path to jco-std's versioned `node:diagnostics_channel` module (overridable for tests) */
     diagnosticsChannelModule?: string;
+    /** Path to jco-std's versioned Errors globals module (overridable for tests) */
+    errorsModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -460,11 +495,17 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const consoleModule = () =>
         options.consoleModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console"));
+    const errorsModule = () =>
+        options.errorsModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors"));
     return {
         name: "jco-node-builtins",
         resolveId(id) {
             if (id.startsWith(VIRTUAL_PREFIX)) {
                 return id;
+            }
+            if (id === ERROR_GLOBALS_SPECIFIER) {
+                return ERROR_GLOBALS_MODULE;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -510,6 +551,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             const value = id.slice(VIRTUAL_PREFIX.length);
             if (id === UNENV_BUFFER_CORE) {
                 return unenvBufferCore(options);
+            }
+            if (id === ERROR_GLOBALS_MODULE) {
+                return `export * from ${JSON.stringify(errorsModule())};`;
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
