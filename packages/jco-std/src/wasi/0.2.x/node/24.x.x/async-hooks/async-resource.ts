@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "./async-local-storage.js";
 import { unsupported } from "./errors.js";
+import { invalidArgType } from "../errors/core.js";
 
 let nextAsyncId = 1;
 
@@ -23,13 +24,7 @@ export class AsyncResource {
 
   constructor(type: string, options?: { triggerAsyncId?: number }) {
     if (typeof type !== "string") {
-      const error = new TypeError(
-        `The "type" argument must be of type string. Received ${typeof type}`,
-      ) as TypeError & {
-        code: string;
-      };
-      error.code = "ERR_INVALID_ARG_TYPE";
-      throw error;
+      throw invalidArgType("type", "string", type);
     }
     this.#type = type;
     this.#asyncId = nextAsyncId++;
