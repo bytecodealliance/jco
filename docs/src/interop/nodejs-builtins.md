@@ -113,6 +113,7 @@ is planned.
 | `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                          |
 | `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                           |
 | `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider. |
+| `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                           |
 | `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.        |
 | `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                |
@@ -362,6 +363,28 @@ Note for anyone reading jco-std: it carries a separate, deliberately minimal `Ev
 own for shims such as `node:cluster`. jco-std does not depend on unenv, and shim code importing a
 `node:*` builtin would rely on a bundler rewriting it, which is not true of every way jco-std is
 consumed. The two are independent by design.
+
+### DNS and host capabilities
+
+`node:dns` and `node:dns/promises` share one guest implementation and the
+`jco:node/dns@0.1.0` capability. Jco adds that import and its `dns.wit`
+dependency when bundled source uses either specifier. The default provider throws
+`ERR_JCO_DNS_ADAPTER_REQUIRED`; applications opt into Node name resolution with:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
+```
+
+The Node provider runs the real `node:dns/promises` operations in a worker so the
+preview2 WIT call can remain synchronous while c-ares progresses. Callback APIs
+retain callback delivery in the guest, and the promises subpath shares server and
+default-result-order state with the main module.
+
+`Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`. The synchronous WIT
+boundary does not expose an outstanding c-ares request that a later guest call
+could cancel. The provider boundary otherwise remains Node-independent, leaving
+room for a future browser implementation.
 
 ### Buffer
 

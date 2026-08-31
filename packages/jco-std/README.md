@@ -19,12 +19,13 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 ## HTTP
 
 | Export                                       | Description                                                                   |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
+|----------------------------------------------|-------------------------------------------------------------------------------|
 | `http/adapters/hono`                         | Enables easier building of [Hono][hono] HTTP servers                          |
 | `http/adapters/express`                      | Provides a simple [Express][express]-like interface for building HTTP servers |
 | `wasi/0.2.x/node/24.x.x/assert`              | `node:assert` adapter, Node 24 on WASI p2                                     |
 | `wasi/0.2.x/node/24.x.x/console`             | `node:console` guest adapter over an explicit host capability                 |
 | `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
+| `wasi/0.2.x/node/24.x.x/dns`                 | `node:dns` guest adapter over an explicit host capability                     |
 | `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
 | `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
@@ -99,6 +100,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - `node:console`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console` and the
   application-provided `jco:node/console@0.1.0` capability;
+- `node:dns` and `node:dns/promises`, implemented by the versioned DNS adapter
+  and the application-provided `jco:node/dns@0.1.0` capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
@@ -286,6 +289,42 @@ jco transpile component.wasm \
 The guest boundary contains only a stream selector, strings, and terminal
 metadata queries. It does not expose Node stream objects, so a browser console
 provider can be added later without changing component-facing code.
+
+### DNS
+
+Application source continues to use ordinary Node imports:
+
+```js
+import dns from "node:dns";
+import dnsPromises from "node:dns/promises";
+
+export function configuredServers() {
+  return [...dns.getServers(), ...dnsPromises.getServers()];
+}
+```
+
+Bundle the source when creating the component so Jco can replace both imports:
+
+```console
+jco componentize component.js --wit wit --world-name component --bundle -o component.wasm
+```
+
+If the selected world does not already import `jco:node/dns@0.1.0`, Jco adds the
+generated import and `dns.wit` dependency and warns about the source changes.
+Repeated builds preserve an existing import and do not add duplicates.
+
+DNS access is denied by default with `ERR_JCO_DNS_ADAPTER_REQUIRED`. A Node host
+can explicitly grant access when transpiling:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
+```
+
+The opt-in provider delegates queries to Node's real `node:dns` implementation.
+`Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`: preview2's synchronous
+component boundary cannot expose an in-flight c-ares request for later cancellation.
+The WIT boundary is runtime-neutral so a browser DNS provider can be added later.
 
 # License
 
