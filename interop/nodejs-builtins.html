@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-db3296f2.js";
+            window.path_to_searchindex_js = "../searchindex-3479c582.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -265,6 +265,7 @@ available only under a versioned entry point.</p>
 <tbody>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
+<tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
 </tbody>
@@ -293,6 +294,39 @@ world must import exactly one compatible version when it uses <code>node:path</c
 <p>Jco selects the adapter matching the version in the world. A component that only
 uses capability-free built-ins such as assert, Buffer, or querystring does not
 need this import.</p>
+<h3 id="child-processes-and-host-capabilities"><a class="header" href="#child-processes-and-host-capabilities">Child processes and host capabilities</a></h3>
+<p>A WebAssembly guest cannot spawn a process itself. When bundled source imports
+<code>node:child_process</code>, Jco ensures that the selected world declares the dedicated
+interface:</p>
+<pre><code class="language-wit">world app {
+  import jco:node/child-process@0.1.0;
+  // component imports and exports...
+}
+</code></pre>
+<p>If the selected world does not already contain the import, Jco edits its <code>.wit</code>
+file in place, adds a comment identifying the generated line, installs the
+interface definition under <code>deps/jco-node-0.1.0</code>, and prints a CLI warning naming
+the changed files. This makes the capability change visible in the application’s
+source control. <code>--world</code> is honored when a package defines multiple worlds, and
+repeated componentization does not add duplicate imports or dependencies.</p>
+<p>The interface definition also ships in <code>jco-std</code> under <code>wit/node-0.1.0</code>.
+Declaring or generating the import does not grant host access: Jco’s default
+transpilation map uses a provider that throws
+<code>ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED</code>. An application must make the security
+decision explicitly, for example by mapping the Node host provider:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/child-process@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host/node'
+</code></pre>
+<p>That produces the call path guest <code>node:child_process</code> → WIT capability → host
+adapter → Node <code>node:child_process</code>.</p>
+<p>The current interface supports <code>spawnSync</code>, <code>execFileSync</code>, and <code>execSync</code>,
+including buffered input/output, encoding, cwd, environment, shell, stdio,
+timeout, signal, identity, and Windows options. <code>spawn</code>, callback-based <code>exec</code>
+and <code>execFile</code>, <code>ChildProcess</code>, and <code>fork</code>/IPC are present but throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. A synchronous WIT function cannot faithfully
+carry Node callbacks, lifecycle events, or interactive streams; those APIs stay
+explicitly unavailable until the capability grows an asynchronous resource and
+stream model.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
@@ -376,7 +410,7 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:child_process</code>, <code>node:cluster</code>, <code>node:console</code>, <code>node:crypto</code>, <code>node:dgram</code>,
+<p><code>node:cluster</code>, <code>node:console</code>, <code>node:crypto</code>, <code>node:dgram</code>,
 <code>node:dns</code>, <code>node:dns/promises</code>, <code>node:fs</code>, <code>node:fs/promises</code>, <code>node:http</code>,
 <code>node:http2</code>, <code>node:https</code>, <code>node:inspector</code>, <code>node:inspector/promises</code>,
 <code>node:module</code>, <code>node:net</code>, <code>node:os</code>, <code>node:perf_hooks</code>, <code>node:process</code>,

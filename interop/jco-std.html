@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-db3296f2.js";
+            window.path_to_searchindex_js = "../searchindex-3479c582.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -264,7 +264,11 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.</p>
 execution without a host capability; and</li>
 <li><code>node:path</code>, <code>node:path/posix</code>, and <code>node:path/win32</code>, implemented with portable
 path algorithms and a <code>wasi:cli/environment</code> provider for operations that need
-the guest working directory.</li>
+the guest working directory; and</li>
+<li>the synchronous <code>node:child_process</code> API, bridged through the explicit
+<code>jco:node/child-process@0.1.0</code> host capability. Its default provider denies
+access, while an opt-in Node host provider delegates to the real
+<code>node:child_process</code> implementation.</li>
 </ul>
 <p>Not every Node compatibility module lives in <code>jco-std</code>. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
