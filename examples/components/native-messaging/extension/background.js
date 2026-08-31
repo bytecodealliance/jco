@@ -1,3 +1,7 @@
+// This script runs in the extension's privileged background context. The
+// content script asks it to start the test; it opens the native-messaging port,
+// which makes the browser launch the registered host, verifies the messages
+// exchanged with that process, and returns the result to the content script.
 if (typeof importScripts === 'function') {
     importScripts('config.js');
 }
