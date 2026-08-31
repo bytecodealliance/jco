@@ -102,6 +102,7 @@ is planned.
 | ------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`        | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`          | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
+| `node:domain`                                     | *(refused)*                                     | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`. |
 | `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`   | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below. |
 | `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` | Synchronous APIs over an explicit application-provided host capability; denied by default.                               |
 | `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`       | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                |
@@ -251,6 +252,20 @@ than a store that silently disappears somewhere else.
 `createHook`, `executionAsyncId`, `triggerAsyncId` and `executionAsyncResource` describe the async
 resource graph and always throw: nothing tracks that graph in a component.
 
+### Domains
+
+`node:domain` is Stability 0 -- deprecated in its entirety -- and Jco implements none of it. Its
+purpose is routing errors across asynchronous boundaries, which a component cannot do in any case
+(see the async hooks section).
+
+It still resolves rather than failing as an unknown import, so the error names the reason and a way
+forward instead of reading `Could not resolve 'node:domain'`. Importing is fine; every use --
+`create()`, `createDomain()`, `new Domain()`, and reading `active` or `_stack` -- throws
+`ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`, pointing at `AsyncLocalStorage` for carrying context.
+
+`active` and `_stack` are reachable on the default import only. An ES module binding cannot throw
+on read, so `import { active } from "node:domain"` fails at build time instead.
+
 ### Buffer
 
 The Buffer core comes from `unenv`'s wrapper around the MIT-licensed Feross
@@ -366,10 +381,13 @@ WASI environment provider.
 
 ### Legacy or deprecated modules
 
-`node:constants`, `node:domain`, `node:punycode`, and `node:sys` are legacy or
-deprecated surfaces. Jco does not enable their functional fallbacks by default.
-When a deprecated API is added for import compatibility, Jco's policy is to expose
-an immediate, explicit unsupported stub rather than execute the deprecated API.
+`node:constants`, `node:punycode`, and `node:sys` are legacy or deprecated
+surfaces. Jco does not enable their functional fallbacks by default. When a
+deprecated API is added for import compatibility, Jco's policy is to expose an
+immediate, explicit unsupported stub rather than execute the deprecated API.
+
+`node:domain` is the worked example of that policy: it resolves, matches Node's
+module shape, and throws from every entry point. See the domain section above.
 
 ## What happens for an unsupported import
 
