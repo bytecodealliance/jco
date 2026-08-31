@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// The browser launches this executable using the path in its generated
+// native-host manifest. It connects the browser's stdin/stdout protocol to the
+// Jco-transpiled component, supplying the WASI streams used by component.js to
+// read requests and write responses.
+//
 // Browser-supplied native-messaging arguments intentionally remain unused:
 // Firefox supplies the host manifest and extension ID, while Chromium supplies
 // the extension origin. The component communicates exclusively over stdio.
