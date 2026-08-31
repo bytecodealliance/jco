@@ -35,12 +35,35 @@ browser can be supplied through `TEST_CHROMIUM_PATH`.
 
 The build has two stages:
 
-1. `jco componentize` builds `src/component.js` as a `wasi:cli/run` component using `wit/component.wit`.
+1. `jco componentize --bundle` combines the focused source modules and builds them as a `wasi:cli/run` component
+   using `wit/component.wit`.
 2. `jco transpile --instantiation async` generates the Node-loadable bindings in `dist/transpiled`.
 
-The executable `scripts/launch-host.js` instantiates those bindings with WASI stdin/stdout streams connected directly
+> [!NOTE]
+> `jco componentize` normally treats a JavaScript input as one already-bundled file. This example passes `--bundle`
+> because `src/component.js` imports the output helpers in `src/output.js`. A single-file component can omit that
+> option.
+
+The executable `scripts/launch-host.mjs` instantiates those bindings with WASI stdin/stdout streams connected directly
 to the browser. It accepts and ignores the browser-specific command-line arguments: Firefox supplies the manifest
 path and extension ID, while Chromium supplies the extension origin.
+
+## Using another component host
+
+The browser does not require Node or Jco-generated JavaScript. It only requires the native-host manifest to name an
+executable that implements the length-prefixed JSON protocol over stdin and stdout. This example uses `jco transpile`
+and a small Node launcher because that keeps the build, host, and browser tests self-contained in the Jco repository.
+
+The setup described in [guest271314's original PR](https://github.com/bytecodealliance/jco/pull/1629) instead built
+the JavaScript source into a component and registered an executable shell launcher as the native host. That launcher
+ran the component with the Wasmtime CLI; its manifest contained the launcher's absolute path and the Chromium
+extension ID. The browser still communicated over the same inherited stdin and stdout streams.
+
+A production application could remove the shell and CLI dependency by building a native executable in Rust, embedding
+Wasmtime, and instantiating this JavaScript component with WASI CLI streams attached to the process's stdin and stdout.
+The component could likewise be replaced by a compatible component written in Rust or any other Component Model
+language. Building and distributing that native host is outside this example's scope and is left as an exercise for
+the reader.
 
 ## How the protocol is tested
 
@@ -63,8 +86,9 @@ element.
 
 ## Project layout
 
-- `src/component.js` implements native-messaging framing and response chunking inside the component.
-- `scripts/launch-host.js` is the executable Node entrypoint registered with each browser.
+- `src/component.js` reads framed messages and runs the component's command loop.
+- `src/output.js` owns response framing, write limits, and large-array chunking.
+- `scripts/launch-host.mjs` is the executable Node entrypoint registered with each browser.
 - `extension/background.js` contains the shared Firefox/Chromium extension behavior.
 - `extension/manifest.firefox.json` and `extension/manifest.chromium.json` contain the small browser-specific pieces.
 - `test/protocol.js` tests the host independently of a browser.

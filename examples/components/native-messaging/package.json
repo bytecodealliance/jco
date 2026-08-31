@@ -5,7 +5,7 @@
     "description": "Firefox and Chromium native messaging with a Jco-built component",
     "type": "module",
     "scripts": {
-        "build:component": "jco componentize src/component.js --wit wit --world-name component --out component.wasm --disable http --disable fetch-event",
+        "build:component": "jco componentize src/component.js --bundle --wit wit --world-name component --out component.wasm --disable http --disable fetch-event",
         "transpile": "jco transpile component.wasm --instantiation async -o dist/transpiled",
         "build": "pnpm run build:component && pnpm run transpile",
         "test": "node all.js",
