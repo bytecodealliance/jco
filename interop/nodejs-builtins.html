@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7f3e39b9.js";
+            window.path_to_searchindex_js = "../searchindex-561e66c5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -265,6 +265,7 @@ available only under a versioned entry point.</p>
 <tbody>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
+<tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store – see below.</td></tr>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
@@ -373,6 +374,20 @@ silently altered.</li>
 </div>
 <p><code>cluster.isMaster</code> and <code>cluster.setupMaster()</code> are deprecated in Node, so they throw
 <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> and point at <code>isPrimary</code>/<code>setupPrimary</code>.</p>
+<h3 id="async-hooks-and-synchronous-scopes"><a class="header" href="#async-hooks-and-synchronous-scopes">Async hooks and synchronous scopes</a></h3>
+<p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
+nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
+was constructed in.</p>
+<p>What it cannot do is carry a store across an asynchronous boundary. <code>await</code> resolves through the
+engine’s internal <code>PerformPromiseThen</code>, which JavaScript cannot intercept – patching
+<code>Promise.prototype.then</code> does not see it – and StarlingMonkey exposes no TC39 <code>AsyncContext</code> to
+carry the value instead.</p>
+<p>Rather than return an empty store after an <code>await</code>, Jco refuses at the call site: any callback
+given to <code>run</code>, <code>exit</code>, <code>withScope</code> or a snapshot that returns a promise throws
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>, naming the reason. A failure at the call site is easier to act on
+than a store that silently disappears somewhere else.</p>
+<p><code>createHook</code>, <code>executionAsyncId</code>, <code>triggerAsyncId</code> and <code>executionAsyncResource</code> describe the async
+resource graph and always throw: nothing tracks that graph in a component.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
@@ -442,7 +457,6 @@ the module or upstream project.</p>
 <tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:async_hooks</code></td><td>The portable fallback does not preserve async context across asynchronous work, and <code>AsyncLocalStorage.snapshot()</code> is not implemented.</td></tr>
 <tr><td><code>node:events</code></td><td>Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.</td></tr>
 <tr><td><code>node:diagnostics_channel</code></td><td>Core channel behavior exists, while tracing and async-context portions are incomplete.</td></tr>
 <tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td>Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.</td></tr>
