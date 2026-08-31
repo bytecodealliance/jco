@@ -1230,6 +1230,15 @@ impl AsyncTaskIntrinsic {
                                 await cstate.acquireExclusiveLock(this.#id);
                             }}
 
+                            // Cancellation can be requested while entry is waiting for
+                            // backpressure or its exclusive lock. Do not execute the guest
+                            // after acquiring a lock for a task that should no longer start.
+                            if (this.deliverPendingCancel({{ cancellable: true }})) {{
+                                cstate.exclusiveRelease(this.#id);
+                                this.cancel();
+                                return false;
+                            }}
+
                             this.#entered = true;
                             return this.#entered;
                         }}
