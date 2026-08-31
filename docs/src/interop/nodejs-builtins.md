@@ -98,17 +98,39 @@ is planned.
 > It is the only such alias: modules added after the split, including `node:assert`, are
 > available only under a versioned entry point.
 
-| Imports                                           | Implementation                                                   | Notes                                                                                                                    |
-| ------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`        | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                     |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`          | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment. |
-| `node:domain`                                     | *(refused)*                                     | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`. |
-| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`   | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below. |
-| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel` | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                        |
-| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` | Synchronous APIs over an explicit application-provided host capability; denied by default.                               |
-| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`       | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                |
-| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter           | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                |
-| `node:querystring`                                | unenv's Node-derived querystring implementation                  | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                     |
+| Imports                                           | Implementation                                                         | Notes                                                                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`              | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                      |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                  |
+| `node:domain`                                     | _(refused)_                                                            | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`. |
+| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`         | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.      |
+| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel` | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                         |
+| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`       | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                |
+| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`             | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                 |
+| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                 | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                 |
+| `node:querystring`                                | unenv's Node-derived querystring implementation                        | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                      |
+
+### Errors globals
+
+The Node [Errors API](https://nodejs.org/docs/latest-v24.x/api/errors.html) is
+cross-cutting behavior rather than a `node:errors` module. Standard error
+constructors are globals, while individual Node APIs create coded and system
+errors. Jco therefore does not resolve `node:errors`; Node 24 rejects that
+specifier as well.
+
+Bundled code can use `Error`, `AggregateError`, `DOMException`, `EvalError`,
+`RangeError`, `ReferenceError`, `SuppressedError`, `SyntaxError`, `TypeError`, and
+`URIError` without an import. Rolldown injects
+`@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors` only for constructors
+actually referenced by the source graph. A graph that uses none of them contains
+none of the adapter after bundling.
+
+The adapter preserves the guest engine's constructor identities, supplies
+portable fallbacks for missing newer constructors and V8 Error extensions, and
+provides the common coded/system-error core used by other jco-std Node shims. No
+WIT capability is required. Error classes, codes, and documented system fields
+are compatibility targets; exact stack frames and source positions remain
+engine-specific.
 
 ### Assert
 
@@ -225,11 +247,11 @@ Two differences from Node are unavoidable:
 
 These throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than failing quietly:
 
-| API | Why |
-| --- | --- |
-| `worker.process` | A `ChildProcess` handle cannot cross the component boundary. |
-| `listening` event, handle sharing | Cluster distributes Node `net` handles; guest servers are `wasi:sockets`, so nothing hooks them. `SCHED_RR` is accepted but does not distribute guest connections. |
-| `setupPrimary({ exec, execArgv, stdio, uid, gid, inspectPort, serialization })` | These configure the host runner executing the component, not a guest file. |
+| API                                                                             | Why                                                                                                                                                                |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `worker.process`                                                                | A `ChildProcess` handle cannot cross the component boundary.                                                                                                       |
+| `listening` event, handle sharing                                               | Cluster distributes Node `net` handles; guest servers are `wasi:sockets`, so nothing hooks them. `SCHED_RR` is accepted but does not distribute guest connections. |
+| `setupPrimary({ exec, execArgv, stdio, uid, gid, inspectPort, serialization })` | These configure the host runner executing the component, not a guest file.                                                                                         |
 
 `cluster.isMaster` and `cluster.setupMaster()` are deprecated in Node, so they throw
 `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API` and point at `isPrimary`/`setupPrimary`.
