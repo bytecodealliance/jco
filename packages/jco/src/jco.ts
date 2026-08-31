@@ -71,6 +71,10 @@ program
     )
     .option("--debug-starlingmonkey-build", "use a debug build of StarlingMonkey")
     .option("--engine <path>", "use a specific StarlingMonkey build (StarlingMonkey backend only)")
+    .option(
+        "--cwd <path>",
+        "directory componentization runs from; paths the component sees are made relative to it (default: the process working directory)",
+    )
     .option("--bundle", "bundle source and its dependencies before componentization (automatic for TypeScript)")
     .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
     .requiredOption("-o, --out <out>", "output component file")
