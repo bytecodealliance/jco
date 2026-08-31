@@ -21,7 +21,7 @@ suite("node:dns in a component", () => {
 
     // TODO(unskip): use the published jco-std DNS exports once a release containing them is available.
     test.skip("componentizes both DNS specifiers and calls the opt-in Node host", async () => {
-        const { componentPath, fixtureDir, stderr } = await componentizeFixture({
+        const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-dns",
             bundle: true,
             copy: true,
@@ -30,10 +30,13 @@ suite("node:dns in a component", () => {
         assert.include(stderr, "Jco added generated WIT import jco:node/dns@0.1.0");
 
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
             component: { name: "node-dns", path: componentPath, skipInstantiation: true },
             jco: {
                 transpile: {
                     extraArgs: {
+                        asyncImports: ["jco:node/dns@0.1.0#query"],
+                        asyncExports: ["run"],
                         map: {
                             "jco:node/dns@0.1.0": pathToFileURL(
                                 fileURLToPath(
@@ -50,7 +53,8 @@ suite("node:dns in a component", () => {
         });
 
         try {
-            const output = await exec(join(fixtureDir, "run.js"), esModuleOutputPath);
+            const runner = fileURLToPath(new URL("../fixtures/componentize/node-dns/run.js", import.meta.url));
+            const output = await exec(runner, esModuleOutputPath);
             const report = JSON.parse(output.stdout);
             assert.isAtLeast(report.serverCount, 0);
             assert.strictEqual(report.namespaceIdentity, true);

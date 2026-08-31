@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
-import { withDefaultNodeCapabilityMap } from "../../src/cmd/transpile.js";
+import { withDefaultNodeCapabilities, withDefaultNodeCapabilityMap } from "../../src/cmd/transpile.js";
 
 const environment = (patch = 6n) => ({
     imports: [
@@ -48,6 +48,30 @@ describe("Node builtin adapters", () => {
             "jco:node/console@0.1.0": "/application/console-host.js",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
         });
+    });
+
+    test("configures custom DNS providers as JSPI imports", () => {
+        const opts = withDefaultNodeCapabilities({
+            map: { "jco:node/dns@0.1.0": "/application/dns-host.js" },
+            asyncImports: ["application:custom/host#load"],
+            asyncExports: ["selected-export"],
+        });
+
+        expect(opts.asyncMode).toBe("jspi");
+        expect(opts.asyncImports).toEqual(["application:custom/host#load", "jco:node/dns@0.1.0#query"]);
+        expect(opts.asyncExports).toEqual(["selected-export", "*"]);
+        expect(opts.map?.["jco:node/dns@0.1.0"]).toBe("/application/dns-host.js");
+
+        withDefaultNodeCapabilities(opts);
+        expect(opts.asyncImports).toHaveLength(2);
+        expect(opts.asyncExports).toHaveLength(2);
+    });
+
+    test("keeps the default DNS deny provider synchronous", () => {
+        const opts = withDefaultNodeCapabilities({});
+        expect(opts.asyncMode).toBeUndefined();
+        expect(opts.asyncImports).toBeUndefined();
+        expect(opts.asyncExports).toBeUndefined();
     });
 
     test.each(["node:path", "node:path/posix", "node:path/win32"])("generates an adapter for %s", (specifier) => {

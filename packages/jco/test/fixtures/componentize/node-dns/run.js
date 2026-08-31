@@ -5,4 +5,4 @@ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 const { instantiate } = await import(pathToFileURL(argv[2]));
 const instance = await instantiate(undefined, new WASIShim().getImportObject());
-stdout.write(`${JSON.stringify(instance.run())}\n`);
+stdout.write(`${JSON.stringify(await instance.run())}\n`);
