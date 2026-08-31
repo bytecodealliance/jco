@@ -21,6 +21,7 @@ const CLUSTER_SPECIFIER = "node:cluster";
 const CONSOLE_SPECIFIER = "node:console";
 const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const DOMAIN_SPECIFIER = "node:domain";
+const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -167,6 +168,8 @@ export interface NodeBuiltinOptions {
     asyncHooksModule?: string;
     /** Path to jco-std's versioned `node:domain` module (overridable for tests) */
     domainModule?: string;
+    /** Path to jco-std's versioned `node:diagnostics_channel` module (overridable for tests) */
+    diagnosticsChannelModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -184,6 +187,27 @@ function domainAdapter(domainModule: string): string {
 import domain from ${JSON.stringify(domainModule)};
 export default domain;
 export { Domain, create, createDomain } from ${JSON.stringify(domainModule)};
+`;
+}
+
+/**
+ * Source of the `node:diagnostics_channel` adapter.
+ *
+ * Capability-free: in-process publish/subscribe with no host involvement.
+ */
+function diagnosticsChannelAdapter(diagnosticsChannelModule: string): string {
+    return `
+import diagnosticsChannel from ${JSON.stringify(diagnosticsChannelModule)};
+export default diagnosticsChannel;
+export {
+    Channel,
+    TracingChannel,
+    channel,
+    hasSubscribers,
+    subscribe,
+    tracingChannel,
+    unsubscribe,
+} from ${JSON.stringify(diagnosticsChannelModule)};
 `;
 }
 
@@ -421,6 +445,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const domainModule = () =>
         options.domainModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/domain"));
+    const diagnosticsChannelModule = () =>
+        options.diagnosticsChannelModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel"));
     const asyncHooksModule = () =>
         options.asyncHooksModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks"));
@@ -444,6 +471,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === DOMAIN_SPECIFIER) {
                 // No onWitRequirement: nothing here reaches the host.
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === DIAGNOSTICS_CHANNEL_SPECIFIER) {
+                // No onWitRequirement: this needs no host capability.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === ASYNC_HOOKS_SPECIFIER) {
@@ -485,6 +516,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === DOMAIN_SPECIFIER) {
                 return domainAdapter(domainModule());
+            }
+            if (value === DIAGNOSTICS_CHANNEL_SPECIFIER) {
+                return diagnosticsChannelAdapter(diagnosticsChannelModule());
             }
             if (value === ASYNC_HOOKS_SPECIFIER) {
                 return asyncHooksAdapter(asyncHooksModule());
