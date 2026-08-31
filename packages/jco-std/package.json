@@ -33,6 +33,15 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/assert/index.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/assert/index.js"
     },
+    "./wasi/0.2.x/node/24.x.x/cluster/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/cluster-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/cluster-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/cluster-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/cluster/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/cluster-host-node.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/cluster-host-node.js"
+    },
     "./wasi/0.2.x/node/24.x.x/cluster": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/cluster.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/cluster.js",

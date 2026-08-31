@@ -17,7 +17,7 @@ export const Worker = cluster.Worker;
 export const fork = (env?: Record<string, string>) => cluster.fork(env);
 export const disconnect = (callback?: () => void) => cluster.disconnect(callback);
 export const setupPrimary = (settings?: Parameters<typeof cluster.setupPrimary>[0]) =>
-    cluster.setupPrimary(settings);
+  cluster.setupPrimary(settings);
 export const setupMaster = () => cluster.setupMaster();
 export default cluster;
 

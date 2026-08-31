@@ -4,7 +4,7 @@ import {
   SCHED_NONE,
   SCHED_RR,
   Worker,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/index.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/core.js";
 import { FakeClusterHost } from "../helpers/cluster.js";
 
 describe("cluster module contract", () => {

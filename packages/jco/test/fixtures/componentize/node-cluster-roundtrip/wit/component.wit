@@ -1,15 +1,12 @@
 package local:node-cluster-roundtrip;
 
 world test {
-  import jco:node/cluster@0.1.0;
-
   record progress {
     events: string,
     messages: string,
     worker-count: u32,
     exited: bool,
   }
-
   /// True in the primary, false in a forked worker.
   export is-primary: func() -> bool;
   /// Fork one worker and return its id. Primary only.
