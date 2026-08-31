@@ -18,15 +18,15 @@ describe("node:dns host providers", () => {
     expect(modules.promises.getDefaultResultOrder()).toBe("ipv6first");
   });
 
-  test("uses the real Node DNS implementation when explicitly selected", () => {
-    const response = JSON.parse(
-      nodeHost.query(
-        JSON.stringify({
-          operation: "lookup",
-          args: ["localhost", { family: 0, hints: 0, all: false, order: "verbatim" }],
-        }),
-      ),
-    ) as DnsResponse;
+  test("uses the real Node DNS implementation when explicitly selected", async () => {
+    const query = nodeHost.query(
+      JSON.stringify({
+        operation: "lookup",
+        args: ["localhost", { family: 0, hints: 0, all: false, order: "verbatim" }],
+      }),
+    );
+    expect(query).toBeInstanceOf(Promise);
+    const response = JSON.parse(await query) as DnsResponse;
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.value).toEqual(
@@ -36,9 +36,9 @@ describe("node:dns host providers", () => {
     }
   });
 
-  test("rejects operations outside the DNS provider allowlist", () => {
+  test("rejects operations outside the DNS provider allowlist", async () => {
     const response = JSON.parse(
-      nodeHost.query(JSON.stringify({ operation: "constructor", args: [] })),
+      await nodeHost.query(JSON.stringify({ operation: "constructor", args: [] })),
     ) as DnsResponse;
     expect(response).toMatchObject({
       ok: false,
