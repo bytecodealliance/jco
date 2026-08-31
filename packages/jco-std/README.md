@@ -125,7 +125,7 @@ function backed by Node's synchronous API:
 import { execFileSync } from "node:child_process";
 
 export function nodeVersion() {
-    return execFileSync("node", ["--version"], { encoding: "utf8" }).trim();
+  return execFileSync("node", ["--version"], { encoding: "utf8" }).trim();
 }
 ```
 
