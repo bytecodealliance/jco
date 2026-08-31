@@ -24,6 +24,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `http/adapters/express`                      | Provides a simple [Express][express]-like interface for building HTTP servers |
 | `wasi/0.2.x/node/24.x.x/assert`              | `node:assert` adapter, Node 24 on WASI p2                                     |
 | `wasi/0.2.x/node/24.x.x/console`             | `node:console` guest adapter over an explicit host capability                 |
+| `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
 | `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
 | `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
@@ -73,6 +74,8 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 
 Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
 
+- Node's global error constructors and coded-error foundation, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors` and injected on demand;
 - `node:assert` and `node:assert/strict`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`;
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
@@ -129,6 +132,40 @@ from Node.
 
 Deprecated APIs remain importable but immediately throw a clear unsupported-API
 error rather than running their deprecated implementation.
+
+### Errors globals
+
+Node's [Errors API](https://nodejs.org/docs/latest-v24.x/api/errors.html) is not an
+importable `node:errors` module. It describes global JavaScript error constructors,
+system-error fields, propagation conventions, and the stable `error.code` values
+produced by other Node APIs.
+
+When Jco bundles component source, references to `Error`, `AggregateError`,
+`DOMException`, `EvalError`, `RangeError`, `ReferenceError`, `SuppressedError`,
+`SyntaxError`, `TypeError`, and `URIError` automatically use the versioned errors
+adapter. No source import or WIT capability is required:
+
+```js
+export function describeFailure() {
+  const cause = new TypeError("invalid input");
+  return new Error("operation failed", { cause }).cause.message;
+}
+```
+
+```console
+jco componentize component.js --wit wit --bundle -o component.wasm
+```
+
+The adapter preserves the guest engine's native constructor identities and adds
+portable Node extensions when the engine lacks them, including
+`Error.captureStackTrace`, `Error.stackTraceLimit`, and `Error.isError`. Shared
+jco-std shims use the same implementation for coded validation and system-error
+objects. Exact stack frames remain engine-specific.
+
+Injection is demand-driven. If a bundled source graph never references one of
+these constructors, Rolldown omits the errors adapter entirely, so the finished
+bundle pays no code-size or runtime cost for it. `node:errors` deliberately remains
+unresolved because Node 24 does not provide that module either.
 
 ### Child processes
 
