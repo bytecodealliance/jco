@@ -23,6 +23,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `http/adapters/hono`                   | Enables easier building of [Hono][hono] HTTP servers                          |
 | `http/adapters/express`                | Provides a simple [Express][express]-like interface for building HTTP servers |
 | `wasi/0.2.x/node/24.x.x/assert`        | `node:assert` adapter, Node 24 on WASI p2                                     |
+| `wasi/0.2.x/node/24.x.x/console`       | `node:console` guest adapter over an explicit host capability                 |
 | `wasi/0.2.x/node/24.x.x/path`          | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/child-process` | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
 | `wasi/0.2.x/node/24.x.x/cluster`       | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
@@ -79,6 +80,9 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - `node:cluster`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster` and the
   `jco:node/cluster@0.1.0` host capability;
+- `node:console`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console` and the
+  application-provided `jco:node/console@0.1.0` capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer.
@@ -198,6 +202,36 @@ import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/wasi/0.2.x/no
 assert(true);
 deepStrictEqual({ ready: true }, { ready: true });
 ```
+
+When bundled source imports `node:console`, Jco adds the host capability to the
+selected WIT world if it is missing:
+
+```wit
+world component {
+    // Added by Jco because bundled source imports node:console.
+    import jco:node/console@0.1.0;
+}
+```
+
+It also installs `console.wit` in the `jco-node-0.1.0` dependency directory and
+prints a warning describing the generated edits. Existing imports and dependency
+files are preserved, so repeated componentization does not create duplicates.
+
+The capability is denied by default. This lets a component containing optional
+console calls build without implicitly granting it Node.js host access; calling
+an output method through the default mapping throws
+`ERR_JCO_CONSOLE_ADAPTER_REQUIRED`.
+
+Applications running under Node can explicitly select the passthrough provider:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/console@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host/node'
+```
+
+The guest boundary contains only a stream selector, strings, and terminal
+metadata queries. It does not expose Node stream objects, so a browser console
+provider can be added later without changing component-facing code.
 
 # License
 
