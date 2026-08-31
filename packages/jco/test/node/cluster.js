@@ -16,7 +16,7 @@ const NODE_HOST = pathToFileURL(
  * Componentize a cluster fixture from a copy, so the WIT import Jco injects lands in a temporary
  * directory rather than editing the fixture in the repository.
  */
-async function buildClusterFixture(fixture, name, backend = "starlingmonkey") {
+async function buildClusterFixture(fixture, name) {
     const outputDir = await getTmpDir();
     const appDir = join(outputDir, "app");
     const componentPath = join(outputDir, "component.wasm");
@@ -29,7 +29,7 @@ async function buildClusterFixture(fixture, name, backend = "starlingmonkey") {
         join(appDir, "source.js"),
         "--bundle",
         "--backend",
-        backend,
+        "starlingmonkey",
         "--wit",
         join(appDir, "wit"),
         "--world-name",
@@ -84,13 +84,7 @@ suite("node:cluster in a component", () => {
     // Driven from a spawned script rather than in-process: cluster.fork() re-executes the current
     // entry, so forking from inside the test runner would fork the runner itself.
     test.skip("forks a worker that runs the component and reports back", async () => {
-        // NOTE: qjs, because this fixture registers cluster listeners at module scope and that traps
-        // StarlingMonkey's Wizer snapshot; the other fixture only touches cluster inside run().
-        const { outputDir, transpiledDir } = await buildClusterFixture(
-            "node-cluster-roundtrip",
-            "node-cluster-rt",
-            "qjs",
-        );
+        const { outputDir, transpiledDir } = await buildClusterFixture("node-cluster-roundtrip", "node-cluster-rt");
 
         // The runner is a bare node process outside the workspace, so give the transpiled output a
         // node_modules to resolve @bytecodealliance/preview2-shim through.
