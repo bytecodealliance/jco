@@ -1,0 +1,14 @@
+package local:node-errors;
+
+world component {
+  record report {
+    message: string,
+    cause-message: string,
+    aggregate-count: u32,
+    suppressed-message: string,
+    is-error: bool,
+    captured-stack: bool,
+  }
+
+  export run: func() -> report;
+}

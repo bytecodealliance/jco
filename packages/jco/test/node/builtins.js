@@ -70,6 +70,13 @@ describe("Node builtin adapters", () => {
         expect(plugin.load(id)).toEqual(expect.any(String));
     });
 
+    test("loads the Errors globals module lazily", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { errorsModule: "/jco/node/errors.js" });
+        const id = plugin.resolveId("jco:node-error-globals");
+        expect(id).toBe("\0jco-node-builtin:error-globals");
+        expect(plugin.load(id)).toBe('export * from "/jco/node/errors.js";');
+    });
+
     test("generates an adapter for node:child_process when its capability is imported", () => {
         const plugin = nodeBuiltinPlugin(childProcess(), { childProcessModule: "/jco/node/child-process.js" });
         const id = plugin.resolveId("node:child_process");
@@ -266,6 +273,8 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("buffer")).toBeNull();
         expect(plugin.resolveId("querystring")).toBeNull();
         expect(plugin.resolveId("node:fs")).toBeNull();
+        expect(plugin.resolveId("node:errors")).toBeNull();
+        expect(plugin.resolveId("errors")).toBeNull();
         expect(plugin.resolveId("console")).toBeNull();
     });
 
