@@ -1,4 +1,4 @@
-import { EventEmitter } from "./emitter.js";
+import { EventEmitter } from "../internal/event-emitter.js";
 
 import { unsupported } from "./errors.js";
 import type { ClusterHost, WorkerInfo, WorkerState } from "./types.js";

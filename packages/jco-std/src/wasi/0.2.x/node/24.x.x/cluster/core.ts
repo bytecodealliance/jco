@@ -1,10 +1,10 @@
-import { EventEmitter } from "./emitter.js";
+import { EventEmitter } from "../internal/event-emitter.js";
 
 import { deprecated, unsupported } from "./errors.js";
 import type { ClusterHost, HostEvent, HostSettings, WorkerInfo } from "./types.js";
 import { Worker } from "./worker.js";
 
-export { EventEmitter } from "./emitter.js";
+export { EventEmitter } from "../internal/event-emitter.js";
 export { Worker } from "./worker.js";
 export type { ClusterHost, HostEvent, HostSettings, WorkerInfo, WorkerState } from "./types.js";
 export { DEPRECATED_CODE, UNSUPPORTED_CODE } from "./errors.js";
