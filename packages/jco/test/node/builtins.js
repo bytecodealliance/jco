@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { withDefaultNodeCapabilityMap } from "../../src/cmd/transpile.js";
 
 const environment = (patch = 6n) => ({
     imports: [
@@ -29,6 +30,23 @@ const unenvAliases = {
 };
 
 describe("Node builtin adapters", () => {
+    test("maps console to the deny host unless the application opts into another provider", () => {
+        expect(withDefaultNodeCapabilityMap()).toEqual({
+            "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
+            "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
+            "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
+        });
+        expect(
+            withDefaultNodeCapabilityMap({
+                "jco:node/console@0.1.0": "/application/console-host.js",
+            }),
+        ).toEqual({
+            "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
+            "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
+            "jco:node/console@0.1.0": "/application/console-host.js",
+        });
+    });
+
     test.each(["node:path", "node:path/posix", "node:path/win32"])("generates an adapter for %s", (specifier) => {
         const plugin = nodeBuiltinPlugin(environment(), { pathFactory: "/jco/node/path.js" });
         const id = plugin.resolveId(specifier);
@@ -111,6 +129,16 @@ describe("Node builtin adapters", () => {
         );
     });
 
+    test("generates an explicitly host-backed node:console adapter", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { consoleModule: "/jco/node/console.js" });
+        const id = plugin.resolveId("node:console");
+        expect(id).toBe("\0jco-node-builtin:node:console");
+        const source = plugin.load(id);
+        expect(source).toContain("export default console");
+        expect(source).toContain("Console,");
+        expect(source).toContain('from "/jco/node/console.js"');
+    });
+
     test("layers audited unenv modules below Jco overrides", () => {
         const plugin = nodeBuiltinPlugin(environment(), {
             assertModule: "/jco/node/assert.js",
@@ -154,6 +182,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("buffer")).toBeNull();
         expect(plugin.resolveId("querystring")).toBeNull();
         expect(plugin.resolveId("node:fs")).toBeNull();
+        expect(plugin.resolveId("console")).toBeNull();
     });
 
     test("reports a missing environment capability only when node:path is used", () => {
@@ -167,5 +196,21 @@ describe("Node builtin adapters", () => {
         metadata.imports.push(environment(3n).imports[0]);
         const plugin = nodeBuiltinPlugin(metadata, { pathFactory: "/jco/node/path.js" });
         expect(() => plugin.resolveId("node:path")).toThrow(/multiple wasi:cli\/environment/);
+    });
+
+    test("reports the WIT capability required by node:console", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { consoleModule: "/jco/node/console.js", onWitRequirement },
+        );
+        expect(plugin.resolveId("node:console")).toBe("\0jco-node-builtin:node:console");
+        expect(onWitRequirement).toHaveBeenCalledOnce();
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({
+                nodeSpecifier: "node:console",
+                witImport: "jco:node/console@0.1.0",
+            }),
+        );
     });
 });
