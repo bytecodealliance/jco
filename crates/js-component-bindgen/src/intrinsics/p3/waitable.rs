@@ -604,7 +604,7 @@ impl WaitableIntrinsic {
                             throw new Error('waitable set still contains waitables');
                         }}
                         if (ws.numWaiting() > 0) {{
-                            throw new Error('waitable set still has other tasks waiting on it');
+                            throw new Error('cannot drop waitable set with waiters');
                         }}
 
                         state.handles.remove(waitableSetRep);
