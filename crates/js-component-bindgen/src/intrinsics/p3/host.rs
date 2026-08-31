@@ -467,6 +467,18 @@ impl HostIntrinsic {
 
                         }});
 
+                        // Starting the subtask is synchronous: async-start-call must
+                        // return STARTED rather than STARTING. Execution remains deferred
+                        // to a new JS task so the caller can continue independently.
+                        let startRes = subtask.onStart({{ startFnParams: params }});
+                        startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
+                        if (startRes.length !== paramCount) {{
+                            throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {async_start_call_fn} invocation expected [${{ paramCount }}]`);
+                        }}
+
+                        // Progress after the directly returned STARTED state is reported
+                        // as an event. Registering this before onStart would enqueue a
+                        // duplicate STARTED event for the caller.
                         subtask.setOnProgressFn(() => {{
                             subtask.setPendingEvent(() => {{
                                 if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
@@ -479,20 +491,15 @@ impl HostIntrinsic {
                             }});
                         }});
 
-                        // Start the (event) driver loop that will resolve the subtask
-                        // in a new JS task
-                        setTimeout(async () => {{
-                            // The subtask may have been resolved before this deferred start ran
-                            // (e.g. cancelled while still STARTING via `subtask.cancel`) -- in
-                            // that case the callee must never be started
-                            if (subtask.isResolved()) {{
-                                {debug_log_fn}('[{async_start_call_fn}()] subtask resolved before deferred start, skipping', {{
-                                    taskID: preparedTask.id(),
-                                    subtaskID: subtask.id(),
-                                }});
-                                return;
-                            }}
+                        // Begin entry synchronously so this call reserves its component
+                        // execution slice before the caller can start another call into
+                        // the same instance. The promise settles asynchronously once entry
+                        // is complete.
+                        const enterPromise = preparedTask.enter();
 
+                        // Start the (event) driver loop that will resolve the subtask
+                        // in a new JS task.
+                        setTimeout(async () => {{
                             {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
                                 taskID: preparedTask.id(),
                                 subtaskID: subtask.id(),
@@ -500,16 +507,9 @@ impl HostIntrinsic {
                                 calleeComponentIdx,
                             }});
 
-                            let startRes = subtask.onStart({{ startFnParams: params }});
-                            startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
-                            if (startRes.length !== paramCount) {{
-                                throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {async_start_call_fn} invocation expected [${{ paramCount }}]`);
-                            }}
-
-                            // NOTE: enter() below queues (FIFO) for the per-slice
-                            // exclusive lock when another slice of the callee component
-                            // is mid-flight; no pre-wait needed.
-                            const started = await preparedTask.enter();
+                            // Entry queues FIFO when another slice of the callee
+                            // component is already in flight.
+                            const started = await enterPromise;
                             if (!started) {{
                                 {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
                                     taskID: preparedTask.id(),
