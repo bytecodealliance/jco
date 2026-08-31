@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e8fd15e.js";
+            window.path_to_searchindex_js = "../searchindex-cfab04a9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -267,6 +267,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
 <tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store – see below.</td></tr>
+<tr><td><code>node:diagnostics_channel</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel</code></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
@@ -399,6 +400,15 @@ forward instead of reading <code>Could not resolve 'node:domain'</code>. Importi
 <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>, pointing at <code>AsyncLocalStorage</code> for carrying context.</p>
 <p><code>active</code> and <code>_stack</code> are reachable on the default import only. An ES module binding cannot throw
 on read, so <code>import { active } from "node:domain"</code> fails at build time instead.</p>
+<h3 id="diagnostics-channels"><a class="header" href="#diagnostics-channels">Diagnostics channels</a></h3>
+<p>Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
+are interned by name: a publisher and a subscriber that never share a reference still meet on the
+same object.</p>
+<p><code>TracingChannel</code> is implemented in full – <code>traceSync</code>, <code>tracePromise</code> and <code>traceCallback</code>, with
+the <code>start</code>/<code>end</code>/<code>asyncStart</code>/<code>asyncEnd</code>/<code>error</code> sub-channels emitted in Node’s order.</p>
+<p><code>Channel.bindStore</code> accepts anything offering <code>run(value, fn)</code>, which includes jco-std’s
+<code>AsyncLocalStorage</code>. Stores are therefore scoped synchronously: a bound store is visible while
+subscribers run and does not follow an <code>await</code>. See the async hooks section above for why.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
@@ -469,7 +479,6 @@ the module or upstream project.</p>
 </thead>
 <tbody>
 <tr><td><code>node:events</code></td><td>Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.</td></tr>
-<tr><td><code>node:diagnostics_channel</code></td><td>Core channel behavior exists, while tracing and async-context portions are incomplete.</td></tr>
 <tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td>Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.</td></tr>
 <tr><td><code>node:timers/promises</code></td><td>A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.</td></tr>
 <tr><td><code>node:trace_events</code>, <code>node:tty</code></td><td>The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.</td></tr>
