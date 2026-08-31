@@ -1,26 +1,41 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface NodeWitRequirement {
     nodeSpecifier: string;
     witImport: string;
     dependencyDirectory: string;
-    dependencySource: string;
+    /**
+     * WIT files installed for this requirement.
+     *
+     * The interfaces live in one file each, sharing a package directory, so a world only gains the
+     * interface it uses. Anything an interface `use`s must be installed with it.
+     */
+    dependencySources: string[];
 }
+
+/** Types the Node API interfaces share; every interface file depends on it. */
+const SHARED_TYPES_SOURCE = fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/types.wit", import.meta.url));
 
 export const CHILD_PROCESS_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:child_process",
     witImport: "jco:node/child-process@0.1.0",
     dependencyDirectory: "jco-node-0.1.0",
-    dependencySource: fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/package.wit", import.meta.url)),
+    dependencySources: [
+        SHARED_TYPES_SOURCE,
+        fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/child-process.wit", import.meta.url)),
+    ],
 };
 
 export const CLUSTER_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:cluster",
     witImport: "jco:node/cluster@0.1.0",
     dependencyDirectory: "jco-node-0.1.0",
-    dependencySource: fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/package.wit", import.meta.url)),
+    dependencySources: [
+        SHARED_TYPES_SOURCE,
+        fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/cluster.wit", import.meta.url)),
+    ],
 };
 
 export interface WitInjectionResult {
@@ -205,14 +220,16 @@ export async function injectNodeWitImports(
     const dependencyFiles: string[] = [];
     for (const requirement of missing) {
         const dependencyDir = join(root, "deps", requirement.dependencyDirectory);
-        const destination = join(dependencyDir, "package.wit");
         await mkdir(dependencyDir, { recursive: true });
-        try {
-            await writeFile(destination, await readFile(requirement.dependencySource), { flag: "wx" });
-            dependencyFiles.push(destination);
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-                throw error;
+        for (const source of requirement.dependencySources) {
+            const destination = join(dependencyDir, basename(source));
+            try {
+                await writeFile(destination, await readFile(source), { flag: "wx" });
+                dependencyFiles.push(destination);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+                    throw error;
+                }
             }
         }
     }

@@ -1,0 +1,10 @@
+package jco:node@0.1.0;
+
+/// Types shared by the Node API interfaces in this package.
+///
+/// Anything more than one `node:*` adapter needs belongs here rather than being repeated, so the
+/// interfaces agree on a single definition.
+interface types {
+    /// Environment variables, as name/value pairs.
+    type env-vars = list<tuple<string, string>>;
+}

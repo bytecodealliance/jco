@@ -30,19 +30,25 @@ describe("Node API WIT import injection", () => {
         expect(result).toEqual({
             witPath: root,
             worldFile: join(root, "app.wit"),
-            dependencyFiles: [join(root, "deps/jco-node-0.1.0/package.wit")],
+            dependencyFiles: [
+                join(root, "deps/jco-node-0.1.0/types.wit"),
+                join(root, "deps/jco-node-0.1.0/child-process.wit"),
+            ],
             imports: ["jco:node/child-process@0.1.0"],
         });
         expect(source).toContain("// Added by Jco because bundled source imports node:child_process.");
         expect(source).toContain("import jco:node/child-process@0.1.0;");
-        await expect(stat(join(root, "deps/jco-node-0.1.0/package.wit"))).resolves.toBeDefined();
+        await expect(stat(join(root, "deps/jco-node-0.1.0/child-process.wit"))).resolves.toBeDefined();
+        await expect(stat(join(root, "deps/jco-node-0.1.0/types.wit"))).resolves.toBeDefined();
         const metadata = await componentWitMetadataForWorld({ tag: "path", val: root }, "app");
         expect(metadata.imports).toContainEqual(
             expect.objectContaining({ namespace: "jco", package: "node", interface: "child-process" }),
         );
         expect(witInjectionWarnings(result)).toEqual([
             expect.stringContaining(`to ${join(root, "app.wit")}`),
-            expect.stringContaining(join(root, "deps/jco-node-0.1.0/package.wit")),
+            // Shared types are installed alongside the interface that uses them.
+            expect.stringContaining(join(root, "deps/jco-node-0.1.0/types.wit")),
+            expect.stringContaining(join(root, "deps/jco-node-0.1.0/child-process.wit")),
         ]);
     });
 
@@ -60,12 +66,12 @@ describe("Node API WIT import injection", () => {
         const source = "package example:app;\nworld app {\n  import jco:node/child-process@0.1.0;\n}\n";
         const root = await fixture({
             "app.wit": source,
-            "deps/jco-node-0.1.0/package.wit": "package jco:node@0.1.0; // user managed\n",
+            "deps/jco-node-0.1.0/child-process.wit": "package jco:node@0.1.0; // user managed\n",
         });
 
         expect(await injectNodeWitImports(root, undefined, [requirement])).toBeUndefined();
         expect(await readFile(join(root, "app.wit"), "utf8")).toBe(source);
-        expect(await readFile(join(root, "deps/jco-node-0.1.0/package.wit"), "utf8")).toContain("user managed");
+        expect(await readFile(join(root, "deps/jco-node-0.1.0/child-process.wit"), "utf8")).toContain("user managed");
     });
 
     test("recognizes an aliased user-provided import", async () => {
@@ -137,7 +143,8 @@ describe("Node API WIT import injection", () => {
         const source = await readFile(witFile, "utf8");
         expect(source).toContain("node:child_process.\r\n  import");
         expect(source.replaceAll("\r\n", "")).not.toContain("\n");
-        await expect(stat(join(root, "deps/jco-node-0.1.0/package.wit"))).resolves.toBeDefined();
+        await expect(stat(join(root, "deps/jco-node-0.1.0/child-process.wit"))).resolves.toBeDefined();
+        await expect(stat(join(root, "deps/jco-node-0.1.0/types.wit"))).resolves.toBeDefined();
         const metadata = await componentWitMetadataForWorld({ tag: "path", val: result.witPath }, "app");
         expect(metadata.imports).toContainEqual(expect.objectContaining({ interface: "child-process" }));
     });
@@ -149,11 +156,12 @@ describe("Node API WIT import injection", () => {
     test("does not overwrite an existing dependency when adding a missing import", async () => {
         const root = await fixture({
             "app.wit": "package example:app;\nworld app {}\n",
-            "deps/jco-node-0.1.0/package.wit": "package jco:node@0.1.0; // pinned by user\n",
+            "deps/jco-node-0.1.0/child-process.wit": "package jco:node@0.1.0; // pinned by user\n",
+            "deps/jco-node-0.1.0/types.wit": "package jco:node@0.1.0; // pinned by user\n",
         });
         const result = await injectNodeWitImports(root, undefined, [requirement]);
         expect(result.dependencyFiles).toEqual([]);
-        expect(await readFile(join(root, "deps/jco-node-0.1.0/package.wit"), "utf8")).toContain("pinned by user");
+        expect(await readFile(join(root, "deps/jco-node-0.1.0/child-process.wit"), "utf8")).toContain("pinned by user");
     });
 
     test("leaves the world unchanged when a generated dependency cannot be read", async () => {
@@ -161,7 +169,7 @@ describe("Node API WIT import injection", () => {
         const root = await fixture({ "app.wit": source });
         await expect(
             injectNodeWitImports(root, undefined, [
-                { ...requirement, dependencyDirectory: "missing", dependencySource: join(root, "missing.wit") },
+                { ...requirement, dependencyDirectory: "missing", dependencySources: [join(root, "missing.wit")] },
             ]),
         ).rejects.toThrow();
         expect(await readFile(join(root, "app.wit"), "utf8")).toBe(source);

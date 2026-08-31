@@ -1,0 +1,42 @@
+package jco:node@0.1.0;
+
+interface child-process {
+  use types.{env-vars};
+
+  record process-error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<s32>,
+    syscall: option<string>,
+    path: option<string>,
+    spawnargs: list<string>,
+  }
+
+  record spawn-options {
+    cwd: option<string>,
+    cwd-is-url: bool,
+    env: option<env-vars>,
+    input: option<list<u8>>,
+    timeout: u64,
+    kill-signal: string,
+    max-buffer: u64,
+    shell: option<string>,
+    stdio: option<list<string>>,
+    windows-hide: bool,
+    windows-verbatim-arguments: bool,
+    uid: option<u32>,
+    gid: option<u32>,
+  }
+
+  record spawn-output {
+    pid: option<u32>,
+    status: option<s32>,
+    signal: option<string>,
+    stdout: option<list<u8>>,
+    stderr: option<list<u8>>,
+    error: option<process-error>,
+  }
+
+  spawn-sync: func(command: string, args: list<string>, options: spawn-options) -> spawn-output;
+}
