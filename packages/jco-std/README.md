@@ -321,10 +321,16 @@ jco transpile component.wasm \
   --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
 ```
 
-The opt-in provider delegates queries to Node's real `node:dns` implementation.
-`Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`: preview2's synchronous
-component boundary cannot expose an in-flight c-ares request for later cancellation.
-The WIT boundary is runtime-neutral so a browser DNS provider can be added later.
+The opt-in provider delegates queries directly to Node's real asynchronous
+`node:dns/promises` implementation. When an application supplies a DNS host map,
+Jco automatically uses JSPI to make that promise-returning host function appear
+synchronous to the Preview 2 guest without blocking Node's event loop. Component
+exports are consequently promise-returning and must be awaited by JavaScript hosts.
+
+`Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`: the synchronous WIT
+interface does not expose an in-flight c-ares request as a resource that a later
+guest call could cancel. The WIT boundary remains runtime-neutral so a browser DNS
+provider can be added later.
 
 # License
 
