@@ -24,6 +24,7 @@ const childProcess = () => ({
 const unenvAliases = {
     "node:assert": "/unenv/assert.js",
     "node:buffer": "/unenv/buffer.js",
+    "node:events": "/unenv/events.js",
     "node:path": "/unenv/path.js",
     "node:querystring": "/unenv/querystring.js",
     "unenv:buffer-core": "/unenv/buffer-core.js",
@@ -243,6 +244,46 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("node:querystring")).toBe("\0jco-node-builtin:node:querystring");
         expect(plugin.load("\0jco-node-builtin:node:buffer")).toEqual(expect.any(String));
         expect(plugin.load("\0jco-node-builtin:node:querystring")).toEqual(expect.any(String));
+    });
+
+    test("layers jco-std's entry points over unenv's emitter for node:events", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { unenvAliases, eventsModule: "/jco/node/events.js" },
+        );
+        expect(plugin.resolveId("node:events")).toBe("\0jco-node-builtin:node:events");
+        const source = plugin.load("\0jco-node-builtin:node:events");
+        // unenv supplies the emitter; jco-std supplies the three module-level functions unenv
+        // ships as stubs, and those exports have to shadow the star re-export to take effect.
+        expect(source).toContain("/unenv/events.js");
+        expect(source).toContain("/jco/node/events.js");
+        expect(source).toContain("export * from");
+        for (const name of ["getMaxListeners", "listenerCount", "setMaxListeners"]) {
+            expect(source).toContain(`export const ${name} = completed.${name};`);
+        }
+    });
+
+    test("reports a missing unenv emitter for node:events", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { unenvAliases: {}, eventsModule: "/jco/node/events.js" },
+        );
+        expect(() => plugin.load("\0jco-node-builtin:node:events")).toThrow(/audited builtin node:events/);
+    });
+
+    test("node:events requires no WIT capability", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { unenvAliases, eventsModule: "/jco/node/events.js", onWitRequirement },
+        );
+        expect(plugin.resolveId("node:events")).toBe("\0jco-node-builtin:node:events");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test("does not intercept the bare events specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { unenvAliases });
+        expect(plugin.resolveId("events")).toBeNull();
     });
 
     test("resolves audited unenv modules without unrelated WASI capabilities", () => {
