@@ -12,10 +12,6 @@ import { instantiate } from '../dist/transpiled/component.js';
 
 const testLog = process.env.JCO_NATIVE_MESSAGING_TEST_LOG;
 const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
-if (testLog) {
-    appendFileSync(testLog, `started ${JSON.stringify(process.argv.slice(2))}\n`);
-    process.on('exit', (code) => appendFileSync(testLog, `exit ${code}\n`));
-}
 
 class InputStream {
     blockingRead(length) {
@@ -91,24 +87,36 @@ class OutputStream {
     blockingFlush() {}
 }
 
-const stdin = new InputStream();
-const stdout = new OutputStream(1);
-const stderr = new OutputStream(2);
-if (testLog) {
-    appendFileSync(testLog, 'creating shim\n');
-}
-const shim = new WASIShim();
-if (testLog) {
-    appendFileSync(testLog, 'instantiating component\n');
-}
-const imports = shim.getImportObject();
-imports['wasi:io/streams'] = { InputStream, OutputStream };
-imports['wasi:cli/stdin'] = { getStdin: () => stdin };
-imports['wasi:cli/stdout'] = { getStdout: () => stdout };
-imports['wasi:cli/stderr'] = { getStderr: () => stderr };
-const component = await instantiate(undefined, imports);
-if (testLog) {
-    appendFileSync(testLog, 'running component\n');
+async function main() {
+    if (testLog) {
+        appendFileSync(testLog, `started ${JSON.stringify(process.argv.slice(2))}\n`);
+        process.on('exit', (code) => appendFileSync(testLog, `exit ${code}\n`));
+    }
+
+    const stdin = new InputStream();
+    const stdout = new OutputStream(1);
+    const stderr = new OutputStream(2);
+    if (testLog) {
+        appendFileSync(testLog, 'creating shim\n');
+    }
+    const shim = new WASIShim();
+    if (testLog) {
+        appendFileSync(testLog, 'instantiating component\n');
+    }
+    const imports = shim.getImportObject();
+    imports['wasi:io/streams'] = { InputStream, OutputStream };
+    imports['wasi:cli/stdin'] = { getStdin: () => stdin };
+    imports['wasi:cli/stdout'] = { getStdout: () => stdout };
+    imports['wasi:cli/stderr'] = { getStderr: () => stderr };
+    const component = await instantiate(undefined, imports);
+    if (testLog) {
+        appendFileSync(testLog, 'running component\n');
+    }
+
+    await component.run.run();
 }
 
-await component.run.run();
+main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});
