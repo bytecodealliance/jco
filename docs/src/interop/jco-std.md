@@ -36,6 +36,11 @@ the component.
 
 ## Use normal imports for Node.js built-ins
 
+> [!WARNING]
+> Jco's Node.js built-in compatibility for components is experimental and subject
+> to change. APIs, behavior, and generated component interfaces may change
+> incompatibly without a semver-major release.
+
 Application code should import supported Node.js APIs exactly as it would under
 Node.js. Do not rewrite a Node.js built-in import to an internal `jco-std` export:
 

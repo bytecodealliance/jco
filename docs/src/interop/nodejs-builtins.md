@@ -3,6 +3,11 @@
 Jco's long-term goal is to let existing Node.js programs become WebAssembly
 components with as few source changes as possible.
 
+> [!WARNING]
+> Jco's Node.js built-in compatibility for components is experimental and subject
+> to change. APIs, behavior, and generated component interfaces may change
+> incompatibly without a semver-major release.
+
 In the ideal case, application code can keep an ordinary import such
 as `import { Buffer } from "node:buffer"`, and `jco componentize` supplies
 a portable implementation while producing the component.
