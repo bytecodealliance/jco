@@ -100,6 +100,11 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/child-process-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/child-process-host-node.js"
     },
+    "./wasi/0.2.x/node/24.x.x/events": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/events.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/events.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/events.js"
+    },
     "./node/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
