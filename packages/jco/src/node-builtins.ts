@@ -3,7 +3,12 @@ import { fileURLToPath } from "node:url";
 import type { Plugin } from "rolldown";
 import { defineEnv } from "unenv";
 
-import { CHILD_PROCESS_WIT_REQUIREMENT, CLUSTER_WIT_REQUIREMENT, type NodeWitRequirement } from "./node-wit.js";
+import {
+    CHILD_PROCESS_WIT_REQUIREMENT,
+    CLUSTER_WIT_REQUIREMENT,
+    CONSOLE_WIT_REQUIREMENT,
+    type NodeWitRequirement,
+} from "./node-wit.js";
 
 const PATH_SPECIFIERS = new Map([
     ["node:path", "default"],
@@ -13,6 +18,7 @@ const PATH_SPECIFIERS = new Map([
 const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
 const CHILD_PROCESS_SPECIFIER = "node:child_process";
 const CLUSTER_SPECIFIER = "node:cluster";
+const CONSOLE_SPECIFIER = "node:console";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
@@ -153,6 +159,8 @@ export interface NodeBuiltinOptions {
     childProcessModule?: string;
     /** Path to jco-std's versioned `node:cluster` module (overridable for tests) */
     clusterModule?: string;
+    /** Path to jco-std's versioned `node:console` module (overridable for tests) */
+    consoleModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -262,6 +270,39 @@ export const win32 = path.win32;
 `;
 }
 
+/** Source of the `node:console` ESM facade. */
+function consoleAdapter(consoleModule: string): string {
+    return `
+import console from ${JSON.stringify(consoleModule)};
+export default console;
+export {
+    Console,
+    assert,
+    clear,
+    count,
+    countReset,
+    debug,
+    dir,
+    dirxml,
+    error,
+    group,
+    groupCollapsed,
+    groupEnd,
+    info,
+    log,
+    profile,
+    profileEnd,
+    table,
+    time,
+    timeEnd,
+    timeLog,
+    timeStamp,
+    trace,
+    warn,
+} from ${JSON.stringify(consoleModule)};
+`;
+}
+
 /** Source of a `node:assert` or `node:assert/strict` adapter */
 function assertAdapter(specifier: string, assertModule: string): string {
     if (specifier === "node:assert") {
@@ -341,6 +382,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const childProcessModule = () =>
         options.childProcessModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process"));
+    const consoleModule = () =>
+        options.consoleModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console"));
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -361,6 +405,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             if (PATH_SPECIFIERS.has(id)) {
                 const version = environmentVersion(worldMetadata);
                 return `${VIRTUAL_PREFIX}${id}@${version}`;
+            }
+            if (id === CONSOLE_SPECIFIER) {
+                options.onWitRequirement?.(CONSOLE_WIT_REQUIREMENT);
+                return `${VIRTUAL_PREFIX}${id}`;
             }
             if (AUDITED_UNENV_SPECIFIERS.has(id)) {
                 unenvAdapter(id, options);
@@ -385,13 +433,19 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             if (value === CHILD_PROCESS_SPECIFIER) {
                 return childProcessAdapter(childProcessModule());
             }
+            if (value === CONSOLE_SPECIFIER) {
+                return consoleAdapter(consoleModule());
+            }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);
             }
             const separator = value.lastIndexOf("@");
             const specifier = value.slice(0, separator);
             const version = value.slice(separator + 1);
-            return specifier === "path-core" ? pathCore(version, pathFactory()) : pathAdapter(specifier, version);
+            if (specifier === "path-core") {
+                return pathCore(version, pathFactory());
+            }
+            return pathAdapter(specifier, version);
         },
     };
 }
