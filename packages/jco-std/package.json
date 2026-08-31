@@ -47,6 +47,20 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/cluster.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/cluster.js"
     },
+    "./wasi/0.2.x/node/24.x.x/console": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/console.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/console.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/console.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/console/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/console-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/console-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/console-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/console/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/console-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/console-host-node.js"
+    },
     "./wasi/0.2.x/node/24.x.x/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
