@@ -3,7 +3,7 @@ import type {
   HostEvent,
   HostSettings,
   WorkerInfo,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/host.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster/types.js";
 
 /**
  * In-memory stand-in for the `jco:node/cluster` host adapter.

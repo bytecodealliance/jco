@@ -1,4 +1,4 @@
-import type { ClusterHost } from "./cluster/host.js";
+import type { ClusterHost } from "./cluster/types.js";
 
 /**
  * The default adapter intentionally grants no process-control capability.

@@ -13,7 +13,7 @@ import process from "node:process";
  * `drainEvents`.
  */
 
-import type { HostEvent, HostSettings, WorkerInfo, WorkerState } from "./cluster/host.js";
+import type { HostEvent, HostSettings, WorkerInfo, WorkerState } from "./cluster/types.js";
 
 const events: HostEvent[] = [];
 let listening = false;

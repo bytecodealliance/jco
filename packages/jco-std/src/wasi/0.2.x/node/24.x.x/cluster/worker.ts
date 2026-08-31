@@ -1,7 +1,7 @@
 import { EventEmitter } from "./emitter.js";
 
 import { unsupported } from "./errors.js";
-import type { ClusterHost, WorkerInfo, WorkerState } from "./host.js";
+import type { ClusterHost, WorkerInfo, WorkerState } from "./types.js";
 
 /**
  * Guest-side view of a cluster worker, mirroring Node's `cluster.Worker`.

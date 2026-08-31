@@ -1,4 +1,4 @@
-import type { HostEvent, HostSettings, WorkerInfo } from "./cluster/host.js";
+import type { HostEvent, HostSettings, WorkerInfo } from "./cluster/types.js";
 
 export function isPrimary(): boolean;
 export function currentWorker(): WorkerInfo | undefined;
