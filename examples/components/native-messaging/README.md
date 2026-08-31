@@ -26,10 +26,10 @@ pnpm run test:setup:puppeteer
 pnpm --filter native-messaging run all
 ```
 
-Firefox deliberately runs before Chromium. A Firefox failure stops the test and Chromium is not attempted.
-`TEST_FIREFOX_PATH` and `TEST_CHROMIUM_PATH` may point to alternative browser executables; `PUPPETEER_PATH` remains
-supported for Chromium. On Linux ARM64, where Chrome for Testing is not distributed, an installed Chromium-based
-browser can be supplied through `TEST_CHROMIUM_PATH`.
+The direct protocol, Firefox, and Chromium tests run concurrently and all must pass. `TEST_FIREFOX_PATH` and
+`TEST_CHROMIUM_PATH` may point to alternative browser executables; `PUPPETEER_PATH` remains supported for Chromium.
+On Linux ARM64, where Chrome for Testing is not distributed, an installed Chromium-based browser can be supplied
+through `TEST_CHROMIUM_PATH`.
 
 ## Build
 
@@ -41,7 +41,7 @@ The build has two stages:
 
 > [!NOTE]
 > `jco componentize` normally treats a JavaScript input as one already-bundled file. This example passes `--bundle`
-> because `src/component.js` imports the output helpers in `src/output.js`. A single-file component can omit that
+> because `src/component.js` imports the protocol helpers in `src/utils.js`. A single-file component can omit that
 > option.
 
 The executable `scripts/launch-host.mjs` instantiates those bindings with WASI stdin/stdout streams connected directly
@@ -67,13 +67,13 @@ the reader.
 
 ## How the protocol is tested
 
-`all.js` stays intentionally small. It calls focused helpers under `test/` in this order:
+`all.js` stays intentionally small. It runs these focused helpers under `test/` concurrently:
 
-1. `test/protocol.js` launches the host directly and checks framing, Unicode, multiple messages on one process,
-   large-array chunking, and truncated input.
-2. `test/browser-harness.js` creates isolated Firefox configuration, installs the temporary extension, registers the
-   host, and repeats the semantic round trips through `connectNative()`.
-3. The same harness creates isolated Chromium configuration and repeats the test with Chromium's manifest format.
+- `test/protocol.js` launches the host directly and checks framing, Unicode, multiple messages on one process,
+  large-array chunking, and truncated input.
+- `test/browser-harness.js` creates isolated Firefox configuration, installs the temporary extension, registers the
+  host, and repeats the semantic round trips through `connectNative()`.
+- The same harness creates isolated Chromium configuration and repeats the test with Chromium's manifest format.
 
 Every browser profile, generated extension configuration, host manifest, and diagnostic log lives in a temporary
 directory removed during teardown. The test does not modify a developer's normal browser profile or native-host
@@ -86,14 +86,14 @@ element.
 
 ## Project layout
 
-- `src/component.js` reads framed messages and runs the component's command loop.
-- `src/output.js` owns response framing, write limits, and large-array chunking.
+- `src/component.js` contains the component's command loop.
+- `src/utils.js` owns message framing, write limits, exact reads, and large-array chunking.
 - `scripts/launch-host.mjs` is the executable Node entrypoint registered with each browser.
 - `extension/background.js` contains the shared Firefox/Chromium extension behavior.
 - `extension/manifest.firefox.json` and `extension/manifest.chromium.json` contain the small browser-specific pieces.
 - `test/protocol.js` tests the host independently of a browser.
 - `test/browser-harness.js` owns browser setup, registration, assertions, and teardown.
-- `all.js` expresses the required Firefox-first test order.
+- `all.js` runs the independent protocol and browser tests in parallel.
 
 The framing and chunking approach is based on the native-messaging example proposed by
 [guest271314 in jco PR #1629](https://github.com/bytecodealliance/jco/pull/1629). This version adapts that work to the
