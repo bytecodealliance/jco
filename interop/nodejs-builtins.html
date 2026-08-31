@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3479c582.js";
+            window.path_to_searchindex_js = "../searchindex-7f3e39b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -266,6 +266,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
+<tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
 </tbody>
@@ -327,6 +328,51 @@ and <code>execFile</code>, <code>ChildProcess</code>, and <code>fork</code>/IPC 
 carry Node callbacks, lifecycle events, or interactive streams; those APIs stay
 explicitly unavailable until the capability grows an asynchronous resource and
 stream model.</p>
+<h3 id="clusters-and-host-capabilities"><a class="header" href="#clusters-and-host-capabilities">Clusters and host capabilities</a></h3>
+<p>A guest has no process model, so <code>node:cluster</code> follows the same pattern as
+<code>node:child_process</code>. When bundled source imports it, Jco ensures the selected world
+declares the interface, editing the <code>.wit</code> file in place, installing the definition under
+<code>deps/jco-node-0.1.0</code>, and printing a CLI warning naming the changed files:</p>
+<pre><code class="language-wit">world app {
+  import jco:node/cluster@0.1.0;
+  // component imports and exports...
+}
+</code></pre>
+<p>Declaring or generating the import does not grant host access. Jco’s default
+transpilation map uses a provider that throws <code>ERR_JCO_CLUSTER_ADAPTER_REQUIRED</code>, so an
+application must make the security decision explicitly, for example by mapping the Node
+host provider:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/cluster@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host/node'
+</code></pre>
+<p>That produces the call path guest <code>node:cluster</code> → WIT capability → host adapter → Node
+<code>node:cluster</code>. Because a transpiled component is itself a Node process, <code>cluster.fork()</code>
+re-executes the entry, so a forked worker runs the component again and observes itself as
+a worker.</p>
+<p>Two differences from Node are unavoidable:</p>
+<ul>
+<li><strong>Event timing.</strong> Node delivers cluster events on its event loop. A guest cannot be
+called back across the host boundary, so events are queued by the host and emitted
+when the guest next touches the module; <code>cluster.pump()</code> drains them on demand.</li>
+<li><strong>Messages cross as JSON.</strong> WIT has no dynamic value type, so values JSON cannot
+represent – functions, symbols, cycles, <code>BigInt</code> – are rejected rather than
+silently altered.</li>
+</ul>
+<p>These throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> rather than failing quietly:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>API</th><th>Why</th></tr>
+</thead>
+<tbody>
+<tr><td><code>worker.process</code></td><td>A <code>ChildProcess</code> handle cannot cross the component boundary.</td></tr>
+<tr><td><code>listening</code> event, handle sharing</td><td>Cluster distributes Node <code>net</code> handles; guest servers are <code>wasi:sockets</code>, so nothing hooks them. <code>SCHED_RR</code> is accepted but does not distribute guest connections.</td></tr>
+<tr><td><code>setupPrimary({ exec, execArgv, stdio, uid, gid, inspectPort, serialization })</code></td><td>These configure the host runner executing the component, not a guest file.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>cluster.isMaster</code> and <code>cluster.setupMaster()</code> are deprecated in Node, so they throw
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> and point at <code>isPrimary</code>/<code>setupPrimary</code>.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
@@ -410,7 +456,7 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:cluster</code>, <code>node:console</code>, <code>node:crypto</code>, <code>node:dgram</code>,
+<p><code>node:console</code>, <code>node:crypto</code>, <code>node:dgram</code>,
 <code>node:dns</code>, <code>node:dns/promises</code>, <code>node:fs</code>, <code>node:fs/promises</code>, <code>node:http</code>,
 <code>node:http2</code>, <code>node:https</code>, <code>node:inspector</code>, <code>node:inspector/promises</code>,
 <code>node:module</code>, <code>node:net</code>, <code>node:os</code>, <code>node:perf_hooks</code>, <code>node:process</code>,
