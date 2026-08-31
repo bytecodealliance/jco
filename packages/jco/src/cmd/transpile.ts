@@ -7,6 +7,8 @@ import { writeFiles } from "../common.js";
 declare const __vite_ssr_import_meta__: ImportMeta;
 declare const globalCreateRequire: typeof import("node:module").createRequire;
 
+const DNS_CAPABILITY = "jco:node/dns@0.1.0";
+const DNS_ASYNC_IMPORT = `${DNS_CAPABILITY}#query`;
 const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -18,12 +20,33 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
 export function withDefaultNodeCapabilityMap(map?: Record<string, string>): Record<string, string> {
     return Object.assign({}, DEFAULT_NODE_CAPABILITY_MAP, map);
 }
+
+function appendUnique(values: string[] | undefined, value: string): string[] {
+    return values?.includes(value) ? values : [...(values ?? []), value];
+}
+
+/** Configure host-backed Node capabilities and their required binding mode. */
+export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts {
+    const hasAsyncDnsProvider =
+        opts.map?.[DNS_CAPABILITY] !== undefined &&
+        opts.map[DNS_CAPABILITY] !== DEFAULT_NODE_CAPABILITY_MAP[DNS_CAPABILITY];
+    if (hasAsyncDnsProvider) {
+        // The Node DNS provider returns a promise. JSPI suspends its synchronous
+        // Preview 2 WIT import, and every possibly-transitive export is promising.
+        opts.asyncMode = "jspi";
+        opts.asyncImports = appendUnique(opts.asyncImports, DNS_ASYNC_IMPORT);
+        opts.asyncExports = appendUnique(opts.asyncExports, "*");
+    }
+    opts.map = withDefaultNodeCapabilityMap(opts.map);
+    return opts;
+}
+
 export interface TranspileOpts {
     name?: string;
     instantiation?: "async" | "sync";
     importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
     map?: Record<string, string>;
-    asyncMode?: string;
+    asyncMode?: "sync" | "jspi";
     asyncImports?: string[];
     asyncExports?: string[];
     validLiftingOptimization?: boolean;
@@ -105,7 +128,7 @@ function prepOpts(opts: any, program?: any) {
     }
     // Host-backed Node capabilities are never granted implicitly. Components use
     // deny-by-default shims unless the application explicitly replaces their maps.
-    opts.map = withDefaultNodeCapabilityMap(opts.map);
+    withDefaultNodeCapabilities(opts);
 
     return opts;
 }
