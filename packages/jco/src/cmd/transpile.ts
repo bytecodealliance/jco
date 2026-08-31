@@ -10,8 +10,13 @@ declare const globalCreateRequire: typeof import("node:module").createRequire;
 const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
+    "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
 };
 
+/** Apply deny-by-default host mappings while preserving explicit application choices. */
+export function withDefaultNodeCapabilityMap(map?: Record<string, string>): Record<string, string> {
+    return Object.assign({}, DEFAULT_NODE_CAPABILITY_MAP, map);
+}
 export interface TranspileOpts {
     name?: string;
     instantiation?: "async" | "sync";
@@ -97,9 +102,9 @@ function prepOpts(opts: any, program?: any) {
             opts.map = Object.fromEntries(opts.map.map((s: string) => s.split("=")));
         }
     }
-    // Process spawning is never granted implicitly. Components resolve to the
-    // deny-by-default shim unless the application explicitly replaces this map.
-    opts.map = Object.assign({}, DEFAULT_NODE_CAPABILITY_MAP, opts.map);
+    // Host-backed Node capabilities are never granted implicitly. Components use
+    // deny-by-default shims unless the application explicitly replaces their maps.
+    opts.map = withDefaultNodeCapabilityMap(opts.map);
 
     return opts;
 }

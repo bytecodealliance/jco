@@ -361,6 +361,27 @@ async function runComponent(
             }
         }
 
+        // Make the deny-by-default node:console host available to generated code.
+        // Selecting an output-capable provider still requires an explicit --map.
+        try {
+            const jcoStdPath = resolve(
+                fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host")),
+                "../../../../../../",
+            );
+            try {
+                await symlink(jcoStdPath, resolve(modulesDir, "jco-std"), "dir");
+            } catch (e) {
+                if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
+                    throw e;
+                }
+            }
+        } catch (e) {
+            // Older jco-std releases do not contain this optional capability.
+            if ((e as NodeJS.ErrnoException).code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") {
+                throw e;
+            }
+        }
+
         const runPath = resolve(outDir, "_run.js");
         const sandboxSetup = getSandboxSetup(opts);
         if (opts.isolateRequests === "worker") {
