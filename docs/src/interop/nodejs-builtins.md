@@ -317,8 +317,8 @@ Common file and directory operations, metadata, directory entries, scalar and
 vector descriptor I/O, and their callback/promise facades are supported. APIs
 whose contract requires long-lived streams or event sources -- including
 `ReadStream`, `WriteStream`, `Utf8Stream`, `watch`, `watchFile`, and
-`openAsBlob` -- throw `ERR_JCO_UNSUPPORTED_NODE_API` because the current WIT
-protocol does not model those resources. Deprecated `exists` and `lchmod` entry
+`openAsBlob` -- throw `ERR_JCO_UNSUPPORTED_NODE_API` because the typed WIT
+interface does not model those resources. Deprecated `exists` and `lchmod` entry
 points fail explicitly rather than executing deprecated behavior.
 
 ### Async hooks and synchronous scopes
