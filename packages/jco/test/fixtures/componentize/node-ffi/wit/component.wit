@@ -1,0 +1,5 @@
+package local:node-ffi;
+
+world test {
+  export run: func() -> string;
+}
