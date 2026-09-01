@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1691cc4b.js";
+            window.path_to_searchindex_js = "searchindex-b8b034db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -2074,7 +2074,9 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:diagnostics_channel</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel</code></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
+<tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
+<tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
 </tbody>
 </table>
@@ -2198,6 +2200,24 @@ silently altered.</li>
 </div>
 <p><code>cluster.isMaster</code> and <code>cluster.setupMaster()</code> are deprecated in Node, so they throw
 <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> and point at <code>isPrimary</code>/<code>setupPrimary</code>.</p>
+<h3 id="console-and-host-capabilities"><a class="header" href="#console-and-host-capabilities">Console and host capabilities</a></h3>
+<p>Writing to a console is a host capability, not a portable one: a component has no
+stdout of its own. <code>node:console</code> therefore resolves against
+<code>jco:node/console@0.1.0</code>, which an application must provide.</p>
+<p>It is <strong>denied by default</strong>. Transpiling maps the capability to jco-std’s deny
+host unless told otherwise, and every call – <code>write</code>, <code>isTerminal</code>, <code>colorDepth</code>
+– throws <code>ERR_JCO_CONSOLE_ADAPTER_REQUIRED</code>. That is deliberate: a component that
+silently discarded its output would be harder to diagnose than one that says the
+capability is missing.</p>
+<p>To grant it, map the interface to a provider. jco-std ships one for Node, which
+writes through to the real <code>process.stdout</code>/<code>process.stderr</code> and reports their TTY
+status and color depth:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/console@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host/node'
+</code></pre>
+<p>Formatting is done in the guest – <code>Console</code>, the <code>log</code>/<code>warn</code>/<code>error</code> family,
+<code>group</code> indentation, <code>count</code>, <code>time</code>, <code>table</code> and <code>dir</code> all run guest-side, and only
+the finished string crosses the boundary.</p>
 <h3 id="async-hooks-and-synchronous-scopes"><a class="header" href="#async-hooks-and-synchronous-scopes">Async hooks and synchronous scopes</a></h3>
 <p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
 nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
@@ -2231,6 +2251,35 @@ the <code>start</code>/<code>end</code>/<code>asyncStart</code>/<code>asyncEnd</
 <p><code>Channel.bindStore</code> accepts anything offering <code>run(value, fn)</code>, which includes jco-std’s
 <code>AsyncLocalStorage</code>. Stores are therefore scoped synchronously: a bound store is visible while
 subscribers run and does not follow an <code>await</code>. See the async hooks section above for why.</p>
+<h3 id="events"><a class="header" href="#events">Events</a></h3>
+<p><code>node:events</code> is two pieces. The <code>EventEmitter</code> itself comes from unenv, audited against Node 24:
+<code>on</code>/<code>emit</code>, one-shot <code>once</code>, listener ordering under <code>prependListener</code>, <code>eventNames</code>,
+<code>removeAllListeners</code>, the per-emitter max-listener methods, and an unhandled <code>error</code> throwing all
+match Node, as do <code>once()</code>, <code>on()</code>’s async iterator, <code>getEventListeners</code>, <code>addAbortListener</code> and
+<code>EventEmitterAsyncResource</code>.</p>
+<p>Three module-level functions do not, and Jco implements them in jco-std rather than exporting
+something that fails when called:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Entry point</th><th>unenv</th><th>Jco</th></tr>
+</thead>
+<tbody>
+<tr><td><code>events.listenerCount(emitter, eventName)</code></td><td>throws <code>[unenv] node:events.listenerCount is not implemented yet!</code></td><td>delegates to the emitter’s own <code>listenerCount</code>, as Node does, so a subclass that overrides it is honored</td></tr>
+<tr><td><code>events.setMaxListeners(n[, ...targets])</code></td><td>throws <code>[unenv] node:events.setMaxListeners is not implemented yet!</code></td><td>sets the limit on <code>EventEmitter</code>s and <code>EventTarget</code>s, or the process-wide default when given no targets</td></tr>
+<tr><td><code>events.getMaxListeners(target)</code></td><td>throws for an <code>EventTarget</code>; only handles emitters</td><td>reads either, falling back to the current default</td></tr>
+</tbody>
+</table>
+</div>
+<p>Argument validation matches Node’s, <code>ERR_INVALID_ARG_TYPE</code> and <code>ERR_OUT_OF_RANGE</code> messages
+included.</p>
+<p>Node’s module object <em>is</em> the <code>EventEmitter</code> class, so <code>events === events.EventEmitter</code> holds here
+too: the adapter keeps the class as the default export, and installs the three functions above as
+statics on it so both access paths reach the working versions.</p>
+<p>Note for anyone reading jco-std: it carries a separate, deliberately minimal <code>EventEmitter</code> of its
+own for shims such as <code>node:cluster</code>. jco-std does not depend on unenv, and shim code importing a
+<code>node:*</code> builtin would rely on a bundler rewriting it, which is not true of every way jco-std is
+consumed. The two are independent by design.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
@@ -2288,9 +2337,11 @@ generated-bundle string checks.</li>
 Until an improvement is in the pinned unenv release and passes Jco’s guest tests,
 Jco keeps a stronger local implementation or leaves the module disabled.</p>
 <h2 id="reviewed-modules-that-are-not-enabled"><a class="header" href="#reviewed-modules-that-are-not-enabled">Reviewed modules that are not enabled</a></h2>
-<p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco exposes
-seven of them: five through Jco implementations and two through audited unenv
-cores. The other aliases were reviewed but are not automatically resolved.</p>
+<p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco resolves
+eleven modules: eight implemented in jco-std (one of which, <code>node:domain</code>, is a
+deliberate refusal), two layering a Jco implementation over an audited unenv core,
+and one audited unenv module used as-is. The other aliases were reviewed but are
+not automatically resolved.</p>
 <p>The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.</p>
 <h3 id="more-semantic-or-dependency-work-needed"><a class="header" href="#more-semantic-or-dependency-work-needed">More semantic or dependency work needed</a></h3>
@@ -2300,7 +2351,6 @@ the module or upstream project.</p>
 <tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:events</code></td><td>Much of EventEmitter is useful, but the public module includes placeholder exports and depends on the current async-hooks fallback.</td></tr>
 <tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td>Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.</td></tr>
 <tr><td><code>node:timers/promises</code></td><td>A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.</td></tr>
 <tr><td><code>node:trace_events</code>, <code>node:tty</code></td><td>The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.</td></tr>
@@ -2312,7 +2362,7 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:console</code>, <code>node:crypto</code>, <code>node:dgram</code>,
+<p><code>node:crypto</code>, <code>node:dgram</code>,
 <code>node:dns</code>, <code>node:dns/promises</code>, <code>node:fs</code>, <code>node:fs/promises</code>, <code>node:http</code>,
 <code>node:http2</code>, <code>node:https</code>, <code>node:inspector</code>, <code>node:inspector/promises</code>,
 <code>node:module</code>, <code>node:net</code>, <code>node:os</code>, <code>node:perf_hooks</code>, <code>node:process</code>,
