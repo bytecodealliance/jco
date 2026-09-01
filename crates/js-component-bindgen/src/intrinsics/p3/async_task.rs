@@ -646,7 +646,24 @@ impl AsyncTaskIntrinsic {
                             subtask.requestCancellation();
 
                             if (!subtask.isResolved()) {{
-                                // The callee did not resolve synchronously: async-lowered cancels
+                                // Cancellation immediately resumes one cancellable child
+                                // execution slice. Wait until that slice either resolves or
+                                // suspends again before deciding whether the cancel blocked.
+                                const childTask = subtask.getChildTask();
+                                if (childTask) {{
+                                    const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
+                                    if (childState.suspendedTaskReady(childTask.id())) {{
+                                        const progress = childTask.waitForProgress();
+                                        if (!childState.resumeTaskByID(childTask.id())) {{
+                                            throw new Error('failed to resume cancellable subtask');
+                                        }}
+                                        await progress;
+                                    }}
+                                }}
+                            }}
+
+                            if (!subtask.isResolved()) {{
+                                // The resumed callee blocked again: async-lowered cancels
                                 // report BLOCKED (resolution will arrive via a later SUBTASK event),
                                 // while sync-lowered cancels block the current task until the
                                 // subtask resolves.
@@ -912,6 +929,7 @@ impl AsyncTaskIntrinsic {
                         #entryFnName = null;
 
                         #onResolveHandlers = [];
+                        #progressWaiters = [];
                         #completionPromise = null;
                         #rejected = false;
 
@@ -1036,6 +1054,18 @@ impl AsyncTaskIntrinsic {
 
                         completionPromise() {{ return this.#completionPromise; }}
                         exitPromise() {{ return this.#exitPromise; }}
+
+                        waitForProgress() {{
+                            const {{ promise, resolve }} = {promise_with_resolvers_fn}();
+                            this.#progressWaiters.push(resolve);
+                            return promise;
+                        }}
+
+                        notifyProgress() {{
+                            const waiters = this.#progressWaiters;
+                            this.#progressWaiters = [];
+                            for (const resolve of waiters) {{ resolve(); }}
+                        }}
 
                         isAsync() {{ return this.#isAsync; }}
                         isSync() {{ return !this.isAsync(); }}
@@ -1436,6 +1466,7 @@ impl AsyncTaskIntrinsic {
                             // host-driven rejection path (see `reject()`).
                             this.onResolve(args?.error ?? null);
                             this.#state = {task_class}.State.RESOLVED;
+                            this.notifyProgress();
                         }}
 
                         onResolve(taskValue) {{
@@ -1574,6 +1605,7 @@ impl AsyncTaskIntrinsic {
                                     }});
                                     throw new Error('unexpected number of results');
                             }}
+                            this.notifyProgress();
                         }}
 
                         exit(args) {{

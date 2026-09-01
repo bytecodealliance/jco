@@ -573,6 +573,11 @@ impl ComponentIntrinsic {
                                 }},
                             }});
 
+                            // A caller synchronously driving one task quantum (for
+                            // example, subtask.cancel) waits for the resumed task to
+                            // either resolve or suspend again.
+                            task.notifyProgress();
+
                             this.runTickLoop();
 
                             return promise;
@@ -580,9 +585,19 @@ impl ComponentIntrinsic {
 
                         resumeTaskByID(taskID) {{
                             const meta = this.#removeSuspendedTaskMeta(taskID);
-                            if (!meta) {{ return; }}
+                            if (!meta) {{ return false; }}
                             if (meta.taskID !== taskID) {{ throw new Error('task ID does not match'); }}
                             meta.resume();
+                            return true;
+                        }}
+
+                        suspendedTaskReady(taskID) {{
+                            const meta = this.#getSuspendedTaskMeta(taskID);
+                            if (!meta) {{ return false; }}
+                            if (!meta.readyFn) {{
+                                throw new Error(`suspended task [${{taskID}}] is missing a readiness function`);
+                            }}
+                            return meta.task.isRejected() || meta.readyFn();
                         }}
 
                         async runTickLoop() {{

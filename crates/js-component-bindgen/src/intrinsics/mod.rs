@@ -1443,6 +1443,26 @@ mod tests {
     }
 
     #[test]
+    fn subtask_cancel_drives_one_cancellable_child_slice() {
+        let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
+        assert!(cancel.contains("childState.suspendedTaskReady(childTask.id())"));
+        assert!(cancel.contains("const progress = childTask.waitForProgress();"));
+        assert!(cancel.contains("childState.resumeTaskByID(childTask.id())"));
+        assert!(cancel.contains("await progress;"));
+
+        let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+        assert!(task.contains("#progressWaiters = [];"));
+        assert!(task.contains("waitForProgress()"));
+        assert!(task.contains("notifyProgress()"));
+
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+        assert!(state.contains("task.notifyProgress();"));
+        assert!(state.contains("suspendedTaskReady(taskID)"));
+    }
+
+    #[test]
     fn sync_start_fused_adapter_runs_in_the_caller_task() {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::SyncStartCall));
 
