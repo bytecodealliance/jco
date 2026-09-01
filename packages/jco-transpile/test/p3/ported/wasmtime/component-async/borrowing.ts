@@ -91,7 +91,7 @@ suite('borrowing scenario', () => {
                 await instance['local:local/run-bool'].run(true);
                 assert.fail('should have failed');
             } catch (err) {
-                assert.include(err.message.toLowerCase(), 'invalid handle');
+                assert.include(err.message.toLowerCase(), 'unknown handle index');
             }
         } finally {
             if (cleanup) {
