@@ -19,7 +19,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 ## HTTP
 
 | Export                                       | Description                                                                   |
-|----------------------------------------------|-------------------------------------------------------------------------------|
+| -------------------------------------------- | ----------------------------------------------------------------------------- |
 | `http/adapters/hono`                         | Enables easier building of [Hono][hono] HTTP servers                          |
 | `http/adapters/express`                      | Provides a simple [Express][express]-like interface for building HTTP servers |
 | `wasi/0.2.x/node/24.x.x/assert`              | `node:assert` adapter, Node 24 on WASI p2                                     |
