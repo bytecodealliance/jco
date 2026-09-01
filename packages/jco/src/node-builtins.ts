@@ -49,6 +49,8 @@ const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
 const OS_SPECIFIER = "node:os";
 const STRING_DECODER_SPECIFIER = "node:string_decoder";
+const STREAM_CONSUMERS_SPECIFIER = "node:stream/consumers";
+const STREAM_ITER_SPECIFIER = "node:stream/iter";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const HTTP_SPECIFIER = "node:http";
 export const HTTP_CALLBACKS_SPECIFIER = "jco:node-http-callbacks";
@@ -271,6 +273,9 @@ export interface NodeBuiltinOptions {
     osModule?: string;
     /** Path to jco-std's versioned `node:string_decoder` module (overridable for tests) */
     stringDecoderModule?: string;
+    /** Paths to jco-std's versioned stream modules (overridable for tests) */
+    streamConsumersModule?: string;
+    streamIterModule?: string;
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
@@ -533,6 +538,15 @@ export {
     spawn,
     spawnSync,
 } from ${JSON.stringify(childProcessModule)};
+`;
+}
+
+/** Source of a capability-free Node stream submodule adapter. */
+function streamAdapter(module: string): string {
+    return `
+import streamModule from ${JSON.stringify(module)};
+export default streamModule;
+export * from ${JSON.stringify(module)};
 `;
 }
 
@@ -868,6 +882,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const stringDecoderModule = () =>
         options.stringDecoderModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder"));
+    const streamConsumersModule = () =>
+        options.streamConsumersModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers"));
+    const streamIterModule = () =>
+        options.streamIterModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter"));
     const clusterModule = () =>
         options.clusterModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
@@ -957,6 +977,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === STRING_DECODER_SPECIFIER) {
                 // No onWitRequirement: decoding and incomplete-byte state stay in the guest.
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === STREAM_CONSUMERS_SPECIFIER || id === STREAM_ITER_SPECIFIER) {
+                // No onWitRequirement: iterable streams are entirely guest-side.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CLUSTER_SPECIFIER) {
@@ -1052,6 +1076,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === STRING_DECODER_SPECIFIER) {
                 return stringDecoderAdapter(stringDecoderModule());
+            }
+            if (value === STREAM_CONSUMERS_SPECIFIER) {
+                return streamAdapter(streamConsumersModule());
+            }
+            if (value === STREAM_ITER_SPECIFIER) {
+                return streamAdapter(streamIterModule());
             }
             if (value === CLUSTER_SPECIFIER) {
                 return clusterAdapter(clusterModule());
