@@ -424,16 +424,6 @@ impl AsyncFutureIntrinsic {
                         }});
                         future.setGlobalFutureMapRep({global_future_map}.insert(future));
 
-                        const writeEnd = future.writeEnd();
-                        writeEnd.setWaitableIdx(cstate.handles.insert(writeEnd));
-                        writeEnd.setHandle(futureTable.insert(writeEnd));
-                        if (writeEnd.futureTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched future table"); }}
-
-                        const writeEndWaitableIdx = writeEnd.waitableIdx();
-                        const writeEndHandle = writeEnd.handle();
-                        writeWaitable.setTarget(`waitable for future write end (waitable [${{writeEndWaitableIdx}}])`);
-                        writeEnd.setTarget(`future write end (waitable [${{writeEndWaitableIdx}}])`);
-
                         const readEnd = future.readEnd();
                         readEnd.setWaitableIdx(cstate.handles.insert(readEnd));
                         readEnd.setHandle(futureTable.insert(readEnd));
@@ -443,6 +433,16 @@ impl AsyncFutureIntrinsic {
                         const readEndHandle = readEnd.handle();
                         readWaitable.setTarget(`waitable for read end (waitable [${{readEndWaitableIdx}}])`);
                         readEnd.setTarget(`future read end (waitable [${{readEndWaitableIdx}}])`);
+
+                        const writeEnd = future.writeEnd();
+                        writeEnd.setWaitableIdx(cstate.handles.insert(writeEnd));
+                        writeEnd.setHandle(futureTable.insert(writeEnd));
+                        if (writeEnd.futureTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched future table"); }}
+
+                        const writeEndWaitableIdx = writeEnd.waitableIdx();
+                        const writeEndHandle = writeEnd.handle();
+                        writeWaitable.setTarget(`waitable for future write end (waitable [${{writeEndWaitableIdx}}])`);
+                        writeEnd.setTarget(`future write end (waitable [${{writeEndWaitableIdx}}])`);
 
                         return {{
                             writeEnd,
