@@ -17,7 +17,7 @@
 
 import { unsupported } from "../cluster/errors.js";
 
-type Listener = (...args: unknown[]) => void;
+type Listener = (...args: never[]) => unknown;
 
 interface Registration {
   listener: Listener;
@@ -113,7 +113,7 @@ export class EventEmitter {
       if (registration.once) {
         this.removeListener(event, registration.listener);
       }
-      registration.listener(...args);
+      (registration.listener as (...values: unknown[]) => unknown)(...args);
     }
     return true;
   }
