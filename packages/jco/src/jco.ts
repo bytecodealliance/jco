@@ -77,6 +77,11 @@ program
     )
     .option("--bundle", "bundle source and its dependencies before componentization (automatic for TypeScript)")
     .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
+    .addOption(
+        new Option("--with-nodejs-http-via <transport>", "transport used by bundled node:http code")
+            .choices(["direct", "wasi-sockets", "wasi-http"])
+            .default("direct"),
+    )
     .requiredOption("-o, --out <out>", "output component file")
     .option("--debug-bindings", "Output debug bindings and metadata during componentization (by default to stderr)")
     .option("--debug-bindings-dir <dir>", "Directory to which to output generated bindings and metadata")
