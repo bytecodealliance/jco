@@ -16,6 +16,7 @@
       "jco:node/console@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/console-interface.d.ts"],
       "jco:node/dns@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/dns-interface.d.ts"],
       "jco:node/fs@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/fs-interface.d.ts"],
+      "jco:node/ffi@0.1.0": ["./src/wasi/0.2.x/node/26.x.x/ffi-interface.d.ts"],
       "wasi:http/types@0.2.3": ["./src/wasi/0.2.3/generated/types/interfaces/wasi-http-types.d.ts"],
       "wasi:cli/environment@0.2.3": [
         "./src/wasi/0.2.3/generated/types/interfaces/wasi-cli-environment.d.ts"

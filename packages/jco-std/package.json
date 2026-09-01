@@ -143,6 +143,20 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/events.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/events.js"
     },
+    "./wasi/0.2.x/node/26.x.x/ffi": {
+      "types": "./dist/wasi/0.2.x/node/26.x.x/ffi.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/26.x.x/ffi.js",
+      "default": "./dist/wasi/0.2.x/node/26.x.x/ffi.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/ffi/host": {
+      "types": "./dist/wasi/0.2.x/node/26.x.x/ffi-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/26.x.x/ffi-host.js",
+      "default": "./dist/wasi/0.2.x/node/26.x.x/ffi-host.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/ffi/host/node": {
+      "types": "./dist/wasi/0.2.x/node/26.x.x/ffi-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/26.x.x/ffi-host-node.js"
+    },
     "./node/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
