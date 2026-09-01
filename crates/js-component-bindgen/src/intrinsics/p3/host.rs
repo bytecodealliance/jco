@@ -552,16 +552,45 @@ impl HostIntrinsic {
                             }});
                         }};
 
+                        const driveJspiCallee = async () => {{
+                            let callbackResult;
+                            try {{
+                                let jspiCallee;
+                                if (callee._cachedPromising) {{
+                                    jspiCallee = callee._cachedPromising;
+                                }} else {{
+                                    callee._cachedPromising = WebAssembly.promising(callee);
+                                    jspiCallee = callee._cachedPromising;
+                                }}
+
+                                callbackResult = await {with_global_current_task_meta_async_fn}({{
+                                    taskID: preparedTask.id(),
+                                    componentIdx: preparedTask.componentIdx(),
+                                    fn: () => jspiCallee.apply(null, startRes),
+                                }});
+                            }} catch(err) {{
+                                handleCalleeError(err);
+                                return;
+                            }}
+
+                            try {{
+                                await driveCallback(callbackResult);
+                            }} catch (err) {{
+                                {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
+                            }}
+                        }};
+
                         // A non-suspending initial slice can run before the lower returns,
-                        // allowing task.return to report RETURNED eagerly. If entry or the
-                        // core function can suspend, preserve the deferred JSPI path.
-                        // Calling tryEnter early for the latter also removes the caller's
-                        // cancellation-before-start window.
-                        const mayStartSynchronously = callee._jcoMaySuspend === false;
+                        // allowing task.return to report RETURNED eagerly. A stack-switching
+                        // caller also continues in this Wasm slice, so the callee must reach its
+                        // first suspension before the caller can observe or cancel the subtask.
+                        // Callback-driven callers return first, preserving cancellation before entry.
+                        const mayStartSynchronously = callee._jcoMaySuspend === false
+                            || !subtask.getParentTask().hasCallback();
                         const enteredSynchronously = mayStartSynchronously
                             ? preparedTask.tryEnter()
                             : null;
-                        if (enteredSynchronously === true) {{
+                        if (enteredSynchronously === true && callee._jcoMaySuspend === false) {{
                             let callbackResult;
                             try {{
                                 callbackResult = {with_global_current_task_meta_fn}({{
@@ -577,13 +606,16 @@ impl HostIntrinsic {
                                     {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
                                 }});
                             }}
-                        }} else if (enteredSynchronously !== false) {{
-                            const enterPromise = enteredSynchronously === null
-                                ? preparedTask.enter()
-                                : Promise.resolve(true);
+                        }} else if (enteredSynchronously === true) {{
+                            // Calling the async helper runs synchronously through invocation of
+                            // WebAssembly.promising, which executes the guest until its first
+                            // suspending import before returning a Promise.
+                            driveJspiCallee();
+                        }} else if (enteredSynchronously === null) {{
+                            const enterPromise = preparedTask.enter();
 
-                            // Start the (event) driver loop that will resolve the subtask
-                            // in a new JS task.
+                            // Entry is blocked by backpressure or the component lock, so resume
+                            // the call once the task is allowed to enter.
                             setTimeout(async () => {{
                                 {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
                                     taskID: preparedTask.id(),
@@ -605,33 +637,7 @@ impl HostIntrinsic {
                                     throw new Error("task failed to start");
                                 }}
 
-                                let callbackResult;
-                                try {{
-                                    let jspiCallee;
-                                    if (callee._cachedPromising) {{
-                                        jspiCallee = callee._cachedPromising;
-                                    }} else {{
-                                        callee._cachedPromising = WebAssembly.promising(callee);
-                                        jspiCallee = callee._cachedPromising;
-                                    }}
-
-                                    callbackResult = await {with_global_current_task_meta_async_fn}({{
-                                        taskID: preparedTask.id(),
-                                        componentIdx: preparedTask.componentIdx(),
-                                        fn: () => {{
-                                            return jspiCallee.apply(null, startRes);
-                                        }}
-                                    }});
-                                }} catch(err) {{
-                                    handleCalleeError(err);
-                                    return;
-                                }}
-
-                                try {{
-                                    await driveCallback(callbackResult);
-                                }} catch (err) {{
-                                    {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
-                                }}
+                                await driveJspiCallee();
                             }}, 0);
                         }}
 
