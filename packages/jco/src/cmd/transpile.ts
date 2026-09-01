@@ -9,6 +9,8 @@ declare const globalCreateRequire: typeof import("node:module").createRequire;
 
 const DNS_CAPABILITY = "jco:node/dns@0.1.0";
 const DNS_ASYNC_IMPORT = `${DNS_CAPABILITY}#*`;
+const HTTP_CAPABILITY = "jco:node/http@0.1.0";
+const HTTP_ASYNC_IMPORT = `${HTTP_CAPABILITY}#request`;
 const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -17,6 +19,7 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
     "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
     "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
+    "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
 };
 
 /** Apply deny-by-default host mappings while preserving explicit application choices. */
@@ -38,6 +41,16 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
         // Preview 2 WIT import, and every possibly-transitive export is promising.
         opts.asyncMode = "jspi";
         opts.asyncImports = appendUnique(opts.asyncImports, DNS_ASYNC_IMPORT);
+        opts.asyncExports = appendUnique(opts.asyncExports, "*");
+    }
+    const hasAsyncHttpProvider =
+        opts.map?.[HTTP_CAPABILITY] !== undefined &&
+        opts.map[HTTP_CAPABILITY] !== DEFAULT_NODE_CAPABILITY_MAP[HTTP_CAPABILITY];
+    if (hasAsyncHttpProvider) {
+        // The opt-in Node HTTP provider buffers an asynchronous request. JSPI
+        // suspends the synchronous Preview 2 WIT import while it is in flight.
+        opts.asyncMode = "jspi";
+        opts.asyncImports = appendUnique(opts.asyncImports, HTTP_ASYNC_IMPORT);
         opts.asyncExports = appendUnique(opts.asyncExports, "*");
     }
     opts.map = withDefaultNodeCapabilityMap(opts.map);

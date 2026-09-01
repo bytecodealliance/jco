@@ -11,6 +11,9 @@ import {
     DNS_WIT_REQUIREMENT,
     FS_WIT_REQUIREMENT,
     FFI_WIT_REQUIREMENT,
+    HTTP_WASI_HTTP_WIT_REQUIREMENTS,
+    HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
+    HTTP_WIT_REQUIREMENT,
     INSPECTOR_PROMISES_WIT_REQUIREMENT,
     INSPECTOR_WIT_REQUIREMENT,
     OS_WIT_REQUIREMENT,
@@ -47,6 +50,7 @@ const EVENTS_SPECIFIER = "node:events";
 const OS_SPECIFIER = "node:os";
 const STRING_DECODER_SPECIFIER = "node:string_decoder";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
+const HTTP_SPECIFIER = "node:http";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
@@ -268,11 +272,20 @@ export interface NodeBuiltinOptions {
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
+    /** Transport used for `node:http` host operations. */
+    nodejsHttpVia?: NodejsHttpVia;
+    /** Paths to jco-std's HTTP modules (overridable for tests). */
+    httpModule?: string;
+    httpCoreModule?: string;
+    httpWasiSocketsTransportModule?: string;
+    httpWasiHttpTransportModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
 }
+
+export type NodejsHttpVia = "direct" | "wasi-sockets" | "wasi-http";
 
 /**
  * Source of the `node:ffi` adapter.
@@ -572,6 +585,84 @@ export default fs;
 `;
 }
 
+const HTTP_EXPORTS = [
+    "Agent",
+    "ClientRequest",
+    "CloseEvent",
+    "IncomingMessage",
+    "METHODS",
+    "MessageEvent",
+    "OutgoingMessage",
+    "STATUS_CODES",
+    "Server",
+    "ServerResponse",
+    "WebSocket",
+    "_connectionListener",
+    "createServer",
+    "get",
+    "globalAgent",
+    "maxHeaderSize",
+    "request",
+    "setGlobalProxyFromEnv",
+    "setMaxIdleHTTPParsers",
+    "validateHeaderName",
+    "validateHeaderValue",
+] as const;
+
+function httpExports(moduleExpression: string): string {
+    return `
+const http = ${moduleExpression};
+export default http;
+export const { ${HTTP_EXPORTS.join(", ")} } = http;
+`;
+}
+
+function httpDirectAdapter(httpModule: string): string {
+    return `
+import directHttp from ${JSON.stringify(httpModule)};
+${httpExports("directHttp")}
+`;
+}
+
+function httpWasiSocketsAdapter(coreModule: string, transportModule: string): string {
+    return `
+import * as instanceNetwork from "wasi:sockets/instance-network@0.2.12";
+import * as ipNameLookup from "wasi:sockets/ip-name-lookup@0.2.12";
+import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@0.2.12";
+import { createHttp } from ${JSON.stringify(coreModule)};
+import { createWasiSocketsHttpTransport } from ${JSON.stringify(transportModule)};
+${httpExports("createHttp(createWasiSocketsHttpTransport({ instanceNetwork, ipNameLookup, tcpCreateSocket }))")}
+`;
+}
+
+function httpWasiHttpAdapter(coreModule: string, transportModule: string): string {
+    return `
+import * as outgoingHandler from "wasi:http/outgoing-handler@0.2.12";
+import * as types from "wasi:http/types@0.2.12";
+import { createHttp } from ${JSON.stringify(coreModule)};
+import { createWasiHttpTransport } from ${JSON.stringify(transportModule)};
+${httpExports("createHttp(createWasiHttpTransport({ outgoingHandler, types }))")}
+`;
+}
+
+function requireWasiHttpVersion(worldMetadata: WorldMetadata, via: Exclude<NodejsHttpVia, "direct">): void {
+    const packageName = via === "wasi-http" ? "http" : "sockets";
+    const incompatible = (worldMetadata.imports ?? []).find(
+        (iface) =>
+            iface.namespace === "wasi" &&
+            iface.package === packageName &&
+            iface.version !== null &&
+            iface.version !== undefined &&
+            (iface.version.major !== 0n || iface.version.minor !== 2n || iface.version.patch !== 12n),
+    );
+    if (incompatible) {
+        const { major, minor, patch } = incompatible.version!;
+        throw new Error(
+            `node:http via ${via} requires wasi:${packageName}@0.2.12, but the selected WIT world imports wasi:${packageName}@${major}.${minor}.${patch}`,
+        );
+    }
+}
+
 /**
  * Determine the `wasi:cli/environment` version a WIT world imports.
  *
@@ -793,6 +884,21 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
               fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/promises")))
             : (options.dnsModule ??
               fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns")));
+    const httpModule = () =>
+        options.httpModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http"));
+    const httpCoreModule = () =>
+        options.httpCoreModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/core"));
+    const httpWasiSocketsTransportModule = () =>
+        options.httpWasiSocketsTransportModule ??
+        fileURLToPath(
+            import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/transport/wasi-sockets"),
+        );
+    const httpWasiHttpTransportModule = () =>
+        options.httpWasiHttpTransportModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/transport/wasi-http"));
+    const httpVia = options.nodejsHttpVia ?? "direct";
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -871,6 +977,21 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 options.onWitRequirement?.(FS_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (id === HTTP_SPECIFIER) {
+                if (httpVia === "direct") {
+                    options.onWitRequirement?.(HTTP_WIT_REQUIREMENT);
+                } else {
+                    requireWasiHttpVersion(worldMetadata, httpVia);
+                    const requirements =
+                        httpVia === "wasi-sockets"
+                            ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
+                            : HTTP_WASI_HTTP_WIT_REQUIREMENTS;
+                    for (const requirement of requirements) {
+                        options.onWitRequirement?.(requirement);
+                    }
+                }
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             if (AUDITED_UNENV_SPECIFIERS.has(id)) {
                 unenvAdapter(id, options);
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -935,6 +1056,14 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (FS_SPECIFIERS.has(value)) {
                 return fsAdapter(value, fsModule(), fsPromisesModule());
+            }
+            if (value === HTTP_SPECIFIER) {
+                if (httpVia === "direct") {
+                    return httpDirectAdapter(httpModule());
+                }
+                return httpVia === "wasi-sockets"
+                    ? httpWasiSocketsAdapter(httpCoreModule(), httpWasiSocketsTransportModule())
+                    : httpWasiHttpAdapter(httpCoreModule(), httpWasiHttpTransportModule());
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);

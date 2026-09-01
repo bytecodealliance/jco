@@ -6,7 +6,13 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
-import { INSPECTOR_CALLBACKS_SPECIFIER, nodeBuiltinPlugin, nodeGlobals, type WorldMetadata } from "../node-builtins.js";
+import {
+    INSPECTOR_CALLBACKS_SPECIFIER,
+    nodeBuiltinPlugin,
+    nodeGlobals,
+    type NodejsHttpVia,
+    type WorldMetadata,
+} from "../node-builtins.js";
 import {
     INSPECTOR_WIT_REQUIREMENT,
     injectNodeWitImports,
@@ -35,6 +41,7 @@ export interface ComponentizeOptions {
     worldName?: string;
     bundle?: boolean;
     bundleConfig?: string;
+    nodejsHttpVia?: NodejsHttpVia;
     backend?: ComponentizeJSBackend;
     backendQjsDisableAysnc: boolean;
     aot?: boolean;
@@ -197,6 +204,7 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             // why `node:path` only works together with `--bundle`.
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
+                    nodejsHttpVia: opts.nodejsHttpVia,
                     onWitRequirement(requirement: NodeWitRequirement) {
                         witRequirements.set(requirement.witImport, requirement);
                     },
