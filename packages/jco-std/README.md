@@ -34,6 +34,9 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/child-process`       | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
 | `wasi/0.2.x/node/24.x.x/cluster`             | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
 | `wasi/0.2.x/node/24.x.x/events`              | `node:events` entry points Jco implements over a supplied emitter core        |
+| `wasi/0.2.x/node/26.x.x/ffi`                 | `node:ffi` guest adapter, Node 26 over an explicit host capability            |
+| `wasi/0.2.x/node/26.x.x/ffi/host`            | Deny-by-default host for `jco:node/ffi`                                       |
+| `wasi/0.2.x/node/26.x.x/ffi/host/node`       | Opt-in host over the runtime's real `node:ffi`; `setSuffix()` pins the suffix |
 
 [express]: https://expressjs.com
 
@@ -112,7 +115,12 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - `node:events`, whose `EventEmitter` comes from Jco's audited unenv
   compatibility layer, completed by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` for the three
-  module-level functions unenv leaves unimplemented.
+  module-level functions unenv leaves unimplemented;
+- `node:ffi`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi` and the
+  `jco:node/ffi@0.1.0` host capability. **Node 26 only**, and denied by default:
+  granting it lets a component load native libraries and read and write host
+  memory.
 
 Jco resolves Node compatibility modules in quality order:
 
