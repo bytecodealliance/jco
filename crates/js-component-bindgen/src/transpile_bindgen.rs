@@ -1647,12 +1647,18 @@ impl<'a> Instantiator<'a, '_> {
         include_suspending_exports: bool,
     ) -> bool {
         match def {
-            CoreDef::Trampoline(index) => match &self.translation.trampolines[*index] {
-                Trampoline::LowerImport {
-                    lower_ty, options, ..
-                } => self.component.options[*options].async_ || self.types[*lower_ty].async_,
-                _ => false,
-            },
+            CoreDef::Trampoline(index) => {
+                let trampoline = &self.translation.trampolines[*index];
+                match trampoline {
+                    Trampoline::LowerImport {
+                        lower_ty, options, ..
+                    } => self.component.options[*options].async_ || self.types[*lower_ty].async_,
+                    _ => {
+                        include_suspending_exports
+                            && self.trampoline_may_suspend(*index, trampoline)
+                    }
+                }
+            }
             CoreDef::Export(export) => {
                 let Some(module_idx) = self.instances.get(export.instance) else {
                     return false;
