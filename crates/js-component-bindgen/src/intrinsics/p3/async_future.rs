@@ -838,7 +838,7 @@ impl AsyncFutureIntrinsic {
                         "_read",
                         format!(
                             r#"
-                          async _read(args) {{
+                          _read(args) {{
                               const {{ buffer, onCopyDoneFn, componentIdx }} = args;
                               if (!buffer) {{ throw new Error('missing buffer for future read'); }}
 
@@ -874,7 +874,7 @@ impl AsyncFutureIntrinsic {
                         "_write",
                         format!(
                             r#"
-                          async _write(args) {{
+                          _write(args) {{
                               const {{ buffer, onCopyDoneFn, componentIdx }} = args;
                               if (!buffer) {{ throw new Error('missing buffer for future write'); }}
 
@@ -922,7 +922,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               // TODO: rename, guestRead also handles host reads (when data is present)...
-                              async guestRead(args) {{
+                              guestRead(args) {{
                                   {debug_log_fn}('[{class_name}#guestRead()] args', args);
                                   const {{
                                       componentIdx,
@@ -999,7 +999,7 @@ impl AsyncFutureIntrinsic {
                                       injectedWritePromise = this.#hostInjectFn({{ count: 1 }});
                                   }}
 
-                                  await this._read({{
+                                  this._read({{
                                       buffer,
                                       onCopyDoneFn,
                                       componentIdx,
@@ -1021,7 +1021,7 @@ impl AsyncFutureIntrinsic {
                         "guestWrite",
                         format!(
                             r#"
-                              async guestWrite(args) {{
+                              guestWrite(args) {{
                                   {debug_log_fn}('[{class_name}#guestWrite()] args', args);
                                   const {{
                                       componentIdx,
@@ -1086,7 +1086,7 @@ impl AsyncFutureIntrinsic {
                                       this.setPendingEvent(() => futureEvent(res));
                                   }};
 
-                                  await this._write({{
+                                  this._write({{
                                       buffer,
                                       onCopyDoneFn,
                                       componentIdx,
@@ -1505,7 +1505,7 @@ impl AsyncFutureIntrinsic {
                 uwriteln!(
                     output,
                     r#"
-                    async function {future_op_fn}(
+                    function {future_op_fn}(
                         ctx,
                         futureEndWaitableIdx,
                         ptr,
@@ -1550,7 +1550,7 @@ impl AsyncFutureIntrinsic {
                             throw new Error('future state must be idle before {future_op_fn}');
                         }}
 
-                        await futureEnd.{guest_op_fn}({{
+                        futureEnd.{guest_op_fn}({{
                             componentIdx,
                             stringEncoding,
                             memory: getMemoryFn?.(),
@@ -1565,8 +1565,15 @@ impl AsyncFutureIntrinsic {
                                 return {async_blocked_const};
                             }} else {{
                                 futureEnd.setCopyState({future_end_base_class}.CopyState.SYNC_COPYING);
-                                await task.suspendUntil({{
+                                return task.suspendUntil({{
                                     readyFn: () => futureEnd.hasPendingEvent(),
+                                }}).then(() => {{
+                                    const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
+                                    if (code !== {event_code}) {{
+                                        throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
+                                    }}
+                                    if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
+                                    return payload;
                                 }});
                             }}
                         }}

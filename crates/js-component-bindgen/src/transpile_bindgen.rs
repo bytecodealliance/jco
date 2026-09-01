@@ -1589,18 +1589,17 @@ impl<'a> Instantiator<'a, '_> {
                     || options.async_
                     || self.types[*lower_ty].async_
             }
+            Trampoline::FutureRead { options, .. } | Trampoline::FutureWrite { options, .. } => {
+                !self.component.options[*options].async_
+            }
             Trampoline::SubtaskCancel { .. }
             | Trampoline::WaitableSetWait { .. }
             | Trampoline::StreamRead { .. }
             | Trampoline::StreamWrite { .. }
             | Trampoline::StreamCancelRead { .. }
             | Trampoline::StreamCancelWrite { .. }
-            | Trampoline::FutureRead { .. }
-            | Trampoline::FutureWrite { .. }
             | Trampoline::FutureCancelRead { .. }
             | Trampoline::FutureCancelWrite { .. }
-            | Trampoline::FutureDropReadable { .. }
-            | Trampoline::FutureDropWritable { .. }
             | Trampoline::SyncStartCall { .. }
             | Trampoline::ThreadYield { .. }
             | Trampoline::EnterSyncCall => true,
@@ -2339,26 +2338,31 @@ impl<'a> Instantiator<'a, '_> {
                 };
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                      const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(
-                          null,
-                          {{
-                              componentIdx: {component_idx},
-                              memoryIdx: {memory_idx_js},
-                              getMemoryFn: {get_memory_fn_js},
-                              reallocIdx: {realloc_idx},
-                              getReallocFn: {get_realloc_fn_js},
-                              stringEncoding: {string_encoding},
-                              futureTableIdx: {future_table_idx},
-                              isAsync: {async_},
-                          }},
-                      )));
-                    "#,
-                    suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn),
+                let ctx = format!(
+                    r#"{{
+                        componentIdx: {component_idx},
+                        memoryIdx: {memory_idx_js},
+                        getMemoryFn: {get_memory_fn_js},
+                        reallocIdx: {realloc_idx},
+                        getReallocFn: {get_realloc_fn_js},
+                        stringEncoding: {string_encoding},
+                        futureTableIdx: {future_table_idx},
+                        isAsync: {async_},
+                    }}"#,
                 );
+                if *async_ {
+                    uwriteln!(
+                        self.src.js,
+                        "const trampoline{i} = {intrinsic_fn}.bind(null, {ctx});",
+                    );
+                } else {
+                    let suspending_wrap_fn =
+                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    uwriteln!(
+                        self.src.js,
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(null, {ctx})));",
+                    );
+                }
             }
 
             Trampoline::FutureCancelRead {
@@ -2419,16 +2423,14 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {future_drop_op_fn}.bind(
+                      const trampoline{i} = {future_drop_op_fn}.bind(
                           null,
                           {{
                               futureTableIdx: {future_table_idx},
                               componentIdx: {component_idx},
                           }},
-                      )));
+                      );
                 "#,
-                    suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn),
                 );
             }
 
