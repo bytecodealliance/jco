@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0810c646.js";
+            window.path_to_searchindex_js = "../searchindex-0cb0a5c3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -272,6 +272,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
+<tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
 <tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store – see below.</td></tr>
 <tr><td><code>node:diagnostics_channel</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel</code></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
@@ -476,6 +477,70 @@ forward instead of reading <code>Could not resolve 'node:domain'</code>. Importi
 <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>, pointing at <code>AsyncLocalStorage</code> for carrying context.</p>
 <p><code>active</code> and <code>_stack</code> are reachable on the default import only. An ES module binding cannot throw
 on read, so <code>import { active } from "node:domain"</code> fails at build time instead.</p>
+<h3 id="foreign-function-interface-nodejs-v26"><a class="header" href="#foreign-function-interface-nodejs-v26">Foreign function interface (NodeJS v26+)</a></h3>
+<p><code>node:ffi</code> lets a component call native code on the host.</p>
+<p>As WASI has no dynamic loader and a component has no host address space, this is host-backed, like
+<code>node:child_process</code>, and is <strong>denied by default</strong>.</p>
+<p>To use the NodeJS passthrough version, you can map it in:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/ffi@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node'
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The host adapter forwards to the runtime’s real <code>node:ffi</code>, so the runtime
+must itself be Node 26 started with <code>--experimental-ffi</code>.</p>
+<p>Without it, calls fail with a message naming the version and the flag rather
+than a missing-module error.</p>
+</blockquote>
+<p>using the load-call-read-write cycle would look something liek this:</p>
+<pre><code class="language-js">import { DynamicLibrary, exportString, getInt32, setInt32, toString } from "node:ffi";
+
+// null resolves symbols from the host process image, which links libc.
+const lib = new DynamicLibrary(null);
+const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" });
+const strlen = lib.getFunction("strlen", { arguments: ["pointer"], return: "uint64" });
+
+const pointer = malloc(64n);
+setInt32(pointer, 0, 123456);
+getInt32(pointer, 0);          // 123456, read back out of host memory
+exportString("hello ffi", pointer, 64);
+strlen(pointer);               // 9n -- native code reading what the guest wrote
+toString(pointer);             // "hello ffi"
+</code></pre>
+<p>Pointers cross as <code>bigint</code>, matching NodeJS.</p>
+<p>Errors keep NodeJS’s own codes, so <code>ERR_FFI_LIBRARY_CLOSED</code> and friends behave as they would on Node.</p>
+<h4 id="nodeffi-incompatibilities"><a class="header" href="#nodeffi-incompatibilities"><code>node:ffi</code> incompatibilities</a></h4>
+<p>These are refused guest-side, before the host is reached, because a WebAssembly component
+cannot express them:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Why</th></tr>
+</thead>
+<tbody>
+<tr><td><code>getRawPointer(buffer)</code></td><td>Guest memory is not mapped into the host address space, so a component’s buffer has no host address. Any number returned would be a lie native code then dereferences.</td></tr>
+<tr><td><code>registerCallback()</code>, <code>unregisterCallback()</code>, <code>refCallback()</code>, <code>unrefCallback()</code></td><td>A native callback is a function pointer the host would call back into the guest through, which the component boundary cannot carry.</td></tr>
+<tr><td><code>toBuffer(p, n, false)</code>, <code>toArrayBuffer(p, n, false)</code></td><td><code>copy: false</code> asks for a live view into host memory. Omit the argument for the copy Node returns by default.</td></tr>
+<tr><td>A <code>buffer</code>, <code>arraybuffer</code>, or <code>function</code> <strong>argument type</strong></td><td>A buffer argument would be copied, so native code writing through the pointer would write into a copy the guest never sees – silently. Declare a <code>pointer</code> and use <code>toBuffer</code>/<code>exportBuffer</code>, which copy explicitly. Refused when the signature is declared, so the message names the type.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="nodeffis-use-of-suffix"><a class="header" href="#nodeffis-use-of-suffix"><code>node:ffi</code>’s use of <code>suffix</code></a></h4>
+<p><code>suffix</code> comes from the host, but not at module load: a component’s top-level code runs under
+Wizer, which refuses imported calls outright (“You cannot call arbitrary imported functions during
+Wizer initialization”).</p>
+<p><code>suffix</code> is seeded with <code>"so"</code> and replaced the first time the guest touches
+the host – or on the first read of <code>ffi.suffix</code>, which syncs before answering.</p>
+<p>The one stale window is a destructured <code>import { suffix }</code> read before any FFI call, which is also
+the documented <code>dlopen(`./lib.${suffix}`)</code> idiom.</p>
+<p>The host adapter therefore lets the application set it, which is the reliable way to
+serve a guest that names <code>.dylib</code> or <code>.dll</code> files:</p>
+<pre><code class="language-js">import { setSuffix } from "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node";
+
+setSuffix("dylib");   // before instantiating the component
+</code></pre>
+<p>Note that you may not need to change the suffix if the runtime already has it set properly, as
+<code>suffix</code> defaults to the runtime’s own <code>ffi.suffix</code>.</p>
 <h3 id="diagnostics-channels"><a class="header" href="#diagnostics-channels">Diagnostics channels</a></h3>
 <p>Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
 are interned by name: a publisher and a subscriber that never share a reference still meet on the
@@ -594,8 +659,9 @@ Until an improvement is in the pinned unenv release and passes Jco’s guest tes
 Jco keeps a stronger local implementation or leaves the module disabled.</p>
 <h2 id="reviewed-modules-that-are-not-enabled"><a class="header" href="#reviewed-modules-that-are-not-enabled">Reviewed modules that are not enabled</a></h2>
 <p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco exposes
-a reviewed subset through Jco implementations and audited unenv cores. The other
-aliases were reviewed but are not automatically resolved.</p>
+a reviewed subset through Jco implementations and audited unenv cores. <code>node:ffi</code>
+is not among them at all – it is a Node 26 module, newer than the release unenv
+targets. The other aliases were reviewed but are not automatically resolved.</p>
 <p>The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.</p>
 <h3 id="more-semantic-or-dependency-work-needed"><a class="header" href="#more-semantic-or-dependency-work-needed">More semantic or dependency work needed</a></h3>
