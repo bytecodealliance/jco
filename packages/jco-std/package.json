@@ -104,6 +104,40 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.js"
     },
+    "./wasi/0.2.x/node/24.x.x/http": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/http/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/http/transport/direct": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http/transports/direct.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http/transports/direct.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http/transports/direct.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/http/transport/wasi-sockets": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http/transports/wasi-sockets.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http/transports/wasi-sockets.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http/transports/wasi-sockets.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/http/transport/wasi-http": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http/transports/wasi-http.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http/transports/wasi-http.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http/transports/wasi-http.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/http/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/http/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/http-host-node.js"
+    },
     "./wasi/0.2.x/node/24.x.x/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
