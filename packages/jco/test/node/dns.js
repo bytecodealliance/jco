@@ -7,6 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DNS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
 
+const NODE_HOST = pathToFileURL(
+    fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/dns-host-node.js", import.meta.url)),
+).href;
+
 suite("node:dns in a component", () => {
     test("installs the DNS WIT dependency without duplicating it", async () => {
         const root = await getTmpDir();
@@ -20,7 +24,7 @@ suite("node:dns in a component", () => {
     });
 
     // TODO(unskip): use the published jco-std DNS exports once a release containing them is available.
-    test.skip("componentizes both DNS specifiers and calls the opt-in Node host", async () => {
+    test.skip("componentizes and resolves example.com through the opt-in Node host", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-dns",
             bundle: true,
@@ -30,22 +34,13 @@ suite("node:dns in a component", () => {
         assert.include(stderr, "Jco added generated WIT import jco:node/dns@0.1.0");
 
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
-            asyncMode: "jspi",
             component: { name: "node-dns", path: componentPath, skipInstantiation: true },
             jco: {
                 transpile: {
                     extraArgs: {
-                        asyncImports: ["jco:node/dns@0.1.0#query"],
                         asyncExports: ["run"],
                         map: {
-                            "jco:node/dns@0.1.0": pathToFileURL(
-                                fileURLToPath(
-                                    new URL(
-                                        "../../../jco-std/dist/wasi/0.2.x/node/24.x.x/dns-host-node.js",
-                                        import.meta.url,
-                                    ),
-                                ),
-                            ).href,
+                            "jco:node/dns@0.1.0": NODE_HOST,
                         },
                     },
                 },
@@ -54,13 +49,17 @@ suite("node:dns in a component", () => {
 
         try {
             const runner = fileURLToPath(new URL("../fixtures/componentize/node-dns/run.js", import.meta.url));
-            const output = await exec(runner, esModuleOutputPath);
+            const output = await exec(runner, esModuleOutputPath, NODE_HOST);
             const report = JSON.parse(output.stdout);
             assert.isAtLeast(report.serverCount, 0);
             assert.strictEqual(report.namespaceIdentity, true);
             assert.strictEqual(report.promisesIdentity, true);
             assert.strictEqual(report.resultOrder, "ipv4first");
             assert.strictEqual(report.cancelCode, "ERR_JCO_UNSUPPORTED_NODE_API");
+            // This intentionally performs a network lookup. The addresses may change;
+            // only the stable shape of the reserved example domain is asserted.
+            assert.isAtLeast(report.externalAddressCount, 1);
+            assert.strictEqual(report.externalAddressesAreIpv4, true);
         } finally {
             await cleanup();
         }
