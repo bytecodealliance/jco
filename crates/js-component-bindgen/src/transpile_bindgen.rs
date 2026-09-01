@@ -262,6 +262,13 @@ pub enum ExportKind {
     Instance,
 }
 
+/// Outputs and metadata produced while generating JavaScript bindings.
+pub struct TranspileBindgenResult {
+    pub imports: Vec<String>,
+    pub exports: Vec<(String, ExportKind)>,
+    pub inferred_async_exports: HashSet<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
@@ -272,7 +279,7 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     files: &mut Files,
-) -> (Vec<String>, Vec<(String, ExportKind)>, HashSet<String>) {
+) -> TranspileBindgenResult {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
         None | Some(AsyncMode::Sync) => (Default::default(), Default::default()),
         Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
@@ -419,7 +426,11 @@ export_kind,
 
     let imports = instantiator.bindgen.esm_bindgen.import_specifiers();
     let inferred_async_exports = instantiator.inferred_async_exports.clone();
-    (imports, exports, inferred_async_exports)
+    TranspileBindgenResult {
+        imports,
+        exports,
+        inferred_async_exports,
+    }
 }
 
 impl JsBindgen<'_> {
