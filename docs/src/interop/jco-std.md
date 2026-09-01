@@ -120,7 +120,11 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
 - the synchronous `node:child_process` API, bridged through the explicit
   `jco:node/child-process@0.1.0` host capability. Its default provider denies
   access, while an opt-in Node host provider delegates to the real
-  `node:child_process` implementation.
+  `node:child_process` implementation; and
+- `node:fs` and `node:fs/promises`, sharing synchronous, callback, and promise
+  facades over the explicit `jco:node/fs@0.1.0` capability. The default provider
+  denies access, while an opt-in Node provider delegates filesystem operations
+  to the host.
 
 Not every Node compatibility module lives in `jco-std`. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For

@@ -26,6 +26,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/console`             | `node:console` guest adapter over an explicit host capability                 |
 | `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
 | `wasi/0.2.x/node/24.x.x/dns`                 | `node:dns` guest adapter over an explicit host capability                     |
+| `wasi/0.2.x/node/24.x.x/fs`                  | `node:fs` and `node:fs/promises` over an explicit host capability             |
 | `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
 | `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
@@ -102,6 +103,9 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   application-provided `jco:node/console@0.1.0` capability;
 - `node:dns` and `node:dns/promises`, implemented by the versioned DNS adapter
   and the application-provided `jco:node/dns@0.1.0` capability;
+- `node:fs` and `node:fs/promises`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs` and the
+  application-provided `jco:node/fs@0.1.0` capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
@@ -249,6 +253,57 @@ The asynchronous `spawn`, `exec`, and `execFile` APIs, `ChildProcess`, and
 `fork`/IPC throw `ERR_JCO_UNSUPPORTED_NODE_API`: callbacks, lifecycle events,
 and interactive streams cannot be represented faithfully by the synchronous
 interface yet.
+
+### Filesystem
+
+Source can keep ordinary `node:fs` and `node:fs/promises` imports. For example:
+
+```js
+import { readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+
+export async function replace(path, contents) {
+  await writeFile(path, contents);
+  return readFileSync(path, "utf8");
+}
+```
+
+Bundle the source when building the component:
+
+```console
+jco componentize component.js --wit wit --bundle -o component.wasm
+```
+
+If the selected world does not already import the filesystem capability, Jco
+edits it in place, installs `fs.wit` under `wit/deps/jco-node-0.1.0`, and warns
+about the generated changes:
+
+```wit
+world app {
+  // Added by Jco because bundled source imports node:fs.
+  import jco:node/fs@0.1.0;
+}
+```
+
+Existing imports and dependency files are preserved, and rerunning the command
+does not add duplicates. Use `--world-name` when the WIT package contains more
+than one world.
+
+The generated import grants no filesystem access by itself. Jco's default host
+provider throws `ERR_JCO_FS_ADAPTER_REQUIRED`. A Node application must opt into
+the real Node filesystem provider while transpiling:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
+```
+
+The guest adapter shares one descriptor core across synchronous, callback, and
+promise APIs. It supports path operations, metadata, directory entries, file
+descriptors, vector I/O, and promise `FileHandle`s. Callback APIs complete on a
+guest microtask. Stream constructors, file watching, `openAsBlob`, and other
+resource-oriented APIs currently throw `ERR_JCO_UNSUPPORTED_NODE_API`; the WIT
+boundary does not yet model their streams, events, or long-lived resources.
 
 Note that the `node:` specifiers are replaced when Jco bundles source during
 componentization. The package export can also be imported directly:

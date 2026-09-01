@@ -114,6 +114,7 @@ is planned.
 | `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                           |
 | `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider. |
 | `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                |
+| `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                               |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                           |
 | `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.        |
 | `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                |
@@ -289,6 +290,37 @@ Formatting is done in the guest -- `Console`, the `log`/`warn`/`error` family,
 `group` indentation, `count`, `time`, `table` and `dir` all run guest-side, and only
 the finished string crosses the boundary.
 
+### Filesystem and host capabilities
+
+`node:fs` and `node:fs/promises` use one `jco:node/fs@0.1.0` host capability.
+When either specifier occurs in bundled source, Jco adds a missing import to the
+selected world, installs `fs.wit` under `deps/jco-node-0.1.0`, and prints a CLI
+warning. Existing imports and dependencies are preserved, `--world` selects the
+target in a multi-world package, and repeated componentization does not add a
+duplicate.
+
+The default provider always throws `ERR_JCO_FS_ADAPTER_REQUIRED`. This keeps
+filesystem authority explicit and leaves room for a future browser or virtual
+filesystem provider. A Node host can opt into the passthrough adapter:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
+```
+
+The resulting path is guest `node:fs` → WIT capability → host adapter → Node
+`node:fs`. The Node provider delegates to Node 24's synchronous operations;
+guest callback APIs queue their callbacks on a microtask, and promise APIs share
+the same descriptor state through promise `FileHandle`s.
+
+Common file and directory operations, metadata, directory entries, scalar and
+vector descriptor I/O, and their callback/promise facades are supported. APIs
+whose contract requires long-lived streams or event sources -- including
+`ReadStream`, `WriteStream`, `Utf8Stream`, `watch`, `watchFile`, and
+`openAsBlob` -- throw `ERR_JCO_UNSUPPORTED_NODE_API` because the current WIT
+protocol does not model those resources. Deprecated `exists` and `lchmod` entry
+points fail explicitly rather than executing deprecated behavior.
+
 ### Async hooks and synchronous scopes
 
 `AsyncLocalStorage` works within a synchronous scope: `run`, `getStore`, `exit`, `enterWith`,
@@ -463,11 +495,9 @@ Jco keeps a stronger local implementation or leaves the module disabled.
 
 ## Reviewed modules that are not enabled
 
-The pinned unenv release currently supplies 55 public `node:` aliases. Jco resolves
-eleven modules: eight implemented in jco-std (one of which, `node:domain`, is a
-deliberate refusal), two layering a Jco implementation over an audited unenv core,
-and one audited unenv module used as-is. The other aliases were reviewed but are
-not automatically resolved.
+The pinned unenv release currently supplies 55 public `node:` aliases. Jco exposes
+a reviewed subset through Jco implementations and audited unenv cores. The other
+aliases were reviewed but are not automatically resolved.
 
 The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.
@@ -487,8 +517,7 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:crypto`, `node:dgram`,
-`node:dns`, `node:dns/promises`, `node:fs`, `node:fs/promises`, `node:http`,
+`node:crypto`, `node:dgram`, `node:http`,
 `node:http2`, `node:https`, `node:inspector`, `node:inspector/promises`,
 `node:module`, `node:net`, `node:os`, `node:perf_hooks`, `node:process`,
 `node:repl`, `node:sqlite`, `node:stream`, `node:stream/consumers`,
@@ -498,10 +527,9 @@ set of coordinated shims:
 
 #### Future composition
 
-This group is not all-or-nothing. For example, a future filesystem implementation
-could combine portable upstream algorithms with explicit WASI filesystem
-providers, just as Jco's path implementation combines portable path logic with a
-WASI environment provider.
+This group is not all-or-nothing. A future implementation can combine portable
+upstream algorithms with explicit host capabilities, just as Jco's path
+implementation combines portable path logic with a WASI environment provider.
 
 ### Legacy or deprecated modules
 
