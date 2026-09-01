@@ -49,7 +49,11 @@ use wasmparser::{
     VisitSimdOperator, WasmFeatures,
 };
 use wasmtime_environ::component::CoreDef;
-use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
+use wasmtime_environ::wasmparser::Operator;
+use wasmtime_environ::{
+    EntityIndex, EntityType as WasmtimeEntityType, FuncIndex, MemoryIndex, ModuleTranslation,
+    PrimaryMap,
+};
 
 pub enum Translation<'a> {
     Normal(ModuleTranslation<'a>),
@@ -193,6 +197,76 @@ impl<'a> Translation<'a> {
                 ret
             }
         }
+    }
+
+    /// Finds core functions which can transitively call a suspending import.
+    pub fn suspending_functions(
+        &self,
+        args: &[CoreDef],
+        mut core_def_may_suspend: impl FnMut(&CoreDef) -> bool,
+    ) -> HashSet<FuncIndex> {
+        let translation = match self {
+            Translation::Normal(translation) => translation,
+            Translation::Augmented { original, .. } => original,
+        };
+
+        let mut suspending = HashSet::new();
+        let mut next_function_index = 0;
+        for ((_, _, entity_type), arg) in translation.module.imports().zip(args) {
+            if matches!(entity_type, WasmtimeEntityType::Function(_)) {
+                let index = FuncIndex::from_u32(next_function_index);
+                next_function_index += 1;
+                if core_def_may_suspend(arg) {
+                    suspending.insert(index);
+                }
+            }
+        }
+
+        let mut calls = Vec::with_capacity(translation.function_body_inputs.len());
+        for (defined, body) in translation.function_body_inputs.iter() {
+            let mut direct = Vec::new();
+            let mut indirect = false;
+            let mut reader = body
+                .body
+                .get_operators_reader()
+                .expect("validated function body should have valid locals");
+            while !reader.eof() {
+                match reader
+                    .read()
+                    .expect("validated function body should have valid operators")
+                {
+                    Operator::Call { function_index } | Operator::ReturnCall { function_index } => {
+                        direct.push(FuncIndex::from_u32(function_index));
+                    }
+                    Operator::CallIndirect { .. }
+                    | Operator::ReturnCallIndirect { .. }
+                    | Operator::CallRef { .. }
+                    | Operator::ReturnCallRef { .. } => indirect = true,
+                    _ => {}
+                }
+            }
+            calls.push((translation.module.func_index(defined), direct, indirect));
+        }
+
+        loop {
+            let any_suspending = !suspending.is_empty();
+            let mut changed = false;
+            for (caller, direct, indirect) in &calls {
+                if suspending.contains(caller) {
+                    continue;
+                }
+                if (*indirect && any_suspending)
+                    || direct.iter().any(|callee| suspending.contains(callee))
+                {
+                    changed |= suspending.insert(*caller);
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        suspending
     }
 
     /// Returns the exports of this module, which are not modified by

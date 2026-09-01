@@ -180,14 +180,25 @@ pub fn transpile(component: &[u8], mut opts: TranspileOpts) -> Result<Transpiled
         files.push(&core_file_name(&name, i.as_u32()), module.wasm());
     }
 
+    let (imports, exports, inferred_async_exports) = transpile_bindgen(
+        &name,
+        &component,
+        &modules,
+        &types.0,
+        &resolve,
+        world_id,
+        opts.clone(),
+        &mut files,
+    );
+
     if !opts.no_typescript {
+        if let Some(AsyncMode::JavaScriptPromiseIntegration { exports, .. }) = &mut opts.async_mode
+        {
+            exports.extend(inferred_async_exports);
+        }
         ts_bindgen(&name, &resolve, world_id, &opts, &mut files)
             .context("failed to generate Typescript bindings")?;
     }
-
-    let (imports, exports) = transpile_bindgen(
-        &name, &component, &modules, &types.0, &resolve, world_id, opts, &mut files,
-    );
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, source) in files.iter() {
