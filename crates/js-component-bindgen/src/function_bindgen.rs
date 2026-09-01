@@ -525,6 +525,9 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentTask,
         ));
+        let current_task_may_block = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::CurrentTaskMayBlock,
+        ));
 
         let (component_idx_expr, get_callback_fn_expr, callback_fn_name) =
             if let Some(state) = &self.component_state {
@@ -576,6 +579,10 @@ impl FunctionBindgen<'_> {
         } else {
             uwriteln!(self.src, "const started = task.enterSync();");
         }
+        uwriteln!(
+            self.src,
+            "{current_task_may_block}.value = task.mayBlock() ? 1 : 0;"
+        );
 
         if self.callee_resource_dynamic {
             let resource_borrows =
