@@ -5387,14 +5387,13 @@ impl<'a> Instantiator<'a, '_> {
         // Determine whether the function should be generated as async
         let inferred_async = self.core_def_requires_async_export(def, false);
         if inferred_async {
-            let func_name = func.name.trim_start_matches("[async]");
-            self.inferred_async_exports.insert(
-                if export_name.trim_start_matches("[async]") == func_name {
+            let func_name = func.name.as_str();
+            self.inferred_async_exports
+                .insert(if export_name == func_name {
                     func_name.to_string()
                 } else {
                     format!("{export_name}#{func_name}")
-                },
-            );
+                });
         }
         let requires_async_porcelain = inferred_async
             || requires_async_porcelain(
