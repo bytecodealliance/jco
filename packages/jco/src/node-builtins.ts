@@ -9,6 +9,7 @@ import {
     CONSOLE_WIT_REQUIREMENT,
     DNS_PROMISES_WIT_REQUIREMENT,
     DNS_WIT_REQUIREMENT,
+    FS_WIT_REQUIREMENT,
     type NodeWitRequirement,
 } from "./node-wit.js";
 
@@ -21,6 +22,7 @@ const ASSERT_SPECIFIERS = new Set(["node:assert", "node:assert/strict"]);
 const CHILD_PROCESS_SPECIFIER = "node:child_process";
 const CLUSTER_SPECIFIER = "node:cluster";
 const CONSOLE_SPECIFIER = "node:console";
+const FS_SPECIFIERS = new Set(["node:fs", "node:fs/promises"]);
 const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const DOMAIN_SPECIFIER = "node:domain";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
@@ -201,6 +203,10 @@ export interface NodeBuiltinOptions {
     clusterModule?: string;
     /** Path to jco-std's versioned `node:console` module (overridable for tests) */
     consoleModule?: string;
+    /** Path to jco-std's versioned `node:fs` module (overridable for tests) */
+    fsModule?: string;
+    /** Path to jco-std's versioned `node:fs/promises` module (overridable for tests) */
+    fsPromisesModule?: string;
     /** Path to jco-std's versioned `node:async_hooks` module (overridable for tests) */
     asyncHooksModule?: string;
     /** Path to jco-std's versioned `node:domain` module (overridable for tests) */
@@ -354,6 +360,16 @@ function dnsAdapter(dnsModule: string): string {
 import dns from ${JSON.stringify(dnsModule)};
 export default dns;
 export * from ${JSON.stringify(dnsModule)};
+`;
+}
+
+/** Source of the `node:fs` and `node:fs/promises` ESM facades. */
+function fsAdapter(specifier: string, fsModule: string, fsPromisesModule: string): string {
+    const module = specifier === "node:fs" ? fsModule : fsPromisesModule;
+    return `
+import fs from ${JSON.stringify(module)};
+export * from ${JSON.stringify(module)};
+export default fs;
 `;
 }
 
@@ -548,6 +564,11 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const consoleModule = () =>
         options.consoleModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console"));
+    const fsModule = () =>
+        options.fsModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs"));
+    const fsPromisesModule = () =>
+        options.fsPromisesModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/promises"));
     const errorsModule = () =>
         options.errorsModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors"));
@@ -607,6 +628,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 );
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (FS_SPECIFIERS.has(id)) {
+                options.onWitRequirement?.(FS_WIT_REQUIREMENT);
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             if (AUDITED_UNENV_SPECIFIERS.has(id)) {
                 unenvAdapter(id, options);
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -650,6 +675,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (DNS_SPECIFIERS.has(value)) {
                 return dnsAdapter(dnsModule(value));
+            }
+            if (FS_SPECIFIERS.has(value)) {
+                return fsAdapter(value, fsModule(), fsPromisesModule());
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);

@@ -1,0 +1,11 @@
+package jco:node@0.1.0;
+
+/// Host-neutral boundary for Node-compatible filesystem operations.
+///
+/// The request envelope is JSON because Node's filesystem API has a large,
+/// evolving set of overloads and result records. Binary data, bigint values,
+/// dates, directory entries, stats, and system errors use explicit tagged
+/// representations defined by the jco-std adapter.
+interface fs {
+  query: func(request-json: string) -> string;
+}
