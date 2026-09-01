@@ -378,16 +378,16 @@ match Node, as do `once()`, `on()`'s async iterator, `getEventListeners`, `addAb
 Three module-level functions do not, and Jco implements them in jco-std rather than exporting
 something that fails when called:
 
-| Entry point | unenv | Jco |
-| --- | --- | --- |
-| `events.listenerCount(emitter, eventName)` | throws `[unenv] node:events.listenerCount is not implemented yet!` | delegates to the emitter's own `listenerCount`, as Node does, so a subclass that overrides it is honored |
-| `events.setMaxListeners(n[, ...targets])` | throws `[unenv] node:events.setMaxListeners is not implemented yet!` | sets the limit on `EventEmitter`s and `EventTarget`s, or the process-wide default when given no targets |
-| `events.getMaxListeners(target)` | throws for an `EventTarget`; only handles emitters | reads either, falling back to the current default |
+| Entry point                                | unenv                                                                | Jco                                                                                                      |
+| ------------------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `events.listenerCount(emitter, eventName)` | throws `[unenv] node:events.listenerCount is not implemented yet!`   | delegates to the emitter's own `listenerCount`, as Node does, so a subclass that overrides it is honored |
+| `events.setMaxListeners(n[, ...targets])`  | throws `[unenv] node:events.setMaxListeners is not implemented yet!` | sets the limit on `EventEmitter`s and `EventTarget`s, or the process-wide default when given no targets  |
+| `events.getMaxListeners(target)`           | throws for an `EventTarget`; only handles emitters                   | reads either, falling back to the current default                                                        |
 
 Argument validation matches Node's, `ERR_INVALID_ARG_TYPE` and `ERR_OUT_OF_RANGE` messages
 included.
 
-Node's module object *is* the `EventEmitter` class, so `events === events.EventEmitter` holds here
+Node's module object _is_ the `EventEmitter` class, so `events === events.EventEmitter` holds here
 too: the adapter keeps the class as the default export, and installs the three functions above as
 statics on it so both access paths reach the working versions.
 
@@ -408,14 +408,16 @@ jco transpile component.wasm \
   --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
 ```
 
-The Node provider calls the real asynchronous `node:dns/promises` operations
-directly. When an application supplies a DNS host map, Jco automatically enables
-JSPI for `jco:node/dns@0.1.0#query`. The Preview 2 WIT call therefore remains
-synchronous from the guest's perspective without blocking Node's event loop or
-creating a worker for each query. Because any component export may transitively
-call DNS, mapped components expose promise-returning exports that JavaScript hosts
-must await. Callback APIs retain callback delivery in the guest, and the promises
-subpath shares server and default-result-order state with the main module.
+The WIT interface represents each DNS operation as a named, typed function; it
+does not tunnel requests through a serialized dispatcher. The Node provider calls
+the real asynchronous `node:dns/promises` operations directly. When an application
+supplies a DNS host map, Jco automatically enables JSPI for every function in
+`jco:node/dns@0.1.0`. The Preview 2 WIT calls therefore remain synchronous from the
+guest's perspective without blocking Node's event loop or creating a worker for
+each query. Because any component export may transitively call DNS, mapped
+components expose promise-returning exports that JavaScript hosts must await.
+Callback APIs retain callback delivery in the guest, and the promises subpath
+shares server and default-result-order state with the main module.
 
 `Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`. The synchronous WIT
 boundary does not expose an outstanding c-ares request that a later guest call
