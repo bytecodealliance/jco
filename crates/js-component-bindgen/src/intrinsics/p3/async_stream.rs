@@ -756,7 +756,7 @@ impl AsyncStreamIntrinsic {
                             }}
                         }}
 
-                        const elemMeta = this.getElemMeta();
+                        const elemMeta = args.elemMeta ?? this.getElemMeta();
                         if (elemMeta.isBorrowed) {{ throw new Error('borrowed types cannot be sent over streams'); }}
 
                         // If we already have a managed buffer (likely host case), we can use that, otherwise we must
@@ -894,7 +894,12 @@ impl AsyncStreamIntrinsic {
                                         return;
                                     }}
                                     const numElements = Math.min(buffer.remaining(), this.#pendingBufferMeta.buffer.remaining());
-                                    this.#pendingBufferMeta.buffer.write(buffer.read(numElements));
+                                    const transferResources = buffer.componentIdx() !== -1
+                                        && this.#pendingBufferMeta.buffer.componentIdx() !== -1;
+                                    this.#pendingBufferMeta.buffer.write(
+                                        buffer.read(numElements, {{ transferResources }}),
+                                        {{ transferResources }},
+                                    );
                                     this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
                                     transferred = true;
                                 }}
@@ -964,7 +969,12 @@ impl AsyncStreamIntrinsic {
                                     }}
                                     if (bufferRemaining > 0) {{
                                         const count = Math.min(pendingRemaining, bufferRemaining);
-                                        buffer.write(this.#pendingBufferMeta.buffer.read(count))
+                                        const transferResources = buffer.componentIdx() !== -1
+                                            && this.#pendingBufferMeta.buffer.componentIdx() !== -1;
+                                        buffer.write(
+                                            this.#pendingBufferMeta.buffer.read(count, {{ transferResources }}),
+                                            {{ transferResources }},
+                                        );
                                         this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
                                         transferred = true;
                                     }}
@@ -1007,18 +1017,25 @@ impl AsyncStreamIntrinsic {
                                  stringEncoding,
                                  reallocFn,
                                  rejectLength,
+                                 elemMeta,
                              }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
 
-                             if (this.#elemMeta.stringEncoding === undefined && stringEncoding) {{
-                                this.#elemMeta.stringEncoding = stringEncoding;
+                             // The operation's metadata supplies the current component's
+                             // lift/lower functions, while the stream's metadata supplies
+                             // the canonical payload identity shared across components.
+                             const copyElemMeta = elemMeta
+                                 ? {{ ...elemMeta, payloadTypeName: this.#elemMeta.payloadTypeName }}
+                                 : this.#elemMeta;
+                             if (copyElemMeta.stringEncoding === undefined && stringEncoding) {{
+                                copyElemMeta.stringEncoding = stringEncoding;
                              }}
-                             if (this.#elemMeta.stringEncoding && stringEncoding && this.#elemMeta.stringEncoding !== stringEncoding) {{
-                                 throw new Error(`inconsistent string encoding (previously [${{this.#elemMeta.stringEncoding}}], now [${{stringEncoding}}])`);
+                             if (copyElemMeta.stringEncoding && stringEncoding && copyElemMeta.stringEncoding !== stringEncoding) {{
+                                 throw new Error(`inconsistent string encoding (previously [${{copyElemMeta.stringEncoding}}], now [${{stringEncoding}}])`);
                              }}
 
-                             if (args.getReallocFn && this.#elemMeta.getReallocFn === undefined) {{
-                                 this.#elemMeta.getReallocFn = args.getReallocFn;
+                             if (args.getReallocFn && copyElemMeta.getReallocFn === undefined) {{
+                                 copyElemMeta.getReallocFn = args.getReallocFn;
                              }}
 
                              if (this.isDropped()) {{
@@ -1041,6 +1058,7 @@ impl AsyncStreamIntrinsic {
                                  bufferID: args.bufferID,
                                  initial,
                                  skipStateCheck,
+                                 elemMeta: copyElemMeta,
                              }});
 
                              // If the stream is readable and was lowered from the host, the
@@ -2150,6 +2168,7 @@ impl AsyncStreamIntrinsic {
                             stringEncoding,
                             isAsync,
                             streamTableIdx,
+                            elemMeta,
                         }} = ctx;
 
                         if (componentIdx === undefined) {{ throw new TypeError("missing/invalid component idx"); }}
@@ -2187,6 +2206,7 @@ impl AsyncStreamIntrinsic {
                             stringEncoding,
                             realloc: getReallocFn?.(),
                             getReallocFn,
+                            elemMeta,
                         }});
 
                         return result;

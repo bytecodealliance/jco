@@ -1280,7 +1280,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!(
                     r#"
                     function {lift_flat_own_fn}(meta) {{
-                        const {{ classNameFn, createResourceFn, componentIdx }} = meta;
+                        const {{ classNameFn, createResourceFn, componentIdx, tableIdx }} = meta;
 
                         return function {lift_flat_own_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_own_fn}()] args', {{ ctx, className: classNameFn() }});
@@ -1290,7 +1290,9 @@ impl LiftIntrinsic {
                             }}
 
                             const [handle, newCtx] = {lift_flat_u32_fn}(ctx);
-                            const resource = createResourceFn(handle);
+                            const resource = ctx.liftResource
+                                ? ctx.liftResource(handle, tableIdx)
+                                : createResourceFn(handle);
 
                             return [resource, newCtx];
                         }}
