@@ -1,0 +1,116 @@
+package jco:node@0.1.0;
+
+/// Host-backed adapter for Node's `ffi` module.
+///
+/// `node:ffi` arrived in Node 26.1.0 (Stability 1, behind `--experimental-ffi`), so unlike the
+/// other Node builtins this one has no Node 24 equivalent at all. WASI has nothing like it: there
+/// is no dynamic loader and no host address space to reach. The host owns a real `node:ffi` and
+/// this interface exposes enough of it to rebuild the observable JS surface guest-side.
+///
+/// Pointers cross as `u64` and become JavaScript `bigint`s, matching what Node hands back.
+///
+/// Parts of Node's surface deliberately have no representation here, because a component cannot
+/// express them and a silently wrong answer would be worse than an error. Each is refused
+/// guest-side; see the matching `TODO(ffi)` in jco-std for what lifting it would take.
+///
+/// - **Guest memory has no host address.** `ffi.getRawPointer()` asks for the address of a
+///   JavaScript buffer; guest memory is not mapped into the host, so the guest refuses instead.
+/// - **The host cannot call back into the guest.** `register-callback` would need a `callback`
+///   resource for the trampoline's lifetime *and* a guest export for the host to invoke when
+///   native code fires. Resources alone would not do it: their methods run host-side.
+/// - **Buffer-shaped arguments** would be copied, so a native function writing through the pointer
+///   writes into a copy the guest never sees. Callers pass a `pointer` and use
+///   `read-bytes`/`write-bytes`, which is explicit about the copy. Adding copy-out results to
+///   `call` would make out-parameters work.
+///
+/// The library handle is a `u32` rather than a `resource`, matching `cluster`'s worker ids, which
+/// is the shape componentize-js is known to handle. A resource would give it a drop and remove the
+/// stale-handle case; worth revisiting when guest-side resource support is proven.
+interface ffi {
+    /// A value crossing the boundary, tagged by the type it was declared as.
+    ///
+    /// `nothing` is Node's `void`. There is no buffer case on purpose -- see the interface docs.
+    variant value {
+        nothing,
+        boolean(bool),
+        int8(s8),
+        uint8(u8),
+        int16(s16),
+        uint16(u16),
+        int32(s32),
+        uint32(u32),
+        int64(s64),
+        uint64(u64),
+        float32(f32),
+        float64(f64),
+        pointer(u64),
+        text(string),
+    }
+
+    /// A failure reported by the host's `node:ffi`, carrying Node's own code where it has one.
+    record failure {
+        code: string,
+        message: string,
+    }
+
+    variant error {
+        /// No FFI capability was granted to this component.
+        denied(string),
+        /// The host runtime has no `node:ffi`: it predates Node 26.1.0, or the flag is missing.
+        unavailable(string),
+        /// The library handle is not open.
+        no-such-library(u32),
+        /// The symbol has not been defined on that library.
+        no-such-symbol(string),
+        /// The signature names a type this boundary cannot carry.
+        unsupported-type(string),
+        /// The underlying call failed.
+        failed(failure),
+    }
+
+    /// A function signature. Type names are Node's own: `int32`, `pointer`, `string`, `void`, ...
+    record signature {
+        arguments: list<string>,
+        returns: string,
+    }
+
+    /// The host platform's shared-library suffix: `so`, `dylib`, or `dll`.
+    suffix: func() -> string;
+
+    /// Load a shared library. A missing path resolves symbols from the host process image.
+    open: func(path: option<string>) -> result<u32, error>;
+
+    /// Release a library handle.
+    close: func(handle: u32) -> result<_, error>;
+
+    /// Resolve a symbol's address.
+    symbol: func(handle: u32, name: string) -> result<u64, error>;
+
+    /// Declare a function so it can be called. Separate from `call` so a signature is validated
+    /// once, where Node validates it, rather than on every invocation.
+    define: func(handle: u32, name: string, sig: signature) -> result<_, error>;
+
+    /// Call a previously declared function.
+    call: func(handle: u32, name: string, args: list<value>) -> result<value, error>;
+
+    /// Read one primitive from host memory. `kind` is a Node type name.
+    read: func(pointer: u64, offset: u64, kind: string) -> result<value, error>;
+
+    /// Write one primitive into host memory.
+    write: func(pointer: u64, offset: u64, kind: string, data: value) -> result<_, error>;
+
+    /// Read a NUL-terminated string. Absent for a null pointer, which is what Node returns.
+    read-text: func(pointer: u64) -> result<option<string>, error>;
+
+    /// Copy bytes out of host memory. Always a copy: a component cannot hold a live view.
+    read-bytes: func(pointer: u64, length: u64) -> result<list<u8>, error>;
+
+    /// Copy bytes into host memory.
+    write-bytes: func(pointer: u64, length: u64, data: list<u8>) -> result<_, error>;
+
+    /// Encode a string into host memory.
+    write-text: func(pointer: u64, length: u64, data: string, encoding: string) -> result<_, error>;
+
+    /// The host's libuv event loop address.
+    current-event-loop: func() -> result<u64, error>;
+}
