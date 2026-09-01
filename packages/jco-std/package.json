@@ -65,6 +65,7 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/errors.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/errors.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/errors.js"
+    },
     "./wasi/0.2.x/node/24.x.x/dns": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/dns.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/dns.js",
