@@ -8,7 +8,7 @@ declare const __vite_ssr_import_meta__: ImportMeta;
 declare const globalCreateRequire: typeof import("node:module").createRequire;
 
 const DNS_CAPABILITY = "jco:node/dns@0.1.0";
-const DNS_ASYNC_IMPORT = `${DNS_CAPABILITY}#query`;
+const DNS_ASYNC_IMPORT = `${DNS_CAPABILITY}#*`;
 const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
