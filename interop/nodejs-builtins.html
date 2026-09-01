@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e79f0c0.js";
+            window.path_to_searchindex_js = "../searchindex-0810c646.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -278,6 +278,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
 <tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
 <tr><td><code>node:dns</code>, <code>node:dns/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns</code></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
+<tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
@@ -421,6 +422,36 @@ status and color depth:</p>
 <p>Formatting is done in the guest – <code>Console</code>, the <code>log</code>/<code>warn</code>/<code>error</code> family,
 <code>group</code> indentation, <code>count</code>, <code>time</code>, <code>table</code> and <code>dir</code> all run guest-side, and only
 the finished string crosses the boundary.</p>
+<h3 id="filesystem-and-host-capabilities"><a class="header" href="#filesystem-and-host-capabilities">Filesystem and host capabilities</a></h3>
+<p><code>node:fs</code> and <code>node:fs/promises</code> use one <code>jco:node/fs@0.1.0</code> host capability.
+When either specifier occurs in bundled source, Jco adds a missing import to the
+selected world, installs <code>fs.wit</code> under <code>deps/jco-node-0.1.0</code>, and prints a CLI
+warning to alert to the fact that a WIT dependency has been added.</p>
+<p>The default filesystem host provider always throws <code>ERR_JCO_FS_ADAPTER_REQUIRED</code>.
+To use the passthrough NodeJS host provider you can map it in:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
+</code></pre>
+<p>The resulting call path for filesystem function is:</p>
+<ol>
+<li>guest <code>node:fs</code></li>
+<li>WIT capability</li>
+<li>host adapter</li>
+<li>NodeJS builtins</li>
+</ol>
+<p>The Node provider delegates to Node 24’s synchronous operations; guest callback APIs
+queue their callbacks on a microtask, and promise APIs share the same descriptor
+state through promise <code>FileHandle</code>s.</p>
+<p>Common file and directory operations, metadata, directory entries, scalar and
+vector descriptor I/O, and their callback/promise facades are supported.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>APIs whose contract requires long-lived streams or event sources are not yet supported
+– including <code>ReadStream</code>, <code>WriteStream</code>, <code>Utf8Stream</code>, <code>watch</code>, <code>watchFile</code>, and
+<code>openAsBlob</code>.</p>
+<p>These functions currently throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> because the typed WIT
+interface does not model those resources.</p>
+</blockquote>
 <h3 id="async-hooks-and-synchronous-scopes"><a class="header" href="#async-hooks-and-synchronous-scopes">Async hooks and synchronous scopes</a></h3>
 <p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
 nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
@@ -491,14 +522,16 @@ dependency when bundled source uses either specifier. The default provider throw
 <pre><code class="language-console">jco transpile component.wasm \
   --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
 </code></pre>
-<p>The Node provider calls the real asynchronous <code>node:dns/promises</code> operations
-directly. When an application supplies a DNS host map, Jco automatically enables
-JSPI for <code>jco:node/dns@0.1.0#query</code>. The Preview 2 WIT call therefore remains
-synchronous from the guest’s perspective without blocking Node’s event loop or
-creating a worker for each query. Because any component export may transitively
-call DNS, mapped components expose promise-returning exports that JavaScript hosts
-must await. Callback APIs retain callback delivery in the guest, and the promises
-subpath shares server and default-result-order state with the main module.</p>
+<p>The WIT interface represents each DNS operation as a named, typed function; it
+does not tunnel requests through a serialized dispatcher. The Node provider calls
+the real asynchronous <code>node:dns/promises</code> operations directly. When an application
+supplies a DNS host map, Jco automatically enables JSPI for every function in
+<code>jco:node/dns@0.1.0</code>. The Preview 2 WIT calls therefore remain synchronous from the
+guest’s perspective without blocking Node’s event loop or creating a worker for
+each query. Because any component export may transitively call DNS, mapped
+components expose promise-returning exports that JavaScript hosts must await.
+Callback APIs retain callback delivery in the guest, and the promises subpath
+shares server and default-result-order state with the main module.</p>
 <p><code>Resolver.cancel()</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. The synchronous WIT
 boundary does not expose an outstanding c-ares request that a later guest call
 could cancel. The provider boundary otherwise remains Node-independent, leaving
@@ -560,11 +593,9 @@ generated-bundle string checks.</li>
 Until an improvement is in the pinned unenv release and passes Jco’s guest tests,
 Jco keeps a stronger local implementation or leaves the module disabled.</p>
 <h2 id="reviewed-modules-that-are-not-enabled"><a class="header" href="#reviewed-modules-that-are-not-enabled">Reviewed modules that are not enabled</a></h2>
-<p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco resolves
-eleven modules: eight implemented in jco-std (one of which, <code>node:domain</code>, is a
-deliberate refusal), two layering a Jco implementation over an audited unenv core,
-and one audited unenv module used as-is. The other aliases were reviewed but are
-not automatically resolved.</p>
+<p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco exposes
+a reviewed subset through Jco implementations and audited unenv cores. The other
+aliases were reviewed but are not automatically resolved.</p>
 <p>The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.</p>
 <h3 id="more-semantic-or-dependency-work-needed"><a class="header" href="#more-semantic-or-dependency-work-needed">More semantic or dependency work needed</a></h3>
@@ -585,8 +616,7 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:crypto</code>, <code>node:dgram</code>,
-<code>node:dns</code>, <code>node:dns/promises</code>, <code>node:fs</code>, <code>node:fs/promises</code>, <code>node:http</code>,
+<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http</code>,
 <code>node:http2</code>, <code>node:https</code>, <code>node:inspector</code>, <code>node:inspector/promises</code>,
 <code>node:module</code>, <code>node:net</code>, <code>node:os</code>, <code>node:perf_hooks</code>, <code>node:process</code>,
 <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>, <code>node:stream/consumers</code>,
@@ -594,10 +624,9 @@ set of coordinated shims:</p>
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
-<p>This group is not all-or-nothing. For example, a future filesystem implementation
-could combine portable upstream algorithms with explicit WASI filesystem
-providers, just as Jco’s path implementation combines portable path logic with a
-WASI environment provider.</p>
+<p>This group is not all-or-nothing. A future implementation can combine portable
+upstream algorithms with explicit host capabilities, just as Jco’s path
+implementation combines portable path logic with a WASI environment provider.</p>
 <h3 id="legacy-or-deprecated-modules"><a class="header" href="#legacy-or-deprecated-modules">Legacy or deprecated modules</a></h3>
 <p><code>node:constants</code>, <code>node:punycode</code>, and <code>node:sys</code> are legacy or deprecated
 surfaces. Jco does not enable their functional fallbacks by default. When a

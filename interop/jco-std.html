@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3e79f0c0.js";
+            window.path_to_searchindex_js = "../searchindex-0810c646.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -274,7 +274,11 @@ the guest working directory; and</li>
 <li>the synchronous <code>node:child_process</code> API, bridged through the explicit
 <code>jco:node/child-process@0.1.0</code> host capability. Its default provider denies
 access, while an opt-in Node host provider delegates to the real
-<code>node:child_process</code> implementation.</li>
+<code>node:child_process</code> implementation; and</li>
+<li><code>node:fs</code> and <code>node:fs/promises</code>, sharing synchronous, callback, and promise
+facades over the explicit <code>jco:node/fs@0.1.0</code> capability. The default provider
+denies access, while an opt-in Node provider delegates filesystem operations
+to the host.</li>
 </ul>
 <p>Not every Node compatibility module lives in <code>jco-std</code>. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
