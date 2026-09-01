@@ -27,6 +27,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
 | `wasi/0.2.x/node/24.x.x/dns`                 | `node:dns` guest adapter over an explicit host capability                     |
 | `wasi/0.2.x/node/24.x.x/fs`                  | `node:fs` and `node:fs/promises` over an explicit host capability             |
+| `wasi/0.2.x/node/24.x.x/http`                | `node:http` client API with direct, WASI sockets, and WASI HTTP transports    |
 | `wasi/0.2.x/node/24.x.x/os`                  | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/string-decoder`      | Guest-local `node:string_decoder` implementation for Node 24                  |
@@ -124,6 +125,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector` and the
   application-provided `jco:node/inspector@0.1.0` capability, with the host
   calling back into the component through a guest-exported callbacks interface;
+- the outbound `node:http` client API, with selectable direct, `wasi:sockets`,
+  and `wasi:http` transports;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
@@ -502,6 +505,58 @@ exports are consequently promise-returning and must be awaited by JavaScript hos
 interface does not expose an in-flight c-ares request as a resource that a later
 guest call could cancel. The WIT boundary remains runtime-neutral so a browser DNS
 provider can be added later.
+
+### HTTP
+
+Application code uses the ordinary Node API:
+
+```js
+import { get } from "node:http";
+
+export function fetchText(url) {
+  return new Promise((resolve, reject) => {
+    const request = get(url, (response) => {
+      const chunks = [];
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.once("error", reject);
+      response.once("end", () => resolve(chunks.join("")));
+    });
+    request.once("error", reject);
+  });
+}
+```
+
+Bundle it and select how `node:http` reaches the host:
+
+```console
+jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http-via wasi-http -o component.wasm
+```
+
+`--with-nodejs-http-via` accepts:
+
+- `direct` (the default), which adds `jco:node/http@0.1.0`; its default provider
+  throws `ERR_JCO_HTTP_ADAPTER_REQUIRED`, and a Node application can explicitly
+  map `wasi/0.2.x/node/24.x.x/http/host/node` when transpiling;
+- `wasi-sockets`, which implements HTTP/1.1 in the guest using only Preview 2
+  socket and IO capabilities; and
+- `wasi-http`, which translates requests to Preview 2
+  `wasi:http/outgoing-handler`.
+
+When the selected world is missing a required import, Jco edits that world in
+place, adds a generated comment and import, installs the corresponding WIT
+packages under `wit/deps`, and prints a warning. Existing imports and dependency
+files are preserved, and repeated componentization does not add duplicates. Use
+`--world-name` when the WIT package defines multiple worlds.
+
+The initial implementation buffers each request and response at the transport
+boundary. Client request/response objects retain Node-style callbacks and events
+inside the guest, but connection pooling, upgrades, CONNECT tunnels, and HTTPS
+are not implemented. `createServer()` exposes Node's public object shape, while
+`listen()` and other inbound operations throw `ERR_JCO_UNSUPPORTED_NODE_API`:
+an arbitrary callback-based server cannot be represented by a WIT import, and a
+`wasi:http/incoming-handler` is a separate component export contract.
 
 # License
 
