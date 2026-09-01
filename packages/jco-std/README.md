@@ -37,6 +37,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/child-process`       | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
 | `wasi/0.2.x/node/24.x.x/cluster`             | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
 | `wasi/0.2.x/node/24.x.x/events`              | `node:events` entry points Jco implements over a supplied emitter core        |
+| `wasi/0.2.x/node/24.x.x/module`              | `node:module`, Node 24: classification and source maps; loading refuses       |
 | `wasi/0.2.x/node/26.x.x/ffi`                 | `node:ffi` guest adapter, Node 26 over an explicit host capability            |
 | `wasi/0.2.x/node/26.x.x/ffi/host`            | Deny-by-default host for `jco:node/ffi`                                       |
 | `wasi/0.2.x/node/26.x.x/ffi/host/node`       | Opt-in host over the runtime's real `node:ffi`; `setSuffix()` pins the suffix |
@@ -138,6 +139,10 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   module-level functions unenv leaves unimplemented;
 - `node:string_decoder`, implemented guest-locally by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`;
+- `node:module`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`. Classification,
+  source maps and `require.resolve` are exact; everything that loads throws,
+  because a component has no module loader;
 - `node:ffi`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi` and the
   `jco:node/ffi@0.1.0` host capability. **Node 26 only**, and denied by default:
