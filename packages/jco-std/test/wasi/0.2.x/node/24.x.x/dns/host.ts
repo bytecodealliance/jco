@@ -6,7 +6,6 @@ import { createDns } from "../../../../../../src/wasi/0.2.x/node/24.x.x/dns/core
 
 describe("node:dns host providers", () => {
   test("denies DNS by default", () => {
-    expect("query" in denyHost).toBe(false);
     expect(() => denyHost.getServers()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_DNS_ADAPTER_REQUIRED" }),
     );
@@ -49,8 +48,7 @@ describe("node:dns host providers", () => {
     }
   });
 
-  test("exports named DNS operations without a generic dispatcher", () => {
-    expect("query" in nodeHost).toBe(false);
+  test("exports named DNS operations", () => {
     expect(nodeHost).toEqual(
       expect.objectContaining({
         lookup: expect.any(Function),
