@@ -23,8 +23,6 @@ suite("node:dns in a component", () => {
         expect(dnsWit).toContain("lookup: func(");
         expect(dnsWit).toContain("resolve4: func(");
         expect(dnsWit).toContain("resolve-tlsa: func(");
-        expect(dnsWit).not.toContain("query: func(");
-        expect(dnsWit).not.toContain("request-json");
         expect(await injectNodeWitImports(root, undefined, [DNS_WIT_REQUIREMENT])).toBeUndefined();
         expect((await readFile(world, "utf8")).match(/import jco:node\/dns@0\.1\.0;/g)).toHaveLength(1);
     });

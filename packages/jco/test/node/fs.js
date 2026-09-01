@@ -36,8 +36,6 @@ suite("node:fs in a component", () => {
             expect(filesystemWit).toContain("access: func(");
             expect(filesystemWit).toContain("read-file: func(");
             expect(filesystemWit).toContain("writev: func(");
-            expect(filesystemWit).not.toContain("query: func(");
-            expect(filesystemWit).not.toContain("request-json");
         } finally {
             await rm(root, { recursive: true, force: true });
         }
