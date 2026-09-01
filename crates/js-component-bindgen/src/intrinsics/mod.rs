@@ -1263,6 +1263,17 @@ mod tests {
     }
 
     #[test]
+    fn invalid_resource_handles_use_canonical_traps() {
+        let get = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
+        let remove = Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove);
+        let (source, _) = render([get, remove]);
+
+        assert!(source.contains(
+            "throw new WebAssemblyRuntimeError(`unknown handle index ${(handle << 1) + 1}`);"
+        ));
+    }
+
+    #[test]
     fn stream_and_future_helpers_are_individual_intrinsics() {
         let helpers = [
             (
