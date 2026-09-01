@@ -30,7 +30,14 @@ suite("node:fs in a component", () => {
             expect(source.slice(source.indexOf("world unused"), source.indexOf("world app"))).not.toContain(
                 "jco:node/fs",
             );
-            await expect(stat(join(root, "deps/jco-node-0.1.0/fs.wit"))).resolves.toBeDefined();
+            const dependency = join(root, "deps/jco-node-0.1.0/fs.wit");
+            await expect(stat(dependency)).resolves.toBeDefined();
+            const filesystemWit = await readFile(dependency, "utf8");
+            expect(filesystemWit).toContain("access: func(");
+            expect(filesystemWit).toContain("read-file: func(");
+            expect(filesystemWit).toContain("writev: func(");
+            expect(filesystemWit).not.toContain("query: func(");
+            expect(filesystemWit).not.toContain("request-json");
         } finally {
             await rm(root, { recursive: true, force: true });
         }
