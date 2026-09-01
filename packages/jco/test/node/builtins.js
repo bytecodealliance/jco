@@ -529,6 +529,26 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("events")).toBeNull();
     });
 
+    test.each([
+        ["node:stream/consumers", "/jco/node/stream-consumers.js", "streamConsumersModule"],
+        ["node:stream/iter", "/jco/node/stream-iter.js", "streamIterModule"],
+    ])("generates a capability-free adapter for %s", (specifier, module, option) => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { [option]: module, onWitRequirement });
+        const id = plugin.resolveId(specifier);
+        expect(id).toBe(`\0jco-node-builtin:${specifier}`);
+        const source = plugin.load(id);
+        expect(source).toContain(`from \"${module}\"`);
+        expect(source).toContain("export default streamModule");
+        expect(source).toContain("export * from");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test.each(["stream/consumers", "stream/iter"])("does not intercept the legacy bare %s specifier", (specifier) => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
+        expect(plugin.resolveId(specifier)).toBeNull();
+    });
+
     test("resolves audited unenv modules without unrelated WASI capabilities", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { unenvAliases });
         expect(plugin.resolveId("node:buffer")).toBe("\0jco-node-builtin:node:buffer");
