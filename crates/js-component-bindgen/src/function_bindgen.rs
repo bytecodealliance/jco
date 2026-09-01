@@ -3632,6 +3632,14 @@ impl Bindgen for FunctionBindgen<'_> {
                           return ret;
                       }}
 
+                      // An async lift without a callback completes when its core
+                      // function returns; there is no callback protocol to drive.
+                      if (!task.hasCallback()) {{
+                          task.resolve([ret]);
+                          task.exit();
+                          return ret;
+                      }}
+
                       const componentState = {get_or_create_async_state_fn}({component_idx_expr});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 
