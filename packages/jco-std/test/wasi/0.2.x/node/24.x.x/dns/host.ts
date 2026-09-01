@@ -36,6 +36,19 @@ describe("node:dns host providers", () => {
     }
   });
 
+  test("resolves the external IANA example domain", async () => {
+    const response = JSON.parse(
+      await nodeHost.query(JSON.stringify({ operation: "resolve4", args: ["example.com"] })),
+    ) as DnsResponse;
+
+    expect(response.ok).toBe(true);
+    if (response.ok) {
+      expect(response.value).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^\d{1,3}(?:\.\d{1,3}){3}$/)]),
+      );
+    }
+  });
+
   test("rejects operations outside the DNS provider allowlist", async () => {
     const response = JSON.parse(
       await nodeHost.query(JSON.stringify({ operation: "constructor", args: [] })),
