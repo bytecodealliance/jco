@@ -30,7 +30,6 @@ import type {
   FsRemoveOptions,
   FsResult,
   FsStatFs,
-  FsStatOptions,
   FsStats,
   FsWriteFileOptions,
 } from "./fs/types.js";
@@ -124,13 +123,27 @@ function numeric(value: number | bigint): FsNumeric {
 }
 
 function fileType(value: FileTypeMethods): FsStats["fileType"] {
-  if (value.isFile()) return "file";
-  if (value.isDirectory()) return "directory";
-  if (value.isSymbolicLink()) return "symlink";
-  if (value.isBlockDevice()) return "block";
-  if (value.isCharacterDevice()) return "character";
-  if (value.isFIFO()) return "fifo";
-  if (value.isSocket()) return "socket";
+  if (value.isFile()) {
+    return "file";
+  }
+  if (value.isDirectory()) {
+    return "directory";
+  }
+  if (value.isSymbolicLink()) {
+    return "symlink";
+  }
+  if (value.isBlockDevice()) {
+    return "block";
+  }
+  if (value.isCharacterDevice()) {
+    return "character";
+  }
+  if (value.isFIFO()) {
+    return "fifo";
+  }
+  if (value.isSocket()) {
+    return "socket";
+  }
   return "unknown";
 }
 
