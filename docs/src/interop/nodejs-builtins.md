@@ -103,21 +103,22 @@ is planned.
 > It is the only such alias: modules added after the split, including `node:assert`, are
 > available only under a versioned entry point.
 
-| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                               |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                            |
-| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.           |
-| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                |
-| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                                   |
-| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                          |
-| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                           |
-| `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider. |
-| `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                |
-| `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                               |
-| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                           |
-| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.        |
-| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                |
+| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                               |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                                           |
+| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.                          |
+| `node:ffi`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi`                                               | **Node 26 only.** Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused -- see below. |
+| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                               |
+| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                                                  |
+| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                                         |
+| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                                          |
+| `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.                |
+| `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                               |
+| `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                              |
+| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                          |
+| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                       |
+| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                               |
 
 ### Errors globals
 
@@ -359,6 +360,80 @@ forward instead of reading `Could not resolve 'node:domain'`. Importing is fine;
 `active` and `_stack` are reachable on the default import only. An ES module binding cannot throw
 on read, so `import { active } from "node:domain"` fails at build time instead.
 
+### Foreign function interface
+
+`node:ffi` lets a component call native code on the host. It is **not a Node 24 module**: it
+arrived in Node 26.1.0 at Stability 1 and still needs `--experimental-ffi` as of 26.8.1, so it is
+the first entry point Jco ships under `wasi/0.2.x/node/26.x.x/` rather than `24.x.x`. That split is
+the reason the Node major appears in the path at all.
+
+WASI has no dynamic loader and a component has no host address space, so this is host-backed, like
+`node:child_process`. **It is denied by default**, and that default matters more here than anywhere
+else in this document: granting it lets a guest load native libraries and read and write arbitrary
+host memory, which is strictly more power than any other Node builtin Jco supports. Declaring the
+WIT import grants nothing; an application opts in at transpile time.
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/ffi@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node'
+```
+
+The host adapter forwards to the runtime's real `node:ffi`, so the runtime must itself be Node 26
+started with `--experimental-ffi`. Without it, calls fail with a message naming the version and the
+flag rather than a missing-module error.
+
+What works is the whole load-call-read-write cycle:
+
+```js
+import { DynamicLibrary, exportString, getInt32, setInt32, toString } from "node:ffi";
+
+// null resolves symbols from the host process image, which links libc.
+const lib = new DynamicLibrary(null);
+const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" });
+const strlen = lib.getFunction("strlen", { arguments: ["pointer"], return: "uint64" });
+
+const pointer = malloc(64n);
+setInt32(pointer, 0, 123456);
+getInt32(pointer, 0);          // 123456, read back out of host memory
+exportString("hello ffi", pointer, 64);
+strlen(pointer);               // 9n -- native code reading what the guest wrote
+toString(pointer);             // "hello ffi"
+```
+
+Pointers cross as `bigint`, matching Node. Failures keep Node's own codes, so
+`ERR_FFI_LIBRARY_CLOSED` and friends behave as they would on Node.
+
+#### What is refused, and why
+
+These are refused guest-side, before the host is reached, because a component cannot express them
+and a plausible-looking wrong answer would be worse than an error:
+
+| Surface | Why |
+| --- | --- |
+| `getRawPointer(buffer)` | Guest memory is not mapped into the host address space, so a component's buffer has no host address. Any number returned would be a lie native code then dereferences. |
+| `registerCallback()`, `unregisterCallback()`, `refCallback()`, `unrefCallback()` | A native callback is a function pointer the host would call back into the guest through, which the component boundary cannot carry. |
+| `toBuffer(p, n, false)`, `toArrayBuffer(p, n, false)` | `copy: false` asks for a live view into host memory. Omit the argument for the copy Node returns by default. |
+| A `buffer`, `arraybuffer`, or `function` **argument type** | A buffer argument would be copied, so native code writing through the pointer would write into a copy the guest never sees -- silently. Declare a `pointer` and use `toBuffer`/`exportBuffer`, which copy explicitly. Refused when the signature is declared, so the message names the type. |
+
+#### `suffix`
+
+`suffix` comes from the host, but not at module load: a component's top-level code runs under
+Wizer, which refuses imported calls outright ("You cannot call arbitrary imported functions during
+Wizer initialization"). So it is seeded with `"so"` and replaced the first time the guest touches
+the host -- or on the first read of `ffi.suffix`, which syncs before answering.
+
+The one stale window is a destructured `import { suffix }` read before any FFI call, which is also
+the documented ``dlopen(`./lib.${suffix}`)`` idiom. The host adapter therefore lets the application
+set it, which is the reliable way to serve a guest that names `.dylib` or `.dll` files:
+
+```js
+import { setSuffix } from "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node";
+
+setSuffix("dylib");   // before instantiating the component
+```
+
+It defaults to the runtime's own `ffi.suffix`.
+
 ### Diagnostics channels
 
 Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
@@ -503,8 +578,9 @@ Jco keeps a stronger local implementation or leaves the module disabled.
 ## Reviewed modules that are not enabled
 
 The pinned unenv release currently supplies 55 public `node:` aliases. Jco exposes
-a reviewed subset through Jco implementations and audited unenv cores. The other
-aliases were reviewed but are not automatically resolved.
+a reviewed subset through Jco implementations and audited unenv cores. `node:ffi`
+is not among them at all -- it is a Node 26 module, newer than the release unenv
+targets. The other aliases were reviewed but are not automatically resolved.
 
 The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.
