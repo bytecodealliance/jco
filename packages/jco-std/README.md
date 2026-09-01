@@ -85,6 +85,8 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 
 Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
 
+- the portable Node globals already provided by the component engine, plus the
+  existing audited Buffer adapter injected on demand for free `Buffer` references;
 - Node's global error constructors and coded-error foundation, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors` and injected on demand;
 - `node:assert` and `node:assert/strict`, implemented by
