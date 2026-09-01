@@ -1423,6 +1423,8 @@ mod tests {
             AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
         ));
         assert!(!enter.contains("symmetric sync guest->guest call should not be async"));
+        assert!(enter.contains("isAsync: false,"));
+        assert!(enter.contains("isAsync: !!calleeIsAsync,"));
         assert!(enter.contains("previousTaskMayBlock: CURRENT_TASK_MAY_BLOCK.value,"));
         assert!(enter.contains("CURRENT_TASK_MAY_BLOCK.value = newTask.mayBlock() ? 1 : 0;"));
 
