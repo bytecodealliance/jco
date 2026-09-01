@@ -1435,8 +1435,8 @@ mod tests {
         assert!(source.contains(
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
-        assert!(source.contains("const enteredSynchronously = preparedTask.tryEnter();"));
-        assert!(source.contains("callee._jcoMaySuspend === false"));
+        assert!(source.contains("const mayStartSynchronously = callee._jcoMaySuspend === false;"));
+        assert!(source.contains("? preparedTask.tryEnter()"));
         assert!(source.contains("fn: () => callee.apply(null, startRes),"));
         assert!(source.contains("if (subtask.isReturned()) {"));
         assert!(source.contains("callerComponentState.handles.remove(subtask.waitableRep())"));

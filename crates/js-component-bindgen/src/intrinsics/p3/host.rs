@@ -555,8 +555,13 @@ impl HostIntrinsic {
                         // A non-suspending initial slice can run before the lower returns,
                         // allowing task.return to report RETURNED eagerly. If entry or the
                         // core function can suspend, preserve the deferred JSPI path.
-                        const enteredSynchronously = preparedTask.tryEnter();
-                        if (enteredSynchronously === true && callee._jcoMaySuspend === false) {{
+                        // Calling tryEnter early for the latter also removes the caller's
+                        // cancellation-before-start window.
+                        const mayStartSynchronously = callee._jcoMaySuspend === false;
+                        const enteredSynchronously = mayStartSynchronously
+                            ? preparedTask.tryEnter()
+                            : null;
+                        if (enteredSynchronously === true) {{
                             let callbackResult;
                             try {{
                                 callbackResult = {with_global_current_task_meta_fn}({{
