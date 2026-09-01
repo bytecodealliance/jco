@@ -240,18 +240,6 @@ adapter policy, limitations, and examples.
 
 See [ComponentizeJS][cjs] and [componentize-qjs][cqjs] for backend-specific details.
 
-#### Experimental Node.js built-in compatibility
-
-> [!WARNING]
-> Node.js built-in compatibility for components is experimental. Its APIs,
-> behavior, and generated component interfaces may change incompatibly without
-> a semver-major release.
-
-Bundled source can keep ordinary supported `node:` imports. See the Jco book's
-[Node.js built-in compatibility guide](https://bytecodealliance.github.io/jco/interop/nodejs-builtins.html)
-for the current API inventory, implementation choices, WIT requirements, host
-adapter policy, limitations, and examples.
-
 [sm]: https://github.com/bytecodealliance/StarlingMonkey
 [qjs-ng]: https://github.com/quickjs-ng/quickjs
 [cjs]: https://github.com/bytecodealliance/componentize-js

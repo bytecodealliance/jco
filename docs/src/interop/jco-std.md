@@ -124,7 +124,10 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
 - `node:fs` and `node:fs/promises`, sharing synchronous, callback, and promise
   facades over the explicit `jco:node/fs@0.1.0` capability. The default provider
   denies access, while an opt-in Node provider delegates filesystem operations
-  to the host.
+  to the host; and
+- the outbound `node:http` client API, implemented over a selectable direct
+  `jco:node/http@0.1.0`, Preview 2 `wasi:sockets`, or Preview 2 `wasi:http`
+  transport. The direct provider denies access by default.
 
 Not every Node compatibility module lives in `jco-std`. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
