@@ -27,7 +27,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/trap-on-reenter.wast', skip: true },
     { relPath: 'async/sync-barges-in.wast', skip: true },
     { relPath: 'async/same-component-stream-future.wast', skip: true },
-    { relPath: 'async/futures-must-write.wast', skip: true },
+    { relPath: 'async/futures-must-write.wast', skip: false },
     { relPath: 'async/dont-block-start.wast', skip: true },
     { relPath: 'async/cross-abi-calls.wast', skip: true },
     { relPath: 'async/empty-wait.wast', skip: true },
