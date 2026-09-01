@@ -370,10 +370,7 @@ pub fn transpile_bindgen(
         err_ctx_tables,
         init_current_module: None,
         context_components: Default::default(),
-        suspending_core_functions: Default::default(),
-        async_export_core_functions: Default::default(),
-        suspending_trampolines: Default::default(),
-        inferred_async_exports: Default::default(),
+        async_analysis: Default::default(),
     };
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
@@ -426,7 +423,7 @@ export_kind,
         .collect();
 
     let imports = instantiator.bindgen.esm_bindgen.import_specifiers();
-    let inferred_async_exports = instantiator.inferred_async_exports.clone();
+    let inferred_async_exports = instantiator.async_analysis.inferred_exports.clone();
     TranspileBindgenResult {
         imports,
         exports,
@@ -728,6 +725,26 @@ impl JsBindgen<'_> {
     }
 }
 
+#[derive(Default)]
+struct AsyncAnalysis {
+    /// Lowered imports which were colored async while their bindings were generated.
+    suspending_trampolines: HashSet<TrampolineIndex>,
+
+    /// Async properties of each instantiated core module's functions.
+    core_functions: PrimaryMap<RuntimeInstanceIndex, CoreFunctionAsyncAnalysis>,
+
+    /// Component exports inferred to need Promise-returning JS bindings.
+    inferred_exports: HashSet<String>,
+}
+
+struct CoreFunctionAsyncAnalysis {
+    /// Core functions which transitively reach a JSPI-suspending import.
+    may_suspend: HashSet<FuncIndex>,
+
+    /// Core functions which transitively require Promise-returning export bindings.
+    requires_promise_binding: HashSet<FuncIndex>,
+}
+
 /// Helper structure used to generate the `instantiate` method of a component.
 ///
 /// This is the main structure for parsing the output of Wasmtime.
@@ -802,17 +819,7 @@ pub(crate) struct Instantiator<'a, 'b> {
     /// Wasm, including core start functions and resource destructors.
     context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 
-    /// Core functions which transitively reach a JSPI-suspending import.
-    suspending_core_functions: PrimaryMap<RuntimeInstanceIndex, HashSet<FuncIndex>>,
-
-    /// Core functions which transitively require Promise-returning export bindings.
-    async_export_core_functions: PrimaryMap<RuntimeInstanceIndex, HashSet<FuncIndex>>,
-
-    /// Lowered imports which were colored async while their bindings were generated.
-    suspending_trampolines: HashSet<TrampolineIndex>,
-
-    /// Component exports inferred to need Promise-returning JS bindings.
-    inferred_async_exports: HashSet<String>,
+    async_analysis: AsyncAnalysis,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -1499,7 +1506,7 @@ impl<'a> Instantiator<'a, '_> {
                 lower_ty, options, ..
             } => {
                 let options = &self.component.options[*options];
-                self.suspending_trampolines.contains(&index)
+                self.async_analysis.suspending_trampolines.contains(&index)
                     || options.async_
                     || self.types[*lower_ty].async_
             }
@@ -1543,9 +1550,10 @@ impl<'a> Instantiator<'a, '_> {
                         *index
                     }
                 };
-                self.suspending_core_functions
+                self.async_analysis
+                    .core_functions
                     .get(export.instance)
-                    .is_some_and(|functions| functions.contains(&function_idx))
+                    .is_some_and(|analysis| analysis.may_suspend.contains(&function_idx))
             }
             CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
                 false
@@ -1581,14 +1589,18 @@ impl<'a> Instantiator<'a, '_> {
                         *index
                     }
                 };
-                self.async_export_core_functions
+                self.async_analysis
+                    .core_functions
                     .get(export.instance)
-                    .is_some_and(|functions| functions.contains(&function_idx))
+                    .is_some_and(|analysis| {
+                        analysis.requires_promise_binding.contains(&function_idx)
+                    })
                     || include_suspending_exports
                         && self
-                            .suspending_core_functions
+                            .async_analysis
+                            .core_functions
                             .get(export.instance)
-                            .is_some_and(|functions| functions.contains(&function_idx))
+                            .is_some_and(|analysis| analysis.may_suspend.contains(&function_idx))
             }
             CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
                 false
@@ -3428,12 +3440,14 @@ impl<'a> Instantiator<'a, '_> {
             self.core_def_requires_async_export(def, crosses_sync_call_boundary)
         });
         let i = self.instances.push(module_idx);
-        let suspending_instance = self.suspending_core_functions.push(suspending_functions);
-        assert_eq!(i, suspending_instance);
-        let async_export_instance = self
-            .async_export_core_functions
-            .push(async_export_functions);
-        assert_eq!(i, async_export_instance);
+        let async_analysis_instance =
+            self.async_analysis
+                .core_functions
+                .push(CoreFunctionAsyncAnalysis {
+                    may_suspend: suspending_functions,
+                    requires_promise_binding: async_export_functions,
+                });
+        assert_eq!(i, async_analysis_instance);
         let iu32 = i.as_u32();
         let instantiate = self.bindgen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
@@ -3631,7 +3645,9 @@ impl<'a> Instantiator<'a, '_> {
             &self.async_imports,
         );
         if is_async || self.types[func_ty].async_ || requires_async_porcelain {
-            self.suspending_trampolines.insert(trampoline);
+            self.async_analysis
+                .suspending_trampolines
+                .insert(trampoline);
         }
 
         // A labeled import of a named interface (the component model
@@ -5388,7 +5404,8 @@ impl<'a> Instantiator<'a, '_> {
         let inferred_async = self.core_def_requires_async_export(def, false);
         if inferred_async {
             let func_name = func.name.as_str();
-            self.inferred_async_exports
+            self.async_analysis
+                .inferred_exports
                 .insert(if export_name == func_name {
                     func_name.to_string()
                 } else {
