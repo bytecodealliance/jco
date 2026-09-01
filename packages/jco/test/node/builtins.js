@@ -61,7 +61,7 @@ describe("Node builtin adapters", () => {
         });
 
         expect(opts.asyncMode).toBe("jspi");
-        expect(opts.asyncImports).toEqual(["application:custom/host#load", "jco:node/dns@0.1.0#query"]);
+        expect(opts.asyncImports).toEqual(["application:custom/host#load", "jco:node/dns@0.1.0#*"]);
         expect(opts.asyncExports).toEqual(["selected-export", "*"]);
         expect(opts.map?.["jco:node/dns@0.1.0"]).toBe("/application/dns-host.js");
 
