@@ -697,9 +697,8 @@ impl AsyncFutureIntrinsic {
                         #waitable;
                         #copyState = {future_end_class}.CopyState.IDLE;
 
-                        #dropped;
-                        #setDroppedFn;
-                        #isDroppedFn;
+                        #dropped = false;
+                        #isPeerDroppedFn;
 
                         constructor(args) {{
                             {debug_log_fn}('[{future_end_class}#constructor()] args', args);
@@ -710,15 +709,10 @@ impl AsyncFutureIntrinsic {
                             if (!args.waitable) {{ throw new Error("missing pending buffer"); }}
                             this.#waitable = args.waitable;
 
-                            if (args.setDroppedFn && args.isDroppedFn) {{
-                                this.#setDroppedFn = args.setDroppedFn;
-                                this.#isDroppedFn = args.isDroppedFn;
-                            }} else if (args.setDroppedFn === undefined && args.isDroppedFn === undefined) {{
-                                this.#setDroppedFn = (v) => {{ this.#dropped = v; }};
-                                this.#isDroppedFn = () => this.#dropped;
-                            }} else {{
-                                throw new TypeError('setDroppedFn and isDroppedFn must both be specified or neither');
+                            if (args.isPeerDroppedFn !== undefined && typeof args.isPeerDroppedFn !== 'function') {{
+                                throw new TypeError('isPeerDroppedFn must be a function');
                             }}
+                            this.#isPeerDroppedFn = args.isPeerDroppedFn ?? (() => false);
                         }}
 
                         getWaitable() {{ return this.#waitable; }}
@@ -797,8 +791,8 @@ impl AsyncFutureIntrinsic {
                             return event;
                         }}
 
-                        isDropped() {{ return this.#isDroppedFn(); }}
-                        setDropped() {{ this.#setDroppedFn(true); }}
+                        isDropped() {{ return this.#dropped; }}
+                        isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
 
                         drop() {{
                             if (this.isDropped()) {{ throw new Error('future already dropped'); }}
@@ -810,7 +804,7 @@ impl AsyncFutureIntrinsic {
                                 this.resetAndNotifyPending({future_end_class}.CopyResult.DROPPED);
                             }}
 
-                            this.setDropped();
+                            this.#dropped = true;
                         }}
 
                     }}
@@ -889,6 +883,10 @@ impl AsyncFutureIntrinsic {
                               }}
 
                               if (this.isDropped()) {{
+                                  throw new Error('cannot write to dropped future');
+                              }}
+
+                              if (this.isPeerDropped()) {{
                                   onCopyDoneFn({future_end_class}.CopyResult.DROPPED);
                                   return;
                               }}
@@ -1353,10 +1351,6 @@ impl AsyncFutureIntrinsic {
 
                             this.#elemMeta = args.elemMeta;
 
-                            let dropped = false;
-                            const setDroppedFn = () => {{ dropped = true }};
-                            const isDroppedFn = () => dropped;
-
                             this.#readEnd = new {read_end_class}({{
                                 tableIdx,
                                 elemMeta: this.#elemMeta,
@@ -1367,8 +1361,7 @@ impl AsyncFutureIntrinsic {
                                 // as that function will *inject* a write when the future is checked
                                 // from inside the guest.
                                 hostInjectFn: args.hostInjectFn,
-                                setDroppedFn,
-                                isDroppedFn,
+                                isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
                             }});
 
                             this.#writeEnd = new {write_end_class}({{
@@ -1378,8 +1371,7 @@ impl AsyncFutureIntrinsic {
                                 target: "future write end (@ init)",
                                 waitable: writeWaitable,
                                 hostOwned: true,
-                                setDroppedFn,
-                                isDroppedFn,
+                                isPeerDroppedFn: () => this.#readEnd.isDropped(),
                             }});
                         }}
 

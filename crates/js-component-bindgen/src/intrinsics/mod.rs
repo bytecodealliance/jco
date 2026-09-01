@@ -1460,6 +1460,27 @@ mod tests {
     }
 
     #[test]
+    fn future_ends_track_own_and_peer_drop_state_separately() {
+        let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::InternalFutureClass,
+        )]);
+        let opts = TranspileOpts::default();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+
+        assert!(source.contains("#dropped = false;"));
+        assert!(source.contains("isDropped() { return this.#dropped; }"));
+        assert!(source.contains("isPeerDropped() { return this.#isPeerDroppedFn(); }"));
+        assert!(source.contains("isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,"));
+        assert!(source.contains("isPeerDroppedFn: () => this.#readEnd.isDropped(),"));
+        assert!(source.contains("if (this.isPeerDropped()) {"));
+    }
+
+    #[test]
     fn flat_flags_bigint_representation_is_opt_in() {
         fn render(flags_as_bigint: bool) -> Source {
             let mut intrinsics = BTreeSet::from([
