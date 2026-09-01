@@ -11,12 +11,14 @@ import { dnsError, invalidArgType, invalidArgValue, unsupported } from "./errors
 import type {
   AnyRecord,
   CaaRecord,
+  DnsAnyRecord,
   DnsError,
-  DnsErrorData,
   DnsFamily,
   DnsHost,
-  DnsRequest,
-  DnsResponse,
+  DnsHostFamily,
+  DnsHostResultOrder,
+  DnsResolverConfig,
+  DnsResult,
   DnsResultOrder,
   LookupAddress,
   LookupAllOptions,
@@ -103,59 +105,77 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parseResponse(source: string): DnsResponse {
-  const value: unknown = JSON.parse(source, (_key, candidate: unknown) => {
-    if (
-      isRecord(candidate) &&
-      Object.keys(candidate).length === 1 &&
-      typeof candidate.__jcoDnsArrayBuffer === "string"
-    ) {
-      const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-      const encoded = candidate.__jcoDnsArrayBuffer.replace(/=+$/, "");
-      const bytes = new Uint8Array(Math.floor((encoded.length * 6) / 8));
-      let bits = 0;
-      let bitCount = 0;
-      let offset = 0;
-      for (const character of encoded) {
-        const value = alphabet.indexOf(character);
-        if (value < 0) {
-          throw new TypeError("node:dns host returned invalid base64 data");
-        }
-        bits = (bits << 6) | value;
-        bitCount += 6;
-        if (bitCount >= 8) {
-          bitCount -= 8;
-          bytes[offset++] = (bits >> bitCount) & 0xff;
-        }
-      }
-      return bytes.buffer;
-    }
-    return candidate;
-  });
-  if (!isRecord(value) || typeof value.ok !== "boolean") {
-    throw new TypeError("node:dns host returned an invalid response envelope");
+function hostResult<T>(response: DnsResult<T>): T {
+  if (response.tag === "err") {
+    throw dnsError(response.val);
   }
-  if (value.ok) {
-    return { ok: true, value: value.value };
-  }
-  if (
-    !isRecord(value.error) ||
-    typeof value.error.name !== "string" ||
-    typeof value.error.message !== "string"
-  ) {
-    throw new TypeError("node:dns host returned an invalid error envelope");
-  }
-  return { ok: false, error: value.error as unknown as DnsErrorData };
+  return response.val;
 }
 
-function hostResult<T>(host: DnsHost, request: DnsRequest): T {
-  const response = parseResponse(host.query(JSON.stringify(request)));
-  if (!response.ok) {
-    throw dnsError(response.error);
+function hostFamily(value: DnsFamily): DnsHostFamily {
+  return value === 4 ? "ipv4" : value === 6 ? "ipv6" : "unspecified";
+}
+
+function publicFamily(value: DnsHostFamily): DnsFamily {
+  return value === "ipv4" ? 4 : value === "ipv6" ? 6 : 0;
+}
+
+function hostOrder(value: DnsResultOrder): DnsHostResultOrder {
+  return value === "ipv4first" ? "ipv4-first" : value === "ipv6first" ? "ipv6-first" : value;
+}
+
+function hostResolver(value?: ResolverConfiguration): DnsResolverConfig | undefined {
+  return value
+    ? {
+        options: { ...value.options },
+        servers: value.servers?.slice(),
+        localAddress: value.localAddress ? [...value.localAddress] : undefined,
+      }
+    : undefined;
+}
+
+function tlsaRecord(value: {
+  certUsage: number;
+  selector: number;
+  match: number;
+  data: Uint8Array;
+}): TlsaRecord {
+  const data = value.data.slice();
+  return {
+    certUsage: value.certUsage,
+    selector: value.selector,
+    match: value.match,
+    data: data.buffer,
+  };
+}
+
+function anyRecord(value: DnsAnyRecord): AnyRecord {
+  switch (value.tag) {
+    case "a":
+      return { type: "A", ...value.val };
+    case "aaaa":
+      return { type: "AAAA", ...value.val };
+    case "caa":
+      return { type: "CAA", ...value.val };
+    case "cname":
+      return { type: "CNAME", value: value.val };
+    case "mx":
+      return { type: "MX", ...value.val };
+    case "naptr":
+      return { type: "NAPTR", ...value.val };
+    case "ns":
+      return { type: "NS", value: value.val };
+    case "ptr":
+      return { type: "PTR", value: value.val };
+    case "soa":
+      return { type: "SOA", ...value.val };
+    case "srv":
+      return { type: "SRV", ...value.val };
+    case "tlsa":
+      return { type: "TLSA", ...tlsaRecord(value.val) };
+    case "txt":
+      return { type: "TXT", entries: value.val };
   }
-  // The provider contract is validated at the response-envelope boundary. Each
-  // operation's value shape is the corresponding Node 24 public return type.
-  return response.value as T;
 }
 
 function validateString(value: unknown, name: string): asserts value is string {
@@ -272,8 +292,24 @@ function resolveArgs(hostname: unknown, callback: unknown): asserts hostname is 
   validateFunction(callback);
 }
 
-function resolveOperation(rrtype: string): string {
-  const operations: Record<string, string> = {
+type ResolveOperation =
+  | "resolve4"
+  | "resolve6"
+  | "resolveAny"
+  | "resolveCaa"
+  | "resolveCname"
+  | "resolveMx"
+  | "resolveNaptr"
+  | "resolveNs"
+  | "resolvePtr"
+  | "resolveSoa"
+  | "resolveSrv"
+  | "resolveTlsa"
+  | "resolveTxt"
+  | "reverse";
+
+function resolveOperation(rrtype: string): ResolveOperation {
+  const operations: Record<string, ResolveOperation> = {
     A: "resolve4",
     AAAA: "resolve6",
     ANY: "resolveAny",
@@ -293,6 +329,50 @@ function resolveOperation(rrtype: string): string {
     throw invalidArgValue("rrtype", rrtype);
   }
   return operation;
+}
+
+function resolveHost(
+  host: DnsHost,
+  operation: ResolveOperation,
+  hostname: string,
+  ttl: boolean,
+  resolver?: ResolverConfiguration,
+): ResolveResult {
+  const configuration = hostResolver(resolver);
+  switch (operation) {
+    case "resolve4": {
+      const records = hostResult(host.resolve4(hostname, ttl, configuration));
+      return ttl ? records : records.map((record) => record.address);
+    }
+    case "resolve6": {
+      const records = hostResult(host.resolve6(hostname, ttl, configuration));
+      return ttl ? records : records.map((record) => record.address);
+    }
+    case "resolveAny":
+      return hostResult(host.resolveAny(hostname, configuration)).map(anyRecord);
+    case "resolveCaa":
+      return hostResult(host.resolveCaa(hostname, configuration));
+    case "resolveCname":
+      return hostResult(host.resolveCname(hostname, configuration));
+    case "resolveMx":
+      return hostResult(host.resolveMx(hostname, configuration));
+    case "resolveNaptr":
+      return hostResult(host.resolveNaptr(hostname, configuration));
+    case "resolveNs":
+      return hostResult(host.resolveNs(hostname, configuration));
+    case "resolvePtr":
+      return hostResult(host.resolvePtr(hostname, configuration));
+    case "resolveSoa":
+      return hostResult(host.resolveSoa(hostname, configuration));
+    case "resolveSrv":
+      return hostResult(host.resolveSrv(hostname, configuration));
+    case "resolveTlsa":
+      return hostResult(host.resolveTlsa(hostname, configuration)).map(tlsaRecord);
+    case "resolveTxt":
+      return hostResult(host.resolveTxt(hostname, configuration));
+    case "reverse":
+      return hostResult(host.reverse(hostname, configuration));
+  }
 }
 
 export interface CallbackResolver {
@@ -420,19 +500,15 @@ export function createDns(host: DnsHost): DnsModules {
   let defaultOrder: DnsResultOrder = "verbatim";
   let defaultServers: string[] | undefined;
 
-  function query<T>(operation: string, args: unknown[], resolver?: ResolverConfiguration): T {
-    return hostResult<T>(host, { operation, args, resolver });
-  }
-
   function servers(): string[] {
-    return (defaultServers ??= query<string[]>("getServers", [])).slice();
+    return (defaultServers ??= hostResult(host.getServers())).slice();
   }
 
   function setServers(serversValue: string[]): void {
     if (!Array.isArray(serversValue)) {
       throw invalidArgType("servers", "Array");
     }
-    const validated = query<string[]>("validateServers", [serversValue]);
+    const validated = hostResult(host.validateServers(serversValue));
     defaultServers = validated.slice();
   }
 
@@ -446,8 +522,34 @@ export function createDns(host: DnsHost): DnsModules {
     defaultOrder = order;
   }
 
+  function hostLookup(
+    hostname: string,
+    options: ParsedLookupOptions,
+  ): LookupAddress | LookupAddress[] {
+    const addresses = hostResult(
+      host.lookup(hostname, {
+        family: hostFamily(options.family),
+        hints: options.hints,
+        all: options.all,
+        order: hostOrder(options.order),
+      }),
+    ).map((address) => ({
+      address: address.address,
+      family: publicFamily(address.family),
+    }));
+    if (options.all) {
+      return addresses;
+    }
+    const address = addresses[0];
+    if (!address) {
+      throw new TypeError("node:dns host returned no lookup address");
+    }
+    return address;
+  }
+
   class ResolverBase {
     protected readonly configuration: ResolverConfiguration;
+
     constructor(options: ResolverOptions = {}) {
       if (!isRecord(options)) {
         throw invalidArgType("options", "object");
@@ -469,18 +571,22 @@ export function createDns(host: DnsHost): DnsModules {
       }
       this.configuration = { options: { ...options } };
     }
+
     cancel(): never {
       return unsupported("dns.Resolver.cancel");
     }
+
     getServers(): string[] {
       return (this.configuration.servers ?? servers()).slice();
     }
+
     setServers(value: string[]): void {
       if (!Array.isArray(value)) {
         throw invalidArgType("servers", "Array");
       }
-      this.configuration.servers = query<string[]>("validateServers", [value]);
+      this.configuration.servers = hostResult(host.validateServers(value));
     }
+
     setLocalAddress(ipv4 = "0.0.0.0", ipv6 = "::0"): void {
       validateString(ipv4, "ipv4");
       validateString(ipv6, "ipv6");
@@ -495,17 +601,18 @@ export function createDns(host: DnsHost): DnsModules {
   }
 
   class Resolver extends ResolverBase implements CallbackResolver {
-    private call<T>(
-      operation: string,
+    private call(
+      operation: ResolveOperation,
       hostname: unknown,
-      args: unknown[],
+      ttl: boolean,
       callback: unknown,
     ): void {
       resolveArgs(hostname, callback);
-      enqueue(callback as DnsCallback<T>, () =>
-        query<T>(operation, [hostname, ...args], this.configuration),
+      enqueue(callback as DnsCallback<ResolveResult>, () =>
+        resolveHost(host, operation, hostname, ttl, this.configuration),
       );
     }
+
     resolve(
       hostname: string,
       rrtypeOrCallback: string | DnsCallback<string[]>,
@@ -515,10 +622,11 @@ export function createDns(host: DnsHost): DnsModules {
       this.call(
         resolveOperation(rrtype),
         hostname,
-        [],
+        false,
         typeof rrtypeOrCallback === "function" ? rrtypeOrCallback : callback,
       );
     }
+
     resolve4(
       hostname: string,
       optionsOrCallback: ResolveOptions | DnsCallback<string[]>,
@@ -528,10 +636,11 @@ export function createDns(host: DnsHost): DnsModules {
       this.call(
         "resolve4",
         hostname,
-        options ? [options] : [],
+        options?.ttl === true,
         typeof optionsOrCallback === "function" ? optionsOrCallback : callback,
       );
     }
+
     resolve6(
       hostname: string,
       optionsOrCallback: ResolveOptions | DnsCallback<string[]>,
@@ -541,95 +650,129 @@ export function createDns(host: DnsHost): DnsModules {
       this.call(
         "resolve6",
         hostname,
-        options ? [options] : [],
+        options?.ttl === true,
         typeof optionsOrCallback === "function" ? optionsOrCallback : callback,
       );
     }
+
     resolveAny(hostname: string, callback: DnsCallback<AnyRecord[]>): void {
-      this.call("resolveAny", hostname, [], callback);
+      this.call("resolveAny", hostname, false, callback);
     }
+
     resolveCaa(hostname: string, callback: DnsCallback<CaaRecord[]>): void {
-      this.call("resolveCaa", hostname, [], callback);
+      this.call("resolveCaa", hostname, false, callback);
     }
+
     resolveCname(hostname: string, callback: DnsCallback<string[]>): void {
-      this.call("resolveCname", hostname, [], callback);
+      this.call("resolveCname", hostname, false, callback);
     }
+
     resolveMx(hostname: string, callback: DnsCallback<MxRecord[]>): void {
-      this.call("resolveMx", hostname, [], callback);
+      this.call("resolveMx", hostname, false, callback);
     }
+
     resolveNaptr(hostname: string, callback: DnsCallback<NaptrRecord[]>): void {
-      this.call("resolveNaptr", hostname, [], callback);
+      this.call("resolveNaptr", hostname, false, callback);
     }
+
     resolveNs(hostname: string, callback: DnsCallback<string[]>): void {
-      this.call("resolveNs", hostname, [], callback);
+      this.call("resolveNs", hostname, false, callback);
     }
+
     resolvePtr(hostname: string, callback: DnsCallback<string[]>): void {
-      this.call("resolvePtr", hostname, [], callback);
+      this.call("resolvePtr", hostname, false, callback);
     }
+
     resolveSoa(hostname: string, callback: DnsCallback<SoaRecord>): void {
-      this.call("resolveSoa", hostname, [], callback);
+      this.call("resolveSoa", hostname, false, callback);
     }
+
     resolveSrv(hostname: string, callback: DnsCallback<SrvRecord[]>): void {
-      this.call("resolveSrv", hostname, [], callback);
+      this.call("resolveSrv", hostname, false, callback);
     }
+
     resolveTlsa(hostname: string, callback: DnsCallback<TlsaRecord[]>): void {
-      this.call("resolveTlsa", hostname, [], callback);
+      this.call("resolveTlsa", hostname, false, callback);
     }
+
     resolveTxt(hostname: string, callback: DnsCallback<string[][]>): void {
-      this.call("resolveTxt", hostname, [], callback);
+      this.call("resolveTxt", hostname, false, callback);
     }
+
     reverse(ip: string, callback: DnsCallback<string[]>): void {
-      this.call("reverse", ip, [], callback);
+      this.call("reverse", ip, false, callback);
     }
   }
 
   const PromisesResolver = class Resolver extends ResolverBase implements PromiseResolver {
-    private call<T>(operation: string, hostname: unknown, args: unknown[] = []): Promise<T> {
+    private call<T extends ResolveResult>(
+      operation: ResolveOperation,
+      hostname: unknown,
+      ttl = false,
+    ): Promise<T> {
       validateString(hostname, "hostname");
-      return promiseCall(() => query<T>(operation, [hostname, ...args], this.configuration));
+      // Each public method below fixes T to the result family selected by its operation.
+      return promiseCall(
+        () => resolveHost(host, operation, hostname, ttl, this.configuration) as T,
+      );
     }
+
     resolve(hostname: string, rrtype = "A"): Promise<ResolveResult> {
       return this.call(resolveOperation(rrtype), hostname);
     }
+
     resolve4(hostname: string, options?: ResolveOptions): Promise<string[] | RecordWithTtl[]> {
-      return this.call("resolve4", hostname, options ? [options] : []);
+      return this.call("resolve4", hostname, options?.ttl === true);
     }
+
     resolve6(hostname: string, options?: ResolveOptions): Promise<string[] | RecordWithTtl[]> {
-      return this.call("resolve6", hostname, options ? [options] : []);
+      return this.call("resolve6", hostname, options?.ttl === true);
     }
+
     resolveAny(hostname: string): Promise<AnyRecord[]> {
       return this.call("resolveAny", hostname);
     }
+
     resolveCaa(hostname: string): Promise<CaaRecord[]> {
       return this.call("resolveCaa", hostname);
     }
+
     resolveCname(hostname: string): Promise<string[]> {
       return this.call("resolveCname", hostname);
     }
+
     resolveMx(hostname: string): Promise<MxRecord[]> {
       return this.call("resolveMx", hostname);
     }
+
     resolveNaptr(hostname: string): Promise<NaptrRecord[]> {
       return this.call("resolveNaptr", hostname);
     }
+
     resolveNs(hostname: string): Promise<string[]> {
       return this.call("resolveNs", hostname);
     }
+
     resolvePtr(hostname: string): Promise<string[]> {
       return this.call("resolvePtr", hostname);
     }
+
     resolveSoa(hostname: string): Promise<SoaRecord> {
       return this.call("resolveSoa", hostname);
     }
+
     resolveSrv(hostname: string): Promise<SrvRecord[]> {
       return this.call("resolveSrv", hostname);
     }
+
     resolveTlsa(hostname: string): Promise<TlsaRecord[]> {
       return this.call("resolveTlsa", hostname);
     }
+
     resolveTxt(hostname: string): Promise<string[][]> {
       return this.call("resolveTxt", hostname);
     }
+
     reverse(ip: string): Promise<string[]> {
       return this.call("reverse", ip);
     }
@@ -666,7 +809,7 @@ export function createDns(host: DnsHost): DnsModules {
     let result: LookupAddress | LookupAddress[] | undefined;
     let error: DnsError | undefined;
     try {
-      result = query("lookup", [hostname, options]);
+      result = hostLookup(hostname, options);
     } catch (caught) {
       error = caught instanceof Error ? (caught as DnsError) : new Error(String(caught));
     }
@@ -696,7 +839,7 @@ export function createDns(host: DnsHost): DnsModules {
     let result: { hostname: string; service: string } | undefined;
     let error: DnsError | undefined;
     try {
-      result = query("lookupService", [address, numericPort]);
+      result = hostResult(host.lookupService(address, numericPort));
     } catch (caught) {
       error = caught instanceof Error ? (caught as DnsError) : new Error(String(caught));
     }
@@ -755,7 +898,7 @@ export function createDns(host: DnsHost): DnsModules {
           parsed.all ? [{ address: hostname, family }] : { address: hostname, family },
         );
       }
-      return promiseCall(() => query("lookup", [hostname, parsed]));
+      return promiseCall(() => hostLookup(hostname, parsed));
     } as PromiseLookupFunction,
     lookupService(address: string, port: number): Promise<{ hostname: string; service: string }> {
       validateString(address, "address");
@@ -766,7 +909,7 @@ export function createDns(host: DnsHost): DnsModules {
       if (!Number.isInteger(numericPort) || numericPort < 0 || numericPort > 65535) {
         throw invalidArgValue("port", port);
       }
-      return promiseCall(() => query("lookupService", [address, numericPort]));
+      return promiseCall(() => hostResult(host.lookupService(address, numericPort)));
     },
     resolve: promiseResolver.resolve.bind(promiseResolver),
     resolve4: promiseResolver.resolve4.bind(promiseResolver),
