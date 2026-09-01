@@ -2055,7 +2055,7 @@ impl AsyncTaskIntrinsic {
                             }});
                             if (!this.#waitable) {{ throw new Error('missing/invalid inner waitable'); }}
                             if (!this.resolveDelivered()) {{
-                                throw new Error('cannot drop subtask before resolve is delivered');
+                                throw new Error('cannot drop a subtask which has not yet resolved');
                             }}
                             if (this.#waitable) {{ this.#waitable.drop() }}
                             this.#dropped = true;
