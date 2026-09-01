@@ -117,6 +117,7 @@ is planned.
 | `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.                |
 | `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                               |
 | `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                              |
+| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Outbound client API over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Server listening is explicitly unsupported.                     |
 | `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.  |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                          |
 | `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                       |
@@ -627,6 +628,36 @@ shares server and default-result-order state with the main module.
 boundary does not expose an outstanding c-ares request that a later guest call
 could cancel. The provider boundary otherwise remains Node-independent, leaving
 room for a future browser implementation.
+
+### HTTP and selectable transports
+
+The `node:http` adapter implements outbound `request()` and `get()` calls with
+Node-style `ClientRequest` and buffered `IncomingMessage` objects. Select the
+host boundary during componentization without changing application imports:
+
+```console
+jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http-via wasi-sockets -o component.wasm
+```
+
+| Value              | Component boundary                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `direct` (default) | Typed `jco:node/http@0.1.0`; denied by default, with an opt-in Node `node:http` provider.                  |
+| `wasi-sockets`     | Preview 2 DNS lookup, TCP sockets, streams, and pollables; HTTP/1.1 framing and parsing live in the guest. |
+| `wasi-http`        | Preview 2 `wasi:http/outgoing-handler` and `wasi:http/types`.                                              |
+
+Jco injects only the selected mode's missing imports into the selected world,
+installs their pinned 0.2.12 dependency packages, and warns about the visible WIT
+changes. Repeated runs are idempotent. An existing incompatible `wasi:http` or
+`wasi:sockets` version is rejected rather than silently mixing interfaces.
+
+The direct Node provider is asynchronous; Jco configures its typed `request`
+import for JSPI so it appears synchronous to the Preview 2 guest without a
+worker. All modes currently buffer complete request and response bodies.
+Connection pooling, upgrades, CONNECT tunnels, TLS/`https:`, and inbound server
+listening are explicit gaps. In particular, a `wasi:http/incoming-handler` is a
+component export contract and cannot transparently implement callback-based
+`server.listen()` through an import.
 
 ### Buffer
 
