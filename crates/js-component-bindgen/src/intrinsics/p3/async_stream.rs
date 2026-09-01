@@ -1629,10 +1629,7 @@ impl AsyncStreamIntrinsic {
                                 }});
                             }}
                             if (this.#pendingBufferMeta) {{
-                                const result = this.#pendingBufferMeta.buffer?.processed > 0
-                                    ? {stream_end_class}.CopyResult.COMPLETED
-                                    : {stream_end_class}.CopyResult.DROPPED;
-                                this.resetAndNotifyPending(result);
+                                this.resetAndNotifyPending({stream_end_class}.CopyResult.DROPPED);
                             }}
                         }}
                     }}
