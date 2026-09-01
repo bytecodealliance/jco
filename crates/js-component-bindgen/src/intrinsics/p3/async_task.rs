@@ -1153,6 +1153,37 @@ impl AsyncTaskIntrinsic {
                             return true;
                         }}
 
+                        tryEnter() {{
+                            if (this.#entered) {{
+                                throw new Error(`task with ID [${{this.#id}}] should not be entered twice`);
+                            }}
+
+                            if (this.deliverPendingCancel({{ cancellable: true }})) {{
+                                this.cancel();
+                                return false;
+                            }}
+
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (this.isSync()) {{
+                                this.#entered = true;
+                                return true;
+                            }}
+                            if (cstate.hasBackpressure()) {{ return null; }}
+                            if (this.needsExclusiveLock()) {{
+                                if (cstate.isExclusivelyLocked()) {{ return null; }}
+                                cstate.exclusiveLock(this.#id);
+                            }}
+
+                            if (this.deliverPendingCancel({{ cancellable: true }})) {{
+                                cstate.exclusiveRelease(this.#id);
+                                this.cancel();
+                                return false;
+                            }}
+
+                            this.#entered = true;
+                            return true;
+                        }}
+
                         async enter(opts) {{
                             {debug_log_fn}('[{task_class}#enter()] args', {{
                                 taskID: this.#id,
