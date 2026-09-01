@@ -1445,9 +1445,13 @@ mod tests {
         assert!(source.contains(
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
-        assert!(source.contains("const mayStartSynchronously = callee._jcoMaySuspend === false;"));
+        assert!(source.contains("|| !subtask.getParentTask().hasCallback();"));
         assert!(source.contains("? preparedTask.tryEnter()"));
         assert!(source.contains("fn: () => callee.apply(null, startRes),"));
+        assert!(source.contains("const driveJspiCallee = async () => {"));
+        assert!(source.contains("} else if (enteredSynchronously === true) {"));
+        assert!(source.contains("driveJspiCallee();"));
+        assert!(source.contains("} else if (enteredSynchronously === null) {"));
         assert!(source.contains("if (subtask.isReturned()) {"));
         assert!(source.contains("callerComponentState.handles.remove(subtask.waitableRep())"));
     }
