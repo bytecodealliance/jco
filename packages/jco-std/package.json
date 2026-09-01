@@ -85,6 +85,25 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/dns-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/dns-host-node.js"
     },
+    "./wasi/0.2.x/node/24.x.x/fs": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/fs.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/fs.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/fs.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/fs/promises": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/fs-promises.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/fs-promises.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/fs-promises.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/fs/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/fs-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/fs-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/fs-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/fs/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.js"
+    },
     "./wasi/0.2.x/node/24.x.x/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
