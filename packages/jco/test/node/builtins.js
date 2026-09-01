@@ -39,6 +39,7 @@ describe("Node builtin adapters", () => {
             "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
+            "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
             "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
         });
         expect(
@@ -54,6 +55,7 @@ describe("Node builtin adapters", () => {
             "jco:node/console@0.1.0": "/application/console-host.js",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "/application/fs-host.js",
+            "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
             "jco:node/os@0.1.0": "/application/os-host.js",
         });
     });
