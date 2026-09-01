@@ -59,7 +59,7 @@ describe("node:fs path operations", () => {
     });
   });
 
-  test("preserves file URLs through the host-neutral protocol", async () => {
+  test("preserves file URLs through the typed host boundary", async () => {
     await withFsFixture((root) => {
       const url = pathToFileURL(join(root, "file URL.txt"));
       fs.writeFileSync(url, "url");
