@@ -988,7 +988,7 @@ impl AsyncTaskIntrinsic {
 
                            this.#onResolveHandlers.push((results) => {{
                                if (this.#parentSubtask !== null) {{ return; }}
-                               if (!this.#isAsync) {{ return; }}
+                               if (!this.#isAsync && !this.#isManualAsync) {{ return; }}
 
                                if (this.#errored !== null) {{
                                    rejectCompletionPromise(this.#errored);
