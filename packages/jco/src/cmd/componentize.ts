@@ -5,7 +5,7 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
-import { nodeBuiltinPlugin, nodeErrorGlobals, type WorldMetadata } from "../node-builtins.js";
+import { nodeBuiltinPlugin, nodeGlobals, type WorldMetadata } from "../node-builtins.js";
 import { injectNodeWitImports, witInjectionWarnings, type NodeWitRequirement } from "../node-wit.js";
 
 /** All features that can be enabled/disabled */
@@ -152,9 +152,9 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         ? await bundleComponentSource(jsSource, {
               config: bundleConfig,
               typescript: isTypeScript,
-              // Node exposes these constructors as globals. Rolldown injects their
-              // shim bindings only when referenced, so unused bundles pay no cost.
-              inject: nodeErrorGlobals(),
+              // The component engine supplies Web globals. Rolldown injects only Jco-backed Node
+              // globals when referenced, so unused adapters add no bundle cost.
+              inject: nodeGlobals(),
               // Node builtin adapters are supplied while the source graph is bundled, which is
               // why `node:path` only works together with `--bundle`.
               plugins: [

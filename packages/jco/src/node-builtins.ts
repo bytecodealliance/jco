@@ -54,6 +54,11 @@ export interface NodeErrorGlobalsOptions {
     errorsModule?: string;
 }
 
+export interface NodeGlobalsOptions extends NodeErrorGlobalsOptions {
+    /** Path to Jco's audited `node:buffer` adapter (overridable for tests). */
+    bufferModule?: string;
+}
+
 /**
  * Rolldown injection map for Node's global error constructors.
  *
@@ -65,6 +70,19 @@ export function nodeErrorGlobals(
 ): Record<string, [module: string, exportName: string]> {
     const errorsModule = options.errorsModule ?? ERROR_GLOBALS_SPECIFIER;
     return Object.fromEntries(NODE_ERROR_GLOBAL_NAMES.map((name) => [name, [errorsModule, name]]));
+}
+
+/**
+ * Rolldown injection map for Node globals backed by Jco implementations.
+ *
+ * Web globals already supplied by the component engine are intentionally absent.
+ * Rolldown includes these adapters only when their free identifiers survive bundling.
+ */
+export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [module: string, exportName: string]> {
+    return {
+        ...nodeErrorGlobals(options),
+        Buffer: [options.bufferModule ?? "node:buffer", "Buffer"],
+    };
 }
 
 let defaultUnenvAliases: Readonly<Record<string, string>> | undefined;
