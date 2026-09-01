@@ -371,6 +371,7 @@ pub fn transpile_bindgen(
         init_current_module: None,
         context_components: Default::default(),
         suspending_core_functions: Default::default(),
+        async_export_core_functions: Default::default(),
         suspending_trampolines: Default::default(),
         inferred_async_exports: Default::default(),
     };
@@ -803,6 +804,9 @@ pub(crate) struct Instantiator<'a, 'b> {
 
     /// Core functions which transitively reach a JSPI-suspending import.
     suspending_core_functions: PrimaryMap<RuntimeInstanceIndex, HashSet<FuncIndex>>,
+
+    /// Core functions which transitively require Promise-returning export bindings.
+    async_export_core_functions: PrimaryMap<RuntimeInstanceIndex, HashSet<FuncIndex>>,
 
     /// Lowered imports which were colored async while their bindings were generated.
     suspending_trampolines: HashSet<TrampolineIndex>,
@@ -1542,6 +1546,49 @@ impl<'a> Instantiator<'a, '_> {
                 self.suspending_core_functions
                     .get(export.instance)
                     .is_some_and(|functions| functions.contains(&function_idx))
+            }
+            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
+                false
+            }
+        }
+    }
+
+    /// Whether a core definition transitively requires a Promise-returning export binding.
+    fn core_def_requires_async_export(
+        &self,
+        def: &CoreDef,
+        include_suspending_exports: bool,
+    ) -> bool {
+        match def {
+            CoreDef::Trampoline(index) => match &self.translation.trampolines[*index] {
+                Trampoline::LowerImport {
+                    lower_ty, options, ..
+                } => self.component.options[*options].async_ || self.types[*lower_ty].async_,
+                _ => false,
+            },
+            CoreDef::Export(export) => {
+                let Some(module_idx) = self.instances.get(export.instance) else {
+                    return false;
+                };
+                let function_idx = match &export.item {
+                    ExportItem::Index(EntityIndex::Function(index)) => *index,
+                    ExportItem::Index(_) => return false,
+                    ExportItem::Name(name) => {
+                        let exports = self.modules[*module_idx].exports();
+                        let Some(EntityIndex::Function(index)) = exports.get(name) else {
+                            return false;
+                        };
+                        *index
+                    }
+                };
+                self.async_export_core_functions
+                    .get(export.instance)
+                    .is_some_and(|functions| functions.contains(&function_idx))
+                    || include_suspending_exports
+                        && self
+                            .suspending_core_functions
+                            .get(export.instance)
+                            .is_some_and(|functions| functions.contains(&function_idx))
             }
             CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
                 false
@@ -3364,9 +3411,29 @@ impl<'a> Instantiator<'a, '_> {
 
         let suspending_functions = self.modules[module_idx]
             .suspending_functions(args, |def| self.core_def_may_suspend(def));
+        // A synchronous component call can import a core export which must
+        // suspend internally. Only that boundary turns technical JSPI
+        // suspension into a Promise-returning component export.
+        let crosses_sync_call_boundary = args.iter().any(|def| {
+            matches!(
+                def,
+                CoreDef::Trampoline(index)
+                    if matches!(
+                        self.translation.trampolines[*index],
+                        Trampoline::EnterSyncCall | Trampoline::SyncStartCall { .. }
+                    )
+            )
+        });
+        let async_export_functions = self.modules[module_idx].suspending_functions(args, |def| {
+            self.core_def_requires_async_export(def, crosses_sync_call_boundary)
+        });
         let i = self.instances.push(module_idx);
         let suspending_instance = self.suspending_core_functions.push(suspending_functions);
         assert_eq!(i, suspending_instance);
+        let async_export_instance = self
+            .async_export_core_functions
+            .push(async_export_functions);
+        assert_eq!(i, async_export_instance);
         let iu32 = i.as_u32();
         let instantiate = self.bindgen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
@@ -5318,7 +5385,7 @@ impl<'a> Instantiator<'a, '_> {
         export_resource_map: &ResourceMap,
     ) {
         // Determine whether the function should be generated as async
-        let inferred_async = self.core_def_may_suspend(def);
+        let inferred_async = self.core_def_requires_async_export(def, false);
         if inferred_async {
             let func_name = func.name.trim_start_matches("[async]");
             self.inferred_async_exports.insert(
