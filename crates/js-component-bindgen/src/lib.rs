@@ -23,10 +23,10 @@ pub mod source;
 pub mod intrinsics;
 use intrinsics::Intrinsic;
 
-use transpile_bindgen::transpile_bindgen;
 pub use transpile_bindgen::{
     AsyncMode, BindingsMode, ExportKind, InstantiationMode, TranspileOpts,
 };
+use transpile_bindgen::{TranspileBindgenResult, transpile_bindgen};
 
 fn enum_case_name(name: &str, screaming_snake_case: bool) -> String {
     if screaming_snake_case {
@@ -180,7 +180,11 @@ pub fn transpile(component: &[u8], mut opts: TranspileOpts) -> Result<Transpiled
         files.push(&core_file_name(&name, i.as_u32()), module.wasm());
     }
 
-    let (imports, exports, inferred_async_exports) = transpile_bindgen(
+    let TranspileBindgenResult {
+        imports,
+        exports,
+        inferred_async_exports,
+    } = transpile_bindgen(
         &name,
         &component,
         &modules,
