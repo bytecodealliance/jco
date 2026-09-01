@@ -10,6 +10,7 @@ import {
     DNS_PROMISES_WIT_REQUIREMENT,
     DNS_WIT_REQUIREMENT,
     FS_WIT_REQUIREMENT,
+    FFI_WIT_REQUIREMENT,
     type NodeWitRequirement,
 } from "./node-wit.js";
 
@@ -25,6 +26,7 @@ const CONSOLE_SPECIFIER = "node:console";
 const FS_SPECIFIERS = new Set(["node:fs", "node:fs/promises"]);
 const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const DOMAIN_SPECIFIER = "node:domain";
+const FFI_SPECIFIER = "node:ffi";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
@@ -211,6 +213,8 @@ export interface NodeBuiltinOptions {
     asyncHooksModule?: string;
     /** Path to jco-std's versioned `node:domain` module (overridable for tests) */
     domainModule?: string;
+    /** Path to jco-std's versioned `node:ffi` module (overridable for tests) */
+    ffiModule?: string;
     /** Path to jco-std's versioned `node:diagnostics_channel` module (overridable for tests) */
     diagnosticsChannelModule?: string;
     /** Path to jco-std's versioned Errors globals module (overridable for tests) */
@@ -224,6 +228,59 @@ export interface NodeBuiltinOptions {
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Source of the `node:ffi` adapter.
+ *
+ * Host-backed, like `node:child_process`: WASI has no dynamic loader and a component has no host
+ * address space, so the jco-std module imports the WIT interface itself and this adapter only has
+ * to re-export Node's module shape.
+ *
+ * Note the module this resolves to lives under `node/26.x.x`: `node:ffi` does not exist in Node 24.
+ */
+function ffiAdapter(ffiModule: string): string {
+    return `
+import ffi from ${JSON.stringify(ffiModule)};
+export default ffi;
+export {
+    DynamicLibrary,
+    dlclose,
+    dlopen,
+    dlsym,
+    exportArrayBuffer,
+    exportArrayBufferView,
+    exportBuffer,
+    exportString,
+    getCurrentEventLoop,
+    getFloat32,
+    getFloat64,
+    getInt16,
+    getInt32,
+    getInt64,
+    getInt8,
+    getRawPointer,
+    getUint16,
+    getUint32,
+    getUint64,
+    getUint8,
+    setFloat32,
+    setFloat64,
+    setInt16,
+    setInt32,
+    setInt64,
+    setInt8,
+    setUint16,
+    setUint32,
+    setUint64,
+    setUint8,
+    suffix,
+    toArrayBuffer,
+    toBuffer,
+    toString,
+    types,
+} from ${JSON.stringify(ffiModule)};
+`;
 }
 
 /**
@@ -543,6 +600,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const assertModule = () =>
         options.assertModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
+    // NOTE: `node:ffi` resolves under `node/26.x.x`, not 24: it does not exist in Node 24. This is
+    // the first place the Node major in the path differs per module rather than per build.
+    const ffiModule = () =>
+        options.ffiModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi"));
     const domainModule = () =>
         options.domainModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/domain"));
@@ -588,6 +649,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return ERROR_GLOBALS_MODULE;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === FFI_SPECIFIER) {
+                options.onWitRequirement?.(FFI_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === DOMAIN_SPECIFIER) {
@@ -651,6 +716,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (value === FFI_SPECIFIER) {
+                return ffiAdapter(ffiModule());
             }
             if (value === DOMAIN_SPECIFIER) {
                 return domainAdapter(domainModule());
