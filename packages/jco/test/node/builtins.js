@@ -37,16 +37,19 @@ describe("Node builtin adapters", () => {
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
             "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
+            "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
         });
         expect(
             withDefaultNodeCapabilityMap({
                 "jco:node/console@0.1.0": "/application/console-host.js",
+                "jco:node/fs@0.1.0": "/application/fs-host.js",
             }),
         ).toEqual({
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
             "jco:node/console@0.1.0": "/application/console-host.js",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
+            "jco:node/fs@0.1.0": "/application/fs-host.js",
         });
     });
 
@@ -72,6 +75,45 @@ describe("Node builtin adapters", () => {
         expect(opts.asyncMode).toBeUndefined();
         expect(opts.asyncImports).toBeUndefined();
         expect(opts.asyncExports).toBeUndefined();
+    });
+
+    test.each([
+        ["node:fs", "/jco/node/fs.js"],
+        ["node:fs/promises", "/jco/node/fs-promises.js"],
+    ])("generates a host-backed adapter for %s", (specifier, expectedModule) => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            {
+                fsModule: "/jco/node/fs.js",
+                fsPromisesModule: "/jco/node/fs-promises.js",
+            },
+        );
+        const id = plugin.resolveId(specifier);
+        expect(id).toBe(`\0jco-node-builtin:${specifier}`);
+        const source = plugin.load(id);
+        expect(source).toContain(`from ${JSON.stringify(expectedModule)}`);
+        expect(source).toContain("export default fs");
+        expect(source).toContain("export *");
+    });
+
+    test.each(["node:fs", "node:fs/promises"])("reports the WIT capability required by %s", (specifier) => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            {
+                fsModule: "/jco/node/fs.js",
+                fsPromisesModule: "/jco/node/fs-promises.js",
+                onWitRequirement,
+            },
+        );
+        plugin.resolveId(specifier);
+        expect(onWitRequirement).toHaveBeenCalledOnce();
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({
+                nodeSpecifier: "node:fs",
+                witImport: "jco:node/fs@0.1.0",
+            }),
+        );
     });
 
     test.each(["node:path", "node:path/posix", "node:path/win32"])("generates an adapter for %s", (specifier) => {
@@ -364,7 +406,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("assert/strict")).toBeNull();
         expect(plugin.resolveId("buffer")).toBeNull();
         expect(plugin.resolveId("querystring")).toBeNull();
-        expect(plugin.resolveId("node:fs")).toBeNull();
+        expect(plugin.resolveId("fs")).toBeNull();
         expect(plugin.resolveId("node:errors")).toBeNull();
         expect(plugin.resolveId("errors")).toBeNull();
         expect(plugin.resolveId("console")).toBeNull();

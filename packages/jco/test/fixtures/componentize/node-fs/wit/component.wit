@@ -1,0 +1,14 @@
+package jco-fixtures:node-fs;
+
+world component {
+    record report {
+        sync-contents: string,
+        callback-contents: string,
+        promise-contents: string,
+        descriptor-contents: string,
+        is-file: bool,
+        entries: string,
+    }
+
+    export run: func(root: string) -> report;
+}
