@@ -206,6 +206,11 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/events.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/events.js"
     },
+    "./wasi/0.2.x/node/24.x.x/module": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/module.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/module.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/module.js"
+    },
     "./wasi/0.2.x/node/26.x.x/ffi": {
       "types": "./dist/wasi/0.2.x/node/26.x.x/ffi.d.ts",
       "browser": "./dist/wasi/0.2.x/node/26.x.x/ffi.js",
