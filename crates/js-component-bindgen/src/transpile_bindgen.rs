@@ -1573,13 +1573,6 @@ impl<'a> Instantiator<'a, '_> {
 
     /// Whether a generated trampoline is exposed to core Wasm as a JSPI-suspending import.
     fn trampoline_may_suspend(&self, index: TrampolineIndex, trampoline: &Trampoline) -> bool {
-        if !matches!(
-            self.bindgen.opts.async_mode,
-            Some(AsyncMode::JavaScriptPromiseIntegration { .. })
-        ) {
-            return false;
-        }
-
         match trampoline {
             Trampoline::LowerImport {
                 lower_ty, options, ..
@@ -3447,8 +3440,14 @@ impl<'a> Instantiator<'a, '_> {
             imports.push('}');
         }
 
-        let suspending_functions = self.modules[module_idx]
-            .suspending_functions(args, |def| self.core_def_may_suspend(def));
+        let jspi_enabled = self
+            .translation
+            .trampolines
+            .iter()
+            .any(|(index, trampoline)| self.trampoline_may_suspend(index, trampoline));
+        let suspending_functions =
+            self.modules[module_idx]
+                .suspending_functions(args, jspi_enabled, |def| self.core_def_may_suspend(def));
         // A synchronous component call can import a core export which must
         // suspend internally. Only that boundary turns technical JSPI
         // suspension into a Promise-returning component export.
@@ -3462,9 +3461,10 @@ impl<'a> Instantiator<'a, '_> {
                     )
             )
         });
-        let async_export_functions = self.modules[module_idx].suspending_functions(args, |def| {
-            self.core_def_requires_async_export(def, crosses_sync_call_boundary)
-        });
+        let async_export_functions =
+            self.modules[module_idx].suspending_functions(args, jspi_enabled, |def| {
+                self.core_def_requires_async_export(def, crosses_sync_call_boundary)
+            });
         let i = self.instances.push(module_idx);
         let async_analysis_instance =
             self.async_analysis
