@@ -32,7 +32,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/cross-abi-calls.wast', skip: true },
     { relPath: 'async/empty-wait.wast', skip: false },
     { relPath: 'async/zero-length.wast', skip: true },
-    { relPath: 'async/cancel-subtask.wast', skip: true },
+    { relPath: 'async/cancel-subtask.wast', skip: false },
     { relPath: 'async/closed-stream.wast', skip: true },
     { relPath: 'async/passing-resources.wast', skip: false },
     { relPath: 'async/drop-cross-task-borrow.wast', skip: true },
