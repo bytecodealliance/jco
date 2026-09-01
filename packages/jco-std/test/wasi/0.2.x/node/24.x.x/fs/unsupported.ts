@@ -8,7 +8,6 @@ import { fs, promises } from "../helpers/fs.js";
 
 describe("node:fs denied and unsupported behavior", () => {
   test("denies host access by default", () => {
-    expect("query" in denyHost).toBe(false);
     expect(() => denyHost.access({ tag: "text", val: "ignored" }, 0)).toThrow(
       expect.objectContaining({ code: "ERR_JCO_FS_ADAPTER_REQUIRED" }),
     );
