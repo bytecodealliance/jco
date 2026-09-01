@@ -35,6 +35,7 @@ describe("Node builtin adapters", () => {
         expect(withDefaultNodeCapabilityMap()).toEqual({
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
+            "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
             "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
@@ -47,6 +48,7 @@ describe("Node builtin adapters", () => {
         ).toEqual({
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
+            "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
             "jco:node/console@0.1.0": "/application/console-host.js",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "/application/fs-host.js",
@@ -153,6 +155,33 @@ describe("Node builtin adapters", () => {
         const source = plugin.load(id);
         expect(source).toContain('from "/jco/node/child-process.js"');
         expect(source).toContain("spawnSync");
+    });
+
+    test("generates a host-backed adapter for node:ffi", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ffiModule: "/jco/node/ffi.js" });
+        const id = plugin.resolveId("node:ffi");
+        expect(id).toBe("\0jco-node-builtin:node:ffi");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/ffi.js"');
+        expect(source).toContain("DynamicLibrary");
+        expect(source).toContain("dlopen");
+    });
+
+    test("reports the WIT capability required by node:ffi", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { ffiModule: "/jco/node/ffi.js", onWitRequirement },
+        );
+        plugin.resolveId("node:ffi");
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({ nodeSpecifier: "node:ffi", witImport: "jco:node/ffi@0.1.0" }),
+        );
+    });
+
+    test("does not intercept the bare ffi specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ffiModule: "/jco/node/ffi.js" });
+        expect(plugin.resolveId("ffi")).toBeNull();
     });
 
     test("generates an adapter for node:domain that refuses at runtime", () => {
