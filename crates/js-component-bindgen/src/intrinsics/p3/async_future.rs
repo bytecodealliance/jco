@@ -697,7 +697,9 @@ impl AsyncFutureIntrinsic {
                         #waitable;
                         #copyState = {future_end_class}.CopyState.IDLE;
 
-                        #dropped = false;
+                        #dropped;
+                        #setDroppedFn;
+                        #isDroppedFn;
 
                         constructor(args) {{
                             {debug_log_fn}('[{future_end_class}#constructor()] args', args);
@@ -707,6 +709,16 @@ impl AsyncFutureIntrinsic {
 
                             if (!args.waitable) {{ throw new Error("missing pending buffer"); }}
                             this.#waitable = args.waitable;
+
+                            if (args.setDroppedFn && args.isDroppedFn) {{
+                                this.#setDroppedFn = args.setDroppedFn;
+                                this.#isDroppedFn = args.isDroppedFn;
+                            }} else if (args.setDroppedFn === undefined && args.isDroppedFn === undefined) {{
+                                this.#setDroppedFn = (v) => {{ this.#dropped = v; }};
+                                this.#isDroppedFn = () => this.#dropped;
+                            }} else {{
+                                throw new TypeError('setDroppedFn and isDroppedFn must both be specified or neither');
+                            }}
                         }}
 
                         getWaitable() {{ return this.#waitable; }}
@@ -785,19 +797,20 @@ impl AsyncFutureIntrinsic {
                             return event;
                         }}
 
-                        isDropped() {{ return this.#dropped; }}
+                        isDropped() {{ return this.#isDroppedFn(); }}
+                        setDropped() {{ this.#setDroppedFn(true); }}
 
                         drop() {{
-                            if (this.#dropped) {{ throw new Error('future already dropped'); }}
+                            if (this.isDropped()) {{ throw new Error('future already dropped'); }}
 
                             if (this.#pendingBufferMeta.buffer) {{
-                                if (!pendingBufferMeta.buffer.isWritable()) {{
+                                if (!this.#pendingBufferMeta.buffer.isWritable()) {{
                                     throw new Error('non-writable pending buffer during drop (reader blocked)');
                                 }}
                                 this.resetAndNotifyPending({future_end_class}.CopyResult.DROPPED);
                             }}
 
-                            this.#dropped = true;
+                            this.setDropped();
                         }}
 
                     }}
@@ -1216,7 +1229,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               if (this.isWritable() && !this.isDoneState()) {{
-                                  throw new {runtime_error_class}('futures must not be dropped before being completed');
+                                  throw new {runtime_error_class}('cannot drop future write end without first writing a value');
                               }}
                             "#
                         )
