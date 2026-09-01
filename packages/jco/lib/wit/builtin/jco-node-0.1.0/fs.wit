@@ -1,11 +1,208 @@
 package jco:node@0.1.0;
 
-/// Host-neutral boundary for Node-compatible filesystem operations.
-///
-/// The request envelope is JSON because Node's filesystem API has a large,
-/// evolving set of overloads and result records. Binary data, bigint values,
-/// dates, directory entries, stats, and system errors use explicit tagged
-/// representations defined by the jco-std adapter.
+/// Typed, runtime-neutral host boundary for the supported Node filesystem API.
 interface fs {
-  query: func(request-json: string) -> string;
+  variant path {
+    text(string),
+    bytes(list<u8>),
+    file-url(string),
+  }
+
+  variant path-or-descriptor {
+    path(path),
+    descriptor(u32),
+  }
+
+  variant mode {
+    number(u32),
+    symbolic(string),
+  }
+
+  variant open-mode {
+    number(s32),
+    symbolic(string),
+  }
+
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    path: option<string>,
+    dest: option<string>,
+  }
+
+  enum file-type {
+    block,
+    character,
+    directory,
+    fifo,
+    file,
+    socket,
+    symlink,
+    unknown,
+  }
+
+  variant numeric {
+    number(f64),
+    bigint(s64),
+  }
+
+  record stats {
+    dev: numeric,
+    ino: numeric,
+    mode: numeric,
+    nlink: numeric,
+    uid: numeric,
+    gid: numeric,
+    rdev: numeric,
+    size: numeric,
+    blksize: numeric,
+    blocks: numeric,
+    atime-ms: numeric,
+    mtime-ms: numeric,
+    ctime-ms: numeric,
+    birthtime-ms: numeric,
+    atime-ns: option<s64>,
+    mtime-ns: option<s64>,
+    ctime-ns: option<s64>,
+    birthtime-ns: option<s64>,
+    file-type: file-type,
+  }
+
+  record statfs-result {
+    %type: numeric,
+    bsize: numeric,
+    blocks: numeric,
+    bfree: numeric,
+    bavail: numeric,
+    files: numeric,
+    ffree: numeric,
+  }
+
+  record dirent {
+    name: string,
+    parent-path: string,
+    file-type: file-type,
+  }
+
+  variant directory-entry {
+    name(string),
+    dirent(dirent),
+  }
+
+  variant glob-entry {
+    path(string),
+    dirent(dirent),
+  }
+
+  variant glob-exclude {
+    pattern(string),
+    patterns(list<string>),
+  }
+
+  record copy-options {
+    dereference: bool,
+    error-on-exist: bool,
+    force: bool,
+    preserve-timestamps: bool,
+    recursive: bool,
+    verbatim-symlinks: bool,
+  }
+
+  record glob-options {
+    cwd: option<path>,
+    exclude: option<glob-exclude>,
+    with-file-types: bool,
+  }
+
+  record mkdir-options {
+    recursive: bool,
+    mode: option<mode>,
+  }
+
+  record readdir-options {
+    recursive: bool,
+    with-file-types: bool,
+  }
+
+  record remove-options {
+    force: bool,
+    max-retries: u32,
+    recursive: bool,
+    retry-delay: u32,
+  }
+
+  record stat-options {
+    bigint: bool,
+    throw-if-no-entry: bool,
+  }
+
+  record read-file-options {
+    flag: option<string>,
+  }
+
+  record write-file-options {
+    flag: option<string>,
+    mode: option<mode>,
+    flush: bool,
+  }
+
+  record read-result {
+    bytes-read: u32,
+    data: list<u8>,
+  }
+
+  record readv-result {
+    bytes-read: u32,
+    buffers: list<list<u8>>,
+  }
+
+  access: func(path: path, mode: s32) -> result<_, error>;
+  append-file: func(file: path-or-descriptor, data: list<u8>, options: write-file-options) -> result<_, error>;
+  chmod: func(path: path, mode: mode) -> result<_, error>;
+  chown: func(path: path, uid: u32, gid: u32) -> result<_, error>;
+  close: func(descriptor: u32) -> result<_, error>;
+  copy-file: func(source: path, destination: path, mode: s32) -> result<_, error>;
+  cp: func(source: path, destination: path, options: copy-options) -> result<_, error>;
+  exists: func(path: path) -> result<bool, error>;
+  fchmod: func(descriptor: u32, mode: mode) -> result<_, error>;
+  fchown: func(descriptor: u32, uid: u32, gid: u32) -> result<_, error>;
+  fdatasync: func(descriptor: u32) -> result<_, error>;
+  fstat: func(descriptor: u32, options: stat-options) -> result<stats, error>;
+  fsync: func(descriptor: u32) -> result<_, error>;
+  ftruncate: func(descriptor: u32, length: u32) -> result<_, error>;
+  futimes: func(descriptor: u32, atime: f64, mtime: f64) -> result<_, error>;
+  glob: func(patterns: list<string>, options: glob-options) -> result<list<glob-entry>, error>;
+  lchown: func(path: path, uid: u32, gid: u32) -> result<_, error>;
+  link: func(existing-path: path, new-path: path) -> result<_, error>;
+  lstat: func(path: path, options: stat-options) -> result<option<stats>, error>;
+  lutimes: func(path: path, atime: f64, mtime: f64) -> result<_, error>;
+  mkdir: func(path: path, options: mkdir-options) -> result<option<string>, error>;
+  mkdtemp: func(prefix: string) -> result<string, error>;
+  open: func(path: path, %flags: open-mode, mode: mode) -> result<u32, error>;
+  read-file: func(file: path-or-descriptor, options: read-file-options) -> result<list<u8>, error>;
+  readdir: func(path: path, options: readdir-options) -> result<list<directory-entry>, error>;
+  readlink: func(path: path) -> result<string, error>;
+  realpath: func(path: path) -> result<string, error>;
+  rename: func(old-path: path, new-path: path) -> result<_, error>;
+  rm: func(path: path, options: remove-options) -> result<_, error>;
+  rmdir: func(path: path, options: remove-options) -> result<_, error>;
+  stat: func(path: path, options: stat-options) -> result<option<stats>, error>;
+  statfs: func(path: path, bigint: bool) -> result<statfs-result, error>;
+  symlink: func(target: path, path: path, %type: option<string>) -> result<_, error>;
+  truncate: func(path: path, length: u32) -> result<_, error>;
+  unlink: func(path: path) -> result<_, error>;
+  utimes: func(path: path, atime: f64, mtime: f64) -> result<_, error>;
+  write-file: func(file: path-or-descriptor, data: list<u8>, options: write-file-options) -> result<_, error>;
+  read: func(descriptor: u32, length: u32, position: option<u64>) -> result<read-result, error>;
+  write: func(descriptor: u32, data: list<u8>, position: option<u64>) -> result<u32, error>;
+  readv: func(descriptor: u32, lengths: list<u32>, position: option<u64>) -> result<readv-result, error>;
+  writev: func(descriptor: u32, buffers: list<list<u8>>, position: option<u64>) -> result<u32, error>;
 }
