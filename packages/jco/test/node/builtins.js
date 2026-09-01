@@ -182,6 +182,33 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("spawnSync");
     });
 
+    test("generates a capability-free adapter for node:module", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { moduleModule: "/jco/node/module.js" });
+        const id = plugin.resolveId("node:module");
+        expect(id).toBe("\0jco-node-builtin:node:module");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/module.js"');
+        expect(source).toContain("createRequire");
+        expect(source).toContain("SourceMap");
+    });
+
+    test("node:module requires no WIT capability", () => {
+        // Nothing reaches a host: what works is computation, and what does not is unimplementable
+        // rather than unprovisioned.
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { moduleModule: "/jco/node/module.js", onWitRequirement },
+        );
+        plugin.resolveId("node:module");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test("does not intercept the bare module specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { moduleModule: "/jco/node/module.js" });
+        expect(plugin.resolveId("module")).toBeNull();
+    });
+
     test("generates a host-backed adapter for node:ffi", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ffiModule: "/jco/node/ffi.js" });
         const id = plugin.resolveId("node:ffi");
