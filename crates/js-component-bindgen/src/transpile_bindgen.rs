@@ -829,6 +829,85 @@ impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
 }
 
 impl<'a> Instantiator<'a, '_> {
+    fn stream_elem_meta_js(&mut self, table_idx: TypeStreamTableIndex) -> String {
+        let stream_ty = &self.types[self.types[table_idx].ty];
+        let payload = stream_ty.payload;
+        let payload_ty_name_js = payload
+            .map(|ty| format!("'{ty:?}'"))
+            .unwrap_or_else(|| "null".into());
+
+        let (
+            align32,
+            size32,
+            flat_count,
+            lift_fn,
+            lower_fn,
+            is_none,
+            is_numeric,
+            is_borrowed,
+            is_async_value,
+            typed_array,
+        ) = match payload {
+            None => (
+                0,
+                0,
+                "0".into(),
+                "null".into(),
+                "null".into(),
+                true,
+                false,
+                false,
+                false,
+                "undefined",
+            ),
+            Some(ty) => {
+                let cabi = self.types.canonical_abi(&ty);
+                (
+                    cabi.align32,
+                    cabi.size32,
+                    cabi.flat_count
+                        .map(|count| count.to_string())
+                        .unwrap_or_else(|| "null".into()),
+                    gen_flat_lift_fn_js_expr(self, &ty, &None),
+                    gen_flat_lower_fn_js_expr(self, &ty, &None),
+                    false,
+                    matches!(
+                        ty,
+                        InterfaceType::U8
+                            | InterfaceType::U16
+                            | InterfaceType::U32
+                            | InterfaceType::U64
+                            | InterfaceType::S8
+                            | InterfaceType::S16
+                            | InterfaceType::S32
+                            | InterfaceType::S64
+                            | InterfaceType::Float32
+                            | InterfaceType::Float64
+                    ),
+                    matches!(ty, InterfaceType::Borrow(_)),
+                    matches!(ty, InterfaceType::Stream(_) | InterfaceType::Future(_)),
+                    js_typed_array_ctor(&ty).unwrap_or("undefined"),
+                )
+            }
+        };
+
+        format!(
+            r#"{{
+                liftFn: {lift_fn},
+                lowerFn: {lower_fn},
+                payloadTypeName: {payload_ty_name_js},
+                isNone: {is_none},
+                isNumeric: {is_numeric},
+                isBorrowed: {is_borrowed},
+                isAsyncValue: {is_async_value},
+                typedArray: {typed_array},
+                flatCount: {flat_count},
+                align32: {align32},
+                size32: {size32},
+            }}"#
+        )
+    }
+
     fn initialize(&mut self) {
         // Populate reverse map from import and export names to world items
         for (key, _) in &self.resolve.worlds[self.world].imports {
@@ -1834,101 +1913,14 @@ impl<'a> Instantiator<'a, '_> {
                 let instance_idx = instance.as_u32();
                 let stream_table_idx = ty.as_u32();
 
-                // Get to the payload type for the given stream table idx
-                let table_ty = &self.types[*ty];
-                let stream_ty_idx = table_ty.ty;
-                let stream_ty = &self.types[stream_ty_idx];
-
-                // TODO(???): do we have no way to go from interface type to in-component type idx?
-                // TODO(???): does this work under type aliases?? we need the type def?
-                // TODO(???): can the stream type be treated as a unique indicator of the payload type? maybe not?
-                // need a way to go from iface type + stream type -> payload type idx?
-                let payload_ty_name_js = stream_ty
-                    .payload
-                    .map(|iface_ty| format!("'{iface_ty:?}'"))
-                    .unwrap_or_else(|| "null".into());
-
-                // Gather type metadata
-                let (
-                    align_32_js,
-                    size_32_js,
-                    flat_count_js,
-                    lift_fn_js,
-                    lower_fn_js,
-                    is_none_js,
-                    is_numeric_type_js,
-                    is_borrow_js,
-                    is_async_value_js,
-                    typed_array_js,
-                ) = match stream_ty.payload {
-                    // If there is no payload for the stream, we know the values
-                    None => (
-                        "0".into(),
-                        "0".into(),
-                        "0".into(),
-                        "null".into(),
-                        "null".into(),
-                        "true",
-                        "false".into(),
-                        "false".into(),
-                        "false".into(),
-                        "undefined",
-                    ),
-                    // If there is a payload, generate relevant lift/lower and other metadata
-                    Some(ty) => (
-                        self.types.canonical_abi(&ty).align32.to_string(),
-                        self.types.canonical_abi(&ty).size32.to_string(),
-                        self.types
-                            .canonical_abi(&ty)
-                            .flat_count
-                            .map(|v| v.to_string())
-                            .unwrap_or_else(|| "null".into()),
-                        gen_flat_lift_fn_js_expr(self, &ty, &None),
-                        gen_flat_lower_fn_js_expr(self, &ty, &None),
-                        "false",
-                        format!(
-                            "{}",
-                            matches!(
-                                ty,
-                                InterfaceType::U8
-                                    | InterfaceType::U16
-                                    | InterfaceType::U32
-                                    | InterfaceType::U64
-                                    | InterfaceType::S8
-                                    | InterfaceType::S16
-                                    | InterfaceType::S32
-                                    | InterfaceType::S64
-                                    | InterfaceType::Float32
-                                    | InterfaceType::Float64
-                            )
-                        ),
-                        format!("{}", matches!(ty, InterfaceType::Borrow(_))),
-                        format!(
-                            "{}",
-                            matches!(ty, InterfaceType::Stream(_) | InterfaceType::Future(_))
-                        ),
-                        js_typed_array_ctor(&ty).unwrap_or("undefined"),
-                    ),
-                };
+                let elem_meta_js = self.stream_elem_meta_js(*ty);
 
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_new_fn}.bind(null, {{
                         streamTableIdx: {stream_table_idx},
                         callerComponentIdx: {instance_idx},
-                        elemMeta: {{
-                            liftFn: {lift_fn_js},
-                            lowerFn: {lower_fn_js},
-                            payloadTypeName: {payload_ty_name_js},
-                            isNone: {is_none_js},
-                            isNumeric: {is_numeric_type_js},
-                            isBorrowed: {is_borrow_js},
-                            isAsyncValue: {is_async_value_js},
-                            typedArray: {typed_array_js},
-                            flatCount: {flat_count_js},
-                            align32: {align_32_js},
-                            size32: {size_32_js},
-                        }},
+                        elemMeta: {elem_meta_js},
                     }});\n",
                 );
             }
@@ -1978,6 +1970,7 @@ impl<'a> Instantiator<'a, '_> {
                 let component_instance_id = instance.as_u32();
                 let string_encoding = string_encoding_js_literal(string_encoding);
                 let stream_table_idx = ty.as_u32();
+                let elem_meta_js = self.stream_elem_meta_js(*ty);
                 let stream_read_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
@@ -2014,6 +2007,7 @@ impl<'a> Instantiator<'a, '_> {
                              stringEncoding: {string_encoding},
                              isAsync: {async_},
                              streamTableIdx: {stream_table_idx},
+                             elemMeta: {elem_meta_js},
                          }}
                      )));
                     "#,
@@ -2067,6 +2061,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 let string_encoding = string_encoding_js_literal(string_encoding);
                 let stream_table_idx = ty.as_u32();
+                let elem_meta_js = self.stream_elem_meta_js(*ty);
                 let stream_write_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
@@ -2103,6 +2098,7 @@ impl<'a> Instantiator<'a, '_> {
                              stringEncoding: {string_encoding},
                              isAsync: {async_},
                              streamTableIdx: {stream_table_idx},
+                             elemMeta: {elem_meta_js},
                          }}
                      )));
                     "#,
@@ -6423,6 +6419,7 @@ pub fn gen_flat_lift_fn_js_expr(
             let table_ty = &component_types[*ty_idx];
             let resource_component_idx = table_ty.unwrap_concrete_instance();
             let component_idx = resource_component_idx.as_u32();
+            let table_idx = ty_idx.as_u32();
             if instantiator
                 .context_components
                 .borrow()
@@ -6440,6 +6437,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 None => format!(
                     r#"{f}({{
                        componentIdx: {component_idx},
+                       tableIdx: {table_idx},
                        classNameFn: () => null,
                        createResourceFn: () => {{ throw new Error('invalid/missing resource type data'); }},
                     }})
@@ -6566,6 +6564,7 @@ pub fn gen_flat_lift_fn_js_expr(
                     format!(
                         r#"{f}({{
                        componentIdx: {component_idx},
+                       tableIdx: {table_idx},
                        classNameFn: () => {resource_class_name},
                        createResourceFn: {create_resource_fn_js},
                     }})
@@ -7047,6 +7046,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
             let resource_table_ty = &component_types[*ty_idx];
             let component_idx = resource_table_ty.unwrap_concrete_instance().as_u32();
+            let table_idx = ty_idx.as_u32();
             let resource_idx = resource_table_ty.unwrap_concrete_ty();
 
             // Retrieve resource information for the given resource, looking
@@ -7084,6 +7084,7 @@ pub fn gen_flat_lower_fn_js_expr(
                     return format!(
                         "{f}({{
                              componentIdx: {component_idx},
+                             tableIdx: {table_idx},
                              lowerFn: () => {{ throw new Error('missing/invalid resource metadata'); }}
                          }})"
                     );
@@ -7218,6 +7219,7 @@ pub fn gen_flat_lower_fn_js_expr(
             format!(
                 "{f}({{
                      componentIdx: {component_idx},
+                     tableIdx: {table_idx},
                      lowerFn: {lower_fn_js},
                  }})"
             )

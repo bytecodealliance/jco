@@ -542,6 +542,14 @@ impl Intrinsic {
             Intrinsic::ManagedBufferClass => {
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let managed_buffer_class = args.require_intrinsic(Intrinsic::ManagedBufferClass);
+                let handle_tables = args.require_intrinsic(Intrinsic::HandleTables);
+                let table_flag = args
+                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
+                let table_remove = args
+                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+                let table_create_own = args.require_intrinsic(Intrinsic::Resource(
+                    ResourceIntrinsic::ResourceTableCreateOwn,
+                ));
                 output.push_str(&format!(
                     r#"
                     class {managed_buffer_class} {{
@@ -612,7 +620,7 @@ impl Intrinsic {
 
                         isHostOwned() {{ return !this.#memory; }}
 
-                        read(count) {{
+                        read(count, opts = {{}}) {{
                             {debug_log_fn}('[{managed_buffer_class}#read()] args', {{ count }});
                             if (count === undefined || count <= 0) {{
                                 throw new TypeError(`missing/invalid count [${{count}}]`);
@@ -644,6 +652,10 @@ impl Intrinsic {
                                         memory: this.#memory,
                                         componentIdx: this.#componentIdx,
                                         stringEncoding: this.#elemMeta.stringEncoding,
+                                        liftResource: opts.transferResources ? (handle, tableIdx) => {{
+                                            const {{ rep }} = {table_remove}({handle_tables}[tableIdx], handle);
+                                            return {{ rep }};
+                                        }} : undefined,
                                     }};
                                     if (currentCount < 0) {{ throw new Error('unexpectedly invalid count'); }}
                                     while (currentCount > 0) {{
@@ -659,7 +671,7 @@ impl Intrinsic {
                             return values;
                         }}
 
-                        write(values) {{
+                        write(values, opts = {{}}) {{
                             {debug_log_fn}('[{managed_buffer_class}#write()] args', {{ values }});
 
                             if (!Array.isArray(values)) {{ throw new TypeError('values input to write() must be an array'); }}
@@ -691,6 +703,15 @@ impl Intrinsic {
                                         stringEncoding: this.#elemMeta.stringEncoding,
                                         realloc: this.#elemMeta.getReallocFn?.(),
                                         getReallocFn: this.#elemMeta.getReallocFn,
+                                        lowerResource: opts.transferResources ? (resource, tableIdx) => {{
+                                            let table = {handle_tables}[tableIdx];
+                                            if (!table) {{
+                                                table = [{table_flag}, 0];
+                                                table._createdReps = new Set();
+                                                {handle_tables}[tableIdx] = table;
+                                            }}
+                                            return {table_create_own}(table, resource.rep);
+                                        }} : undefined,
                                     }}
                                     for (const v of values) {{
                                         lowerCtx.vals = [v];

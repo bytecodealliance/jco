@@ -1052,7 +1052,7 @@ impl LowerIntrinsic {
                 output.push_str(&format!(
                     r#"
                       function {lower_flat_own_fn}(meta) {{
-                          const {{ lowerFn, componentIdx }} = meta;
+                          const {{ lowerFn, componentIdx, tableIdx }} = meta;
 
                           return function {lower_flat_own_fn}Inner(ctx) {{
                               {debug_log_fn}('[{lower_flat_own_fn}()] args', {{ ctx }});
@@ -1064,7 +1064,9 @@ impl LowerIntrinsic {
 
                               const obj = ctx.vals[0];
                               if (obj === undefined || obj === null) {{ throw new Error('missing resource'); }}
-                              const handle = lowerFn(obj);
+                              const handle = ctx.lowerResource
+                                  ? ctx.lowerResource(obj, tableIdx)
+                                  : lowerFn(obj);
 
                               ctx.vals[0] = handle;
                               {lower_u32_fn}(ctx);
