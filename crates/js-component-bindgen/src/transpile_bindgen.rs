@@ -3465,8 +3465,12 @@ impl<'a> Instantiator<'a, '_> {
                     )
             )
         });
+        // Mutable imported/exported tables make indirect calls unsafe to run
+        // directly, but do not by themselves change a component export's API
+        // into a Promise-returning one. Only known suspending targets propagate
+        // across that public binding boundary.
         let async_export_functions =
-            self.modules[module_idx].suspending_functions(args, jspi_enabled, |def| {
+            self.modules[module_idx].suspending_functions(args, false, |def| {
                 self.core_def_requires_async_export(def, crosses_sync_call_boundary)
             });
         let i = self.instances.push(module_idx);
