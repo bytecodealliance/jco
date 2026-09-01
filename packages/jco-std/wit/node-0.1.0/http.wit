@@ -1,0 +1,45 @@
+/// Typed, runtime-neutral host boundary for outbound Node-compatible HTTP requests.
+interface http {
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    hostname: option<string>,
+    address: option<string>,
+    port: option<u16>,
+  }
+
+  record header {
+    name: string,
+    value: list<u8>,
+  }
+
+  record request-options {
+    method: string,
+    scheme: string,
+    authority: string,
+    path-with-query: string,
+    headers: list<header>,
+    body: list<u8>,
+    connect-timeout-ms: option<u32>,
+    first-byte-timeout-ms: option<u32>,
+    between-bytes-timeout-ms: option<u32>,
+  }
+
+  record response {
+    status-code: u16,
+    status-message: string,
+    http-version: string,
+    headers: list<header>,
+    body: list<u8>,
+  }
+
+  request: func(options: request-options) -> result<response, error>;
+}
