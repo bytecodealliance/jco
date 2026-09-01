@@ -338,7 +338,7 @@ async function runComponent(
                 throw e;
             }
         }
-        // Expose jco-std's default-deny Node host shims (child-process, cluster) to the component.
+        // Expose jco-std's default-deny process, cluster, and filesystem host shims to the component.
         try {
             const jcoStdPath = resolve(
                 fileURLToPath(
