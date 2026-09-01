@@ -5,7 +5,39 @@ import { assert, expect, suite, test } from "vitest";
 
 import { bundleComponentSource } from "../../src/bundle.js";
 import { nodeBuiltinPlugin, nodeGlobals } from "../../src/node-builtins.js";
-import { getTmpDir } from "../helpers.js";
+import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
+
+const EXPECTED_REPORT = {
+    abort: true,
+    base64: true,
+    blob: true,
+    buffer: true,
+    byteLengthQueuingStrategy: true,
+    compression: true,
+    console: true,
+    countQueuingStrategy: true,
+    crypto: true,
+    customEvent: true,
+    domException: true,
+    event: true,
+    eventTarget: true,
+    fetch: true,
+    file: true,
+    formData: true,
+    headers: true,
+    performance: true,
+    queueMicrotask: true,
+    readableByteStreamController: true,
+    readableStream: true,
+    readableStreamByob: true,
+    structuredClone: true,
+    textCodec: true,
+    timers: true,
+    transformStream: true,
+    url: true,
+    wasm: true,
+    writableStream: true,
+};
 
 async function writeInjectionModules(root) {
     const errors = join(root, "errors.js");
@@ -122,4 +154,22 @@ suite("Node globals", () => {
         assert.include(source, "__BUFFER_OVERRIDE_MARKER__");
         expect(source).not.toContain("__BUFFER_GLOBAL_MARKER__");
     });
+
+    // TODO(unskip): use the published jco-std Errors globals once a release containing them is available.
+    test.skip("provides the supported Node globals to a StarlingMonkey guest", async () => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-globals",
+            bundle: true,
+            extraArgs: ["--backend", "starlingmonkey"],
+        });
+        const { instance, cleanup } = await setupAsyncTest({
+            component: { name: "node-globals", path: componentPath },
+        });
+
+        try {
+            expect(JSON.parse(instance.run())).toEqual(EXPECTED_REPORT);
+        } finally {
+            await cleanup();
+        }
+    }, 600_000);
 });
