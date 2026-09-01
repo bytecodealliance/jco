@@ -2,49 +2,52 @@ import { vi } from "vitest";
 
 import { createDns } from "../../../../../../../src/wasi/0.2.x/node/24.x.x/dns/core.js";
 import type {
-  DnsRequest,
-  DnsResponse,
+  DnsHost,
+  DnsResult,
 } from "../../../../../../../src/wasi/0.2.x/node/24.x.x/dns/types.js";
 
+function ok<T>(val: T): DnsResult<T> {
+  return { tag: "ok", val };
+}
+
 export function fakeDns() {
-  const query = vi.fn((source: string): string => {
-    const request = JSON.parse(source) as DnsRequest;
-    let value: unknown;
-    switch (request.operation) {
-      case "getServers":
-        value = ["192.0.2.53"];
-        break;
-      case "validateServers":
-        value = request.args[0];
-        break;
-      case "lookup": {
-        const options = request.args[1] as { all: boolean; family: number };
-        const address = options.family === 6 ? "2001:db8::1" : "192.0.2.1";
-        value = options.all
-          ? [{ address, family: options.family || 4 }]
-          : { address, family: options.family || 4 };
-        break;
-      }
-      case "lookupService":
-        value = { hostname: "localhost", service: "http" };
-        break;
-      case "resolve4":
-        value = request.args[1]?.ttl ? [{ address: "192.0.2.1", ttl: 60 }] : ["192.0.2.1"];
-        break;
-      case "resolve6":
-        value = ["2001:db8::1"];
-        break;
-      case "resolveMx":
-        value = [{ exchange: "mail.example", priority: 10 }];
-        break;
-      case "reverse":
-        value = ["example.test"];
-        break;
-      default:
-        value = [];
-    }
-    const response: DnsResponse = { ok: true, value };
-    return JSON.stringify(response);
-  });
-  return { query, modules: createDns({ query }) };
+  const host = {
+    getServers: vi.fn(() => ok(["192.0.2.53"])),
+    validateServers: vi.fn((servers: string[]) => ok(servers)),
+    lookup: vi.fn((_hostname, options) =>
+      ok([
+        {
+          address: options.family === "ipv6" ? "2001:db8::1" : "192.0.2.1",
+          family: options.family === "unspecified" ? "ipv4" : options.family,
+        },
+      ]),
+    ),
+    lookupService: vi.fn(() => ok({ hostname: "localhost", service: "http" })),
+    resolve4: vi.fn((_hostname, ttl) => ok([{ address: "192.0.2.1", ttl: ttl ? 60 : 0 }])),
+    resolve6: vi.fn(() => ok([{ address: "2001:db8::1", ttl: 0 }])),
+    resolveAny: vi.fn(() => ok([])),
+    resolveCaa: vi.fn(() => ok([])),
+    resolveCname: vi.fn(() => ok([])),
+    resolveMx: vi.fn(() => ok([{ exchange: "mail.example", priority: 10 }])),
+    resolveNaptr: vi.fn(() => ok([])),
+    resolveNs: vi.fn(() => ok([])),
+    resolvePtr: vi.fn(() => ok([])),
+    resolveSoa: vi.fn(() =>
+      ok({
+        nsname: "ns.example",
+        hostmaster: "hostmaster.example",
+        serial: 1,
+        refresh: 2,
+        retry: 3,
+        expire: 4,
+        minttl: 5,
+      }),
+    ),
+    resolveSrv: vi.fn(() => ok([])),
+    resolveTlsa: vi.fn(() => ok([])),
+    resolveTxt: vi.fn(() => ok([])),
+    reverse: vi.fn(() => ok(["example.test"])),
+  } satisfies DnsHost;
+
+  return { host, modules: createDns(host) };
 }
