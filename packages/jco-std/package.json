@@ -239,6 +239,16 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/inspector-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/inspector-host-node.js"
     },
+    "./wasi/0.2.x/node/24.x.x/stream/consumers": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/stream/consumers.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/consumers.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/stream/consumers.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/stream/iter": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/stream/iter/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/iter/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/stream/iter/index.js"
+    },
     "./node/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
