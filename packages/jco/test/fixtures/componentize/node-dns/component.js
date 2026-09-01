@@ -1,9 +1,10 @@
 import dns, * as dnsNamespace from "node:dns";
 import dnsPromises from "node:dns/promises";
 
-export function run() {
+export async function run() {
     dns.setDefaultResultOrder("ipv4first");
     const servers = dns.getServers();
+    const externalAddresses = await dnsPromises.resolve4("example.com");
     let cancelCode = "";
     try {
         new dns.Resolver().cancel();
@@ -16,5 +17,7 @@ export function run() {
         promisesIdentity: dns.promises === dnsPromises,
         resultOrder: dnsPromises.getDefaultResultOrder(),
         cancelCode,
+        externalAddressCount: externalAddresses.length,
+        externalAddressesAreIpv4: externalAddresses.every((address) => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(address)),
     };
 }
