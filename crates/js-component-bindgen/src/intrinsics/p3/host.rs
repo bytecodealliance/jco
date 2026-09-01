@@ -491,69 +491,22 @@ impl HostIntrinsic {
                             }});
                         }});
 
-                        // Begin entry synchronously so this call reserves its component
-                        // execution slice before the caller can start another call into
-                        // the same instance. The promise settles asynchronously once entry
-                        // is complete.
-                        const enterPromise = preparedTask.enter();
+                        const handleCalleeError = (err) => {{
+                            {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
+                            // NOTE: a good place to reject the parent task, if rejection API is enabled
+                            // subtask.reject(err);
+                            // subtask.getParentTask().reject(err);
 
-                        // Start the (event) driver loop that will resolve the subtask
-                        // in a new JS task.
-                        setTimeout(async () => {{
-                            {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
-                                taskID: preparedTask.id(),
-                                subtaskID: subtask.id(),
-                                callerComponentIdx,
-                                calleeComponentIdx,
-                            }});
+                            subtask.getParentTask().setErrored(err);
 
-                            // Entry queues FIFO when another slice of the callee
-                            // component is already in flight.
-                            const started = await enterPromise;
-                            if (!started) {{
-                                {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
-                                    taskID: preparedTask.id(),
-                                    subtaskID: subtask.id(),
-                                }});
-                                // A cancellation-before-start is a valid resolution, not a failure
-                                if (preparedTask.isCancelled()) {{ return; }}
-                                throw new Error("task failed to start");
+                            // Release the enter()-acquired per-slice hold: the driver
+                            // loop that would normally pair it never starts.
+                            if (preparedTask.needsExclusiveLock()) {{
+                                calleeComponentState.exclusiveRelease(preparedTask.id());
                             }}
+                        }};
 
-                            let callbackResult;
-                            try {{
-                                let jspiCallee;
-                                if (callee._cachedPromising) {{
-                                    jspiCallee = callee._cachedPromising;
-                                }} else {{
-                                    callee._cachedPromising = WebAssembly.promising(callee);
-                                    jspiCallee = callee._cachedPromising;
-                                }}
-
-                                callbackResult = await {with_global_current_task_meta_async_fn}({{
-                                    taskID: preparedTask.id(),
-                                    componentIdx: preparedTask.componentIdx(),
-                                    fn: () => {{
-                                        return jspiCallee.apply(null, startRes);
-                                    }}
-                                }});
-                            }} catch(err) {{
-                                {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
-                                // NOTE: a good place to rejectt the parent task, if rejection API is enabled
-                                // subtask.reject(err);
-                                // subtask.getParentTask().reject(err);
-
-                                subtask.getParentTask().setErrored(err);
-
-                                // Release the enter()-acquired per-slice hold: the driver
-                                // loop that would normally pair it never starts.
-                                if (preparedTask.needsExclusiveLock()) {{
-                                    calleeComponentState.exclusiveRelease(preparedTask.id());
-                                }}
-
-                                return;
-                            }}
-
+                        const driveCallback = (callbackResult) => {{
                             // If there was no callback function, we're dealing with a sync function
                             // that was lifted as async without one, there is only the callee.
                             if (!callbackFn) {{
@@ -582,27 +535,100 @@ impl HostIntrinsic {
                                 ].join("");
                             }}
 
-                            try {{
-                                {debug_log_fn}("[{async_start_call_fn}()] starting driver loop", {{
-                                    fnName,
-                                    componentIdx: preparedTask.componentIdx(),
-                                    subtaskID: subtask.id(),
-                                    childTaskID: subtask.childTaskID(),
-                                    parentTaskID: subtask.parentTaskID(),
-                                }});
+                            {debug_log_fn}("[{async_start_call_fn}()] starting driver loop", {{
+                                fnName,
+                                componentIdx: preparedTask.componentIdx(),
+                                subtaskID: subtask.id(),
+                                childTaskID: subtask.childTaskID(),
+                                parentTaskID: subtask.parentTaskID(),
+                            }});
 
-                                await {async_driver_loop_fn}({{
-                                    componentState: calleeComponentState,
-                                    task: preparedTask,
-                                    fnName,
-                                    isAsync: true,
-                                    callbackResult,
+                            return {async_driver_loop_fn}({{
+                                componentState: calleeComponentState,
+                                task: preparedTask,
+                                fnName,
+                                isAsync: true,
+                                callbackResult,
+                            }});
+                        }};
+
+                        // A non-suspending initial slice can run before the lower returns,
+                        // allowing task.return to report RETURNED eagerly. If entry or the
+                        // core function can suspend, preserve the deferred JSPI path.
+                        const enteredSynchronously = preparedTask.tryEnter();
+                        if (enteredSynchronously === true && callee._jcoMaySuspend === false) {{
+                            let callbackResult;
+                            try {{
+                                callbackResult = {with_global_current_task_meta_fn}({{
+                                    taskID: preparedTask.id(),
+                                    componentIdx: preparedTask.componentIdx(),
+                                    fn: () => callee.apply(null, startRes),
                                 }});
                             }} catch (err) {{
-                                {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
+                                handleCalleeError(err);
                             }}
+                            if (callbackResult !== undefined) {{
+                                driveCallback(callbackResult)?.catch(err => {{
+                                    {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
+                                }});
+                            }}
+                        }} else if (enteredSynchronously !== false) {{
+                            const enterPromise = enteredSynchronously === null
+                                ? preparedTask.enter()
+                                : Promise.resolve(true);
 
-                        }}, 0);
+                            // Start the (event) driver loop that will resolve the subtask
+                            // in a new JS task.
+                            setTimeout(async () => {{
+                                {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
+                                    taskID: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                    callerComponentIdx,
+                                    calleeComponentIdx,
+                                }});
+
+                                // Entry queues FIFO when another slice of the callee
+                                // component is already in flight.
+                                const started = await enterPromise;
+                                if (!started) {{
+                                    {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
+                                        taskID: preparedTask.id(),
+                                        subtaskID: subtask.id(),
+                                    }});
+                                    // A cancellation-before-start is a valid resolution, not a failure
+                                    if (preparedTask.isCancelled()) {{ return; }}
+                                    throw new Error("task failed to start");
+                                }}
+
+                                let callbackResult;
+                                try {{
+                                    let jspiCallee;
+                                    if (callee._cachedPromising) {{
+                                        jspiCallee = callee._cachedPromising;
+                                    }} else {{
+                                        callee._cachedPromising = WebAssembly.promising(callee);
+                                        jspiCallee = callee._cachedPromising;
+                                    }}
+
+                                    callbackResult = await {with_global_current_task_meta_async_fn}({{
+                                        taskID: preparedTask.id(),
+                                        componentIdx: preparedTask.componentIdx(),
+                                        fn: () => {{
+                                            return jspiCallee.apply(null, startRes);
+                                        }}
+                                    }});
+                                }} catch(err) {{
+                                    handleCalleeError(err);
+                                    return;
+                                }}
+
+                                try {{
+                                    await driveCallback(callbackResult);
+                                }} catch (err) {{
+                                    {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
+                                }}
+                            }}, 0);
+                        }}
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
@@ -615,6 +641,24 @@ impl HostIntrinsic {
                                 state: subtaskState,
                             }}
                         }});
+
+                        if (subtask.isReturned()) {{
+                            // Eager completion exposes no waitable handle to the caller.
+                            // Consume the parked progress event and retire the internal
+                            // bookkeeping subtask just like an eager host import.
+                            if (subtask.hasPendingEvent()) {{
+                                subtask.getPendingEvent();
+                            }}
+                            if (!subtask.resolveDelivered()) {{
+                                subtask.deliverResolve();
+                            }}
+                            const removed = callerComponentState.handles.remove(subtask.waitableRep());
+                            if (removed !== subtask) {{
+                                throw new Error('subtask handle cleanup removed unexpected entry');
+                            }}
+                            subtask.drop();
+                            return subtaskState;
+                        }}
 
                         return Number(subtask.waitableRep()) << 4 | subtaskState;
                     }}
