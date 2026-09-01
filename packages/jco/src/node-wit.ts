@@ -22,6 +22,13 @@ export interface NodeWitRequirement {
      * interface it uses. Anything an interface `use`s must be installed with it.
      */
     dependencySources: string[];
+    /** Additional WIT dependency packages installed alongside the primary package. */
+    dependencyPackages?: WitDependencyPackage[];
+}
+
+export interface WitDependencyPackage {
+    dependencyDirectory: string;
+    dependencySources: string[];
 }
 
 /** Types the Node API interfaces share; every interface file depends on it. */
@@ -98,6 +105,60 @@ export const INSPECTOR_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
     ...INSPECTOR_WIT_REQUIREMENT,
     nodeSpecifier: "node:inspector/promises",
 };
+
+export const HTTP_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:http",
+    witImport: "jco:node/http@0.1.0",
+    dependencyDirectory: "jco-node-0.1.0",
+    dependencySources: [
+        SHARED_TYPES_SOURCE,
+        fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/http.wit", import.meta.url)),
+    ],
+};
+
+const WASI_0_2_12_ROOT = new URL("../lib/wit/builtin/0.2.12/", import.meta.url);
+
+function wasiDependency(name: string): WitDependencyPackage {
+    return {
+        dependencyDirectory: `${name}-0.2.12`,
+        dependencySources: [fileURLToPath(new URL(`${name}/package.wit`, WASI_0_2_12_ROOT))],
+    };
+}
+
+const WASI_IO_DEPENDENCY = wasiDependency("wasi-io");
+const WASI_CLOCKS_DEPENDENCY = wasiDependency("wasi-clocks");
+const WASI_SOCKETS_DEPENDENCIES = [WASI_IO_DEPENDENCY, WASI_CLOCKS_DEPENDENCY, wasiDependency("wasi-sockets")];
+const WASI_HTTP_DEPENDENCIES = [
+    WASI_IO_DEPENDENCY,
+    WASI_CLOCKS_DEPENDENCY,
+    wasiDependency("wasi-random"),
+    wasiDependency("wasi-filesystem"),
+    wasiDependency("wasi-sockets"),
+    wasiDependency("wasi-cli"),
+    wasiDependency("wasi-http"),
+];
+
+function wasiRequirement(witImport: string, dependencies: WitDependencyPackage[]): NodeWitRequirement {
+    const [primary, ...additional] = dependencies;
+    return {
+        nodeSpecifier: "node:http",
+        witImport,
+        dependencyDirectory: primary.dependencyDirectory,
+        dependencySources: primary.dependencySources,
+        dependencyPackages: additional,
+    };
+}
+
+export const HTTP_WASI_SOCKETS_WIT_REQUIREMENTS = [
+    wasiRequirement("wasi:sockets/instance-network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/ip-name-lookup@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/tcp-create-socket@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+] as const;
+
+export const HTTP_WASI_HTTP_WIT_REQUIREMENTS = [
+    wasiRequirement("wasi:http/outgoing-handler@0.2.12", WASI_HTTP_DEPENDENCIES),
+    wasiRequirement("wasi:http/types@0.2.12", WASI_HTTP_DEPENDENCIES),
+] as const;
 
 export interface WitInjectionResult {
     witPath: string;
@@ -311,10 +372,23 @@ export async function injectNodeWitImports(
     const newline = world.source.includes("\r\n") ? "\r\n" : "\n";
     const root = (await stat(resolve(witPath))).isFile() ? dirname(resolve(witPath)) : resolve(witPath);
     const dependencyFiles: string[] = [];
+    const dependencies = new Map<string, WitDependencyPackage>();
     for (const requirement of toInstall) {
-        const dependencyDir = join(root, "deps", requirement.dependencyDirectory);
+        const packages = [
+            {
+                dependencyDirectory: requirement.dependencyDirectory,
+                dependencySources: requirement.dependencySources,
+            },
+            ...(requirement.dependencyPackages ?? []),
+        ];
+        for (const dependency of packages) {
+            dependencies.set(dependency.dependencyDirectory, dependency);
+        }
+    }
+    for (const dependency of dependencies.values()) {
+        const dependencyDir = join(root, "deps", dependency.dependencyDirectory);
         await mkdir(dependencyDir, { recursive: true });
-        for (const source of requirement.dependencySources) {
+        for (const source of dependency.dependencySources) {
             const destination = join(dependencyDir, basename(source));
             try {
                 await writeFile(destination, await readFile(source), { flag: "wx" });
