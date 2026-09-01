@@ -1418,6 +1418,22 @@ mod tests {
     }
 
     #[test]
+    fn symmetric_guest_calls_switch_task_may_block_state() {
+        let enter = render_intrinsic_body(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
+        ));
+        assert!(!enter.contains("symmetric sync guest->guest call should not be async"));
+        assert!(enter.contains("previousTaskMayBlock: CURRENT_TASK_MAY_BLOCK.value,"));
+        assert!(enter.contains("CURRENT_TASK_MAY_BLOCK.value = newTask.mayBlock() ? 1 : 0;"));
+
+        let exit = render_intrinsic_body(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall,
+        ));
+        assert!(exit.contains("const { componentIdx, previousTaskMayBlock }"));
+        assert!(exit.contains("CURRENT_TASK_MAY_BLOCK.value = previousTaskMayBlock;"));
+    }
+
+    #[test]
     fn resource_transfer_borrow_checks_source_handle() {
         let mut intrinsics = BTreeSet::from([Intrinsic::Resource(
             ResourceIntrinsic::ResourceTransferBorrow,

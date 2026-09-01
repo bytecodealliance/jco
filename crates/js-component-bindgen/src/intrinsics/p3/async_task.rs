@@ -2854,6 +2854,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
                 let symmetric_sync_guest_call_stack =
                     render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
+                let current_task_may_block =
+                    render_args.require_intrinsic(Self::CurrentTaskMayBlock);
 
                 // TODO: find a way to get the callee function/export name for the executing symmetric call,
                 // at present we only have the current executing task which is far outside
@@ -2868,8 +2870,6 @@ impl AsyncTaskIntrinsic {
                         }});
 
                         const cstate = {get_or_create_async_state_fn}(calleeComponentIdx);
-
-                        if (calleeIsAsync) {{ throw new Error('symmetric sync guest->guest call should not be async'); }}
 
                         const callerTaskMeta = {get_current_task_fn}(callerComponentIdx);
                         if (!callerTaskMeta) {{ throw new Error('missing current caller task metadata'); }}
@@ -2907,7 +2907,9 @@ impl AsyncTaskIntrinsic {
                             }});
                             {symmetric_sync_guest_call_stack}.push({{
                                 componentIdx: newTask.componentIdx(),
+                                previousTaskMayBlock: {current_task_may_block}.value,
                             }});
+                            {current_task_may_block}.value = newTask.mayBlock() ? 1 : 0;
 
                             {debug_log_fn}('[{enter_symmetric_sync_guest_call_fn}()] finished preparing', {{
                                 callerComponentIdx,
@@ -2951,6 +2953,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
                 let symmetric_sync_guest_call_stack =
                     render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
+                let current_task_may_block =
+                    render_args.require_intrinsic(Self::CurrentTaskMayBlock);
 
                 // NOTE: we need to end the task (and clear task machinery/set relevant state)
                 // for sync->sync guest calls here because normal task machinery does not work
@@ -2959,7 +2963,7 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!(
                     r#"
                     function {exit_symmetric_sync_guest_call_fn}() {{
-                        const {{ componentIdx }} = {symmetric_sync_guest_call_stack}.pop();
+                        const {{ componentIdx, previousTaskMayBlock }} = {symmetric_sync_guest_call_stack}.pop();
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
 
                         const taskMeta = {get_current_task_fn}(componentIdx);
@@ -2977,6 +2981,8 @@ impl AsyncTaskIntrinsic {
 
                         task.resolve([]);
                         task.exit();
+
+                        {current_task_may_block}.value = previousTaskMayBlock;
 
                         {clear_global_current_task_meta_fn}({{
                             taskID: task.id(),
