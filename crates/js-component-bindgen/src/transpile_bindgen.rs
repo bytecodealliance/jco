@@ -1639,6 +1639,28 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
+    fn core_def_is_function(&self, def: &CoreDef) -> bool {
+        match def {
+            CoreDef::Trampoline(_) => true,
+            CoreDef::Export(export) => {
+                let Some(module_idx) = self.instances.get(export.instance) else {
+                    return false;
+                };
+                match &export.item {
+                    ExportItem::Index(EntityIndex::Function(_)) => true,
+                    ExportItem::Index(_) => false,
+                    ExportItem::Name(name) => matches!(
+                        self.modules[*module_idx].exports().get(name),
+                        Some(EntityIndex::Function(_))
+                    ),
+                }
+            }
+            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
+                false
+            }
+        }
+    }
+
     /// Whether a core definition transitively requires a Promise-returning export binding.
     fn core_def_requires_async_export(
         &self,
@@ -4848,7 +4870,16 @@ impl<'a> Instantiator<'a, '_> {
 
     fn augmented_import_def(&mut self, def: &core::AugmentedImport<'_>) -> String {
         match def {
-            core::AugmentedImport::CoreDef(def) => self.core_def(def),
+            core::AugmentedImport::CoreDef(def) => {
+                let is_non_suspending_function =
+                    self.core_def_is_function(def) && !self.core_def_may_suspend(def);
+                let value = self.core_def(def);
+                if is_non_suspending_function {
+                    format!("Object.assign({value}, {{ _jcoMaySuspend: false }})")
+                } else {
+                    value
+                }
+            }
             core::AugmentedImport::Memory { mem, op } => {
                 let mem = self.core_def(mem);
                 match op {
