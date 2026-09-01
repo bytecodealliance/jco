@@ -45,6 +45,7 @@ const INSPECTOR_SPECIFIERS = new Set([INSPECTOR_SPECIFIER, INSPECTOR_PROMISES_SP
  * jco-std inspector module so the wrapper can add it to the component's top-level exports.
  */
 export const INSPECTOR_CALLBACKS_SPECIFIER = "jco:node-inspector-callbacks";
+const MODULE_SPECIFIER = "node:module";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
 const OS_SPECIFIER = "node:os";
@@ -263,6 +264,8 @@ export interface NodeBuiltinOptions {
     inspectorModule?: string;
     /** Path to jco-std's versioned `node:inspector/promises` module (overridable for tests) */
     inspectorPromisesModule?: string;
+    /** Path to jco-std's versioned `node:module` module (overridable for tests) */
+    moduleModule?: string;
     /** Path to jco-std's versioned `node:diagnostics_channel` module (overridable for tests) */
     diagnosticsChannelModule?: string;
     /** Path to jco-std's versioned Errors globals module (overridable for tests) */
@@ -293,6 +296,56 @@ export interface NodeBuiltinOptions {
 }
 
 export type NodejsHttpVia = "direct" | "wasi-sockets" | "wasi-http";
+
+/**
+ * Source of the `node:module` adapter.
+ *
+ * Capability-free: what this module can do here is classification and source-map arithmetic, and
+ * what it cannot do -- loading -- no host could supply, because the missing piece is the guest
+ * engine's ability to instantiate code that was not bundled.
+ */
+function moduleAdapter(moduleModule: string): string {
+    return `
+import nodeModule from ${JSON.stringify(moduleModule)};
+export default nodeModule;
+export {
+    Module,
+    SourceMap,
+    _cache,
+    _debug,
+    _extensions,
+    _findPath,
+    _initPaths,
+    _load,
+    _nodeModulePaths,
+    _pathCache,
+    _preloadModules,
+    _readPackage,
+    _resolveFilename,
+    _resolveLookupPaths,
+    _stat,
+    builtinModules,
+    constants,
+    createRequire,
+    enableCompileCache,
+    findPackageJSON,
+    findSourceMap,
+    flushCompileCache,
+    getCompileCacheDir,
+    getSourceMapsSupport,
+    globalPaths,
+    isBuiltin,
+    register,
+    registerHooks,
+    runMain,
+    setSourceMapsSupport,
+    stripTypeScriptTypes,
+    syncBuiltinESMExports,
+    wrap,
+    wrapper,
+} from ${JSON.stringify(moduleModule)};
+`;
+}
 
 /**
  * Source of the `node:ffi` adapter.
@@ -855,6 +908,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const assertModule = () =>
         options.assertModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
+    const moduleModule = () =>
+        options.moduleModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module"));
     // NOTE: `node:ffi` resolves under `node/26.x.x`, not 24: it does not exist in Node 24. This is
     // the first place the Node major in the path differs per module rather than per build.
     const ffiModule = () =>
@@ -937,6 +993,11 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return HTTP_CALLBACKS_MODULE;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === MODULE_SPECIFIER) {
+                // No onWitRequirement: classification and source-map arithmetic need no host, and
+                // the loading half is unimplementable rather than unprovisioned.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === FFI_SPECIFIER) {
@@ -1046,6 +1107,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
+            }
+            if (value === MODULE_SPECIFIER) {
+                return moduleAdapter(moduleModule());
             }
             if (value === FFI_SPECIFIER) {
                 return ffiAdapter(ffiModule());
