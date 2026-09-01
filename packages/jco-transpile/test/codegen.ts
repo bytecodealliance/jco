@@ -41,6 +41,11 @@ suite('codegen', async () => {
             fileURLToPath(new URL('./fixtures/components/hello-world.wasm', import.meta.url)),
             { outDir },
         );
+        assert.notInclude(
+            new TextDecoder().decode(files['hello-world.js']),
+            'WebAssembly.promising(',
+            'synchronous output must not require JSPI',
+        );
         await writeFiles(files);
 
         // Run the component as a HTTP server

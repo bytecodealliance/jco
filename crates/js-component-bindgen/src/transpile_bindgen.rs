@@ -1593,9 +1593,13 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::StreamCancelWrite { .. }
             | Trampoline::FutureCancelRead { .. }
             | Trampoline::FutureCancelWrite { .. }
-            | Trampoline::SyncStartCall { .. }
-            | Trampoline::ThreadYield { .. }
-            | Trampoline::EnterSyncCall => true,
+            | Trampoline::ThreadYield { .. } => true,
+            // These composition trampolines are plain functions outside JSPI;
+            // counting them as suspending would add promising wrappers to sync output.
+            Trampoline::SyncStartCall { .. } | Trampoline::EnterSyncCall => matches!(
+                self.bindgen.opts.async_mode,
+                Some(AsyncMode::JavaScriptPromiseIntegration { .. })
+            ),
             _ => false,
         }
     }
