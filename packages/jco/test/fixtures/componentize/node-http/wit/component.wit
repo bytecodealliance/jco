@@ -1,0 +1,11 @@
+package jco-fixtures:node-http;
+
+world component {
+    record report {
+        status-code: u16,
+        content-type: string,
+        body: string,
+    }
+
+    export run: func(url: string) -> report;
+}
