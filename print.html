@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0cb0a5c3.js";
+            window.path_to_searchindex_js = "searchindex-be1895ff.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -2088,6 +2088,31 @@ available only under a versioned entry point.</p>
 </tbody>
 </table>
 </div>
+<h3 id="globals"><a class="header" href="#globals">Globals</a></h3>
+<p>Node’s <a href="https://nodejs.org/docs/latest-v24.x/api/globals.html">Globals API</a> is a
+catalog of runtime bindings, not a <code>node:globals</code> module. Jco therefore does not
+resolve that specifier. Bundled code can use <code>Buffer</code> without importing
+<code>node:buffer</code>; Rolldown injects Jco’s existing audited Buffer adapter only when a
+free <code>Buffer</code> identifier is referenced. A source graph that never uses it pays no
+bundle-size or initialization cost.</p>
+<p>The component engine already supplies the portable Web globals shared with Node,
+so Jco leaves their identities and behavior untouched. With ComponentizeJS 0.22.0’s
+pinned StarlingMonkey runtime, this includes:</p>
+<ul>
+<li><code>AbortController</code>, <code>AbortSignal</code>, <code>atob</code>, <code>btoa</code>, <code>Blob</code>, and <code>File</code>;</li>
+<li><code>ByteLengthQueuingStrategy</code>, <code>CountQueuingStrategy</code>, <code>ReadableStream</code> and its
+exposed reader/controller classes, <code>WritableStream</code>, <code>TransformStream</code>,
+<code>CompressionStream</code>, and <code>DecompressionStream</code>;</li>
+<li><code>console</code>, <code>Crypto</code>, <code>CryptoKey</code>, <code>SubtleCrypto</code>, <code>crypto</code>, <code>CustomEvent</code>,
+<code>DOMException</code>, <code>Event</code>, and <code>EventTarget</code>;</li>
+<li><code>fetch</code>, <code>FormData</code>, <code>Headers</code>, <code>Request</code>, and <code>Response</code>;</li>
+<li><code>Performance</code>, <code>performance</code>, <code>queueMicrotask</code>, timeout/interval functions,
+<code>structuredClone</code>, <code>TextEncoder</code>, <code>TextDecoder</code>, <code>URL</code>, <code>URLSearchParams</code>, and
+<code>WebAssembly</code>.</li>
+</ul>
+<p>Some of these retain StarlingMonkey’s existing WASI feature requirements, such as
+clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
+fetches. Jco does not add a Node-specific WIT capability for globals.</p>
 <h3 id="errors-globals"><a class="header" href="#errors-globals">Errors globals</a></h3>
 <p>The Node <a href="https://nodejs.org/docs/latest-v24.x/api/errors.html">Errors API</a> is
 cross-cutting behavior rather than a <code>node:errors</code> module. Standard error
