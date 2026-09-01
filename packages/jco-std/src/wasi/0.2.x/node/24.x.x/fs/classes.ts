@@ -2,14 +2,13 @@
  * Public filesystem value objects follow nodejs/node v24.19.0, commit
  * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/internal/fs/utils.js and
  * lib/internal/fs/dir.js (MIT license). Local classes are reconstructed from
- * transport-safe snapshots rather than Node native binding arrays.
+ * typed WIT records rather than Node native binding arrays.
  */
 import { codedError, invalidArgType, unsupportedNodeApi } from "../errors/core.js";
 
-import type { FsWireDirent, FsWireStats } from "./types.js";
+import type { FsDirent, FsFileType, FsNumeric, FsStats } from "./types.js";
 
 type Numeric = number | bigint;
-type FileType = FsWireStats["fileType"];
 
 function unsupported(api: string): never {
   throw unsupportedNodeApi(
@@ -18,16 +17,12 @@ function unsupported(api: string): never {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function numeric<T extends Numeric>(value: FsNumeric, fallback: T): T {
+  return (value.tag === "number" || value.tag === "bigint" ? value.val : fallback) as T;
 }
 
-function numeric<T extends Numeric>(value: unknown, fallback: T): T {
-  return (typeof value === "number" || typeof value === "bigint" ? value : fallback) as T;
-}
-
-function date(value: unknown): Date {
-  return value instanceof Date ? value : new Date(0);
+function date(value: FsNumeric): Date {
+  return new Date(Number(value.val));
 }
 
 function directoryClosed(): Error & { code: "ERR_DIR_CLOSED" } {
@@ -57,34 +52,33 @@ export class Stats<T extends Numeric = number> {
   readonly mtime: Date;
   readonly ctime: Date;
   readonly birthtime: Date;
-  readonly #fileType: FileType;
+  readonly #fileType: FsFileType;
 
-  constructor(snapshot?: FsWireStats) {
-    const values = snapshot?.values ?? {};
-    const zero = (typeof values.dev === "bigint" ? 0n : 0) as T;
-    this.dev = numeric(values.dev, zero);
-    this.ino = numeric(values.ino, zero);
-    this.mode = numeric(values.mode, zero);
-    this.nlink = numeric(values.nlink, zero);
-    this.uid = numeric(values.uid, zero);
-    this.gid = numeric(values.gid, zero);
-    this.rdev = numeric(values.rdev, zero);
-    this.size = numeric(values.size, zero);
-    this.blksize = numeric(values.blksize, zero);
-    this.blocks = numeric(values.blocks, zero);
-    this.atimeMs = numeric(values.atimeMs, zero);
-    this.mtimeMs = numeric(values.mtimeMs, zero);
-    this.ctimeMs = numeric(values.ctimeMs, zero);
-    this.birthtimeMs = numeric(values.birthtimeMs, zero);
-    this.atimeNs = typeof values.atimeNs === "bigint" ? values.atimeNs : undefined;
-    this.mtimeNs = typeof values.mtimeNs === "bigint" ? values.mtimeNs : undefined;
-    this.ctimeNs = typeof values.ctimeNs === "bigint" ? values.ctimeNs : undefined;
-    this.birthtimeNs = typeof values.birthtimeNs === "bigint" ? values.birthtimeNs : undefined;
-    this.atime = date(values.atime);
-    this.mtime = date(values.mtime);
-    this.ctime = date(values.ctime);
-    this.birthtime = date(values.birthtime);
-    this.#fileType = snapshot?.fileType ?? "unknown";
+  constructor(snapshot: FsStats) {
+    const zero = (snapshot.dev.tag === "bigint" ? 0n : 0) as T;
+    this.dev = numeric(snapshot.dev, zero);
+    this.ino = numeric(snapshot.ino, zero);
+    this.mode = numeric(snapshot.mode, zero);
+    this.nlink = numeric(snapshot.nlink, zero);
+    this.uid = numeric(snapshot.uid, zero);
+    this.gid = numeric(snapshot.gid, zero);
+    this.rdev = numeric(snapshot.rdev, zero);
+    this.size = numeric(snapshot.size, zero);
+    this.blksize = numeric(snapshot.blksize, zero);
+    this.blocks = numeric(snapshot.blocks, zero);
+    this.atimeMs = numeric(snapshot.atimeMs, zero);
+    this.mtimeMs = numeric(snapshot.mtimeMs, zero);
+    this.ctimeMs = numeric(snapshot.ctimeMs, zero);
+    this.birthtimeMs = numeric(snapshot.birthtimeMs, zero);
+    this.atimeNs = snapshot.atimeNs;
+    this.mtimeNs = snapshot.mtimeNs;
+    this.ctimeNs = snapshot.ctimeNs;
+    this.birthtimeNs = snapshot.birthtimeNs;
+    this.atime = date(snapshot.atimeMs);
+    this.mtime = date(snapshot.mtimeMs);
+    this.ctime = date(snapshot.ctimeMs);
+    this.birthtime = date(snapshot.birthtimeMs);
+    this.#fileType = snapshot.fileType;
   }
 
   isBlockDevice(): boolean {
@@ -122,28 +116,17 @@ export class Dirent<Name extends string | Uint8Array = string> {
   readonly name: Name;
   readonly parentPath: string;
   readonly path: string;
-  readonly #fileType: FileType;
+  readonly #fileType: FsFileType;
 
-  constructor(name: Name, parentPath: string, fileType: FileType = "unknown") {
+  constructor(name: Name, parentPath: string, fileType: FsFileType = "unknown") {
     this.name = name;
     this.parentPath = parentPath;
     this.path = parentPath;
     this.#fileType = fileType;
   }
 
-  static fromWire(value: unknown): Dirent<string | Uint8Array> {
-    if (!isRecord(value) || value.__jcoNodeFs !== "dirent") {
-      throw new TypeError("invalid filesystem dirent payload");
-    }
-    const wire = value as unknown as FsWireDirent;
-    if (typeof wire.name !== "string" && !(wire.name instanceof Uint8Array)) {
-      throw new TypeError("invalid filesystem dirent name");
-    }
-    return new Dirent(
-      wire.name,
-      typeof wire.parentPath === "string" ? wire.parentPath : "",
-      wire.fileType,
-    );
+  static fromHost(value: FsDirent): Dirent<string> {
+    return new Dirent(value.name, value.parentPath, value.fileType);
   }
 
   isBlockDevice(): boolean {

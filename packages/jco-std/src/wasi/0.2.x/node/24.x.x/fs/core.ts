@@ -4,8 +4,9 @@
  * Public validation and overload behavior follows nodejs/node v24.19.0,
  * commit cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/fs.js,
  * lib/internal/fs/promises.js, and lib/internal/fs/utils.js (MIT license).
- * Local changes route scalar operations through jco:node/fs, reconstruct
- * public value objects guest-side, and reject resource/event APIs explicitly.
+ * Local changes route operations through typed jco:node/fs functions,
+ * reconstruct public value objects guest-side, and reject resource/event APIs
+ * explicitly.
  */
 import { Buffer } from "node:buffer";
 
@@ -20,7 +21,6 @@ import {
 } from "../errors/core.js";
 
 import { Dir, Dirent, Stats } from "./classes.js";
-import { parseResponse, serializeRequest } from "./protocol.js";
 import type {
   AsyncDisposableTempDir,
   BinaryData,
@@ -46,43 +46,54 @@ import type {
   WriteResult,
   WriteVResult,
 } from "./public-types.js";
-import type { FsHost, FsWireStats } from "./types.js";
+import type {
+  FsCopyOptions,
+  FsGlobExclude,
+  FsGlobOptions,
+  FsHost,
+  FsMkdirOptions,
+  FsMode,
+  FsOpenMode,
+  FsPath,
+  FsPathOrDescriptor,
+  FsReadFileOptions,
+  FsReaddirOptions,
+  FsRemoveOptions,
+  FsResult,
+  FsStatFs,
+  FsStatOptions,
+  FsStats,
+  FsWriteFileOptions,
+} from "./types.js";
 
 type Numeric = number | bigint;
 type StringOrBytes = string | Uint8Array;
-
-interface HostReadResult {
-  bytesRead: number;
-  data: Uint8Array;
-}
-
-interface HostReadVResult {
-  bytesRead: number;
-  buffers: Uint8Array[];
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function path(value: PathLike, name = "path"): string | Uint8Array | URL {
-  if (typeof value === "string" || value instanceof Uint8Array) {
-    return value;
+function path(value: PathLike, name = "path"): FsPath {
+  if (typeof value === "string") {
+    return { tag: "text", val: value };
+  }
+  if (value instanceof Uint8Array) {
+    return { tag: "bytes", val: value };
   }
   if (value instanceof URL) {
     if (value.protocol !== "file:") {
       throw invalidArgValue(name, value, "must use the file: scheme");
     }
-    return value;
+    return { tag: "file-url", val: value.href };
   }
   throw invalidArgType(name, ["string", "Buffer", "URL"], value);
 }
 
-function pathOrFd(value: PathLike | number, name = "path"): string | Uint8Array | URL | number {
+function pathOrFd(value: PathLike | number, name = "path"): FsPathOrDescriptor {
   if (typeof value === "number") {
-    return fd(value);
+    return { tag: "descriptor", val: fd(value) };
   }
-  return path(value, name);
+  return { tag: "path", val: path(value, name) };
 }
 
 function fd(value: number): number {
@@ -92,14 +103,18 @@ function fd(value: number): number {
   return value;
 }
 
-function position(value: number | bigint | null | undefined): number | bigint | null {
+function position(value: number | bigint | null | undefined): bigint | undefined {
   if (value === undefined || value === null) {
-    return null;
+    return undefined;
   }
-  if ((typeof value !== "number" && typeof value !== "bigint") || value < 0) {
+  if (
+    (typeof value !== "number" && typeof value !== "bigint") ||
+    value < 0 ||
+    (typeof value === "number" && !Number.isInteger(value))
+  ) {
     throw outOfRange("position", ">= 0", value);
   }
-  return value;
+  return BigInt(value);
 }
 
 function integer(value: unknown, name: string, minimum = 0): number {
@@ -179,14 +194,79 @@ function unsupported(api: string, reason: string): never {
   throw unsupportedNodeApi(api, reason);
 }
 
-function stats(value: unknown): Stats<Numeric> | undefined {
+function stats(value: FsStats | undefined): Stats<Numeric> | undefined {
   if (value === undefined) {
     return undefined;
   }
-  if (!isRecord(value) || value.__jcoNodeFs !== "stats") {
-    throw new TypeError("invalid filesystem stats response");
+  return new Stats(value);
+}
+
+function hostMode(value: Mode): FsMode {
+  return typeof value === "number"
+    ? { tag: "number", val: integer(value, "mode") }
+    : { tag: "symbolic", val: value };
+}
+
+function hostOpenMode(value: OpenMode): FsOpenMode {
+  return typeof value === "number"
+    ? { tag: "number", val: value }
+    : { tag: "symbolic", val: value };
+}
+
+function statOptions(options: StatOptions | undefined): FsStatOptions {
+  const value = optionsRecord(options);
+  return {
+    bigint: value.bigint === true,
+    throwIfNoEntry: value.throwIfNoEntry !== false,
+  };
+}
+
+function readFileOptions(options: Record<string, unknown>): FsReadFileOptions {
+  return {
+    flag: typeof options.flag === "string" ? options.flag : undefined,
+  };
+}
+
+function writeFileOptions(options: Record<string, unknown>): FsWriteFileOptions {
+  return {
+    flag: typeof options.flag === "string" ? options.flag : undefined,
+    mode:
+      typeof options.mode === "string" || typeof options.mode === "number"
+        ? hostMode(options.mode)
+        : undefined,
+    flush: options.flush === true,
+  };
+}
+
+function removeOptions(options: Record<string, unknown>): FsRemoveOptions {
+  return {
+    force: options.force === true,
+    maxRetries: integer(options.maxRetries ?? 0, "options.maxRetries"),
+    recursive: options.recursive === true,
+    retryDelay: integer(options.retryDelay ?? 100, "options.retryDelay"),
+  };
+}
+
+function unwrap<T>(result: FsResult<T>): T {
+  if (result.tag === "ok") {
+    return result.val;
   }
-  return new Stats(value as unknown as FsWireStats);
+  const value = result.val;
+  const error = systemError({
+    message: value.message,
+    code: value.code ?? "UNKNOWN",
+    errno:
+      value.errno?.tag === "number"
+        ? Number(value.errno.val)
+        : value.errno?.tag === "symbolic"
+          ? value.errno.val
+          : undefined,
+    syscall: value.syscall,
+    path: value.path,
+    dest: value.dest,
+  });
+  error.name = value.name;
+  throw error;
 }
 
 export class FileHandle implements AsyncDisposable {
@@ -414,25 +494,8 @@ export class FsCore {
     this.#host = host;
   }
 
-  call(operation: string, args: readonly unknown[]): unknown {
-    const response = parseResponse(this.#host.query(serializeRequest(operation, args)));
-    if (response.ok) {
-      return response.value;
-    }
-    const error = systemError({
-      message: response.error.message,
-      code: response.error.code ?? "UNKNOWN",
-      errno: response.error.errno,
-      syscall: response.error.syscall,
-      path: response.error.path,
-      dest: response.error.dest,
-    });
-    error.name = response.error.name;
-    throw error;
-  }
-
   accessSync(value: PathLike, mode = 0): void {
-    this.call("access", [path(value), mode]);
+    unwrap(this.#host.access(path(value), mode));
   }
 
   appendFileSync(
@@ -446,27 +509,25 @@ export class FsCore {
       typeof opts.encoding === "string" && opts.encoding !== "buffer"
         ? (opts.encoding as BufferEncoding)
         : "utf8";
-    this.call("appendFile", [
-      pathOrFd(file),
-      encodeData(data, encoding),
-      { ...opts, encoding: undefined, signal: undefined },
-    ]);
+    unwrap(
+      this.#host.appendFile(pathOrFd(file), encodeData(data, encoding), writeFileOptions(opts)),
+    );
   }
 
   chmodSync(value: PathLike, mode: Mode): void {
-    this.call("chmod", [path(value), mode]);
+    unwrap(this.#host.chmod(path(value), hostMode(mode)));
   }
 
   chownSync(value: PathLike, uid: number, gid: number): void {
-    this.call("chown", [path(value), integer(uid, "uid"), integer(gid, "gid")]);
+    unwrap(this.#host.chown(path(value), integer(uid, "uid"), integer(gid, "gid")));
   }
 
   closeSync(descriptor: number): void {
-    this.call("close", [fd(descriptor)]);
+    unwrap(this.#host.close(fd(descriptor)));
   }
 
   copyFileSync(source: PathLike, destination: PathLike, mode = 0): void {
-    this.call("copyFile", [path(source, "src"), path(destination, "dest"), mode]);
+    unwrap(this.#host.copyFile(path(source, "src"), path(destination, "dest"), mode));
   }
 
   cpSync(source: PathLike, destination: PathLike, options?: CopyOptions): void {
@@ -474,12 +535,20 @@ export class FsCore {
     if (typeof opts.filter === "function") {
       unsupported("fs.cp filter", "functions cannot cross the filesystem host boundary");
     }
-    this.call("cp", [path(source, "src"), path(destination, "dest"), opts]);
+    const hostOptions: FsCopyOptions = {
+      dereference: opts.dereference === true,
+      errorOnExist: opts.errorOnExist === true,
+      force: opts.force !== false,
+      preserveTimestamps: opts.preserveTimestamps === true,
+      recursive: opts.recursive === true,
+      verbatimSymlinks: opts.verbatimSymlinks === true,
+    };
+    unwrap(this.#host.cp(path(source, "src"), path(destination, "dest"), hostOptions));
   }
 
   existsSync(value: PathLike): boolean {
     try {
-      return Boolean(this.call("exists", [path(value)]));
+      return unwrap(this.#host.exists(path(value)));
     } catch (error) {
       if (isRecord(error) && error.code === "ERR_JCO_FS_ADAPTER_REQUIRED") {
         throw error;
@@ -489,19 +558,19 @@ export class FsCore {
   }
 
   fchmodSync(descriptor: number, mode: Mode): void {
-    this.call("fchmod", [fd(descriptor), mode]);
+    unwrap(this.#host.fchmod(fd(descriptor), hostMode(mode)));
   }
 
   fchownSync(descriptor: number, uid: number, gid: number): void {
-    this.call("fchown", [fd(descriptor), integer(uid, "uid"), integer(gid, "gid")]);
+    unwrap(this.#host.fchown(fd(descriptor), integer(uid, "uid"), integer(gid, "gid")));
   }
 
   fdatasyncSync(descriptor: number): void {
-    this.call("fdatasync", [fd(descriptor)]);
+    unwrap(this.#host.fdatasync(fd(descriptor)));
   }
 
   fstatSync(descriptor: number, options?: StatOptions): Stats<Numeric> {
-    const result = stats(this.call("fstat", [fd(descriptor), optionsRecord(options)]));
+    const result = stats(unwrap(this.#host.fstat(fd(descriptor), statOptions(options))));
     if (!result) {
       throw new TypeError("missing filesystem stats response");
     }
@@ -509,15 +578,15 @@ export class FsCore {
   }
 
   fsyncSync(descriptor: number): void {
-    this.call("fsync", [fd(descriptor)]);
+    unwrap(this.#host.fsync(fd(descriptor)));
   }
 
   ftruncateSync(descriptor: number, length = 0): void {
-    this.call("ftruncate", [fd(descriptor), integer(length, "len")]);
+    unwrap(this.#host.ftruncate(fd(descriptor), integer(length, "len")));
   }
 
   futimesSync(descriptor: number, atime: TimeLike, mtime: TimeLike): void {
-    this.call("futimes", [fd(descriptor), atime, mtime]);
+    unwrap(this.#host.futimes(fd(descriptor), toUnixTimestamp(atime), toUnixTimestamp(mtime)));
   }
 
   globSync(
@@ -531,32 +600,36 @@ export class FsCore {
     if (typeof opts.exclude === "function") {
       unsupported("fs.glob exclude", "functions cannot cross the filesystem host boundary");
     }
-    if (opts.cwd !== undefined) {
-      opts.cwd = path(opts.cwd as PathLike, "options.cwd");
+    let exclude: FsGlobExclude | undefined;
+    if (typeof opts.exclude === "string") {
+      exclude = { tag: "pattern", val: opts.exclude };
+    } else if (Array.isArray(opts.exclude)) {
+      exclude = { tag: "patterns", val: opts.exclude.map(String) };
     }
-    const result = this.call("glob", [pattern, { ...opts, encoding: "utf8" }]);
-    if (!Array.isArray(result)) {
-      throw new TypeError("invalid filesystem glob response");
-    }
-    return result.map((entry) =>
-      isRecord(entry) && entry.__jcoNodeFs === "dirent" ? Dirent.fromWire(entry) : String(entry),
-    );
+    const hostOptions: FsGlobOptions = {
+      cwd: opts.cwd === undefined ? undefined : path(opts.cwd as PathLike, "options.cwd"),
+      exclude,
+      withFileTypes: opts.withFileTypes === true,
+    };
+    return unwrap(
+      this.#host.glob(typeof pattern === "string" ? [pattern] : [...pattern], hostOptions),
+    ).map((entry) => (entry.tag === "dirent" ? Dirent.fromHost(entry.val) : entry.val));
   }
 
   lchownSync(value: PathLike, uid: number, gid: number): void {
-    this.call("lchown", [path(value), integer(uid, "uid"), integer(gid, "gid")]);
+    unwrap(this.#host.lchown(path(value), integer(uid, "uid"), integer(gid, "gid")));
   }
 
   linkSync(existingPath: PathLike, newPath: PathLike): void {
-    this.call("link", [path(existingPath, "existingPath"), path(newPath, "newPath")]);
+    unwrap(this.#host.link(path(existingPath, "existingPath"), path(newPath, "newPath")));
   }
 
   lstatSync(value: PathLike, options?: StatOptions): Stats<Numeric> | undefined {
-    return stats(this.call("lstat", [path(value), optionsRecord(options)]));
+    return stats(unwrap(this.#host.lstat(path(value), statOptions(options))));
   }
 
   lutimesSync(value: PathLike, atime: TimeLike, mtime: TimeLike): void {
-    this.call("lutimes", [path(value), atime, mtime]);
+    unwrap(this.#host.lutimes(path(value), toUnixTimestamp(atime), toUnixTimestamp(mtime)));
   }
 
   mkdirSync(value: PathLike, options?: Mode | MakeDirectoryOptions | null): string | undefined {
@@ -564,8 +637,14 @@ export class FsCore {
       typeof options === "string" || typeof options === "number"
         ? { mode: options }
         : optionsRecord(options);
-    const result = this.call("mkdir", [path(value), opts]);
-    return result === undefined ? undefined : String(result);
+    const hostOptions: FsMkdirOptions = {
+      recursive: opts.recursive === true,
+      mode:
+        typeof opts.mode === "string" || typeof opts.mode === "number"
+          ? hostMode(opts.mode)
+          : undefined,
+    };
+    return unwrap(this.#host.mkdir(path(value), hostOptions));
   }
 
   mkdtempSync(
@@ -576,7 +655,7 @@ export class FsCore {
       throw invalidArgType("prefix", "string", prefix);
     }
     const encoding = encodingFrom(options);
-    const result = String(this.call("mkdtemp", [prefix, { encoding: "utf8" }]));
+    const result = unwrap(this.#host.mkdtemp(prefix));
     return encoding === "buffer" ? Buffer.from(result) : result;
   }
 
@@ -593,14 +672,14 @@ export class FsCore {
   }
 
   openSync(value: PathLike, flags: OpenMode = "r", mode: Mode = 0o666): number {
-    return Number(this.call("open", [path(value), flags, mode]));
+    return unwrap(this.#host.open(path(value), hostOpenMode(flags), hostMode(mode)));
   }
 
   opendirSync(value: PathLike, options?: OpenDirOptions): Dir {
-    const pathname = path(value);
-    if (typeof pathname !== "string") {
+    if (typeof value !== "string") {
       throw invalidArgType("path", "string", value);
     }
+    const pathname = value;
     const entries = this.readdirSync(pathname, {
       ...options,
       encoding: "utf8",
@@ -616,10 +695,7 @@ export class FsCore {
     const opts = typeof options === "string" ? { encoding: options } : optionsRecord(options);
     checkSignal(opts.signal);
     const encoding = encodingFrom(typeof options === "string" ? options : (opts as FlagOptions));
-    const result = this.call("readFile", [
-      pathOrFd(file),
-      { ...opts, encoding: null, signal: undefined },
-    ]);
+    const result = unwrap(this.#host.readFile(pathOrFd(file), readFileOptions(opts)));
     return decodeData(result, encoding);
   }
 
@@ -629,13 +705,14 @@ export class FsCore {
   ): Array<StringOrBytes | Dirent<string | Uint8Array>> {
     const opts = typeof options === "string" ? { encoding: options } : optionsRecord(options);
     const encoding = encodingFrom(typeof options === "string" ? options : (opts as ReaddirOptions));
-    const result = this.call("readdir", [path(value), { ...opts, encoding: "utf8" }]);
-    if (!Array.isArray(result)) {
-      throw new TypeError("invalid filesystem readdir response");
-    }
+    const hostOptions: FsReaddirOptions = {
+      recursive: opts.recursive === true,
+      withFileTypes: opts.withFileTypes === true,
+    };
+    const result = unwrap(this.#host.readdir(path(value), hostOptions));
     return result.map((entry) => {
-      if (isRecord(entry) && entry.__jcoNodeFs === "dirent") {
-        const dirent = Dirent.fromWire(entry);
+      if (entry.tag === "dirent") {
+        const dirent = Dirent.fromHost(entry.val);
         return encoding === "buffer"
           ? new Dirent(
               Buffer.from(String(dirent.name)),
@@ -650,7 +727,7 @@ export class FsCore {
             )
           : dirent;
       }
-      const name = String(entry);
+      const name = entry.val;
       return encoding === "buffer" ? Buffer.from(name) : name;
     });
   }
@@ -660,7 +737,7 @@ export class FsCore {
     options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
   ): StringOrBytes {
     const encoding = encodingFrom(options);
-    const result = String(this.call("readlink", [path(value), { encoding: "utf8" }]));
+    const result = unwrap(this.#host.readlink(path(value)));
     return encoding === "buffer" ? Buffer.from(result) : result;
   }
 
@@ -669,16 +746,16 @@ export class FsCore {
     options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
   ): StringOrBytes {
     const encoding = encodingFrom(options);
-    const result = String(this.call("realpath", [path(value), { encoding: "utf8" }]));
+    const result = unwrap(this.#host.realpath(path(value)));
     return encoding === "buffer" ? Buffer.from(result) : result;
   }
 
   renameSync(oldPath: PathLike, newPath: PathLike): void {
-    this.call("rename", [path(oldPath, "oldPath"), path(newPath, "newPath")]);
+    unwrap(this.#host.rename(path(oldPath, "oldPath"), path(newPath, "newPath")));
   }
 
   rmSync(value: PathLike, options?: RemoveOptions): void {
-    this.call("rm", [path(value), optionsRecord(options)]);
+    unwrap(this.#host.rm(path(value), removeOptions(optionsRecord(options))));
   }
 
   rmdirSync(value: PathLike, options?: RemoveOptions): void {
@@ -689,35 +766,32 @@ export class FsCore {
         "fs.rm(path, { recursive: true })",
       );
     }
-    this.call("rmdir", [path(value), opts]);
+    unwrap(this.#host.rmdir(path(value), removeOptions(opts)));
   }
 
   statSync(value: PathLike, options?: StatOptions): Stats<Numeric> | undefined {
-    return stats(this.call("stat", [path(value), optionsRecord(options)]));
+    return stats(unwrap(this.#host.stat(path(value), statOptions(options))));
   }
 
   statfsSync(value: PathLike, options?: { bigint?: boolean }): Record<string, Numeric> {
-    const result = this.call("statfs", [path(value), optionsRecord(options)]);
-    if (!isRecord(result)) {
-      throw new TypeError("invalid filesystem statfs response");
-    }
-    return result as Record<string, Numeric>;
+    const result: FsStatFs = unwrap(this.#host.statfs(path(value), options?.bigint === true));
+    return Object.fromEntries(Object.entries(result).map(([name, value]) => [name, value.val]));
   }
 
   symlinkSync(target: PathLike, value: PathLike, type?: "dir" | "file" | "junction" | null): void {
-    this.call("symlink", [path(target, "target"), path(value), type]);
+    unwrap(this.#host.symlink(path(target, "target"), path(value), type ?? undefined));
   }
 
   truncateSync(value: PathLike, length = 0): void {
-    this.call("truncate", [path(value), integer(length, "len")]);
+    unwrap(this.#host.truncate(path(value), integer(length, "len")));
   }
 
   unlinkSync(value: PathLike): void {
-    this.call("unlink", [path(value)]);
+    unwrap(this.#host.unlink(path(value)));
   }
 
   utimesSync(value: PathLike, atime: TimeLike, mtime: TimeLike): void {
-    this.call("utimes", [path(value), atime, mtime]);
+    unwrap(this.#host.utimes(path(value), toUnixTimestamp(atime), toUnixTimestamp(mtime)));
   }
 
   writeFileSync(
@@ -731,11 +805,9 @@ export class FsCore {
       typeof opts.encoding === "string" && opts.encoding !== "buffer"
         ? (opts.encoding as BufferEncoding)
         : "utf8";
-    this.call("writeFile", [
-      pathOrFd(file),
-      encodeData(data, encoding),
-      { ...opts, encoding: undefined, signal: undefined },
-    ]);
+    unwrap(
+      this.#host.writeFile(pathOrFd(file), encodeData(data, encoding), writeFileOptions(opts)),
+    );
   }
 
   readSync(descriptor: number, buffer: ArrayBufferView, options?: ReadOptions): number;
@@ -763,18 +835,7 @@ export class FsCore {
     if (offset + count > target.byteLength) {
       throw outOfRange("length", `<= ${target.byteLength - offset}`, count);
     }
-    const result = this.call("read", [
-      fd(descriptor),
-      count,
-      position(opts.position),
-    ]) as HostReadResult;
-    if (
-      !isRecord(result) ||
-      !(result.data instanceof Uint8Array) ||
-      typeof result.bytesRead !== "number"
-    ) {
-      throw new TypeError("invalid filesystem read response");
-    }
+    const result = unwrap(this.#host.read(fd(descriptor), count, position(opts.position)));
     target.set(result.data, offset);
     return result.bytesRead;
   }
@@ -805,12 +866,12 @@ export class FsCore {
         value,
         typeof lengthOrEncoding === "string" ? lengthOrEncoding : "utf8",
       );
-      return Number(
-        this.call("write", [
+      return unwrap(
+        this.#host.write(
           fd(descriptor),
           data,
           position(typeof offsetOrOptions === "number" ? offsetOrOptions : null),
-        ]),
+        ),
       );
     }
     const source = bytes(value);
@@ -827,12 +888,12 @@ export class FsCore {
     if (offset + count > source.byteLength) {
       throw outOfRange("length", `<= ${source.byteLength - offset}`, count);
     }
-    return Number(
-      this.call("write", [
+    return unwrap(
+      this.#host.write(
         fd(descriptor),
         source.subarray(offset, offset + count),
         position(opts.position),
-      ]),
+      ),
     );
   }
 
@@ -845,18 +906,13 @@ export class FsCore {
       throw invalidArgType("buffers", "Array", buffers);
     }
     const targets = buffers.map((buffer) => bytes(buffer));
-    const result = this.call("readv", [
-      fd(descriptor),
-      targets.map((buffer) => buffer.byteLength),
-      position(readPosition),
-    ]) as HostReadVResult;
-    if (
-      !isRecord(result) ||
-      !Array.isArray(result.buffers) ||
-      typeof result.bytesRead !== "number"
-    ) {
-      throw new TypeError("invalid filesystem readv response");
-    }
+    const result = unwrap(
+      this.#host.readv(
+        fd(descriptor),
+        targets.map((buffer) => buffer.byteLength),
+        position(readPosition),
+      ),
+    );
     result.buffers.forEach((buffer, index) => targets[index]?.set(buffer));
     return result.bytesRead;
   }
@@ -869,12 +925,12 @@ export class FsCore {
     if (!Array.isArray(buffers)) {
       throw invalidArgType("buffers", "Array", buffers);
     }
-    return Number(
-      this.call("writev", [
+    return unwrap(
+      this.#host.writev(
         fd(descriptor),
         buffers.map((buffer) => bytes(buffer)),
         position(writePosition),
-      ]),
+      ),
     );
   }
 
@@ -913,8 +969,5 @@ export function toUnixTimestamp(value: TimeLike): number {
 }
 
 export function unsupportedFsApi(api: string): never {
-  return unsupported(
-    api,
-    "the initial filesystem WIT protocol does not model event or stream resources",
-  );
+  return unsupported(api, "the filesystem WIT interface does not model event or stream resources");
 }

@@ -166,7 +166,7 @@ export function createFsPromises(core: FsCore) {
     watch(..._args: unknown[]): never {
       throw unsupportedNodeApi(
         "fsPromises.watch",
-        "the filesystem WIT protocol does not model watcher resources",
+        "the filesystem WIT interface does not model watcher resources",
       );
     },
 
