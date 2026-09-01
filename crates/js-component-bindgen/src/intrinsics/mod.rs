@@ -1426,6 +1426,16 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_tasks_skip_return_lowering_and_post_return() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+
+        assert!(source.contains("const taskReturned = !this.isCancelled();"));
+        assert!(source.contains("if (parentSubtaskPending && taskReturned) {"));
+        assert!(source.contains("if (this.#postReturnFn && taskReturned) {"));
+    }
+
+    #[test]
     fn async_start_fused_adapter_runs_in_the_caller_task() {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
 

@@ -1493,8 +1493,9 @@ impl AsyncTaskIntrinsic {
                             // cancelled via `subtask.cancel` while this task was still pending),
                             // this task's resolution must be discarded rather than delivered.
                             const parentSubtaskPending = this.#parentSubtask && !this.#parentSubtask.isResolved();
+                            const taskReturned = !this.isCancelled();
 
-                            if (parentSubtaskPending) {{
+                            if (parentSubtaskPending && taskReturned) {{
                                 const meta = this.#parentSubtask.getCallMetadata();
                                 // Run the rturn fn if it has not already been called -- this *should* have happened in
                                 // `task.return`, but some paths do not go through task.return (e.g. async lower of sync fn
@@ -1515,7 +1516,7 @@ impl AsyncTaskIntrinsic {
                                 }}
                             }}
 
-                            if (this.#postReturnFn) {{
+                            if (this.#postReturnFn && taskReturned) {{
                                 {debug_log_fn}('[{task_class}#onResolve()] running post return ', {{
                                     componentIdx: this.#componentIdx,
                                     taskID: this.#id,
