@@ -1,0 +1,5 @@
+package local:node-module;
+
+world test {
+  export run: func() -> string;
+}
