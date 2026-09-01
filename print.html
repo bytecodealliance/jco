@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b8b034db.js";
+            window.path_to_searchindex_js = "searchindex-3e79f0c0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -2075,6 +2075,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
 <tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
+<tr><td><code>node:dns</code>, <code>node:dns/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns</code></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
@@ -2280,6 +2281,26 @@ statics on it so both access paths reach the working versions.</p>
 own for shims such as <code>node:cluster</code>. jco-std does not depend on unenv, and shim code importing a
 <code>node:*</code> builtin would rely on a bundler rewriting it, which is not true of every way jco-std is
 consumed. The two are independent by design.</p>
+<h3 id="dns-and-host-capabilities"><a class="header" href="#dns-and-host-capabilities">DNS and host capabilities</a></h3>
+<p><code>node:dns</code> and <code>node:dns/promises</code> share one guest implementation and the
+<code>jco:node/dns@0.1.0</code> capability. Jco adds that import and its <code>dns.wit</code>
+dependency when bundled source uses either specifier. The default provider throws
+<code>ERR_JCO_DNS_ADAPTER_REQUIRED</code>; applications opt into Node name resolution with:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
+</code></pre>
+<p>The Node provider calls the real asynchronous <code>node:dns/promises</code> operations
+directly. When an application supplies a DNS host map, Jco automatically enables
+JSPI for <code>jco:node/dns@0.1.0#query</code>. The Preview 2 WIT call therefore remains
+synchronous from the guest’s perspective without blocking Node’s event loop or
+creating a worker for each query. Because any component export may transitively
+call DNS, mapped components expose promise-returning exports that JavaScript hosts
+must await. Callback APIs retain callback delivery in the guest, and the promises
+subpath shares server and default-result-order state with the main module.</p>
+<p><code>Resolver.cancel()</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. The synchronous WIT
+boundary does not expose an outstanding c-ares request that a later guest call
+could cancel. The provider boundary otherwise remains Node-independent, leaving
+room for a future browser implementation.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
