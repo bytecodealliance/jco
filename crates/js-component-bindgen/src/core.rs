@@ -203,6 +203,7 @@ impl<'a> Translation<'a> {
     pub fn suspending_functions(
         &self,
         args: &[CoreDef],
+        externally_mutable_tables_may_suspend: bool,
         mut core_def_may_suspend: impl FnMut(&CoreDef) -> bool,
     ) -> HashSet<FuncIndex> {
         let translation = match self {
@@ -248,14 +249,28 @@ impl<'a> Translation<'a> {
             calls.push((translation.module.func_index(defined), direct, indirect));
         }
 
+        // An imported or exported table can be populated after instantiation
+        // with a suspending function, so its indirect calls are not provably sync.
+        let externally_mutable_table = externally_mutable_tables_may_suspend
+            && (translation
+                .module
+                .imports()
+                .any(|(_, _, ty)| matches!(ty, WasmtimeEntityType::Table(_)))
+                || translation
+                    .module
+                    .exports
+                    .iter()
+                    .any(|(_, index)| matches!(index, EntityIndex::Table(_))));
+
         loop {
-            let any_suspending = !suspending.is_empty();
+            let any_indirect_target_may_suspend =
+                !suspending.is_empty() || externally_mutable_table;
             let mut changed = false;
             for (caller, direct, indirect) in &calls {
                 if suspending.contains(caller) {
                     continue;
                 }
-                if (*indirect && any_suspending)
+                if (*indirect && any_indirect_target_may_suspend)
                     || direct.iter().any(|callee| suspending.contains(callee))
                 {
                     changed |= suspending.insert(*caller);
