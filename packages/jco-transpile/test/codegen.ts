@@ -259,7 +259,7 @@ suite('Trap detection', () => {
                 }
 
                 assert.instanceOf(trap, WebAssembly.RuntimeError);
-                assert.match(trap.message, /futures must not be dropped before being completed/);
+                assert.match(trap.message, /cannot drop future write end without first writing a value/);
 
                 let subsequentCallError;
                 try {
