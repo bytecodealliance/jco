@@ -44,6 +44,8 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/inspector/promises`  | `node:inspector/promises`, sharing one core with `node:inspector`             |
 | `wasi/0.2.x/node/24.x.x/inspector/host`      | Deny-by-default host for `jco:node/inspector`                                 |
 | `wasi/0.2.x/node/24.x.x/inspector/host/node` | Opt-in host over the runtime's real `node:inspector`                          |
+| `wasi/0.2.x/node/24.x.x/stream/consumers`    | Portable `node:stream/consumers`, Node 24                                     |
+| `wasi/0.2.x/node/24.x.x/stream/iter`         | Experimental iterable streams from Node 24.20                                 |
 
 [express]: https://expressjs.com
 
@@ -140,7 +142,19 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi` and the
   `jco:node/ffi@0.1.0` host capability. **Node 26 only**, and denied by default:
   granting it lets a component load native libraries and read and write host
-  memory.
+  memory;
+- `node:stream/consumers`, implemented portably by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`; and
+- the experimental Node 24.20 `node:stream/iter` API, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`.
+
+The two stream modules share portable byte normalization and collection helpers.
+They use the component engine's iterable, typed-array, text-codec, Blob, and abort
+globals and require no WIT capability. The iterable module's `fromReadable()` and
+`fromWritable()` accept duck-typed classic streams. `toReadable()`,
+`toReadableSync()`, and `toWritable()` throw `ERR_JCO_UNSUPPORTED_NODE_API` until
+Jco has a faithful classic `node:stream` implementation; weak unenv constructor
+mocks are not used.
 
 Jco resolves Node compatibility modules in quality order:
 

@@ -128,7 +128,18 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
 - the `node:http` client and server APIs, implemented over a selectable direct
   `jco:node/http@0.1.0`, Preview 2 `wasi:sockets`, or Preview 2 `wasi:http`
   implementation. The direct provider denies access by default, direct and
-  `wasi:sockets` support servers, and `wasi:http` rejects server construction.
+  `wasi:sockets` support servers, and `wasi:http` rejects server construction;
+- `node:stream/consumers`, implemented as portable iterable collection over the
+  engine's Blob, typed-array, and text-codec globals; and
+- the experimental Node 24.20 `node:stream/iter` API, including portable sources,
+  transforms, consumers, writers, push streams, duplex pairs, and multicast
+  streams. It requires no WIT capability.
+
+Iterable-stream adapters that consume duck-typed classic Readable and Writable
+objects are available. The reverse adapters that must construct a real classic
+Node stream fail explicitly until Jco has a faithful `node:stream`
+implementation; jco-std does not substitute unenv's nonfunctional constructor
+mocks.
 
 Not every Node compatibility module lives in `jco-std`. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For

@@ -79,7 +79,9 @@ while its application code imports `node:assert` and `node:buffer`.
 
 ## Currently supported modules
 
-The current compatibility target is Node.js 24.19.0. The unenv-backed modules are
+The current compatibility target is Node.js 24.20.0. Implementations that predate
+that patch retain their pinned Node 24 provenance; `node:stream/iter` specifically
+targets the release where it was introduced. The unenv-backed modules are
 audited against `unenv@2.0.0-rc.24`; upgrading unenv requires rerunning the
 compatibility suites.
 
@@ -107,7 +109,7 @@ is planned.
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                               |
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                                           |
-| `node:string_decoder`                            | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`                                    | Guest-local streaming decoder for Node 24. Requires no WIT capability.                                                                                              |
+| `node:string_decoder`                             | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`                                    | Guest-local streaming decoder for Node 24. Requires no WIT capability.                                                                                             |
 | `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.                          |
 | `node:ffi`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi`                                               | **Node 26 only.** Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused -- see below. |
 | `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                               |
@@ -122,6 +124,51 @@ is planned.
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                          |
 | `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                       |
 | `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                               |
+| `node:stream/consumers`                           | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`                                  | Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.                                                           |
+| `node:stream/iter`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`                                       | Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.                                          |
+
+### Stream consumers and iterable streams
+
+`node:stream/consumers` supports Node 24 applications written before or after the
+24.20 iterable-stream addition. `node:stream/iter` exposes the experimental 24.20
+batch-oriented API. Both execute entirely inside the guest and share byte
+normalization, limits, text decoding, and collection behavior. Importing either
+specifier adds no host or WIT capability.
+
+For example, ordinary Node application source can use both entry points:
+
+```js
+import { text as consumeText } from 'node:stream/consumers';
+import { from, pull, text } from 'node:stream/iter';
+
+export async function run() {
+    const upper = (batch) =>
+        batch?.map((chunk) => chunk.map((byte) => (byte >= 97 && byte <= 122 ? byte - 32 : byte))) ?? null;
+    return {
+        consumed: await consumeText(['consumer']),
+        transformed: await text(pull(from('iterable'), upper)),
+    };
+}
+```
+
+Bundle that source normally; the WIT world only needs to describe the component's
+own imports and exports:
+
+```console
+jco componentize app.js --bundle --backend starlingmonkey -w app.wit -o app.wasm
+```
+
+The implementation uses engine-provided iterable, typed-array, Blob, text-codec,
+and abort globals. `fromReadable()` and `fromWritable()` work with duck-typed
+classic streams. `toReadable()`, `toReadableSync()`, and `toWritable()` need real
+classic Node stream constructors, which neither the component engine nor the
+audited unenv release provides. Those functions remain present but immediately
+throw `ERR_JCO_UNSUPPORTED_NODE_API`; they do not inspect their arguments first.
+
+> [!WARNING]
+> Node marks `node:stream/iter` experimental. Its Jco implementation is likewise
+> experimental and may change incompatibly without a semver-major release as the
+> upstream Node 24 API evolves.
 
 ### Globals
 
@@ -767,11 +814,9 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:crypto`, `node:dgram`, `node:http`,
-`node:http2`, `node:https`, `node:inspector`, `node:inspector/promises`,
-`node:module`, `node:net`, `node:os`, `node:perf_hooks`, `node:process`,
-`node:repl`, `node:sqlite`, `node:stream`, `node:stream/consumers`,
-`node:stream/promises`, `node:stream/web`, `node:timers`,
+`node:crypto`, `node:dgram`, `node:http`, `node:http2`, `node:https`,
+`node:module`, `node:net`, `node:perf_hooks`, `node:process`, `node:repl`,
+`node:sqlite`, `node:stream`, `node:stream/promises`, `node:stream/web`, `node:timers`,
 `node:tls`, `node:util`, `node:util/types`, `node:v8`, `node:vm`, `node:wasi`,
 `node:worker_threads`, and `node:zlib`.
 
