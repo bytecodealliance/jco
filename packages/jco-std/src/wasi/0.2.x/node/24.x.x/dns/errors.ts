@@ -22,7 +22,12 @@ export function dnsError(data: DnsErrorData): DnsError {
   const error = new Error(data.message) as DnsError;
   error.name = data.name;
   error.code = data.code;
-  error.errno = data.errno;
+  error.errno =
+    data.errno?.tag === "number"
+      ? Number(data.errno.val)
+      : data.errno?.tag === "symbolic"
+        ? data.errno.val
+        : undefined;
   error.syscall = data.syscall;
   error.hostname = data.hostname;
   return error;

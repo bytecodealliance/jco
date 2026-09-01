@@ -100,30 +100,102 @@ export interface ResolverOptions {
   maxTimeout?: number;
 }
 
-export interface DnsHost {
-  query(request: string): string;
-}
-
 export interface DnsErrorData {
   name: string;
   message: string;
   code?: string;
-  errno?: number | string;
+  errno?: DnsErrno;
   syscall?: string;
   hostname?: string;
 }
 
-export interface DnsRequest {
-  operation: string;
-  args: unknown[];
-  resolver?: {
-    options: ResolverOptions;
-    servers?: string[];
-    localAddress?: [string, string];
-  };
+export type DnsResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: DnsErrorData };
+
+export type DnsErrno = { tag: "number"; val: bigint } | { tag: "symbolic"; val: string };
+
+export type DnsHostFamily = "unspecified" | "ipv4" | "ipv6";
+export type DnsHostResultOrder = "ipv4-first" | "ipv6-first" | "verbatim";
+
+export interface DnsResolverOptions {
+  timeout?: number;
+  tries?: number;
+  maxTimeout?: number;
 }
 
-export type DnsResponse = { ok: true; value: unknown } | { ok: false; error: DnsErrorData };
+export interface DnsResolverConfig {
+  options: DnsResolverOptions;
+  servers?: string[];
+  localAddress?: [string, string];
+}
+
+export interface DnsLookupOptions {
+  family: DnsHostFamily;
+  hints: number;
+  all: boolean;
+  order: DnsHostResultOrder;
+}
+
+export interface DnsLookupAddress {
+  address: string;
+  family: DnsHostFamily;
+}
+
+export interface DnsLookupServiceResult {
+  hostname: string;
+  service: string;
+}
+
+export interface DnsAddressWithTtl {
+  address: string;
+  ttl: number;
+}
+
+export interface DnsTlsaRecord {
+  certUsage: number;
+  selector: number;
+  match: number;
+  data: Uint8Array;
+}
+
+export type DnsAnyRecord =
+  | { tag: "a" | "aaaa"; val: DnsAddressWithTtl }
+  | { tag: "caa"; val: CaaRecord }
+  | { tag: "cname" | "ns" | "ptr"; val: string }
+  | { tag: "mx"; val: MxRecord }
+  | { tag: "naptr"; val: NaptrRecord }
+  | { tag: "soa"; val: SoaRecord }
+  | { tag: "srv"; val: SrvRecord }
+  | { tag: "tlsa"; val: DnsTlsaRecord }
+  | { tag: "txt"; val: string[] };
+
+export interface DnsHost {
+  getServers(): DnsResult<string[]>;
+  validateServers(servers: string[]): DnsResult<string[]>;
+  lookup(hostname: string, options: DnsLookupOptions): DnsResult<DnsLookupAddress[]>;
+  lookupService(address: string, port: number): DnsResult<DnsLookupServiceResult>;
+  resolve4(
+    hostname: string,
+    ttl: boolean,
+    resolver?: DnsResolverConfig,
+  ): DnsResult<DnsAddressWithTtl[]>;
+  resolve6(
+    hostname: string,
+    ttl: boolean,
+    resolver?: DnsResolverConfig,
+  ): DnsResult<DnsAddressWithTtl[]>;
+  resolveAny(hostname: string, resolver?: DnsResolverConfig): DnsResult<DnsAnyRecord[]>;
+  resolveCaa(hostname: string, resolver?: DnsResolverConfig): DnsResult<CaaRecord[]>;
+  resolveCname(hostname: string, resolver?: DnsResolverConfig): DnsResult<string[]>;
+  resolveMx(hostname: string, resolver?: DnsResolverConfig): DnsResult<MxRecord[]>;
+  resolveNaptr(hostname: string, resolver?: DnsResolverConfig): DnsResult<NaptrRecord[]>;
+  resolveNs(hostname: string, resolver?: DnsResolverConfig): DnsResult<string[]>;
+  resolvePtr(hostname: string, resolver?: DnsResolverConfig): DnsResult<string[]>;
+  resolveSoa(hostname: string, resolver?: DnsResolverConfig): DnsResult<SoaRecord>;
+  resolveSrv(hostname: string, resolver?: DnsResolverConfig): DnsResult<SrvRecord[]>;
+  resolveTlsa(hostname: string, resolver?: DnsResolverConfig): DnsResult<DnsTlsaRecord[]>;
+  resolveTxt(hostname: string, resolver?: DnsResolverConfig): DnsResult<string[][]>;
+  reverse(ip: string, resolver?: DnsResolverConfig): DnsResult<string[]>;
+}
 
 export interface DnsError extends Error {
   code?: string;

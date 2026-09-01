@@ -1,3 +1,20 @@
 declare module "jco:node/dns@0.1.0" {
-  export function query(request: string): string;
+  export const getServers: import("./dns/types.js").DnsHost["getServers"];
+  export const validateServers: import("./dns/types.js").DnsHost["validateServers"];
+  export const lookup: import("./dns/types.js").DnsHost["lookup"];
+  export const lookupService: import("./dns/types.js").DnsHost["lookupService"];
+  export const resolve4: import("./dns/types.js").DnsHost["resolve4"];
+  export const resolve6: import("./dns/types.js").DnsHost["resolve6"];
+  export const resolveAny: import("./dns/types.js").DnsHost["resolveAny"];
+  export const resolveCaa: import("./dns/types.js").DnsHost["resolveCaa"];
+  export const resolveCname: import("./dns/types.js").DnsHost["resolveCname"];
+  export const resolveMx: import("./dns/types.js").DnsHost["resolveMx"];
+  export const resolveNaptr: import("./dns/types.js").DnsHost["resolveNaptr"];
+  export const resolveNs: import("./dns/types.js").DnsHost["resolveNs"];
+  export const resolvePtr: import("./dns/types.js").DnsHost["resolvePtr"];
+  export const resolveSoa: import("./dns/types.js").DnsHost["resolveSoa"];
+  export const resolveSrv: import("./dns/types.js").DnsHost["resolveSrv"];
+  export const resolveTlsa: import("./dns/types.js").DnsHost["resolveTlsa"];
+  export const resolveTxt: import("./dns/types.js").DnsHost["resolveTxt"];
+  export const reverse: import("./dns/types.js").DnsHost["reverse"];
 }

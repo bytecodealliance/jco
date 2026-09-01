@@ -1,119 +1,320 @@
-import { Buffer } from "node:buffer";
 import dns from "node:dns";
 import dnsPromises from "node:dns/promises";
 
-import type { DnsErrorData, DnsRequest, DnsResponse } from "./dns/types.js";
+import type {
+  CaaRecord,
+  DnsAddressWithTtl,
+  DnsAnyRecord,
+  DnsErrorData,
+  DnsHost,
+  DnsHostFamily,
+  DnsHostResultOrder,
+  DnsLookupAddress,
+  DnsLookupOptions,
+  DnsResolverConfig,
+  DnsResult,
+  DnsTlsaRecord,
+  MxRecord,
+  NaptrRecord,
+  SoaRecord,
+  SrvRecord,
+} from "./dns/types.js";
 
-const ALLOWED_OPERATIONS = new Set([
-  "lookup",
-  "lookupService",
-  "resolve4",
-  "resolve6",
-  "resolveAny",
-  "resolveCaa",
-  "resolveCname",
-  "resolveMx",
-  "resolveNaptr",
-  "resolveNs",
-  "resolvePtr",
-  "resolveSoa",
-  "resolveSrv",
-  "resolveTlsa",
-  "resolveTxt",
-  "reverse",
-]);
-
-type DnsOperation = (...args: never[]) => Promise<unknown>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+type AsyncResult<T> = Promise<DnsResult<T>>;
+type ResolverTarget = typeof dnsPromises | dnsPromises.Resolver;
 
 function serializeError(error: unknown): DnsErrorData {
-  if (!isRecord(error)) {
-    return { name: "Error", message: String(error) };
-  }
+  const value =
+    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
+  const errno =
+    typeof value.errno === "number"
+      ? { tag: "number" as const, val: BigInt(value.errno) }
+      : typeof value.errno === "string"
+        ? { tag: "symbolic" as const, val: value.errno }
+        : undefined;
   return {
-    name: typeof error.name === "string" ? error.name : "Error",
-    message: typeof error.message === "string" ? error.message : String(error),
-    code: typeof error.code === "string" ? error.code : undefined,
-    errno:
-      typeof error.errno === "string" || typeof error.errno === "number" ? error.errno : undefined,
-    syscall: typeof error.syscall === "string" ? error.syscall : undefined,
-    hostname: typeof error.hostname === "string" ? error.hostname : undefined,
+    name: typeof value.name === "string" ? value.name : "Error",
+    message: typeof value.message === "string" ? value.message : String(error),
+    code: typeof value.code === "string" ? value.code : undefined,
+    errno,
+    syscall: typeof value.syscall === "string" ? value.syscall : undefined,
+    hostname: typeof value.hostname === "string" ? value.hostname : undefined,
   };
 }
 
-function replacer(_key: string, value: unknown): unknown {
-  return value instanceof ArrayBuffer
-    ? { __jcoDnsArrayBuffer: Buffer.from(value).toString("base64") }
-    : value;
+function capture<T>(operation: () => T): DnsResult<T> {
+  try {
+    return { tag: "ok", val: operation() };
+  } catch (error) {
+    return { tag: "err", val: serializeError(error) };
+  }
 }
 
-function unsupported(operation: string): Error {
-  return Object.assign(new Error(`Unsupported DNS operation: ${operation}`), {
-    code: "ERR_JCO_UNSUPPORTED_NODE_API",
+async function captureAsync<T>(operation: () => Promise<T>): AsyncResult<T> {
+  try {
+    return { tag: "ok", val: await operation() };
+  } catch (error) {
+    return { tag: "err", val: serializeError(error) };
+  }
+}
+
+function target(configuration?: DnsResolverConfig): ResolverTarget {
+  if (!configuration) {
+    return dnsPromises;
+  }
+  const resolver = new dnsPromises.Resolver(configuration.options);
+  if (configuration.servers) {
+    resolver.setServers(configuration.servers);
+  }
+  if (configuration.localAddress) {
+    resolver.setLocalAddress(...configuration.localAddress);
+  }
+  return resolver;
+}
+
+function family(value: DnsHostFamily): 0 | 4 | 6 {
+  return value === "ipv4" ? 4 : value === "ipv6" ? 6 : 0;
+}
+
+function hostFamily(value: number): DnsHostFamily {
+  return value === 4 ? "ipv4" : value === 6 ? "ipv6" : "unspecified";
+}
+
+function order(value: DnsHostResultOrder): "ipv4first" | "ipv6first" | "verbatim" {
+  return value === "ipv4-first" ? "ipv4first" : value === "ipv6-first" ? "ipv6first" : value;
+}
+
+function hints(value: number): number {
+  let result = 0;
+  if (value & 32) {
+    result |= dns.ADDRCONFIG;
+  }
+  if (value & 16) {
+    result |= dns.ALL;
+  }
+  if (value & 8) {
+    result |= dns.V4MAPPED;
+  }
+  return result;
+}
+
+function tlsa(value: {
+  certUsage: number;
+  selector: number;
+  match: number;
+  data: ArrayBuffer;
+}): DnsTlsaRecord {
+  return {
+    certUsage: value.certUsage,
+    selector: value.selector,
+    match: value.match,
+    data: new Uint8Array(value.data),
+  };
+}
+
+function anyRecord(
+  value: Awaited<ReturnType<dnsPromises.Resolver["resolveAny"]>>[number],
+): DnsAnyRecord {
+  switch (value.type) {
+    case "A":
+      return { tag: "a", val: { address: value.address, ttl: value.ttl } };
+    case "AAAA":
+      return { tag: "aaaa", val: { address: value.address, ttl: value.ttl } };
+    case "CAA":
+      return { tag: "caa", val: value };
+    case "CNAME":
+      return { tag: "cname", val: value.value };
+    case "MX":
+      return { tag: "mx", val: value };
+    case "NAPTR":
+      return { tag: "naptr", val: value };
+    case "NS":
+      return { tag: "ns", val: value.value };
+    case "PTR":
+      return { tag: "ptr", val: value.value };
+    case "SOA":
+      return { tag: "soa", val: value };
+    case "SRV":
+      return { tag: "srv", val: value };
+    case "TLSA":
+      return { tag: "tlsa", val: tlsa(value) };
+    case "TXT":
+      return { tag: "txt", val: value.entries };
+  }
+}
+
+/** Read the process-wide DNS server list without performing a network query. */
+export const getServers: DnsHost["getServers"] = () => capture(() => dns.getServers());
+
+/** Validate a server list with Node's Resolver parser without mutating global state. */
+export const validateServers: DnsHost["validateServers"] = (servers) =>
+  capture(() => {
+    const resolver = new dns.Resolver();
+    resolver.setServers(servers);
+    return resolver.getServers();
+  });
+
+export async function lookup(
+  hostname: string,
+  options: DnsLookupOptions,
+): AsyncResult<DnsLookupAddress[]> {
+  return captureAsync(async () => {
+    const result = await dnsPromises.lookup(hostname, {
+      family: family(options.family),
+      hints: hints(options.hints),
+      all: options.all,
+      order: order(options.order),
+    });
+    const addresses = Array.isArray(result) ? result : [result];
+    return addresses.map((address) => ({
+      address: address.address,
+      family: hostFamily(address.family),
+    }));
   });
 }
 
-/**
- * Opt-in provider that delegates to Node's real `node:dns` implementation.
- * Jco lowers this promise-returning host function as a synchronous Preview 2
- * WIT import with JSPI, so Node's event loop remains free while DNS completes.
- */
-export async function query(requestJson: string): Promise<string> {
-  let response: DnsResponse;
-  try {
-    const request = JSON.parse(requestJson) as DnsRequest;
-    if (request.operation === "getServers") {
-      response = { ok: true, value: dns.getServers() };
-    } else if (request.operation === "validateServers") {
-      const resolver = new dns.Resolver();
-      resolver.setServers(request.args[0] as string[]);
-      response = { ok: true, value: resolver.getServers() };
-    } else {
-      if (!ALLOWED_OPERATIONS.has(request.operation)) {
-        throw unsupported(request.operation);
-      }
-      let target: object = dnsPromises;
-      if (request.resolver) {
-        const resolver = new dnsPromises.Resolver(request.resolver.options);
-        if (request.resolver.servers) {
-          resolver.setServers(request.resolver.servers);
-        }
-        if (request.resolver.localAddress) {
-          resolver.setLocalAddress(...request.resolver.localAddress);
-        }
-        target = resolver;
-      }
-      if (request.operation === "lookup" && isRecord(request.args[1])) {
-        const options = request.args[1];
-        const guestHints = typeof options.hints === "number" ? options.hints : 0;
-        let hints = 0;
-        if (guestHints & 32) {
-          hints |= dns.ADDRCONFIG;
-        }
-        if (guestHints & 16) {
-          hints |= dns.ALL;
-        }
-        if (guestHints & 8) {
-          hints |= dns.V4MAPPED;
-        }
-        request.args[1] = { ...options, hints };
-      }
-      const operation = (target as Record<string, unknown>)[request.operation];
-      if (typeof operation !== "function") {
-        throw unsupported(request.operation);
-      }
-      response = {
-        ok: true,
-        value: await (operation as DnsOperation).apply(target, request.args as never[]),
-      };
-    }
-  } catch (error) {
-    response = { ok: false, error: serializeError(error) };
-  }
-  return JSON.stringify(response, replacer);
+export async function lookupService(
+  address: string,
+  port: number,
+): AsyncResult<{ hostname: string; service: string }> {
+  return captureAsync(() => dnsPromises.lookupService(address, port));
 }
 
-export default { query };
+async function resolveAddressRecords(
+  recordFamily: "resolve4" | "resolve6",
+  hostname: string,
+  ttl: boolean,
+  configuration?: DnsResolverConfig,
+): AsyncResult<DnsAddressWithTtl[]> {
+  return captureAsync(async () => {
+    const records = await target(configuration)[recordFamily](hostname, { ttl });
+    return records.map((record) =>
+      typeof record === "string" ? { address: record, ttl: 0 } : record,
+    );
+  });
+}
+
+export function resolve4(
+  hostname: string,
+  ttl: boolean,
+  configuration?: DnsResolverConfig,
+): AsyncResult<DnsAddressWithTtl[]> {
+  return resolveAddressRecords("resolve4", hostname, ttl, configuration);
+}
+
+export function resolve6(
+  hostname: string,
+  ttl: boolean,
+  configuration?: DnsResolverConfig,
+): AsyncResult<DnsAddressWithTtl[]> {
+  return resolveAddressRecords("resolve6", hostname, ttl, configuration);
+}
+
+export async function resolveAny(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<DnsAnyRecord[]> {
+  return captureAsync(async () =>
+    (await target(configuration).resolveAny(hostname)).map(anyRecord),
+  );
+}
+
+export async function resolveCaa(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<CaaRecord[]> {
+  return captureAsync(() => target(configuration).resolveCaa(hostname));
+}
+
+export async function resolveCname(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<string[]> {
+  return captureAsync(() => target(configuration).resolveCname(hostname));
+}
+
+export async function resolveMx(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<MxRecord[]> {
+  return captureAsync(() => target(configuration).resolveMx(hostname));
+}
+
+export async function resolveNaptr(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<NaptrRecord[]> {
+  return captureAsync(() => target(configuration).resolveNaptr(hostname));
+}
+
+export async function resolveNs(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<string[]> {
+  return captureAsync(() => target(configuration).resolveNs(hostname));
+}
+
+export async function resolvePtr(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<string[]> {
+  return captureAsync(() => target(configuration).resolvePtr(hostname));
+}
+
+export async function resolveSoa(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<SoaRecord> {
+  return captureAsync(() => target(configuration).resolveSoa(hostname));
+}
+
+export async function resolveSrv(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<SrvRecord[]> {
+  return captureAsync(() => target(configuration).resolveSrv(hostname));
+}
+
+export async function resolveTlsa(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<DnsTlsaRecord[]> {
+  return captureAsync(async () => (await target(configuration).resolveTlsa(hostname)).map(tlsa));
+}
+
+export async function resolveTxt(
+  hostname: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<string[][]> {
+  return captureAsync(() => target(configuration).resolveTxt(hostname));
+}
+
+export async function reverse(
+  ip: string,
+  configuration?: DnsResolverConfig,
+): AsyncResult<string[]> {
+  return captureAsync(() => target(configuration).reverse(ip));
+}
+
+const host = {
+  getServers,
+  validateServers,
+  lookup,
+  lookupService,
+  resolve4,
+  resolve6,
+  resolveAny,
+  resolveCaa,
+  resolveCname,
+  resolveMx,
+  resolveNaptr,
+  resolveNs,
+  resolvePtr,
+  resolveSoa,
+  resolveSrv,
+  resolveTlsa,
+  resolveTxt,
+  reverse,
+};
+
+export default host;

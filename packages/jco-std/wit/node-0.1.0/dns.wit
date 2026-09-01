@@ -1,7 +1,145 @@
 package jco:node@0.1.0;
 
-/// Runtime-neutral DNS request boundary. Requests and responses are validated
-/// JSON envelopes because DNS record payloads form a large evolving tagged union.
+/// Typed, runtime-neutral host boundary for Node-compatible DNS operations.
 interface dns {
-  query: func(request: string) -> string;
+  enum family {
+    unspecified,
+    ipv4,
+    ipv6,
+  }
+
+  enum result-order {
+    ipv4-first,
+    ipv6-first,
+    verbatim,
+  }
+
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    hostname: option<string>,
+  }
+
+  record resolver-options {
+    timeout: option<s32>,
+    tries: option<u32>,
+    max-timeout: option<u32>,
+  }
+
+  record resolver-config {
+    options: resolver-options,
+    servers: option<list<string>>,
+    local-address: option<tuple<string, string>>,
+  }
+
+  record lookup-options {
+    family: family,
+    hints: u32,
+    all: bool,
+    order: result-order,
+  }
+
+  record lookup-address {
+    address: string,
+    family: family,
+  }
+
+  record lookup-service-result {
+    hostname: string,
+    service: string,
+  }
+
+  record address-with-ttl {
+    address: string,
+    ttl: u32,
+  }
+
+  record caa-record {
+    critical: u32,
+    issue: option<string>,
+    issuewild: option<string>,
+    iodef: option<string>,
+    contactemail: option<string>,
+    contactphone: option<string>,
+  }
+
+  record mx-record {
+    priority: u32,
+    exchange: string,
+  }
+
+  record naptr-record {
+    %flags: string,
+    service: string,
+    regexp: string,
+    replacement: string,
+    order: u32,
+    preference: u32,
+  }
+
+  record soa-record {
+    nsname: string,
+    hostmaster: string,
+    serial: u32,
+    refresh: u32,
+    retry: u32,
+    expire: u32,
+    minttl: u32,
+  }
+
+  record srv-record {
+    priority: u32,
+    weight: u32,
+    port: u16,
+    name: string,
+  }
+
+  record tlsa-record {
+    cert-usage: u8,
+    selector: u8,
+    match: u8,
+    data: list<u8>,
+  }
+
+  variant any-record {
+    a(address-with-ttl),
+    aaaa(address-with-ttl),
+    caa(caa-record),
+    cname(string),
+    mx(mx-record),
+    naptr(naptr-record),
+    ns(string),
+    ptr(string),
+    soa(soa-record),
+    srv(srv-record),
+    tlsa(tlsa-record),
+    txt(list<string>),
+  }
+
+  get-servers: func() -> result<list<string>, error>;
+  validate-servers: func(servers: list<string>) -> result<list<string>, error>;
+  lookup: func(hostname: string, options: lookup-options) -> result<list<lookup-address>, error>;
+  lookup-service: func(address: string, port: u16) -> result<lookup-service-result, error>;
+  resolve4: func(hostname: string, ttl: bool, resolver: option<resolver-config>) -> result<list<address-with-ttl>, error>;
+  resolve6: func(hostname: string, ttl: bool, resolver: option<resolver-config>) -> result<list<address-with-ttl>, error>;
+  resolve-any: func(hostname: string, resolver: option<resolver-config>) -> result<list<any-record>, error>;
+  resolve-caa: func(hostname: string, resolver: option<resolver-config>) -> result<list<caa-record>, error>;
+  resolve-cname: func(hostname: string, resolver: option<resolver-config>) -> result<list<string>, error>;
+  resolve-mx: func(hostname: string, resolver: option<resolver-config>) -> result<list<mx-record>, error>;
+  resolve-naptr: func(hostname: string, resolver: option<resolver-config>) -> result<list<naptr-record>, error>;
+  resolve-ns: func(hostname: string, resolver: option<resolver-config>) -> result<list<string>, error>;
+  resolve-ptr: func(hostname: string, resolver: option<resolver-config>) -> result<list<string>, error>;
+  resolve-soa: func(hostname: string, resolver: option<resolver-config>) -> result<soa-record, error>;
+  resolve-srv: func(hostname: string, resolver: option<resolver-config>) -> result<list<srv-record>, error>;
+  resolve-tlsa: func(hostname: string, resolver: option<resolver-config>) -> result<list<tlsa-record>, error>;
+  resolve-txt: func(hostname: string, resolver: option<resolver-config>) -> result<list<list<string>>, error>;
+  reverse: func(ip: string, resolver: option<resolver-config>) -> result<list<string>, error>;
 }
