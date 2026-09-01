@@ -2879,7 +2879,10 @@ impl AsyncTaskIntrinsic {
                         const subtask = callerTask.createSubtask({{
                            componentIdx: callerComponentIdx,
                            parentTask: callerTask,
-                           isAsync: !!calleeIsAsync,
+                           // This adapter is a synchronous lowering even when
+                           // the callee's component function is async. Its
+                           // bookkeeping subtask is never exposed to the guest.
+                           isAsync: false,
                         }});
 
                         const [newTask, newTaskID] = {create_new_current_task_fn}({{
