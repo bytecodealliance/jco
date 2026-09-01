@@ -1510,6 +1510,31 @@ mod tests {
     }
 
     #[test]
+    fn future_new_allocates_the_readable_end_first() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture));
+        let read = source.find("const readEnd = future.readEnd();").unwrap();
+        let write = source.find("const writeEnd = future.writeEnd();").unwrap();
+
+        assert!(read < write);
+    }
+
+    #[test]
+    fn future_operations_only_suspend_for_sync_canonical_calls() {
+        for op in [
+            AsyncFutureIntrinsic::FutureRead,
+            AsyncFutureIntrinsic::FutureWrite,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncFuture(op));
+
+            assert!(source.contains(&format!("function {}(", op.name())));
+            assert!(!source.contains(&format!("async function {}(", op.name())));
+            assert!(source.contains("if (isAsync) {"));
+            assert!(source.contains("return task.suspendUntil({"));
+        }
+    }
+
+    #[test]
     fn future_ends_track_own_and_peer_drop_state_separately() {
         let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::InternalFutureClass,
