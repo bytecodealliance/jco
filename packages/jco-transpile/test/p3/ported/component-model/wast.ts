@@ -40,7 +40,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/drop-waitable-set.wast', skip: false },
     { relPath: 'async/drop-stream.wast', skip: true },
     { relPath: 'async/async-calls-sync.wast', skip: true },
-    { relPath: 'async/drop-subtask.wast', skip: true },
+    { relPath: 'async/drop-subtask.wast', skip: false },
     { relPath: 'async/cancellable.wast', skip: true },
 ];
 
