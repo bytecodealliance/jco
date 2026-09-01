@@ -1,0 +1,920 @@
+/**
+ * Shared Node.js filesystem core.
+ *
+ * Public validation and overload behavior follows nodejs/node v24.19.0,
+ * commit cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/fs.js,
+ * lib/internal/fs/promises.js, and lib/internal/fs/utils.js (MIT license).
+ * Local changes route scalar operations through jco:node/fs, reconstruct
+ * public value objects guest-side, and reject resource/event APIs explicitly.
+ */
+import { Buffer } from "node:buffer";
+
+import {
+  AbortError,
+  deprecatedNodeApi,
+  invalidArgType,
+  invalidArgValue,
+  outOfRange,
+  systemError,
+  unsupportedNodeApi,
+} from "../errors/core.js";
+
+import { Dir, Dirent, Stats } from "./classes.js";
+import { parseResponse, serializeRequest } from "./protocol.js";
+import type {
+  AsyncDisposableTempDir,
+  BinaryData,
+  BufferEncoding,
+  CopyOptions,
+  DisposableTempDir,
+  FileData,
+  FlagOptions,
+  GlobOptions,
+  MakeDirectoryOptions,
+  Mode,
+  OpenDirOptions,
+  OpenMode,
+  PathLike,
+  ReadOptions,
+  ReadResult,
+  ReadVResult,
+  ReaddirOptions,
+  RemoveOptions,
+  StatOptions,
+  TimeLike,
+  WriteOptions,
+  WriteResult,
+  WriteVResult,
+} from "./public-types.js";
+import type { FsHost, FsWireStats } from "./types.js";
+
+type Numeric = number | bigint;
+type StringOrBytes = string | Uint8Array;
+
+interface HostReadResult {
+  bytesRead: number;
+  data: Uint8Array;
+}
+
+interface HostReadVResult {
+  bytesRead: number;
+  buffers: Uint8Array[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function path(value: PathLike, name = "path"): string | Uint8Array | URL {
+  if (typeof value === "string" || value instanceof Uint8Array) {
+    return value;
+  }
+  if (value instanceof URL) {
+    if (value.protocol !== "file:") {
+      throw invalidArgValue(name, value, "must use the file: scheme");
+    }
+    return value;
+  }
+  throw invalidArgType(name, ["string", "Buffer", "URL"], value);
+}
+
+function pathOrFd(value: PathLike | number, name = "path"): string | Uint8Array | URL | number {
+  if (typeof value === "number") {
+    return fd(value);
+  }
+  return path(value, name);
+}
+
+function fd(value: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > 0x7fff_ffff) {
+    throw outOfRange("fd", ">= 0 and <= 2147483647", value);
+  }
+  return value;
+}
+
+function position(value: number | bigint | null | undefined): number | bigint | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if ((typeof value !== "number" && typeof value !== "bigint") || value < 0) {
+    throw outOfRange("position", ">= 0", value);
+  }
+  return value;
+}
+
+function integer(value: unknown, name: string, minimum = 0): number {
+  if (!Number.isInteger(value) || (value as number) < minimum) {
+    throw outOfRange(name, `>= ${minimum}`, value);
+  }
+  return value as number;
+}
+
+function viewBytes(value: ArrayBufferView): Uint8Array {
+  return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function bytes(value: BinaryData, name = "buffer"): Uint8Array {
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return viewBytes(value);
+  }
+  throw invalidArgType(name, ["Buffer", "TypedArray", "DataView"], value);
+}
+
+function encodingFrom(
+  options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" | null } | null,
+): BufferEncoding | "buffer" | null {
+  if (typeof options === "string") {
+    return options;
+  }
+  if (options === undefined || options === null) {
+    return null;
+  }
+  if (typeof options !== "object") {
+    throw invalidArgType("options", ["string", "Object"], options);
+  }
+  return options.encoding ?? null;
+}
+
+function decodeData(value: unknown, encoding: BufferEncoding | "buffer" | null): StringOrBytes {
+  if (!(value instanceof Uint8Array)) {
+    throw new TypeError("invalid filesystem byte response");
+  }
+  const buffer = Buffer.from(value);
+  return encoding && encoding !== "buffer" ? buffer.toString(encoding) : buffer;
+}
+
+function encodeData(value: FileData, encoding: BufferEncoding = "utf8"): Uint8Array {
+  if (typeof value === "string") {
+    return Buffer.from(value, encoding);
+  }
+  return bytes(value, "data");
+}
+
+function optionsRecord(value: unknown, name = "options"): Record<string, unknown> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (typeof value !== "object") {
+    throw invalidArgType(name, "Object", value);
+  }
+  return { ...value };
+}
+
+function checkSignal(value: unknown): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!(value instanceof AbortSignal)) {
+    throw invalidArgType("options.signal", "AbortSignal", value);
+  }
+  if (value.aborted) {
+    throw new AbortError(undefined, { cause: value.reason });
+  }
+}
+
+function unsupported(api: string, reason: string): never {
+  throw unsupportedNodeApi(api, reason);
+}
+
+function stats(value: unknown): Stats<Numeric> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value) || value.__jcoNodeFs !== "stats") {
+    throw new TypeError("invalid filesystem stats response");
+  }
+  return new Stats(value as unknown as FsWireStats);
+}
+
+export class FileHandle implements AsyncDisposable {
+  readonly fd: number;
+  readonly #core: FsCore;
+  #closed = false;
+
+  constructor(core: FsCore, descriptor: number) {
+    this.#core = core;
+    this.fd = descriptor;
+  }
+
+  #open(): void {
+    if (this.#closed) {
+      const error = new Error("file closed") as Error & { code: string };
+      error.code = "EBADF";
+      throw error;
+    }
+  }
+
+  async appendFile(data: FileData, options?: BufferEncoding | FlagOptions | null): Promise<void> {
+    this.#open();
+    this.#core.appendFileSync(this.fd, data, options);
+  }
+
+  async chmod(mode: Mode): Promise<void> {
+    this.#open();
+    this.#core.fchmodSync(this.fd, mode);
+  }
+
+  async chown(uid: number, gid: number): Promise<void> {
+    this.#open();
+    this.#core.fchownSync(this.fd, uid, gid);
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) {
+      return;
+    }
+    this.#core.closeSync(this.fd);
+    this.#closed = true;
+  }
+
+  createReadStream(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.createReadStream",
+      "Node streams cannot cross the filesystem host boundary",
+    );
+  }
+
+  createWriteStream(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.createWriteStream",
+      "Node streams cannot cross the filesystem host boundary",
+    );
+  }
+
+  async datasync(): Promise<void> {
+    this.#open();
+    this.#core.fdatasyncSync(this.fd);
+  }
+
+  pull(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.pull",
+      "iterable stream transforms require Node stream resources",
+    );
+  }
+
+  pullSync(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.pullSync",
+      "iterable stream transforms require Node stream resources",
+    );
+  }
+
+  async read<T extends ArrayBufferView>(buffer: T, options?: ReadOptions): Promise<ReadResult<T>>;
+  async read<T extends ArrayBufferView>(
+    buffer: T,
+    offset?: number,
+    length?: number,
+    position?: number | bigint | null,
+  ): Promise<ReadResult<T>>;
+  async read<T extends ArrayBufferView>(
+    buffer: T,
+    offsetOrOptions: number | ReadOptions = 0,
+    length?: number,
+    readPosition?: number | bigint | null,
+  ): Promise<ReadResult<T>> {
+    this.#open();
+    const options =
+      typeof offsetOrOptions === "object"
+        ? offsetOrOptions
+        : { offset: offsetOrOptions, length, position: readPosition };
+    const bytesRead = this.#core.readSync(this.fd, buffer, options);
+    return { bytesRead, buffer };
+  }
+
+  readableWebStream(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.readableWebStream",
+      "Web streams require a resource-oriented host boundary",
+    );
+  }
+
+  async readFile(options?: BufferEncoding | FlagOptions | null): Promise<StringOrBytes> {
+    this.#open();
+    return this.#core.readFileSync(this.fd, options);
+  }
+
+  readLines(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.readLines",
+      "Node readline streams are not available in the component runtime",
+    );
+  }
+
+  async readv<T extends readonly ArrayBufferView[]>(
+    buffers: T,
+    readPosition?: number,
+  ): Promise<ReadVResult<T>> {
+    this.#open();
+    return { bytesRead: this.#core.readvSync(this.fd, buffers, readPosition), buffers };
+  }
+
+  async stat(options?: StatOptions): Promise<Stats<Numeric>> {
+    this.#open();
+    return this.#core.fstatSync(this.fd, options);
+  }
+
+  async sync(): Promise<void> {
+    this.#open();
+    this.#core.fsyncSync(this.fd);
+  }
+
+  async truncate(length = 0): Promise<void> {
+    this.#open();
+    this.#core.ftruncateSync(this.fd, length);
+  }
+
+  async utimes(atime: TimeLike, mtime: TimeLike): Promise<void> {
+    this.#open();
+    this.#core.futimesSync(this.fd, atime, mtime);
+  }
+
+  async write<T extends ArrayBufferView>(
+    buffer: T,
+    options?: WriteOptions,
+  ): Promise<WriteResult<T>>;
+  async write<T extends ArrayBufferView>(
+    buffer: T,
+    offset?: number,
+    length?: number,
+    position?: number | null,
+  ): Promise<WriteResult<T>>;
+  async write(
+    data: string,
+    position?: number | null,
+    encoding?: BufferEncoding,
+  ): Promise<WriteResult<Uint8Array>>;
+  async write<T extends ArrayBufferView>(
+    value: T | string,
+    offsetOrPosition: number | WriteOptions | null = 0,
+    lengthOrEncoding?: number | BufferEncoding,
+    writePosition?: number | null,
+  ): Promise<WriteResult<T | Uint8Array>> {
+    this.#open();
+    if (typeof value === "string") {
+      const buffer = Buffer.from(
+        value,
+        typeof lengthOrEncoding === "string" ? lengthOrEncoding : "utf8",
+      );
+      const bytesWritten = this.#core.writeSync(
+        this.fd,
+        buffer,
+        0,
+        buffer.byteLength,
+        typeof offsetOrPosition === "number" ? offsetOrPosition : null,
+      );
+      return { bytesWritten, buffer };
+    }
+    const options =
+      typeof offsetOrPosition === "object" && offsetOrPosition !== null
+        ? offsetOrPosition
+        : {
+            offset: typeof offsetOrPosition === "number" ? offsetOrPosition : 0,
+            length: typeof lengthOrEncoding === "number" ? lengthOrEncoding : undefined,
+            position: writePosition,
+          };
+    const bytesWritten = this.#core.writeSync(this.fd, value, options);
+    return { bytesWritten, buffer: value };
+  }
+
+  async writeFile(data: FileData, options?: BufferEncoding | FlagOptions | null): Promise<void> {
+    this.#open();
+    this.#core.writeFileSync(this.fd, data, options);
+  }
+
+  async writev<T extends readonly ArrayBufferView[]>(
+    buffers: T,
+    writePosition?: number,
+  ): Promise<WriteVResult<T>> {
+    this.#open();
+    return { bytesWritten: this.#core.writevSync(this.fd, buffers, writePosition), buffers };
+  }
+
+  writer(..._args: unknown[]): never {
+    return unsupported(
+      "filehandle.writer",
+      "iterable stream writers require Node stream resources",
+    );
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (!this.#closed) {
+      await this.close();
+    }
+  }
+}
+
+export class FsCore {
+  readonly #host: FsHost;
+
+  constructor(host: FsHost) {
+    this.#host = host;
+  }
+
+  call(operation: string, args: readonly unknown[]): unknown {
+    const response = parseResponse(this.#host.query(serializeRequest(operation, args)));
+    if (response.ok) {
+      return response.value;
+    }
+    const error = systemError({
+      message: response.error.message,
+      code: response.error.code ?? "UNKNOWN",
+      errno: response.error.errno,
+      syscall: response.error.syscall,
+      path: response.error.path,
+      dest: response.error.dest,
+    });
+    error.name = response.error.name;
+    throw error;
+  }
+
+  accessSync(value: PathLike, mode = 0): void {
+    this.call("access", [path(value), mode]);
+  }
+
+  appendFileSync(
+    file: PathLike | number,
+    data: FileData,
+    options?: BufferEncoding | FlagOptions | null,
+  ): void {
+    const opts = typeof options === "string" ? { encoding: options } : optionsRecord(options);
+    checkSignal(opts.signal);
+    const encoding =
+      typeof opts.encoding === "string" && opts.encoding !== "buffer"
+        ? (opts.encoding as BufferEncoding)
+        : "utf8";
+    this.call("appendFile", [
+      pathOrFd(file),
+      encodeData(data, encoding),
+      { ...opts, encoding: undefined, signal: undefined },
+    ]);
+  }
+
+  chmodSync(value: PathLike, mode: Mode): void {
+    this.call("chmod", [path(value), mode]);
+  }
+
+  chownSync(value: PathLike, uid: number, gid: number): void {
+    this.call("chown", [path(value), integer(uid, "uid"), integer(gid, "gid")]);
+  }
+
+  closeSync(descriptor: number): void {
+    this.call("close", [fd(descriptor)]);
+  }
+
+  copyFileSync(source: PathLike, destination: PathLike, mode = 0): void {
+    this.call("copyFile", [path(source, "src"), path(destination, "dest"), mode]);
+  }
+
+  cpSync(source: PathLike, destination: PathLike, options?: CopyOptions): void {
+    const opts = optionsRecord(options);
+    if (typeof opts.filter === "function") {
+      unsupported("fs.cp filter", "functions cannot cross the filesystem host boundary");
+    }
+    this.call("cp", [path(source, "src"), path(destination, "dest"), opts]);
+  }
+
+  existsSync(value: PathLike): boolean {
+    try {
+      return Boolean(this.call("exists", [path(value)]));
+    } catch (error) {
+      if (isRecord(error) && error.code === "ERR_JCO_FS_ADAPTER_REQUIRED") {
+        throw error;
+      }
+      return false;
+    }
+  }
+
+  fchmodSync(descriptor: number, mode: Mode): void {
+    this.call("fchmod", [fd(descriptor), mode]);
+  }
+
+  fchownSync(descriptor: number, uid: number, gid: number): void {
+    this.call("fchown", [fd(descriptor), integer(uid, "uid"), integer(gid, "gid")]);
+  }
+
+  fdatasyncSync(descriptor: number): void {
+    this.call("fdatasync", [fd(descriptor)]);
+  }
+
+  fstatSync(descriptor: number, options?: StatOptions): Stats<Numeric> {
+    const result = stats(this.call("fstat", [fd(descriptor), optionsRecord(options)]));
+    if (!result) {
+      throw new TypeError("missing filesystem stats response");
+    }
+    return result;
+  }
+
+  fsyncSync(descriptor: number): void {
+    this.call("fsync", [fd(descriptor)]);
+  }
+
+  ftruncateSync(descriptor: number, length = 0): void {
+    this.call("ftruncate", [fd(descriptor), integer(length, "len")]);
+  }
+
+  futimesSync(descriptor: number, atime: TimeLike, mtime: TimeLike): void {
+    this.call("futimes", [fd(descriptor), atime, mtime]);
+  }
+
+  globSync(
+    pattern: string | readonly string[],
+    options?: GlobOptions,
+  ): Array<string | Dirent<string | Uint8Array>> {
+    if (typeof pattern !== "string" && !Array.isArray(pattern)) {
+      throw invalidArgType("pattern", ["string", "Array"], pattern);
+    }
+    const opts = optionsRecord(options);
+    if (typeof opts.exclude === "function") {
+      unsupported("fs.glob exclude", "functions cannot cross the filesystem host boundary");
+    }
+    if (opts.cwd !== undefined) {
+      opts.cwd = path(opts.cwd as PathLike, "options.cwd");
+    }
+    const result = this.call("glob", [pattern, { ...opts, encoding: "utf8" }]);
+    if (!Array.isArray(result)) {
+      throw new TypeError("invalid filesystem glob response");
+    }
+    return result.map((entry) =>
+      isRecord(entry) && entry.__jcoNodeFs === "dirent" ? Dirent.fromWire(entry) : String(entry),
+    );
+  }
+
+  lchownSync(value: PathLike, uid: number, gid: number): void {
+    this.call("lchown", [path(value), integer(uid, "uid"), integer(gid, "gid")]);
+  }
+
+  linkSync(existingPath: PathLike, newPath: PathLike): void {
+    this.call("link", [path(existingPath, "existingPath"), path(newPath, "newPath")]);
+  }
+
+  lstatSync(value: PathLike, options?: StatOptions): Stats<Numeric> | undefined {
+    return stats(this.call("lstat", [path(value), optionsRecord(options)]));
+  }
+
+  lutimesSync(value: PathLike, atime: TimeLike, mtime: TimeLike): void {
+    this.call("lutimes", [path(value), atime, mtime]);
+  }
+
+  mkdirSync(value: PathLike, options?: Mode | MakeDirectoryOptions | null): string | undefined {
+    const opts =
+      typeof options === "string" || typeof options === "number"
+        ? { mode: options }
+        : optionsRecord(options);
+    const result = this.call("mkdir", [path(value), opts]);
+    return result === undefined ? undefined : String(result);
+  }
+
+  mkdtempSync(
+    prefix: string,
+    options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
+  ): StringOrBytes {
+    if (typeof prefix !== "string") {
+      throw invalidArgType("prefix", "string", prefix);
+    }
+    const encoding = encodingFrom(options);
+    const result = String(this.call("mkdtemp", [prefix, { encoding: "utf8" }]));
+    return encoding === "buffer" ? Buffer.from(result) : result;
+  }
+
+  mkdtempDisposableSync(
+    prefix: string,
+    options?: BufferEncoding | { encoding?: BufferEncoding } | null,
+  ): DisposableTempDir {
+    const value = this.mkdtempSync(prefix, options);
+    if (typeof value !== "string") {
+      throw new TypeError("temporary directory path must be a string");
+    }
+    const remove = () => this.rmSync(value, { recursive: true, force: true });
+    return { path: value, remove, [Symbol.dispose]: remove };
+  }
+
+  openSync(value: PathLike, flags: OpenMode = "r", mode: Mode = 0o666): number {
+    return Number(this.call("open", [path(value), flags, mode]));
+  }
+
+  opendirSync(value: PathLike, options?: OpenDirOptions): Dir {
+    const pathname = path(value);
+    if (typeof pathname !== "string") {
+      throw invalidArgType("path", "string", value);
+    }
+    const entries = this.readdirSync(pathname, {
+      ...options,
+      encoding: "utf8",
+      withFileTypes: true,
+    }) as Dirent[];
+    return new Dir(pathname, entries);
+  }
+
+  readFileSync(
+    file: PathLike | number,
+    options?: BufferEncoding | FlagOptions | null,
+  ): StringOrBytes {
+    const opts = typeof options === "string" ? { encoding: options } : optionsRecord(options);
+    checkSignal(opts.signal);
+    const encoding = encodingFrom(typeof options === "string" ? options : (opts as FlagOptions));
+    const result = this.call("readFile", [
+      pathOrFd(file),
+      { ...opts, encoding: null, signal: undefined },
+    ]);
+    return decodeData(result, encoding);
+  }
+
+  readdirSync(
+    value: PathLike,
+    options?: BufferEncoding | ReaddirOptions | null,
+  ): Array<StringOrBytes | Dirent<string | Uint8Array>> {
+    const opts = typeof options === "string" ? { encoding: options } : optionsRecord(options);
+    const encoding = encodingFrom(typeof options === "string" ? options : (opts as ReaddirOptions));
+    const result = this.call("readdir", [path(value), { ...opts, encoding: "utf8" }]);
+    if (!Array.isArray(result)) {
+      throw new TypeError("invalid filesystem readdir response");
+    }
+    return result.map((entry) => {
+      if (isRecord(entry) && entry.__jcoNodeFs === "dirent") {
+        const dirent = Dirent.fromWire(entry);
+        return encoding === "buffer"
+          ? new Dirent(
+              Buffer.from(String(dirent.name)),
+              dirent.parentPath,
+              dirent.isFile()
+                ? "file"
+                : dirent.isDirectory()
+                  ? "directory"
+                  : dirent.isSymbolicLink()
+                    ? "symlink"
+                    : "unknown",
+            )
+          : dirent;
+      }
+      const name = String(entry);
+      return encoding === "buffer" ? Buffer.from(name) : name;
+    });
+  }
+
+  readlinkSync(
+    value: PathLike,
+    options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
+  ): StringOrBytes {
+    const encoding = encodingFrom(options);
+    const result = String(this.call("readlink", [path(value), { encoding: "utf8" }]));
+    return encoding === "buffer" ? Buffer.from(result) : result;
+  }
+
+  realpathSync(
+    value: PathLike,
+    options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
+  ): StringOrBytes {
+    const encoding = encodingFrom(options);
+    const result = String(this.call("realpath", [path(value), { encoding: "utf8" }]));
+    return encoding === "buffer" ? Buffer.from(result) : result;
+  }
+
+  renameSync(oldPath: PathLike, newPath: PathLike): void {
+    this.call("rename", [path(oldPath, "oldPath"), path(newPath, "newPath")]);
+  }
+
+  rmSync(value: PathLike, options?: RemoveOptions): void {
+    this.call("rm", [path(value), optionsRecord(options)]);
+  }
+
+  rmdirSync(value: PathLike, options?: RemoveOptions): void {
+    const opts = optionsRecord(options);
+    if (opts.recursive) {
+      throw deprecatedNodeApi(
+        "fs.rmdir(path, { recursive: true })",
+        "fs.rm(path, { recursive: true })",
+      );
+    }
+    this.call("rmdir", [path(value), opts]);
+  }
+
+  statSync(value: PathLike, options?: StatOptions): Stats<Numeric> | undefined {
+    return stats(this.call("stat", [path(value), optionsRecord(options)]));
+  }
+
+  statfsSync(value: PathLike, options?: { bigint?: boolean }): Record<string, Numeric> {
+    const result = this.call("statfs", [path(value), optionsRecord(options)]);
+    if (!isRecord(result)) {
+      throw new TypeError("invalid filesystem statfs response");
+    }
+    return result as Record<string, Numeric>;
+  }
+
+  symlinkSync(target: PathLike, value: PathLike, type?: "dir" | "file" | "junction" | null): void {
+    this.call("symlink", [path(target, "target"), path(value), type]);
+  }
+
+  truncateSync(value: PathLike, length = 0): void {
+    this.call("truncate", [path(value), integer(length, "len")]);
+  }
+
+  unlinkSync(value: PathLike): void {
+    this.call("unlink", [path(value)]);
+  }
+
+  utimesSync(value: PathLike, atime: TimeLike, mtime: TimeLike): void {
+    this.call("utimes", [path(value), atime, mtime]);
+  }
+
+  writeFileSync(
+    file: PathLike | number,
+    data: FileData,
+    options?: BufferEncoding | FlagOptions | null,
+  ): void {
+    const opts = typeof options === "string" ? { encoding: options } : optionsRecord(options);
+    checkSignal(opts.signal);
+    const encoding =
+      typeof opts.encoding === "string" && opts.encoding !== "buffer"
+        ? (opts.encoding as BufferEncoding)
+        : "utf8";
+    this.call("writeFile", [
+      pathOrFd(file),
+      encodeData(data, encoding),
+      { ...opts, encoding: undefined, signal: undefined },
+    ]);
+  }
+
+  readSync(descriptor: number, buffer: ArrayBufferView, options?: ReadOptions): number;
+  readSync(
+    descriptor: number,
+    buffer: ArrayBufferView,
+    offset?: number,
+    length?: number,
+    readPosition?: number | bigint | null,
+  ): number;
+  readSync(
+    descriptor: number,
+    buffer: ArrayBufferView,
+    offsetOrOptions: number | ReadOptions = 0,
+    length?: number,
+    readPosition?: number | bigint | null,
+  ): number {
+    const target = bytes(buffer);
+    const opts =
+      typeof offsetOrOptions === "object"
+        ? offsetOrOptions
+        : { offset: offsetOrOptions, length, position: readPosition };
+    const offset = integer(opts.offset ?? 0, "offset");
+    const count = integer(opts.length ?? target.byteLength - offset, "length");
+    if (offset + count > target.byteLength) {
+      throw outOfRange("length", `<= ${target.byteLength - offset}`, count);
+    }
+    const result = this.call("read", [
+      fd(descriptor),
+      count,
+      position(opts.position),
+    ]) as HostReadResult;
+    if (
+      !isRecord(result) ||
+      !(result.data instanceof Uint8Array) ||
+      typeof result.bytesRead !== "number"
+    ) {
+      throw new TypeError("invalid filesystem read response");
+    }
+    target.set(result.data, offset);
+    return result.bytesRead;
+  }
+
+  writeSync(descriptor: number, buffer: ArrayBufferView, options?: WriteOptions): number;
+  writeSync(
+    descriptor: number,
+    buffer: ArrayBufferView,
+    offset?: number,
+    length?: number,
+    writePosition?: number | null,
+  ): number;
+  writeSync(
+    descriptor: number,
+    value: string,
+    writePosition?: number | null,
+    encoding?: BufferEncoding,
+  ): number;
+  writeSync(
+    descriptor: number,
+    value: ArrayBufferView | string,
+    offsetOrOptions: number | WriteOptions | null = 0,
+    lengthOrEncoding?: number | BufferEncoding,
+    writePosition?: number | null,
+  ): number {
+    if (typeof value === "string") {
+      const data = Buffer.from(
+        value,
+        typeof lengthOrEncoding === "string" ? lengthOrEncoding : "utf8",
+      );
+      return Number(
+        this.call("write", [
+          fd(descriptor),
+          data,
+          position(typeof offsetOrOptions === "number" ? offsetOrOptions : null),
+        ]),
+      );
+    }
+    const source = bytes(value);
+    const opts =
+      typeof offsetOrOptions === "object" && offsetOrOptions !== null
+        ? offsetOrOptions
+        : {
+            offset: typeof offsetOrOptions === "number" ? offsetOrOptions : 0,
+            length: typeof lengthOrEncoding === "number" ? lengthOrEncoding : undefined,
+            position: writePosition,
+          };
+    const offset = integer(opts.offset ?? 0, "offset");
+    const count = integer(opts.length ?? source.byteLength - offset, "length");
+    if (offset + count > source.byteLength) {
+      throw outOfRange("length", `<= ${source.byteLength - offset}`, count);
+    }
+    return Number(
+      this.call("write", [
+        fd(descriptor),
+        source.subarray(offset, offset + count),
+        position(opts.position),
+      ]),
+    );
+  }
+
+  readvSync(
+    descriptor: number,
+    buffers: readonly ArrayBufferView[],
+    readPosition?: number,
+  ): number {
+    if (!Array.isArray(buffers)) {
+      throw invalidArgType("buffers", "Array", buffers);
+    }
+    const targets = buffers.map((buffer) => bytes(buffer));
+    const result = this.call("readv", [
+      fd(descriptor),
+      targets.map((buffer) => buffer.byteLength),
+      position(readPosition),
+    ]) as HostReadVResult;
+    if (
+      !isRecord(result) ||
+      !Array.isArray(result.buffers) ||
+      typeof result.bytesRead !== "number"
+    ) {
+      throw new TypeError("invalid filesystem readv response");
+    }
+    result.buffers.forEach((buffer, index) => targets[index]?.set(buffer));
+    return result.bytesRead;
+  }
+
+  writevSync(
+    descriptor: number,
+    buffers: readonly ArrayBufferView[],
+    writePosition?: number,
+  ): number {
+    if (!Array.isArray(buffers)) {
+      throw invalidArgType("buffers", "Array", buffers);
+    }
+    return Number(
+      this.call("writev", [
+        fd(descriptor),
+        buffers.map((buffer) => bytes(buffer)),
+        position(writePosition),
+      ]),
+    );
+  }
+
+  async open(value: PathLike, flags: OpenMode = "r", mode: Mode = 0o666): Promise<FileHandle> {
+    return new FileHandle(this, this.openSync(value, flags, mode));
+  }
+
+  async mkdtempDisposable(
+    prefix: string,
+    options?: BufferEncoding | { encoding?: BufferEncoding } | null,
+  ): Promise<AsyncDisposableTempDir> {
+    const disposable = this.mkdtempDisposableSync(prefix, options);
+    const remove = async () => disposable.remove();
+    return { path: disposable.path, remove, [Symbol.asyncDispose]: remove };
+  }
+}
+
+export function createFsCore(host: FsHost): FsCore {
+  return new FsCore(host);
+}
+
+export function toUnixTimestamp(value: TimeLike): number {
+  if (value instanceof Date) {
+    return value.getTime() / 1000;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    value = Number(value);
+  }
+  if (typeof value !== "number") {
+    throw invalidArgType("time", ["number", "string", "Date"], value);
+  }
+  if (Number.isNaN(value) || value < 0) {
+    throw invalidArgValue("time", value);
+  }
+  return value;
+}
+
+export function unsupportedFsApi(api: string): never {
+  return unsupported(
+    api,
+    "the initial filesystem WIT protocol does not model event or stream resources",
+  );
+}
