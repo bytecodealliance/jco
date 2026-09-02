@@ -785,6 +785,14 @@ impl AsyncStreamIntrinsic {
                         const processFn = (result, reclaimBufferFn, rejectedLength) => {{
                             if (reclaimBufferFn) {{ reclaimBufferFn(); }}
 
+                            // Copy events are materialized lazily. Cancellation may begin
+                            // after progress queued a COMPLETED event but before the guest
+                            // consumed it; preserve the count and report the cancellation.
+                            if (result === {stream_end_class}.CopyResult.COMPLETED
+                                && streamEnd.getCopyState() === {stream_end_class}.CopyState.CANCELLING_COPY) {{
+                                result = {stream_end_class}.CopyResult.CANCELLED;
+                            }}
+
                             if (result === {stream_end_class}.CopyResult.DROPPED) {{
                                 streamEnd.setCopyState({stream_end_class}.CopyState.DONE);
                             }} else {{
@@ -1603,10 +1611,7 @@ impl AsyncStreamIntrinsic {
                                 // cancelling the next operation or starting a duplicate write.
                                 if (this.hasPendingEvent()) {{ return; }}
                                 if (this.#hostCancelFn?.()) {{ return; }}
-                                const result = this.#pendingBufferMeta?.buffer?.processed > 0
-                                    ? {stream_end_class}.CopyResult.COMPLETED
-                                    : {stream_end_class}.CopyResult.CANCELLED;
-                                this.resetAndNotifyPending(result);
+                                this.resetAndNotifyPending({stream_end_class}.CopyResult.CANCELLED);
                             }};
                             if (this.#hostInjectFn) {{
                                 setTimeout(completeCancel, 0);
