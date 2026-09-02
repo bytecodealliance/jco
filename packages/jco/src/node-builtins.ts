@@ -14,6 +14,7 @@ import {
     HTTP_WASI_HTTP_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
     HTTP_WIT_REQUIREMENT,
+    HTTP2_WIT_REQUIREMENT,
     INSPECTOR_PROMISES_WIT_REQUIREMENT,
     INSPECTOR_WIT_REQUIREMENT,
     OS_WIT_REQUIREMENT,
@@ -55,10 +56,13 @@ const STREAM_ITER_SPECIFIER = "node:stream/iter";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const HTTP_SPECIFIER = "node:http";
 export const HTTP_CALLBACKS_SPECIFIER = "jco:node-http-callbacks";
+const HTTP2_SPECIFIER = "node:http2";
+export const HTTP2_CALLBACKS_SPECIFIER = "jco:node-http2-callbacks";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
 const HTTP_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http-callbacks`;
+const HTTP2_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http2-callbacks`;
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
 const ERROR_GLOBALS_SPECIFIER = "jco:node-error-globals";
 const ERROR_GLOBALS_MODULE = `${VIRTUAL_PREFIX}error-globals`;
@@ -289,6 +293,13 @@ export interface NodeBuiltinOptions {
     httpCoreModule?: string;
     httpWasiSocketsImplementationModule?: string;
     httpWasiHttpImplementationModule?: string;
+    /** Implementation used for `node:http2` host operations. */
+    nodejsHttp2Via?: NodejsHttp2Via;
+    /** Paths to jco-std's HTTP/2 modules (overridable for tests). */
+    http2Module?: string;
+    http2CoreModule?: string;
+    http2WasiSocketsImplementationModule?: string;
+    http2WasiHttpImplementationModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -296,6 +307,7 @@ export interface NodeBuiltinOptions {
 }
 
 export type NodejsHttpVia = "direct" | "wasi-sockets" | "wasi-http";
+export type NodejsHttp2Via = NodejsHttpVia;
 
 /**
  * Source of the `node:module` adapter.
@@ -714,6 +726,54 @@ ${httpExports("createHttp(createWasiHttpImplementation({ outgoingHandler, types 
 `;
 }
 
+const HTTP2_EXPORTS = [
+    "Http2ServerRequest",
+    "Http2ServerResponse",
+    "connect",
+    "constants",
+    "createSecureServer",
+    "createServer",
+    "getDefaultSettings",
+    "getPackedSettings",
+    "getUnpackedSettings",
+    "performServerHandshake",
+    "sensitiveHeaders",
+] as const;
+
+function http2Exports(moduleExpression: string): string {
+    return `
+const http2 = ${moduleExpression};
+export default http2;
+export const { ${HTTP2_EXPORTS.join(", ")} } = http2;
+`;
+}
+
+function http2DirectAdapter(http2Module: string): string {
+    return `
+import directHttp2 from ${JSON.stringify(http2Module)};
+${http2Exports("directHttp2")}
+`;
+}
+
+/** Source for the guest-exported HTTP/2 callback interface used by the component entry wrapper. */
+function http2CallbacksAdapter(http2Module: string): string {
+    return `export { http2Callbacks } from ${JSON.stringify(http2Module)};`;
+}
+
+function http2PortableAdapter(
+    coreModule: string,
+    implementationModule: string,
+    via: Exclude<NodejsHttp2Via, "direct">,
+): string {
+    const factory =
+        via === "wasi-sockets" ? "createWasiSocketsHttp2Implementation" : "createWasiHttpHttp2Implementation";
+    return `
+import { createHttp2 } from ${JSON.stringify(coreModule)};
+import { ${factory} } from ${JSON.stringify(implementationModule)};
+${http2Exports(`createHttp2(${factory}())`)}
+`;
+}
+
 function requireWasiHttpVersion(worldMetadata: WorldMetadata, via: Exclude<NodejsHttpVia, "direct">): void {
     const packageName = via === "wasi-http" ? "http" : "sockets";
     const incompatible = (worldMetadata.imports ?? []).find(
@@ -935,6 +995,19 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const httpWasiHttpImplementationModule = () =>
         stdModule(options.httpWasiHttpImplementationModule, "http/impl/wasi-http");
     const httpVia = options.nodejsHttpVia ?? "direct";
+    const http2Module = () =>
+        options.http2Module ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2"));
+    const http2CoreModule = () =>
+        options.http2CoreModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/core"));
+    const http2WasiSocketsImplementationModule = () =>
+        options.http2WasiSocketsImplementationModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets"));
+    const http2WasiHttpImplementationModule = () =>
+        options.http2WasiHttpImplementationModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http"));
+    const http2Via = options.nodejsHttp2Via ?? "direct";
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -946,6 +1019,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === HTTP_CALLBACKS_SPECIFIER) {
                 return HTTP_CALLBACKS_MODULE;
+            }
+            if (id === HTTP2_CALLBACKS_SPECIFIER) {
+                return HTTP2_CALLBACKS_MODULE;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -1040,6 +1116,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 }
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (id === HTTP2_SPECIFIER) {
+                if (http2Via === "direct") {
+                    options.onWitRequirement?.(HTTP2_WIT_REQUIREMENT);
+                }
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             if (AUDITED_UNENV_SPECIFIERS.has(id)) {
                 unenvAdapter(id, options);
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -1059,6 +1141,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === HTTP_CALLBACKS_MODULE) {
                 return httpCallbacksAdapter(httpModule());
+            }
+            if (id === HTTP2_CALLBACKS_MODULE) {
+                return http2CallbacksAdapter(http2Module());
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
@@ -1124,6 +1209,18 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return httpVia === "wasi-sockets"
                     ? httpWasiSocketsAdapter(httpCoreModule(), httpWasiSocketsImplementationModule())
                     : httpWasiHttpAdapter(httpCoreModule(), httpWasiHttpImplementationModule());
+            }
+            if (value === HTTP2_SPECIFIER) {
+                if (http2Via === "direct") {
+                    return http2DirectAdapter(http2Module());
+                }
+                return http2PortableAdapter(
+                    http2CoreModule(),
+                    http2Via === "wasi-sockets"
+                        ? http2WasiSocketsImplementationModule()
+                        : http2WasiHttpImplementationModule(),
+                    http2Via,
+                );
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);

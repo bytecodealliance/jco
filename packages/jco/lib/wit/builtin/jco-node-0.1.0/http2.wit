@@ -1,0 +1,189 @@
+/// Guest-owned callbacks used by the direct Node-compatible HTTP/2 implementation.
+interface http2-callbacks {
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    hostname: option<string>,
+    address: option<string>,
+    port: option<u16>,
+  }
+
+  record header {
+    name: string,
+    value: list<u8>,
+  }
+
+  record incoming-stream {
+    session-id: u32,
+    id: u32,
+    headers: list<header>,
+    body: list<u8>,
+    remote-address: option<string>,
+    remote-port: option<u16>,
+  }
+
+  record outgoing-response {
+    headers: list<header>,
+    body: list<u8>,
+  }
+
+  resource stream-listener {
+    handle: func(input: incoming-stream) -> result<outgoing-response, error>;
+  }
+
+  resource server-error-listener {
+    handle: func(reason: error);
+  }
+}
+
+/// Typed host boundary for Node-compatible HTTP/2 clients and servers.
+interface http2 {
+  use http2-callbacks.{server-error-listener, stream-listener};
+
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    hostname: option<string>,
+    address: option<string>,
+    port: option<u16>,
+  }
+
+  record header {
+    name: string,
+    value: list<u8>,
+  }
+
+  record custom-setting {
+    id: u16,
+    value: u32,
+  }
+
+  record http2-settings {
+    header-table-size: option<u32>,
+    enable-push: option<bool>,
+    initial-window-size: option<u32>,
+    max-frame-size: option<u32>,
+    max-concurrent-streams: option<u32>,
+    max-header-list-size: option<u32>,
+    enable-connect-protocol: option<bool>,
+    custom-settings: list<custom-setting>,
+  }
+
+  record client-options {
+    settings: http2-settings,
+    reject-unauthorized: option<bool>,
+    server-name: option<string>,
+    ca: option<list<u8>>,
+  }
+
+  record request-options {
+    end-stream: option<bool>,
+    wait-for-trailers: option<bool>,
+  }
+
+  record response {
+    headers: list<header>,
+    trailers: list<header>,
+    body: list<u8>,
+  }
+
+  record stream-state {
+    state: option<u32>,
+    local-window-size: option<u32>,
+    local-close: option<u32>,
+    remote-close: option<u32>,
+  }
+
+  record ping-response {
+    duration-ms: f64,
+    payload: list<u8>,
+  }
+
+  record session-info {
+    alpn-protocol: option<string>,
+    encrypted: bool,
+    local-settings: http2-settings,
+    remote-settings: http2-settings,
+  }
+
+  record server-options {
+    secure: bool,
+    key: option<list<u8>>,
+    cert: option<list<u8>>,
+    settings: http2-settings,
+    allow-http1: option<bool>,
+    strict-field-whitespace-validation: option<bool>,
+  }
+
+  record listen-options {
+    port: option<u16>,
+    host: option<string>,
+    backlog: option<u32>,
+    path: option<string>,
+    exclusive: option<bool>,
+    ipv6-only: option<bool>,
+    reuse-port: option<bool>,
+  }
+
+  record tcp-address {
+    address: string,
+    family: string,
+    port: u16,
+  }
+
+  variant server-address {
+    tcp(tcp-address),
+    pipe(string),
+  }
+
+  resource client-stream {
+    write: func(chunk: list<u8>) -> result<bool, error>;
+    finish: func() -> result<response, error>;
+    close: func(code: u32) -> result<_, error>;
+    id: func() -> option<u32>;
+    state: func() -> stream-state;
+  }
+
+  resource client-session {
+    constructor(authority: string, options: client-options);
+    ready: func() -> result<session-info, error>;
+    request: func(headers: list<header>, options: request-options) -> result<own<client-stream>, error>;
+    close: func() -> result<_, error>;
+    destroy: func(code: u32) -> result<_, error>;
+    settings: func(settings: http2-settings) -> result<http2-settings, error>;
+    ping: func(payload: list<u8>) -> result<ping-response, error>;
+    goaway: func(code: u32, last-stream-id: option<u32>, opaque-data: list<u8>) -> result<_, error>;
+    ref: func();
+    unref: func();
+  }
+
+  resource server {
+    constructor(
+      options: server-options,
+      listener: own<stream-listener>,
+      error-listener: own<server-error-listener>,
+    );
+    listen: func(options: listen-options) -> result<server-address, error>;
+    close: func() -> result<bool, error>;
+    address: func() -> option<server-address>;
+    update-settings: func(settings: http2-settings) -> result<_, error>;
+    ref: func();
+    unref: func();
+  }
+}

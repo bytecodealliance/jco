@@ -114,6 +114,23 @@ export const HTTP_WIT_REQUIREMENT = nodeRequirement("node:http", "http", {
     ],
 });
 
+export const HTTP2_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:http2",
+    witImport: "jco:node/http2@0.1.0",
+    guestExports: [
+        {
+            witExport: "jco:node/http2-callbacks@0.1.0",
+            jsExport: "http2Callbacks",
+            moduleSpecifier: "jco:node-http2-callbacks",
+        },
+    ],
+    dependencyDirectory: "jco-node-0.1.0",
+    dependencySources: [
+        SHARED_TYPES_SOURCE,
+        fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/http2.wit", import.meta.url)),
+    ],
+};
+
 const WASI_0_2_12_ROOT = new URL("../lib/wit/builtin/0.2.12/", import.meta.url);
 
 function wasiDependency(name: string): WitDependencyPackage {

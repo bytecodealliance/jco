@@ -82,6 +82,11 @@ program
             .choices(["direct", "wasi-sockets", "wasi-http"])
             .default("direct"),
     )
+    .addOption(
+        new Option("--with-nodejs-http2-via <implementation>", "implementation used by bundled node:http2 code")
+            .choices(["direct", "wasi-sockets", "wasi-http"])
+            .default("direct"),
+    )
     .requiredOption("-o, --out <out>", "output component file")
     .option("--debug-bindings", "Output debug bindings and metadata during componentization (by default to stderr)")
     .option("--debug-bindings-dir <dir>", "Directory to which to output generated bindings and metadata")

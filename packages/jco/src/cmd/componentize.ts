@@ -6,7 +6,13 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
-import { nodeBuiltinPlugin, nodeGlobals, type NodejsHttpVia, type WorldMetadata } from "../node-builtins.js";
+import {
+    nodeBuiltinPlugin,
+    nodeGlobals,
+    type NodejsHttp2Via,
+    type NodejsHttpVia,
+    type WorldMetadata,
+} from "../node-builtins.js";
 import {
     injectNodeWitImports,
     witInjectionWarnings,
@@ -36,6 +42,7 @@ export interface ComponentizeOptions {
     bundle?: boolean;
     bundleConfig?: string;
     nodejsHttpVia?: NodejsHttpVia;
+    nodejsHttp2Via?: NodejsHttp2Via;
     backend?: ComponentizeJSBackend;
     backendQjsDisableAysnc: boolean;
     aot?: boolean;
@@ -191,6 +198,7 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
                     nodejsHttpVia: opts.nodejsHttpVia,
+                    nodejsHttp2Via: opts.nodejsHttp2Via,
                     onWitRequirement(requirement: NodeWitRequirement) {
                         witRequirements.set(requirement.witImport, requirement);
                     },
