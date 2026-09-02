@@ -1445,13 +1445,16 @@ mod tests {
         assert!(source.contains(
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
-        assert!(source.contains("|| !subtask.getParentTask().hasCallback();"));
-        assert!(source.contains("? preparedTask.tryEnter()"));
+        assert!(source.contains("preparedTask.setCalleeIsAsync((flags & 1) !== 0);"));
+        assert!(source.contains("const enteredSynchronously = preparedTask.tryEnter();"));
         assert!(source.contains("fn: () => callee.apply(null, startRes),"));
         assert!(source.contains("const driveJspiCallee = async () => {"));
-        assert!(source.contains("} else if (enteredSynchronously === true) {"));
+        assert!(source.contains("if (enteredSynchronously === true) {"));
+        assert!(source.contains("startSubtask();"));
+        assert!(source.contains("registerSubtaskProgress();"));
         assert!(source.contains("driveJspiCallee();"));
         assert!(source.contains("} else if (enteredSynchronously === null) {"));
+        assert!(source.contains("const enterPromise = preparedTask.enter();"));
         assert!(source.contains("if (subtask.isReturned()) {"));
         assert!(source.contains("callerComponentState.handles.remove(subtask.waitableRep())"));
     }
@@ -1467,7 +1470,14 @@ mod tests {
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
         assert!(task.contains("#progressWaiters = [];"));
         assert!(task.contains("waitForProgress()"));
-        assert!(task.contains("notifyProgress()"));
+        assert_eq!(task.matches("this.notifyProgress();").count(), 1);
+        let release = task
+            .find("state.exclusiveRelease(this.#id);")
+            .expect("task exit should release component entry");
+        let progress = task
+            .find("this.notifyProgress();")
+            .expect("task exit should report progress");
+        assert!(release < progress);
 
         let state = render_intrinsic_body(Intrinsic::Component(
             ComponentIntrinsic::ComponentAsyncStateClass,
