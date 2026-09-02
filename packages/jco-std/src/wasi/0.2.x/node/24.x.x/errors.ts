@@ -24,6 +24,10 @@ import {
   unsupportedNodeApi,
 } from "./errors/core.js";
 
+import { parseCallSites } from "./errors/call-site.js";
+
+export { parseCallSites, type CallSite } from "./errors/call-site.js";
+
 type ConstructorFunction = (...args: never[]) => unknown;
 
 export interface NodeErrorConstructor extends ErrorConstructor {
@@ -41,7 +45,8 @@ function captureStackTrace(targetObject: object, constructorOpt?: ConstructorFun
   }
   const target = targetObject as { message?: unknown; name?: unknown };
   const captured = new globalThis.Error();
-  let stack = captured.stack ?? "Error";
+  const raw = captured.stack ?? "Error";
+  let stack = raw;
   if (constructorOpt?.name) {
     const lines = stack.split("\n");
     const frame = lines.findIndex((line) => line.includes(constructorOpt.name));
@@ -53,11 +58,36 @@ function captureStackTrace(targetObject: object, constructorOpt?: ConstructorFun
   const message = typeof target.message === "string" ? target.message : "";
   const lines = stack.split("\n");
   lines[0] = message ? `${name}: ${message}` : name;
+  const rendered = lines.join("\n");
+
+  // Node computes `stack` when it is first read, and asks `Error.prepareStackTrace` to render
+  // it. Packages set that hook to collect the frames as objects rather than as text -- `depd`
+  // does it while being imported, so this runs before a component handles anything -- and
+  // they restore the previous hook straight afterwards. Reading lazily is what makes the hook
+  // that was installed at read time the one that gets used.
+  let value: unknown;
+  let computed = false;
   Object.defineProperty(targetObject, "stack", {
-    value: lines.join("\n"),
     enumerable: false,
     configurable: true,
-    writable: true,
+    get() {
+      if (!computed) {
+        computed = true;
+        const prepare = (globalThis.Error as NodeErrorConstructor).prepareStackTrace;
+        value =
+          typeof prepare === "function"
+            ? prepare(
+                targetObject as Error,
+                parseCallSites(raw, constructorOpt?.name) as unknown as NodeJS.CallSite[],
+              )
+            : rendered;
+      }
+      return value;
+    },
+    set(replacement: unknown) {
+      computed = true;
+      value = replacement;
+    },
   });
 }
 
