@@ -19,6 +19,7 @@ use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
+use crate::intrinsics::lift::LiftIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
@@ -220,6 +221,9 @@ pub struct FunctionBindgen<'a> {
     /// function to preserve the future as a distinct awaitable layer.
     pub wrap_async_future_result: bool,
 
+    /// Component result type, used to lift callbackless async core returns.
+    pub result_ty: Option<&'a Type>,
+
     /// Interface name
     pub iface_name: Option<&'a str>,
 
@@ -354,6 +358,67 @@ impl FunctionBindgen<'_> {
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         intrinsic.name().to_string()
+    }
+
+    fn lift_callbackless_async_result(&mut self) -> Option<(String, String)> {
+        if !self.is_async || self.for_import.unwrap_or_default() {
+            return None;
+        }
+
+        let Type::Id(id) = self.result_ty? else {
+            return None;
+        };
+        let type_id = crate::dealias(self.resolve, *id);
+        let resource = self.resource_map.get(&type_id)?;
+        let (lift_intrinsic, table_idx, table_field) = match resource {
+            ResourceTable {
+                imported: true,
+                data:
+                    ResourceData::Guest {
+                        extra: Some(ResourceExtraData::Future { table_idx, .. }),
+                        ..
+                    },
+            } => (
+                LiftIntrinsic::LiftFlatFuture,
+                table_idx.as_u32(),
+                "futureTableIdx",
+            ),
+            ResourceTable {
+                imported: true,
+                data:
+                    ResourceData::Guest {
+                        extra: Some(ResourceExtraData::Stream { table_idx, .. }),
+                        ..
+                    },
+            } => (
+                LiftIntrinsic::LiftFlatStream,
+                table_idx.as_u32(),
+                "streamTableIdx",
+            ),
+            _ => return None,
+        };
+
+        let component_idx = self
+            .component_state
+            .as_ref()
+            .map(|state| state.get_js_exprs().component_idx)
+            .unwrap_or_else(|| "-1".into());
+        let lift_fn = self.intrinsic(Intrinsic::Lift(lift_intrinsic));
+        let result_var = format!("directAsyncResult{}", self.tmp());
+        let code = format!(
+            r#"
+              const [{result_var}] = {lift_fn}({{
+                  {table_field}: {table_idx},
+                  componentIdx: {component_idx},
+              }})({{
+                  componentIdx: {component_idx},
+                  params: [ret],
+                  useDirectParams: true,
+                  isBorrowed: false,
+              }});
+            "#,
+        );
+        Some((code, result_var))
     }
 
     fn clamp_guest<T>(&mut self, results: &mut Vec<String>, operands: &[String], min: T, max: T)
@@ -3543,6 +3608,14 @@ impl Bindgen for FunctionBindgen<'_> {
             // - `hostProvided`: whether the original function was a host-provided (i.e. host provided import)
             //
             Instruction::AsyncTaskReturn { name, params } => {
+                let (direct_result_lift, direct_result) = self
+                    .lift_callbackless_async_result()
+                    .unwrap_or_else(|| (String::new(), "ret".into()));
+                let return_direct_result = if self.wrap_async_future_result {
+                    format!("{{ value: {direct_result} }}")
+                } else {
+                    direct_result.clone()
+                };
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let is_async_js = self.requires_async_porcelain | self.is_async;
                 let async_driver_loop_fn =
@@ -3637,9 +3710,10 @@ impl Bindgen for FunctionBindgen<'_> {
                       // An async lift without a callback completes when its core
                       // function returns; there is no callback protocol to drive.
                       if (!task.hasCallback()) {{
-                          task.resolve([ret]);
+                          {direct_result_lift}
+                          task.resolve([{direct_result}]);
                           task.exit();
-                          return ret;
+                          return {return_direct_result};
                       }}
 
                       const componentState = {get_or_create_async_state_fn}({component_idx_expr});
@@ -3682,7 +3756,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         "{ value: taskRes }"
                     } else {
                         "taskRes"
-                    }
+                    },
+                    return_direct_result = return_direct_result,
                 );
             }
 

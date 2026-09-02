@@ -4851,6 +4851,7 @@ impl<'a> Instantiator<'a, '_> {
             requires_async_porcelain,
             is_async,
             wrap_async_future_result,
+            result_ty: func.result.as_ref(),
             iface_name,
             asmjs: self.bindgen.opts.asmjs,
             component_state: Some(FunctionBindgenComponentState {
