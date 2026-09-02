@@ -1563,8 +1563,12 @@ mod tests {
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
         assert!(source.contains("preparedTask.registerOnResolveHandler(() => {"));
-        assert!(source.contains("await taskReturnPromise;"));
-        assert!(!source.contains("await _driverLoop({"));
+        assert!(source.contains("const calleeLifecyclePromise = (async () => {"));
+        assert!(source.contains("await _driverLoop({"));
+        assert!(source.contains("await Promise.race(["));
+        assert!(source.contains("calleeLifecyclePromise.then(() => taskReturnPromise),"));
+        assert!(source.contains("calleeComponentState.markTrapped(err);"));
+        assert!(source.contains("preparedTask.exit({ skipExclusiveLockCheck: true });"));
     }
 
     #[test]
