@@ -751,6 +751,7 @@ impl AsyncTaskIntrinsic {
                             stringEncoding,
                             errHandling,
                             getCalleeParamsFn,
+                            calleeIsAsync,
                             resultPtr,
                             callingWasmExport,
                         }} = args;
@@ -770,6 +771,7 @@ impl AsyncTaskIntrinsic {
                             callbackFnName,
                             stringEncoding,
                             getCalleeParamsFn,
+                            calleeIsAsync,
                             resultPtr,
                             errHandling,
                             callingWasmExport,
@@ -945,6 +947,7 @@ impl AsyncTaskIntrinsic {
                         #postReturnFn = null;
 
                         #getCalleeParamsFn = null;
+                        #calleeIsAsync = null;
 
                         #stringEncoding = null;
 
@@ -1038,6 +1041,7 @@ impl AsyncTaskIntrinsic {
                            if (opts.callbackFnName) {{ this.#callbackFnName = opts.callbackFnName; }}
 
                            if (opts.getCalleeParamsFn) {{ this.#getCalleeParamsFn = opts.getCalleeParamsFn; }}
+                           if (opts.calleeIsAsync !== undefined) {{ this.#calleeIsAsync = opts.calleeIsAsync; }}
 
                            if (opts.stringEncoding) {{ this.#stringEncoding = opts.stringEncoding; }}
 
@@ -1662,7 +1666,10 @@ impl AsyncTaskIntrinsic {
                             // inside the calling guest slice, which already holds the
                             // lock; only tasks that execute guest slices need it.
                             if (!this.#callingWasmExport) {{ return false; }}
-                            return !this.#isAsync || this.hasCallback();
+                            // A sync-lifted callee cannot be reentered until the whole
+                            // stackful call returns. This is the Component Model's
+                            // automatic-backpressure rule for async-lowered calls.
+                            return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
                         }}
 
                         createSubtask(args) {{
