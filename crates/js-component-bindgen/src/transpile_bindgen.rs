@@ -1433,6 +1433,7 @@ impl<'a> Instantiator<'a, '_> {
                 r#"
                   const handleTable{rtid} = [{rsc_table_flag}, 0];
                   handleTable{rtid}._createdReps = new Set();
+                  handleTable{rtid}._componentIdx = {component_idx};
                 "#,
             );
             if !self.resources_initialized.contains_key(&resource_idx) {
@@ -1456,6 +1457,7 @@ impl<'a> Instantiator<'a, '_> {
                 r#"
                    const handleTable{rtid} = [{rsc_table_flag}, 0];
                    handleTable{rtid}._createdReps = new Set();
+                   handleTable{rtid}._componentIdx = {component_idx};
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                        const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
                    }});

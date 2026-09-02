@@ -6,6 +6,7 @@ use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
@@ -492,6 +493,7 @@ impl AsyncTaskIntrinsic {
 
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata'); }}
+                        task.validateResourceBorrowScope();
 
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
@@ -925,6 +927,13 @@ impl AsyncTaskIntrinsic {
                 let future_value_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureValueClass,
                 ));
+                let resource_scope_counter = render_args.require_intrinsic(Intrinsic::Resource(
+                    ResourceIntrinsic::ResourceScopeCounter,
+                ));
+                let resource_scope_tasks = render_args
+                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceScopeTasks));
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -983,6 +992,11 @@ impl AsyncTaskIntrinsic {
 
                         #returnLowerFns = null;
 
+                        #resourceScopeId;
+                        #resourceBorrowCount = 0;
+                        #resourceLenders = [];
+                        #resourceScopeExited = false;
+
                         #subtasks = [];
 
                         #entered = false;
@@ -995,12 +1009,12 @@ impl AsyncTaskIntrinsic {
 
                         returnCalls =  0;
                         storage = [0, 0];
-                        borrowedHandles = {{}};
-
                         tmpRetI64HighBits = 0|0;
 
                         constructor(opts) {{
                            this.#id = ++{task_class}._ID;
+                           this.#resourceScopeId = ++{resource_scope_counter};
+                           {resource_scope_tasks}.set(this.#resourceScopeId, this);
 
                            if (opts?.componentIdx === undefined) {{
                                throw new TypeError('missing component id during task creation');
@@ -1076,6 +1090,47 @@ impl AsyncTaskIntrinsic {
                         id() {{ return this.#id; }}
                         componentIdx() {{ return this.#componentIdx; }}
                         entryFnName() {{ return this.#entryFnName; }}
+
+                        resourceScopeId() {{ return this.#resourceScopeId; }}
+
+                        addBorrowedHandle() {{
+                            if (this.#resourceScopeExited) {{
+                                throw new Error('cannot add a borrow to an exited resource scope');
+                            }}
+                            this.#resourceBorrowCount++;
+                        }}
+
+                        removeBorrowedHandle() {{
+                            if (this.#resourceBorrowCount === 0) {{
+                                throw new Error('resource borrow count underflow');
+                            }}
+                            this.#resourceBorrowCount--;
+                        }}
+
+                        addResourceLender(table, handle) {{
+                            if (this.#resourceScopeExited) {{
+                                throw new Error('cannot add a lender to an exited resource scope');
+                            }}
+                            this.#resourceLenders.push({{ table, handle }});
+                        }}
+
+                        validateResourceBorrowScope() {{
+                            if (this.#resourceScopeExited) {{ return; }}
+                            if (this.#resourceBorrowCount !== 0) {{
+                                throw new {runtime_error_class}('borrow handles still remain at the end of the call');
+                            }}
+                            for (const {{ table, handle }} of this.#resourceLenders) {{
+                                const idx = handle << 1;
+                                const lendCount = table[idx];
+                                if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2**30) {{
+                                    throw new Error('invalid resource lender state at scope exit');
+                                }}
+                                table[idx] = lendCount - 1;
+                            }}
+                            this.#resourceLenders = [];
+                            this.#resourceScopeExited = true;
+                            {resource_scope_tasks}.delete(this.#resourceScopeId);
+                        }}
 
                         completionPromise() {{ return this.#completionPromise; }}
                         exitPromise() {{ return this.#exitPromise; }}
@@ -1495,7 +1550,7 @@ impl AsyncTaskIntrinsic {
                             if (this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] invalid task state [${{this.taskState()}}] for cancellation`);
                             }}
-                            if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
+                            this.validateResourceBorrowScope();
                             this.cancelled = true;
                             // Cancelled tasks resolve with no value (spec: `Task.cancel` calls
                             // `on_resolve(None)`); an explicit error is only present on the
@@ -1617,9 +1672,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved (did you forget to wait for an import?)`);
                             }}
 
-                            if (this.borrowedHandles.length > 0) {{
-                                throw new Error('task still has borrow handles');
-                            }}
+                            this.validateResourceBorrowScope();
 
                             this.#state = {task_class}.State.RESOLVED;
 
@@ -1655,9 +1708,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
                             }}
 
-                            if (this.borrowedHandles > 0) {{
-                                throw new Error('task [${{this.#id}}] exited without clearing borrowed handles');
-                            }}
+                            this.validateResourceBorrowScope();
 
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
