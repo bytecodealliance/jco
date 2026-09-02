@@ -61,39 +61,43 @@ fn convert_wast_file(
         "#
     )?;
 
-    let mut module_seen = false;
+    let mut primary_module_seen = false;
     let mut artifacts = Vec::new();
     let mut definitions = HashMap::new();
     for directive in parsed.directives {
         match directive {
             wast::WastDirective::Module(mut quote_wat) => {
-                ensure!(
-                    !module_seen,
-                    "multiple module directives are not yet supported"
-                );
                 let definition_name = quote_wat.name().map(|id| id.name().to_owned());
-                let encoded = quote_wat.encode().with_context(|| {
-                    format!(
-                        "failed to encode component in WAT [{}]",
-                        input_wast_path.display()
-                    )
-                })?;
-                output_wasm.write_all(&encoded).with_context(|| {
-                    format!(
-                        "failed to write component output in WAT [{}]",
-                        input_wast_path.display()
-                    )
-                })?;
-                output_wasm.flush()?;
-                module_seen = true;
-
                 let artifact_idx = artifacts.len();
-                let mut artifact_path = PathBuf::from(input_wast_path);
-                artifact_path.add_extension("wasm");
-                artifacts.push(WastArtifact {
-                    file_name: artifact_file_name(&artifact_path)?,
-                    kind: encoded_kind(&encoded)?,
-                });
+                if primary_module_seen {
+                    artifacts.push(write_quote_artifact(
+                        quote_wat,
+                        input_wast_path,
+                        artifact_idx,
+                    )?);
+                } else {
+                    let encoded = quote_wat.encode().with_context(|| {
+                        format!(
+                            "failed to encode component in WAT [{}]",
+                            input_wast_path.display()
+                        )
+                    })?;
+                    output_wasm.write_all(&encoded).with_context(|| {
+                        format!(
+                            "failed to write component output in WAT [{}]",
+                            input_wast_path.display()
+                        )
+                    })?;
+                    output_wasm.flush()?;
+                    primary_module_seen = true;
+
+                    let mut artifact_path = PathBuf::from(input_wast_path);
+                    artifact_path.add_extension("wasm");
+                    artifacts.push(WastArtifact {
+                        file_name: artifact_file_name(&artifact_path)?,
+                        kind: encoded_kind(&encoded)?,
+                    });
+                }
                 writeln!(
                     output_js,
                     "currentInstance = await instantiate(wastTestArtifacts[{artifact_idx}]);"
@@ -230,7 +234,7 @@ fn convert_wast_file(
     }
 
     ensure!(
-        module_seen || !artifacts.is_empty(),
+        !artifacts.is_empty(),
         "wast file did not contain an executable module or component"
     );
 
@@ -753,15 +757,88 @@ mod tests {
     }
 
     #[test]
-    fn rejects_multiple_modules() -> Result<()> {
-        with_wast_fixture("(component) (component)", |wast_path| {
-            let err = run(wast_path).expect_err("multiple modules should fail");
-            ensure!(
-                err.to_string().contains("multiple module directives"),
-                "unexpected error: {err:#}"
-            );
-            Ok(())
-        })
+    fn builds_multiple_modules_in_directive_order() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (component $first
+                    (core module $m (func (export "run")))
+                    (core instance $i (instantiate $m))
+                    (func (export "run") (canon lift (core func $i "run")))
+                )
+                (assert_return (invoke "run"))
+                (module $second (func (export "run")))
+                (invoke "run")
+                (component $third
+                    (core module $m (func (export "run")))
+                    (core instance $i (instantiate $m))
+                    (func (export "run") (canon lift (core func $i "run")))
+                )
+                (assert_return (invoke "run"))
+            "#,
+            |wast_path| {
+                run(wast_path)?;
+
+                let primary_path = wast_path.with_extension("wast.wasm");
+                let second_path = wast_path.with_extension("wast.1.wasm");
+                let third_path = wast_path.with_extension("wast.2.wasm");
+                ensure!(
+                    !fs::read(primary_path)?.is_empty(),
+                    "missing first ordinary component artifact"
+                );
+                ensure!(
+                    !fs::read(second_path)?.is_empty(),
+                    "missing ordinary core module artifact"
+                );
+                ensure!(
+                    !fs::read(third_path)?.is_empty(),
+                    "missing second ordinary component artifact"
+                );
+
+                let script = fs::read_to_string(wast_path.with_extension("wast.js"))?;
+                ensure!(
+                    script.contains(
+                        r#"{ path: "fixture.wast.wasm", kind: "component" }, { path: "fixture.wast.1.wasm", kind: "module" }, { path: "fixture.wast.2.wasm", kind: "component" }"#
+                    ),
+                    "ordinary directive artifacts were not typed in directive order"
+                );
+                for name in ["first", "second", "third"] {
+                    ensure!(
+                        script
+                            .contains(&format!("namedInstances.set(\"{name}\", currentInstance);")),
+                        "ordinary directive did not preserve the ${name} instance name"
+                    );
+                }
+
+                let first_instance = script
+                    .find("instantiate(wastTestArtifacts[0])")
+                    .context("missing first ordinary component instantiation")?;
+                let first_assertion = script
+                    .find("assert.isUndefined(res);")
+                    .context("missing first ordinary component assertion")?;
+                let second_instance = script
+                    .find("instantiate(wastTestArtifacts[1])")
+                    .context("missing ordinary core module instantiation")?;
+                let second_invoke = second_instance
+                    + script[second_instance..]
+                        .find("await getInstance(null)[\"run\"]();")
+                        .context("missing ordinary core module invocation")?;
+                let third_instance = script
+                    .find("instantiate(wastTestArtifacts[2])")
+                    .context("missing second ordinary component instantiation")?;
+                let second_assertion = script
+                    .rfind("assert.isUndefined(res);")
+                    .context("missing second ordinary component assertion")?;
+                ensure!(
+                    first_instance < first_assertion
+                        && first_assertion < second_instance
+                        && second_instance < second_invoke
+                        && second_invoke < third_instance
+                        && third_instance < second_assertion,
+                    "ordinary directive execution order was not preserved"
+                );
+                Ok(())
+            },
+        )
     }
 
     #[test]
