@@ -415,6 +415,7 @@ jco transpile component.wasm \
 ```
 
 The resulting call path for filesystem function is:
+
 1. guest `node:fs`
 2. WIT capability
 3. host adapter
@@ -528,19 +529,19 @@ jco transpile component.wasm \
 using the load-call-read-write cycle would look something liek this:
 
 ```js
-import { DynamicLibrary, exportString, getInt32, setInt32, toString } from "node:ffi";
+import { DynamicLibrary, exportString, getInt32, setInt32, toString } from 'node:ffi';
 
 // null resolves symbols from the host process image, which links libc.
 const lib = new DynamicLibrary(null);
-const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" });
-const strlen = lib.getFunction("strlen", { arguments: ["pointer"], return: "uint64" });
+const malloc = lib.getFunction('malloc', { arguments: ['uint64'], return: 'pointer' });
+const strlen = lib.getFunction('strlen', { arguments: ['pointer'], return: 'uint64' });
 
 const pointer = malloc(64n);
 setInt32(pointer, 0, 123456);
-getInt32(pointer, 0);          // 123456, read back out of host memory
-exportString("hello ffi", pointer, 64);
-strlen(pointer);               // 9n -- native code reading what the guest wrote
-toString(pointer);             // "hello ffi"
+getInt32(pointer, 0); // 123456, read back out of host memory
+exportString('hello ffi', pointer, 64);
+strlen(pointer); // 9n -- native code reading what the guest wrote
+toString(pointer); // "hello ffi"
 ```
 
 Pointers cross as `bigint`, matching NodeJS.
@@ -553,7 +554,7 @@ These are refused guest-side, before the host is reached, because a WebAssembly 
 cannot express them:
 
 | Surface                                                                          | Why                                                                                                                                                                                                                                                                                          |
-|----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `getRawPointer(buffer)`                                                          | Guest memory is not mapped into the host address space, so a component's buffer has no host address. Any number returned would be a lie native code then dereferences.                                                                                                                       |
 | `registerCallback()`, `unregisterCallback()`, `refCallback()`, `unrefCallback()` | A native callback is a function pointer the host would call back into the guest through, which the component boundary cannot carry.                                                                                                                                                          |
 | `toBuffer(p, n, false)`, `toArrayBuffer(p, n, false)`                            | `copy: false` asks for a live view into host memory. Omit the argument for the copy Node returns by default.                                                                                                                                                                                 |
@@ -575,9 +576,9 @@ The host adapter therefore lets the application set it, which is the reliable wa
 serve a guest that names `.dylib` or `.dll` files:
 
 ```js
-import { setSuffix } from "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node";
+import { setSuffix } from '@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node';
 
-setSuffix("dylib");   // before instantiating the component
+setSuffix('dylib'); // before instantiating the component
 ```
 
 Note that you may not need to change the suffix if the runtime already has it set properly, as
@@ -806,6 +807,55 @@ connections.
 Connection pooling, upgrades, CONNECT tunnels, and HTTPS are explicit gaps.
 Unavailable operations throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than silently
 doing nothing.
+
+### HTTP/2
+
+Client and server code uses Node's normal session and stream APIs:
+
+```js
+import { connect, createServer } from 'node:http2';
+
+export function requestStatus(authority) {
+    const session = connect(authority);
+    const stream = session.request({ ':path': '/status' });
+    stream.end();
+    return session;
+}
+
+export const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end(`received ${request.url}`);
+});
+```
+
+Select its implementation independently:
+
+```console
+jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http2-via direct -o component.wasm
+```
+
+| Value              | Behavior                                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `direct` (default) | Typed `jco:node/http2@0.1.0`, denied by default; an opt-in Node host uses real h2c and TLS/ALPN clients and servers.                                        |
+| `wasi-sockets`     | Rejects clients and servers: HTTP/2 framing, HPACK, multiplexing, flow control, TLS, and ALPN are not implemented over the available raw socket interfaces. |
+| `wasi-http`        | Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.                      |
+
+Direct mode models sessions, streams, and servers as typed host-owned WIT
+resources. Stream and server-error callbacks are separate guest-owned resources
+on the exported `jco:node/http2-callbacks@0.1.0` interface. Jco adds only missing
+imports and exports to the selected world, installs the matching WIT source,
+adds generated comments, and warns about each visible change. Aliased existing
+declarations are recognized and repeated runs are idempotent.
+
+The default provider rejects both `connect()` and server construction with
+`ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Mapping the import to
+`@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node` opts in to
+Node's real provider. Async connection, stream completion, settings, ping,
+listen, and close operations use JSPI, not workers. Bodies are currently
+buffered; low-level sockets, priority, push, flow-control windows, and operations
+that cannot cross the boundary throw explicit errors. Constants and settings
+packing are capability-free in every mode.
 
 ### Buffer
 
