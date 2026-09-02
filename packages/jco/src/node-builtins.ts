@@ -51,9 +51,11 @@ const OS_SPECIFIER = "node:os";
 const STRING_DECODER_SPECIFIER = "node:string_decoder";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const HTTP_SPECIFIER = "node:http";
+export const HTTP_CALLBACKS_SPECIFIER = "jco:node-http-callbacks";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
+const HTTP_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http-callbacks`;
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
 const ERROR_GLOBALS_SPECIFIER = "jco:node-error-globals";
 const ERROR_GLOBALS_MODULE = `${VIRTUAL_PREFIX}error-globals`;
@@ -619,10 +621,14 @@ export const { ${HTTP_EXPORTS.join(", ")} } = http;
 
 function httpDirectAdapter(httpModule: string): string {
     return `
-import directHttp, { httpCallbacks } from ${JSON.stringify(httpModule)};
-globalThis[Symbol.for("jco.node.http.callbacks")] = httpCallbacks;
+import directHttp from ${JSON.stringify(httpModule)};
 ${httpExports("directHttp")}
 `;
+}
+
+/** Source for the guest-exported HTTP callback interface used by the component entry wrapper. */
+function httpCallbacksAdapter(httpModule: string): string {
+    return `export { httpCallbacks } from ${JSON.stringify(httpModule)};`;
 }
 
 function httpWasiSocketsAdapter(coreModule: string, implementationModule: string): string {
@@ -898,7 +904,6 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         options.httpWasiHttpImplementationModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/wasi-http"));
     const httpVia = options.nodejsHttpVia ?? "direct";
-    let usesDirectHttp = false;
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -907,6 +912,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === ERROR_GLOBALS_SPECIFIER) {
                 return ERROR_GLOBALS_MODULE;
+            }
+            if (id === HTTP_CALLBACKS_SPECIFIER) {
+                return HTTP_CALLBACKS_MODULE;
             }
             if (ASSERT_SPECIFIERS.has(id)) {
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -979,7 +987,6 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === HTTP_SPECIFIER) {
                 if (httpVia === "direct") {
-                    usesDirectHttp = true;
                     options.onWitRequirement?.(HTTP_WIT_REQUIREMENT);
                 } else {
                     requireWasiHttpVersion(worldMetadata, httpVia);
@@ -1009,6 +1016,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === ERROR_GLOBALS_MODULE) {
                 return `export * from ${JSON.stringify(errorsModule())};`;
+            }
+            if (id === HTTP_CALLBACKS_MODULE) {
+                return httpCallbacksAdapter(httpModule());
             }
             if (ASSERT_SPECIFIERS.has(value)) {
                 return assertAdapter(value, assertModule());
@@ -1076,12 +1086,6 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return pathCore(version, pathFactory());
             }
             return pathAdapter(specifier, version);
-        },
-        renderChunk(code, chunk) {
-            if (!usesDirectHttp || !chunk.isEntry || chunk.exports.includes("httpCallbacks")) {
-                return null;
-            }
-            return `${code}\nconst __jcoHttpCallbacks = globalThis[Symbol.for("jco.node.http.callbacks")];\nexport { __jcoHttpCallbacks as httpCallbacks };\n`;
         },
     };
 }
