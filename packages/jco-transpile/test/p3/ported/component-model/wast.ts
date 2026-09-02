@@ -59,6 +59,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/validate-no-stream-char.wast' },
     { relPath: 'async/validate-no-async-abi-for-sync-type.wast' },
     { relPath: 'async/builtin-trap-poisons-instance.wast' },
+    { relPath: 'async/trap-if-transfer-in-waitable-set.wast' },
 
     // Skipped tests
     // TODO: Revisit this fixture once stackful async support is implemented.

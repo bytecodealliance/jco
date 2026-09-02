@@ -92,6 +92,10 @@
             "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
         },
         {
+            "name": "trap-if-transfer-in-waitable-set.wast",
+            "revision": "c956fde25a4baba42187761a8c7954dd40d3d4a4"
+        },
+        {
             "name": "trap-on-reenter.wast",
             "revision": "4769c405eda54e99ea28292ebd007fcbe53c7b40"
         },
