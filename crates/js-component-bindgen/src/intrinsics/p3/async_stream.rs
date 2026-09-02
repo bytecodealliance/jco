@@ -374,16 +374,6 @@ impl AsyncStreamIntrinsic {
                         }});
                         stream.setGlobalStreamMapRep({global_stream_map}.insert(stream));
 
-                        const writeEnd = stream.writeEnd();
-                        writeEnd.setWaitableIdx(cstate.handles.insert(writeEnd));
-                        writeEnd.setHandle(localStreamTable.insert(writeEnd));
-                        if (writeEnd.streamTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched stream table"); }}
-
-                        const writeEndWaitableIdx = writeEnd.waitableIdx();
-                        const writeEndHandle = writeEnd.handle();
-                        writeWaitable.setTarget(`waitable for stream write end (waitable [${{writeEndWaitableIdx}}])`);
-                        writeEnd.setTarget(`stream write end (waitable [${{writeEndWaitableIdx}}])`);
-
                         const readEnd = stream.readEnd();
                         readEnd.setWaitableIdx(cstate.handles.insert(readEnd));
                         readEnd.setHandle(localStreamTable.insert(readEnd));
@@ -393,6 +383,16 @@ impl AsyncStreamIntrinsic {
                         const readEndHandle = readEnd.handle();
                         readWaitable.setTarget(`waitable for read end (waitable [${{readEndWaitableIdx}}])`);
                         readEnd.setTarget(`stream read end (waitable [${{readEndWaitableIdx}}])`);
+
+                        const writeEnd = stream.writeEnd();
+                        writeEnd.setWaitableIdx(cstate.handles.insert(writeEnd));
+                        writeEnd.setHandle(localStreamTable.insert(writeEnd));
+                        if (writeEnd.streamTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched stream table"); }}
+
+                        const writeEndWaitableIdx = writeEnd.waitableIdx();
+                        const writeEndHandle = writeEnd.handle();
+                        writeWaitable.setTarget(`waitable for stream write end (waitable [${{writeEndWaitableIdx}}])`);
+                        writeEnd.setTarget(`stream write end (waitable [${{writeEndWaitableIdx}}])`);
 
                         return {{
                             writeEnd,
