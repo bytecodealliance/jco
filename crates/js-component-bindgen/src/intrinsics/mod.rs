@@ -1170,12 +1170,17 @@ impl Intrinsic {
                           return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
+
                               const savedTask = saved
                                   ? {get_current_task}(saved.componentIdx, saved.taskID)?.task
                                   : null;
-                              const mayBlock = saved
+                              const mayBlock = savedTask
                                   ? (savedTask?.mayBlock() ?? ({current_task_may_block}.value !== 0))
                                   : false;
+                              if (!saved && !mayBlock) {{
+                                  throw new {runtime_error_class}('cannot block a synchronous task before returning');
+                              }}
+
                               if (!mayBlock) {{
                                   let result;
                                   try {{
@@ -1186,6 +1191,7 @@ impl Intrinsic {
                                   }}
 
                                   {global_current_task_meta_obj}[componentIdx] = saved;
+
                                   if (result !== null &&
                                       (typeof result === 'object' || typeof result === 'function') &&
                                       typeof result.then === 'function') {{
@@ -1193,18 +1199,19 @@ impl Intrinsic {
                                       // Mark it handled before replacing it with the canonical
                                       // synchronous-task trap.
                                       Promise.resolve(result).catch(() => {{}});
+
+                                     {global_current_task_meta_obj}[componentIdx] = saved;
+                                     throw new {runtime_error_class}('cannot block a synchronous task before returning');
+
                                       throw new {runtime_error_class}('cannot block a synchronous task before returning');
                                   }}
                                   return result;
                               }}
 
-                              return (async () => {{
-                                  try {{
-                                      return await fn.apply(null, args);
-                                  }} finally {{
-                                      {global_current_task_meta_obj}[componentIdx] = saved;
-                                  }}
-                              }})();
+                              return Promise.resolve(result).finally(() => {{
+                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                              }});
+
                           }};
                       }}
                     "#,
@@ -1417,9 +1424,14 @@ mod tests {
         );
         assert!(source.contains(": false;"));
         assert!(source.contains("if (!mayBlock) {"));
+
+        assert!(!source.contains("return async function (...args) {"));
+        assert!(source.contains("if (!saved && !mayBlock) {"));
+
         assert!(source.contains("result = fn.apply(null, args);"));
         assert!(source.contains("typeof result.then === 'function'"));
         assert!(source.contains("Promise.resolve(result).catch(() => {});"));
+        assert!(source.contains("if (!mayBlock) {"));
         assert!(source.contains(
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
