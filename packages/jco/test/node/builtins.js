@@ -39,11 +39,13 @@ describe("Node builtin adapters", () => {
             "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
+            "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
         });
         expect(
             withDefaultNodeCapabilityMap({
                 "jco:node/console@0.1.0": "/application/console-host.js",
                 "jco:node/fs@0.1.0": "/application/fs-host.js",
+                "jco:node/os@0.1.0": "/application/os-host.js",
             }),
         ).toEqual({
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
@@ -52,6 +54,7 @@ describe("Node builtin adapters", () => {
             "jco:node/console@0.1.0": "/application/console-host.js",
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "/application/fs-host.js",
+            "jco:node/os@0.1.0": "/application/os-host.js",
         });
     });
 
@@ -328,6 +331,34 @@ describe("Node builtin adapters", () => {
         expect(source).toContain('from "/jco/node/console.js"');
     });
 
+    test("generates an explicitly host-backed node:os adapter", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { osModule: "/jco/node/os.js" });
+        const id = plugin.resolveId("node:os");
+        expect(id).toBe("\0jco-node-builtin:node:os");
+        const source = plugin.load(id);
+        expect(source).toContain("export default os");
+        expect(source).toContain("availableParallelism,");
+        expect(source).toContain('from "/jco/node/os.js"');
+    });
+
+    test("reports the WIT capability required by node:os", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { osModule: "/jco/node/os.js", onWitRequirement },
+        );
+        expect(plugin.resolveId("node:os")).toBe("\0jco-node-builtin:node:os");
+        expect(onWitRequirement).toHaveBeenCalledOnce();
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({ nodeSpecifier: "node:os", witImport: "jco:node/os@0.1.0" }),
+        );
+    });
+
+    test("does not intercept the bare os specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { osModule: "/jco/node/os.js" });
+        expect(plugin.resolveId("os")).toBeNull();
+    });
+
     test.each([
         ["node:dns", "/jco/node/dns.js"],
         ["node:dns/promises", "/jco/node/dns-promises.js"],
@@ -441,6 +472,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("console")).toBeNull();
         expect(plugin.resolveId("dns")).toBeNull();
         expect(plugin.resolveId("dns/promises")).toBeNull();
+        expect(plugin.resolveId("os")).toBeNull();
     });
 
     test("reports a missing environment capability only when node:path is used", () => {
