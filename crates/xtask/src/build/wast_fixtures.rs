@@ -473,7 +473,7 @@ fn cm_val_to_js_param(wast_val: &wast::component::WastVal<'_>) -> Result<String>
             )),
             None => Ok(format!("{{ tag: {} }}", js_string(tag)?)),
         },
-        wast::component::WastVal::Enum(v) => Ok(format!("{{ tag: {} }}", js_string(v)?)),
+        wast::component::WastVal::Enum(v) => js_string(v),
         wast::component::WastVal::Option(wast_val) => match wast_val {
             Some(v) => Ok(format!(
                 "{{ tag: 'some', val: {} }}",
@@ -943,6 +943,10 @@ mod tests {
         assert_eq!(
             cm_val_to_js_param(&WastVal::String("quote: \" and newline:\n"))?,
             r#""quote: \" and newline:\n""#
+        );
+        assert_eq!(
+            cm_val_to_js_param(&WastVal::Enum("stream-write"))?,
+            r#""stream-write""#
         );
         assert_eq!(float_to_js(f64::NEG_INFINITY), "-Infinity");
         assert_eq!(float_to_js(-0.0), "-0");
