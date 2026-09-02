@@ -129,6 +129,10 @@ impl HostIntrinsic {
                 );
                 let set_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                let current_task_may_block =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                   r#"
@@ -180,6 +184,13 @@ impl HostIntrinsic {
 
                         const currentCallerTaskMeta = {current_task_get_fn}(callerComponentIdx);
                         if (!currentCallerTaskMeta) {{
+                            // Core start functions run without an ambient component task.
+                            // A fused synchronous lower would have to block that implicit
+                            // synchronous task, so report the canonical trap before trying
+                            // to construct its structured-concurrency child.
+                            if (!isAsync && {current_task_may_block}.value === 0) {{
+                                throw new {runtime_error_class}('cannot block a synchronous task before returning');
+                            }}
                             throw new Error('invalid/missing current task for caller during prepare call');
                         }}
 
