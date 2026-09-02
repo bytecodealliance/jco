@@ -129,6 +129,10 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
   `jco:node/http@0.1.0`, Preview 2 `wasi:sockets`, or Preview 2 `wasi:http`
   implementation. The direct provider denies access by default, direct and
   `wasi:sockets` support servers, and `wasi:http` rejects server construction;
+- the `node:http2` settings API plus typed session, stream, and server resources.
+  Its direct provider delegates to real Node HTTP/2 after explicit host mapping;
+  the `wasi-sockets` and `wasi-http` choices reject session and server operations
+  whose semantics those interfaces cannot currently preserve;
 - `node:stream/consumers`, implemented as portable iterable collection over the
   engine's Blob, typed-array, and text-codec globals; and
 - the experimental Node 24.20 `node:stream/iter` API, including portable sources,
