@@ -1,0 +1,6 @@
+package jco-fixtures:node-http-server;
+
+world component {
+    export start: func() -> u16;
+    export stop: func();
+}
