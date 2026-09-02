@@ -1,15 +1,17 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  parseHttp1Request,
   parseHttp1Response,
   serializeHttp1Request,
+  serializeHttp1Response,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/http1.js";
-import type { HttpTransportRequest } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
+import type { HttpImplementationRequest } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function request(body = ""): HttpTransportRequest {
+function request(body = ""): HttpImplementationRequest {
   return {
     method: "POST",
     scheme: "http",
@@ -67,5 +69,43 @@ describe("HTTP/1.1 framing", () => {
     const noContent = encoder.encode("HTTP/1.1 204 No Content\r\n\r\n");
     expect(parseHttp1Response(head, "HEAD")?.body).toHaveLength(0);
     expect(parseHttp1Response(noContent, "GET")?.body).toHaveLength(0);
+  });
+
+  test("parses an inbound request and serializes a framed response", () => {
+    const parsed = parseHttp1Request(
+      encoder.encode(
+        "POST /submit HTTP/1.1\r\nHost: example.com\r\nContent-Length: 5\r\n\r\nhello",
+      ),
+    );
+    expect(parsed).toMatchObject({
+      request: {
+        method: "POST",
+        url: "/submit",
+        httpVersion: "1.1",
+        body: encoder.encode("hello"),
+      },
+    });
+    expect(
+      decoder.decode(
+        serializeHttp1Response({
+          statusCode: 201,
+          statusMessage: "Created",
+          headers: [{ name: "Content-Type", value: encoder.encode("text/plain") }],
+          body: encoder.encode("done"),
+        }),
+      ),
+    ).toBe(
+      "HTTP/1.1 201 Created\r\n" +
+        "Content-Type: text/plain\r\n" +
+        "Content-Length: 4\r\n" +
+        "Connection: close\r\n\r\n" +
+        "done",
+    );
+  });
+
+  test("waits for an incomplete inbound body", () => {
+    expect(
+      parseHttp1Request(encoder.encode("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhel")),
+    ).toBeUndefined();
   });
 });

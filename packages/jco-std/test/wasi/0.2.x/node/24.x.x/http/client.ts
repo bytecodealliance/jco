@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import type { IncomingMessage } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/incoming-message.js";
-import { nextTurn, recordingTransport } from "./helpers/index.js";
+import { nextTurn, recordingImplementation } from "./helpers/index.js";
 
 describe("node:http client requests", () => {
   test("normalizes URL options and buffers a request body", async () => {
-    const { http, requests } = recordingTransport();
+    const { http, requests } = recordingImplementation();
     const events: string[] = [];
     const response = new Promise<IncomingMessage>((resolve) => {
       const request = http.request(
@@ -42,7 +42,7 @@ describe("node:http client requests", () => {
   });
 
   test("get ends automatically and delivers buffered response events asynchronously", async () => {
-    const { http } = recordingTransport();
+    const { http } = recordingImplementation();
     const order: string[] = [];
     http.get("http://example.com/", (message) => {
       order.push("response");
@@ -57,14 +57,14 @@ describe("node:http client requests", () => {
   });
 
   test("rejects protocols that do not belong to node:http", () => {
-    const { http } = recordingTransport();
+    const { http } = recordingImplementation();
     expect(() => http.request("https://example.com/")).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_PROTOCOL" }),
     );
   });
 
   test("makes deprecated and socket-owned operations explicit", () => {
-    const { http } = recordingTransport();
+    const { http } = recordingImplementation();
     const request = http.request("http://example.com/");
     expect(() => request.abort()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API" }),
@@ -74,10 +74,10 @@ describe("node:http client requests", () => {
     );
   });
 
-  test("does not cross the transport boundary for an already-aborted signal", async () => {
+  test("does not cross the implementation boundary for an already-aborted signal", async () => {
     const controller = new AbortController();
     controller.abort("cancelled");
-    const { http, requests } = recordingTransport();
+    const { http, requests } = recordingImplementation();
     const request = http.request("http://example.com/", { signal: controller.signal });
     const error = new Promise<Error>((resolve) => request.once("error", resolve));
     request.end();
@@ -85,8 +85,8 @@ describe("node:http client requests", () => {
     expect(requests).toHaveLength(0);
   });
 
-  test("validates transport timeout values before sending", () => {
-    const { http } = recordingTransport();
+  test("validates implementation timeout values before sending", () => {
+    const { http } = recordingImplementation();
     const request = http.request("http://example.com/");
     expect(() => request.setTimeout("10" as never)).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }),

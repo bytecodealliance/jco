@@ -1,17 +1,96 @@
 import { describe, expect, test } from "vitest";
 
-import { createWasiSocketsHttpTransport } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/transports/wasi-sockets.js";
+import { createHttp } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/core.js";
+import { createWasiSocketsHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
 import type {
   WasiInputStream,
   WasiOutputStream,
   WasiSocketsProvider,
   WasiTcpSocket,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/transports/wasi-sockets.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-describe("node:http wasi:sockets transport", () => {
+describe("node:http wasi:sockets implementation", () => {
+  test("accepts an HTTP/1.1 request and dispatches it to http.Server", async () => {
+    const writes: Uint8Array[] = [];
+    let scheduled: (() => void | Promise<void>) | undefined;
+    let accepted = false;
+    const connection: WasiTcpSocket = {
+      startConnect: () => undefined,
+      finishConnect: () => {
+        throw new Error("not used");
+      },
+      remoteAddress: () => ({
+        tag: "ipv4",
+        val: { address: [192, 0, 2, 10], port: 1234 },
+      }),
+      subscribe: () => ({ block: () => undefined }),
+      shutdown: () => undefined,
+    };
+    const listener: WasiTcpSocket = {
+      startBind: () => undefined,
+      finishBind: () => undefined,
+      startConnect: () => undefined,
+      finishConnect: () => {
+        throw new Error("not used");
+      },
+      startListen: () => undefined,
+      finishListen: () => undefined,
+      accept: () => {
+        if (accepted) {
+          throw { tag: "would-block" };
+        }
+        accepted = true;
+        return [
+          connection,
+          {
+            blockingRead: () =>
+              encoder.encode(
+                "POST /items HTTP/1.1\r\nHost: example.com\r\nContent-Length: 5\r\n\r\nhello",
+              ),
+          },
+          { blockingWriteAndFlush: (contents) => writes.push(contents.slice()) },
+        ];
+      },
+      localAddress: () => ({
+        tag: "ipv4",
+        val: { address: [127, 0, 0, 1], port: 8080 },
+      }),
+      subscribe: () => ({ block: () => undefined }),
+      shutdown: () => undefined,
+    };
+    const provider: WasiSocketsProvider = {
+      instanceNetwork: { instanceNetwork: () => ({}) },
+      ipNameLookup: {
+        resolveAddresses: () => {
+          throw new Error("not used");
+        },
+      },
+      tcpCreateSocket: { createTcpSocket: () => listener },
+      schedule: (task) => {
+        scheduled = task;
+      },
+    };
+    const http = createHttp(createWasiSocketsHttpImplementation(provider));
+    const server = http.createServer((request, response) => {
+      expect(request.socket).toMatchObject({
+        remoteAddress: "192.0.2.10",
+        remotePort: 1234,
+      });
+      response.writeHead(200, { "Content-Type": "text/plain" });
+      response.end(`${request.method} ${request.url}`);
+    });
+    server.listen(8080, "127.0.0.1");
+    await scheduled?.();
+    expect(decoder.decode(writes[0])).toContain(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11",
+    );
+    expect(decoder.decode(writes[0]).endsWith("POST /items")).toBe(true);
+    server.close();
+  });
+
   test("resolves, connects, writes HTTP/1.1, and reads a response", () => {
     const writes: Uint8Array[] = [];
     let shutdown: string | undefined;
@@ -65,7 +144,7 @@ describe("node:http wasi:sockets transport", () => {
       },
       tcpCreateSocket: { createTcpSocket: () => socket },
     };
-    const response = createWasiSocketsHttpTransport(provider).request({
+    const response = createWasiSocketsHttpImplementation(provider).request({
       method: "GET",
       scheme: "http",
       authority: "example.com:8080",
@@ -99,7 +178,7 @@ describe("node:http wasi:sockets transport", () => {
       },
     };
     expect(() =>
-      createWasiSocketsHttpTransport(provider).request({
+      createWasiSocketsHttpImplementation(provider).request({
         method: "GET",
         scheme: "http",
         authority: "missing.invalid",
@@ -125,7 +204,7 @@ describe("node:http wasi:sockets transport", () => {
       },
     } satisfies WasiSocketsProvider;
     expect(() =>
-      createWasiSocketsHttpTransport(provider).request({
+      createWasiSocketsHttpImplementation(provider).request({
         method: "GET",
         scheme: "http",
         authority: "example.com",

@@ -1,13 +1,13 @@
 import { createHttp } from "../../../../../../../src/wasi/0.2.x/node/24.x.x/http/core.js";
 import type {
-  HttpTransport,
-  HttpTransportRequest,
-  HttpTransportResponse,
+  HttpImplementation,
+  HttpImplementationRequest,
+  HttpImplementationResponse,
 } from "../../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
 
 const encoder = new TextEncoder();
 
-export function response(body = "response body"): HttpTransportResponse {
+export function response(body = "response body"): HttpImplementationResponse {
   return {
     statusCode: 200,
     statusMessage: "OK",
@@ -21,19 +21,19 @@ export function response(body = "response body"): HttpTransportResponse {
   };
 }
 
-export function recordingTransport(result = response()): {
+export function recordingImplementation(result = response()): {
   http: ReturnType<typeof createHttp>;
-  requests: HttpTransportRequest[];
-  transport: HttpTransport;
+  requests: HttpImplementationRequest[];
+  implementation: HttpImplementation;
 } {
-  const requests: HttpTransportRequest[] = [];
-  const transport: HttpTransport = {
+  const requests: HttpImplementationRequest[] = [];
+  const implementation: HttpImplementation = {
     request(request) {
       requests.push(request);
       return result;
     },
   };
-  return { http: createHttp(transport), requests, transport };
+  return { http: createHttp(implementation), requests, implementation };
 }
 
 export function nextTurn(): Promise<void> {
