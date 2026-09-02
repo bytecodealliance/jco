@@ -52,7 +52,6 @@ describe("Node builtin adapters", () => {
         expect(withDefaultNodeCapabilityMap()).toEqual({
             "jco:node/tls@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host",
             "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
-            "jco:node/http-callbacks@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/callbacks/host",
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
             "jco:node/worker-threads@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/worker-threads/host",
@@ -81,7 +80,6 @@ describe("Node builtin adapters", () => {
         ).toEqual({
             "jco:node/tls@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host",
             "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
-            "jco:node/http-callbacks@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/callbacks/host",
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
             "jco:node/worker-threads@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/worker-threads/host",
