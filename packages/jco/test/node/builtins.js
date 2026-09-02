@@ -145,6 +145,25 @@ describe("Node builtin adapters", () => {
         expect(plugin.load(id)).toEqual(expect.any(String));
     });
 
+    test("generates a capability-free adapter for node:string_decoder", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { stringDecoderModule: "/jco/node/string-decoder.js", onWitRequirement },
+        );
+        const id = plugin.resolveId("node:string_decoder");
+        expect(id).toBe("\0jco-node-builtin:node:string_decoder");
+        expect(plugin.load(id)).toContain('from "/jco/node/string-decoder.js"');
+        expect(plugin.load(id)).toContain("export { StringDecoder }");
+        expect(plugin.load(id)).toContain("export default stringDecoder");
+        expect(onWitRequirement).not.toHaveBeenCalled();
+    });
+
+    test("does not intercept the legacy bare string_decoder specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
+        expect(plugin.resolveId("string_decoder")).toBeNull();
+    });
+
     test("loads the Errors globals module lazily", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { errorsModule: "/jco/node/errors.js" });
         const id = plugin.resolveId("jco:node-error-globals");
@@ -467,6 +486,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("assert/strict")).toBeNull();
         expect(plugin.resolveId("buffer")).toBeNull();
         expect(plugin.resolveId("querystring")).toBeNull();
+        expect(plugin.resolveId("string_decoder")).toBeNull();
         expect(plugin.resolveId("fs")).toBeNull();
         expect(plugin.resolveId("node:errors")).toBeNull();
         expect(plugin.resolveId("errors")).toBeNull();
