@@ -849,13 +849,27 @@ jco transpile app.wasm -o out --async-mode jspi \\
 > binding asynchronous without wrapping the export in `WebAssembly.promising`, so the first
 > call that suspends fails with `SuspendError`.
 
-The `wasi-sockets` transport cannot serve yet, for a reason outside Jco: ComponentizeJS's
-guest bindings do not emit a class for an imported resource that has no methods, while still
-referencing one when lifting a returned handle. `wasi:sockets/network`'s `network` is such a
-resource, so any guest that calls `instance-network()` fails with
-`import_network_0_2_12$Network is not defined`. It reproduces in twelve lines of WIT --
-`resource token;` returned from a function -- and affects ComponentizeJS 0.19.3 through
-0.22.0. Preview 2's `wasi:sockets` implementation is complete and is not involved.
+The `wasi-sockets` transport also serves, with the guest owning the accept loop. Two things
+differ from `direct`:
+
+- **`listen()` does not return.** The guest blocks on a pollable to accept connections, so it
+  serves from inside whichever export called `listen()`. An application that wants to report
+  its port has to do so before that call returns.
+- **The component is not portable to a stock WASI host.** ComponentizeJS's guest bindings do
+  not emit a class for an imported resource that has no methods, while still referencing one
+  when lifting a returned handle -- and `wasi:sockets/network`'s `network` is the only
+  resource in WASI shaped that way, so any guest calling `instance-network()` fails with
+  `import_network_0_2_12$Network is not defined`. It reproduces in twelve lines of WIT, a
+  `resource token;` returned from a function, and affects ComponentizeJS 0.19.3 through
+  0.22.0. Preview 2's `wasi:sockets` implementation is complete and is not involved.
+
+  Jco works around it by declaring one unused method on `network` in the WIT it injects. That
+  method is part of the component's imported interface, so the component declares a
+  `wasi:sockets/network` that is not the standard one and a host implementing only the
+  standard interface will refuse to link it. It runs against Jco's transpiled JavaScript
+  host. The workaround is commented where it lives, in
+  `packages/jco/lib/wit/builtin/0.2.12/wasi-sockets/package.wit`, and should be removed once
+  ComponentizeJS emits the class on its own.
 
 The `node:http` adapter implements both client and server NodeJS HTTP APIs,
 with outbound `request()` and `get()` calls with Node-style `ClientRequest`

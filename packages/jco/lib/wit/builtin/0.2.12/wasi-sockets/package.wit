@@ -15,7 +15,28 @@ interface ip-name-lookup {
 interface network {
     @unstable(feature = network-error-code)
     use wasi:io/error@0.2.12.{error};
-    resource network;
+    /// A `network` handle.
+    ///
+    /// The method below is not part of `wasi:sockets`. It is here because ComponentizeJS's
+    /// guest bindings do not emit a class for an imported resource that has no methods,
+    /// while still referencing one when lifting a returned handle. `network` is the only
+    /// resource in WASI shaped that way, so every guest that calls `instance-network()`
+    /// fails at runtime with `import_network_0_2_12$Network is not defined`, which makes
+    /// `wasi:sockets` unusable from a component altogether. Declaring one method is enough
+    /// for the class to be emitted; nothing calls it.
+    ///
+    /// The cost is real and worth knowing: the method is part of the component's imported
+    /// interface, so a component built against this copy declares a `wasi:sockets/network`
+    /// that is not the standard one, and a host implementing only the standard interface
+    /// will refuse to link it. Components built this way run against Jco's transpiled
+    /// JavaScript host, which supplies whatever the import declares.
+    ///
+    /// Remove it once ComponentizeJS emits the class on its own. A twelve-line reproduction
+    /// is in `packages/jco/test/node/http.js`.
+    resource network {
+        /// Never called. See the note on `network` above.
+        jco-bindgen-workaround: func();
+    }
     enum error-code {
         unknown,
         access-denied,
