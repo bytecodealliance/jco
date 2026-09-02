@@ -38,14 +38,23 @@ interface http-callbacks {
     body: list<u8>,
   }
 
-  resource request-listener {
-    handle: func(request: incoming-request) -> result<outgoing-response, error>;
-  }
+  /// Hand one request to the listener a server was created with.
+  ///
+  /// This is a plain function rather than a method on a `request-listener` resource for two
+  /// reasons. A guest cannot pass one of its own resources into an import -- an imported
+  /// interface's resource types are the host's to implement, and a world that both imports
+  /// and exports this interface ends up with two unrelated resource types. And a guest
+  /// export has to be able to answer asynchronously, because a Node request handler responds
+  /// whenever it is ready; the engine awaits a function export that returns a promise, but
+  /// not a resource method.
+  ///
+  /// The id is the one the server was constructed with, so a single component can serve any
+  /// number of servers.
+  handle-request: func(listener-id: u64, request: incoming-request) -> result<outgoing-response, error>;
 }
 
 /// Typed host boundary for Node-compatible HTTP clients and servers.
 interface http {
-  use http-callbacks.{request-listener};
 
   variant errno {
     number(s64),
@@ -128,7 +137,7 @@ interface http {
   request: func(options: request-options) -> result<response, error>;
 
   resource server {
-    constructor(options: server-options, listener: own<request-listener>);
+    constructor(options: server-options, listener-id: u64);
     listen: func(options: listen-options) -> result<server-address, error>;
     close: func() -> result<bool, error>;
     close-all-connections: func() -> result<_, error>;

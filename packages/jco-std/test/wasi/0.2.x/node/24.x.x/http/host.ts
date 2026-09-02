@@ -2,7 +2,11 @@ import nodeHttp from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { Server, request } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
+import {
+  Server,
+  request,
+  setCallbacks,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
 import type {
   DirectHttpResult,
   DirectHttpServerAddress,
@@ -44,24 +48,20 @@ async function listen(server: nodeHttp.Server): Promise<number> {
 }
 
 describe("node:http direct Node host", () => {
-  test("serves requests through a guest callback resource", async () => {
-    const server = new Server(
-      {},
-      {
-        handle: async (incoming) => ({
-          tag: "ok",
-          val: {
-            statusCode: 202,
-            statusMessage: "Accepted",
-            headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
-            body: new TextEncoder().encode(
-              `${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
-            ),
-          },
-        }),
-        [Symbol.dispose]: () => undefined,
-      },
-    );
+  test("serves requests through the guest's exported callback", async () => {
+    // The host reaches the guest through the callbacks the application connects after
+    // instantiation, and names the listener by the id its server was created with.
+    setCallbacks({
+      handleRequest: async (listenerId, incoming) => ({
+        statusCode: 202,
+        statusMessage: "Accepted",
+        headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
+        body: new TextEncoder().encode(
+          `${listenerId} ${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
+        ),
+      }),
+    });
+    const server = new Server({}, 7n);
     const started = (await server.listen({
       port: 0,
       host: "127.0.0.1",
@@ -87,7 +87,7 @@ describe("node:http direct Node host", () => {
     expect(result.tag).toBe("ok");
     if (result.tag === "ok") {
       expect(result.val.statusCode).toBe(202);
-      expect(new TextDecoder().decode(result.val.body)).toBe("POST /resource hello");
+      expect(new TextDecoder().decode(result.val.body)).toBe("7 POST /resource hello");
     }
     await server.close();
   });

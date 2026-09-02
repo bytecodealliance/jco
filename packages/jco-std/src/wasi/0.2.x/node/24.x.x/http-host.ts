@@ -9,4 +9,7 @@ export const Server: DirectHttpHost["Server"] = class Server {
   }
 } as unknown as DirectHttpHost["Server"];
 
-export default { request, Server };
+/** Accepting the component's callbacks costs nothing; using them still needs a provider. */
+export const setCallbacks: NonNullable<DirectHttpHost["setCallbacks"]> = () => {};
+
+export default { request, Server, setCallbacks };

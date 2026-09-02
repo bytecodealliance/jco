@@ -12,7 +12,7 @@ import type {
   DirectHttpError,
   DirectHttpListenOptions,
   DirectHttpRequest,
-  DirectHttpRequestListener,
+  DirectHttpCallbacks,
   DirectHttpResponse,
   DirectHttpResult,
   DirectHttpServerAddress,
@@ -157,12 +157,38 @@ function serverAddress(
       };
 }
 
+/**
+ * The component's exported callbacks, once the application has connected them.
+ *
+ * A host provider is one of the component's imports, so it cannot reach the component's
+ * exports by itself; {@link setCallbacks} is how the application introduces them.
+ */
+let callbacks: DirectHttpCallbacks | undefined;
+
+/**
+ * Connect this host to a component's exported `jco:node/http-callbacks`.
+ *
+ * @param exported - the instantiated component's `jco:node/http-callbacks` namespace
+ */
+export function setCallbacks(exported: DirectHttpCallbacks): void {
+  callbacks = exported;
+}
+
+function guestCallbacks(): DirectHttpCallbacks {
+  if (!callbacks) {
+    throw new Error(
+      "node:http server support needs the component's jco:node/http-callbacks export; call setCallbacks() on this host after instantiating it",
+    );
+  }
+  return callbacks;
+}
+
 class NodeHttpServer {
-  readonly #listener: DirectHttpRequestListener;
+  readonly #listenerId: bigint;
   readonly #server: nodeHttp.Server;
 
-  constructor(options: DirectHttpServerOptions, listener: DirectHttpRequestListener) {
-    this.#listener = listener;
+  constructor(options: DirectHttpServerOptions, listenerId: bigint) {
+    this.#listenerId = listenerId;
     this.#server = nodeHttp.createServer(nodeServerOptions(options), async (request, response) => {
       try {
         const chunks: Uint8Array[] = [];
@@ -176,7 +202,11 @@ class NodeHttpServer {
           body.set(chunk, offset);
           offset += chunk.byteLength;
         }
-        const result = await listener.handle({
+        // Calling into the guest only from here matters: the constructor runs while the guest
+        // is still on the stack, inside its own `new Server(...)`, and a component cannot be
+        // re-entered there. A request arrives from the event loop with no guest call in
+        // progress.
+        const result = await guestCallbacks().handleRequest(this.#listenerId, {
           method: request.method ?? "GET",
           url: request.url ?? "/",
           httpVersion: request.httpVersion,
@@ -185,15 +215,10 @@ class NodeHttpServer {
           remoteAddress: request.socket.remoteAddress,
           remotePort: request.socket.remotePort,
         });
-        if (result.tag === "err") {
-          throw Object.assign(new Error(result.val.message), result.val);
-        }
-        response.writeHead(
-          result.val.statusCode,
-          result.val.statusMessage,
-          headers(result.val.headers),
-        );
-        response.end(result.val.body);
+        // A guest export whose WIT return type is a `result` hands back the value and throws
+        // for the error case, so a failure arrives at the `catch` below.
+        response.writeHead(result.statusCode, result.statusMessage, headers(result.headers));
+        response.end(result.body);
       } catch (error) {
         if (!response.headersSent) {
           response.statusCode = 500;
@@ -307,10 +332,9 @@ class NodeHttpServer {
 
   [Symbol.dispose](): void {
     this.#server.close();
-    this.#listener[Symbol.dispose]();
   }
 }
 
 export const Server = NodeHttpServer as unknown as DirectHttpServerConstructor;
 
-export default { request, Server };
+export default { request, Server, setCallbacks };

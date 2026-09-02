@@ -104,11 +104,6 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.js"
     },
-    "./wasi/0.2.x/node/24.x.x/http/callbacks/host": {
-      "types": "./dist/wasi/0.2.x/node/24.x.x/http-callbacks-host.d.ts",
-      "browser": "./dist/wasi/0.2.x/node/24.x.x/http-callbacks-host.js",
-      "default": "./dist/wasi/0.2.x/node/24.x.x/http-callbacks-host.js"
-    },
     "./wasi/0.2.x/node/24.x.x/crypto": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/crypto.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/crypto.js",
