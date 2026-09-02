@@ -1,0 +1,13 @@
+package jco-fixtures:node-express-handle;
+
+world component {
+    record answer {
+        status: u16,
+        content-type: string,
+        etag: bool,
+        chained: bool,
+        body: string,
+    }
+
+    export handle: func(method: string, url: string, content-type: string, body: string) -> answer;
+}
