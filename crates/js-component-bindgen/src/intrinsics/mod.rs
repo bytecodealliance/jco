@@ -1776,6 +1776,32 @@ mod tests {
     }
 
     #[test]
+    fn stream_drop_rejects_busy_ends_before_table_removal() {
+        for (intrinsic, error) in [
+            (
+                AsyncStreamIntrinsic::StreamDropReadable,
+                "cannot remove busy stream",
+            ),
+            (
+                AsyncStreamIntrinsic::StreamDropWritable,
+                "cannot drop busy stream",
+            ),
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncStream(intrinsic));
+            let busy_check = source
+                .find("if (streamEnd.isCopying() || streamEnd.hasPendingEvent()) {")
+                .expect("stream drop should reject an active or undelivered copy");
+            let removal = source
+                .find("const removedStreamEnd = deleteStreamEnd(")
+                .expect("stream drop should remove a validated idle end");
+
+            assert!(source.contains(&format!("throw new Error('{error}');")));
+            assert!(busy_check < removal, "busy validation must precede removal");
+            assert!(source.contains("if (removedStreamEnd !== streamEnd) {"));
+        }
+    }
+
+    #[test]
     fn future_ends_track_own_and_peer_drop_state_separately() {
         let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::InternalFutureClass,
