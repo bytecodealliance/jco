@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 
 let server;
 
-export function start() {
+export async function start() {
     server = createServer(async (request, response) => {
         request.setEncoding("utf8");
         const chunks = [];
@@ -14,10 +14,13 @@ export function start() {
     });
 
     server.listen(0, "127.0.0.1");
-
-    // Reported before returning because `listen()` does not return on this transport: the
-    // guest owns the accept loop, and it blocks inside this call for as long as it serves.
     console.error(`listening on ${server.address().port}`);
+
+    // Wait here for as long as the server should run. A component only executes while a call
+    // into it is in progress, so returning from this export would stop the server: on this
+    // transport the guest owns the accept loop, and nothing would be left running to drive
+    // it. Under Node the open socket keeps the process alive; this is that, written out.
+    await new Promise(() => {});
 }
 
 export function stop() {
