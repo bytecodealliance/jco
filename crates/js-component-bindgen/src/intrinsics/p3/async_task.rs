@@ -751,7 +751,6 @@ impl AsyncTaskIntrinsic {
                             stringEncoding,
                             errHandling,
                             getCalleeParamsFn,
-                            calleeIsAsync,
                             resultPtr,
                             callingWasmExport,
                         }} = args;
@@ -771,7 +770,6 @@ impl AsyncTaskIntrinsic {
                             callbackFnName,
                             stringEncoding,
                             getCalleeParamsFn,
-                            calleeIsAsync,
                             resultPtr,
                             errHandling,
                             callingWasmExport,
@@ -1041,8 +1039,6 @@ impl AsyncTaskIntrinsic {
                            if (opts.callbackFnName) {{ this.#callbackFnName = opts.callbackFnName; }}
 
                            if (opts.getCalleeParamsFn) {{ this.#getCalleeParamsFn = opts.getCalleeParamsFn; }}
-                           if (opts.calleeIsAsync !== undefined) {{ this.#calleeIsAsync = opts.calleeIsAsync; }}
-
                            if (opts.stringEncoding) {{ this.#stringEncoding = opts.stringEncoding; }}
 
                            if (opts.parentSubtask) {{ this.#parentSubtask = opts.parentSubtask; }}
@@ -1092,6 +1088,11 @@ impl AsyncTaskIntrinsic {
 
                         setReturnLowerFns(fns) {{ this.#returnLowerFns = fns; }}
                         getReturnLowerFns() {{ return this.#returnLowerFns; }}
+
+                        setCalleeIsAsync(value) {{
+                            if (typeof value !== 'boolean') {{ throw new TypeError('callee async state must be a boolean'); }}
+                            this.#calleeIsAsync = value;
+                        }}
 
                         setParentSubtask(subtask) {{
                             if (!subtask || !(subtask instanceof {subtask_class})) {{ return }}
