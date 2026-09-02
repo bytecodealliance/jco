@@ -86,6 +86,84 @@ Browse the [supported modules](./nodejs-builtins/supported-modules/index.md) for
 API-specific examples, capabilities, and compatibility limits. Each API has its
 own page, with related submodules grouped together.
 
+#### Serving requests
+
+`http.createServer()` and `server.listen()` work on the `direct` and `wasi-sockets`
+implementations. What `listen()` does differs between them, and an application that wants to
+report the port it is serving on has to know which.
+
+> [!IMPORTANT]
+> On `wasi-sockets` the guest owns the accept loop, so **the export that starts a server does
+> not return while the server is serving**. `listen()` itself returns, and the statements
+> after it run:
+>
+> ```js
+> server.listen(0, "127.0.0.1");
+> console.error(`listening on ${server.address().port}`);   // runs
+> ```
+>
+> What waits is the return to the host. The guest accepts connections by blocking on a
+> pollable, and that has to happen while the call is still open: a component only runs while
+> a call into it is in progress, so there is no background task to move the accept loop into.
+> Deferring it to a timer callback does let the export return -- and then the server answers
+> nothing, because no guest code is running to accept. The socket is bound, so connections
+> are reset rather than refused. Blocking is what makes it serve.
+>
+> Component-model async, where a guest can hold concurrent tasks the host drives, is what
+> would change this; Preview 2 has no equivalent.
+>
+> For a program that would keep running under Node -- a script that calls `app.listen()` and
+> stays up -- this is the shape you want, and `wasi:cli/run` is where it belongs: `run()`
+> blocks for the lifetime of the server, exactly as the Node process would. If instead you
+> need the export to return and requests to arrive afterwards, the host has to own the
+> socket: use the `direct` implementation, or export `wasi:http/incoming-handler` and skip
+> `node:http`'s server entirely.
+>
+> On `direct` the host owns the socket, `listen()` returns, and the export finishes normally.
+> Requests arrive later, through the callbacks export.
+
+Two things have to be arranged around the `direct` implementation.
+
+The host provider is one of the component's *imports*, so it cannot reach the component's
+exports by itself. The application introduces them once, after instantiating:
+
+```js
+import * as httpHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node";
+
+const instance = await instantiate(undefined, imports);
+httpHost.setCallbacks(instance["jco:node/http-callbacks@0.1.0"]);
+```
+
+And the exports that suspend on an asynchronous import have to be named when transpiling:
+
+```console
+jco transpile app.wasm -o out --async-mode jspi \
+    --async-exports start --async-exports 'jco:node/http-callbacks@0.1.0#handle-request' \
+    --map 'jco:node/http@0.1.0=...'
+```
+
+> [!NOTE]
+> Name them rather than passing `--async-exports '*'`. The wildcard marks an export's
+> binding asynchronous without wrapping the export in `WebAssembly.promising`, so the first
+> call that suspends fails with `SuspendError`.
+
+A component serving over `wasi-sockets` is not portable to a stock WASI host.
+ComponentizeJS's guest bindings do not emit a class for an imported resource that has no
+methods, while still referencing one when lifting a returned handle -- and
+`wasi:sockets/network`'s `network` is the only resource in WASI shaped that way, so any guest
+calling `instance-network()` fails with `import_network_0_2_12$Network is not defined`. It
+reproduces in twelve lines of WIT, a `resource token;` returned from a function, and affects
+ComponentizeJS 0.19.3 through 0.22.0. Preview 2's `wasi:sockets` implementation is complete
+and is not involved.
+
+Jco works around it by declaring one unused method on `network` in the WIT it injects. That
+method is part of the component's imported interface, so the component declares a
+`wasi:sockets/network` that is not the standard one and a host implementing only the standard
+interface will refuse to link it. It runs against Jco's transpiled JavaScript host. The
+workaround is commented where it lives, in
+`packages/jco/lib/wit/builtin/0.2.12/wasi-sockets/package.wit`, and should be removed once
+ComponentizeJS emits the class on its own.
+
 ### Express
 
 Express is the widest test of this compatibility layer: nothing about it is written for
@@ -112,56 +190,9 @@ Two limits are worth knowing before writing one:
 - **`res.sendFile()`, `res.render()` and `express.static()` need a filesystem.** They work
   only in a world that imports `jco:node/fs` with a host wired up; the deny-by-default
   provider satisfies the import for an application that never calls them.
-
-### Serving requests
-
-`app.listen()` works on the `direct` transport, where the host owns the socket and calls
-back into the guest for each request. Two things have to be arranged around it.
-
-The host provider is one of the component's *imports*, so it cannot reach the component's
-exports by itself. The application introduces them once, after instantiating:
-
-```js
-import * as httpHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node";
-
-const instance = await instantiate(undefined, imports);
-httpHost.setCallbacks(instance["jco:node/http-callbacks@0.1.0"]);
-```
-
-And the exports that suspend on an asynchronous import have to be named when transpiling:
-
-```console
-jco transpile app.wasm -o out --async-mode jspi \\
-    --async-exports start --async-exports 'jco:node/http-callbacks@0.1.0#handle-request' \\
-    --map 'jco:node/http@0.1.0=...'
-```
-
-> [!NOTE]
-> Name them rather than passing `--async-exports '*'`. The wildcard marks an export's
-> binding asynchronous without wrapping the export in `WebAssembly.promising`, so the first
-> call that suspends fails with `SuspendError`.
-
-The `wasi-sockets` transport also serves, with the guest owning the accept loop. Two things
-differ from `direct`:
-
-- **`listen()` does not return.** The guest blocks on a pollable to accept connections, so it
-  serves from inside whichever export called `listen()`. An application that wants to report
-  its port has to do so before that call returns.
-- **The component is not portable to a stock WASI host.** ComponentizeJS's guest bindings do
-  not emit a class for an imported resource that has no methods, while still referencing one
-  when lifting a returned handle -- and `wasi:sockets/network`'s `network` is the only
-  resource in WASI shaped that way, so any guest calling `instance-network()` fails with
-  `import_network_0_2_12$Network is not defined`. It reproduces in twelve lines of WIT, a
-  `resource token;` returned from a function, and affects ComponentizeJS 0.19.3 through
-  0.22.0. Preview 2's `wasi:sockets` implementation is complete and is not involved.
-
-  Jco works around it by declaring one unused method on `network` in the WIT it injects. That
-  method is part of the component's imported interface, so the component declares a
-  `wasi:sockets/network` that is not the standard one and a host implementing only the
-  standard interface will refuse to link it. It runs against Jco's transpiled JavaScript
-  host. The workaround is commented where it lives, in
-  `packages/jco/lib/wit/builtin/0.2.12/wasi-sockets/package.wit`, and should be removed once
-  ComponentizeJS emits the class on its own.
+- **`app.listen()` behaves differently per implementation.** On `direct` it returns and the
+  export finishes; on `wasi-sockets` the export serves until the server closes. See
+  [Serving requests](#serving-requests).
 
 ### Additional application globals
 
