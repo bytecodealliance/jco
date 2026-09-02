@@ -857,6 +857,12 @@ report the port it is serving on has to know which.
 > nothing, because no guest code is running to accept. The socket is bound, so connections
 > are reset rather than refused. Blocking is what makes it serve.
 >
+> While it waits, the host thread waits too. Preview 2's `pollable.block()` is served by
+> `preview2-shim` through a worker and `Atomics.wait`, so the JavaScript host is parked for as
+> long as the guest is waiting for a connection. A client in the *same* process therefore
+> deadlocks -- it never gets a turn to send -- and has to run somewhere else, which is why the
+> test for this drives the component from a separate process.
+>
 > Component-model async, where a guest can hold concurrent tasks the host drives, is what
 > would change this; Preview 2 has no equivalent.
 >
