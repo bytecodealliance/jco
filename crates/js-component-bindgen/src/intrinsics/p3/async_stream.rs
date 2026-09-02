@@ -2320,6 +2320,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamDropReadable | Self::StreamDropWritable => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_drop_fn = self.name();
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let delete_stream_end_fn = render_args.require_intrinsic(Self::DeleteStreamEnd);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
@@ -2328,6 +2329,11 @@ impl AsyncStreamIntrinsic {
                     render_args.require_intrinsic(Self::StreamWritableEndClass)
                 } else {
                     render_args.require_intrinsic(Self::StreamReadableEndClass)
+                };
+                let busy_error = if is_write {
+                    "cannot drop busy stream"
+                } else {
+                    "cannot remove busy stream"
                 };
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -2343,7 +2349,7 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing component state for component idx [${{componentIdx}}]`); }}
 
-                        const streamEnd = {delete_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                        const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
                             throw new Error(`missing stream (waitable [${{streamEndWaitableIdx}}], table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
@@ -2352,6 +2358,17 @@ impl AsyncStreamIntrinsic {
                           throw new Error('invalid stream end class, expected [{stream_end_class}]');
                         }}
 
+                        // Copy completion is not observable until the guest consumes its
+                        // pending event, so both an active copy and an undelivered event
+                        // keep the table-local stream handle busy.
+                        if (streamEnd.isCopying() || streamEnd.hasPendingEvent()) {{
+                            throw new Error('{busy_error}');
+                        }}
+
+                        const removedStreamEnd = {delete_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
+                        if (removedStreamEnd !== streamEnd) {{
+                            throw new Error('removed stream end does not match validated stream end');
+                        }}
                         streamEnd.drop();
                     }}
                 "#));
