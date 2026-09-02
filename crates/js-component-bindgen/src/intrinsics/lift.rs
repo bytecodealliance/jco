@@ -1372,6 +1372,9 @@ impl LiftIntrinsic {
 
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat future of borrowed type'); }}
                             if (futureEnd.isWritable()) {{ throw new Error('only readable futures can be lifted'); }}
+                            if (futureEnd.isDoneState()) {{
+                                throw new {runtime_error_class}('cannot lift future after previous read succeeded');
+                            }}
                             if (!futureEnd.isIdleState()) {{ throw new Error('futures must be in idle state'); }}
                             if (futureEnd.isInSet()) {{ throw new {runtime_error_class}('futures in waitable sets cannot be lifted'); }}
 
@@ -1440,6 +1443,9 @@ impl LiftIntrinsic {
 
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat stream of borrowed type'); }}
                             if (streamEnd.isWritable()) {{ throw new Error('only readable streams can be lifted'); }}
+                            if (streamEnd.isDoneState()) {{
+                                throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
+                            }}
                             if (!streamEnd.isIdleState()) {{ throw new Error('streams must be in idle state'); }}
                             if (streamEnd.isInSet()) {{ throw new {runtime_error_class}('streams in waitable sets cannot be lifted'); }}
 

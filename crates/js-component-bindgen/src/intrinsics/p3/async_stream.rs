@@ -1813,6 +1813,9 @@ impl AsyncStreamIntrinsic {
                            if (!streamEnd) {{
                                throw new Error(`missing stream [${{this.#streamEndWaitableIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
+                           if (streamEnd.isDoneState()) {{
+                               throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
+                           }}
                            if (streamEnd.isInSet()) {{ throw new {runtime_error_class}('streams in waitable sets cannot be lifted'); }}
 
                             return new {external_stream_class}({{
@@ -2227,6 +2230,12 @@ impl AsyncStreamIntrinsic {
                         if (streamEnd.streamTableIdx() !== streamTableIdx) {{
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
                         }}
+                        if (streamEnd.isDoneState()) {{
+                            const message = streamEnd.isWritable()
+                                ? 'cannot write to stream after being notified that the readable end dropped'
+                                : 'cannot read from stream after being notified that the writable end dropped';
+                            throw new {runtime_error_class}(message);
+                        }}
 
                         return streamEnd.copy({{
                             isAsync,
@@ -2377,6 +2386,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamTransfer => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_transfer_fn = self.name();
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let remove_stream_end_from_table_fn =
                     render_args.require_intrinsic(Self::RemoveStreamEndFromTable);
                 let add_stream_end_to_table_fn =
@@ -2386,6 +2396,8 @@ impl AsyncStreamIntrinsic {
                 );
                 let global_stream_table_map =
                     render_args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                     r#"
@@ -2417,12 +2429,17 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const streamEnd = {remove_stream_end_from_table_fn}({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
+                        const streamEnd = {get_stream_end_fn}({{ tableIdx: srcTableIdx, streamEndWaitableIdx: srcStreamWaitableIdx }});
                         if (!streamEnd.isReadable()) {{
                             throw new Error("writable stream ends cannot be moved");
                         }}
                         if (streamEnd.isDoneState()) {{
-                            throw new Error('readable ends cannot be moved once writable ends are dropped');
+                            throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
+                        }}
+
+                        const removedStreamEnd = {remove_stream_end_from_table_fn}({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
+                        if (removedStreamEnd !== streamEnd) {{
+                            throw new Error('removed stream end does not match validated stream end');
                         }}
 
                         const {{ handle, waitableIdx }} = {add_stream_end_to_table_fn}({{ tableIdx: destTableIdx, streamEnd }});
