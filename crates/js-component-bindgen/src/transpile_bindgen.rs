@@ -20,7 +20,7 @@ use wasmtime_environ::component::{
     ExtractCallback, ImportIndex, NameMapNoIntern, Transcode,
     TypeComponentLocalErrorContextTableIndex,
 };
-use wasmtime_environ::{EntityIndex, FuncIndex, PrimaryMap};
+use wasmtime_environ::{EntityIndex, FuncIndex, PrimaryMap, Trap};
 use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::AbiVariant;
@@ -3251,9 +3251,20 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::Trap => {
+                let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let trap_messages = fact_trap_messages_js();
                 uwriteln!(
                     self.src.js,
-                    "function trampoline{i}(rep) {{ throw new TypeError('Trap'); }}"
+                    r#"
+                        const trampoline{i}TrapMessages = {trap_messages};
+                        function trampoline{i}(rep) {{
+                            const message = trampoline{i}TrapMessages[rep];
+                            if (message === undefined) {{
+                                throw new TypeError(`invalid canonical trap code [${{rep}}]`);
+                            }}
+                            throw new {runtime_error}(message);
+                        }}
+                    "#
                 );
             }
 
@@ -5903,6 +5914,15 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
     }
 }
 
+fn fact_trap_messages_js() -> String {
+    let messages = (0..=u8::MAX)
+        .filter_map(|code| {
+            Trap::from_u8(code).map(|trap| format!("{code}: {:?}", trap.to_string()))
+        })
+        .collect::<Vec<_>>();
+    format!("{{ {} }}", messages.join(", "))
+}
+
 /// Generate the javascript that corresponds to a list of lifting functions for a given list of types
 ///
 /// # Arguments
@@ -7565,6 +7585,21 @@ mod tests {
         assert_eq!(compat_key("1.0.0-rc.1"), None);
         assert_eq!(compat_key("0.2.0-pre"), None);
         assert_eq!(compat_key("not-a-version"), None);
+    }
+
+    #[test]
+    fn test_fact_trap_messages_use_canonical_codes() {
+        let messages = fact_trap_messages_js();
+        assert!(messages.contains(&format!(
+            "{}: {:?}",
+            Trap::CannotEnterComponent as u8,
+            "wasm trap: cannot enter component instance"
+        )));
+        assert!(messages.contains(&format!(
+            "{}: {:?}",
+            Trap::CannotLeaveComponent as u8,
+            "wasm trap: cannot leave component instance"
+        )));
     }
 
     #[test]
