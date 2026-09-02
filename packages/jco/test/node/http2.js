@@ -5,8 +5,9 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 import { describe, expect, test, vi } from "vitest";
 
 import { bundleComponentSource } from "../../src/bundle.js";
+import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { HTTP2_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { HTTP2_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, getTmpDir } from "../helpers.js";
 
@@ -36,10 +37,27 @@ describe("node:http2 builtin adapter", () => {
         expect(source).toContain("getPackedSettings");
         if (nodejsHttp2Via === "direct") {
             expect(onWitRequirement).toHaveBeenCalledWith(HTTP2_WIT_REQUIREMENT);
-            expect(source).toContain("jco.node.http2.callbacks");
+            expect(onWitRequirement).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    guestExports: [
+                        {
+                            witExport: "jco:node/http2-callbacks@0.1.0",
+                            jsExport: "http2Callbacks",
+                            moduleSpecifier: HTTP2_CALLBACKS_SPECIFIER,
+                        },
+                    ],
+                }),
+            );
         } else {
             expect(onWitRequirement).not.toHaveBeenCalled();
         }
+    });
+
+    test("resolves the direct callback implementation for an entry wrapper", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ...modulePaths, nodejsHttp2Via: "direct" });
+        const id = plugin.resolveId(HTTP2_CALLBACKS_SPECIFIER);
+        expect(id).toBe("\0jco-node-builtin:http2-callbacks");
+        expect(plugin.load(id)).toBe('export { http2Callbacks } from "/jco/http2.js";');
     });
 
     test("keeps the direct callback resource as an entry export", async () => {
@@ -51,8 +69,9 @@ describe("node:http2 builtin adapter", () => {
             http2Module,
             "export const http2Callbacks = { StreamListener: class StreamListener {} }; export default {};\n",
         );
-        const source = await bundleComponentSource(entry, {
-            plugins: [nodeBuiltinPlugin({ imports: [], exports: [] }, { http2Module })],
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { http2Module });
+        const source = await bundleNodeGuestExportsWrapper(entry, HTTP2_WIT_REQUIREMENT.guestExports, {
+            plugins: [plugin],
         });
         expect(source).toContain("http2Callbacks");
         expect(source).toMatch(/export\s*\{[^}]*http2Callbacks/);
