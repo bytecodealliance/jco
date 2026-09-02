@@ -611,6 +611,69 @@ and events inside the guest. Connection pooling, upgrades, CONNECT tunnels,
 HTTPS, and persistent HTTP/1.1 connections in the `wasi-sockets` implementation
 are not implemented; unavailable operations throw explicit errors.
 
+### HTTP/2
+
+HTTP/2 application code also keeps its ordinary Node imports. A client can open
+a session and a stream:
+
+```js
+import { connect } from "node:http2";
+
+const session = connect("https://example.com");
+const stream = session.request({ ":path": "/status" });
+stream.setEncoding("utf8");
+stream.on("data", (chunk) => console.log(chunk));
+stream.on("end", () => session.close());
+stream.end();
+```
+
+Servers retain the `stream` and compatibility `request` APIs:
+
+```js
+import { createServer } from "node:http2";
+
+const server = createServer();
+server.on("stream", (stream, headers) => {
+  stream.respond({ ":status": 200, "content-type": "text/plain" });
+  stream.end(`received ${headers[":path"]}`);
+});
+server.listen(8080, "127.0.0.1");
+```
+
+Select the implementation independently from `node:http`:
+
+```console
+jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http2-via direct -o component.wasm
+```
+
+`direct` is the default. Jco adds the typed `jco:node/http2@0.1.0` import and
+`jco:node/http2-callbacks@0.1.0` export only when absent. Servers, sessions, and
+streams are WIT resources; the separate guest-owned stream and server-error
+listener resources let a real Node host call back into the component. The
+default host mapping denies client and server capabilities with
+`ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Opt in to real Node HTTP/2 when transpiling:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/http2@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node'
+```
+
+The direct provider uses Node's actual `node:http2` implementation for h2c and
+TLS, including TLS ALPN negotiation. Its async connect, stream completion,
+settings, ping, listen, and close operations use JSPI rather than workers. The
+initial boundary buffers bodies; socket objects, priority, server push, and
+low-level flow-control access are explicitly unsupported.
+
+`wasi-sockets` rejects client and server construction with
+`ERR_JCO_UNSUPPORTED_NODE_API`. Raw Preview 2 sockets do not supply HTTP/2
+framing, HPACK, multiplexing, flow control, TLS, or ALPN, and this implementation
+does not substitute an HTTP/1 facade. `wasi-http` rejects these operations too:
+an outgoing handler represents individual requests, not observable Node HTTP/2
+sessions or arbitrary inbound servers. Capability-free constants and settings
+packing remain available in all three modes. Jco's generated WIT edits are
+commented, warned about, alias-aware, selected-world aware, and idempotent.
+
 # License
 
 This project is licensed under the Apache 2.0 license with the LLVM exception.
