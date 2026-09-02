@@ -240,26 +240,6 @@ adapter policy, limitations, and examples.
 
 See [ComponentizeJS][cjs] and [componentize-qjs][cqjs] for backend-specific details.
 
-> **Warning:** Node.js built-in compatibility in components is experimental.
-> APIs, behavior, and generated component interfaces may change incompatibly.
-
-Bundled `node:http2` code has the parallel
-`--with-nodejs-http2-via <direct|wasi-sockets|wasi-http>` option. `direct` adds a
-deny-by-default typed `jco:node/http2@0.1.0` import and the guest callback export
-needed for host-to-guest stream and server-error callbacks. Jco injects only
-missing declarations into the selected WIT world, recognizes aliased imports
-and exports, preserves existing files, and produces the same result when run
-repeatedly.
-
-With an explicit Node host map, direct mode uses real `node:http2` sessions,
-streams, h2c servers, and TLS servers with ALPN. The async boundary is configured
-for JSPI and does not create workers. `wasi-sockets` currently rejects clients
-and servers because HTTP/2 framing, HPACK, multiplexing, flow control, TLS, and
-ALPN are not implemented. `wasi-http` rejects session and server operations
-because outgoing-handler cannot expose those Node semantics. Unsupported paths
-throw `ERR_JCO_UNSUPPORTED_NODE_API`; constants and settings helpers remain
-usable without network capabilities.
-
 [sm]: https://github.com/bytecodealliance/StarlingMonkey
 [qjs-ng]: https://github.com/quickjs-ng/quickjs
 [cjs]: https://github.com/bytecodealliance/componentize-js
