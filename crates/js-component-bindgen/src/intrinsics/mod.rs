@@ -1375,18 +1375,16 @@ mod tests {
         let table_remove = Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove);
         let (source, intrinsics) = render([transfer]);
 
-        for dependency in [table_flag, table_get, table_remove] {
+        for dependency in [table_flag, table_get] {
             assert!(intrinsics.contains(&dependency));
         }
+        assert!(!intrinsics.contains(&table_remove));
 
         let flag_position = source.find("const T_FLAG").unwrap();
         let get_position = source.find("function rscTableGet").unwrap();
-        let remove_position = source.find("function rscTableRemove").unwrap();
         let transfer_position = source.find("function resourceTransferBorrow").unwrap();
         assert!(flag_position < get_position);
-        assert!(flag_position < remove_position);
         assert!(get_position < transfer_position);
-        assert!(remove_position < transfer_position);
     }
 
     #[test]
@@ -1675,7 +1673,7 @@ mod tests {
     }
 
     #[test]
-    fn resource_transfer_borrow_checks_source_handle() {
+    fn resource_transfer_borrow_lends_without_consuming_source() {
         let mut intrinsics = BTreeSet::from([Intrinsic::Resource(
             ResourceIntrinsic::ResourceTransferBorrow,
         )]);
@@ -1688,9 +1686,44 @@ mod tests {
         );
 
         assert!(source.contains("function rscTableGet(table, handle)"));
-        assert!(source.contains("function rscTableRemove(table, handle)"));
         assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
-        assert!(source.contains("if (!own) rscTableRemove(fromTable, handle);"));
+        assert!(!source.contains("if (!own) rscTableRemove(fromTable, handle);"));
+        assert!(source.contains("fromTable[handle << 1]++;"));
+        assert!(source.contains("borrowTask.addResourceLender(fromTable, handle);"));
+        assert!(source.contains("borrowTask?.resourceScopeId() ?? SCOPE_ID"));
+        assert!(source.contains("borrowTask.addBorrowedHandle();"));
+    }
+
+    #[test]
+    fn resource_drop_updates_the_borrowing_task_scope() {
+        let source =
+            render_intrinsic_body(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+
+        assert!(
+            source
+                .contains("const borrowTask = own ? undefined : RESOURCE_SCOPE_TASKS.get(scope);")
+        );
+        assert!(source.contains("borrowTask?.removeBorrowedHandle();"));
+        assert!(source.contains(
+            "throw new WebAssemblyRuntimeError('cannot remove owned resource while borrowed');"
+        ));
+    }
+
+    #[test]
+    fn tasks_validate_and_release_their_resource_scope() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+
+        assert!(source.contains("this.#resourceScopeId = ++RESOURCE_SCOPE_ID;"));
+        assert!(source.contains("RESOURCE_SCOPE_TASKS.set(this.#resourceScopeId, this);"));
+        assert!(source.contains("addBorrowedHandle()"));
+        assert!(source.contains("removeBorrowedHandle()"));
+        assert!(source.contains("addResourceLender(table, handle)"));
+        assert!(source.contains(
+            "throw new WebAssemblyRuntimeError('borrow handles still remain at the end of the call');"
+        ));
+        assert!(source.contains("table[idx] = lendCount - 1;"));
+        assert!(source.contains("RESOURCE_SCOPE_TASKS.delete(this.#resourceScopeId);"));
     }
 
     /// Future read/write trampoline code references the future end classes

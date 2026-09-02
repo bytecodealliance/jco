@@ -61,6 +61,8 @@ pub enum ResourceIntrinsic {
     ResourceTableEnsureBorrowDrop,
     ResourceTableRemove,
     ResourceCallBorrows,
+    ResourceScopeCounter,
+    ResourceScopeTasks,
     ResourceTransferBorrow,
     ResourceTransferBorrowValidLifting,
     ResourceTransferOwn,
@@ -83,6 +85,8 @@ impl ResourceIntrinsic {
             Self::ResourceTransferBorrowValidLifting.name(),
             Self::ResourceTransferOwn.name(),
             Self::CurResourceBorrows.name(),
+            Self::ResourceScopeCounter.name(),
+            Self::ResourceScopeTasks.name(),
             Self::ResourceDestructorCall.name(),
         ]
     }
@@ -91,6 +95,8 @@ impl ResourceIntrinsic {
     pub fn name(&self) -> &'static str {
         match self {
             Self::ResourceCallBorrows => "RESOURCE_CALL_BORROWS",
+            Self::ResourceScopeCounter => "RESOURCE_SCOPE_ID",
+            Self::ResourceScopeTasks => "RESOURCE_SCOPE_TASKS",
             Self::ResourceTableFlag => "T_FLAG",
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
@@ -255,6 +261,7 @@ impl ResourceIntrinsic {
                 let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
                 let runtime_error =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let resource_scope_tasks = render_args.require_intrinsic(Self::ResourceScopeTasks);
                 uwriteln!(
                     output,
                     r#"
@@ -267,8 +274,13 @@ impl ResourceIntrinsic {
                         // Resource entries occupy scope/rep pairs after the table sentinel.
                         throw new {runtime_error}(`unknown handle index ${{(handle << 1) + 1}}`);
                     }}
+                    if (own && scope !== 0) {{
+                        throw new {runtime_error}('cannot remove owned resource while borrowed');
+                    }}
+                    const borrowTask = own ? undefined : {resource_scope_tasks}.get(scope);
                     table[handle << 1] = table[0] | {table_flag};
                     table[0] = handle | {table_flag};
+                    borrowTask?.removeBorrowedHandle();
                     return {{ rep, scope, own }};
                 }}
             "#
@@ -280,11 +292,14 @@ impl ResourceIntrinsic {
                 let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
                 let resource_borrows = render_args.require_intrinsic(Self::ResourceCallBorrows);
                 let rsc_table_get = render_args.require_intrinsic(Self::ResourceTableGet);
-                let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
                 let rsc_table_create_borrow =
                     render_args.require_intrinsic(Self::ResourceTableCreateBorrow);
                 let scope_id = render_args.require_intrinsic(Intrinsic::ScopeId);
                 let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                let get_global_current_task_meta =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let get_current_task = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
                 uwriteln!(
                     output,
@@ -292,7 +307,6 @@ impl ResourceIntrinsic {
                     function {resource_transfer_borrow_fn}(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
                         const {{ rep, own }} = {rsc_table_get}(fromTable, handle);
-                        if (!own) {rsc_table_remove}(fromTable, handle);
 
                         let toTable = {handle_tables}[toTid];
                         if (!toTable) {{
@@ -301,12 +315,33 @@ impl ResourceIntrinsic {
                             toTable._createdReps = new Set();
                         }}
 
+                        const componentIdx = toTable._componentIdx;
+                        const currentTaskMeta = componentIdx === undefined
+                            ? undefined
+                            : {get_global_current_task_meta}(componentIdx);
+                        const borrowTask = currentTaskMeta
+                            ? {get_current_task}(componentIdx, currentTaskMeta.taskID)?.task
+                            : undefined;
+
+                        if (borrowTask && own) {{
+                            fromTable[handle << 1]++;
+                            borrowTask.addResourceLender(fromTable, handle);
+                        }}
+
                         if (toTable._createdReps.has(rep)) {{
                             return rep;
                         }}
 
-                        const newHandle = {rsc_table_create_borrow}(toTable, rep, {scope_id});
-                        {resource_borrows}.push({{ rid: toTid, handle: newHandle }});
+                        const newHandle = {rsc_table_create_borrow}(
+                            toTable,
+                            rep,
+                            borrowTask?.resourceScopeId() ?? {scope_id},
+                        );
+                        if (borrowTask) {{
+                            borrowTask.addBorrowedHandle();
+                        }} else {{
+                            {resource_borrows}.push({{ rid: toTid, handle: newHandle }});
+                        }}
                         return newHandle;
                     }}
                 "#
@@ -314,32 +349,12 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTransferBorrowValidLifting => {
-                let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
-                let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
-                let rsc_table_create_borrow =
-                    render_args.require_intrinsic(Self::ResourceTableCreateBorrow);
-                let scope_id = render_args.require_intrinsic(Intrinsic::ScopeId);
-                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
-                output.push_str(&format!(r#"
-                    function resourceTransferBorrowValidLifting(handle, fromTid, toTid) {{
-                        const fromTable = {handle_tables}[fromTid];
-                        const isOwn = (fromTable[(handle << 1) + 1] & {table_flag}) !== 0;
-                        const rep = isOwn ? fromTable[(handle << 1) + 1] & ~{table_flag} : {rsc_table_remove}(fromTable, handle).rep;
-
-                        let toTable = {handle_tables}[toTid];
-                        if (!toTable) {{
-                            {handle_tables}[toTid] = [{table_flag}, 0];
-                            toTable = {handle_tables}[toTid];
-                            toTable._createdReps = new Set();
-                        }}
-
-                        if (toTable._createdReps.has(rep)) {{
-                            return rep;
-                        }}
-
-                        return {rsc_table_create_borrow}(toTable, rep, {scope_id});
-                    }}
-                "#));
+                let resource_transfer_borrow =
+                    render_args.require_intrinsic(Self::ResourceTransferBorrow);
+                uwriteln!(
+                    output,
+                    "const resourceTransferBorrowValidLifting = {resource_transfer_borrow};"
+                );
             }
 
             Self::ResourceTransferOwn => {
@@ -370,6 +385,16 @@ impl ResourceIntrinsic {
             Self::ResourceCallBorrows => {
                 let name = self.name();
                 output.push_str(&format!("let {name} = [];"));
+            }
+
+            Self::ResourceScopeCounter => {
+                let name = self.name();
+                uwriteln!(output, "let {name} = 0;");
+            }
+
+            Self::ResourceScopeTasks => {
+                let name = self.name();
+                uwriteln!(output, "const {name} = new Map();");
             }
         }
     }
