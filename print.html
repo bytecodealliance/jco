@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5c7bd545.js";
+            window.path_to_searchindex_js = "searchindex-595eafe3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -1940,8 +1940,18 @@ to the host; and</li>
 <li>the <code>node:http</code> client and server APIs, implemented over a selectable direct
 <code>jco:node/http@0.1.0</code>, Preview 2 <code>wasi:sockets</code>, or Preview 2 <code>wasi:http</code>
 implementation. The direct provider denies access by default, direct and
-<code>wasi:sockets</code> support servers, and <code>wasi:http</code> rejects server construction.</li>
+<code>wasi:sockets</code> support servers, and <code>wasi:http</code> rejects server construction;</li>
+<li><code>node:stream/consumers</code>, implemented as portable iterable collection over the
+engine’s Blob, typed-array, and text-codec globals; and</li>
+<li>the experimental Node 24.20 <code>node:stream/iter</code> API, including portable sources,
+transforms, consumers, writers, push streams, duplex pairs, and multicast
+streams. It requires no WIT capability.</li>
 </ul>
+<p>Iterable-stream adapters that consume duck-typed classic Readable and Writable
+objects are available. The reverse adapters that must construct a real classic
+Node stream fail explicitly until Jco has a faithful <code>node:stream</code>
+implementation; jco-std does not substitute unenv’s nonfunctional constructor
+mocks.</p>
 <p>Not every Node compatibility module lives in <code>jco-std</code>. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
 example, the current Buffer and querystring cores come from <code>unenv</code> and are wrapped
@@ -2049,7 +2059,9 @@ as <code>buffer</code>, <code>path</code>, and <code>querystring</code> are not 
 componentization modes. For example, a component can use jco-std’s Hono adapter
 while its application code imports <code>node:assert</code> and <code>node:buffer</code>.</p>
 <h2 id="currently-supported-modules"><a class="header" href="#currently-supported-modules">Currently supported modules</a></h2>
-<p>The current compatibility target is Node.js 24.19.0. The unenv-backed modules are
+<p>The current compatibility target is Node.js 24.20.0. Implementations that predate
+that patch retain their pinned Node 24 provenance; <code>node:stream/iter</code> specifically
+targets the release where it was introduced. The unenv-backed modules are
 audited against <code>unenv@2.0.0-rc.24</code>; upgrading unenv requires rerunning the
 compatibility suites.</p>
 <p>These entry points are namespaced by two independent versions: the WASI version they adapt
@@ -2092,9 +2104,46 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
+<tr><td><code>node:stream/consumers</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers</code></td><td>Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.</td></tr>
+<tr><td><code>node:stream/iter</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter</code></td><td>Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.</td></tr>
 </tbody>
 </table>
 </div>
+<h3 id="stream-consumers-and-iterable-streams"><a class="header" href="#stream-consumers-and-iterable-streams">Stream consumers and iterable streams</a></h3>
+<p><code>node:stream/consumers</code> supports Node 24 applications written before or after the
+24.20 iterable-stream addition. <code>node:stream/iter</code> exposes the experimental 24.20
+batch-oriented API. Both execute entirely inside the guest and share byte
+normalization, limits, text decoding, and collection behavior. Importing either
+specifier adds no host or WIT capability.</p>
+<p>For example, ordinary Node application source can use both entry points:</p>
+<pre><code class="language-js">import { text as consumeText } from 'node:stream/consumers';
+import { from, pull, text } from 'node:stream/iter';
+
+export async function run() {
+    const upper = (batch) =&gt;
+        batch?.map((chunk) =&gt; chunk.map((byte) =&gt; (byte &gt;= 97 &amp;&amp; byte &lt;= 122 ? byte - 32 : byte))) ?? null;
+    return {
+        consumed: await consumeText(['consumer']),
+        transformed: await text(pull(from('iterable'), upper)),
+    };
+}
+</code></pre>
+<p>Bundle that source normally; the WIT world only needs to describe the component’s
+own imports and exports:</p>
+<pre><code class="language-console">jco componentize app.js --bundle --backend starlingmonkey -w app.wit -o app.wasm
+</code></pre>
+<p>The implementation uses engine-provided iterable, typed-array, Blob, text-codec,
+and abort globals. <code>fromReadable()</code> and <code>fromWritable()</code> work with duck-typed
+classic streams. <code>toReadable()</code>, <code>toReadableSync()</code>, and <code>toWritable()</code> need real
+classic Node stream constructors, which neither the component engine nor the
+audited unenv release provides. Those functions remain present but immediately
+throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>; they do not inspect their arguments first.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Node marks <code>node:stream/iter</code> experimental. Its Jco implementation is likewise
+experimental and may change incompatibly without a semver-major release as the
+upstream Node 24 API evolves.</p>
+</blockquote>
 <h3 id="globals"><a class="header" href="#globals">Globals</a></h3>
 <p>Node’s <a href="https://nodejs.org/docs/latest-v24.x/api/globals.html">Globals API</a> is a
 catalog of runtime bindings, not a <code>node:globals</code> module. Jco therefore does not
@@ -2626,11 +2675,9 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http</code>,
-<code>node:http2</code>, <code>node:https</code>, <code>node:inspector</code>, <code>node:inspector/promises</code>,
-<code>node:module</code>, <code>node:net</code>, <code>node:os</code>, <code>node:perf_hooks</code>, <code>node:process</code>,
-<code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>, <code>node:stream/consumers</code>,
-<code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
+<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http</code>, <code>node:http2</code>, <code>node:https</code>,
+<code>node:module</code>, <code>node:net</code>, <code>node:perf_hooks</code>, <code>node:process</code>, <code>node:repl</code>,
+<code>node:sqlite</code>, <code>node:stream</code>, <code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>

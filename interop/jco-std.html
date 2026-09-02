@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c7bd545.js";
+            window.path_to_searchindex_js = "../searchindex-595eafe3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -282,8 +282,18 @@ to the host; and</li>
 <li>the <code>node:http</code> client and server APIs, implemented over a selectable direct
 <code>jco:node/http@0.1.0</code>, Preview 2 <code>wasi:sockets</code>, or Preview 2 <code>wasi:http</code>
 implementation. The direct provider denies access by default, direct and
-<code>wasi:sockets</code> support servers, and <code>wasi:http</code> rejects server construction.</li>
+<code>wasi:sockets</code> support servers, and <code>wasi:http</code> rejects server construction;</li>
+<li><code>node:stream/consumers</code>, implemented as portable iterable collection over the
+engine’s Blob, typed-array, and text-codec globals; and</li>
+<li>the experimental Node 24.20 <code>node:stream/iter</code> API, including portable sources,
+transforms, consumers, writers, push streams, duplex pairs, and multicast
+streams. It requires no WIT capability.</li>
 </ul>
+<p>Iterable-stream adapters that consume duck-typed classic Readable and Writable
+objects are available. The reverse adapters that must construct a real classic
+Node stream fail explicitly until Jco has a faithful <code>node:stream</code>
+implementation; jco-std does not substitute unenv’s nonfunctional constructor
+mocks.</p>
 <p>Not every Node compatibility module lives in <code>jco-std</code>. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
 example, the current Buffer and querystring cores come from <code>unenv</code> and are wrapped
