@@ -1495,6 +1495,22 @@ mod tests {
     }
 
     #[test]
+    fn cancellable_wait_poll_and_yield_reach_task_state() {
+        let wait = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
+        assert!(wait.contains("const wset = cstate.handles.get(waitableSetRep);"));
+        assert!(!wait.contains("await cstate.handles.get(waitableSetRep);"));
+        assert!(wait.contains("cancellable: isCancellable"));
+
+        let poll = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
+        assert!(poll.contains("deliverPendingCancel({ cancellable: isCancellable })"));
+
+        let yield_ = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
+        assert!(yield_.contains("const keepGoing = await task.immediateSuspend({"));
+        assert!(yield_.contains("cancellable: isCancellable"));
+        assert!(yield_.contains("return keepGoing ? 0 : 1;"));
+    }
+
+    #[test]
     fn sync_start_fused_adapter_runs_in_the_caller_task() {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::SyncStartCall));
 
