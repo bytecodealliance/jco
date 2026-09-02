@@ -31,10 +31,10 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/drop-subtask.wast' },
     { relPath: 'async/async-calls-sync.wast' },
     { relPath: 'async/cancellable.wast' },
+    { relPath: 'async/deadlock.wast' },
 
     // Skipped tests
     { relPath: 'async/sync-streams.wast', skip: true },
-    { relPath: 'async/deadlock.wast', skip: true },
     { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
     { relPath: 'async/trap-on-reenter.wast', skip: true },
     { relPath: 'async/sync-barges-in.wast', skip: true },
