@@ -442,6 +442,7 @@ impl WaitableIntrinsic {
                         const {{
                             componentIdx,
                             isAsync,
+                            isCancellable,
                             memoryIdx,
                             getMemoryFn,
                         }} = ctx;
@@ -459,12 +460,12 @@ impl WaitableIntrinsic {
                         const memory = getMemoryFn();
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        const wset = await cstate.handles.get(waitableSetRep);
+                        const wset = cstate.handles.get(waitableSetRep);
                         if (!(wset instanceof {waitable_set_class})) {{
                             throw new Error(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
                         }}
 
-                        const event = await wset.waitUntil({{ readyFn: () => true, task, cancellable: false }});
+                        const event = await wset.waitUntil({{ readyFn: () => true, task, cancellable: isCancellable }});
                         return {store_event_in_component_memory_fn}({{
                             memory,
                             ptr: resultPtr,

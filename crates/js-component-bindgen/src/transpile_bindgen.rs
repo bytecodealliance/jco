@@ -1834,6 +1834,7 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     async_,
+                    cancellable,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
                     ..
@@ -1858,6 +1859,7 @@ impl<'a> Instantiator<'a, '_> {
                     const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({instance_idx}, {waitable_set_wait_fn}.bind(null, {{
                         componentIdx: {instance_idx},
                         isAsync: {async_},
+                        isCancellable: {cancellable},
                         memoryIdx: {memory_idx},
                         getMemoryFn: () => memory{memory_idx},
                     }})));
