@@ -1,0 +1,6 @@
+package jco-fixtures:node-http-sockets-server;
+
+world component {
+    export start: func();
+    export stop: func();
+}

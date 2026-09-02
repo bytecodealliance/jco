@@ -1,5 +1,8 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import nodeHttp from "node:http";
+import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
@@ -226,6 +229,56 @@ describe("node:http in a component", () => {
             const output = await exec(runner, esModuleOutputPath, NODE_HOST);
             expect(output.stdout.trim()).toBe("POST /items: hello");
         } finally {
+            await cleanup();
+        }
+    }, 600_000);
+
+    test("serves a request over wasi:sockets", async () => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-http-sockets-server",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "wasi-sockets"],
+        });
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http-sockets-server", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["start", "stop"] } } },
+        });
+        const runner = fileURLToPath(
+            new URL("../fixtures/componentize/node-http-sockets-server/run.js", import.meta.url),
+        );
+        // The guest blocks inside `start()` to accept connections, so it runs as its own
+        // process and reports the port it chose on stderr.
+        const server = spawn(process.execPath, [runner, esModuleOutputPath]);
+        try {
+            const port = await new Promise((resolve, reject) => {
+                let output = "";
+                const timer = setTimeout(() => reject(new Error(`no port in: ${output}`)), 120_000);
+                server.stderr.on("data", (chunk) => {
+                    output += chunk;
+                    const match = /listening on (\d+)/.exec(output);
+                    if (match) {
+                        clearTimeout(timer);
+                        resolve(Number(match[1]));
+                    }
+                });
+                server.once("error", reject);
+                server.once("exit", (code) => reject(new Error(`exited with ${code}: ${output}`)));
+            });
+
+            const body = await new Promise((resolve, reject) => {
+                const request = nodeHttp.request(`http://127.0.0.1:${port}/items`, { method: "POST" }, (response) => {
+                    response.setEncoding("utf8");
+                    const chunks = [];
+                    response.on("data", (chunk) => chunks.push(chunk));
+                    response.once("end", () => resolve(chunks.join("")));
+                });
+                request.once("error", reject);
+                request.end("hello");
+            });
+            expect(body).toBe("POST /items: hello");
+        } finally {
+            server.kill();
             await cleanup();
         }
     }, 600_000);
