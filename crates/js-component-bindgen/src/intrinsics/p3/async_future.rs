@@ -1771,6 +1771,8 @@ impl AsyncFutureIntrinsic {
                 let gen_host_inject_fn = self.name();
                 let nested_future_symbol = render_args.require_intrinsic(Self::NestedFutureSymbol);
                 let get_error_payload = render_args.require_intrinsic(Intrinsic::GetErrorPayload);
+                let track_host_operation =
+                    render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
 
                 uwriteln!(
                     output,
@@ -1798,7 +1800,7 @@ impl AsyncFutureIntrinsic {
 
                               let value;
                               try {{
-                                  value = await promise;
+                                  value = await {track_host_operation}(() => promise);
                               }} catch (err) {{
                                   const elemMeta = hostWriteEnd.getElemMeta();
                                   if (!elemMeta.payloadTypeName?.startsWith('Result(')) {{
