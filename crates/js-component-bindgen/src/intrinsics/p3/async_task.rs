@@ -647,8 +647,9 @@ impl AsyncTaskIntrinsic {
 
                             if (!subtask.isResolved()) {{
                                 // Cancellation immediately resumes one cancellable child
-                                // execution slice. Wait until that slice either resolves or
-                                // suspends again before deciding whether the cancel blocked.
+                                // execution slice. Wait until that slice releases component
+                                // entry by exiting or suspending again before deciding whether
+                                // the cancel blocked.
                                 const childTask = subtask.getChildTask();
                                 if (childTask) {{
                                     const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
@@ -1474,7 +1475,6 @@ impl AsyncTaskIntrinsic {
                             // host-driven rejection path (see `reject()`).
                             this.onResolve(args?.error ?? null);
                             this.#state = {task_class}.State.RESOLVED;
-                            this.notifyProgress();
                         }}
 
                         onResolve(taskValue) {{
@@ -1614,7 +1614,6 @@ impl AsyncTaskIntrinsic {
                                     }});
                                     throw new Error('unexpected number of results');
                             }}
-                            this.notifyProgress();
                         }}
 
                         exit(args) {{
@@ -1647,6 +1646,7 @@ impl AsyncTaskIntrinsic {
                             // task exiting while another task's slice holds the lock no
                             // longer clears the foreign hold).
                             state.exclusiveRelease(this.#id);
+                            this.notifyProgress();
 
                             for (const f of this.#onExitHandlers) {{
                                 try {{
