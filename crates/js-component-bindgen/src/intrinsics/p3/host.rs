@@ -696,6 +696,8 @@ impl HostIntrinsic {
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let set_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                let promise_with_resolvers_fn =
+                    render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
 
                 // NTOE: in the case of a sync-lowered import of an async fucntion,
                 // we must handle the blocking start-call differently:
@@ -760,6 +762,20 @@ impl HostIntrinsic {
                         const params = preparedTask.getCalleeParams();
 
                         const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
+
+                        const {{
+                            promise: taskReturnPromise,
+                            resolve: resolveTaskReturn,
+                            reject: rejectTaskReturn,
+                        }} = {promise_with_resolvers_fn}();
+                        preparedTask.registerOnResolveHandler(() => {{
+                            const err = preparedTask.isErrored();
+                            if (err) {{
+                                rejectTaskReturn(err);
+                            }} else {{
+                                resolveTaskReturn();
+                            }}
+                        }});
 
                         // For fused guest->guest calls the [return-call] helper performs the
                         // result copy/lower; it is invoked by the taskReturn intrinsic when
@@ -842,14 +858,24 @@ impl HostIntrinsic {
                                 componentIdx: preparedTask.componentIdx(),
                                 subtaskID: subtask.id(),
                             }});
-                            await {async_driver_loop_fn}({{
+                            {async_driver_loop_fn}({{
                                 componentState: calleeComponentState,
                                 task: preparedTask,
                                 fnName,
                                 isAsync: true,
                                 callbackResult,
+                            }}).catch(err => {{
+                                {debug_log_fn}('[{sync_start_call_fn}()] driver loop failed', {{ err }});
+                                if (!preparedTask.isResolvedState()) {{
+                                    preparedTask.setErrored(err);
+                                    preparedTask.reject(err);
+                                }}
                             }});
                         }}
+
+                        // A sync lower blocks only until task.return supplies its result.
+                        // The callback protocol may continue running after that return.
+                        await taskReturnPromise;
 
                         const callMeta = subtask.getCallMetadata();
                         const flatResult = callMeta?.returnFnResult;

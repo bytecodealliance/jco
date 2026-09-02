@@ -1486,6 +1486,9 @@ mod tests {
         assert!(source.contains(
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
+        assert!(source.contains("preparedTask.registerOnResolveHandler(() => {"));
+        assert!(source.contains("await taskReturnPromise;"));
+        assert!(!source.contains("await _driverLoop({"));
     }
 
     #[test]
