@@ -223,37 +223,86 @@ impl WaitableIntrinsic {
                             throw new Error('no waitables had a pending event');
                         }}
 
-                        async waitUntil(opts) {{
-                            {debug_log_fn}('[{waitable_set_class}#waitUntil()] args', {{ opts }});
+                        tryWait(opts) {{
+                            {debug_log_fn}('[{waitable_set_class}#tryWait()] args', {{ opts }});
                             // TODO(threads): this task should be the thread
                             const {{ readyFn, task, cancellable }} = opts;
 
-                            let event;
-
-                            this.incrementNumWaiting();
-
-                            const keepGoing = await task.suspendUntil({{
-                                readyFn: () => {{
-                                    const hasPendingEvent = this.hasPendingEvent();
-                                    const ready = readyFn();
-                                    return ready && hasPendingEvent;
-                                }},
-                                cancellable,
-                            }});
-
-                            if (keepGoing) {{
-                                event = this.getPendingEvent();
-                            }} else {{
-                                event = {{
+                            const isReady = () => {{
+                                const hasPendingEvent = this.hasPendingEvent();
+                                const ready = readyFn();
+                                return ready && hasPendingEvent;
+                            }};
+                            const finishWait = (keepGoing) => {{
+                                const event = keepGoing
+                                    ? this.getPendingEvent()
+                                    : {{
                                     code: {async_event_code_enum}.TASK_CANCELLED,
                                     payload0: 0,
                                     payload1: 0,
                                 }};
+                                return event;
+                            }};
+
+                            if (task.deliverPendingCancel({{ cancellable }})) {{
+                                return finishWait(false);
+                            }}
+                            if (isReady()) {{ return finishWait(true); }}
+                            return null;
+                        }}
+
+                        waitUntil(opts) {{
+                            {debug_log_fn}('[{waitable_set_class}#waitUntil()] args', {{ opts }});
+                            const event = this.tryWait(opts);
+                            if (event !== null) {{ return event; }}
+
+                            const {{ readyFn, task, cancellable }} = opts;
+                            const isReady = () => readyFn() && this.hasPendingEvent();
+                            this.incrementNumWaiting();
+
+                            return task.suspendUntil({{ readyFn: isReady, cancellable }}).then(
+                                (keepGoing) => {{
+                                    const readyEvent = keepGoing
+                                        ? this.getPendingEvent()
+                                        : {{
+                                        code: {async_event_code_enum}.TASK_CANCELLED,
+                                        payload0: 0,
+                                        payload1: 0,
+                                    }};
+                                    this.decrementNumWaiting();
+                                    return readyEvent;
+                                }},
+                                (err) => {{
+                                    this.decrementNumWaiting();
+                                    throw err;
+                                }},
+                            );
+                        }}
+
+                        waitUntilCallback(opts, onEvent) {{
+                            {debug_log_fn}('[{waitable_set_class}#waitUntilCallback()] args', {{ opts }});
+                            const event = this.tryWait(opts);
+                            if (event !== null) {{
+                                onEvent(event);
+                                return;
                             }}
 
-                            this.decrementNumWaiting();
-
-                            return event;
+                            const {{ readyFn, task, cancellable }} = opts;
+                            this.incrementNumWaiting();
+                            task.suspendUntilCallback({{
+                                readyFn: () => readyFn() && this.hasPendingEvent(),
+                                cancellable,
+                            }}, (keepGoing) => {{
+                                const resumedEvent = keepGoing
+                                    ? this.getPendingEvent()
+                                    : {{
+                                    code: {async_event_code_enum}.TASK_CANCELLED,
+                                    payload0: 0,
+                                    payload1: 0,
+                                }};
+                                this.decrementNumWaiting();
+                                onEvent(resumedEvent);
+                            }});
                         }}
 
                     }}
@@ -437,7 +486,7 @@ impl WaitableIntrinsic {
                 let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
 
                 output.push_str(&format!(r#"
-                    async function {waitable_set_wait_fn}(ctx, waitableSetRep, resultPtr) {{
+                    function {waitable_set_wait_fn}(ctx, waitableSetRep, resultPtr, syncOnly = false) {{
                         {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ ctx, waitableSetRep, resultPtr }});
                         const {{
                             componentIdx,
@@ -465,15 +514,21 @@ impl WaitableIntrinsic {
                             throw new Error(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
                         }}
 
-                        const event = await wset.waitUntil({{ readyFn: () => true, task, cancellable: isCancellable }});
-                        return {store_event_in_component_memory_fn}({{
-                            memory,
-                            ptr: resultPtr,
-                            event,
-                            componentIdx,
-                            task,
-                            memoryIdx,
-                        }});
+                        const storeEvent = (event) => {store_event_in_component_memory_fn}({{
+                                memory,
+                                ptr: resultPtr,
+                                event,
+                                componentIdx,
+                                task,
+                                memoryIdx,
+                            }});
+                        const waitOpts = {{ readyFn: () => true, task, cancellable: isCancellable }};
+                        const event = syncOnly ? wset.tryWait(waitOpts) : wset.waitUntil(waitOpts);
+                        if (event === null) {{ return -1; }}
+                        if (event && typeof event.then === 'function') {{
+                            return event.then(storeEvent);
+                        }}
+                        return storeEvent(event);
                     }}
                 "#));
             }

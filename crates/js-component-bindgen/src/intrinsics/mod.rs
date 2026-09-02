@@ -170,6 +170,18 @@ pub enum Intrinsic {
     /// Wrap the JS payload of a `WebAssembly.Suspending` import so the
     /// importing component's current-task register survives suspension
     SuspendingImportWrapperFn,
+
+    /// Build an `(i32) -> i32` Wasm trampoline that calls a plain fast path
+    /// before falling back to a JSPI-suspending slow path when it returns -2.
+    ConditionalSuspending1I32ToI32Fn,
+
+    /// Build an `(i32, i32) -> i32` Wasm trampoline that calls a plain fast
+    /// path before falling back to a JSPI-suspending slow path.
+    ConditionalSuspending2I32ToI32Fn,
+
+    /// Build an `(i32, i32, i32) -> ()` Wasm trampoline that calls a plain fast
+    /// path before falling back to a JSPI-suspending slow path.
+    ConditionalSuspending3I32ToVoidFn,
 }
 
 macro_rules! impl_from_intrinsic {
@@ -1240,6 +1252,93 @@ impl Intrinsic {
                 ));
             }
 
+            Self::ConditionalSuspending2I32ToI32Fn => {
+                let conditional_suspending_fn =
+                    args.require_intrinsic(Self::ConditionalSuspending2I32ToI32Fn);
+
+                output.push_str(&format!(
+                    r#"
+                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
+                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+                          0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f,
+                          0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74,
+                          0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f, 0x77, 0x00,
+                          0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03,
+                          0x72, 0x75, 0x6e, 0x00, 0x02, 0x0a, 0x1d, 0x01, 0x1b,
+                          0x01, 0x01, 0x7f, 0x20, 0x00, 0x20, 0x01, 0x10, 0x00,
+                          0x22, 0x02, 0x41, 0x7f, 0x47, 0x04, 0x7f, 0x20, 0x02,
+                          0x05, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0b,
+                      ]));
+
+                      function {conditional_suspending_fn}(fast, slow) {{
+                          return new WebAssembly.Instance(
+                              {conditional_suspending_fn}Module,
+                              {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
+                          ).exports.run;
+                      }}
+                    "#,
+                ));
+            }
+
+            Self::ConditionalSuspending1I32ToI32Fn => {
+                let conditional_suspending_fn =
+                    args.require_intrinsic(Self::ConditionalSuspending1I32ToI32Fn);
+
+                output.push_str(&format!(
+                    r#"
+                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
+                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+                          0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f,
+                          0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73,
+                          0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
+                          0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07,
+                          0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02,
+                          0x0a, 0x19, 0x01, 0x17, 0x01, 0x01, 0x7f, 0x20,
+                          0x00, 0x10, 0x00, 0x22, 0x01, 0x41, 0x7e, 0x47,
+                          0x04, 0x7f, 0x20, 0x01, 0x05, 0x20, 0x00, 0x10,
+                          0x01, 0x0b, 0x0b,
+                      ]));
+
+                      function {conditional_suspending_fn}(fast, slow) {{
+                          return new WebAssembly.Instance(
+                              {conditional_suspending_fn}Module,
+                              {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
+                          ).exports.run;
+                      }}
+                    "#,
+                ));
+            }
+
+            Self::ConditionalSuspending3I32ToVoidFn => {
+                let conditional_suspending_fn =
+                    args.require_intrinsic(Self::ConditionalSuspending3I32ToVoidFn);
+
+                output.push_str(&format!(
+                    r#"
+                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
+                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+                          0x01, 0x0e, 0x02, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
+                          0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x00,
+                          0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73,
+                          0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
+                          0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x07,
+                          0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02,
+                          0x0a, 0x19, 0x01, 0x17, 0x00, 0x20, 0x00, 0x20,
+                          0x01, 0x20, 0x02, 0x10, 0x00, 0x45, 0x04, 0x40,
+                          0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0x10, 0x01,
+                          0x1a, 0x0b, 0x0b,
+                      ]));
+
+                      function {conditional_suspending_fn}(fast, slow) {{
+                          return new WebAssembly.Instance(
+                              {conditional_suspending_fn}Module,
+                              {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
+                          ).exports.run;
+                      }}
+                    "#,
+                ));
+            }
+
             // TODO(feat): customizable stream classes
             Intrinsic::PlatformReadableStreamClass => {
                 let name = self.name();
@@ -1593,22 +1692,22 @@ mod tests {
     #[test]
     fn subtask_cancel_drives_one_cancellable_child_slice() {
         let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
-        assert!(cancel.contains("const childProgress = childTask?.waitForProgress();"));
-        assert!(cancel.contains("subtask.requestCancellation();"));
-        assert!(cancel.contains("await childProgress;"));
-        assert!(cancel.contains("if (isAsync) { return 0xFFFFFFFF; }"));
+        assert!(cancel.contains("childState.suspendedTaskReady(childTask.id())"));
+        assert!(cancel.contains("childState.resumeTaskByID(childTask.id())"));
+        assert!(cancel.contains("function subtaskCancel"));
+        assert!(!cancel.contains("async function subtaskCancel"));
+        assert!(cancel.contains(".then(finishCancel)"));
+        assert!(cancel.contains("cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF"));
 
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
-        assert!(task.contains("#progressWaiters = [];"));
-        assert!(task.contains("waitForProgress()"));
-        let exit = task
-            .find("exit(args)")
-            .expect("task class should contain an exit method");
-        let exit_body = &task[exit..];
-        let release = exit_body
+        assert!(task.contains("suspendUntilCallback(opts, onResume)"));
+        assert!(task.contains("this.#callbackFn._jcoMaySuspend === false"));
+        assert!(task.contains("if (this.isResolvedState() || this.isCancelled())"));
+        assert!(task.contains("cancellationRequested() { return this.cancelRequested; }"));
+        let release = task
             .find("state.exclusiveRelease(this.#id);")
             .expect("task exit should release component entry");
-        let progress = exit_body
+        let progress = task
             .find("this.notifyProgress();")
             .expect("task exit should report progress");
         assert!(release < progress);
@@ -1617,16 +1716,34 @@ mod tests {
         let state = render_intrinsic_body(Intrinsic::Component(
             ComponentIntrinsic::ComponentAsyncStateClass,
         ));
+        assert!(state.contains("const { task, readyFn, cancellable, onResume } = args;"));
+        assert!(state.contains("resume = () => onResume(!task.isCancelled());"));
+        assert!(state.contains("suspendedTaskCancellable(taskID)"));
         assert!(state.contains("task.notifyProgress();"));
         assert!(state.contains("suspendedTaskReady(taskID)"));
     }
 
     #[test]
     fn cancellable_wait_poll_and_yield_reach_task_state() {
+        let waitable_set =
+            render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass));
+        assert!(waitable_set.contains("tryWait(opts)"));
+        assert!(waitable_set.contains("waitUntil(opts)"));
+        assert!(!waitable_set.contains("async waitUntil(opts)"));
+        assert!(waitable_set.contains("if (isReady()) { return finishWait(true); }"));
+
         let wait = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
         assert!(wait.contains("const wset = cstate.handles.get(waitableSetRep);"));
         assert!(!wait.contains("await cstate.handles.get(waitableSetRep);"));
         assert!(wait.contains("cancellable: isCancellable"));
+        assert!(wait.contains("function waitableSetWait"));
+        assert!(!wait.contains("async function waitableSetWait"));
+        assert!(wait.contains("syncOnly ? wset.tryWait(waitOpts) : wset.waitUntil(waitOpts)"));
+        assert!(wait.contains("return event.then(storeEvent);"));
+
+        let conditional = render_intrinsic_body(Intrinsic::ConditionalSuspending2I32ToI32Fn);
+        assert!(conditional.contains("new WebAssembly.Suspending(slow)"));
+        assert!(conditional.contains("0x66, 0x61, 0x73, 0x74"));
 
         let poll = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
         assert!(poll.contains("deliverPendingCancel({ cancellable: isCancellable })"));
@@ -1751,6 +1868,9 @@ mod tests {
         assert!(enter.contains("isAsync: false,"));
         assert!(enter.contains("isAsync: !!calleeIsAsync,"));
         assert!(enter.contains("isManualAsync: callerTask.isManualAsync(),"));
+        assert!(enter.contains("syncOnly && !calleeIsAsync && cstate.isExclusivelyLocked()"));
+        assert!(enter.contains("return 0;"));
+        assert!(enter.contains("return 1;"));
         assert!(enter.contains("previousTaskMayBlock: CURRENT_TASK_MAY_BLOCK.value,"));
         assert!(enter.contains("CURRENT_TASK_MAY_BLOCK.value = newTask.mayBlock() ? 1 : 0;"));
 
@@ -2428,6 +2548,9 @@ impl Intrinsic {
             Self::WithGlobalCurrentTaskMetaFnAsync => "_withGlobalCurrentTaskMetaAsync",
             Self::ClearGlobalCurrentTaskMetaFn => "_clearCurrentTask",
             Self::SuspendingImportWrapperFn => "_suspendingImport",
+            Self::ConditionalSuspending1I32ToI32Fn => "_conditionalSuspending1I32ToI32",
+            Self::ConditionalSuspending2I32ToI32Fn => "_conditionalSuspending2I32ToI32",
+            Self::ConditionalSuspending3I32ToVoidFn => "_conditionalSuspending3I32ToVoid",
 
             // Iteratively saved metadata
             Intrinsic::GlobalComponentMemoryMap => "GLOBAL_COMPONENT_MEMORY_MAP",

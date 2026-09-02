@@ -565,7 +565,7 @@ impl ComponentIntrinsic {
                         // Awaitable acquisition: takes the lock immediately when free,
                         // otherwise queues FIFO behind the current holder and earlier
                         // waiters. The resolved promise implies ownership.
-                        async acquireExclusiveLock(taskID) {{
+                        acquireExclusiveLock(taskID) {{
                             if (taskID === undefined || taskID === null) {{
                                 throw new Error('exclusive lock requires the acquiring task id');
                             }}
@@ -586,7 +586,7 @@ impl ComponentIntrinsic {
                                 componentIdx: this.#componentIdx,
                                 queued: this.#lockWaiters.length,
                             }});
-                            await new Promise((resolve) => {{
+                            return new Promise((resolve) => {{
                                 this.#lockWaiters.push({{ taskID, resolve }});
                             }});
                         }}
@@ -690,7 +690,7 @@ impl ComponentIntrinsic {
 
                         // TODO(threads): readyFn is normally on the thread
                         suspendTask(args) {{
-                            const {{ task, readyFn }} = args;
+                            const {{ task, readyFn, cancellable, onResume }} = args;
                             const taskID = task.id();
                             const componentIdx = task.componentIdx();
                             {debug_log_fn}('[{component_async_state_class}#suspendTask()]', {{
@@ -708,10 +708,19 @@ impl ComponentIntrinsic {
                                 throw new Error(`task [${{taskID}}] already suspended`);
                             }}
 
-                            const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
+                            let promise;
+                            let resume;
+                            if (onResume) {{
+                                resume = () => onResume(!task.isCancelled());
+                            }} else {{
+                                const resolvers = {promise_with_resolvers_fn}();
+                                promise = resolvers.promise;
+                                resume = () => resolvers.resolve(!task.isCancelled());
+                            }}
                             this.#addSuspendedTaskMeta({{
                                 task,
                                 taskID,
+                                cancellable,
                                 readyFn,
                                 resume: () => {{
                                     {debug_log_fn}('[{component_async_state_class}] resuming suspended task', {{
@@ -719,7 +728,7 @@ impl ComponentIntrinsic {
                                         componentIdx: this.#componentIdx,
                                     }});
                                     // TODO(threads): it's thread cancellation we should be checking for below, not task
-                                    resolve(!task.isCancelled());
+                                    resume();
                                 }},
                             }});
 
@@ -749,6 +758,10 @@ impl ComponentIntrinsic {
                                 throw new Error(`suspended task [${{taskID}}] is missing a readiness function`);
                             }}
                             return meta.task.isRejected() || meta.readyFn();
+                        }}
+
+                        suspendedTaskCancellable(taskID) {{
+                            return !!this.#getSuspendedTaskMeta(taskID)?.cancellable;
                         }}
 
                         suspendedTaskMetas() {{
