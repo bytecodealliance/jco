@@ -841,36 +841,36 @@ implementations. What `listen()` does differs between them, and an application t
 report the port it is serving on has to know which.
 
 > [!IMPORTANT]
-> On `wasi-sockets` the guest owns the accept loop, so **the export that starts a server does
-> not return while the server is serving**. `listen()` itself returns, and the statements
-> after it run:
+> On `wasi-sockets` the guest owns the accept loop, so an export that starts a server has to
+> stay on the stack for as long as the server should run. A component only executes while a
+> call into it is in progress: return, and nothing is left running to accept connections.
+> Under Node the open socket keeps the process alive; here you write that out:
 >
 > ```js
-> server.listen(0, "127.0.0.1");
-> console.error(`listening on ${server.address().port}`);   // runs
+> export async function start() {
+>     const server = createServer(handler);
+>     server.listen(0, "127.0.0.1");
+>     console.error(`listening on ${server.address().port}`);   // runs; listen() returns
+>
+>     // Serve until the component is torn down.
+>     await new Promise(() => {});
+> }
 > ```
 >
-> What waits is the return to the host. The guest accepts connections by blocking on a
-> pollable, and that has to happen while the call is still open: a component only runs while
-> a call into it is in progress, so there is no background task to move the accept loop into.
-> Deferring it to a timer callback does let the export return -- and then the server answers
-> nothing, because no guest code is running to accept. The socket is bound, so connections
-> are reset rather than refused. Blocking is what makes it serve.
+> Waiting like this is worth doing explicitly rather than relying on the accept loop to hold
+> the call open by itself: it keeps the export open no matter how the implementation
+> schedules that loop.
 >
-> While it waits, the host thread waits too. Preview 2's `pollable.block()` is served by
-> `preview2-shim` through a worker and `Atomics.wait`, so the JavaScript host is parked for as
-> long as the guest is waiting for a connection. A client in the *same* process therefore
+> While the guest waits, the host thread waits too. Preview 2's `pollable.block()` is served
+> by `preview2-shim` through a worker and `Atomics.wait`, so the JavaScript host is parked for
+> as long as the guest is waiting for a connection. A client in the *same* process therefore
 > deadlocks -- it never gets a turn to send -- and has to run somewhere else, which is why the
 > test for this drives the component from a separate process.
 >
 > Component-model async, where a guest can hold concurrent tasks the host drives, is what
-> would change this; Preview 2 has no equivalent.
->
-> For a program that would keep running under Node -- a script that calls `app.listen()` and
-> stays up -- this is the shape you want, and `wasi:cli/run` is where it belongs: `run()`
-> blocks for the lifetime of the server, exactly as the Node process would. If instead you
-> need the export to return and requests to arrive afterwards, the host has to own the
-> socket: use the `direct` implementation, or export `wasi:http/incoming-handler` and skip
+> would let an export return and keep serving. Preview 2 has no equivalent, so a program that
+> has to carry on doing other work after `listen()` wants the host to own the socket instead:
+> use the `direct` implementation, or export `wasi:http/incoming-handler` and skip
 > `node:http`'s server entirely.
 >
 > On `direct` the host owns the socket, `listen()` returns, and the export finishes normally.
@@ -944,9 +944,9 @@ Two limits are worth knowing before writing one:
 - **`res.sendFile()`, `res.render()` and `express.static()` need a filesystem.** They work
   only in a world that imports `jco:node/fs` with a host wired up; the deny-by-default
   provider satisfies the import for an application that never calls them.
-- **`app.listen()` behaves differently per implementation.** On `direct` it returns and the
-  export finishes; on `wasi-sockets` the export serves until the server closes. See
-  [Serving requests](#serving-requests).
+- **`app.listen()` behaves differently per implementation.** On `direct` the export finishes
+  and requests arrive afterwards; on `wasi-sockets` the export has to wait for as long as the
+  server should run. See [Serving requests](#serving-requests).
 
 ### Buffer
 
