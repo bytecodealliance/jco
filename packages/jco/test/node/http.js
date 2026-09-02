@@ -6,8 +6,8 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 import { describe, expect, test, vi } from "vitest";
 
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
-import { bundleComponentSource } from "../../src/bundle.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
+import { HTTP_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import {
     HTTP_WASI_HTTP_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
@@ -46,21 +46,25 @@ describe("node:http builtin adapter", () => {
         expect(source).toContain("validateHeaderValue");
         expect(onWitRequirement).toHaveBeenCalledWith(expect.objectContaining({ witImport: capability }));
         if (nodejsHttpVia === "direct") {
-            expect(source).toContain("jco.node.http.callbacks");
             expect(onWitRequirement).toHaveBeenCalledWith(
-                expect.objectContaining({ witExports: ["jco:node/http-callbacks@0.1.0"] }),
+                expect.objectContaining({
+                    guestExports: [
+                        {
+                            witExport: "jco:node/http-callbacks@0.1.0",
+                            jsExport: "httpCallbacks",
+                            moduleSpecifier: HTTP_CALLBACKS_SPECIFIER,
+                        },
+                    ],
+                }),
             );
         }
     });
 
-    test("exports the direct callback resource from the bundled guest", () => {
+    test("resolves the direct callback implementation for an entry wrapper", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ...modulePaths, nodejsHttpVia: "direct" });
-        plugin.resolveId("node:http");
-        const rendered = plugin.renderChunk("export const run = () => {};", {
-            exports: ["run"],
-            isEntry: true,
-        });
-        expect(rendered).toContain("export { __jcoHttpCallbacks as httpCallbacks }");
+        const id = plugin.resolveId(HTTP_CALLBACKS_SPECIFIER);
+        expect(id).toBe("\0jco-node-builtin:http-callbacks");
+        expect(plugin.load(id)).toBe('export { httpCallbacks } from "/jco/http.js";');
     });
 
     test("keeps the callback resource as an entry export after bundling", async () => {
@@ -72,9 +76,9 @@ describe("node:http builtin adapter", () => {
             httpModule,
             "export const httpCallbacks = { RequestListener: class RequestListener {} }; export default {};\n",
         );
-        const source = await bundleComponentSource(entry, {
-            plugins: [nodeBuiltinPlugin({ imports: [], exports: [] }, { httpModule })],
-        });
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { httpModule });
+        const bundleOptions = { plugins: [plugin] };
+        const source = await bundleNodeGuestExportsWrapper(entry, HTTP_WIT_REQUIREMENT.guestExports, bundleOptions);
         expect(source).toContain("httpCallbacks");
         expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
