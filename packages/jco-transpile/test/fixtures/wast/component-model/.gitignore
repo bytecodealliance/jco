@@ -1,2 +1,3 @@
 *.wast.wasm
+*.wast.*.wasm
 *.wast.js
