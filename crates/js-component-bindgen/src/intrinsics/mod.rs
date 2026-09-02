@@ -1680,6 +1680,23 @@ mod tests {
     }
 
     #[test]
+    fn native_core_traps_are_canonicalized_before_poisoning() {
+        let normalizer =
+            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::NormalizeCoreTrap));
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+
+        assert!(
+            normalizer.contains(
+                r#"['unreachable', "wasm trap: wasm `unreachable` instruction executed"]"#
+            )
+        );
+        assert!(normalizer.contains("['divide by zero', \"wasm trap: integer divide by zero\"]"));
+        assert!(state.contains("err = _normalizeCoreTrap(err);"));
+    }
+
+    #[test]
     fn sync_start_fused_adapter_runs_in_the_caller_task() {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::SyncStartCall));
 
