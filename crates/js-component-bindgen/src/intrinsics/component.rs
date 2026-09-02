@@ -16,6 +16,15 @@ pub enum ComponentIntrinsic {
     /// Shared trap state for all component instances in this generated store.
     GlobalStoreTrap,
 
+    /// Shared scheduling state for all component instances in this generated store.
+    GlobalStoreAsyncState,
+
+    /// Schedule a store-wide deadlock check after queued guest work has drained.
+    CheckForDeadlock,
+
+    /// Track a possibly asynchronous host operation as an external wake source.
+    TrackHostOperation,
+
     /// Trap if the specified component instance may not currently leave.
     CheckMayLeave,
 
@@ -78,6 +87,9 @@ impl ComponentIntrinsic {
         match self {
             Self::GlobalInstanceFlagsMap => "INSTANCE_FLAGS",
             Self::GlobalStoreTrap => "STORE_TRAP",
+            Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
+            Self::CheckForDeadlock => "_checkForDeadlock",
+            Self::TrackHostOperation => "_trackHostOperation",
             Self::CheckMayLeave => "_checkMayLeave",
             Self::GuardMayLeave => "_guardMayLeave",
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
@@ -100,6 +112,96 @@ impl ComponentIntrinsic {
             Self::GlobalStoreTrap => {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 uwriteln!(output, r#"const {var_name} = {{ error: null }};"#);
+            }
+
+            Self::GlobalStoreAsyncState => {
+                let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                uwriteln!(
+                    output,
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0 }};"#
+                );
+            }
+
+            Self::CheckForDeadlock => {
+                let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
+                let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
+                let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(
+                    r#"
+                    function {check_for_deadlock_fn}() {{
+                        if ({store_async_state}.deadlockCheck !== null || {store_trap}.error !== null) {{ return; }}
+                        {store_async_state}.deadlockCheck = setTimeout(() => {{
+                            {store_async_state}.deadlockCheck = null;
+                            if ({store_trap}.error !== null || {store_async_state}.pendingHostOperations > 0) {{ return; }}
+
+                            const suspendedTasks = new Set();
+                            for (const state of {async_state_map}.values()) {{
+                                if (state.hasPendingSchedulerWork()) {{
+                                    state.runTickLoop();
+                                    return;
+                                }}
+                                for (const meta of state.suspendedTaskMetas()) {{
+                                    suspendedTasks.add(meta.task);
+                                }}
+                            }}
+
+                            const unresolvedRoots = new Set();
+                            for (const task of suspendedTasks) {{
+                                const root = task.getRootTask();
+                                if (!root.isResolvedState()) {{ unresolvedRoots.add(root); }}
+                            }}
+                            if (unresolvedRoots.size === 0) {{ return; }}
+
+                            const err = new {runtime_error_class}('wasm trap: deadlock detected: event loop cannot make further progress');
+                            {store_trap}.error = err;
+                            for (const root of unresolvedRoots) {{
+                                root.setErrored(err);
+                                root.reject(err);
+                            }}
+                            for (const task of suspendedTasks) {{
+                                if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {{
+                                    task.setErrored(err);
+                                    task.reject(err);
+                                }}
+                            }}
+                            for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
+                        }}, 0);
+                    }}
+                    "#,
+                ));
+            }
+
+            Self::TrackHostOperation => {
+                let track_host_operation_fn =
+                    render_args.require_intrinsic(Self::TrackHostOperation);
+                let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
+                let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
+                let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                output.push_str(&format!(
+                    r#"
+                    function {track_host_operation_fn}(operation) {{
+                        const result = operation();
+                        if (result === null ||
+                            (typeof result !== 'object' && typeof result !== 'function') ||
+                            typeof result.then !== 'function') {{
+                            return result;
+                        }}
+
+                        {store_async_state}.pendingHostOperations++;
+                        return Promise.resolve(result).finally(() => {{
+                            {store_async_state}.pendingHostOperations--;
+                            if ({store_async_state}.pendingHostOperations < 0) {{
+                                throw new Error('negative pending host operation count');
+                            }}
+                            for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
+                            {check_for_deadlock_fn}();
+                        }});
+                    }}
+                    "#,
+                ));
             }
 
             Self::CheckMayLeave => {
@@ -185,6 +287,7 @@ impl ComponentIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
 
                 output.push_str(&format!(
                     r#"
@@ -579,6 +682,7 @@ impl ComponentIntrinsic {
                             task.notifyProgress();
 
                             this.runTickLoop();
+                            {check_for_deadlock_fn}();
 
                             return promise;
                         }}
@@ -600,12 +704,27 @@ impl ComponentIntrinsic {
                             return meta.task.isRejected() || meta.readyFn();
                         }}
 
+                        suspendedTaskMetas() {{
+                            return this.#suspendedTasksByTaskID.values();
+                        }}
+
+                        hasPendingSchedulerWork() {{
+                            if (this.#lockHandoffScheduled) {{ return true; }}
+                            for (const meta of this.#suspendedTasksByTaskID.values()) {{
+                                if (meta.task.isRejected() || meta.readyFn()) {{ return true; }}
+                            }}
+                            return false;
+                        }}
+
                         async runTickLoop() {{
                             if (this.#tickLoop !== null) {{ return; }}
                             this.#tickLoop = 1;
                             setTimeout(async () => {{
                                 let result = this.tick();
                                 while (result !== {component_async_state_class}.TickResult.DONE) {{
+                                    if (result === {component_async_state_class}.TickResult.IDLE) {{
+                                        {check_for_deadlock_fn}();
+                                    }}
                                     // After resuming a task, re-tick as soon as the resumed
                                     // slice's microtask continuations have drained (timeout 0)
                                     // so queued sibling resumptions aren't charged the idle
