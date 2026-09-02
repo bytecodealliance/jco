@@ -32,6 +32,10 @@
             "revision": "4769c405eda54e99ea28292ebd007fcbe53c7b40"
         },
         {
+            "name": "cross-task-future.wast",
+            "revision": "e8d80050994662d150c84e3d52981a9d471a152d"
+        },
+        {
             "name": "deadlock.wast",
             "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
         },
