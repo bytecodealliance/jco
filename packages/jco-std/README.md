@@ -29,6 +29,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/fs`                  | `node:fs` and `node:fs/promises` over an explicit host capability             |
 | `wasi/0.2.x/node/24.x.x/os`                  | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
+| `wasi/0.2.x/node/24.x.x/string-decoder`      | Guest-local `node:string_decoder` implementation for Node 24                  |
 | `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
 | `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
 | `wasi/0.2.x/node/24.x.x/diagnostics-channel` | `node:diagnostics_channel` guest adapter, Node 24                             |
@@ -122,6 +123,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   compatibility layer, completed by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` for the three
   module-level functions unenv leaves unimplemented;
+- `node:string_decoder`, implemented guest-locally by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`;
 - `node:ffi`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi` and the
   `jco:node/ffi@0.1.0` host capability. **Node 26 only**, and denied by default:
@@ -195,6 +198,28 @@ Adapter authors can import `createPath()` from the versioned `jco-std` entry
 point and supply typed `initialCwd` and `getEnvironment` providers. This is also
 the boundary used by Jco's builtin adapter. `minimatch` 10.2.6 is bundled for
 Node-compatible `matchesGlob()` behavior; it does not add filesystem access.
+
+### String decoder
+
+The versioned string-decoder module implements Node 24's `StringDecoder` in the
+guest and reuses Jco's existing `node:buffer` core. It preserves incomplete UTF-8,
+UTF-16LE, base64, and base64url groups across writes, accepts strings and all
+`ArrayBufferView` inputs, and supports Node's encoding aliases. No WIT import,
+host adapter, JSPI configuration, or machine capability is required.
+
+```js
+import { Buffer } from "node:buffer";
+import { StringDecoder } from "node:string_decoder";
+
+const decoder = new StringDecoder("utf8");
+decoder.write(Buffer.from([0xf0, 0x9f]));
+decoder.end(Buffer.from([0x8c, 0x8d])); // "🌍"
+```
+
+The implementation follows Node 24.20.0's module surface and portable decoder
+algorithms. It also retains the legacy `text`, `lastChar`, `lastNeed`, and
+`lastTotal` prototype members that remain present in Node 24, although new code
+should use the documented constructor, `write()`, and `end()` API.
 
 ### Errors globals
 
