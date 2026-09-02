@@ -6,6 +6,7 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 import { describe, expect, test, vi } from "vitest";
 
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
+import { bundleComponentSource } from "../../src/bundle.js";
 import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import {
     HTTP_WASI_HTTP_WIT_REQUIREMENTS,
@@ -18,8 +19,8 @@ import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers
 const modulePaths = {
     httpModule: "/jco/http.js",
     httpCoreModule: "/jco/http/core.js",
-    httpWasiSocketsTransportModule: "/jco/http/wasi-sockets.js",
-    httpWasiHttpTransportModule: "/jco/http/wasi-http.js",
+    httpWasiSocketsImplementationModule: "/jco/http/wasi-sockets.js",
+    httpWasiHttpImplementationModule: "/jco/http/wasi-http.js",
 };
 
 const NODE_HOST = pathToFileURL(
@@ -31,7 +32,7 @@ describe("node:http builtin adapter", () => {
         ["direct", "jco:node/http@0.1.0", "/jco/http.js"],
         ["wasi-sockets", "wasi:sockets/instance-network@0.2.12", "/jco/http/wasi-sockets.js"],
         ["wasi-http", "wasi:http/outgoing-handler@0.2.12", "/jco/http/wasi-http.js"],
-    ])("generates the %s transport facade", (nodejsHttpVia, capability, transportModule) => {
+    ])("generates the %s implementation facade", (nodejsHttpVia, capability, implementationModule) => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -40,10 +41,42 @@ describe("node:http builtin adapter", () => {
         const id = plugin.resolveId("node:http");
         expect(id).toBe("\0jco-node-builtin:node:http");
         const source = plugin.load(id);
-        expect(source).toContain(transportModule);
+        expect(source).toContain(implementationModule);
         expect(source).toContain("export default http");
         expect(source).toContain("validateHeaderValue");
         expect(onWitRequirement).toHaveBeenCalledWith(expect.objectContaining({ witImport: capability }));
+        if (nodejsHttpVia === "direct") {
+            expect(source).toContain("jco.node.http.callbacks");
+            expect(onWitRequirement).toHaveBeenCalledWith(
+                expect.objectContaining({ witExports: ["jco:node/http-callbacks@0.1.0"] }),
+            );
+        }
+    });
+
+    test("exports the direct callback resource from the bundled guest", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ...modulePaths, nodejsHttpVia: "direct" });
+        plugin.resolveId("node:http");
+        const rendered = plugin.renderChunk("export const run = () => {};", {
+            exports: ["run"],
+            isEntry: true,
+        });
+        expect(rendered).toContain("export { __jcoHttpCallbacks as httpCallbacks }");
+    });
+
+    test("keeps the callback resource as an entry export after bundling", async () => {
+        const root = await getTmpDir();
+        const entry = join(root, "entry.js");
+        const httpModule = join(root, "http.js");
+        await writeFile(entry, 'import { createServer } from "node:http"; export { createServer };\n');
+        await writeFile(
+            httpModule,
+            "export const httpCallbacks = { RequestListener: class RequestListener {} }; export default {};\n",
+        );
+        const source = await bundleComponentSource(entry, {
+            plugins: [nodeBuiltinPlugin({ imports: [], exports: [] }, { httpModule })],
+        });
+        expect(source).toContain("httpCallbacks");
+        expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
 
     test("does not intercept the bare http specifier", () => {
@@ -76,7 +109,12 @@ describe("node:http builtin adapter", () => {
             map: { "jco:node/http@0.1.0": "/application/http-host.js" },
         });
         expect(opts.asyncMode).toBe("jspi");
-        expect(opts.asyncImports).toEqual(["jco:node/http@0.1.0#request"]);
+        expect(opts.asyncImports).toEqual([
+            "jco:node/http@0.1.0#request",
+            "jco:node/http@0.1.0#[method]server.listen",
+            "jco:node/http@0.1.0#[method]server.close",
+            "jco:node/http@0.1.0#[method]server.get-connections",
+        ]);
         expect(opts.asyncExports).toEqual(["*"]);
     });
 });
@@ -88,9 +126,41 @@ describe("node:http WIT installation", () => {
         await writeFile(world, "package test:http;\nworld component {}\n");
         await injectNodeWitImports(root, undefined, [HTTP_WIT_REQUIREMENT]);
         expect(await injectNodeWitImports(root, undefined, [HTTP_WIT_REQUIREMENT])).toBeUndefined();
-        expect((await readFile(world, "utf8")).match(/import jco:node\/http@0\.1\.0;/g)).toHaveLength(1);
+        const worldSource = await readFile(world, "utf8");
+        expect(worldSource.match(/import jco:node\/http@0\.1\.0;/g)).toHaveLength(1);
+        expect(worldSource.match(/export jco:node\/http-callbacks@0\.1\.0;/g)).toHaveLength(1);
         const source = await readFile(join(root, "deps/jco-node-0.1.0/http.wit"), "utf8");
         expect(source).toContain("request: func(options: request-options)");
+        expect(source).toContain("resource server");
+        const metadata = await componentWitMetadataForWorld({ tag: "path", val: root }, "component");
+        expect(metadata.exports).toContainEqual(
+            expect.objectContaining({ namespace: "jco", package: "node", interface: "http-callbacks" }),
+        );
+    });
+
+    test("adds only the missing side of the direct callback boundary", async () => {
+        const root = await getTmpDir();
+        const world = join(root, "component.wit");
+        await writeFile(world, "package test:http;\nworld component {\n  import jco:node/http@0.1.0;\n}\n");
+        const result = await injectNodeWitImports(root, undefined, [HTTP_WIT_REQUIREMENT]);
+        expect(result).toMatchObject({ imports: [], exports: ["jco:node/http-callbacks@0.1.0"] });
+        const source = await readFile(world, "utf8");
+        expect(source.match(/import jco:node\/http@0\.1\.0;/g)).toHaveLength(1);
+        expect(source.match(/export jco:node\/http-callbacks@0\.1\.0;/g)).toHaveLength(1);
+    });
+
+    test("preserves an aliased callback export while adding the missing import", async () => {
+        const root = await getTmpDir();
+        const world = join(root, "component.wit");
+        await writeFile(
+            world,
+            "package test:http;\nworld component {\n  export callbacks: jco:node/http-callbacks@0.1.0;\n}\n",
+        );
+        const result = await injectNodeWitImports(root, undefined, [HTTP_WIT_REQUIREMENT]);
+        expect(result).toMatchObject({ imports: ["jco:node/http@0.1.0"], exports: [] });
+        const source = await readFile(world, "utf8");
+        expect(source.match(/import jco:node\/http@0\.1\.0;/g)).toHaveLength(1);
+        expect(source.match(/http-callbacks@0\.1\.0;/g)).toHaveLength(1);
     });
 
     test.each([
@@ -121,25 +191,55 @@ describe("node:http WIT installation", () => {
 });
 
 describe("node:http in a component", () => {
+    // TODO(unskip): use the published jco-std HTTP server exports once a release containing them is available.
+    test.skip("serves a request through guest -> WIT callback resource -> host node:http", async () => {
+        const { componentPath, stderr } = await componentizeFixture({
+            fixture: "node-http-server",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "direct"],
+        });
+        expect(stderr).toContain("Jco added generated WIT import");
+        expect(stderr).toContain("jco:node/http-callbacks@0.1.0");
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http-server", path: componentPath, skipInstantiation: true },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncExports: ["*"],
+                        map: { "jco:node/http@0.1.0": NODE_HOST },
+                    },
+                },
+            },
+        });
+        try {
+            const runner = fileURLToPath(new URL("../fixtures/componentize/node-http-server/run.js", import.meta.url));
+            const output = await exec(runner, esModuleOutputPath, NODE_HOST);
+            expect(output.stdout.trim()).toBe("POST /items: hello");
+        } finally {
+            await cleanup();
+        }
+    }, 600_000);
+
     // TODO(unskip): use the published jco-std HTTP exports once a release containing them is available.
     test.skip.each(["direct", "wasi-sockets", "wasi-http"])(
         "componentizes and performs a local request via %s",
-        async (transport) => {
+        async (implementation) => {
             const { componentPath, stderr } = await componentizeFixture({
                 fixture: "node-http",
                 bundle: true,
                 copy: true,
-                extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", transport],
+                extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", implementation],
             });
             expect(stderr).toContain("Jco added generated WIT import");
-            const map = transport === "direct" ? { "jco:node/http@0.1.0": NODE_HOST } : undefined;
+            const map = implementation === "direct" ? { "jco:node/http@0.1.0": NODE_HOST } : undefined;
             const { esModuleOutputPath, cleanup } = await setupAsyncTest({
-                component: { name: `node-http-${transport}`, path: componentPath, skipInstantiation: true },
+                component: { name: `node-http-${implementation}`, path: componentPath, skipInstantiation: true },
                 jco: { transpile: { extraArgs: { asyncExports: ["run"], map } } },
             });
             try {
                 const runner = fileURLToPath(new URL("../fixtures/componentize/node-http/run.js", import.meta.url));
-                const output = await exec(runner, esModuleOutputPath, transport === "direct" ? NODE_HOST : "");
+                const output = await exec(runner, esModuleOutputPath, implementation === "direct" ? NODE_HOST : "");
                 expect(JSON.parse(output.stdout)).toEqual({
                     statusCode: 200,
                     contentType: "text/plain",
