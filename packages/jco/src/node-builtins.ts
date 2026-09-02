@@ -10,6 +10,7 @@ import {
     DNS_PROMISES_WIT_REQUIREMENT,
     DNS_WIT_REQUIREMENT,
     FS_WIT_REQUIREMENT,
+    PATH_WIT_REQUIREMENT,
     FFI_WIT_REQUIREMENT,
     HTTP_WASI_HTTP_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
@@ -55,7 +56,64 @@ const STREAM_ITER_SPECIFIER = "node:stream/iter";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const HTTP_SPECIFIER = "node:http";
 export const HTTP_CALLBACKS_SPECIFIER = "jco:node-http-callbacks";
+const CRYPTO_SPECIFIER = "node:crypto";
+const TIMERS_SPECIFIER = "node:timers";
+const STREAM_SPECIFIER = "node:stream";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
+
+/**
+ * Builtins served by unenv's portable implementation behind a thin Jco adapter.
+ *
+ * These carry no host capability and need no WASI-aware behavior, so unenv's implementation
+ * is used as it is. They are admitted as a group because a Node dependency graph of any size
+ * reaches all of them: `send` wants `node:stream` and `node:util`, `parseurl` wants
+ * `node:url`, `body-parser` wants `node:zlib`, and `debug` wants `node:tty`.
+ */
+const PORTABLE_UNENV_SPECIFIERS = new Set([
+    "node:https",
+    "node:net",
+    "node:os",
+    "node:process",
+    STREAM_SPECIFIER,
+    "node:stream/promises",
+    "node:tty",
+    "node:url",
+    "node:util",
+    "node:util/types",
+    "node:zlib",
+]);
+
+/**
+ * Builtin names that may also be written without the `node:` prefix.
+ *
+ * Jco rewrites `node:` specifiers by design, but a dependency graph written before that
+ * prefix existed says `require("stream")`. Those are resolved as builtins only when nothing
+ * else answers to the name, so a package that genuinely installs `buffer` or `punycode`
+ * keeps winning -- see `resolveId` below.
+ */
+const BARE_SPECIFIER_BUILTINS = new Set(
+    [
+        ...PATH_SPECIFIERS.keys(),
+        ...ASSERT_SPECIFIERS,
+        ...FS_SPECIFIERS,
+        ...DNS_SPECIFIERS,
+        ...AUDITED_UNENV_SPECIFIERS,
+        ...PORTABLE_UNENV_SPECIFIERS,
+        ASYNC_HOOKS_SPECIFIER,
+        CHILD_PROCESS_SPECIFIER,
+        CLUSTER_SPECIFIER,
+        CONSOLE_SPECIFIER,
+        CRYPTO_SPECIFIER,
+        DIAGNOSTICS_CHANNEL_SPECIFIER,
+        DOMAIN_SPECIFIER,
+        EVENTS_SPECIFIER,
+        HTTP_SPECIFIER,
+        STRING_DECODER_SPECIFIER,
+        TIMERS_SPECIFIER,
+    ].map((specifier) => specifier.slice("node:".length)),
+);
+/** WASI version Jco injects when a world does not already declare one. */
+const DEFAULT_WASI_VERSION = "0.2.12";
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
 const HTTP_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http-callbacks`;
@@ -84,6 +142,10 @@ export interface NodeErrorGlobalsOptions {
 export interface NodeGlobalsOptions extends NodeErrorGlobalsOptions {
     /** Path to Jco's audited `node:buffer` adapter (overridable for tests). */
     bufferModule?: string;
+    /** Path to Jco's `node:timers` adapter, which supplies `setImmediate` (overridable for tests). */
+    timersModule?: string;
+    /** Path to Jco's `node:process` adapter (overridable for tests). */
+    processModule?: string;
 }
 
 /**
@@ -106,9 +168,21 @@ export function nodeErrorGlobals(
  * Rolldown includes these adapters only when their free identifiers survive bundling.
  */
 export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [module: string, exportName: string]> {
+    const timers = options.timersModule ?? TIMERS_SPECIFIER;
     return {
         ...nodeErrorGlobals(options),
         Buffer: [options.bufferModule ?? "node:buffer", "Buffer"],
+        // `setImmediate` is Node's rather than the web's, so the component engine does not
+        // supply it, and Node-shaped HTTP code calls it without importing anything: Express's
+        // router uses it to break deep synchronous middleware recursion, and `finalhandler`
+        // uses it to report an error after the response is already on its way.
+        setImmediate: [timers, "setImmediate"],
+        clearImmediate: [timers, "clearImmediate"],
+        // Node's `process` is a global too, and package code reads it at module scope without
+        // importing anything -- `depd` calls `process.cwd()` while it is being loaded. Code
+        // that branches on `typeof process` therefore takes its Node path here, which is the
+        // same choice Node itself presents it with.
+        process: [options.processModule ?? "node:process", "default"],
     };
 }
 
@@ -151,6 +225,92 @@ export default querystring;
 `;
     }
     throw new Error(`missing Jco adapter for audited unenv builtin ${specifier}`);
+}
+
+/**
+ * Source of an adapter over unenv's portable implementation of a builtin.
+ *
+ * Nothing is reshaped: the point is to give the module a stable virtual identity inside the
+ * bundle so that both `node:util` and a bare `require("util")` reach the same instance.
+ */
+function portableUnenvAdapter(specifier: string, options: NodeBuiltinOptions): string {
+    const module = JSON.stringify(unenvModule(specifier, options));
+    return `
+import implementation from ${module};
+export * from ${module};
+export default implementation;
+`;
+}
+
+/**
+ * Source of the `node:stream` adapter.
+ *
+ * Node's module export for `stream` is the legacy `Stream` constructor with the rest of the
+ * module hanging off it, and CommonJS dependencies rely on that: `send` builds its response
+ * type with `util.inherits(SendStream, require("stream"))`. Bundling unenv's ES module and
+ * requiring it would yield the namespace object instead, whose `prototype` is undefined, so
+ * this adapter is CommonJS and exports the constructor.
+ *
+ * unenv has no legacy `Stream` -- its export by that name throws on construction -- so the
+ * class is defined here, as an `EventEmitter` with Node's `pipe()`. Consumers inherit from it
+ * and emit on themselves; `send` then overrides `pipe()` with its own.
+ */
+function nodeStreamCommonJsAdapter(options: NodeBuiltinOptions): string {
+    const stream = JSON.stringify(unenvModule(STREAM_SPECIFIER, options));
+    const events = JSON.stringify(unenvModule(EVENTS_SPECIFIER, options));
+    return `
+const implementation = require(${stream});
+const { EventEmitter } = require(${events});
+class Stream extends EventEmitter {
+    pipe(destination, options) {
+        const onData = (chunk) => {
+            if (destination.write(chunk) === false && this.pause) {
+                this.pause();
+            }
+        };
+        this.on("data", onData);
+        destination.on("drain", () => {
+            if (this.resume) {
+                this.resume();
+            }
+        });
+        if (!destination._isStdio && (!options || options.end !== false)) {
+            this.on("end", () => destination.end());
+        }
+        destination.emit("pipe", this);
+        return destination;
+    }
+}
+for (const source of [implementation, { Stream, default: Stream }]) {
+    for (const key of Reflect.ownKeys(source)) {
+        if (Object.prototype.hasOwnProperty.call(Stream, key)) {
+            continue;
+        }
+        // Assignment is not enough: some of these are accessors without a setter.
+        Object.defineProperty(Stream, key, {
+            value: source[key],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+        });
+    }
+}
+module.exports = Stream;
+`;
+}
+
+/**
+ * Source of an adapter over a jco-std module that needs no host capability.
+ *
+ * Used for the builtins jco-std implements because unenv's stand-in throws where Node-shaped
+ * code calls it synchronously and cannot recover.
+ */
+function jcoStdAdapter(module: string): string {
+    return `
+import implementation from ${JSON.stringify(module)};
+export * from ${JSON.stringify(module)};
+export default implementation;
+`;
 }
 
 function unenvBufferCore(options: NodeBuiltinOptions): string {
@@ -282,6 +442,10 @@ export interface NodeBuiltinOptions {
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
+    /** Path to jco-std's versioned `node:crypto` module (overridable for tests) */
+    cryptoModule?: string;
+    /** Path to jco-std's versioned `node:timers` module (overridable for tests) */
+    timersModule?: string;
     /** Implementation used for `node:http` host operations. */
     nodejsHttpVia?: NodejsHttpVia;
     /** Paths to jco-std's HTTP modules (overridable for tests). */
@@ -738,7 +902,7 @@ function requireWasiHttpVersion(worldMetadata: WorldMetadata, via: Exclude<Nodej
  * `node:path` is backed by WASI, so the world has to import the interface it needs, at exactly
  * one version.
  */
-function environmentVersion(worldMetadata: WorldMetadata): string {
+function environmentVersion(worldMetadata: WorldMetadata): string | undefined {
     const matches = (worldMetadata?.imports ?? []).filter(
         (iface) =>
             iface.namespace === "wasi" &&
@@ -748,9 +912,11 @@ function environmentVersion(worldMetadata: WorldMetadata): string {
             iface.version?.minor === 2n,
     );
     if (matches.length === 0) {
-        throw new Error(
-            "node:path requires the selected WIT world to import wasi:cli/environment@0.2.x; add that interface to the world",
-        );
+        // The world does not import it, so one is added, the same way the host-backed builtins
+        // add theirs. `node:path` is usually reached through a dependency rather than written
+        // by the application, and requiring the author to find that out and hand-write the
+        // import made a working program fail to build for a reason it did not choose.
+        return undefined;
     }
     if (matches.length > 1) {
         throw new Error(
@@ -759,6 +925,16 @@ function environmentVersion(worldMetadata: WorldMetadata): string {
     }
     const { major, minor, patch, pre } = matches[0].version!;
     return `${major}.${minor}.${patch}${pre ? `-${pre}` : ""}`;
+}
+
+/** The `wasi:cli/environment` version `node:path` is built against, injecting it if absent. */
+function environmentVersionOrInject(worldMetadata: WorldMetadata, options: NodeBuiltinOptions): string {
+    const declared = environmentVersion(worldMetadata);
+    if (declared) {
+        return declared;
+    }
+    options.onWitRequirement?.(PATH_WIT_REQUIREMENT);
+    return DEFAULT_WASI_VERSION;
 }
 
 /** Source of the shared `node:path` core, which owns the single WASI-backed path instance */
@@ -934,10 +1110,34 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         stdModule(options.httpWasiSocketsImplementationModule, "http/impl/wasi-sockets");
     const httpWasiHttpImplementationModule = () =>
         stdModule(options.httpWasiHttpImplementationModule, "http/impl/wasi-http");
+    const cryptoModule = () => stdModule(options.cryptoModule, "crypto");
+    const timersModule = () => stdModule(options.timersModule, "timers");
     const httpVia = options.nodejsHttpVia ?? "direct";
     return {
         name: "jco-node-builtins",
-        resolveId(id) {
+        resolveId(id, importer) {
+            const resolved = resolveBuiltinSpecifier(id);
+            if (resolved !== null) {
+                return resolved;
+            }
+            // A bare builtin name is only a builtin when nothing else answers to it. Resolving
+            // normally first keeps an installed package of the same name -- `buffer`,
+            // `punycode`, `process` all exist on npm -- ahead of Jco's implementation, which is
+            // why this cannot simply strip the prefix and look the name up.
+            if (!id.startsWith("node:") && BARE_SPECIFIER_BUILTINS.has(id)) {
+                return Promise.resolve(this.resolve(id, importer, { skipSelf: true })).then((installed) =>
+                    installed ? null : resolveBuiltinSpecifier(`node:${id}`),
+                );
+            }
+            return null;
+        },
+        load(id) {
+            return loadBuiltinModule(id);
+        },
+    };
+
+    function resolveBuiltinSpecifier(id: string): string | null {
+        {
             if (id.startsWith(VIRTUAL_PREFIX)) {
                 return id;
             }
@@ -1008,7 +1208,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (PATH_SPECIFIERS.has(id)) {
-                const version = environmentVersion(worldMetadata);
+                const version = environmentVersionOrInject(worldMetadata, options);
                 return `${VIRTUAL_PREFIX}${id}@${version}`;
             }
             if (id === CONSOLE_SPECIFIER) {
@@ -1044,9 +1244,22 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 unenvAdapter(id, options);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (PORTABLE_UNENV_SPECIFIERS.has(id)) {
+                // No onWitRequirement: none of these reach a host capability.
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === CRYPTO_SPECIFIER || id === TIMERS_SPECIFIER) {
+                // No onWitRequirement: the digests are computed in the guest, the decoder is the
+                // engine's `TextDecoder`, and the timers are the engine's, already backed by
+                // `wasi:clocks`.
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             return null;
-        },
-        load(id) {
+        }
+    }
+
+    function loadBuiltinModule(id: string) {
+        {
             if (!id.startsWith(VIRTUAL_PREFIX)) {
                 return null;
             }
@@ -1128,6 +1341,18 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);
             }
+            if (value === STREAM_SPECIFIER) {
+                return nodeStreamCommonJsAdapter(options);
+            }
+            if (PORTABLE_UNENV_SPECIFIERS.has(value)) {
+                return portableUnenvAdapter(value, options);
+            }
+            if (value === CRYPTO_SPECIFIER) {
+                return jcoStdAdapter(cryptoModule());
+            }
+            if (value === TIMERS_SPECIFIER) {
+                return jcoStdAdapter(timersModule());
+            }
             const separator = value.lastIndexOf("@");
             const specifier = value.slice(0, separator);
             const version = value.slice(separator + 1);
@@ -1135,6 +1360,6 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return pathCore(version, pathFactory());
             }
             return pathAdapter(specifier, version);
-        },
-    };
+        }
+    }
 }
