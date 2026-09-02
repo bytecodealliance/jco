@@ -1,0 +1,5 @@
+package jco-fixtures:node-os;
+
+world component {
+    export run: func() -> string;
+}
