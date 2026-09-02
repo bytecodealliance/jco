@@ -1562,6 +1562,16 @@ mod tests {
     }
 
     #[test]
+    fn stream_new_allocates_the_readable_end_first() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream));
+        let read = source.find("const readEnd = stream.readEnd();").unwrap();
+        let write = source.find("const writeEnd = stream.writeEnd();").unwrap();
+
+        assert!(read < write);
+    }
+
+    #[test]
     fn future_operations_only_suspend_for_sync_canonical_calls() {
         for op in [
             AsyncFutureIntrinsic::FutureRead,
