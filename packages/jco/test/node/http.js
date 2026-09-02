@@ -83,8 +83,11 @@ describe("node:http builtin adapter", () => {
         expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
 
-    test.concurrent("does not intercept the bare http specifier", () => {
-        expect(nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths).resolveId("http")).toBeNull();
+    test.concurrent("resolves the bare http specifier only when nothing is installed under that name", async () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths);
+        const resolve = (installed) => plugin.resolveId.call({ resolve: async () => installed }, "http");
+        expect(await resolve({ id: "/app/node_modules/http/index.js" })).toBeNull();
+        expect(await resolve(null)).toBe("\0jco-node-builtin:node:http");
     });
 
     test.each([

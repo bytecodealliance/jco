@@ -33,9 +33,15 @@ suite("node:path in a component", () => {
         }
     });
 
-    test.concurrent("requires the world to import wasi:cli/environment", async () => {
-        await expect(componentizeFixture({ fixture: "node-path-missing-environment", bundle: true })).rejects.toThrow(
-            /import wasi:cli\/environment@0\.2\.x/,
-        );
+    test.concurrent("adds wasi:cli/environment to a world that does not import it", async () => {
+        // `node:path` reads the working directory from the environment. A world that does not
+        // declare it has the import added, the same way the host-backed builtins do, because
+        // `node:path` is usually reached through a dependency rather than written by hand.
+        const { stderr } = await componentizeFixture({
+            fixture: "node-path-missing-environment",
+            bundle: true,
+            copy: true,
+        });
+        expect(stderr).toContain("wasi:cli/environment@0.2.12");
     });
 });

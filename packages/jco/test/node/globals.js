@@ -87,6 +87,10 @@ suite("Node globals", () => {
             SyntaxError: ["/errors.js", "SyntaxError"],
             TypeError: ["/errors.js", "TypeError"],
             URIError: ["/errors.js", "URIError"],
+            // Node globals the engine does not supply, which package code uses without importing.
+            setImmediate: ["node:timers", "setImmediate"],
+            clearImmediate: ["node:timers", "clearImmediate"],
+            process: ["node:process", "default"],
         });
     });
 
