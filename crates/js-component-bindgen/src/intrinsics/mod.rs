@@ -1862,6 +1862,80 @@ mod tests {
     }
 
     #[test]
+    fn future_and_stream_terminal_states_use_canonical_traps() {
+        for (intrinsic, message) in [
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite),
+                "cannot write to future after previous write succeeded or readable end dropped",
+            ),
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead),
+                "cannot read from future after previous read succeeded",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite),
+                "cannot write to stream after being notified that the readable end dropped",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead),
+                "cannot read from stream after being notified that the writable end dropped",
+            ),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            assert!(
+                source.contains("if (futureEnd.isDoneState()) {")
+                    || source.contains("if (streamEnd.isDoneState()) {")
+            );
+            assert!(source.contains(message));
+            assert!(source.contains("throw new WebAssemblyRuntimeError(message);"));
+        }
+
+        for (intrinsic, get, remove, message) in [
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureTransfer),
+                "const futureEnd = getFutureEnd(",
+                "const removedFutureEnd = removeFutureEndFromTable(",
+                "cannot lift future after previous read succeeded",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamTransfer),
+                "const streamEnd = getStreamEnd(",
+                "const removedStreamEnd = removeStreamEndFromTable(",
+                "cannot lift stream after being notified that the writable end dropped",
+            ),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            let get = source.find(get).expect("terminal validation lookup");
+            let remove = source.find(remove).expect("validated endpoint removal");
+            assert!(get < remove);
+            assert!(source.contains(message));
+        }
+
+        for (intrinsic, message) in [
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
+                "cannot lift future after previous read succeeded",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
+                "cannot lift stream after being notified that the writable end dropped",
+            ),
+            (
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture),
+                "cannot lift future after previous read succeeded",
+            ),
+            (
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatStream),
+                "cannot lift stream after being notified that the writable end dropped",
+            ),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            assert!(source.contains("End.isDoneState()) {"));
+            assert!(source.contains(message));
+        }
+    }
+
+    #[test]
     fn future_ends_track_own_and_peer_drop_state_separately() {
         let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::InternalFutureClass,

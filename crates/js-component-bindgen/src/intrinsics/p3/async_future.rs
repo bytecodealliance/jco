@@ -662,6 +662,9 @@ impl AsyncFutureIntrinsic {
                            if (!futureEnd) {{
                                throw new Error(`missing future [${{this.#futureEndWaitableIdx}}] (table [${{this.#futureTableIdx}}], component [${{this.#componentIdx}}]`);
                            }}
+                           if (futureEnd.isDoneState()) {{
+                               throw new {runtime_error_class}('cannot lift future after previous read succeeded');
+                           }}
                            if (futureEnd.isInSet()) {{ throw new {runtime_error_class}('futures in waitable sets cannot be lifted'); }}
 
                             return futureEnd.promise();
@@ -1482,6 +1485,8 @@ impl AsyncFutureIntrinsic {
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 let future_op_fn = self.name();
                 let (guest_op_fn, future_end_class) = match self {
@@ -1546,6 +1551,12 @@ impl AsyncFutureIntrinsic {
                         }}
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new Error('invalid future end, expected [{future_end_class}]');
+                        }}
+                        if (futureEnd.isDoneState()) {{
+                            const message = futureEnd.isWritable()
+                                ? 'cannot write to future after previous write succeeded or readable end dropped'
+                                : 'cannot read from future after previous read succeeded';
+                            throw new {runtime_error_class}(message);
                         }}
                         if (!futureEnd.isIdleState()) {{
                             throw new Error('future state must be idle before {future_op_fn}');
@@ -1701,6 +1712,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureTransfer => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_transfer_fn = self.name();
+                let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
                 let remove_future_end_from_table_fn =
                     render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let add_future_end_to_table_fn =
@@ -1710,6 +1722,8 @@ impl AsyncFutureIntrinsic {
                 );
                 let global_future_table_map =
                     render_args.require_intrinsic(Self::GlobalFutureTableMap);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                     r#"
@@ -1737,12 +1751,17 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const futureEnd = {remove_future_end_from_table_fn}({{ tableIdx: srcTableIdx, futureWaitableIdx: srcFutureWaitableIdx }});
+                        const futureEnd = {get_future_end_fn}({{ tableIdx: srcTableIdx, futureEndWaitableIdx: srcFutureWaitableIdx }});
                         if (!futureEnd.isReadable()) {{
                             throw new Error("writable future ends cannot be moved");
                         }}
                         if (futureEnd.isDoneState()) {{
-                            throw new Error('future read ends cannot be moved once the value has been delivered');
+                            throw new {runtime_error_class}('cannot lift future after previous read succeeded');
+                        }}
+
+                        const removedFutureEnd = {remove_future_end_from_table_fn}({{ tableIdx: srcTableIdx, futureWaitableIdx: srcFutureWaitableIdx }});
+                        if (removedFutureEnd !== futureEnd) {{
+                            throw new Error('removed future end does not match validated future end');
                         }}
 
                         const {{ handle, waitableIdx }} = {add_future_end_to_table_fn}({{ tableIdx: destTableIdx, futureEnd }});
