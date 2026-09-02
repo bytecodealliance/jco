@@ -229,6 +229,41 @@ separately when required.
 
 See [ComponentizeJS][cjs] and [componentize-qjs][cqjs] for backend-specific details.
 
+#### Experimental Node.js compatibility
+
+> [!WARNING]
+> Node.js built-in compatibility for components is experimental. Its APIs,
+> behavior, and generated component interfaces may change incompatibly without
+> a semver-major release.
+
+Bundled component source can use `node:os` normally:
+
+```js
+import { arch, platform } from "node:os";
+
+export function target() {
+    return `${platform()}-${arch()}`;
+}
+```
+
+If the selected WIT world does not already import `jco:node/os@0.1.0`, Jco
+edits that world to add a generated import, installs the typed `os.wit`
+dependency, and emits a warning describing the changes. Existing and aliased
+imports are preserved, and repeated componentization does not add duplicates.
+
+OS inspection is denied by default. A Node host explicitly grants pass-through
+access while transpiling:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
+```
+
+The default provider throws `ERR_JCO_OS_ADAPTER_REQUIRED` for inspecting or
+mutating calls. The opt-in provider uses the runtime's real `node:os` module;
+applications may instead map their own implementation of the typed WIT
+interface. The API is synchronous and does not require JSPI.
+
 [sm]: https://github.com/bytecodealliance/StarlingMonkey
 [qjs-ng]: https://github.com/quickjs-ng/quickjs
 [cjs]: https://github.com/bytecodealliance/componentize-js
