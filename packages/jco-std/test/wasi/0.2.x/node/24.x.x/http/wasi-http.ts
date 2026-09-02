@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { createWasiHttpTransport } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/transports/wasi-http.js";
+import { createHttp } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/core.js";
+import { createWasiHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-http.js";
 import type {
   WasiHttpFields,
   WasiHttpIncomingBody,
@@ -9,12 +10,12 @@ import type {
   WasiHttpOutgoingRequest,
   WasiHttpProvider,
   WasiHttpRequestOptions,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/transports/wasi-http.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-http.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-describe("node:http wasi:http transport", () => {
+describe("node:http wasi:http implementation", () => {
   test("translates a buffered exchange and disposes child streams before their bodies", () => {
     const events: string[] = [];
     let requestMethod: unknown;
@@ -148,7 +149,7 @@ describe("node:http wasi:http transport", () => {
       },
     };
 
-    const response = createWasiHttpTransport(provider).request({
+    const response = createWasiHttpImplementation(provider).request({
       method: "POST",
       scheme: "http",
       authority: "example.com",
@@ -215,7 +216,7 @@ describe("node:http wasi:http transport", () => {
     } satisfies WasiHttpProvider;
 
     expect(() =>
-      createWasiHttpTransport(provider).request({
+      createWasiHttpImplementation(provider).request({
         method: "GET",
         scheme: "http",
         authority: "example.com",
@@ -224,5 +225,15 @@ describe("node:http wasi:http transport", () => {
         body: new Uint8Array(),
       }),
     ).toThrow(expect.objectContaining({ code: "ECONNREFUSED" }));
+  });
+
+  test("rejects server construction immediately", () => {
+    const implementation = createWasiHttpImplementation({} as never);
+    expect(() => createHttp(implementation).createServer()).toThrow(
+      expect.objectContaining({
+        code: "ERR_JCO_UNSUPPORTED_NODE_API",
+        message: expect.stringContaining("outgoing-handler"),
+      }),
+    );
   });
 });

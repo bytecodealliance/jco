@@ -2,7 +2,11 @@ import nodeHttp from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { request } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
+import { Server, request } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
+import type {
+  DirectHttpResult,
+  DirectHttpServerAddress,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
 
 const servers = new Set<nodeHttp.Server>();
 
@@ -40,6 +44,54 @@ async function listen(server: nodeHttp.Server): Promise<number> {
 }
 
 describe("node:http direct Node host", () => {
+  test("serves requests through a guest callback resource", async () => {
+    const server = new Server(
+      {},
+      {
+        handle: async (incoming) => ({
+          tag: "ok",
+          val: {
+            statusCode: 202,
+            statusMessage: "Accepted",
+            headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
+            body: new TextEncoder().encode(
+              `${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
+            ),
+          },
+        }),
+        [Symbol.dispose]: () => undefined,
+      },
+    );
+    const started = (await server.listen({
+      port: 0,
+      host: "127.0.0.1",
+    })) as DirectHttpResult<DirectHttpServerAddress>;
+    expect(started.tag).toBe("ok");
+    if (started.tag === "err" || started.val.tag !== "tcp") {
+      throw new Error("expected a TCP listener");
+    }
+    const result = await request({
+      method: "POST",
+      scheme: "http",
+      authority: `127.0.0.1:${started.val.val.port}`,
+      pathWithQuery: "/resource",
+      headers: [
+        {
+          name: "Host",
+          value: new TextEncoder().encode(`127.0.0.1:${started.val.val.port}`),
+        },
+        { name: "Content-Length", value: new TextEncoder().encode("5") },
+      ],
+      body: new TextEncoder().encode("hello"),
+    });
+    expect(result.tag).toBe("ok");
+    if (result.tag === "ok") {
+      expect(result.val.statusCode).toBe(202);
+      expect(new TextDecoder().decode(result.val.body)).toBe("POST /resource hello");
+    }
+    await server.close();
+  });
+
   test("performs the guest-boundary-shaped request through real node:http", async () => {
     const server = nodeHttp.createServer((incoming, outgoing) => {
       const chunks: Uint8Array[] = [];
