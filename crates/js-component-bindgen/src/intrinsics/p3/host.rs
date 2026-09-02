@@ -619,14 +619,13 @@ impl HostIntrinsic {
                                 }});
                             }} catch (err) {{
                                 handleCalleeError(err);
+                                return;
                             }} finally {{
                                 if (!calleeIsAsync) {{ {blocking_call_depth}.value--; }}
                             }}
-                            if (callbackResult !== undefined) {{
-                                driveCallback(callbackResult)?.catch(err => {{
-                                    {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
-                                }});
-                            }}
+                            driveCallback(callbackResult)?.catch(err => {{
+                                {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
+                            }});
                         }};
 
                         // Decide whether the callee may enter (and run) synchronously in this

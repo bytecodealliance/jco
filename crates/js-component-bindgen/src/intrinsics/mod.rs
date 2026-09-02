@@ -1525,6 +1525,8 @@ mod tests {
         assert!(source.contains("const enteredSynchronously = mayStartSynchronously"));
         assert!(source.contains("? preparedTask.tryEnter()"));
         assert!(source.contains("fn: () => callee.apply(null, startRes),"));
+        assert!(!source.contains("if (callbackResult !== undefined)"));
+        assert!(source.contains("driveCallback(callbackResult)?.catch(err =>"));
         assert!(source.contains("const driveJspiCallee = async () => {"));
         assert!(source.contains("if (enteredSynchronously === true) {"));
         assert!(source.contains("startSubtask();"));
