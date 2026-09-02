@@ -128,6 +128,7 @@ describe("Node builtin adapters", () => {
         const source = plugin.load(id);
         expect(source).toContain("jco-node-builtin:path-core@0.2.6");
         expect(source).toContain("export default path");
+        expect(source).toContain("export const _makeLong = path._makeLong");
         const coreId = plugin.resolveId("\0jco-node-builtin:path-core@0.2.6");
         const core = plugin.load(coreId);
         expect(core).toContain('from "wasi:cli/environment@0.2.6"');
