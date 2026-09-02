@@ -11,6 +11,7 @@ import {
     DNS_WIT_REQUIREMENT,
     FS_WIT_REQUIREMENT,
     FFI_WIT_REQUIREMENT,
+    OS_WIT_REQUIREMENT,
     type NodeWitRequirement,
 } from "./node-wit.js";
 
@@ -29,6 +30,7 @@ const DOMAIN_SPECIFIER = "node:domain";
 const FFI_SPECIFIER = "node:ffi";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
+const OS_SPECIFIER = "node:os";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
@@ -239,6 +241,8 @@ export interface NodeBuiltinOptions {
     errorsModule?: string;
     /** Path to jco-std's versioned `node:events` module (overridable for tests) */
     eventsModule?: string;
+    /** Path to jco-std's versioned `node:os` module (overridable for tests) */
+    osModule?: string;
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
@@ -438,6 +442,39 @@ export * from ${JSON.stringify(dnsModule)};
 `;
 }
 
+/** Source of the host-backed `node:os` ESM facade. */
+function osAdapter(osModule: string): string {
+    return `
+import os from ${JSON.stringify(osModule)};
+export default os;
+export {
+    EOL,
+    arch,
+    availableParallelism,
+    constants,
+    cpus,
+    devNull,
+    endianness,
+    freemem,
+    getPriority,
+    homedir,
+    hostname,
+    loadavg,
+    machine,
+    networkInterfaces,
+    platform,
+    release,
+    setPriority,
+    tmpdir,
+    totalmem,
+    type,
+    uptime,
+    userInfo,
+    version,
+} from ${JSON.stringify(osModule)};
+`;
+}
+
 /** Source of the `node:fs` and `node:fs/promises` ESM facades. */
 function fsAdapter(specifier: string, fsModule: string, fsPromisesModule: string): string {
     const module = specifier === "node:fs" ? fsModule : fsPromisesModule;
@@ -634,6 +671,8 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const eventsModule = () =>
         options.eventsModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events"));
+    const osModule = () =>
+        options.osModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os"));
     const clusterModule = () =>
         options.clusterModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
@@ -687,6 +726,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === EVENTS_SPECIFIER) {
                 // No onWitRequirement: in-process emitters need no host capability.
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === OS_SPECIFIER) {
+                options.onWitRequirement?.(OS_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CLUSTER_SPECIFIER) {
@@ -749,6 +792,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === EVENTS_SPECIFIER) {
                 return eventsAdapter(unenvModule(EVENTS_SPECIFIER, options), eventsModule());
+            }
+            if (value === OS_SPECIFIER) {
+                return osAdapter(osModule());
             }
             if (value === CLUSTER_SPECIFIER) {
                 return clusterAdapter(clusterModule());
