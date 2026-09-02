@@ -100,10 +100,10 @@ export function deprecated(api: string, replacement: string): never {
   );
 }
 
-export function fromTransportError(value: HttpErrorData | DirectHttpError): NodeHttpError {
+export function fromImplementationError(value: HttpErrorData | DirectHttpError): NodeHttpError {
   const error = codedError(
     value.name === "TypeError" || value.name === "RangeError" ? value.name : "Error",
-    value.code ?? "ERR_JCO_HTTP_TRANSPORT",
+    value.code ?? "ERR_JCO_HTTP_IMPLEMENTATION",
     value.message,
   );
   const errno = value.errno;

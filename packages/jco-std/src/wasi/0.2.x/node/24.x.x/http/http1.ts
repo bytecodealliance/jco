@@ -1,6 +1,12 @@
 import { concatBytes } from "./body.js";
 import { invalidArgValue } from "./errors.js";
-import type { HttpTransportHeader, HttpTransportRequest, HttpTransportResponse } from "./types.js";
+import type {
+  HttpHeaderField,
+  HttpImplementationRequest,
+  HttpImplementationResponse,
+  HttpIncomingRequestData,
+  HttpOutgoingResponseData,
+} from "./types.js";
 
 const CRLF = Uint8Array.from([13, 10]);
 const HEADER_END = Uint8Array.from([13, 10, 13, 10]);
@@ -25,11 +31,11 @@ function ascii(value: string): Uint8Array {
   return Uint8Array.from(value, (character) => character.charCodeAt(0));
 }
 
-function wireHeaders(headers: readonly HttpTransportHeader[]): Uint8Array[] {
+function wireHeaders(headers: readonly HttpHeaderField[]): Uint8Array[] {
   return headers.flatMap(({ name, value }) => [ascii(`${name}: `), value, CRLF]);
 }
 
-export function serializeHttp1Request(request: HttpTransportRequest): Uint8Array {
+export function serializeHttp1Request(request: HttpImplementationRequest): Uint8Array {
   const hasConnection = request.headers.some(({ name }) => name.toLowerCase() === "connection");
   const headers = hasConnection
     ? request.headers
@@ -39,6 +45,27 @@ export function serializeHttp1Request(request: HttpTransportRequest): Uint8Array
     ...wireHeaders(headers),
     CRLF,
     request.body,
+  ]);
+}
+
+export function serializeHttp1Response(response: HttpOutgoingResponseData): Uint8Array {
+  const hasLength = response.headers.some(({ name }) => name.toLowerCase() === "content-length");
+  const hasTransferEncoding = response.headers.some(
+    ({ name }) => name.toLowerCase() === "transfer-encoding",
+  );
+  const hasConnection = response.headers.some(({ name }) => name.toLowerCase() === "connection");
+  const headers = [
+    ...response.headers,
+    ...(hasLength || hasTransferEncoding
+      ? []
+      : [{ name: "Content-Length", value: ascii(String(response.body.byteLength)) }]),
+    ...(hasConnection ? [] : [{ name: "Connection", value: ascii("close") }]),
+  ];
+  return concatBytes([
+    ascii(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n`),
+    ...wireHeaders(headers),
+    CRLF,
+    response.body,
   ]);
 }
 
@@ -88,7 +115,7 @@ function responseHead(source: Uint8Array):
       statusCode: number;
       statusMessage: string;
       httpVersion: string;
-      headers: HttpTransportHeader[];
+      headers: HttpHeaderField[];
       bodyOffset: number;
     }
   | undefined {
@@ -101,7 +128,7 @@ function responseHead(source: Uint8Array):
   if (!status) {
     throw invalidArgValue("HTTP response status line", latin1(source.subarray(0, end)));
   }
-  const headers: HttpTransportHeader[] = [];
+  const headers: HttpHeaderField[] = [];
   for (const line of lines) {
     const colon = line.indexOf(":");
     if (colon < 1) {
@@ -118,16 +145,94 @@ function responseHead(source: Uint8Array):
   };
 }
 
-function headerValues(headers: readonly HttpTransportHeader[], name: string): string[] {
+function headerValues(headers: readonly HttpHeaderField[], name: string): string[] {
   return headers
     .filter((header) => header.name.toLowerCase() === name)
     .map((header) => latin1(header.value));
 }
 
+export interface ParsedHttp1Request {
+  request: HttpIncomingRequestData;
+  consumed: number;
+}
+
+export function parseHttp1Request(
+  source: Uint8Array,
+  closed = false,
+): ParsedHttp1Request | undefined {
+  const end = bytesIndexOf(source, HEADER_END);
+  if (end < 0) {
+    if (closed && source.byteLength > 0) {
+      throw invalidArgValue("HTTP request", "incomplete headers");
+    }
+    return undefined;
+  }
+  const lines = latin1(source.subarray(0, end)).split("\r\n");
+  const requestLine = /^([^\s]+)\s+([^\s]+)\s+HTTP\/(\d+\.\d+)$/.exec(lines.shift() ?? "");
+  if (!requestLine) {
+    throw invalidArgValue("HTTP request line", latin1(source.subarray(0, end)));
+  }
+  const headers: HttpHeaderField[] = [];
+  for (const line of lines) {
+    const colon = line.indexOf(":");
+    if (colon < 1) {
+      throw invalidArgValue("HTTP request header", line);
+    }
+    headers.push({ name: line.slice(0, colon), value: ascii(line.slice(colon + 1).trimStart()) });
+  }
+  const bodyOffset = end + HEADER_END.byteLength;
+  let body: Uint8Array;
+  let consumed: number;
+  const transferEncoding = headerValues(headers, "transfer-encoding").join(",").toLowerCase();
+  if (
+    transferEncoding
+      .split(",")
+      .map((value) => value.trim())
+      .includes("chunked")
+  ) {
+    const parsed = chunkedBody(source, bodyOffset);
+    if (!parsed) {
+      if (closed) {
+        throw invalidArgValue("HTTP request", "incomplete chunked body");
+      }
+      return undefined;
+    }
+    body = parsed.body;
+    consumed = parsed.consumed;
+  } else {
+    const lengths = headerValues(headers, "content-length");
+    if (lengths.length > 1 || lengths[0]?.includes(",")) {
+      throw invalidArgValue("content-length", lengths.join(", "));
+    }
+    const length = lengths.length === 0 ? 0 : Number(lengths[0]);
+    if (!Number.isSafeInteger(length) || length < 0) {
+      throw invalidArgValue("content-length", lengths[0]);
+    }
+    if (source.byteLength < bodyOffset + length) {
+      if (closed) {
+        throw invalidArgValue("HTTP request", "body ended before content-length bytes arrived");
+      }
+      return undefined;
+    }
+    body = source.slice(bodyOffset, bodyOffset + length);
+    consumed = bodyOffset + length;
+  }
+  return {
+    request: {
+      method: requestLine[1],
+      url: requestLine[2],
+      httpVersion: requestLine[3],
+      headers,
+      body,
+    },
+    consumed,
+  };
+}
+
 function completedResponse(
   head: Exclude<ReturnType<typeof responseHead>, undefined>,
   body: Uint8Array,
-): HttpTransportResponse {
+): HttpImplementationResponse {
   return {
     statusCode: head.statusCode,
     statusMessage: head.statusMessage,
@@ -141,7 +246,7 @@ export function parseHttp1Response(
   source: Uint8Array,
   requestMethod: string,
   closed = false,
-): HttpTransportResponse | undefined {
+): HttpImplementationResponse | undefined {
   let remaining = source;
   for (;;) {
     const head = responseHead(remaining);

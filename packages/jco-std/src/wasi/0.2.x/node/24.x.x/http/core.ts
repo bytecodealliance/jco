@@ -12,13 +12,14 @@ import { IncomingMessage } from "./incoming-message.js";
 import { OutgoingMessage } from "./outgoing-message.js";
 import {
   connectionListener,
-  createServer,
-  Server,
+  createServerConstructor,
+  type ServerBase,
+  type ServerConstructor,
   ServerResponse,
   type RequestListener,
   type ServerOptions,
 } from "./server.js";
-import type { HttpRequestOptions, HttpTransport } from "./types.js";
+import type { HttpImplementation, HttpRequestOptions } from "./types.js";
 
 type RuntimeConstructor = new (...args: unknown[]) => unknown;
 
@@ -44,11 +45,14 @@ export interface NodeHttpModule {
   MessageEvent: RuntimeConstructor;
   OutgoingMessage: typeof OutgoingMessage;
   STATUS_CODES: Record<number, string>;
-  Server: typeof Server;
+  Server: ServerConstructor;
   ServerResponse: typeof ServerResponse;
   WebSocket: RuntimeConstructor;
   _connectionListener: typeof connectionListener;
-  createServer: typeof createServer;
+  createServer: (
+    optionsOrListener?: ServerOptions | RequestListener,
+    listener?: RequestListener,
+  ) => ServerBase;
   get: (
     input: RequestInput,
     options?: HttpRequestOptions | ResponseListener,
@@ -69,8 +73,9 @@ export interface NodeHttpModule {
 
 let maxIdleHttpParsers = 1_000;
 
-export function createHttp(transport: HttpTransport): NodeHttpModule {
-  const ClientRequest = createClientRequest(transport);
+export function createHttp(implementation: HttpImplementation): NodeHttpModule {
+  const ClientRequest = createClientRequest(implementation);
+  const Server = createServerConstructor(implementation);
 
   function request(
     input: RequestInput,
@@ -88,6 +93,13 @@ export function createHttp(transport: HttpTransport): NodeHttpModule {
     const clientRequest = request(input, options, callback);
     clientRequest.end();
     return clientRequest;
+  }
+
+  function createServer(
+    optionsOrListener: ServerOptions | RequestListener = {},
+    listener?: RequestListener,
+  ): ServerBase {
+    return new Server(optionsOrListener, listener);
   }
 
   function setMaxIdleHTTPParsers(max: number): void {
@@ -121,10 +133,7 @@ export function createHttp(transport: HttpTransport): NodeHttpModule {
     ServerResponse,
     WebSocket: globalConstructor("WebSocket"),
     _connectionListener: connectionListener,
-    createServer: createServer as (
-      optionsOrListener?: ServerOptions | RequestListener,
-      listener?: RequestListener,
-    ) => Server,
+    createServer,
     get,
     globalAgent,
     maxHeaderSize,

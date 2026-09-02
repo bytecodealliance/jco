@@ -33,28 +33,28 @@ export interface AgentLike {
 
 export type HttpBodyChunk = string | ArrayBuffer | ArrayBufferView;
 
-export interface HttpTransportHeader {
+export interface HttpHeaderField {
   name: string;
   value: Uint8Array;
 }
 
-export interface HttpTransportRequest {
+export interface HttpImplementationRequest {
   method: string;
   scheme: string;
   authority: string;
   pathWithQuery: string;
-  headers: HttpTransportHeader[];
+  headers: HttpHeaderField[];
   body: Uint8Array;
   connectTimeoutMs?: number;
   firstByteTimeoutMs?: number;
   betweenBytesTimeoutMs?: number;
 }
 
-export interface HttpTransportResponse {
+export interface HttpImplementationResponse {
   statusCode: number;
   statusMessage: string;
   httpVersion: string;
-  headers: HttpTransportHeader[];
+  headers: HttpHeaderField[];
   body: Uint8Array;
 }
 
@@ -71,8 +71,82 @@ export interface HttpErrorData {
 
 export type HttpResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: HttpErrorData };
 
-export interface HttpTransport {
-  request(options: HttpTransportRequest): HttpTransportResponse;
+export interface HttpServerOptions {
+  requestTimeout?: number;
+  headersTimeout?: number;
+  keepAliveTimeout?: number;
+  keepAliveTimeoutBuffer?: number;
+  connectionsCheckingInterval?: number;
+  maxHeaderSize?: number;
+  joinDuplicateHeaders?: boolean;
+  noDelay?: boolean;
+  requireHostHeader?: boolean;
+  keepAlive?: boolean;
+  keepAliveInitialDelay?: number;
+  rejectNonStandardBodyWrites?: boolean;
+  optimizeEmptyRequests?: boolean;
+  IncomingMessage?: unknown;
+  ServerResponse?: unknown;
+  shouldUpgradeCallback?: unknown;
+  highWaterMark?: number;
+  insecureHTTPParser?: boolean;
+  uniqueHeaders?: Array<string | string[]>;
+  [name: string]: unknown;
+}
+
+export interface HttpListenOptions {
+  port?: number;
+  host?: string;
+  backlog?: number;
+  path?: string;
+  exclusive?: boolean;
+  ipv6Only?: boolean;
+  reusePort?: boolean;
+  signal?: AbortSignal;
+}
+
+export type HttpServerAddress = { address: string; family: "IPv4" | "IPv6"; port: number } | string;
+
+export interface HttpIncomingRequestData {
+  method: string;
+  url: string;
+  httpVersion: string;
+  headers: HttpHeaderField[];
+  body: Uint8Array;
+  remoteAddress?: string;
+  remotePort?: number;
+}
+
+export interface HttpOutgoingResponseData {
+  statusCode: number;
+  statusMessage: string;
+  headers: HttpHeaderField[];
+  body: Uint8Array;
+}
+
+export interface HttpServerImplementation {
+  listen(options: HttpListenOptions): HttpServerAddress;
+  close(): boolean;
+  closeAllConnections(): void;
+  closeIdleConnections(): void;
+  getConnections(): number;
+  address(): HttpServerAddress | null;
+  ref(): void;
+  unref(): void;
+}
+
+export type HttpRequestHandler = (
+  request: HttpIncomingRequestData,
+) => HttpOutgoingResponseData | Promise<HttpOutgoingResponseData>;
+
+export interface HttpImplementation {
+  request(options: HttpImplementationRequest): HttpImplementationResponse;
+  createServer?(
+    options: HttpServerOptions,
+    handler: HttpRequestHandler,
+    onError: (error: Error) => void,
+  ): HttpServerImplementation;
+  serverUnsupportedReason?: string;
 }
 
 export type HttpCallback = () => void;
@@ -124,7 +198,7 @@ export interface DirectHttpRequest {
   scheme: string;
   authority: string;
   pathWithQuery: string;
-  headers: HttpTransportHeader[];
+  headers: HttpHeaderField[];
   body: Uint8Array;
   connectTimeoutMs?: number;
   firstByteTimeoutMs?: number;
@@ -135,12 +209,70 @@ export interface DirectHttpResponse {
   statusCode: number;
   statusMessage: string;
   httpVersion: string;
-  headers: HttpTransportHeader[];
+  headers: HttpHeaderField[];
   body: Uint8Array;
 }
 
 export type DirectHttpResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: DirectHttpError };
 
+export interface DirectHttpServerOptions {
+  requestTimeout?: number;
+  headersTimeout?: number;
+  keepAliveTimeout?: number;
+  keepAliveTimeoutBuffer?: number;
+  connectionsCheckingInterval?: number;
+  maxHeaderSize?: number;
+  joinDuplicateHeaders?: boolean;
+  noDelay?: boolean;
+  requireHostHeader?: boolean;
+  keepAlive?: boolean;
+  keepAliveInitialDelay?: number;
+  rejectNonStandardBodyWrites?: boolean;
+  optimizeEmptyRequests?: boolean;
+}
+
+export interface DirectHttpListenOptions {
+  port?: number;
+  host?: string;
+  backlog?: number;
+  path?: string;
+  exclusive?: boolean;
+  ipv6Only?: boolean;
+  reusePort?: boolean;
+}
+
+export type DirectHttpServerAddress =
+  | { tag: "tcp"; val: { address: string; family: string; port: number } }
+  | { tag: "pipe"; val: string };
+
+export type DirectHttpIncomingRequest = HttpIncomingRequestData;
+
+export type DirectHttpOutgoingResponse = HttpOutgoingResponseData;
+
+export interface DirectHttpRequestListener extends Disposable {
+  handle(
+    request: DirectHttpIncomingRequest,
+  ):
+    | DirectHttpResult<DirectHttpOutgoingResponse>
+    | Promise<DirectHttpResult<DirectHttpOutgoingResponse>>;
+}
+
+export interface DirectHttpServer extends Disposable {
+  listen(options: DirectHttpListenOptions): DirectHttpResult<DirectHttpServerAddress>;
+  close(): DirectHttpResult<boolean>;
+  closeAllConnections(): DirectHttpResult<undefined>;
+  closeIdleConnections(): DirectHttpResult<undefined>;
+  getConnections(): DirectHttpResult<bigint>;
+  address(): DirectHttpServerAddress | undefined;
+  ref(): void;
+  unref(): void;
+}
+
+export interface DirectHttpServerConstructor {
+  new (options: DirectHttpServerOptions, listener: DirectHttpRequestListener): DirectHttpServer;
+}
+
 export interface DirectHttpHost {
   request(options: DirectHttpRequest): DirectHttpResult<DirectHttpResponse>;
+  Server: DirectHttpServerConstructor;
 }

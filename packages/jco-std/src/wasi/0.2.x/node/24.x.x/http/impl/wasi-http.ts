@@ -1,7 +1,7 @@
 import { concatBytes } from "../body.js";
 import { STATUS_CODES } from "../constants.js";
-import { fromTransportError } from "../errors.js";
-import type { HttpTransport, HttpTransportHeader } from "../types.js";
+import { fromImplementationError } from "../errors.js";
+import type { HttpHeaderField, HttpImplementation } from "../types.js";
 
 export type WasiHttpMethod =
   | { tag: "get" | "head" | "post" | "put" | "delete" | "connect" | "options" | "trace" | "patch" }
@@ -123,7 +123,7 @@ function error(errorCode: WasiHttpErrorCode, syscall: string): Error {
     "connection-write-timeout": "ETIMEDOUT",
   };
   const code = nodeCodes[errorCode.tag] ?? "ERR_JCO_WASI_HTTP";
-  return fromTransportError({
+  return fromImplementationError({
     name: "Error",
     message: `${syscall} ${code}: wasi:http ${errorCode.tag}`,
     code,
@@ -203,7 +203,7 @@ function awaitResponse(future: WasiHttpFutureIncomingResponse): WasiHttpIncoming
       continue;
     }
     if (outer.tag === "err") {
-      throw fromTransportError({
+      throw fromImplementationError({
         name: "Error",
         message: "wasi:http response future was already consumed",
         code: "ERR_JCO_WASI_HTTP_STATE",
@@ -230,12 +230,15 @@ function readBody(stream: WasiHttpInputStream): Uint8Array {
   }
 }
 
-function responseHeaders(fields: WasiHttpFields): HttpTransportHeader[] {
+function responseHeaders(fields: WasiHttpFields): HttpHeaderField[] {
   return fields.entries().map(([name, value]) => ({ name, value: value.slice() }));
 }
 
-export function createWasiHttpTransport(provider: WasiHttpProvider): HttpTransport {
+export function createWasiHttpImplementation(provider: WasiHttpProvider): HttpImplementation {
   return {
+    serverUnsupportedReason:
+      "wasi:http outgoing-handler cannot accept arbitrary inbound HTTP connections",
+
     request(request) {
       try {
         const fields = provider.types.Fields.fromList(

@@ -1,6 +1,6 @@
 import { EventEmitter } from "../internal/event-emitter.js";
 import { incomingHeaders } from "./headers.js";
-import type { HttpTransportResponse } from "./types.js";
+import type { HttpImplementationResponse, HttpIncomingRequestData } from "./types.js";
 
 export type IncomingHeaderValue = string | string[] | undefined;
 
@@ -21,11 +21,13 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
   readonly trailers: Record<string, string | string[]> = {};
   readonly trailersDistinct: Record<string, string[]> = {};
   readonly rawTrailers: string[] = [];
-  readonly statusCode: number;
-  readonly statusMessage: string;
-  readonly method: string | undefined = undefined;
-  readonly url: string | undefined = undefined;
-  readonly socket: undefined = undefined;
+  readonly statusCode: number | undefined;
+  readonly statusMessage: string | undefined;
+  readonly method: string | undefined;
+  readonly url: string | undefined;
+  readonly socket:
+    | { remoteAddress?: string; remotePort?: number; remoteFamily?: "IPv4" | "IPv6" }
+    | undefined;
   readonly signal: AbortSignal | undefined = undefined;
   closed = false;
   destroyed = false;
@@ -37,11 +39,11 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
   #encoding: string | undefined;
   #started = false;
 
-  constructor(response: HttpTransportResponse) {
+  constructor(message: HttpImplementationResponse | HttpIncomingRequestData) {
     super();
-    const [major = 1, minor = 1] = response.httpVersion.split(".").map(Number);
-    const { headers, rawHeaders } = incomingHeaders(response.headers);
-    this.httpVersion = response.httpVersion;
+    const [major = 1, minor = 1] = message.httpVersion.split(".").map(Number);
+    const { headers, rawHeaders } = incomingHeaders(message.headers);
+    this.httpVersion = message.httpVersion;
     this.httpVersionMajor = major;
     this.httpVersionMinor = minor;
     this.headers = headers;
@@ -52,12 +54,32 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
       ]),
     );
     this.rawHeaders = rawHeaders;
-    this.statusCode = response.statusCode;
-    this.statusMessage = response.statusMessage;
-    this.#body = response.body.slice();
+    if ("statusCode" in message) {
+      this.statusCode = message.statusCode;
+      this.statusMessage = message.statusMessage;
+      this.method = undefined;
+      this.url = undefined;
+      this.socket = undefined;
+    } else {
+      this.statusCode = undefined;
+      this.statusMessage = undefined;
+      this.method = message.method;
+      this.url = message.url;
+      this.socket = {
+        remoteAddress: message.remoteAddress,
+        remotePort: message.remotePort,
+        remoteFamily:
+          message.remoteAddress === undefined
+            ? undefined
+            : message.remoteAddress.includes(":")
+              ? "IPv6"
+              : "IPv4",
+      };
+    }
+    this.#body = message.body.slice();
   }
 
-  get connection(): undefined {
+  get connection(): IncomingMessage["socket"] {
     return this.socket;
   }
 

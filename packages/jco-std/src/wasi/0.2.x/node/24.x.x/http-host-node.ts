@@ -10,9 +10,14 @@ import * as nodeHttp from "node:http";
 
 import type {
   DirectHttpError,
+  DirectHttpListenOptions,
   DirectHttpRequest,
+  DirectHttpRequestListener,
   DirectHttpResponse,
   DirectHttpResult,
+  DirectHttpServerAddress,
+  DirectHttpServerConstructor,
+  DirectHttpServerOptions,
 } from "./http/types.js";
 
 type AsyncResult<T> = Promise<DirectHttpResult<T>>;
@@ -133,4 +138,189 @@ export async function request(options: DirectHttpRequest): AsyncResult<DirectHtt
   });
 }
 
-export default { request };
+function nodeServerOptions(options: DirectHttpServerOptions): nodeHttp.ServerOptions {
+  return {
+    requestTimeout: options.requestTimeout,
+    headersTimeout: options.headersTimeout,
+    keepAliveTimeout: options.keepAliveTimeout,
+    keepAliveTimeoutBuffer: options.keepAliveTimeoutBuffer,
+    connectionsCheckingInterval: options.connectionsCheckingInterval,
+    maxHeaderSize: options.maxHeaderSize,
+    joinDuplicateHeaders: options.joinDuplicateHeaders,
+    noDelay: options.noDelay,
+    requireHostHeader: options.requireHostHeader,
+    keepAlive: options.keepAlive,
+    keepAliveInitialDelay: options.keepAliveInitialDelay,
+    rejectNonStandardBodyWrites: options.rejectNonStandardBodyWrites,
+    optimizeEmptyRequests: options.optimizeEmptyRequests,
+  };
+}
+
+function serverAddress(
+  address: Exclude<ReturnType<nodeHttp.Server["address"]>, null>,
+): DirectHttpServerAddress {
+  return typeof address === "string"
+    ? { tag: "pipe", val: address }
+    : {
+        tag: "tcp",
+        val: { address: address.address, family: address.family, port: address.port },
+      };
+}
+
+class NodeHttpServer {
+  readonly #listener: DirectHttpRequestListener;
+  readonly #server: nodeHttp.Server;
+
+  constructor(options: DirectHttpServerOptions, listener: DirectHttpRequestListener) {
+    this.#listener = listener;
+    this.#server = nodeHttp.createServer(nodeServerOptions(options), async (request, response) => {
+      try {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of request) {
+          chunks.push(typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk);
+        }
+        const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+        const body = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          body.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        const result = await listener.handle({
+          method: request.method ?? "GET",
+          url: request.url ?? "/",
+          httpVersion: request.httpVersion,
+          headers: responseHeaders(request.rawHeaders),
+          body,
+          remoteAddress: request.socket.remoteAddress,
+          remotePort: request.socket.remotePort,
+        });
+        if (result.tag === "err") {
+          throw Object.assign(new Error(result.val.message), result.val);
+        }
+        response.writeHead(
+          result.val.statusCode,
+          result.val.statusMessage,
+          headers(result.val.headers),
+        );
+        response.end(result.val.body);
+      } catch (error) {
+        if (!response.headersSent) {
+          response.statusCode = 500;
+          response.setHeader("content-type", "text/plain; charset=utf-8");
+          response.end(error instanceof Error ? error.message : String(error));
+        } else {
+          response.destroy(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+    });
+  }
+
+  async listen(options: DirectHttpListenOptions): AsyncResult<DirectHttpServerAddress> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error): void => reject(error);
+        this.#server.once("error", onError);
+        const done = (): void => {
+          this.#server.off("error", onError);
+          resolve();
+        };
+        if (options.path !== undefined) {
+          this.#server.listen(
+            {
+              path: options.path,
+              backlog: options.backlog,
+              exclusive: options.exclusive,
+            },
+            done,
+          );
+        } else {
+          this.#server.listen(
+            {
+              port: options.port ?? 0,
+              host: options.host,
+              backlog: options.backlog,
+              exclusive: options.exclusive,
+              ipv6Only: options.ipv6Only,
+              reusePort: options.reusePort,
+            },
+            done,
+          );
+        }
+      });
+      const address = this.#server.address();
+      if (address === null) {
+        throw new Error("HTTP server started without a listening address");
+      }
+      return { tag: "ok", val: serverAddress(address) };
+    } catch (error) {
+      return { tag: "err", val: serializeError(error) };
+    }
+  }
+
+  async close(): AsyncResult<boolean> {
+    const wasListening = this.#server.listening;
+    if (!wasListening) {
+      return { tag: "ok", val: false };
+    }
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.#server.close((error) => (error ? reject(error) : resolve()));
+      });
+      return { tag: "ok", val: true };
+    } catch (error) {
+      return { tag: "err", val: serializeError(error) };
+    }
+  }
+
+  closeAllConnections(): DirectHttpResult<undefined> {
+    try {
+      this.#server.closeAllConnections();
+      return { tag: "ok", val: undefined };
+    } catch (error) {
+      return { tag: "err", val: serializeError(error) };
+    }
+  }
+
+  closeIdleConnections(): DirectHttpResult<undefined> {
+    try {
+      this.#server.closeIdleConnections();
+      return { tag: "ok", val: undefined };
+    } catch (error) {
+      return { tag: "err", val: serializeError(error) };
+    }
+  }
+
+  async getConnections(): AsyncResult<bigint> {
+    try {
+      const count = await new Promise<number>((resolve, reject) => {
+        this.#server.getConnections((error, value) => (error ? reject(error) : resolve(value)));
+      });
+      return { tag: "ok", val: BigInt(count) };
+    } catch (error) {
+      return { tag: "err", val: serializeError(error) };
+    }
+  }
+
+  address(): DirectHttpServerAddress | undefined {
+    const address = this.#server.address();
+    return address === null ? undefined : serverAddress(address);
+  }
+
+  ref(): void {
+    this.#server.ref();
+  }
+
+  unref(): void {
+    this.#server.unref();
+  }
+
+  [Symbol.dispose](): void {
+    this.#server.close();
+    this.#listener[Symbol.dispose]();
+  }
+}
+
+export const Server = NodeHttpServer as unknown as DirectHttpServerConstructor;
+
+export default { request, Server };
