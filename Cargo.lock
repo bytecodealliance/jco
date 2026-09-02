@@ -1651,6 +1651,7 @@ dependencies = [
  "heck 0.5.0",
  "js-component-bindgen",
  "semver",
+ "serde",
  "serde_json",
  "structopt",
  "wast",

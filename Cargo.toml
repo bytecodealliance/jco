@@ -40,6 +40,7 @@ cargo_metadata = { version = "0.23.1", default-features = false }
 heck = { version = "0.5.0", default-features = false }
 log = { version = "0.4.29", default-features = false }
 semver = { version = "1.0.27", default-features = false }
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
 structopt = { version = "0.3.26", default-features = false }
 tokio = { version = "1.50.0", default-features = false }
