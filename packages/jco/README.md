@@ -227,6 +227,34 @@ jco componentize app.ts --wit wit -n world-name -o component.wasm
 The TypeScript transform erases types but does not perform semantic type checking. Run `tsc --noEmit`
 separately when required.
 
+#### Experimental Node.js path support
+
+> **Warning:** Node.js builtin compatibility in components is experimental. Its
+> APIs and generated component requirements may change incompatibly before the
+> feature is stabilized.
+
+Bundled source may use ordinary `node:path`, `node:path/posix`, and
+`node:path/win32` imports. Jco replaces them with the Node 24.20-compatible
+`jco-std` implementation and shares one module instance across all three
+specifiers:
+
+```js
+import { resolve } from "node:path";
+import { join as winJoin } from "node:path/win32";
+
+export function paths() {
+    return [resolve("dist", "app.js"), winJoin("C:\\dist", "app.js")];
+}
+```
+
+The selected WIT world must import exactly one
+`wasi:cli/environment@0.2.x` interface. Lexical operations do not read it, but
+relative resolution uses `initial-cwd` lazily and Windows drive-relative paths
+may use `get-environment`. Jco reports a focused error when the interface is
+missing or ambiguous. The implementation adds no custom WIT, callback export,
+network access, or Node host passthrough. Source graphs that do not reference a
+path builtin never resolve the adapter, so no path implementation is added.
+
 See [ComponentizeJS][cjs] and [componentize-qjs][cqjs] for backend-specific details.
 
 #### Experimental Node.js compatibility
