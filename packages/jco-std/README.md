@@ -38,6 +38,10 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/26.x.x/ffi`                 | `node:ffi` guest adapter, Node 26 over an explicit host capability            |
 | `wasi/0.2.x/node/26.x.x/ffi/host`            | Deny-by-default host for `jco:node/ffi`                                       |
 | `wasi/0.2.x/node/26.x.x/ffi/host/node`       | Opt-in host over the runtime's real `node:ffi`; `setSuffix()` pins the suffix |
+| `wasi/0.2.x/node/24.x.x/inspector`           | `node:inspector` guest adapter, Node 24 over an explicit host capability      |
+| `wasi/0.2.x/node/24.x.x/inspector/promises`  | `node:inspector/promises`, sharing one core with `node:inspector`             |
+| `wasi/0.2.x/node/24.x.x/inspector/host`      | Deny-by-default host for `jco:node/inspector`                                 |
+| `wasi/0.2.x/node/24.x.x/inspector/host/node` | Opt-in host over the runtime's real `node:inspector`                          |
 
 [express]: https://expressjs.com
 
@@ -115,6 +119,10 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - `node:os`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os` and the
   application-provided `jco:node/os@0.1.0` capability;
+- `node:inspector` and `node:inspector/promises`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector` and the
+  application-provided `jco:node/inspector@0.1.0` capability, with the host
+  calling back into the component through a guest-exported callbacks interface;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
