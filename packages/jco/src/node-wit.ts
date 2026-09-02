@@ -64,6 +64,13 @@ export const FS_WIT_REQUIREMENT: NodeWitRequirement = {
     dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/fs.wit", import.meta.url))],
 };
 
+export const OS_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:os",
+    witImport: "jco:node/os@0.1.0",
+    dependencyDirectory: "jco-node-0.1.0",
+    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/os.wit", import.meta.url))],
+};
+
 export const FFI_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:ffi",
     witImport: "jco:node/ffi@0.1.0",
