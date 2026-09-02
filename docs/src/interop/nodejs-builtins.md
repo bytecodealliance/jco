@@ -124,7 +124,7 @@ is planned.
 | `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.                |
 | `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                               |
 | `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                              |
-| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Outbound client API over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Server listening is explicitly unsupported.                     |
+| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Serving works on the `direct` transport; see below.          |
 | `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.  |
 | `node:os`                                         | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os`                                                | Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider -- see below.                  |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                          |
@@ -820,6 +820,42 @@ Two limits are worth knowing before writing one:
 - **`res.sendFile()`, `res.render()` and `express.static()` need a filesystem.** They work
   only in a world that imports `jco:node/fs` with a host wired up; the deny-by-default
   provider satisfies the import for an application that never calls them.
+
+### Serving requests
+
+`app.listen()` works on the `direct` transport, where the host owns the socket and calls
+back into the guest for each request. Two things have to be arranged around it.
+
+The host provider is one of the component's *imports*, so it cannot reach the component's
+exports by itself. The application introduces them once, after instantiating:
+
+```js
+import * as httpHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node";
+
+const instance = await instantiate(undefined, imports);
+httpHost.setCallbacks(instance["jco:node/http-callbacks@0.1.0"]);
+```
+
+And the exports that suspend on an asynchronous import have to be named when transpiling:
+
+```console
+jco transpile app.wasm -o out --async-mode jspi \\
+    --async-exports start --async-exports 'jco:node/http-callbacks@0.1.0#handle-request' \\
+    --map 'jco:node/http@0.1.0=...'
+```
+
+> [!NOTE]
+> Name them rather than passing `--async-exports '*'`. The wildcard marks an export's
+> binding asynchronous without wrapping the export in `WebAssembly.promising`, so the first
+> call that suspends fails with `SuspendError`.
+
+The `wasi-sockets` transport cannot serve yet, for a reason outside Jco: ComponentizeJS's
+guest bindings do not emit a class for an imported resource that has no methods, while still
+referencing one when lifting a returned handle. `wasi:sockets/network`'s `network` is such a
+resource, so any guest that calls `instance-network()` fails with
+`import_network_0_2_12$Network is not defined`. It reproduces in twelve lines of WIT --
+`resource token;` returned from a function -- and affects ComponentizeJS 0.19.3 through
+0.22.0. Preview 2's `wasi:sockets` implementation is complete and is not involved.
 
 The `node:http` adapter implements both client and server NodeJS HTTP APIs,
 with outbound `request()` and `get()` calls with Node-style `ClientRequest`

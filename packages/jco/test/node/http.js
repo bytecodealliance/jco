@@ -198,8 +198,7 @@ describe("node:http WIT installation", () => {
 });
 
 describe("node:http in a component", () => {
-    // TODO(unskip): use the published jco-std HTTP server exports once a release containing them is available.
-    test.skip("serves a request through guest -> WIT callback resource -> host node:http", async () => {
+    test("serves a request through guest -> WIT callback -> host node:http", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http-server",
             bundle: true,
@@ -213,7 +212,10 @@ describe("node:http in a component", () => {
             jco: {
                 transpile: {
                     extraArgs: {
-                        asyncExports: ["*"],
+                        // Named rather than `"*"`: the wildcard marks an export's binding async
+                        // without wrapping the export in `WebAssembly.promising`, so a call
+                        // that suspends on an async import fails with `SuspendError`.
+                        asyncExports: ["start", "stop", "jco:node/http-callbacks@0.1.0#handle-request"],
                         map: { "jco:node/http@0.1.0": NODE_HOST },
                     },
                 },
