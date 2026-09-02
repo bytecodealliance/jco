@@ -16,6 +16,16 @@ const HTTP_ASYNC_IMPORTS = [
     `${HTTP_CAPABILITY}#[method]server.close`,
     `${HTTP_CAPABILITY}#[method]server.get-connections`,
 ];
+const HTTP2_CAPABILITY = "jco:node/http2@0.1.0";
+const HTTP2_ASYNC_IMPORTS = [
+    `${HTTP2_CAPABILITY}#[method]client-session.ready`,
+    `${HTTP2_CAPABILITY}#[method]client-stream.finish`,
+    `${HTTP2_CAPABILITY}#[method]client-session.close`,
+    `${HTTP2_CAPABILITY}#[method]client-session.settings`,
+    `${HTTP2_CAPABILITY}#[method]client-session.ping`,
+    `${HTTP2_CAPABILITY}#[method]server.listen`,
+    `${HTTP2_CAPABILITY}#[method]server.close`,
+];
 const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -26,6 +36,7 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
     "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
     "jco:node/inspector@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host",
+    "jco:node/http2@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host",
 };
 
 /** Apply deny-by-default host mappings while preserving explicit application choices. */
@@ -57,6 +68,18 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
         // suspends the synchronous Preview 2 WIT import while it is in flight.
         opts.asyncMode = "jspi";
         for (const asyncImport of HTTP_ASYNC_IMPORTS) {
+            opts.asyncImports = appendUnique(opts.asyncImports, asyncImport);
+        }
+        opts.asyncExports = appendUnique(opts.asyncExports, "*");
+    }
+    const hasAsyncHttp2Provider =
+        opts.map?.[HTTP2_CAPABILITY] !== undefined &&
+        opts.map[HTTP2_CAPABILITY] !== DEFAULT_NODE_CAPABILITY_MAP[HTTP2_CAPABILITY];
+    if (hasAsyncHttp2Provider) {
+        // A direct Node HTTP/2 provider waits on real sessions, streams, and
+        // server callbacks. JSPI suspends those typed resource methods.
+        opts.asyncMode = "jspi";
+        for (const asyncImport of HTTP2_ASYNC_IMPORTS) {
             opts.asyncImports = appendUnique(opts.asyncImports, asyncImport);
         }
         opts.asyncExports = appendUnique(opts.asyncExports, "*");
