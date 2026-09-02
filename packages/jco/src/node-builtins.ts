@@ -31,6 +31,7 @@ const FFI_SPECIFIER = "node:ffi";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
 const OS_SPECIFIER = "node:os";
+const STRING_DECODER_SPECIFIER = "node:string_decoder";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
@@ -243,6 +244,8 @@ export interface NodeBuiltinOptions {
     eventsModule?: string;
     /** Path to jco-std's versioned `node:os` module (overridable for tests) */
     osModule?: string;
+    /** Path to jco-std's versioned `node:string_decoder` module (overridable for tests) */
+    stringDecoderModule?: string;
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
@@ -359,6 +362,15 @@ export {
     executionAsyncResource,
     triggerAsyncId,
 } from ${JSON.stringify(asyncHooksModule)};
+`;
+}
+
+/** Source of the capability-free `node:string_decoder` ESM facade. */
+function stringDecoderAdapter(stringDecoderModule: string): string {
+    return `
+import stringDecoder from ${JSON.stringify(stringDecoderModule)};
+export default stringDecoder;
+export { StringDecoder } from ${JSON.stringify(stringDecoderModule)};
 `;
 }
 
@@ -674,6 +686,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events"));
     const osModule = () =>
         options.osModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os"));
+    const stringDecoderModule = () =>
+        options.stringDecoderModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder"));
     const clusterModule = () =>
         options.clusterModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
@@ -731,6 +746,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === OS_SPECIFIER) {
                 options.onWitRequirement?.(OS_WIT_REQUIREMENT);
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === STRING_DECODER_SPECIFIER) {
+                // No onWitRequirement: decoding and incomplete-byte state stay in the guest.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CLUSTER_SPECIFIER) {
@@ -796,6 +815,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === OS_SPECIFIER) {
                 return osAdapter(osModule());
+            }
+            if (value === STRING_DECODER_SPECIFIER) {
+                return stringDecoderAdapter(stringDecoderModule());
             }
             if (value === CLUSTER_SPECIFIER) {
                 return clusterAdapter(clusterModule());
