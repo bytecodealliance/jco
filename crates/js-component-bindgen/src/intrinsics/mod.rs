@@ -1587,6 +1587,30 @@ mod tests {
     }
 
     #[test]
+    fn stream_operations_only_suspend_for_sync_canonical_calls() {
+        for op in [
+            AsyncStreamIntrinsic::StreamRead,
+            AsyncStreamIntrinsic::StreamWrite,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncStream(op));
+
+            assert!(source.contains(&format!("function {}(", op.name())));
+            assert!(!source.contains(&format!("async function {}(", op.name())));
+        }
+
+        for end in [
+            AsyncStreamIntrinsic::StreamReadableEndClass,
+            AsyncStreamIntrinsic::StreamWritableEndClass,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncStream(end));
+            assert!(source.contains("copy(args) {"));
+            assert!(!source.contains("async copy(args) {"));
+            assert!(source.contains("if (isAsync) {"));
+            assert!(source.contains("return task.suspendUntil({"));
+        }
+    }
+
+    #[test]
     fn future_ends_track_own_and_peer_drop_state_separately() {
         let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::InternalFutureClass,
