@@ -8,8 +8,12 @@
  */
 import * as nodeHttp from "node:http";
 
+import {
+  fieldsToRawHeaders,
+  rawHeadersToFields,
+  serializeNodeError,
+} from "./internal/http-host.js";
 import type {
-  DirectHttpError,
   DirectHttpListenOptions,
   DirectHttpRequest,
   DirectHttpRequestListener,
@@ -19,36 +23,8 @@ import type {
   DirectHttpServerConstructor,
   DirectHttpServerOptions,
 } from "./http/types.js";
-import { serializeHostError, stringField } from "./internal/host-error.js";
-
 type AsyncResult<T> = Promise<DirectHttpResult<T>>;
 type Timer = ReturnType<typeof setTimeout>;
-
-function serializeError(error: unknown): DirectHttpError {
-  const value = error as Record<string, unknown> | null;
-  return {
-    ...serializeHostError(error),
-    hostname: stringField(value?.hostname),
-    address: stringField(value?.address),
-    port: typeof value?.port === "number" ? value.port : undefined,
-  };
-}
-
-function headers(value: readonly { name: string; value: Uint8Array }[]): string[] {
-  const decoder = new TextDecoder("latin1");
-  return value.flatMap(({ name, value: bytes }) => [name, decoder.decode(bytes)]);
-}
-
-function responseHeaders(rawHeaders: string[]): Array<{ name: string; value: Uint8Array }> {
-  const result: Array<{ name: string; value: Uint8Array }> = [];
-  for (let index = 0; index < rawHeaders.length; index += 2) {
-    result.push({
-      name: rawHeaders[index],
-      value: Uint8Array.from(rawHeaders[index + 1], (character) => character.charCodeAt(0)),
-    });
-  }
-  return result;
-}
 
 function timeoutError(syscall: string): Error & { code: string; syscall: string } {
   return Object.assign(new Error(`HTTP ${syscall} timed out`), {
@@ -70,7 +46,7 @@ export async function request(options: DirectHttpRequest): AsyncResult<DirectHtt
       new URL(`${options.scheme}://${options.authority}${options.pathWithQuery}`),
       {
         method: options.method,
-        headers: headers(options.headers),
+        headers: fieldsToRawHeaders(options.headers),
         joinDuplicateHeaders: true,
       },
       (response) => {
@@ -83,7 +59,7 @@ export async function request(options: DirectHttpRequest): AsyncResult<DirectHtt
           });
         }
         response.on("data", (chunk: Uint8Array) => chunks.push(new Uint8Array(chunk)));
-        response.once("error", (error) => finish({ tag: "err", val: serializeError(error) }));
+        response.once("error", (error) => finish({ tag: "err", val: serializeNodeError(error) }));
         response.once("end", () => {
           const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
           const body = new Uint8Array(size);
@@ -98,14 +74,14 @@ export async function request(options: DirectHttpRequest): AsyncResult<DirectHtt
               statusCode: response.statusCode ?? 0,
               statusMessage: response.statusMessage ?? "",
               httpVersion: response.httpVersion,
-              headers: responseHeaders(response.rawHeaders),
+              headers: rawHeadersToFields(response.rawHeaders),
               body,
             },
           });
         });
       },
     );
-    request.once("error", (error) => finish({ tag: "err", val: serializeError(error) }));
+    request.once("error", (error) => finish({ tag: "err", val: serializeNodeError(error) }));
     if (options.connectTimeoutMs !== undefined) {
       request.once("socket", (socket) => {
         if (!socket.connecting) {
@@ -180,7 +156,7 @@ class NodeHttpServer {
           method: request.method ?? "GET",
           url: request.url ?? "/",
           httpVersion: request.httpVersion,
-          headers: responseHeaders(request.rawHeaders),
+          headers: rawHeadersToFields(request.rawHeaders),
           body,
           remoteAddress: request.socket.remoteAddress,
           remotePort: request.socket.remotePort,
@@ -191,7 +167,7 @@ class NodeHttpServer {
         response.writeHead(
           result.val.statusCode,
           result.val.statusMessage,
-          headers(result.val.headers),
+          fieldsToRawHeaders(result.val.headers),
         );
         response.end(result.val.body);
       } catch (error) {
@@ -244,7 +220,7 @@ class NodeHttpServer {
       }
       return { tag: "ok", val: serverAddress(address) };
     } catch (error) {
-      return { tag: "err", val: serializeError(error) };
+      return { tag: "err", val: serializeNodeError(error) };
     }
   }
 
@@ -259,7 +235,7 @@ class NodeHttpServer {
       });
       return { tag: "ok", val: true };
     } catch (error) {
-      return { tag: "err", val: serializeError(error) };
+      return { tag: "err", val: serializeNodeError(error) };
     }
   }
 
@@ -268,7 +244,7 @@ class NodeHttpServer {
       this.#server.closeAllConnections();
       return { tag: "ok", val: undefined };
     } catch (error) {
-      return { tag: "err", val: serializeError(error) };
+      return { tag: "err", val: serializeNodeError(error) };
     }
   }
 
@@ -277,7 +253,7 @@ class NodeHttpServer {
       this.#server.closeIdleConnections();
       return { tag: "ok", val: undefined };
     } catch (error) {
-      return { tag: "err", val: serializeError(error) };
+      return { tag: "err", val: serializeNodeError(error) };
     }
   }
 
@@ -288,7 +264,7 @@ class NodeHttpServer {
       });
       return { tag: "ok", val: BigInt(count) };
     } catch (error) {
-      return { tag: "err", val: serializeError(error) };
+      return { tag: "err", val: serializeNodeError(error) };
     }
   }
 

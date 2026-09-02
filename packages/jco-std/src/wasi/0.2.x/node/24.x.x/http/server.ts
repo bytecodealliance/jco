@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from "../internal/event-emitter.js";
+import { parseListenArguments } from "../internal/net-server.js";
 import { STATUS_CODES } from "./constants.js";
 import { codedError } from "../errors/core.js";
 import { invalidArgType, invalidArgValue, unsupported } from "./errors.js";
@@ -23,7 +24,6 @@ import type {
   HttpHeaders,
   HttpImplementation,
   HttpIncomingRequestData,
-  HttpListenOptions,
   HttpOutgoingResponseData,
   HttpServerAddress,
   HttpServerImplementation,
@@ -53,36 +53,6 @@ export interface ServerOptions {
   insecureHTTPParser?: boolean;
   uniqueHeaders?: Array<string | string[]>;
   [name: string]: unknown;
-}
-
-function listenArguments(args: unknown[]): {
-  options: HttpListenOptions;
-  callback: HttpCallback | undefined;
-} {
-  const values = [...args];
-  const callback = typeof values.at(-1) === "function" ? (values.pop() as HttpCallback) : undefined;
-  const first = values.shift();
-  if (typeof first === "object" && first !== null) {
-    return { options: { ...(first as HttpListenOptions) }, callback };
-  }
-  if (typeof first === "string" && !/^\d+$/.test(first)) {
-    return { options: { path: first }, callback };
-  }
-  const port = typeof first === "string" ? Number(first) : first;
-  if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65_535) {
-    throw invalidArgValue("options.port", first);
-  }
-  const options: HttpListenOptions = { port };
-  if (typeof values[0] === "string") {
-    options.host = values.shift() as string;
-  }
-  if (typeof values[0] === "number") {
-    options.backlog = values.shift() as number;
-  }
-  if (values.length > 0) {
-    throw invalidArgType("options", "object, string, or number", first);
-  }
-  return { options, callback };
 }
 
 export class ServerResponse extends OutgoingMessage {
@@ -252,7 +222,7 @@ export class ServerBase extends EventEmitter {
   }
 
   listen(...args: unknown[]): this {
-    const { options, callback } = listenArguments(args);
+    const { options, callback } = parseListenArguments(args);
     if (options.signal !== undefined) {
       unsupported(
         "http.Server.listen signal",
