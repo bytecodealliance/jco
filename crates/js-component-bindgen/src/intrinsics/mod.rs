@@ -2025,6 +2025,56 @@ mod tests {
     }
 
     #[test]
+    fn future_and_stream_waitable_membership_traps_before_transfer() {
+        for (intrinsic, check, remove, message) in [
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureTransfer),
+                "if (futureEnd.isInSet()) {",
+                "const removedFutureEnd = removeFutureEndFromTable(",
+                "cannot lift future while it's in a waitable set",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamTransfer),
+                "if (streamEnd.isInSet()) {",
+                "const removedStreamEnd = removeStreamEndFromTable(",
+                "cannot lift stream while it's in a waitable set",
+            ),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            let check = source.find(check).expect("waitable membership check");
+            let remove = source.find(remove).expect("endpoint table removal");
+
+            assert!(check < remove, "membership validation must precede removal");
+            assert!(source.contains(&format!(
+                "throw new WebAssemblyRuntimeError(\"{message}\");"
+            )));
+        }
+
+        for (intrinsic, message) in [
+            (
+                Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
+                "cannot lift future while it's in a waitable set",
+            ),
+            (
+                Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
+                "cannot lift stream while it's in a waitable set",
+            ),
+            (
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture),
+                "cannot lift future while it's in a waitable set",
+            ),
+            (
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatStream),
+                "cannot lift stream while it's in a waitable set",
+            ),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            assert!(source.contains(&format!("\"{message}\"")));
+            assert!(!source.contains("in waitable sets cannot be lifted"));
+        }
+    }
+
+    #[test]
     fn future_ends_track_own_and_peer_drop_state_separately() {
         let mut intrinsics = BTreeSet::from([Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::InternalFutureClass,

@@ -5,6 +5,9 @@ use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
+use crate::intrinsics::p3::{
+    CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, CANNOT_LIFT_STREAM_IN_WAITABLE_SET,
+};
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
@@ -1376,7 +1379,7 @@ impl LiftIntrinsic {
                                 throw new {runtime_error_class}('cannot lift future after previous read succeeded');
                             }}
                             if (!futureEnd.isIdleState()) {{ throw new Error('futures must be in idle state'); }}
-                            if (futureEnd.isInSet()) {{ throw new {runtime_error_class}('futures in waitable sets cannot be lifted'); }}
+                            if (futureEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_FUTURE_IN_WAITABLE_SET:?}); }}
 
                             return [ futureEnd.promise(), ctx ];
                         }};
@@ -1447,7 +1450,7 @@ impl LiftIntrinsic {
                                 throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
                             }}
                             if (!streamEnd.isIdleState()) {{ throw new Error('streams must be in idle state'); }}
-                            if (streamEnd.isInSet()) {{ throw new {runtime_error_class}('streams in waitable sets cannot be lifted'); }}
+                            if (streamEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_STREAM_IN_WAITABLE_SET:?}); }}
 
                             const stream = new {external_stream_class}({{
                                 globalRep: streamEnd.globalStreamMapRep(),

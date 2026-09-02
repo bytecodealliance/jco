@@ -5,7 +5,7 @@ use crate::{
     source::Source,
 };
 
-use super::async_task::AsyncTaskIntrinsic;
+use super::{CANNOT_LIFT_STREAM_IN_WAITABLE_SET, async_task::AsyncTaskIntrinsic};
 
 /// This enum contains intrinsics that enable Stream
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -1816,7 +1816,7 @@ impl AsyncStreamIntrinsic {
                            if (streamEnd.isDoneState()) {{
                                throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
                            }}
-                           if (streamEnd.isInSet()) {{ throw new {runtime_error_class}('streams in waitable sets cannot be lifted'); }}
+                           if (streamEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_STREAM_IN_WAITABLE_SET:?}); }}
 
                             return new {external_stream_class}({{
                                 isReadable: streamEnd.isReadable(),
@@ -2437,6 +2437,9 @@ impl AsyncStreamIntrinsic {
                         }}
                         if (streamEnd.isDoneState()) {{
                             throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
+                        }}
+                        if (streamEnd.isInSet()) {{
+                            throw new {runtime_error_class}({CANNOT_LIFT_STREAM_IN_WAITABLE_SET:?});
                         }}
 
                         const removedStreamEnd = {remove_stream_end_from_table_fn}({{ tableIdx: srcTableIdx, streamWaitableIdx: srcStreamWaitableIdx }});
