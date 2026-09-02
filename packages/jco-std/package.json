@@ -262,6 +262,9 @@
     "test": "vitest run -c test/vitest.ts",
     "prepack": "pnpm run build"
   },
+  "dependencies": {
+    "minimatch": "10.2.6"
+  },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.22.0",
     "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
