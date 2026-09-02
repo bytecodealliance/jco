@@ -530,6 +530,7 @@ function pathAdapter(specifier: string, version: string) {
 import { portablePath } from ${JSON.stringify(`${VIRTUAL_PREFIX}path-core@${version}`)};
 const path = ${namespace === "default" ? "portablePath" : `portablePath.${namespace}`};
 export default path;
+export const _makeLong = path._makeLong;
 export const basename = path.basename;
 export const delimiter = path.delimiter;
 export const dirname = path.dirname;
