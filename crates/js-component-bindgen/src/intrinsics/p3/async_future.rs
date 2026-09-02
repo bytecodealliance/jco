@@ -7,7 +7,10 @@ use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
-use super::{CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, async_task::AsyncTaskIntrinsic};
+use super::{
+    CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, CANNOT_START_CONCURRENT_OPERATION,
+    async_task::AsyncTaskIntrinsic,
+};
 
 /// This enum contains intrinsics that enable Futures
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -1562,7 +1565,7 @@ impl AsyncFutureIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
                         if (!futureEnd.isIdleState()) {{
-                            throw new Error('future state must be idle before {future_op_fn}');
+                            throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
                         }}
 
                         futureEnd.{guest_op_fn}({{
@@ -1632,9 +1635,9 @@ impl AsyncFutureIntrinsic {
                 };
 
                 output.push_str(&format!(r#"
-                    async function {future_cancel_fn}(
+                    function {future_cancel_fn}(
                         ctx,
-                        futureEndIdx,
+                        futureEndWaitableIdx,
                     ) {{
                         {debug_log_fn}('[{future_cancel_fn}()] args', {{
                             ctx,

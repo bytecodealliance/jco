@@ -9,3 +9,5 @@ pub(crate) const CANNOT_LIFT_FUTURE_IN_WAITABLE_SET: &str =
     "cannot lift future while it's in a waitable set";
 pub(crate) const CANNOT_LIFT_STREAM_IN_WAITABLE_SET: &str =
     "cannot lift stream while it's in a waitable set";
+pub(crate) const CANNOT_START_CONCURRENT_OPERATION: &str =
+    "cannot have concurrent operations active on a future/stream";

@@ -5,7 +5,10 @@ use crate::{
     source::Source,
 };
 
-use super::{CANNOT_LIFT_STREAM_IN_WAITABLE_SET, async_task::AsyncTaskIntrinsic};
+use super::{
+    CANNOT_LIFT_STREAM_IN_WAITABLE_SET, CANNOT_START_CONCURRENT_OPERATION,
+    async_task::AsyncTaskIntrinsic,
+};
 
 /// This enum contains intrinsics that enable Stream
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -301,7 +304,6 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-
                 output.push_str(&format!(
                     r#"
                     function {add_stream_end_to_table_fn}(args) {{
@@ -728,6 +730,8 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 // Internal helper fn that sets up for a `copy()` call
                 let copy_setup_impl = format!(
@@ -749,7 +753,7 @@ impl AsyncStreamIntrinsic {
                         // Only check invariants if we are *not* doing a follow-up/post-blocked read
                         if (!skipStateCheck) {{
                             if (this.isCopying()) {{
-                                throw new Error('stream is currently undergoing a separate copy');
+                                throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
                             }}
                             if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
                                 throw new Error(`stream copy state is not idle`);
@@ -2306,7 +2310,7 @@ impl AsyncStreamIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 output.push_str(&format!(r#"
-                    async function {stream_cancel_fn}(ctx, streamEndWaitableIdx) {{
+                    function {stream_cancel_fn}(ctx, streamEndWaitableIdx) {{
                         {debug_log_fn}('[{stream_cancel_fn}()] args', {{ ctx, streamEndWaitableIdx }});
                         const {{ streamTableIdx, isAsync, componentIdx }} = ctx;
 
@@ -2321,8 +2325,22 @@ impl AsyncStreamIntrinsic {
 
                         streamEnd.setCopyState({stream_end_class}.CopyState.CANCELLING_COPY);
 
-                        if (!streamEnd.hasPendingEvent()) {{
+                        const finishCancel = () => {{
+                            const event = streamEnd.getPendingEvent();
+                            const {{ code, payload0: index, payload1: payload }} = event;
+                            if (streamEnd.isCopying()) {{
+                                throw new Error(`stream end (idx [${{streamEndWaitableIdx}}]) is still in copying state`);
+                            }}
+                            if (code !== {event_code_enum}) {{
+                                throw new Error(`unexpected event code [${{code}}], expected [{event_code_enum}]`);
+                            }}
+                            if (index !== streamEnd.waitableIdx()) {{ throw new Error('event index does not match stream end'); }}
 
+                            {debug_log_fn}('[{stream_cancel_fn}()] successful cancel', {{ ctx, streamEndWaitableIdx, streamEnd, event }});
+                            return payload;
+                        }};
+
+                        if (!streamEnd.hasPendingEvent()) {{
                             streamEnd.cancel();
 
                             if (!streamEnd.hasPendingEvent()) {{
@@ -2332,22 +2350,13 @@ impl AsyncStreamIntrinsic {
                                 if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
                                 const task = taskMeta.task;
                                 if (!task) {{ throw new Error('missing task while doing stream transfer'); }}
-                                await task.suspendUntil({{ readyFn: () => streamEnd.hasPendingEvent() }});
+                                return task.suspendUntil({{
+                                    readyFn: () => streamEnd.hasPendingEvent(),
+                                }}).then(finishCancel);
                             }}
                         }}
 
-                        const event = streamEnd.getPendingEvent();
-                        const {{ code, payload0: index, payload1: payload }} = event;
-                        if (streamEnd.isCopying()) {{
-                            throw new Error(`stream end (idx [${{streamEndWaitableIdx}}]) is still in copying state`);
-                        }}
-                        if (code !== {event_code_enum}) {{
-                            throw new Error(`unexpected event code [${{code}}], expected [{event_code_enum}]`);
-                        }}
-                        if (index !== streamEnd.waitableIdx()) {{ throw new Error('event index does not match stream end'); }}
-
-                        {debug_log_fn}('[{stream_cancel_fn}()] successful cancel', {{ ctx, streamEndWaitableIdx, streamEnd, event }});
-                        return payload;
+                        return finishCancel();
                     }}
                 "#));
             }
