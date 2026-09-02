@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6b07382a.js";
+            window.path_to_searchindex_js = "../searchindex-5c7bd545.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -281,6 +281,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
 <tr><td><code>node:dns</code>, <code>node:dns/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns</code></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
 <tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
+<tr><td><code>node:http</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http</code></td><td>Outbound client API over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Server listening is explicitly unsupported.</td></tr>
 <tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
@@ -697,6 +698,47 @@ shares server and default-result-order state with the main module.</p>
 boundary does not expose an outstanding c-ares request that a later guest call
 could cancel. The provider boundary otherwise remains Node-independent, leaving
 room for a future browser implementation.</p>
+<h3 id="http-and-selectable-implementations"><a class="header" href="#http-and-selectable-implementations">HTTP and selectable implementations</a></h3>
+<p>The <code>node:http</code> adapter implements both client and server NodeJS HTTP APIs,
+with outbound <code>request()</code> and <code>get()</code> calls with Node-style <code>ClientRequest</code>
+and buffered <code>IncomingMessage</code> objects along with <code>http.Server</code>.</p>
+<p>As this API obviously requires access to the outside world of some sort, and
+there are actually many ways to achieve that on the host side, you must select
+the host implementation during componentization:</p>
+<pre><code class="language-console">jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http-via wasi-sockets -o component.wasm
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Value</th><th>Component boundary</th></tr>
+</thead>
+<tbody>
+<tr><td><code>direct</code> (default)</td><td>Typed <code>jco:node/http@0.1.0</code>; denied by default, with an opt-in Node <code>node:http</code> provider.</td></tr>
+<tr><td><code>wasi-sockets</code></td><td>Preview 2 DNS lookup, TCP sockets, streams, and pollables; HTTP/1.1 framing and parsing live in the guest.</td></tr>
+<tr><td><code>wasi-http</code></td><td>Preview 2 <code>wasi:http/outgoing-handler</code> and <code>wasi:http/types</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Jco injects only the selected mode’s missing imports into the selected world. In
+direct mode it also injects the <code>jco:node/http-callbacks@0.1.0</code> export and
+re-bundles the component entry with the matching guest callback implementation.
+Generated declarations include comments, pinned dependencies are installed under
+<code>wit/deps</code>, and Jco warns about the visible WIT changes. Existing declarations,
+including aliases, are preserved and repeated componentization is idempotent.</p>
+<p>The <code>direct</code> implementation is asynchronous; Jco configures its typed request,
+listen, close, and connection-count imports for JSPI so they appear synchronous
+to the Preview 2 guest without a worker. Direct and <code>wasi-sockets</code> implement
+clients and servers. <code>wasi-http</code> implements clients and rejects server
+construction immediately because outgoing-handler cannot listen for arbitrary
+connections.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>All modes currently buffer complete request and response bodies.</p>
+</blockquote>
+<p>Connection pooling, upgrades, CONNECT tunnels, and HTTPS are explicit gaps.
+Unavailable operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> rather than silently
+doing nothing.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,

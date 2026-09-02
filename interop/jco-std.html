@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6b07382a.js";
+            window.path_to_searchindex_js = "../searchindex-5c7bd545.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -278,7 +278,11 @@ access, while an opt-in Node host provider delegates to the real
 <li><code>node:fs</code> and <code>node:fs/promises</code>, sharing synchronous, callback, and promise
 facades over the explicit <code>jco:node/fs@0.1.0</code> capability. The default provider
 denies access, while an opt-in Node provider delegates filesystem operations
-to the host.</li>
+to the host; and</li>
+<li>the <code>node:http</code> client and server APIs, implemented over a selectable direct
+<code>jco:node/http@0.1.0</code>, Preview 2 <code>wasi:sockets</code>, or Preview 2 <code>wasi:http</code>
+implementation. The direct provider denies access by default, direct and
+<code>wasi:sockets</code> support servers, and <code>wasi:http</code> rejects server construction.</li>
 </ul>
 <p>Not every Node compatibility module lives in <code>jco-std</code>. Jco can also bundle an
 audited upstream implementation directly when that is the better fit. For
