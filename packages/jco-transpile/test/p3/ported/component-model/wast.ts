@@ -56,6 +56,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/trap-if-done.wast' },
     { relPath: 'async/cross-abi-calls.wast' },
     { relPath: 'async/trap-on-reenter.wast' },
+    { relPath: 'async/validate-no-stream-char.wast' },
 
     // Skipped tests
     // TODO: Revisit this fixture once stackful async support is implemented.
