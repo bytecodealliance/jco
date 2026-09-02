@@ -51,13 +51,13 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/same-component-stream-future.wast' },
     { relPath: 'async/drop-cross-task-borrow.wast' },
     { relPath: 'async/sync-barges-in.wast' },
+    { relPath: 'async/trap-if-done.wast' },
 
     // Skipped tests
     // TODO: Revisit this fixture once stackful async support is implemented.
     { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
     { relPath: 'async/trap-on-reenter.wast', skip: true },
     { relPath: 'async/cross-abi-calls.wast', skip: true },
-    { relPath: 'async/trap-if-done.wast', skip: true },
 ];
 
 // These tests are ported from the component-model repo
