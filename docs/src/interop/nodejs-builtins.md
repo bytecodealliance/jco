@@ -107,6 +107,7 @@ is planned.
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                               |
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                                           |
+| `node:string_decoder`                            | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`                                    | Guest-local streaming decoder for Node 24. Requires no WIT capability.                                                                                              |
 | `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.                          |
 | `node:ffi`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi`                                               | **Node 26 only.** Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused -- see below. |
 | `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                               |
@@ -202,6 +203,33 @@ world app {
 Jco selects the adapter matching the version in the world. A component that only
 uses capability-free built-ins such as assert, Buffer, or querystring does not
 need this import.
+
+### String decoder
+
+Bundled source can use the documented Node 24 streaming decoder directly:
+
+```js
+import { Buffer } from "node:buffer";
+import { StringDecoder } from "node:string_decoder";
+
+const decoder = new StringDecoder("utf8");
+
+export function decode() {
+  return decoder.write(Buffer.from([0xf0, 0x9f])) +
+    decoder.end(Buffer.from([0x8c, 0x8d]));
+}
+```
+
+Jco maps the import to a guest-local implementation based on Node 24.20.0. It
+retains incomplete UTF-8, UTF-16LE, base64, and base64url groups between calls,
+supports Node's encoding aliases, and accepts strings or any `ArrayBufferView`.
+It reuses the audited Buffer core already used by `node:buffer`; it does not add a
+WIT import, callback export, host adapter, or JSPI operation.
+
+Because the adapter is selected only when bundled code resolves
+`node:string_decoder`, source graphs that do not import it pay no decoder code or
+initialization cost. The legacy bare `string_decoder` specifier is deliberately
+not intercepted.
 
 ### Child processes and host capabilities
 
@@ -700,7 +728,7 @@ set of coordinated shims:
 `node:http2`, `node:https`, `node:inspector`, `node:inspector/promises`,
 `node:module`, `node:net`, `node:os`, `node:perf_hooks`, `node:process`,
 `node:repl`, `node:sqlite`, `node:stream`, `node:stream/consumers`,
-`node:stream/promises`, `node:stream/web`, `node:string_decoder`, `node:timers`,
+`node:stream/promises`, `node:stream/web`, `node:timers`,
 `node:tls`, `node:util`, `node:util/types`, `node:v8`, `node:vm`, `node:wasi`,
 `node:worker_threads`, and `node:zlib`.
 
