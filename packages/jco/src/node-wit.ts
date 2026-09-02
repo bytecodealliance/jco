@@ -258,11 +258,13 @@ function wasiRequirement(witImport: string, dependencies: WitDependencyPackage[]
 }
 
 export const HTTP_WASI_SOCKETS_WIT_REQUIREMENTS = [
-    wasiRequirement("wasi:sockets/instance-network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    // `network` and `tcp` define the resources the other three hand back, and the guest
+    // bindings need their types even though nothing imports them by name.
     wasiRequirement("wasi:sockets/network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/instance-network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/ip-name-lookup@0.2.12", WASI_SOCKETS_DEPENDENCIES),
-    wasiRequirement("wasi:sockets/tcp-create-socket@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/tcp@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/tcp-create-socket@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:io/streams@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:io/poll@0.2.12", WASI_SOCKETS_DEPENDENCIES),
 ] as const;
@@ -282,6 +284,27 @@ export const HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:io/streams@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
     wasiRequirement("wasi:io/poll@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
 ] as const;
+
+/**
+ * The environment `node:path` reads the working directory from.
+ *
+ * Unlike the host-backed builtins this is a plain WASI interface, but it is injected the same
+ * way: an application that reaches `node:path` -- usually through a dependency rather than
+ * directly -- should not have to hand-write the import and vendor its WIT to build.
+ */
+export const PATH_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:path",
+    witImport: "wasi:cli/environment@0.2.12",
+    dependencyDirectory: WASI_IO_DEPENDENCY.dependencyDirectory,
+    dependencySources: WASI_IO_DEPENDENCY.dependencySources,
+    dependencyPackages: [
+        WASI_CLOCKS_DEPENDENCY,
+        wasiDependency("wasi-random"),
+        wasiDependency("wasi-filesystem"),
+        wasiDependency("wasi-sockets"),
+        wasiDependency("wasi-cli"),
+    ],
+};
 
 export const HTTP_WASI_HTTP_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:http/outgoing-handler@0.2.12", WASI_HTTP_DEPENDENCIES),

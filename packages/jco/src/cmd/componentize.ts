@@ -6,6 +6,7 @@ import { resolve, basename, dirname, extname, join } from "node:path";
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
+import { engineCompatPlugin } from "../engine-compat.js";
 import { styleText, isWindows } from "../common.js";
 import {
     nodeBuiltinPlugin,
@@ -44,6 +45,12 @@ export interface ComponentizeOptions {
     bundleConfig?: string;
     nodejsHttpVia?: NodejsHttpVia;
     nodejsHttp2Via?: NodejsHttp2Via;
+    /**
+     * The CLI spelling of {@link nodejsHttpVia}.
+     *
+     * Commander names the option after the flag, `--with-nodejs-http-via`, so a value given on
+     * the command line arrives under this key rather than the API one.
+     */
     withNodejsHttpVia?: NodejsHttpVia;
     withNodejsHttp2Via?: NodejsHttp2Via;
     backend?: ComponentizeJSBackend;
@@ -213,6 +220,9 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
                         );
                     },
                 }),
+                // Rewrites regular-expression syntax the component engines cannot parse, so
+                // that a dependency using it fails to bundle rather than at pre-initialization.
+                engineCompatPlugin(),
             ],
         };
         source = await bundleComponentSource(jsSource, bundleOptions);
