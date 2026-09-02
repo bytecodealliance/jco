@@ -1928,6 +1928,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_component_state = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
+                let track_host_operation =
+                    self.intrinsic(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
                 let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentTask,
                 ));
@@ -2105,7 +2107,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
-                              fn: () => {callee_fn_js}({callee_args_js}),
+                              fn: () => {track_host_operation}(() => {callee_fn_js}({callee_args_js})),
                           }})
                         "#,
                 );

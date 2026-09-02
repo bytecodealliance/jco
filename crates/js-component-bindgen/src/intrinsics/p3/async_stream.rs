@@ -1838,6 +1838,8 @@ impl AsyncStreamIntrinsic {
 
             Self::PendingValueQueueClass => {
                 let pending_value_queue_class = self.name();
+                let track_host_operation =
+                    render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
 
                 output.push_str(&format!(
                     r#"
@@ -1882,7 +1884,7 @@ impl AsyncStreamIntrinsic {
                           async readSource() {{
                               if (!this.#sourceReadPromise) {{
                                   this.#sourceReadPromise = (async () => {{
-                                      const res = await this.#readFn();
+                                      const res = await {track_host_operation}(() => this.#readFn());
                                       const appended = this.appendReadValue(res.value);
                                       this.#done = res.done;
                                       return appended;
