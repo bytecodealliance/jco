@@ -1,12 +1,18 @@
-import { stat, readFile, writeFile } from "node:fs/promises";
-import { resolve, basename, dirname, extname } from "node:path";
+import { mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
+import { resolve, basename, dirname, extname, join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { styleText, isWindows } from "../common.js";
-import { nodeBuiltinPlugin, nodeGlobals, type WorldMetadata } from "../node-builtins.js";
-import { injectNodeWitImports, witInjectionWarnings, type NodeWitRequirement } from "../node-wit.js";
+import { INSPECTOR_CALLBACKS_SPECIFIER, nodeBuiltinPlugin, nodeGlobals, type WorldMetadata } from "../node-builtins.js";
+import {
+    INSPECTOR_WIT_REQUIREMENT,
+    injectNodeWitImports,
+    witInjectionWarnings,
+    type NodeWitRequirement,
+} from "../node-wit.js";
 
 /** All features that can be enabled/disabled */
 const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
@@ -93,6 +99,37 @@ async function worldMetadataFor(witPath: string, worldName?: string): Promise<Wo
     return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
 }
 
+/**
+ * Re-bundle the component with a wrapper that also exports the guest-side inspector callbacks.
+ *
+ * The user's entry only imports `node:inspector`; the callbacks the host uses to re-enter the
+ * component are a guest-*exported* interface, so they must appear among the bundle's top-level
+ * exports. The wrapper re-exports everything the original entry exports (the world's exports) and
+ * adds `inspectorCallbacks`, which the Node builtin plugin resolves to the shared jco-std inspector
+ * module. Bundled with the same plugin and options as the first pass, so nothing else changes.
+ */
+async function bundleInspectorCallbacksWrapper(
+    jsSource: string,
+    bundleOptions: Parameters<typeof bundleComponentSource>[1],
+): Promise<string> {
+    const entry = resolve(jsSource);
+    const wrapperDir = await mkdtemp(join(tmpdir(), "jco-inspector-"));
+    const wrapperPath = join(wrapperDir, "wrapper.mjs");
+    const wrapperSource =
+        `export * from ${JSON.stringify(entry)};
+` +
+        `export { inspectorCallbacks } from ${JSON.stringify(INSPECTOR_CALLBACKS_SPECIFIER)};
+`;
+    await writeFile(wrapperPath, wrapperSource);
+    try {
+        // The wrapper is plain JS regardless of the original's language; keep the original's
+        // tsconfig handling so a TypeScript entry still transforms with its own settings.
+        return await bundleComponentSource(wrapperPath, bundleOptions);
+    } finally {
+        await rm(wrapperDir, { recursive: true, force: true });
+    }
+}
+
 async function usesOlderWasiHTTP(witPath: string, worldName?: string) {
     const worldMetadata = await worldMetadataFor(witPath, worldName);
 
@@ -148,24 +185,35 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
     const bundleConfig = opts.bundleConfig ? await loadBundleConfig(opts.bundleConfig) : undefined;
     let witPath = resolve(opts.wit);
     const witRequirements = new Map<string, NodeWitRequirement>();
-    const source = shouldBundle
-        ? await bundleComponentSource(jsSource, {
-              config: bundleConfig,
-              typescript: isTypeScript,
-              // The component engine supplies Web globals. Rolldown injects only Jco-backed Node
-              // globals when referenced, so unused adapters add no bundle cost.
-              inject: nodeGlobals(),
-              // Node builtin adapters are supplied while the source graph is bundled, which is
-              // why `node:path` only works together with `--bundle`.
-              plugins: [
-                  nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
-                      onWitRequirement(requirement) {
-                          witRequirements.set(requirement.witImport, requirement);
-                      },
-                  }),
-              ],
-          })
-        : await readFile(jsSource, "utf8");
+    let source: string;
+    if (shouldBundle) {
+        const bundleOptions = {
+            config: bundleConfig,
+            typescript: isTypeScript,
+            // The component engine supplies Web globals. Rolldown injects only Jco-backed Node
+            // globals when referenced, so unused adapters add no bundle cost.
+            inject: nodeGlobals(),
+            // Node builtin adapters are supplied while the source graph is bundled, which is
+            // why `node:path` only works together with `--bundle`.
+            plugins: [
+                nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
+                    onWitRequirement(requirement: NodeWitRequirement) {
+                        witRequirements.set(requirement.witImport, requirement);
+                    },
+                }),
+            ],
+        };
+        source = await bundleComponentSource(jsSource, bundleOptions);
+        // `node:inspector` is host-backed *and* calls back into the component through a
+        // guest-exported callbacks interface. The user's entry only imports `node:inspector`, so a
+        // second pass re-bundles a wrapper that also exports that interface -- the JS half of the
+        // `export jco:node/inspector-callbacks@0.1.0;` the WIT injection adds to the world.
+        if (witRequirements.has(INSPECTOR_WIT_REQUIREMENT.witImport)) {
+            source = await bundleInspectorCallbacksWrapper(jsSource, bundleOptions);
+        }
+    } else {
+        source = await readFile(jsSource, "utf8");
+    }
     const injection = await injectNodeWitImports(witPath, opts.worldName, [...witRequirements.values()]);
     if (injection) {
         witPath = injection.witPath;

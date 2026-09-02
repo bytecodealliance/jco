@@ -11,6 +11,8 @@ import {
     DNS_WIT_REQUIREMENT,
     FS_WIT_REQUIREMENT,
     FFI_WIT_REQUIREMENT,
+    INSPECTOR_PROMISES_WIT_REQUIREMENT,
+    INSPECTOR_WIT_REQUIREMENT,
     OS_WIT_REQUIREMENT,
     type NodeWitRequirement,
 } from "./node-wit.js";
@@ -28,12 +30,25 @@ const FS_SPECIFIERS = new Set(["node:fs", "node:fs/promises"]);
 const ASYNC_HOOKS_SPECIFIER = "node:async_hooks";
 const DOMAIN_SPECIFIER = "node:domain";
 const FFI_SPECIFIER = "node:ffi";
+const INSPECTOR_SPECIFIER = "node:inspector";
+const INSPECTOR_PROMISES_SPECIFIER = "node:inspector/promises";
+const INSPECTOR_SPECIFIERS = new Set([INSPECTOR_SPECIFIER, INSPECTOR_PROMISES_SPECIFIER]);
+/**
+ * Virtual specifier the two-pass bundler imports to reach the guest-exported callbacks interface.
+ *
+ * `node:inspector` is host-backed, but the host also has to call *back* into the component. A
+ * component cannot implement a resource on an imported interface, so the callbacks live in a
+ * guest-exported interface, and this virtual module re-exports its implementation from the shared
+ * jco-std inspector module so the wrapper can add it to the component's top-level exports.
+ */
+export const INSPECTOR_CALLBACKS_SPECIFIER = "jco:node-inspector-callbacks";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
 const OS_SPECIFIER = "node:os";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const VIRTUAL_PREFIX = "\0jco-node-builtin:";
+const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
 const ERROR_GLOBALS_SPECIFIER = "jco:node-error-globals";
 const ERROR_GLOBALS_MODULE = `${VIRTUAL_PREFIX}error-globals`;
@@ -235,6 +250,10 @@ export interface NodeBuiltinOptions {
     domainModule?: string;
     /** Path to jco-std's versioned `node:ffi` module (overridable for tests) */
     ffiModule?: string;
+    /** Path to jco-std's versioned `node:inspector` module (overridable for tests) */
+    inspectorModule?: string;
+    /** Path to jco-std's versioned `node:inspector/promises` module (overridable for tests) */
+    inspectorPromisesModule?: string;
     /** Path to jco-std's versioned `node:diagnostics_channel` module (overridable for tests) */
     diagnosticsChannelModule?: string;
     /** Path to jco-std's versioned Errors globals module (overridable for tests) */
@@ -303,6 +322,62 @@ export {
     types,
 } from ${JSON.stringify(ffiModule)};
 `;
+}
+
+/**
+ * Source of the `node:inspector` adapter.
+ *
+ * Host-backed like `node:ffi`, but with a second half: the host also calls *back* into the
+ * component when a protocol response or notification arrives. That channel is the guest-exported
+ * `inspectorCallbacks` interface, added to the component's exports by Jco's two-pass bundling; this
+ * adapter only re-exports the module surface.
+ */
+function inspectorAdapter(inspectorModule: string): string {
+    return `
+import inspector from ${JSON.stringify(inspectorModule)};
+export default inspector;
+export {
+    close,
+    console,
+    DOMStorage,
+    Network,
+    NetworkResources,
+    open,
+    Session,
+    url,
+    waitForDebugger,
+} from ${JSON.stringify(inspectorModule)};
+`;
+}
+
+/** Source of the `node:inspector/promises` adapter, sharing one core with `node:inspector`. */
+function inspectorPromisesAdapter(inspectorPromisesModule: string): string {
+    return `
+import inspector from ${JSON.stringify(inspectorPromisesModule)};
+export default inspector;
+export {
+    close,
+    console,
+    DOMStorage,
+    Network,
+    NetworkResources,
+    open,
+    Session,
+    url,
+    waitForDebugger,
+} from ${JSON.stringify(inspectorPromisesModule)};
+`;
+}
+
+/**
+ * Source of the virtual module the two-pass bundler exports to satisfy the guest-exported
+ * `jco:node/inspector-callbacks@0.1.0` interface.
+ *
+ * Always pulls from the base `node:inspector` module (not `/promises`), which owns the one callback
+ * registry both entries register into.
+ */
+function inspectorCallbacksAdapter(inspectorModule: string): string {
+    return `export { inspectorCallbacks } from ${JSON.stringify(inspectorModule)};`;
 }
 
 /**
@@ -660,6 +735,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     // the first place the Node major in the path differs per module rather than per build.
     const ffiModule = () =>
         options.ffiModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi"));
+    const inspectorModule = () =>
+        options.inspectorModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector"));
+    const inspectorPromisesModule = () =>
+        options.inspectorPromisesModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/promises"));
     const domainModule = () =>
         options.domainModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/domain"));
@@ -711,6 +792,18 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === FFI_SPECIFIER) {
                 options.onWitRequirement?.(FFI_WIT_REQUIREMENT);
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
+            if (id === INSPECTOR_CALLBACKS_SPECIFIER) {
+                // The two-pass wrapper's import of the guest-exported callbacks interface.
+                return INSPECTOR_CALLBACKS_MODULE;
+            }
+            if (INSPECTOR_SPECIFIERS.has(id)) {
+                options.onWitRequirement?.(
+                    id === INSPECTOR_PROMISES_SPECIFIER
+                        ? INSPECTOR_PROMISES_WIT_REQUIREMENT
+                        : INSPECTOR_WIT_REQUIREMENT,
+                );
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === DOMAIN_SPECIFIER) {
@@ -781,6 +874,15 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === FFI_SPECIFIER) {
                 return ffiAdapter(ffiModule());
+            }
+            if (id === INSPECTOR_CALLBACKS_MODULE) {
+                return inspectorCallbacksAdapter(inspectorModule());
+            }
+            if (value === INSPECTOR_PROMISES_SPECIFIER) {
+                return inspectorPromisesAdapter(inspectorPromisesModule());
+            }
+            if (value === INSPECTOR_SPECIFIER) {
+                return inspectorAdapter(inspectorModule());
             }
             if (value === DOMAIN_SPECIFIER) {
                 return domainAdapter(domainModule());
