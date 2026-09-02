@@ -7,10 +7,10 @@ import { suite, test, assert, expect, beforeAll } from 'vitest';
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, setupAsyncTest } from '../../../helpers.js';
 
-// Relative paths to tests that should be skipped
+// Relative paths to component-model WAST tests
 interface WastTest {
     relPath: string;
-    skip: boolean;
+    skip?: boolean;
 }
 
 interface WastTestModule {
@@ -18,29 +18,32 @@ interface WastTestModule {
 }
 
 const WAST_TESTS: readonly WastTest[] = [
-    { relPath: 'async/wait-during-callback.wast', skip: false },
-    { relPath: 'async/cancel-stream.wast', skip: false },
+    // Running tests
+    { relPath: 'async/wait-during-callback.wast' },
+    { relPath: 'async/cancel-stream.wast' },
+    { relPath: 'async/partial-stream-copies.wast' },
+    { relPath: 'async/futures-must-write.wast' },
+    { relPath: 'async/empty-wait.wast' },
+    { relPath: 'async/zero-length.wast' },
+    { relPath: 'async/cancel-subtask.wast' },
+    { relPath: 'async/passing-resources.wast' },
+    { relPath: 'async/drop-waitable-set.wast' },
+    { relPath: 'async/drop-subtask.wast' },
+
+    // Skipped tests
     { relPath: 'async/sync-streams.wast', skip: true },
     { relPath: 'async/deadlock.wast', skip: true },
     { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
-    { relPath: 'async/partial-stream-copies.wast', skip: false },
     { relPath: 'async/trap-on-reenter.wast', skip: true },
     { relPath: 'async/sync-barges-in.wast', skip: true },
     { relPath: 'async/same-component-stream-future.wast', skip: true },
-    { relPath: 'async/futures-must-write.wast', skip: false },
     { relPath: 'async/dont-block-start.wast', skip: true },
     { relPath: 'async/cross-abi-calls.wast', skip: true },
-    { relPath: 'async/empty-wait.wast', skip: false },
-    { relPath: 'async/zero-length.wast', skip: false },
-    { relPath: 'async/cancel-subtask.wast', skip: false },
     { relPath: 'async/closed-stream.wast', skip: true },
-    { relPath: 'async/passing-resources.wast', skip: false },
     { relPath: 'async/drop-cross-task-borrow.wast', skip: true },
     { relPath: 'async/trap-if-done.wast', skip: true },
-    { relPath: 'async/drop-waitable-set.wast', skip: false },
     { relPath: 'async/drop-stream.wast', skip: true },
     { relPath: 'async/async-calls-sync.wast', skip: true },
-    { relPath: 'async/drop-subtask.wast', skip: false },
     { relPath: 'async/cancellable.wast', skip: true },
 ];
 
