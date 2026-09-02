@@ -19,7 +19,7 @@ interface WastTestModule {
 
 const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/wait-during-callback.wast', skip: false },
-    { relPath: 'async/cancel-stream.wast', skip: true },
+    { relPath: 'async/cancel-stream.wast', skip: false },
     { relPath: 'async/sync-streams.wast', skip: true },
     { relPath: 'async/deadlock.wast', skip: true },
     { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
