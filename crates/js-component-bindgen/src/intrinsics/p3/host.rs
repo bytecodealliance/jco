@@ -236,7 +236,6 @@ impl HostIntrinsic {
                         const [newTask, newTaskID] = {create_new_current_task_fn}({{
                             componentIdx: calleeComponentIdx,
                             isAsync,
-                            calleeIsAsync: calleeIsAsyncInt !== 0,
                             getCalleeParamsFn,
                             entryFnName: [
                                 'task',
@@ -323,6 +322,7 @@ impl HostIntrinsic {
                         const preparedTask = preparedTaskMeta.task;
                         if (!preparedTask) {{ throw new Error('unexpectedly missing current task'); }}
                         if (!preparedTask.subtaskMeta) {{ throw new Error('missing subtask meta from prepare'); }}
+                        preparedTask.setCalleeIsAsync((flags & 1) !== 0);
 
                         const {{
                             subtask,
@@ -468,29 +468,28 @@ impl HostIntrinsic {
 
                         }});
 
-                        // Starting the subtask is synchronous: async-start-call must
-                        // return STARTED rather than STARTING. Execution remains deferred
-                        // to a new JS task so the caller can continue independently.
-                        let startRes = subtask.onStart({{ startFnParams: params }});
-                        startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
-                        if (startRes.length !== paramCount) {{
-                            throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {async_start_call_fn} invocation expected [${{ paramCount }}]`);
-                        }}
+                        let startRes;
+                        const startSubtask = () => {{
+                            startRes = subtask.onStart({{ startFnParams: params }});
+                            startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
+                            if (startRes.length !== paramCount) {{
+                                throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {async_start_call_fn} invocation expected [${{ paramCount }}]`);
+                            }}
+                        }};
 
-                        // Progress after the directly returned STARTED state is reported
-                        // as an event. Registering this before onStart would enqueue a
-                        // duplicate STARTED event for the caller.
-                        subtask.setOnProgressFn(() => {{
-                            subtask.setPendingEvent(() => {{
-                                if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
-                                const event = {{
-                                    code: {async_event_code_enum}.SUBTASK,
-                                    payload0: subtask.waitableRep(),
-                                    payload1: subtask.getStateNumber(),
-                                }};
-                                return event;
+                        const registerSubtaskProgress = () => {{
+                            subtask.setOnProgressFn(() => {{
+                                subtask.setPendingEvent(() => {{
+                                    if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
+                                    const event = {{
+                                        code: {async_event_code_enum}.SUBTASK,
+                                        payload0: subtask.waitableRep(),
+                                        payload1: subtask.getStateNumber(),
+                                    }};
+                                    return event;
+                                }});
                             }});
-                        }});
+                        }};
 
                         const handleCalleeError = (err) => {{
                             {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
@@ -587,17 +586,7 @@ impl HostIntrinsic {
                             }}
                         }};
 
-                        // A non-suspending initial slice can run before the lower returns,
-                        // allowing task.return to report RETURNED eagerly. A stack-switching
-                        // caller also continues in this Wasm slice, so the callee must reach its
-                        // first suspension before the caller can observe or cancel the subtask.
-                        // Callback-driven callers return first, preserving cancellation before entry.
-                        const mayStartSynchronously = callee._jcoMaySuspend === false
-                            || !subtask.getParentTask().hasCallback();
-                        const enteredSynchronously = mayStartSynchronously
-                            ? preparedTask.tryEnter()
-                            : null;
-                        if (enteredSynchronously === true && callee._jcoMaySuspend === false) {{
+                        const driveDirectCallee = () => {{
                             let callbackResult;
                             try {{
                                 callbackResult = {with_global_current_task_meta_fn}({{
@@ -613,16 +602,37 @@ impl HostIntrinsic {
                                     {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
                                 }});
                             }}
-                        }} else if (enteredSynchronously === true) {{
-                            // Calling the async helper runs synchronously through invocation of
-                            // WebAssembly.promising, which executes the guest until its first
-                            // suspending import before returning a Promise.
-                            driveJspiCallee();
+                        }};
+
+                        // A non-suspending initial slice can run before the lower returns,
+                        // allowing task.return to report RETURNED eagerly. A stack-switching
+                        // caller also continues in this Wasm slice, so the callee must reach its
+                        // first suspension before the caller can observe or cancel the subtask.
+                        // Reserve component entry before returning so a following call observes
+                        // either explicit backpressure or the in-flight component slice. Only a
+                        // successfully entered task transitions from STARTING to STARTED.
+                        const enteredSynchronously = preparedTask.tryEnter();
+                        if (enteredSynchronously === true) {{
+                            // Directly returned STARTED is not also delivered as an event, so
+                            // install the progress handler only after the state transition.
+                            startSubtask();
+                            registerSubtaskProgress();
+
+                            if (callee._jcoMaySuspend === false) {{
+                                driveDirectCallee();
+                            }} else {{
+                                // Calling the async helper runs synchronously through invocation
+                                // of WebAssembly.promising, which executes the guest until its
+                                // first suspending import before returning a Promise.
+                                driveJspiCallee();
+                            }}
                         }} else if (enteredSynchronously === null) {{
+                            // A delayed transition to STARTED is guest-visible progress.
+                            registerSubtaskProgress();
                             const enterPromise = preparedTask.enter();
 
-                            // Entry is blocked by backpressure or the component lock, so resume
-                            // the call once the task is allowed to enter.
+                            // Entry is blocked by backpressure or an in-flight component slice,
+                            // so resume the call once the task is allowed to enter.
                             setTimeout(async () => {{
                                 {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
                                     taskID: preparedTask.id(),
@@ -644,7 +654,18 @@ impl HostIntrinsic {
                                     throw new Error("task failed to start");
                                 }}
 
-                                await driveJspiCallee();
+                                try {{
+                                    startSubtask();
+                                }} catch (err) {{
+                                    handleCalleeError(err);
+                                    return;
+                                }}
+
+                                if (callee._jcoMaySuspend === false) {{
+                                    driveDirectCallee();
+                                }} else {{
+                                    await driveJspiCallee();
+                                }}
                             }}, 0);
                         }}
 
