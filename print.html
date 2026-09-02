@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-be1895ff.js";
+            window.path_to_searchindex_js = "searchindex-8b8b2462.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -2082,6 +2082,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
 <tr><td><code>node:dns</code>, <code>node:dns/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns</code></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
 <tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
+<tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
@@ -2368,6 +2369,54 @@ setSuffix("dylib");   // before instantiating the component
 </code></pre>
 <p>Note that you may not need to change the suffix if the runtime already has it set properly, as
 <code>suffix</code> defaults to the runtime’s own <code>ffi.suffix</code>.</p>
+<h3 id="inspector"><a class="header" href="#inspector">Inspector</a></h3>
+<p><code>node:inspector</code> (and <code>node:inspector/promises</code>) exposes the V8 inspector: a <code>Session</code> speaking the
+Chrome DevTools Protocol, the inspector <code>console</code>, and the experimental <code>Network</code>/<code>DOMStorage</code>
+broadcast namespaces. The inspector is host machinery – a WebSocket server and a protocol
+dispatcher wired into the running isolate – so WASI cannot express it. Like <code>node:child_process</code>,
+it is host-backed and <strong>denied by default</strong>.</p>
+<p>Map it to the Node passthrough to grant it:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/inspector@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host/node'
+</code></pre>
+<p>The guest code is ordinary Node:</p>
+<pre><code class="language-js">import { Session } from "node:inspector/promises";
+
+const session = new Session();
+session.connect();
+const { result } = await session.post("Runtime.evaluate", { expression: "6 * 7" });
+result.value;   // 42, evaluated in the host isolate
+</code></pre>
+<p>Argument validation, session state, the <code>EventEmitter</code> surface, and error reconstruction all run
+guest-side, so <code>ERR_INSPECTOR_NOT_CONNECTED</code>, <code>ERR_INSPECTOR_ALREADY_CONNECTED</code>,
+<code>ERR_INVALID_ARG_TYPE</code>, and the protocol’s <code>ERR_INSPECTOR_COMMAND</code> all match Node exactly. CDP
+payloads cross the boundary as JSON; the inspector <code>console</code> forwards its arguments as JSON too,
+which is best-effort for functions, symbols, and cycles.</p>
+<h4 id="the-host-calls-back-into-the-component"><a class="header" href="#the-host-calls-back-into-the-component">The host calls back into the component</a></h4>
+<p>The inspector’s two callbacks – a <code>post</code> response and a session notification – run the other way,
+from host to guest. A component cannot implement a resource declared on an <em>imported</em> interface (its
+methods would run host-side), so the callbacks are a guest-<strong>exported</strong> interface,
+<code>jco:node/inspector-callbacks@0.1.0</code>, holding one resource per callback kind: a one-shot
+<code>post-callback</code> and a long-lived <code>notification-listener</code>. When bundled source imports
+<code>node:inspector</code>, Jco adds both the <code>import jco:node/inspector@0.1.0;</code> and the matching
+<code>export jco:node/inspector-callbacks@0.1.0;</code> to the selected world, and bundles the JS export
+alongside the entry – neither is written by hand.</p>
+<p>The embedder wires the exported interface to the host adapter after instantiation:</p>
+<pre><code class="language-js">import * as inspectorHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host/node";
+import * as component from "./transpiled/component.js";
+
+inspectorHost.attachCallbacks(component.inspectorCallbacks);
+</code></pre>
+<p>Two timing rules follow from the component model, which forbids calling into a component while a
+task is already active in it:</p>
+<ul>
+<li><strong>In-isolate <code>post</code> responses are synchronous.</strong> <code>Runtime.evaluate</code>, <code>Debugger.*</code>, and the other
+in-isolate methods resolve during the post call, so the host returns the response directly and an
+awaited <code>Session.post</code> never needs a re-entrant callback. This is the same behavior as Node, which
+also fires those callbacks synchronously.</li>
+<li><strong>Notifications arrive between guest tasks</strong>, like <code>node:cluster</code>’s events: the host queues each
+notification and delivers it once no exported call is in flight, never into a suspended <code>await</code>.</li>
+</ul>
 <h3 id="diagnostics-channels"><a class="header" href="#diagnostics-channels">Diagnostics channels</a></h3>
 <p>Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
 are interned by name: a publisher and a subscriber that never share a reference still meet on the
