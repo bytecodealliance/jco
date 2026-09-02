@@ -329,6 +329,7 @@ impl ComponentIntrinsic {
                 let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
+                let cannot_enter_component = Trap::CannotEnterComponent.to_string();
 
                 output.push_str(&format!(
                     r#"
@@ -354,6 +355,7 @@ impl ComponentIntrinsic {
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
                         #errored = null;
+                        #trapped = false;
                         #backpressure = 0;
                         #backpressureWaiters = 0n;
 
@@ -405,13 +407,16 @@ impl ComponentIntrinsic {
                                 return false;
                             }}
                             err = {normalize_core_trap_fn}(err);
+                            this.#trapped = true;
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
                             if ({store_trap}.error === null) {{ {store_trap}.error = err; }}
                             return true;
                         }}
 
                         throwIfTrapped() {{
-                            if ({store_trap}.error !== null) {{ throw {store_trap}.error; }}
+                            if (this.#trapped) {{
+                                throw new {runtime_error_class}({cannot_enter_component:?});
+                            }}
                         }}
 
                         callingSyncImport(val) {{

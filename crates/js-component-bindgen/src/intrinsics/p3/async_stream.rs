@@ -2347,6 +2347,8 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(r#"
                     function {stream_drop_fn}(ctx, streamEndWaitableIdx) {{
                         {debug_log_fn}('[{stream_drop_fn}()] args', {{ ctx, streamEndWaitableIdx }});
@@ -2371,7 +2373,7 @@ impl AsyncStreamIntrinsic {
                         // pending event, so both an active copy and an undelivered event
                         // keep the table-local stream handle busy.
                         if (streamEnd.isCopying() || streamEnd.hasPendingEvent()) {{
-                            throw new Error('{busy_error}');
+                            throw new {runtime_error_class}('{busy_error}');
                         }}
 
                         const removedStreamEnd = {delete_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
