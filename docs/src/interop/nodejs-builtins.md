@@ -867,11 +867,15 @@ report the port it is serving on has to know which.
 > deadlocks -- it never gets a turn to send -- and has to run somewhere else, which is why the
 > test for this drives the component from a separate process.
 >
-> Component-model async, where a guest can hold concurrent tasks the host drives, is what
-> would let an export return and keep serving. Preview 2 has no equivalent, so a program that
-> has to carry on doing other work after `listen()` wants the host to own the socket instead:
-> use the `direct` implementation, or export `wasi:http/incoming-handler` and skip
-> `node:http`'s server entirely.
+> Serving from an export that returns needs component model async -- WASI 0.3.x, with an
+> interface whose functions are declared async -- so the guest can hold a task the host keeps
+> driving after the call completes. A component may mix Preview 2 interfaces with component
+> model async, but `node:http`'s implementations deliberately do not: they are Preview 2
+> throughout.
+>
+> Until then, a program that has to carry on doing other work after `listen()` wants the host
+> to own the socket instead: use the `direct` implementation, or export
+> `wasi:http/incoming-handler` and skip `node:http`'s server entirely.
 >
 > On `direct` the host owns the socket, `listen()` returns, and the export finishes normally.
 > Requests arrive later, through the callbacks export.
