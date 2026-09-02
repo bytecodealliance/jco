@@ -1,0 +1,115 @@
+{
+    "repository": "WebAssembly/component-model",
+    "sourceDirectory": "test/async",
+    "destinationDirectory": "packages/jco-transpile/test/fixtures/wast/component-model/async",
+    "fixtures": [
+        {
+            "name": "async-calls-sync.wast",
+            "revision": "dac78059d47dadf3221a71548463fadb294412e3"
+        },
+        {
+            "name": "builtin-trap-poisons-instance.wast",
+            "revision": "e8d80050994662d150c84e3d52981a9d471a152d"
+        },
+        {
+            "name": "cancel-stream.wast",
+            "revision": "dac78059d47dadf3221a71548463fadb294412e3"
+        },
+        {
+            "name": "cancel-subtask.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        },
+        {
+            "name": "cancellable.wast",
+            "revision": "9fca40481033b16757c8f19ce87c79df26675941"
+        },
+        {
+            "name": "closed-stream.wast",
+            "revision": "da19bf54cf04d68b8d1059e38008c364ce70cdcd"
+        },
+        {
+            "name": "cross-abi-calls.wast",
+            "revision": "4769c405eda54e99ea28292ebd007fcbe53c7b40"
+        },
+        {
+            "name": "deadlock.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        },
+        {
+            "name": "dont-block-start.wast",
+            "revision": "e1fdcd10003c2570c77cbd9f6dbcb9db629ecb6a"
+        },
+        {
+            "name": "drop-cross-task-borrow.wast",
+            "revision": "dd1f6fa66e5e26dd7a1f6449133f825edbd8f614"
+        },
+        {
+            "name": "drop-stream.wast",
+            "revision": "2c17516179f99accdafb01d8e4affcc0f58184cc"
+        },
+        {
+            "name": "drop-subtask.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        },
+        {
+            "name": "drop-waitable-set.wast",
+            "revision": "dac78059d47dadf3221a71548463fadb294412e3"
+        },
+        {
+            "name": "empty-wait.wast",
+            "revision": "dac78059d47dadf3221a71548463fadb294412e3"
+        },
+        {
+            "name": "futures-must-write.wast",
+            "revision": "e362068250dccf53daf12e22771bcae0bb8012fe"
+        },
+        {
+            "name": "partial-stream-copies.wast",
+            "revision": "dac78059d47dadf3221a71548463fadb294412e3"
+        },
+        {
+            "name": "passing-resources.wast",
+            "revision": "dac78059d47dadf3221a71548463fadb294412e3"
+        },
+        {
+            "name": "same-component-stream-future.wast",
+            "revision": "9fca40481033b16757c8f19ce87c79df26675941"
+        },
+        {
+            "name": "sync-barges-in.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        },
+        {
+            "name": "sync-streams.wast",
+            "revision": "6014b1f577ad223bf6eaf6a199a6367e56b845a8"
+        },
+        {
+            "name": "trap-if-block-and-sync.wast",
+            "revision": "bd014937dee64d2f26b2c0b333fd55d8ba21e54c"
+        },
+        {
+            "name": "trap-if-done.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        },
+        {
+            "name": "trap-on-reenter.wast",
+            "revision": "4769c405eda54e99ea28292ebd007fcbe53c7b40"
+        },
+        {
+            "name": "validate-no-async-abi-for-sync-type.wast",
+            "revision": "e8d80050994662d150c84e3d52981a9d471a152d"
+        },
+        {
+            "name": "validate-no-stream-char.wast",
+            "revision": "5452862053a7114064ae6d7e4c90488b3c2a7b45"
+        },
+        {
+            "name": "wait-during-callback.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        },
+        {
+            "name": "zero-length.wast",
+            "revision": "7479890cb506d0f8f687595a4d41361ff8a2a194"
+        }
+    ]
+}

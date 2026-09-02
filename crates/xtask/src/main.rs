@@ -4,6 +4,7 @@ use structopt::StructOpt;
 
 mod build;
 mod generate;
+mod sync_wast_fixtures;
 mod test;
 
 #[derive(StructOpt)]
@@ -20,6 +21,12 @@ enum Cmd {
     BuildWastFixture {
         /// Path to the given .wast file
         path: PathBuf,
+    },
+    /// Synchronize vendored WAST fixtures with their pinned upstream revisions
+    SyncWastFixtures {
+        /// Check for drift without updating local fixture files
+        #[structopt(long)]
+        check: bool,
     },
 }
 
@@ -77,6 +84,7 @@ fn main() -> anyhow::Result<()> {
             build::wast_fixtures::run(&path)?;
             Ok(())
         }
+        Cmd::SyncWastFixtures { check } => sync_wast_fixtures::run(check),
         Cmd::Test(Platform::Node) => test::run(false),
         Cmd::Test(Platform::Deno) => test::run(true),
         Cmd::Generate(Generate::WebidlTests) => generate::webidl_tests::run(),
