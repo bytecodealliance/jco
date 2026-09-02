@@ -814,6 +814,8 @@ impl AsyncFutureIntrinsic {
 
             Self::FutureReadableEndClass | Self::FutureWritableEndClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let (class_name, _future_var_name, _js_future_var_type) = match self {
                     Self::FutureReadableEndClass => (self.name(), "promise", "Promise"),
                     Self::FutureWritableEndClass => (self.name(), "resolve", "Function"),
@@ -859,7 +861,7 @@ impl AsyncFutureIntrinsic {
                               }}
 
                               if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) {{
-                                  throw new Error('same-component future reads not allowed for non-numeric types');
+                                  throw new {runtime_error_class}('cannot read from and write to intra-component future');
                               }}
 
                               buffer.write(meta.buffer.read(1));
@@ -903,7 +905,7 @@ impl AsyncFutureIntrinsic {
                               }}
 
                               if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) {{
-                                  throw new Error('same-component future writes not allowed for non-numeric types');
+                                  throw new {runtime_error_class}('cannot read from and write to intra-component future');
                               }}
 
                               meta.buffer.write(buffer.read(1));
@@ -1223,8 +1225,6 @@ impl AsyncFutureIntrinsic {
                 let drop_check = match self {
                     Self::FutureReadableEndClass => "".into(),
                     Self::FutureWritableEndClass => {
-                        let runtime_error_class =
-                            render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                         format!(
                             r#"
                               if (this.isWritable() && !this.isDoneState()) {{

@@ -1740,6 +1740,20 @@ mod tests {
     }
 
     #[test]
+    fn future_ends_use_canonical_intra_component_copy_trap() {
+        let error = "throw new WebAssemblyRuntimeError('cannot read from and write to intra-component future');";
+
+        for end in [
+            AsyncFutureIntrinsic::FutureReadableEndClass,
+            AsyncFutureIntrinsic::FutureWritableEndClass,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncFuture(end));
+            assert!(source.contains(error));
+            assert!(source.contains("componentIdx === meta.componentIdx"));
+        }
+    }
+
+    #[test]
     fn stream_new_allocates_the_readable_end_first() {
         let source =
             render_intrinsic_body(Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream));
