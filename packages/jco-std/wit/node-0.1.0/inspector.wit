@@ -1,0 +1,142 @@
+package jco:node@0.1.0;
+
+/// Host-backed adapter for Node's `inspector` module (and `inspector/promises`).
+///
+/// The inspector is host machinery by definition: a V8 WebSocket server and a Chrome DevTools
+/// Protocol dispatcher wired into the running isolate. WASI expresses none of it, so unlike Jco's
+/// portable shims every observable operation forwards to the host's real `node:inspector` over
+/// this interface. Guest-side code owns Node-faithful argument validation, session state, the
+/// `EventEmitter` surface, and error reconstruction; the host owns the V8 machinery.
+///
+/// Protocol payloads are JSON by definition (CDP), so `session-post`, notifications, and the
+/// broadcast namespaces carry their parameters and results as JSON strings without loss. The
+/// `console` forwarder JSON-encodes its arguments, which is lossy for functions, symbols, and
+/// cycles -- best-effort, and documented as such guest-side.
+///
+/// Callbacks run the other way: the host must call back into the component when a protocol
+/// response or a notification arrives. A component cannot implement a resource declared in an
+/// *imported* interface -- its methods would run host-side -- so the callback resources live in the
+/// guest-*exported* `inspector-callbacks` interface below. This import carries only a `u32`
+/// callback id; the host redeems it for an owned resource handle through the exported `take-*`
+/// functions and invokes the resource method to re-enter the guest. The host must never do so while
+/// a guest->host call is still on the stack (component re-entrance); the Node adapter queues
+/// deliveries and flushes them on a later turn, which makes guest-side callbacks always
+/// asynchronous even where Node fires them synchronously. Node does not promise synchronous
+/// delivery.
+///
+/// The one exception is a `session-post` whose CDP command resolves in-isolate: the host returns
+/// that response directly from the import call, so the promise-based `Session.post` can `await` it
+/// without any callback re-entering a suspended task. The `post-callback` resource remains for
+/// genuinely deferred responses, and notifications arrive between guest tasks.
+///
+/// Session ids are `u32` allocated guest-side (like `cluster`'s worker ids), so `new Session()`
+/// touches no host state. Deny-by-default: declaring the import grants nothing; an application
+/// opts in by mapping the interface to a host adapter at transpile time.
+interface inspector {
+    /// A failure reported by the host, carrying Node's own error code where it has one.
+    record failure {
+        code: string,
+        message: string,
+    }
+
+    /// Why an operation the guest asked for cannot be carried out.
+    variant error {
+        /// No inspector capability was granted to this component.
+        denied(string),
+        /// The host runtime has no usable `node:inspector` (for example, a browser host).
+        unavailable(string),
+        /// No session with this id is connected.
+        no-such-session(u32),
+        /// The host's inspector call failed.
+        failed(failure),
+    }
+
+    /// Which inspector a session attaches to. `main-thread` is `connectToMainThread`, valid only
+    /// from a worker.
+    enum connect-kind {
+        local,
+        main-thread,
+    }
+
+    /// Which experimental broadcast namespace an `emit` targets.
+    enum broadcast-target {
+        network,
+        dom-storage,
+    }
+
+    /// Activate the inspector, optionally waiting for a client to attach before returning.
+    open: func(port: option<u32>, host: option<string>, wait: bool) -> result<_, error>;
+
+    /// Deactivate the inspector.
+    close: func() -> result<_, error>;
+
+    /// The active inspector WebSocket URL, or none when it is not active.
+    url: func() -> result<option<string>, error>;
+
+    /// Block until a client has connected and is ready to step. Requires an active inspector.
+    wait-for-debugger: func() -> result<_, error>;
+
+    /// Emit through the inspector's own `console`, optionally into a named context. `args-json` is
+    /// the JSON-encoded argument list.
+    console-call: func(context: option<string>, method: string, args-json: string) -> result<_, error>;
+
+    /// Connect a session. `listener` is the id of the guest-exported `notification-listener` the
+    /// host redeems once and keeps for the session's lifetime, calling it per notification.
+    session-connect: func(session: u32, kind: connect-kind, listener: u32) -> result<_, error>;
+
+    /// The outcome of a CDP command the host resolved synchronously.
+    ///
+    /// In-isolate protocol methods (`Runtime.evaluate`, `Debugger.*`, ...) resolve during the post
+    /// call, so their response is returned directly. This matters beyond efficiency: a guest that
+    /// `await`s the result would otherwise need the host to call back in while the guest is
+    /// suspended, which the component model forbids.
+    variant command-response {
+        /// Success: the JSON-encoded CDP result, absent when the result is empty.
+        ok(option<string>),
+        /// Failure: the protocol error, carrying Node's `ERR_INSPECTOR_COMMAND` code.
+        failed(failure),
+    }
+
+    /// Post a CDP command on a session.
+    ///
+    /// Returns `some(response)` when the command resolved synchronously (the common case), `none`
+    /// when the response is deferred. For a deferred response, if `callback` is present it is the id
+    /// of a guest-exported `post-callback` the host redeems and calls once the response arrives. A
+    /// guest must not `await` a deferred response -- delivery would re-enter a suspended task -- so
+    /// the promise-based `Session.post` only awaits synchronous responses.
+    session-post: func(session: u32, method: string, params-json: option<string>, callback: option<u32>) -> result<option<command-response>, error>;
+
+    /// Disconnect a session, releasing its notification listener.
+    session-disconnect: func(session: u32) -> result<_, error>;
+
+    /// Feed one event to an experimental broadcast namespace (`Network`, `DOMStorage`). `params-json`
+    /// is the JSON-encoded parameter object.
+    emit: func(target: broadcast-target, event: string, params-json: string) -> result<_, error>;
+
+    /// Register a network resource for the inspector to serve (`NetworkResources.put`).
+    put-network-resource: func(url: string, data: string) -> result<_, error>;
+}
+
+/// Callback channel the host uses to re-enter the component. Guest-*exported*: the component owns
+/// the resource implementations, and the host redeems ids for handles through the `take-*`
+/// functions. See the `inspector` interface docs for why the callbacks cannot live on the import.
+interface inspector-callbacks {
+    /// A one-shot response to a `session-post`, matching Node's `(err, result)` callback.
+    resource post-callback {
+        /// Deliver the response. `error-json` is a JSON `{ code, message }` when the command
+        /// failed, otherwise absent; `result-json` is the JSON-encoded CDP result on success.
+        done: func(error-json: option<string>, result-json: option<string>);
+    }
+
+    /// The long-lived channel for one connected session's notifications.
+    resource notification-listener {
+        /// Deliver one CDP notification. `params-json` is the JSON-encoded parameter object.
+        notify: func(method: string, params-json: string);
+    }
+
+    /// Redeem a `session-post` callback id for its resource. Absent if the id is unknown.
+    take-post-callback: func(id: u32) -> option<post-callback>;
+
+    /// Redeem a session's notification-listener id for its resource. Absent if the id is unknown.
+    take-notification-listener: func(id: u32) -> option<notification-listener>;
+}
