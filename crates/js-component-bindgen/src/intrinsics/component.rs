@@ -6,6 +6,7 @@ use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
+use wasmtime_environ::Trap;
 
 /// This enum contains intrinsics that manage per-component state
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -24,6 +25,9 @@ pub enum ComponentIntrinsic {
 
     /// Track a possibly asynchronous host operation as an external wake source.
     TrackHostOperation,
+
+    /// Normalize engine-specific core WebAssembly trap messages.
+    NormalizeCoreTrap,
 
     /// Trap if the specified component instance may not currently leave.
     CheckMayLeave,
@@ -90,6 +94,7 @@ impl ComponentIntrinsic {
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
+            Self::NormalizeCoreTrap => "_normalizeCoreTrap",
             Self::CheckMayLeave => "_checkMayLeave",
             Self::GuardMayLeave => "_guardMayLeave",
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
@@ -204,6 +209,41 @@ impl ComponentIntrinsic {
                 ));
             }
 
+            Self::NormalizeCoreTrap => {
+                let normalize_core_trap_fn = render_args.require_intrinsic(Self::NormalizeCoreTrap);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let unreachable = Trap::UnreachableCodeReached.to_string();
+                let memory_oob = Trap::MemoryOutOfBounds.to_string();
+                let integer_division_by_zero = Trap::IntegerDivisionByZero.to_string();
+                let integer_overflow = Trap::IntegerOverflow.to_string();
+                let bad_conversion = Trap::BadConversionToInteger.to_string();
+                let table_oob = Trap::TableOutOfBounds.to_string();
+                let bad_signature = Trap::BadSignature.to_string();
+                let stack_overflow = Trap::StackOverflow.to_string();
+                output.push_str(&format!(
+                    r#"
+                    const CORE_TRAP_MESSAGES = new Map([
+                        ['unreachable', {unreachable:?}],
+                        ['memory access out of bounds', {memory_oob:?}],
+                        ['divide by zero', {integer_division_by_zero:?}],
+                        ['remainder by zero', {integer_division_by_zero:?}],
+                        ['divide result unrepresentable', {integer_overflow:?}],
+                        ['float unrepresentable in integer range', {bad_conversion:?}],
+                        ['table index is out of bounds', {table_oob:?}],
+                        ['function signature mismatch', {bad_signature:?}],
+                        ['call stack exhausted', {stack_overflow:?}],
+                    ]);
+                    function {normalize_core_trap_fn}(err) {{
+                        if (!(err instanceof {runtime_error_class})) {{ return err; }}
+                        const message = CORE_TRAP_MESSAGES.get(err.message);
+                        if (message !== undefined) {{ err.message = message; }}
+                        return err;
+                    }}
+                    "#,
+                ));
+            }
+
             Self::CheckMayLeave => {
                 let check_may_leave_fn = render_args.require_intrinsic(Self::CheckMayLeave);
                 let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
@@ -285,6 +325,7 @@ impl ComponentIntrinsic {
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let normalize_core_trap_fn = render_args.require_intrinsic(Self::NormalizeCoreTrap);
                 let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
@@ -363,6 +404,7 @@ impl ComponentIntrinsic {
                             if (!(err instanceof {runtime_error_class})) {{
                                 return false;
                             }}
+                            err = {normalize_core_trap_fn}(err);
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
                             if ({store_trap}.error === null) {{ {store_trap}.error = err; }}
                             return true;
