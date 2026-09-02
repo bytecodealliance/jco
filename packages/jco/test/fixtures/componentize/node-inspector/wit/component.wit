@@ -1,0 +1,8 @@
+package local:node-inspector;
+
+// The jco:node/inspector import and the jco:node/inspector-callbacks export are added by Jco during
+// componentization; asserting that injection is part of the test, so they are absent here.
+world test {
+  export run: func() -> string;
+  export observed: func() -> string;
+}

@@ -35,6 +35,7 @@ describe("Node API WIT import injection", () => {
                 join(root, "deps/jco-node-0.1.0/child-process.wit"),
             ],
             imports: ["jco:node/child-process@0.1.0"],
+            exports: [],
         });
         expect(source).toContain("// Added by Jco because bundled source imports node:child_process.");
         expect(source).toContain("import jco:node/child-process@0.1.0;");
