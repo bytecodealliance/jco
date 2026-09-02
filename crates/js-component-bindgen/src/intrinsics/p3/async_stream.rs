@@ -1012,7 +1012,7 @@ impl AsyncStreamIntrinsic {
                 // read on an external stream class)
                 let copy_impl = format!(
                     r#"
-                         async copy(args) {{
+                         copy(args) {{
                              const {{
                                  isAsync,
                                  memory,
@@ -1088,7 +1088,38 @@ impl AsyncStreamIntrinsic {
                                  injectedWritePromise = this.#hostInjectFn({{ count }});
                              }}
 
-                             // If sync, wait forever but allow task to do other things
+                             const finishCopy = () => {{
+                                 const event = this.getPendingEvent();
+                                 if (!event) {{ throw new Error("unexpectedly missing pending event"); }}
+                                 if (event.code === undefined || event.payload0 === undefined || event.payload1 === undefined) {{
+                                     throw new Error("unexpectedly malformed event");
+                                 }}
+
+                                 const {{ code, payload0: index, payload1: payload }} = event;
+
+                                 const waitableIdx = this.getWaitable().idx();
+                                 if (code !== eventCode  || index !== waitableIdx || payload === {async_blocked_const}) {{
+                                     const errMsg = "invalid event code/event during stream operation";
+                                     {debug_log_fn}(errMsg, {{
+                                         event,
+                                         payload,
+                                         payloadIsBlockedConst: payload === {async_blocked_const},
+                                         code,
+                                         eventCode,
+                                         codeDoesNotMatchEventCode: code !== eventCode,
+                                         index,
+                                         internalEndIdx: waitableIdx,
+                                         indexDoesNotMatch: index !== waitableIdx,
+                                     }});
+                                     throw new Error(errMsg);
+                                 }}
+
+                                 if (event.rejectedLength !== undefined) {{
+                                     this.#rejectedLength = event.rejectedLength;
+                                 }}
+                                 return payload;
+                             }};
+
                              if (!this.hasPendingEvent()) {{
                                  if (isAsync) {{
                                      this.setCopyState({stream_end_class}.CopyState.ASYNC_COPYING);
@@ -1112,48 +1143,30 @@ impl AsyncStreamIntrinsic {
                                      if (!task) {{ throw new Error('missing task task from task meta'); }}
 
                                      const streamEnd = this;
-                                     await task.suspendUntil({{
+                                     return task.suspendUntil({{
                                          readyFn: () => streamEnd.hasPendingEvent(),
+                                     }}).then(() => {{
+                                         if (!injectedWritePromise) {{ return finishCopy(); }}
+                                         return injectedWritePromise.then(cleanupFn => {{
+                                             cleanupFn();
+                                             return finishCopy();
+                                         }});
                                      }});
                                  }}
                              }}
 
-                             // If the read completed immediately after injecting a host write,
-                             // it is safe to await injection cleanup before consuming the event.
-                             if (injectedWritePromise) {{
-                                 const cleanupFn = await injectedWritePromise;
+                             if (!injectedWritePromise) {{ return finishCopy(); }}
+                             if (isAsync) {{
+                                 injectedWritePromise.then(
+                                     cleanupFn => cleanupFn(),
+                                     err => this.setPendingEvent(() => {{ throw err; }}),
+                                 );
+                                 return finishCopy();
+                             }}
+                             return injectedWritePromise.then(cleanupFn => {{
                                  cleanupFn();
-                             }}
-
-                             const event = this.getPendingEvent();
-                             if (!event) {{ throw new Error("unexpectedly missing pending event"); }}
-                             if (event.code === undefined || event.payload0 === undefined || event.payload1 === undefined) {{
-                                 throw new Error("unexpectedly malformed event");
-                             }}
-
-                             const {{ code, payload0: index, payload1: payload }} = event;
-
-                             const waitableIdx = this.getWaitable().idx();
-                             if (code !== eventCode  || index !== waitableIdx || payload === {async_blocked_const}) {{
-                                 const errMsg = "invalid event code/event during stream operation";
-                                 {debug_log_fn}(errMsg, {{
-                                     event,
-                                     payload,
-                                     payloadIsBlockedConst: payload === {async_blocked_const},
-                                     code,
-                                     eventCode,
-                                     codeDoesNotMatchEventCode: code !== eventCode,
-                                     index,
-                                     internalEndIdx: waitableIdx,
-                                     indexDoesNotMatch: index !== waitableIdx,
-                                 }});
-                                 throw new Error(errMsg);
-                             }}
-
-                             if (event.rejectedLength !== undefined) {{
-                                 this.#rejectedLength = event.rejectedLength;
-                             }}
-                             return payload;
+                                 return finishCopy();
+                             }});
                          }}
                     "#
                 );
@@ -2154,7 +2167,7 @@ impl AsyncStreamIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
-                    async function {stream_op_fn}(
+                    function {stream_op_fn}(
                         ctx,
                         streamEndWaitableIdx,
                         ptr,
@@ -2198,7 +2211,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
                         }}
 
-                        const result = await streamEnd.copy({{
+                        return streamEnd.copy({{
                             isAsync,
                             memory: getMemoryFn?.(),
                             ptr,
@@ -2210,8 +2223,6 @@ impl AsyncStreamIntrinsic {
                             getReallocFn,
                             elemMeta,
                         }});
-
-                        return result;
                     }}
                 "#));
             }
