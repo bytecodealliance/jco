@@ -645,25 +645,31 @@ jco componentize component.js --wit wit --bundle \
 ```
 
 | Value              | Component boundary                                                                                         |
-|--------------------|------------------------------------------------------------------------------------------------------------|
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
 | `direct` (default) | Typed `jco:node/http@0.1.0`; denied by default, with an opt-in Node `node:http` provider.                  |
 | `wasi-sockets`     | Preview 2 DNS lookup, TCP sockets, streams, and pollables; HTTP/1.1 framing and parsing live in the guest. |
 | `wasi-http`        | Preview 2 `wasi:http/outgoing-handler` and `wasi:http/types`.                                              |
 
-Jco injects only the selected mode's missing imports into the selected world,
-installs their pinned 0.2.12 dependency packages, and warns about the visible WIT
-changes.
+Jco injects only the selected mode's missing imports into the selected world. In
+direct mode it also injects the `jco:node/http-callbacks@0.1.0` export and
+re-bundles the component entry with the matching guest callback implementation.
+Generated declarations include comments, pinned dependencies are installed under
+`wit/deps`, and Jco warns about the visible WIT changes. Existing declarations,
+including aliases, are preserved and repeated componentization is idempotent.
 
-The `direct` implementation is asynchronous; Jco configures its typed `request`
-import for JSPI so it appears synchronous to the Preview 2 guest without a
-worker.
+The `direct` implementation is asynchronous; Jco configures its typed request,
+listen, close, and connection-count imports for JSPI so they appear synchronous
+to the Preview 2 guest without a worker. Direct and `wasi-sockets` implement
+clients and servers. `wasi-http` implements clients and rejects server
+construction immediately because outgoing-handler cannot listen for arbitrary
+connections.
 
 > [!WARNING]
 > All modes currently buffer complete request and response bodies.
 
-Note that depending on the implementation there may be parts that are hard/impossible to implement --
-for example, the `wasi-http` implementation is based on `wasi:http`, and may not be able to deliver
-fine grained socket control in the same way that the `wasi-sockets` or `direct` implementations can.
+Connection pooling, upgrades, CONNECT tunnels, and HTTPS are explicit gaps.
+Unavailable operations throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than silently
+doing nothing.
 
 ### Buffer
 
