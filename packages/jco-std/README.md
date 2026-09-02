@@ -650,9 +650,11 @@ jco componentize component.js --wit wit --bundle \
 `direct` is the default. Jco adds the typed `jco:node/http2@0.1.0` import and
 `jco:node/http2-callbacks@0.1.0` export only when absent. Servers, sessions, and
 streams are WIT resources; the separate guest-owned stream and server-error
-listener resources let a real Node host call back into the component. The
-default host mapping denies client and server capabilities with
-`ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Opt in to real Node HTTP/2 when transpiling:
+listener resources let a real Node host call back into the component. Jco
+re-bundles a small entry wrapper so the callback implementation is present on
+the final component export. The default host mapping denies client and server
+capabilities with `ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Opt in to real Node HTTP/2
+when transpiling:
 
 ```console
 jco transpile component.wasm \
