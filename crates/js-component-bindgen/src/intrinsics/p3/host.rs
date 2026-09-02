@@ -236,6 +236,7 @@ impl HostIntrinsic {
                         const [newTask, newTaskID] = {create_new_current_task_fn}({{
                             componentIdx: calleeComponentIdx,
                             isAsync,
+                            calleeIsAsync: calleeIsAsyncInt !== 0,
                             getCalleeParamsFn,
                             entryFnName: [
                                 'task',
@@ -518,6 +519,12 @@ impl HostIntrinsic {
                                     isResolved: preparedTask.isResolved(),
                                     callbackFn,
                                 }});
+                                // A sync-lifted callee applies automatic backpressure for
+                                // the complete call. Its entry hold ends when the core
+                                // function returns, not when one of its nested calls parks.
+                                if (preparedTask.needsExclusiveLock()) {{
+                                    calleeComponentState.exclusiveRelease(preparedTask.id());
+                                }}
                                 preparedTask.resolve([callbackResult]);
                                 return;
                             }}
