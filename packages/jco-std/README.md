@@ -27,6 +27,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
 | `wasi/0.2.x/node/24.x.x/dns`                 | `node:dns` guest adapter over an explicit host capability                     |
 | `wasi/0.2.x/node/24.x.x/fs`                  | `node:fs` and `node:fs/promises` over an explicit host capability             |
+| `wasi/0.2.x/node/24.x.x/os`                  | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
 | `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
@@ -111,6 +112,9 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - `node:fs` and `node:fs/promises`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs` and the
   application-provided `jco:node/fs@0.1.0` capability;
+- `node:os`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os` and the
+  application-provided `jco:node/os@0.1.0` capability;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
@@ -354,6 +358,43 @@ jco transpile component.wasm \
 The guest boundary contains only a stream selector, strings, and terminal
 metadata queries. It does not expose Node stream objects, so a browser console
 provider can be added later without changing component-facing code.
+
+### Operating-system information
+
+Guest source uses the ordinary Node API:
+
+```js
+import os from "node:os";
+
+export function hostSummary() {
+  return `${os.platform()} ${os.arch()} (${os.availableParallelism()} CPUs)`;
+}
+```
+
+When bundled source imports `node:os`, Jco adds a generated
+`jco:node/os@0.1.0` import to the selected WIT world when it is absent, installs
+`os.wit` in `wit/deps/jco-node-0.1.0`, and warns about both source changes.
+Aliased existing imports are recognized and repeated componentization is
+idempotent.
+
+Machine inspection and priority changes are denied by default with
+`ERR_JCO_OS_ADAPTER_REQUIRED`. The value exports `EOL`, `devNull`, and
+`constants` use a non-sensitive POSIX/WASI snapshot so importing optional code
+does not itself reveal host state. A Node application can opt into values from
+the actual machine:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
+```
+
+The opt-in adapter delegates the supported Node 24 surface to the runtime's
+real `node:os` module and preserves typed CPU, network-interface, user, constant,
+and structured-error records across WIT. All operations are synchronous, so no
+JSPI configuration is required. Applications can build restricted providers
+against the exported `OsHost` types and use the conversions in
+`wasi/0.2.x/node/24.x.x/os/host-utils`; `os/core` builds the idiomatic guest
+module from such a provider.
 
 ### DNS
 
