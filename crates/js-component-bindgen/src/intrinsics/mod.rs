@@ -1141,31 +1141,63 @@ impl Intrinsic {
                 ));
             }
 
-            // Under JSPI a wasm stack suspends inside a task's callback
+            // Under JSPI a wasm stack may suspend inside a task's callback
             // slice; other tasks then set the per-component current-task
-            // register. Restoring the captured entry when the awaited
-            // import settles is the last JS to run before the suspended
-            // stack resumes, so the resumed continuation's context.get /
-            // context.set (and task-exit bookkeeping) address the task
-            // that is actually executing.
+            // register. Preserve synchronous results and failures so a core
+            // start function that is not allowed to block receives the
+            // canonical trap instead of asking V8 to suspend a non-promising
+            // frame. For an allowed suspension, restoring the captured entry
+            // when the promise settles is the last JS to run before the
+            // suspended stack resumes, so context and exit bookkeeping address
+            // the task that is actually executing.
             Self::SuspendingImportWrapperFn => {
                 let suspending_import_wrapper_fn =
                     args.require_intrinsic(Self::SuspendingImportWrapperFn);
                 let global_current_task_meta_obj =
                     args.require_intrinsic(Self::GlobalCurrentTaskMeta);
                 let check_may_leave_fn = args.require_intrinsic(ComponentIntrinsic::CheckMayLeave);
+                let current_task_may_block =
+                    args.require_intrinsic(p3::async_task::AsyncTaskIntrinsic::CurrentTaskMayBlock);
+                let runtime_error_class =
+                    args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(
                     r#"
                       function {suspending_import_wrapper_fn}(componentIdx, fn) {{
-                          return async function (...args) {{
+                          return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
-                              try {{
-                                  return await fn.apply(null, args);
-                              }} finally {{
-                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                              if (!saved && {current_task_may_block}.value === 0) {{
+                                  throw new {runtime_error_class}('cannot block a synchronous task before returning');
                               }}
+
+                              let result;
+                              try {{
+                                  result = fn.apply(null, args);
+                              }} catch (err) {{
+                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                                  throw err;
+                              }}
+
+                              if (result === null ||
+                                  (typeof result !== 'object' && typeof result !== 'function') ||
+                                  typeof result.then !== 'function') {{
+                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                                  return result;
+                              }}
+
+                              if ({current_task_may_block}.value === 0) {{
+                                  // The helper may already have returned a rejected promise.
+                                  // Mark it handled before replacing it with the canonical
+                                  // synchronous-task trap.
+                                  Promise.resolve(result).catch(() => {{}});
+                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                                  throw new {runtime_error_class}('cannot block a synchronous task before returning');
+                              }}
+
+                              return Promise.resolve(result).finally(() => {{
+                                  {global_current_task_meta_obj}[componentIdx] = saved;
+                              }});
                           }};
                       }}
                     "#,
@@ -1371,6 +1403,22 @@ mod tests {
     }
 
     #[test]
+    fn suspending_import_preserves_sync_results_and_rejects_disallowed_blocking() {
+        let source = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
+
+        assert!(source.contains("return function (...args) {"));
+        assert!(!source.contains("return async function (...args) {"));
+        assert!(source.contains("if (!saved && CURRENT_TASK_MAY_BLOCK.value === 0) {"));
+        assert!(source.contains("result = fn.apply(null, args);"));
+        assert!(source.contains("typeof result.then !== 'function'"));
+        assert!(source.contains("Promise.resolve(result).catch(() => {});"));
+        assert!(source.contains(
+            "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
+        ));
+        assert!(source.contains("return Promise.resolve(result).finally(() => {"));
+    }
+
+    #[test]
     fn resource_destructor_call_creates_and_completes_a_sync_guest_task() {
         let source = render_intrinsic_body(Intrinsic::Resource(
             ResourceIntrinsic::ResourceDestructorCall,
@@ -1569,6 +1617,19 @@ mod tests {
         assert!(source.contains("calleeLifecyclePromise.then(() => taskReturnPromise),"));
         assert!(source.contains("calleeComponentState.markTrapped(err);"));
         assert!(source.contains("preparedTask.exit({ skipExclusiveLockCheck: true });"));
+    }
+
+    #[test]
+    fn sync_prepare_call_rejects_blocking_from_core_start() {
+        let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::PrepareCall));
+
+        assert!(source.contains("if (!isAsync && CURRENT_TASK_MAY_BLOCK.value === 0) {"));
+        assert!(source.contains(
+            "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
+        ));
+        assert!(source.contains(
+            "throw new Error('invalid/missing current task for caller during prepare call');"
+        ));
     }
 
     #[test]
