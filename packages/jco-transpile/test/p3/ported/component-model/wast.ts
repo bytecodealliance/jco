@@ -55,6 +55,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/sync-barges-in.wast' },
     { relPath: 'async/trap-if-done.wast' },
     { relPath: 'async/cross-abi-calls.wast' },
+    { relPath: 'async/cross-task-future.wast' },
     { relPath: 'async/trap-on-reenter.wast' },
     { relPath: 'async/validate-no-stream-char.wast' },
     { relPath: 'async/validate-no-async-abi-for-sync-type.wast' },
