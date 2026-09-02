@@ -1,9 +1,11 @@
 import * as host from "jco:node/http@0.1.0";
 
 import { createHttp } from "./http/core.js";
-import { createDirectHttpTransport } from "./http/transports/direct.js";
+import { createDirectHttpImplementation, httpCallbacks } from "./http/impl/direct.js";
 
-const http = createHttp(createDirectHttpTransport(host));
+const http = createHttp(createDirectHttpImplementation(host));
+
+export { httpCallbacks };
 
 export const Agent = http.Agent;
 export const ClientRequest = http.ClientRequest;

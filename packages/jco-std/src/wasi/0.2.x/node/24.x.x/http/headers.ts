@@ -4,7 +4,7 @@ import {
   invalidHeaderChar,
   invalidHttpToken,
 } from "./errors.js";
-import type { HttpHeaderValue, HttpHeaders, HttpTransportHeader } from "./types.js";
+import type { HttpHeaderField, HttpHeaderValue, HttpHeaders } from "./types.js";
 
 const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const INVALID_VALUE = /[\0\r\n]/;
@@ -126,7 +126,7 @@ export class HeaderStore {
     );
   }
 
-  transport(): HttpTransportHeader[] {
+  fields(): HttpHeaderField[] {
     return this.entries().map(([name, value]) => ({
       name,
       value: Uint8Array.from(value, (character) => character.charCodeAt(0) & 0xff),
@@ -140,7 +140,7 @@ export class HeaderStore {
   }
 }
 
-export function incomingHeaders(headers: HttpTransportHeader[]): {
+export function incomingHeaders(headers: HttpHeaderField[]): {
   headers: Record<string, string | string[]>;
   rawHeaders: string[];
 } {

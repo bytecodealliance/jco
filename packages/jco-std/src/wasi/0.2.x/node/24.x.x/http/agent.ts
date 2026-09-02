@@ -53,7 +53,10 @@ export class Agent extends EventEmitter {
   }
 
   createConnection(..._args: unknown[]): never {
-    return unsupported("http.Agent.createConnection", "the selected transport owns connections");
+    return unsupported(
+      "http.Agent.createConnection",
+      "the selected implementation owns connections",
+    );
   }
 
   getName(options: AgentNameOptions = {}): string {

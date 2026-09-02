@@ -5,10 +5,10 @@ import { validateHeaderName } from "./headers.js";
 import { IncomingMessage } from "./incoming-message.js";
 import { OutgoingMessage } from "./outgoing-message.js";
 import type {
+  HttpImplementation,
+  HttpImplementationRequest,
+  HttpImplementationResponse,
   HttpRequestOptions,
-  HttpTransport,
-  HttpTransportRequest,
-  HttpTransportResponse,
 } from "./types.js";
 
 export type ResponseListener = (response: IncomingMessage) => void;
@@ -117,20 +117,20 @@ export class ClientRequestBase extends OutgoingMessage {
   readonly method: string;
   readonly reusedSocket = false;
   maxHeadersCount: number | null = null;
-  readonly #transport: HttpTransport;
+  readonly #implementation: HttpImplementation;
   readonly #hostname: string;
   readonly #port: number;
   readonly #responseListener: ResponseListener | undefined;
 
   constructor(
-    transport: HttpTransport,
+    implementation: HttpImplementation,
     input: RequestInput,
     options: HttpRequestOptions | undefined,
     responseListener: ResponseListener | undefined,
   ) {
     const normalized = normalizedRequest(input, options);
     super(normalized.options.headers);
-    this.#transport = transport;
+    this.#implementation = implementation;
     this.#hostname = normalized.hostname;
     this.#port = normalized.port;
     this.#responseListener = responseListener;
@@ -167,13 +167,16 @@ export class ClientRequestBase extends OutgoingMessage {
   }
 
   setNoDelay(_noDelay = true): never {
-    return unsupported("http.ClientRequest.setNoDelay", "the selected transport owns the socket");
+    return unsupported(
+      "http.ClientRequest.setNoDelay",
+      "the selected implementation owns the socket",
+    );
   }
 
   setSocketKeepAlive(_enable = false, _initialDelay = 0): never {
     return unsupported(
       "http.ClientRequest.setSocketKeepAlive",
-      "the selected transport owns the socket",
+      "the selected implementation owns the socket",
     );
   }
 
@@ -188,22 +191,22 @@ export class ClientRequestBase extends OutgoingMessage {
       this._headers.setInternal("Content-Length", body.byteLength);
     }
     const timeout = this._timeout() || undefined;
-    const request: HttpTransportRequest = {
+    const request: HttpImplementationRequest = {
       method: this.method,
       scheme: "http",
       authority: this.host,
       pathWithQuery: this.path,
-      headers: this._headers.transport(),
+      headers: this._headers.fields(),
       body,
       connectTimeoutMs: timeout,
       firstByteTimeoutMs: timeout,
       betweenBytesTimeoutMs: timeout,
     };
-    const response = this.#transport.request(request);
+    const response = this.#implementation.request(request);
     return () => this.#deliver(response);
   }
 
-  #deliver(response: HttpTransportResponse): void {
+  #deliver(response: HttpImplementationResponse): void {
     if (this.destroyed) {
       return;
     }
@@ -226,7 +229,7 @@ export interface ClientRequestConstructor {
   ): ClientRequestBase;
 }
 
-export function createClientRequest(transport: HttpTransport): ClientRequestConstructor {
+export function createClientRequest(implementation: HttpImplementation): ClientRequestConstructor {
   return class ClientRequest extends ClientRequestBase {
     constructor(
       input: RequestInput,
@@ -234,7 +237,7 @@ export function createClientRequest(transport: HttpTransport): ClientRequestCons
       callback?: ResponseListener,
     ) {
       super(
-        transport,
+        implementation,
         input,
         typeof options === "function" ? undefined : options,
         typeof options === "function" ? options : callback,
