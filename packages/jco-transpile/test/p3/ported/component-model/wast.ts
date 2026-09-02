@@ -46,6 +46,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/deadlock.wast' },
     { relPath: 'async/sync-streams.wast' },
     { relPath: 'async/dont-block-start.wast' },
+    { relPath: 'async/closed-stream.wast' },
 
     // Skipped tests
     { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
@@ -53,7 +54,6 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/sync-barges-in.wast', skip: true },
     { relPath: 'async/same-component-stream-future.wast', skip: true },
     { relPath: 'async/cross-abi-calls.wast', skip: true },
-    { relPath: 'async/closed-stream.wast', skip: true },
     { relPath: 'async/drop-cross-task-borrow.wast', skip: true },
     { relPath: 'async/trap-if-done.wast', skip: true },
     { relPath: 'async/drop-stream.wast', skip: true },
