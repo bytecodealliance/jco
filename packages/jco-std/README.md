@@ -164,6 +164,38 @@ from Node.
 Deprecated APIs remain importable but immediately throw a clear unsupported-API
 error rather than running their deprecated implementation.
 
+### Paths
+
+The `node:path`, `node:path/posix`, and `node:path/win32` builtins use the
+MIT-licensed path algorithms from Node.js 24.20.0. Both lexical namespaces,
+`matchesGlob()`, namespace identities, Node-style validation errors, and the
+legacy `_makeLong` alias match that release. WASI targets use POSIX as the
+default namespace; importing `node:path/win32` or using `path.win32` selects the
+Windows algorithms explicitly.
+
+Most path operations are pure and never access the host. `resolve()` and
+`relative()` obtain the component working directory lazily from
+`wasi:cli/environment#initial-cwd` when their inputs require it. Windows drive-relative
+resolution also reads the matching `=C:`-style environment entry when one exists.
+Therefore, a world that bundles any of these specifiers must import exactly one
+`wasi:cli/environment@0.2.x` interface. No Jco-specific WIT interface or
+deny-by-default host adapter is involved.
+
+```js
+import path, { matchesGlob } from "node:path";
+import { join as winJoin } from "node:path/win32";
+
+export function outputPath(name) {
+  if (!matchesGlob(name, "**/*.js")) throw new TypeError("expected JavaScript");
+  return `${path.resolve("dist", name)}|${winJoin("C:\\dist", name)}`;
+}
+```
+
+Adapter authors can import `createPath()` from the versioned `jco-std` entry
+point and supply typed `initialCwd` and `getEnvironment` providers. This is also
+the boundary used by Jco's builtin adapter. `minimatch` 10.2.6 is bundled for
+Node-compatible `matchesGlob()` behavior; it does not add filesystem access.
+
 ### Errors globals
 
 Node's [Errors API](https://nodejs.org/docs/latest-v24.x/api/errors.html) is not an
