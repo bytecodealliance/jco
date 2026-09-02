@@ -7,7 +7,7 @@ use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
-use super::async_task::AsyncTaskIntrinsic;
+use super::{CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, async_task::AsyncTaskIntrinsic};
 
 /// This enum contains intrinsics that enable Futures
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -665,7 +665,7 @@ impl AsyncFutureIntrinsic {
                            if (futureEnd.isDoneState()) {{
                                throw new {runtime_error_class}('cannot lift future after previous read succeeded');
                            }}
-                           if (futureEnd.isInSet()) {{ throw new {runtime_error_class}('futures in waitable sets cannot be lifted'); }}
+                           if (futureEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_FUTURE_IN_WAITABLE_SET:?}); }}
 
                             return futureEnd.promise();
                         }}
@@ -1757,6 +1757,9 @@ impl AsyncFutureIntrinsic {
                         }}
                         if (futureEnd.isDoneState()) {{
                             throw new {runtime_error_class}('cannot lift future after previous read succeeded');
+                        }}
+                        if (futureEnd.isInSet()) {{
+                            throw new {runtime_error_class}({CANNOT_LIFT_FUTURE_IN_WAITABLE_SET:?});
                         }}
 
                         const removedFutureEnd = {remove_future_end_from_table_fn}({{ tableIdx: srcTableIdx, futureWaitableIdx: srcFutureWaitableIdx }});
