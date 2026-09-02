@@ -29,6 +29,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/passing-resources.wast' },
     { relPath: 'async/drop-waitable-set.wast' },
     { relPath: 'async/drop-subtask.wast' },
+    { relPath: 'async/async-calls-sync.wast' },
 
     // Skipped tests
     { relPath: 'async/sync-streams.wast', skip: true },
@@ -43,7 +44,6 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/drop-cross-task-borrow.wast', skip: true },
     { relPath: 'async/trap-if-done.wast', skip: true },
     { relPath: 'async/drop-stream.wast', skip: true },
-    { relPath: 'async/async-calls-sync.wast', skip: true },
     { relPath: 'async/cancellable.wast', skip: true },
 ];
 
