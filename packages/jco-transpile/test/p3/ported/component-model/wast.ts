@@ -23,7 +23,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/sync-streams.wast', skip: true },
     { relPath: 'async/deadlock.wast', skip: true },
     { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
-    { relPath: 'async/partial-stream-copies.wast', skip: true },
+    { relPath: 'async/partial-stream-copies.wast', skip: false },
     { relPath: 'async/trap-on-reenter.wast', skip: true },
     { relPath: 'async/sync-barges-in.wast', skip: true },
     { relPath: 'async/same-component-stream-future.wast', skip: true },
