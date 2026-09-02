@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b8b2462.js";
+            window.path_to_searchindex_js = "../searchindex-6b07382a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -271,6 +271,7 @@ available only under a versioned entry point.</p>
 <tbody>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
+<tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
 <tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
 <tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store – see below.</td></tr>
@@ -353,6 +354,27 @@ world must import exactly one compatible version when it uses <code>node:path</c
 <p>Jco selects the adapter matching the version in the world. A component that only
 uses capability-free built-ins such as assert, Buffer, or querystring does not
 need this import.</p>
+<h3 id="string-decoder"><a class="header" href="#string-decoder">String decoder</a></h3>
+<p>Bundled source can use the documented Node 24 streaming decoder directly:</p>
+<pre><code class="language-js">import { Buffer } from "node:buffer";
+import { StringDecoder } from "node:string_decoder";
+
+const decoder = new StringDecoder("utf8");
+
+export function decode() {
+  return decoder.write(Buffer.from([0xf0, 0x9f])) +
+    decoder.end(Buffer.from([0x8c, 0x8d]));
+}
+</code></pre>
+<p>Jco maps the import to a guest-local implementation based on Node 24.20.0. It
+retains incomplete UTF-8, UTF-16LE, base64, and base64url groups between calls,
+supports Node’s encoding aliases, and accepts strings or any <code>ArrayBufferView</code>.
+It reuses the audited Buffer core already used by <code>node:buffer</code>; it does not add a
+WIT import, callback export, host adapter, or JSPI operation.</p>
+<p>Because the adapter is selected only when bundled code resolves
+<code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
+initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
+not intercepted.</p>
 <h3 id="child-processes-and-host-capabilities"><a class="header" href="#child-processes-and-host-capabilities">Child processes and host capabilities</a></h3>
 <p>A WebAssembly guest cannot spawn a process itself. When bundled source imports
 <code>node:child_process</code>, Jco ensures that the selected world declares the dedicated
@@ -760,7 +782,7 @@ set of coordinated shims:</p>
 <code>node:http2</code>, <code>node:https</code>, <code>node:inspector</code>, <code>node:inspector/promises</code>,
 <code>node:module</code>, <code>node:net</code>, <code>node:os</code>, <code>node:perf_hooks</code>, <code>node:process</code>,
 <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>, <code>node:stream/consumers</code>,
-<code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:string_decoder</code>, <code>node:timers</code>,
+<code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
