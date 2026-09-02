@@ -10,7 +10,12 @@ declare const globalCreateRequire: typeof import("node:module").createRequire;
 const DNS_CAPABILITY = "jco:node/dns@0.1.0";
 const DNS_ASYNC_IMPORT = `${DNS_CAPABILITY}#*`;
 const HTTP_CAPABILITY = "jco:node/http@0.1.0";
-const HTTP_ASYNC_IMPORT = `${HTTP_CAPABILITY}#request`;
+const HTTP_ASYNC_IMPORTS = [
+    `${HTTP_CAPABILITY}#request`,
+    `${HTTP_CAPABILITY}#[method]server.listen`,
+    `${HTTP_CAPABILITY}#[method]server.close`,
+    `${HTTP_CAPABILITY}#[method]server.get-connections`,
+];
 const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -50,7 +55,9 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
         // The opt-in Node HTTP provider buffers an asynchronous request. JSPI
         // suspends the synchronous Preview 2 WIT import while it is in flight.
         opts.asyncMode = "jspi";
-        opts.asyncImports = appendUnique(opts.asyncImports, HTTP_ASYNC_IMPORT);
+        for (const asyncImport of HTTP_ASYNC_IMPORTS) {
+            opts.asyncImports = appendUnique(opts.asyncImports, asyncImport);
+        }
         opts.asyncExports = appendUnique(opts.asyncExports, "*");
     }
     opts.map = withDefaultNodeCapabilityMap(opts.map);

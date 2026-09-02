@@ -272,13 +272,13 @@ export interface NodeBuiltinOptions {
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
-    /** Transport used for `node:http` host operations. */
+    /** Implementation used for `node:http` host operations. */
     nodejsHttpVia?: NodejsHttpVia;
     /** Paths to jco-std's HTTP modules (overridable for tests). */
     httpModule?: string;
     httpCoreModule?: string;
-    httpWasiSocketsTransportModule?: string;
-    httpWasiHttpTransportModule?: string;
+    httpWasiSocketsImplementationModule?: string;
+    httpWasiHttpImplementationModule?: string;
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
@@ -619,29 +619,30 @@ export const { ${HTTP_EXPORTS.join(", ")} } = http;
 
 function httpDirectAdapter(httpModule: string): string {
     return `
-import directHttp from ${JSON.stringify(httpModule)};
+import directHttp, { httpCallbacks } from ${JSON.stringify(httpModule)};
+globalThis[Symbol.for("jco.node.http.callbacks")] = httpCallbacks;
 ${httpExports("directHttp")}
 `;
 }
 
-function httpWasiSocketsAdapter(coreModule: string, transportModule: string): string {
+function httpWasiSocketsAdapter(coreModule: string, implementationModule: string): string {
     return `
 import * as instanceNetwork from "wasi:sockets/instance-network@0.2.12";
 import * as ipNameLookup from "wasi:sockets/ip-name-lookup@0.2.12";
 import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@0.2.12";
 import { createHttp } from ${JSON.stringify(coreModule)};
-import { createWasiSocketsHttpTransport } from ${JSON.stringify(transportModule)};
-${httpExports("createHttp(createWasiSocketsHttpTransport({ instanceNetwork, ipNameLookup, tcpCreateSocket }))")}
+import { createWasiSocketsHttpImplementation } from ${JSON.stringify(implementationModule)};
+${httpExports("createHttp(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket }))")}
 `;
 }
 
-function httpWasiHttpAdapter(coreModule: string, transportModule: string): string {
+function httpWasiHttpAdapter(coreModule: string, implementationModule: string): string {
     return `
 import * as outgoingHandler from "wasi:http/outgoing-handler@0.2.12";
 import * as types from "wasi:http/types@0.2.12";
 import { createHttp } from ${JSON.stringify(coreModule)};
-import { createWasiHttpTransport } from ${JSON.stringify(transportModule)};
-${httpExports("createHttp(createWasiHttpTransport({ outgoingHandler, types }))")}
+import { createWasiHttpImplementation } from ${JSON.stringify(implementationModule)};
+${httpExports("createHttp(createWasiHttpImplementation({ outgoingHandler, types }))")}
 `;
 }
 
@@ -890,15 +891,14 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const httpCoreModule = () =>
         options.httpCoreModule ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/core"));
-    const httpWasiSocketsTransportModule = () =>
-        options.httpWasiSocketsTransportModule ??
-        fileURLToPath(
-            import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/transport/wasi-sockets"),
-        );
-    const httpWasiHttpTransportModule = () =>
-        options.httpWasiHttpTransportModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/transport/wasi-http"));
+    const httpWasiSocketsImplementationModule = () =>
+        options.httpWasiSocketsImplementationModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets"));
+    const httpWasiHttpImplementationModule = () =>
+        options.httpWasiHttpImplementationModule ??
+        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/wasi-http"));
     const httpVia = options.nodejsHttpVia ?? "direct";
+    let usesDirectHttp = false;
     return {
         name: "jco-node-builtins",
         resolveId(id) {
@@ -979,6 +979,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (id === HTTP_SPECIFIER) {
                 if (httpVia === "direct") {
+                    usesDirectHttp = true;
                     options.onWitRequirement?.(HTTP_WIT_REQUIREMENT);
                 } else {
                     requireWasiHttpVersion(worldMetadata, httpVia);
@@ -1062,8 +1063,8 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                     return httpDirectAdapter(httpModule());
                 }
                 return httpVia === "wasi-sockets"
-                    ? httpWasiSocketsAdapter(httpCoreModule(), httpWasiSocketsTransportModule())
-                    : httpWasiHttpAdapter(httpCoreModule(), httpWasiHttpTransportModule());
+                    ? httpWasiSocketsAdapter(httpCoreModule(), httpWasiSocketsImplementationModule())
+                    : httpWasiHttpAdapter(httpCoreModule(), httpWasiHttpImplementationModule());
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {
                 return unenvAdapter(value, options);
@@ -1075,6 +1076,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return pathCore(version, pathFactory());
             }
             return pathAdapter(specifier, version);
+        },
+        renderChunk(code, chunk) {
+            if (!usesDirectHttp || !chunk.isEntry || chunk.exports.includes("httpCallbacks")) {
+                return null;
+            }
+            return `${code}\nconst __jcoHttpCallbacks = globalThis[Symbol.for("jco.node.http.callbacks")];\nexport { __jcoHttpCallbacks as httpCallbacks };\n`;
         },
     };
 }

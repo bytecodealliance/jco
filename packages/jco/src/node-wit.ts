@@ -6,14 +6,17 @@ export interface NodeWitRequirement {
     nodeSpecifier: string;
     witImport: string;
     /**
-     * A WIT interface the bundled source must *export*, added to the world beside `witImport`.
+     * A WIT interface the bundled source must export, retained for requirements with one
+     * companion callback interface.
      *
      * `node:inspector` is the only builtin that needs this: the host calls back into the component
      * through a guest-exported callbacks interface (a component cannot implement a resource on an
      * imported interface). Jco pairs the export injection here with a two-pass bundle that adds the
      * matching JS export.
-     */
+    */
     witExport?: string;
+    /** Companion guest interfaces exported so imported host resources can invoke guest callbacks. */
+    witExports?: string[];
     dependencyDirectory: string;
     /**
      * WIT files installed for this requirement.
@@ -109,6 +112,7 @@ export const INSPECTOR_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
 export const HTTP_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:http",
     witImport: "jco:node/http@0.1.0",
+    witExports: ["jco:node/http-callbacks@0.1.0"],
     dependencyDirectory: "jco-node-0.1.0",
     dependencySources: [
         SHARED_TYPES_SOURCE,
@@ -308,34 +312,35 @@ async function findWorld(witPath: string, worldName: string | undefined): Promis
     return declarations[0];
 }
 
-function worldHasDirective(world: WorldDeclaration, directive: "import" | "export", witName: string): boolean {
+function worldHasDeclaration(world: WorldDeclaration, declaration: "import" | "export", witName: string): boolean {
     const body = withoutComments(world.source.slice(world.openBrace + 1, world.closeBrace));
     const escaped = witName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`\\b${directive}\\s+(?:%?[A-Za-z][A-Za-z0-9-]*\\s*:\\s*)?${escaped}\\s*;`).test(body);
+    return new RegExp(`\\b${declaration}\\s+(?:%?[A-Za-z][A-Za-z0-9-]*\\s*:\\s*)?${escaped}\\s*;`).test(body);
 }
 
-function worldHasImport(world: WorldDeclaration, witImport: string): boolean {
-    return worldHasDirective(world, "import", witImport);
+function insertionFor(
+    imports: NodeWitRequirement[],
+    exports: Array<{ nodeSpecifier: string; witExport: string }>,
+    newline: string,
+): string {
+    return [
+        ...imports.map(
+            ({ nodeSpecifier, witImport }) =>
+                `${newline}  // Added by Jco because bundled source imports ${nodeSpecifier}.${newline}  import ${witImport};`,
+        ),
+        ...exports.map(
+            ({ nodeSpecifier, witExport }) =>
+                `${newline}  // Added by Jco so the ${nodeSpecifier} host can invoke guest callbacks.${newline}  export ${witExport};`,
+        ),
+    ].join("");
 }
 
-function worldHasExport(world: WorldDeclaration, witExport: string): boolean {
-    return worldHasDirective(world, "export", witExport);
-}
-
-function insertionFor(imports: NodeWitRequirement[], exports: NodeWitRequirement[], newline: string): string {
-    const importLines = imports.map(
-        ({ nodeSpecifier, witImport }) =>
-            `${newline}  // Added by Jco because bundled source imports ${nodeSpecifier}.${newline}  import ${witImport};`,
-    );
-    const exportLines = exports.map(
-        ({ nodeSpecifier, witExport }) =>
-            `${newline}  // Added by Jco because bundled source imports ${nodeSpecifier}.${newline}  export ${witExport};`,
-    );
-    return [...importLines, ...exportLines].join("");
+function requirementWitExports(requirement: NodeWitRequirement): string[] {
+    return [...(requirement.witExport ? [requirement.witExport] : []), ...(requirement.witExports ?? [])];
 }
 
 /**
- * Add Node capability imports to the selected user world in place.
+ * Add Node capability imports and companion callback exports to the selected user world in place.
  *
  * This is intentionally visible in source control. Repeated calls are no-ops,
  * and dependency packages supplied by the user are never overwritten.
@@ -352,28 +357,30 @@ export async function injectNodeWitImports(
     const uniqueRequirements = [
         ...new Map(requirements.map((requirement) => [requirement.witImport, requirement])).values(),
     ];
-    const missingImports = uniqueRequirements.filter(({ witImport }) => !worldHasImport(world, witImport));
-    const missingExports = uniqueRequirements.filter(
-        (requirement): requirement is NodeWitRequirement & { witExport: string } =>
-            requirement.witExport !== undefined && !worldHasExport(world, requirement.witExport),
+    const missingImports = uniqueRequirements.filter(
+        ({ witImport }) => !worldHasDeclaration(world, "import", witImport),
+    );
+    const missingExports = uniqueRequirements.flatMap((requirement) =>
+        requirementWitExports(requirement)
+            .filter((witExport) => !worldHasDeclaration(world, "export", witExport))
+            .map((witExport) => ({ nodeSpecifier: requirement.nodeSpecifier, witExport })),
     );
     if (missingImports.length === 0 && missingExports.length === 0) {
         return undefined;
     }
 
-    // Any requirement with a missing directive needs its dependency WIT installed. Deduplicate by
-    // witImport so a module needing both an import and an export installs its package once.
-    const toInstall = [
-        ...new Map(
-            [...missingImports, ...missingExports].map((requirement) => [requirement.witImport, requirement]),
-        ).values(),
-    ];
-
     const newline = world.source.includes("\r\n") ? "\r\n" : "\n";
     const root = (await stat(resolve(witPath))).isFile() ? dirname(resolve(witPath)) : resolve(witPath);
     const dependencyFiles: string[] = [];
     const dependencies = new Map<string, WitDependencyPackage>();
-    for (const requirement of toInstall) {
+    const changedRequirements = uniqueRequirements.filter(
+        (requirement) =>
+            missingImports.includes(requirement) ||
+            requirementWitExports(requirement).some((witExport) =>
+                missingExports.some((missing) => missing.witExport === witExport),
+            ),
+    );
+    for (const requirement of changedRequirements) {
         const packages = [
             {
                 dependencyDirectory: requirement.dependencyDirectory,

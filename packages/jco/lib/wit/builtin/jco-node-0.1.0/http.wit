@@ -1,5 +1,52 @@
-/// Typed, runtime-neutral host boundary for outbound Node-compatible HTTP requests.
+/// Guest-owned callbacks used by the direct Node-compatible HTTP implementation.
+interface http-callbacks {
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    hostname: option<string>,
+    address: option<string>,
+    port: option<u16>,
+  }
+
+  record header {
+    name: string,
+    value: list<u8>,
+  }
+
+  record incoming-request {
+    method: string,
+    url: string,
+    http-version: string,
+    headers: list<header>,
+    body: list<u8>,
+    remote-address: option<string>,
+    remote-port: option<u16>,
+  }
+
+  record outgoing-response {
+    status-code: u16,
+    status-message: string,
+    headers: list<header>,
+    body: list<u8>,
+  }
+
+  resource request-listener {
+    handle: func(request: incoming-request) -> result<outgoing-response, error>;
+  }
+}
+
+/// Typed host boundary for Node-compatible HTTP clients and servers.
 interface http {
+  use http-callbacks.{request-listener};
+
   variant errno {
     number(s64),
     symbolic(string),
@@ -41,5 +88,54 @@ interface http {
     body: list<u8>,
   }
 
+  record server-options {
+    request-timeout: option<u32>,
+    headers-timeout: option<u32>,
+    keep-alive-timeout: option<u32>,
+    keep-alive-timeout-buffer: option<u32>,
+    connections-checking-interval: option<u32>,
+    max-header-size: option<u32>,
+    join-duplicate-headers: option<bool>,
+    no-delay: option<bool>,
+    require-host-header: option<bool>,
+    keep-alive: option<bool>,
+    keep-alive-initial-delay: option<u32>,
+    reject-non-standard-body-writes: option<bool>,
+    optimize-empty-requests: option<bool>,
+  }
+
+  record listen-options {
+    port: option<u16>,
+    host: option<string>,
+    backlog: option<u32>,
+    path: option<string>,
+    exclusive: option<bool>,
+    ipv6-only: option<bool>,
+    reuse-port: option<bool>,
+  }
+
+  record tcp-address {
+    address: string,
+    family: string,
+    port: u16,
+  }
+
+  variant server-address {
+    tcp(tcp-address),
+    pipe(string),
+  }
+
   request: func(options: request-options) -> result<response, error>;
+
+  resource server {
+    constructor(options: server-options, listener: own<request-listener>);
+    listen: func(options: listen-options) -> result<server-address, error>;
+    close: func() -> result<bool, error>;
+    close-all-connections: func() -> result<_, error>;
+    close-idle-connections: func() -> result<_, error>;
+    get-connections: func() -> result<u64, error>;
+    address: func() -> option<server-address>;
+    ref: func();
+    unref: func();
+  }
 }
