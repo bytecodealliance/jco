@@ -1,11 +1,12 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use heck::ToLowerCamelCase;
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use wast::core::WastRetCore;
 
-struct InlineArtifact {
+struct WastArtifact {
     file_name: String,
     kind: &'static str,
 }
@@ -45,13 +46,24 @@ fn convert_wast_file(
               if (!args) {{ throw new Error('missing args'); }}
               if (!args.assert) {{ throw new Error('missing assert obj'); }}
               if (!args.expect) {{ throw new Error('missing expect obj'); }}
-              const {{ instance, instantiate, assert, expect }} = args;
+              if (!args.instantiate) {{ throw new Error('missing artifact instantiator'); }}
+              const {{ instantiate, assert, expect }} = args;
+              const namedInstances = new Map();
+              let currentInstance;
+              const getInstance = (name) => {{
+                  const selected = name === null ? currentInstance : namedInstances.get(name);
+                  if (!selected) {{
+                      throw new Error(name === null ? 'missing current WAST instance' : `missing WAST instance $${{name}}`);
+                  }}
+                  return selected;
+              }};
               let res;
         "#
     )?;
 
     let mut module_seen = false;
-    let mut inline_artifacts = Vec::new();
+    let mut artifacts = Vec::new();
+    let mut definitions = HashMap::new();
     for directive in parsed.directives {
         match directive {
             wast::WastDirective::Module(mut quote_wat) => {
@@ -59,7 +71,7 @@ fn convert_wast_file(
                     !module_seen,
                     "multiple module directives are not yet supported"
                 );
-                module_seen = true;
+                let definition_name = quote_wat.name().map(|id| id.name().to_owned());
                 let encoded = quote_wat.encode().with_context(|| {
                     format!(
                         "failed to encode component in WAT [{}]",
@@ -73,12 +85,58 @@ fn convert_wast_file(
                     )
                 })?;
                 output_wasm.flush()?;
+                module_seen = true;
+
+                let artifact_idx = artifacts.len();
+                let mut artifact_path = PathBuf::from(input_wast_path);
+                artifact_path.add_extension("wasm");
+                artifacts.push(WastArtifact {
+                    file_name: artifact_file_name(&artifact_path)?,
+                    kind: encoded_kind(&encoded)?,
+                });
+                writeln!(
+                    output_js,
+                    "currentInstance = await instantiate(wastTestArtifacts[{artifact_idx}]);"
+                )?;
+                if let Some(name) = definition_name {
+                    writeln!(
+                        output_js,
+                        "namedInstances.set({}, currentInstance);",
+                        js_string(&name)?
+                    )?;
+                }
             }
-            wast::WastDirective::ModuleDefinition(_) => {
-                bail!("unsupported directive ModuleDefinition")
+            wast::WastDirective::ModuleDefinition(quote_wat) => {
+                let definition_name = quote_wat.name().map(|id| id.name().to_owned());
+                let artifact_idx = artifacts.len();
+                artifacts.push(write_quote_artifact(
+                    quote_wat,
+                    input_wast_path,
+                    artifact_idx,
+                )?);
+                register_definition(definition_name.as_deref(), artifact_idx, &mut definitions);
             }
-            wast::WastDirective::ModuleInstance { .. } => {
-                bail!("unsupported directive ModuleInstance")
+            wast::WastDirective::ModuleInstance {
+                instance, module, ..
+            } => {
+                let definition_name = module.map(|id| id.name().to_owned());
+                let artifact_idx = *definitions.get(&definition_name).with_context(|| {
+                    let name = definition_name
+                        .as_deref()
+                        .map_or("<unnamed>".to_owned(), |name| format!("${name}"));
+                    format!("unknown WAST module/component definition {name}")
+                })?;
+                writeln!(
+                    output_js,
+                    "currentInstance = await instantiate(wastTestArtifacts[{artifact_idx}]);"
+                )?;
+                if let Some(instance) = instance {
+                    writeln!(
+                        output_js,
+                        "namedInstances.set({}, currentInstance);",
+                        js_string(instance.name())?
+                    )?;
+                }
             }
             wast::WastDirective::AssertMalformed { .. } => {
                 bail!("unsupported directive AssertMalformed")
@@ -90,39 +148,30 @@ fn convert_wast_file(
                 bail!("unsupported directive Register")
             }
             wast::WastDirective::Invoke(invoke) => {
-                ensure!(module_seen, "invoke directive appeared before a module");
-                ensure!(
-                    invoke.module.is_none(),
-                    "wast invocations with named modules are not yet supported"
-                );
                 writeln!(
                     output_js,
-                    "await instance[{}]({});",
+                    "await getInstance({})[{}]({});",
+                    invocation_instance_name(invoke.module)?,
                     js_export_name(invoke.name)?,
                     args_to_js_params(&invoke.args)?,
                 )?;
             }
             wast::WastDirective::AssertTrap { exec, message, .. } => match exec {
                 wast::WastExecute::Invoke(invoke) => {
-                    let invoke = wast::WastExecute::Invoke(invoke);
-                    let (export_name, args) = extract_export_fn(&invoke)?;
                     writeln!(
                         output_js,
                         r#"
-                              await expect(async () => instance[{}]({})).rejects.toThrow({});
+                              await expect(async () => getInstance({})[{}]({})).rejects.toThrow({});
                             "#,
-                        js_export_name(export_name)?,
-                        args_to_js_params(args)?,
+                        invocation_instance_name(invoke.module)?,
+                        js_export_name(invoke.name)?,
+                        args_to_js_params(&invoke.args)?,
                         js_string(message)?,
                     )?;
                 }
                 wast::WastExecute::Wat(wat) => {
-                    let artifact_idx = inline_artifacts.len();
-                    inline_artifacts.push(write_inline_artifact(
-                        wat,
-                        input_wast_path,
-                        artifact_idx,
-                    )?);
+                    let artifact_idx = artifacts.len();
+                    artifacts.push(write_inline_artifact(wat, input_wast_path, artifact_idx)?);
                     writeln!(
                         output_js,
                         r#"
@@ -136,7 +185,7 @@ fn convert_wast_file(
                 }
             },
             wast::WastDirective::AssertReturn { exec, results, .. } => {
-                let (export_name, args) = extract_export_fn(&exec)?;
+                let invoke = extract_invoke(&exec)?;
                 let expected = results
                     .iter()
                     .map(wast_ret_to_js_param)
@@ -149,11 +198,12 @@ fn convert_wast_file(
                 writeln!(
                     output_js,
                     r#"
-                      res = await instance[{}]({});
+                      res = await getInstance({})[{}]({});
                       {check_expr}
                     "#,
-                    js_export_name(export_name)?,
-                    args_to_js_params(args)?,
+                    invocation_instance_name(invoke.module)?,
+                    js_export_name(invoke.name)?,
+                    args_to_js_params(&invoke.args)?,
                 )?;
             }
             wast::WastDirective::AssertExhaustion { .. } => {
@@ -180,17 +230,14 @@ fn convert_wast_file(
     }
 
     ensure!(
-        module_seen || !inline_artifacts.is_empty(),
+        module_seen || !artifacts.is_empty(),
         "wast file did not contain an executable module or component"
     );
 
     // Close out the function
     writeln!(output_js, "}}",)?;
-    writeln!(
-        output_js,
-        "export const wastTestRequiresInstance = {module_seen};"
-    )?;
-    let artifact_metadata = inline_artifacts
+    writeln!(output_js, "export const wastTestRequiresInstance = false;")?;
+    let artifact_metadata = artifacts
         .iter()
         .map(|artifact| {
             Ok(format!(
@@ -210,22 +257,68 @@ fn convert_wast_file(
     Ok(())
 }
 
+fn register_definition(
+    name: Option<&str>,
+    artifact_idx: usize,
+    definitions: &mut HashMap<Option<String>, usize>,
+) {
+    definitions.insert(name.map(str::to_owned), artifact_idx);
+}
+
+fn invocation_instance_name(module: Option<wast::token::Id<'_>>) -> Result<String> {
+    module.map_or_else(|| Ok("null".to_owned()), |id| js_string(id.name()))
+}
+
+fn artifact_file_name(artifact_path: &Path) -> Result<String> {
+    Ok(artifact_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("WAST artifact path was not valid UTF-8")?
+        .to_owned())
+}
+
+fn encoded_kind(encoded: &[u8]) -> Result<&'static str> {
+    match encoded.get(0..8) {
+        Some(b"\0asm\x0d\0\x01\0") => Ok("component"),
+        Some(b"\0asm\x01\0\0\0") => Ok("module"),
+        _ => bail!("encoded WAT artifact has an unknown binary kind"),
+    }
+}
+
+fn write_quote_artifact(
+    mut quote_wat: wast::QuoteWat<'_>,
+    input_wast_path: &Path,
+    artifact_idx: usize,
+) -> Result<WastArtifact> {
+    let encoded = quote_wat.encode().with_context(|| {
+        format!(
+            "failed to encode WAT artifact in [{}]",
+            input_wast_path.display()
+        )
+    })?;
+    write_artifact(&encoded, input_wast_path, artifact_idx)
+}
+
 fn write_inline_artifact(
     mut wat: wast::Wat<'_>,
     input_wast_path: &Path,
     artifact_idx: usize,
-) -> Result<InlineArtifact> {
-    let kind = match &wat {
-        wast::Wat::Module(_) => "module",
-        wast::Wat::Component(_) => "component",
-    };
+) -> Result<WastArtifact> {
     let encoded = wat.encode().with_context(|| {
         format!(
-            "failed to encode inline {kind} in WAT [{}]",
+            "failed to encode inline WAT artifact in [{}]",
             input_wast_path.display()
         )
     })?;
+    write_artifact(&encoded, input_wast_path, artifact_idx)
+}
 
+fn write_artifact(
+    encoded: &[u8],
+    input_wast_path: &Path,
+    artifact_idx: usize,
+) -> Result<WastArtifact> {
+    let kind = encoded_kind(encoded)?;
     let mut artifact_path = PathBuf::from(input_wast_path);
     artifact_path.set_extension(format!("wast.{artifact_idx}.wasm"));
     let mut artifact_file = OpenOptions::new()
@@ -247,12 +340,10 @@ fn write_inline_artifact(
     })?;
     artifact_file.flush()?;
 
-    let file_name = artifact_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .context("inline WAT artifact path was not valid UTF-8")?
-        .to_owned();
-    Ok(InlineArtifact { file_name, kind })
+    Ok(WastArtifact {
+        file_name: artifact_file_name(&artifact_path)?,
+        kind,
+    })
 }
 
 /// Generate a list of JS params
@@ -438,20 +529,10 @@ pub(crate) fn run(wast_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Extract the export function from an Exec, along with it's results
-fn extract_export_fn<'a>(
-    exec: &'a wast::WastExecute,
-) -> Result<(&'a str, &'a [wast::WastArg<'a>])> {
+/// Extract an invocation from an executable WAST directive.
+fn extract_invoke<'a>(exec: &'a wast::WastExecute) -> Result<&'a wast::WastInvoke<'a>> {
     match exec {
-        wast::WastExecute::Invoke(wast::WastInvoke {
-            module, name, args, ..
-        }) => {
-            ensure!(
-                module.is_none(),
-                "wast invocations with modules not yet supported"
-            );
-            Ok((*name, args))
-        }
+        wast::WastExecute::Invoke(invoke) => Ok(invoke),
         wast::WastExecute::Wat(_) => bail!("unsupported wast execute type WastExecute::Wat"),
         wast::WastExecute::Get { .. } => bail!("unsupported wast execute type WastExecute::Get"),
     }
@@ -507,7 +588,11 @@ mod tests {
                 );
                 let script = fs::read_to_string(script_path)?;
                 ensure!(
-                    script.contains("await instance[\"run\"]();"),
+                    script.contains("currentInstance = await instantiate(wastTestArtifacts[0]);"),
+                    "missing component instantiation"
+                );
+                ensure!(
+                    script.contains("await getInstance(null)[\"run\"]();"),
                     "missing invoke assertion"
                 );
                 ensure!(
@@ -519,12 +604,98 @@ mod tests {
                     "missing trap assertion"
                 );
                 ensure!(
-                    script.contains("export const wastTestRequiresInstance = true;"),
-                    "missing primary-instance metadata"
+                    script.contains("export const wastTestRequiresInstance = false;"),
+                    "primary component should be instantiated in directive order"
                 );
                 ensure!(
-                    script.contains("export const wastTestArtifacts = [];"),
-                    "unexpected inline artifact metadata"
+                    script.contains(
+                        r#"export const wastTestArtifacts = [{ path: "fixture.wast.wasm", kind: "component" }];"#
+                    ),
+                    "missing primary component artifact metadata"
+                );
+                Ok(())
+            },
+        )
+    }
+
+    #[test]
+    fn builds_named_definitions_instances_and_invocations_in_directive_order() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (component definition $component-def
+                    (core module $m (func (export "run")))
+                    (core instance $i (instantiate $m))
+                    (func (export "run") (canon lift (core func $i "run")))
+                )
+                (component instance $component-instance $component-def)
+                (invoke $component-instance "run")
+                (module definition $module-def
+                    (func (export "run"))
+                )
+                (module instance $module-instance $module-def)
+                (invoke $component-instance "run")
+                (invoke "run")
+                (component instance $second-component-instance $component-def)
+                (invoke "run")
+            "#,
+            |wast_path| {
+                run(wast_path)?;
+
+                let component_path = wast_path.with_extension("wast.0.wasm");
+                let module_path = wast_path.with_extension("wast.1.wasm");
+                ensure!(
+                    !fs::read(component_path)?.is_empty(),
+                    "missing named component definition"
+                );
+                ensure!(
+                    !fs::read(module_path)?.is_empty(),
+                    "missing named module definition"
+                );
+
+                let script = fs::read_to_string(wast_path.with_extension("wast.js"))?;
+                ensure!(
+                    script.contains(
+                        r#"{ path: "fixture.wast.0.wasm", kind: "component" }, { path: "fixture.wast.1.wasm", kind: "module" }"#
+                    ),
+                    "definitions were not encoded in directive order"
+                );
+                ensure!(
+                    script
+                        .match_indices("currentInstance = await instantiate(wastTestArtifacts[0]);")
+                        .count()
+                        == 2,
+                    "component definition was not reusable"
+                );
+                ensure!(
+                    script.contains("namedInstances.set(\"component-instance\", currentInstance);"),
+                    "missing named component instance"
+                );
+                ensure!(
+                    script.contains("namedInstances.set(\"module-instance\", currentInstance);"),
+                    "missing named module instance"
+                );
+                ensure!(
+                    script.contains("await getInstance(\"component-instance\")[\"run\"]();"),
+                    "missing named invocation target"
+                );
+                ensure!(
+                    script.contains("await getInstance(null)[\"run\"]();"),
+                    "missing current-instance invocation target"
+                );
+
+                let first_component_instance = script
+                    .find("namedInstances.set(\"component-instance\", currentInstance);")
+                    .context("missing first component instance")?;
+                let module_instance = script
+                    .find("namedInstances.set(\"module-instance\", currentInstance);")
+                    .context("missing module instance")?;
+                let second_component_instance = script
+                    .find("namedInstances.set(\"second-component-instance\", currentInstance);")
+                    .context("missing second component instance")?;
+                ensure!(
+                    first_component_instance < module_instance
+                        && module_instance < second_component_instance,
+                    "instance directive ordering was not preserved"
                 );
                 Ok(())
             },

@@ -108,6 +108,7 @@ suite('component-model WAST', () => {
                 const artifacts = mod.wastTestArtifacts ?? [];
                 const requiresInstance = mod.wastTestRequiresInstance ?? true;
                 const componentName = basename(relPath).replace('.wast', '');
+                const artifactInstantiators = new Map<WastTestArtifact, Promise<() => Promise<object>>>();
 
                 let instance;
                 if (requiresInstance) {
@@ -146,26 +147,31 @@ suite('component-model WAST', () => {
                     instance,
                     instantiate: async (artifact) => {
                         const artifactPath = artifactPaths.get(artifact);
-                        assert(artifactPath, 'WAST requested an unknown inline artifact');
-                        if (artifact.kind === 'module') {
-                            const { instance } = await WebAssembly.instantiate(
-                                await readComponentBytes(artifactPath),
-                                {},
-                            );
-                            return instance;
-                        }
+                        assert(artifactPath, 'WAST requested an unknown artifact');
 
-                        const artifactIdx = artifacts.indexOf(artifact);
-                        const setup = await setupAsyncTest({
-                            asyncMode: 'jspi',
-                            component: {
-                                name: `${componentName}-inline-${artifactIdx}`,
-                                path: artifactPath,
-                                skipInstantiation: true,
-                            },
-                        });
-                        cleanups.push(setup.cleanup);
-                        return setup.esModule.instantiate(undefined, {});
+                        let loadInstantiator = artifactInstantiators.get(artifact);
+                        if (!loadInstantiator) {
+                            loadInstantiator = (async () => {
+                                if (artifact.kind === 'module') {
+                                    const module = await WebAssembly.compile(await readComponentBytes(artifactPath));
+                                    return async () => WebAssembly.instantiate(module, {});
+                                }
+
+                                const artifactIdx = artifacts.indexOf(artifact);
+                                const setup = await setupAsyncTest({
+                                    asyncMode: 'jspi',
+                                    component: {
+                                        name: `${componentName}-artifact-${artifactIdx}`,
+                                        path: artifactPath,
+                                        skipInstantiation: true,
+                                    },
+                                });
+                                cleanups.push(setup.cleanup);
+                                return async () => setup.esModule.instantiate(undefined, {});
+                            })();
+                            artifactInstantiators.set(artifact, loadInstantiator);
+                        }
+                        return (await loadInstantiator)();
                     },
                     assert,
                     expect,
