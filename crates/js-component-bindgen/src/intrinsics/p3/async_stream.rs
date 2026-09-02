@@ -789,7 +789,8 @@ impl AsyncStreamIntrinsic {
                             // after progress queued a COMPLETED event but before the guest
                             // consumed it; preserve the count and report the cancellation.
                             if (result === {stream_end_class}.CopyResult.COMPLETED
-                                && streamEnd.getCopyState() === {stream_end_class}.CopyState.CANCELLING_COPY) {{
+                                && streamEnd.getCopyState() === {stream_end_class}.CopyState.CANCELLING_COPY
+                                && !streamEnd.hasHostInject()) {{
                                 result = {stream_end_class}.CopyResult.CANCELLED;
                             }}
 
@@ -855,6 +856,17 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 if (!this.#pendingBufferMeta.buffer) {{
+                                    // A just-in-time host-injected write found no reader buffer: the
+                                    // target read was cancelled. Return the undelivered items to the
+                                    // source (redelivered by a later read) instead of stranding
+                                    // (which blocks on a future read -- can deadlock a stream whose
+                                    // write waits on its reader -- or is dropped at stream end).
+                                    if (this.#sourceRebufferFn && buffer.isHostOwned()) {{
+                                        const remaining = buffer.remaining();
+                                        if (remaining > 0) {{ this.#sourceRebufferFn(buffer.read(remaining)); }}
+                                        onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
+                                        return;
+                                    }}
                                     this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn }});
                                     return;
                                 }}
@@ -1534,6 +1546,7 @@ impl AsyncStreamIntrinsic {
                         #isHostOwned;
 
                         #result = null;
+                        #sourceRebufferFn = null;
 
                         #endOfStream = false;
                         #rejectedLength = null;
@@ -1580,6 +1593,8 @@ impl AsyncStreamIntrinsic {
                             this.#hostDropFn = f;
                         }}
                         setHostCancelFn(f) {{ this.#hostCancelFn = f; }}
+                        hasHostInject() {{ return !!this.#hostInjectFn; }}
+                        setSourceRebufferFn(f) {{ this.#sourceRebufferFn = f; }}
 
                         getElemMeta() {{ return {{...this.#elemMeta}}; }}
 
@@ -2503,6 +2518,7 @@ impl AsyncStreamIntrinsic {
                           const elemMeta = hostWriteEnd.getElemMeta();
 
                           const pendingValues = new {pending_value_queue_class}(readFn, elemMeta);
+                          hostWriteEnd.setSourceRebufferFn?.((items) => pendingValues.prepend(items));
 
                           return async function generatedStreamHostInject(args) {{
                               let {{ count }} = args;
@@ -2558,9 +2574,11 @@ impl AsyncStreamIntrinsic {
                                       if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) {{ return doNothingFn; }}
                                   }}
                                   if (pendingValues.length > 0) {{
-                                      const readyValues = [];
-                                      pendingValues.drainInto(readyValues, 1);
-                                      await writeValues(readyValues);
+                                      // Readiness signal for a zero-length read: complete it with zero
+                                      // items rather than draining/buffering one (which the wasmtime
+                                      // host contract warns can be lost, and which stores a pending
+                                      // write that corrupts the next read's rendezvous).
+                                      readEnd.resetAndNotifyPending(readEnd.constructor.CopyResult.COMPLETED);
                                   }} else if (pendingValues.done) {{
                                       hostWriteEnd.getPendingEvent();
                                       hostWriteEnd.drop();

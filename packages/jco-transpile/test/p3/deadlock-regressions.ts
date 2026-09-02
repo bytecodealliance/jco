@@ -163,6 +163,29 @@ suite('async scheduling regressions', () => {
         }
     });
 
+    // Regression guard for host-injected stream data lost across read cancellation
+    // (originally seen as a flaky `p3-sockets-tcp-streams` failure under real socket I/O).
+    //
+    // Failure scenario this reproduces:
+    //   - The guest reads a host-backed (lowered) stream in a loop: poll the read once
+    //     with a no-op waker and, if it is not immediately ready, CANCEL it -- then issue a
+    //     zero-length read to wait for host readiness before looping (see
+    //     `read_with_cancellation` in the `stream_concurrency` test component).
+    //   - Bug 1: the zero-length read used to DRAIN one item from the source and rendezvous
+    //     it with the zero-capacity read buffer, which stored it as a pending write in the
+    //     shared buffer slot -- corrupting the next real read's rendezvous.
+    //   - Bug 2: when a just-in-time host write then found no reader buffer (its target read
+    //     had been cancelled), its in-flight items were stranded and dropped when the stream
+    //     ended, instead of being returned to the source for redelivery.
+    //   - Net effect: the tail of the stream (exactly the in-flight chunk) was silently lost,
+    //     so the guest received fewer bytes than were sent.
+    //
+    // The loss only manifests when cancel completion wins the race against the in-flight
+    // write. In production that deferral is a `setTimeout(fn, 0)`, and real socket latency is
+    // what usually opens the window; a microtask-based host iterator alone does not. To make
+    // the race deterministic here we collapse zero-delay timers onto the microtask queue for
+    // the duration of the guest call (test-only; no production behavior changes) so cancel
+    // completion reliably precedes delivery. Without the fix this loses the final chunk.
     test('cancelled host stream reads preserve every value in order', async () => {
         const expected = Uint8Array.from({ length: 2 * 1024 * 1024 }, (_, index) => index & 0xff);
         let offset = 0;
@@ -201,12 +224,30 @@ suite('async scheduling regressions', () => {
             },
         });
 
+        // Force zero-delay `setTimeout` (used to defer stream cancel completion) onto the
+        // microtask queue so cancel completion deterministically races ahead of the in-flight
+        // host write -- the timing real socket I/O produces. Restored in `finally`.
+        const realSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = (fn, delay, ...args) => {
+            if (!delay) {
+                queueMicrotask(() => fn(...args));
+                return 0;
+            }
+            return realSetTimeout(fn, delay, ...args);
+        };
+
         try {
-            assert.deepEqual(
-                await instance['jco:test-components/stream-concurrency-test'].readWithCancellation(stream),
-                expected,
+            const actual = await instance['jco:test-components/stream-concurrency-test'].readWithCancellation(stream);
+            // Explicit length check first: a regression drops the final in-flight chunk, so
+            // the clearest symptom is a short result rather than a mismatched byte.
+            assert.strictEqual(
+                actual.length,
+                expected.length,
+                `expected ${expected.length} bytes but received ${actual.length} (lost the in-flight tail)`,
             );
+            assert.deepEqual(actual, expected);
         } finally {
+            globalThis.setTimeout = realSetTimeout;
             await cleanup();
         }
     });
