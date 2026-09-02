@@ -113,6 +113,42 @@ Two limits are worth knowing before writing one:
   only in a world that imports `jco:node/fs` with a host wired up; the deny-by-default
   provider satisfies the import for an application that never calls them.
 
+### Serving requests
+
+`app.listen()` works on the `direct` transport, where the host owns the socket and calls
+back into the guest for each request. Two things have to be arranged around it.
+
+The host provider is one of the component's *imports*, so it cannot reach the component's
+exports by itself. The application introduces them once, after instantiating:
+
+```js
+import * as httpHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node";
+
+const instance = await instantiate(undefined, imports);
+httpHost.setCallbacks(instance["jco:node/http-callbacks@0.1.0"]);
+```
+
+And the exports that suspend on an asynchronous import have to be named when transpiling:
+
+```console
+jco transpile app.wasm -o out --async-mode jspi \\
+    --async-exports start --async-exports 'jco:node/http-callbacks@0.1.0#handle-request' \\
+    --map 'jco:node/http@0.1.0=...'
+```
+
+> [!NOTE]
+> Name them rather than passing `--async-exports '*'`. The wildcard marks an export's
+> binding asynchronous without wrapping the export in `WebAssembly.promising`, so the first
+> call that suspends fails with `SuspendError`.
+
+The `wasi-sockets` transport cannot serve yet, for a reason outside Jco: ComponentizeJS's
+guest bindings do not emit a class for an imported resource that has no methods, while still
+referencing one when lifting a returned handle. `wasi:sockets/network`'s `network` is such a
+resource, so any guest that calls `instance-network()` fails with
+`import_network_0_2_12$Network is not defined`. It reproduces in twelve lines of WIT --
+`resource token;` returned from a function -- and affects ComponentizeJS 0.19.3 through
+0.22.0. Preview 2's `wasi:sockets` implementation is complete and is not involved.
+
 ### Additional application globals
 
 Three more Node globals are injected the same way, for the same reason -- package code
