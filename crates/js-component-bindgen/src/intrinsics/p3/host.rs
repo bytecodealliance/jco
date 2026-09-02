@@ -879,57 +879,91 @@ impl HostIntrinsic {
                             jspiCallee = callee._cachedPromising;
                         }}
 
-                        let callbackResult;
-                        try {{
-                            callbackResult = await {with_global_current_task_meta_async_fn}({{
-                                taskID: preparedTask.id(),
-                                componentIdx: preparedTask.componentIdx(),
-                                fn: () => {{
-                                    return jspiCallee.apply(null, startRes);
-                                }}
-                            }});
-                        }} catch (err) {{
-                            // A trapped callee propagates to the (sync) caller; release
-                            // the per-slice hold the driver loop will never pair.
+                        const failCalleeLifecycle = (err) => {{
+                            {debug_log_fn}('[{sync_start_call_fn}()] callee lifecycle failed', {{ err }});
+
+                            // The initial slice owns component entry until it either hands
+                            // control to the callback driver or fails. A failure has no driver
+                            // exit with which to pair this hold.
                             if (preparedTask.needsExclusiveLock()) {{
                                 calleeComponentState.exclusiveRelease(preparedTask.id());
                             }}
-                            throw err;
-                        }}
 
-                        if (!callbackFn) {{
-                            // Async-lifted without a callback (stackful lift): the callee ran
-                            // to completion above; task.return already ran within it.
-                            {debug_log_fn}('[{sync_start_call_fn}()] no callback, resolving w/ callee result', {{
-                                taskID: preparedTask.id(),
-                                componentIdx: preparedTask.componentIdx(),
-                            }});
-                            if (!preparedTask.isResolved()) {{ preparedTask.resolve([callbackResult]); }}
-                        }} else {{
-                            const fnName = callbackFn.fnName ?? ('<sync-start subtask ' + subtask.id() + '>');
-                            {debug_log_fn}('[{sync_start_call_fn}()] starting driver loop', {{
-                                fnName,
-                                componentIdx: preparedTask.componentIdx(),
-                                subtaskID: subtask.id(),
-                            }});
-                            {async_driver_loop_fn}({{
-                                componentState: calleeComponentState,
-                                task: preparedTask,
-                                fnName,
-                                isAsync: true,
-                                callbackResult,
-                            }}).catch(err => {{
-                                {debug_log_fn}('[{sync_start_call_fn}()] driver loop failed', {{ err }});
-                                if (!preparedTask.isResolvedState()) {{
-                                    preparedTask.setErrored(err);
-                                    preparedTask.reject(err);
+                            preparedTask.setErrored(err);
+                            if (!preparedTask.isResolvedState()) {{
+                                preparedTask.reject(err);
+                            }} else {{
+                                // task.return may already have released the synchronous caller.
+                                // Preserve a later trap on the store and reject the still-running
+                                // root task when there is one, rather than losing the detached
+                                // lifecycle failure.
+                                calleeComponentState.markTrapped(err);
+                                const rootTask = preparedTask.getRootTask();
+                                if (!rootTask.isResolvedState()) {{
+                                    rootTask.setErrored(err);
+                                    rootTask.reject(err);
                                 }}
-                            }});
-                        }}
+                            }}
+                            throw err;
+                        }};
 
-                        // A sync lower blocks only until task.return supplies its result.
-                        // The callback protocol may continue running after that return.
-                        await taskReturnPromise;
+                        // Invocation begins immediately and runs through its first JSPI
+                        // suspension while the callee owns component entry. Keep driving that
+                        // invocation and its callback/exit protocol in the background after
+                        // task.return releases the synchronous caller.
+                        const calleeLifecyclePromise = (async () => {{
+                            let callbackResult;
+                            try {{
+                                callbackResult = await {with_global_current_task_meta_async_fn}({{
+                                    taskID: preparedTask.id(),
+                                    componentIdx: preparedTask.componentIdx(),
+                                    fn: () => {{
+                                        return jspiCallee.apply(null, startRes);
+                                    }}
+                                }});
+
+                                if (!callbackFn) {{
+                                    // Async-lifted without a callback (stackful lift): the callee
+                                    // ran to completion above; task.return already ran within it.
+                                    {debug_log_fn}('[{sync_start_call_fn}()] no callback, resolving w/ callee result', {{
+                                        taskID: preparedTask.id(),
+                                        componentIdx: preparedTask.componentIdx(),
+                                    }});
+                                    if (!preparedTask.isResolved()) {{ preparedTask.resolve([callbackResult]); }}
+                                    preparedTask.exit({{ skipExclusiveLockCheck: true }});
+                                    return;
+                                }}
+
+                                const fnName = callbackFn.fnName ?? ('<sync-start subtask ' + subtask.id() + '>');
+                                {debug_log_fn}('[{sync_start_call_fn}()] starting driver loop', {{
+                                    fnName,
+                                    componentIdx: preparedTask.componentIdx(),
+                                    subtaskID: subtask.id(),
+                                }});
+                                await {async_driver_loop_fn}({{
+                                    componentState: calleeComponentState,
+                                    task: preparedTask,
+                                    fnName,
+                                    isAsync: true,
+                                    callbackResult,
+                                }});
+                                const driverError = preparedTask.isErrored();
+                                if (driverError) {{ throw driverError; }}
+                            }} catch (err) {{
+                                failCalleeLifecycle(err);
+                            }}
+                        }})();
+                        // If task.return wins the race below, retain a rejection handler on
+                        // the detached lifecycle while failCalleeLifecycle propagates it to
+                        // the task tree/store.
+                        calleeLifecyclePromise.catch(() => {{}});
+
+                        // A sync lower blocks only until task.return supplies its result, but
+                        // an earlier initial-invocation failure must still trap the caller.
+                        await Promise.race([
+                            taskReturnPromise,
+                            calleeLifecyclePromise.then(() => taskReturnPromise),
+                        ]);
 
                         const callMeta = subtask.getCallMetadata();
                         const flatResult = callMeta?.returnFnResult;
