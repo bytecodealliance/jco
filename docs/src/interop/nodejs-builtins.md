@@ -844,9 +844,10 @@ jco componentize component.js --wit wit --bundle \
 Direct mode models sessions, streams, and servers as typed host-owned WIT
 resources. Stream and server-error callbacks are separate guest-owned resources
 on the exported `jco:node/http2-callbacks@0.1.0` interface. Jco adds only missing
-imports and exports to the selected world, installs the matching WIT source,
-adds generated comments, and warns about each visible change. Aliased existing
-declarations are recognized and repeated runs are idempotent.
+imports and exports to the selected world and re-bundles the entry with the guest
+callback implementation on the final component export. It installs the matching
+WIT source, adds generated comments, and warns about each visible change. Aliased
+existing declarations are recognized and repeated runs are idempotent.
 
 The default provider rejects both `connect()` and server construction with
 `ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Mapping the import to
