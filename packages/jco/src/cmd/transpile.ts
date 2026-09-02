@@ -26,6 +26,10 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
     "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
     "jco:node/inspector@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host",
+    // `jco:node/http` borrows `request-listener` from the interface the guest exports, so a
+    // component using the Node HTTP server needs an import binding for that type even though
+    // the listener itself lives in the guest.
+    "jco:node/http-callbacks@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/callbacks/host",
 };
 
 /** Apply deny-by-default host mappings while preserving explicit application choices. */

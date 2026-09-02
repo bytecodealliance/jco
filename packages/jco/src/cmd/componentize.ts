@@ -5,6 +5,7 @@ import { resolve, basename, dirname, extname, join } from "node:path";
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
+import { engineCompatPlugin } from "../engine-compat.js";
 import { styleText, isWindows } from "../common.js";
 import { nodeBuiltinPlugin, nodeGlobals, type NodejsHttpVia, type WorldMetadata } from "../node-builtins.js";
 import {
@@ -36,6 +37,13 @@ export interface ComponentizeOptions {
     bundle?: boolean;
     bundleConfig?: string;
     nodejsHttpVia?: NodejsHttpVia;
+    /**
+     * The CLI spelling of {@link nodejsHttpVia}.
+     *
+     * Commander names the option after the flag, `--with-nodejs-http-via`, so a value given on
+     * the command line arrives under this key rather than the API one.
+     */
+    withNodejsHttpVia?: NodejsHttpVia;
     backend?: ComponentizeJSBackend;
     backendQjsDisableAysnc: boolean;
     aot?: boolean;
@@ -190,11 +198,14 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             // why `node:path` only works together with `--bundle`.
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
-                    nodejsHttpVia: opts.nodejsHttpVia,
+                    nodejsHttpVia: opts.nodejsHttpVia ?? opts.withNodejsHttpVia,
                     onWitRequirement(requirement: NodeWitRequirement) {
                         witRequirements.set(requirement.witImport, requirement);
                     },
                 }),
+                // Rewrites regular-expression syntax the component engines cannot parse, so
+                // that a dependency using it fails to bundle rather than at pre-initialization.
+                engineCompatPlugin(),
             ],
         };
         source = await bundleComponentSource(jsSource, bundleOptions);
