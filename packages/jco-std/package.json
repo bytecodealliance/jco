@@ -109,6 +109,30 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/path.js"
     },
+    "./wasi/0.2.x/node/24.x.x/os": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/os.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/os.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/os.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/os/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/os/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/os/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/os/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/os/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/os-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/os-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/os-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/os/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/os-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/os-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/os/host-utils": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/os/host-utils.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/os/host-utils.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/os/host-utils.js"
+    },
     "./wasi/0.2.x/node/24.x.x/async-hooks": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/async-hooks.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/async-hooks.js",

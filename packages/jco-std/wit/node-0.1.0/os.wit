@@ -1,0 +1,120 @@
+package jco:node@0.1.0;
+
+/// Typed, runtime-neutral host boundary for Node-compatible OS information.
+interface os {
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error-info {
+    errno: option<errno>,
+    code: option<string>,
+    message: option<string>,
+    syscall: option<string>,
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    info: option<error-info>,
+  }
+
+  record constant-entry {
+    name: string,
+    value: s64,
+  }
+
+  record os-constants {
+    uv-udp-reuseaddr: s32,
+    dlopen: list<constant-entry>,
+    errno: list<constant-entry>,
+    signals: list<constant-entry>,
+    priority: list<constant-entry>,
+  }
+
+  record static-properties {
+    eol: string,
+    dev-null: string,
+    constants: os-constants,
+  }
+
+  enum byte-order {
+    be,
+    le,
+  }
+
+  record cpu-times {
+    user: u64,
+    nice: u64,
+    sys: u64,
+    idle: u64,
+    irq: u64,
+  }
+
+  record cpu-info {
+    model: string,
+    speed: u32,
+    times: cpu-times,
+  }
+
+  record load-average {
+    one: float64,
+    five: float64,
+    fifteen: float64,
+  }
+
+  enum network-family {
+    ipv4,
+    ipv6,
+  }
+
+  record network-interface {
+    name: string,
+    address: string,
+    netmask: string,
+    family: network-family,
+    mac: string,
+    internal: bool,
+    scopeid: option<u32>,
+    cidr: option<string>,
+  }
+
+  variant user-info-value {
+    text(string),
+    bytes(list<u8>),
+  }
+
+  record user-info {
+    username: user-info-value,
+    uid: s64,
+    gid: s64,
+    shell: option<user-info-value>,
+    homedir: user-info-value,
+  }
+
+  get-static-properties: func() -> result<static-properties, error>;
+  arch: func() -> result<string, error>;
+  available-parallelism: func() -> result<u32, error>;
+  cpus: func() -> result<list<cpu-info>, error>;
+  endianness: func() -> result<byte-order, error>;
+  freemem: func() -> result<u64, error>;
+  get-priority: func(pid: s32) -> result<s32, error>;
+  homedir: func() -> result<string, error>;
+  hostname: func() -> result<string, error>;
+  loadavg: func() -> result<load-average, error>;
+  machine: func() -> result<string, error>;
+  network-interfaces: func() -> result<list<network-interface>, error>;
+  platform: func() -> result<string, error>;
+  release: func() -> result<string, error>;
+  set-priority: func(pid: s32, priority: s32) -> result<_, error>;
+  tmpdir: func() -> result<string, error>;
+  totalmem: func() -> result<u64, error>;
+  type: func() -> result<string, error>;
+  uptime: func() -> result<float64, error>;
+  user-info: func(encoding: option<string>) -> result<user-info, error>;
+  version: func() -> result<string, error>;
+}
