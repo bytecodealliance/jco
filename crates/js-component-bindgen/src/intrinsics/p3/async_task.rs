@@ -615,10 +615,15 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        return task.waitUntil({{
+                        // A canonical thread.yield must give the scheduler a chance to
+                        // run other work before reporting NOT_CANCELLED. Unlike an
+                        // ordinary ready wait, it cannot take the immediate-completion
+                        // shortcut.
+                        const keepGoing = await task.immediateSuspend({{
                             cancellable: isCancellable,
                             readyFn: () => true,
                         }});
+                        return keepGoing ? 0 : 1;
                     }}
                 "
                 ));
