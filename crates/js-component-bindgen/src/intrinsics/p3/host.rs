@@ -623,6 +623,7 @@ impl HostIntrinsic {
                             }} finally {{
                                 if (!calleeIsAsync) {{ {blocking_call_depth}.value--; }}
                             }}
+
                             driveCallback(callbackResult)?.catch(err => {{
                                 {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
                             }});
