@@ -188,6 +188,74 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("ffi")).toBeNull();
     });
 
+    test("generates a host-backed adapter for node:inspector", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { inspectorModule: "/jco/node/inspector.js" });
+        const id = plugin.resolveId("node:inspector");
+        expect(id).toBe("\0jco-node-builtin:node:inspector");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/inspector.js"');
+        expect(source).toContain("Session");
+        expect(source).toContain("NetworkResources");
+    });
+
+    test("generates a shared-core adapter for node:inspector/promises", () => {
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { inspectorPromisesModule: "/jco/node/inspector-promises.js" },
+        );
+        const id = plugin.resolveId("node:inspector/promises");
+        expect(id).toBe("\0jco-node-builtin:node:inspector/promises");
+        const source = plugin.load(id);
+        expect(source).toContain('from "/jco/node/inspector-promises.js"');
+        expect(source).toContain("Session");
+    });
+
+    test("resolves the callbacks virtual to the base inspector module", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { inspectorModule: "/jco/node/inspector.js" });
+        const id = plugin.resolveId("jco:node-inspector-callbacks");
+        expect(id).toBe("\0jco-node-builtin:inspector-callbacks");
+        const source = plugin.load(id);
+        expect(source).toContain("inspectorCallbacks");
+        expect(source).toContain('from "/jco/node/inspector.js"');
+    });
+
+    test("reports the WIT import and export required by node:inspector", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { inspectorModule: "/jco/node/inspector.js", onWitRequirement },
+        );
+        plugin.resolveId("node:inspector");
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({
+                nodeSpecifier: "node:inspector",
+                witImport: "jco:node/inspector@0.1.0",
+                witExport: "jco:node/inspector-callbacks@0.1.0",
+            }),
+        );
+    });
+
+    test("node:inspector/promises reports the same capability under its own specifier", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { inspectorPromisesModule: "/jco/node/inspector-promises.js", onWitRequirement },
+        );
+        plugin.resolveId("node:inspector/promises");
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({
+                nodeSpecifier: "node:inspector/promises",
+                witImport: "jco:node/inspector@0.1.0",
+                witExport: "jco:node/inspector-callbacks@0.1.0",
+            }),
+        );
+    });
+
+    test("does not intercept the bare inspector specifier", () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { inspectorModule: "/jco/node/inspector.js" });
+        expect(plugin.resolveId("inspector")).toBeNull();
+    });
+
     test("generates an adapter for node:domain that refuses at runtime", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { domainModule: "/jco/node/domain.js" });
         const id = plugin.resolveId("node:domain");
