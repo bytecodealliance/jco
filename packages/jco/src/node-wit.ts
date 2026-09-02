@@ -13,10 +13,12 @@ export interface NodeWitRequirement {
      * through a guest-exported callbacks interface (a component cannot implement a resource on an
      * imported interface). Jco pairs the export injection here with a two-pass bundle that adds the
      * matching JS export.
-    */
+     */
     witExport?: string;
     /** Companion guest interfaces exported so imported host resources can invoke guest callbacks. */
     witExports?: string[];
+    /** JavaScript exports that implement companion guest callback interfaces. */
+    guestExports?: NodeGuestExport[];
     dependencyDirectory: string;
     /**
      * WIT files installed for this requirement.
@@ -27,6 +29,12 @@ export interface NodeWitRequirement {
     dependencySources: string[];
     /** Additional WIT dependency packages installed alongside the primary package. */
     dependencyPackages?: WitDependencyPackage[];
+}
+
+export interface NodeGuestExport {
+    witExport: string;
+    jsExport: string;
+    moduleSpecifier: string;
 }
 
 export interface WitDependencyPackage {
@@ -100,6 +108,13 @@ export const INSPECTOR_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:inspector",
     witImport: "jco:node/inspector@0.1.0",
     witExport: "jco:node/inspector-callbacks@0.1.0",
+    guestExports: [
+        {
+            witExport: "jco:node/inspector-callbacks@0.1.0",
+            jsExport: "inspectorCallbacks",
+            moduleSpecifier: "jco:node-inspector-callbacks",
+        },
+    ],
     dependencyDirectory: "jco-node-0.1.0",
     dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/inspector.wit", import.meta.url))],
 };
@@ -112,7 +127,13 @@ export const INSPECTOR_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
 export const HTTP_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:http",
     witImport: "jco:node/http@0.1.0",
-    witExports: ["jco:node/http-callbacks@0.1.0"],
+    guestExports: [
+        {
+            witExport: "jco:node/http-callbacks@0.1.0",
+            jsExport: "httpCallbacks",
+            moduleSpecifier: "jco:node-http-callbacks",
+        },
+    ],
     dependencyDirectory: "jco-node-0.1.0",
     dependencySources: [
         SHARED_TYPES_SOURCE,
@@ -336,7 +357,13 @@ function insertionFor(
 }
 
 function requirementWitExports(requirement: NodeWitRequirement): string[] {
-    return [...(requirement.witExport ? [requirement.witExport] : []), ...(requirement.witExports ?? [])];
+    return [
+        ...new Set([
+            ...(requirement.witExport ? [requirement.witExport] : []),
+            ...(requirement.witExports ?? []),
+            ...(requirement.guestExports ?? []).map(({ witExport }) => witExport),
+        ]),
+    ];
 }
 
 /**
