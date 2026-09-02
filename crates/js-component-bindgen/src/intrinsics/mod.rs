@@ -1511,6 +1511,48 @@ mod tests {
     }
 
     #[test]
+    fn async_scheduler_detects_store_wide_deadlocks() {
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+        assert!(state.contains("_checkForDeadlock();"));
+        assert!(state.contains("suspendedTaskMetas()"));
+        assert!(state.contains("hasPendingSchedulerWork()"));
+
+        let check =
+            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));
+        assert!(check.contains("for (const state of ASYNC_STATE.values())"));
+        assert!(check.contains("STORE_ASYNC_STATE.pendingHostOperations > 0"));
+        assert!(check.contains("const root = task.getRootTask();"));
+        assert!(check.contains(
+            "new WebAssemblyRuntimeError('wasm trap: deadlock detected: event loop cannot make further progress')"
+        ));
+        assert!(check.contains("for (const root of unresolvedRoots)"));
+        assert!(check.contains("root.reject(err);"));
+        assert!(check.contains("task.reject(err);"));
+    }
+
+    #[test]
+    fn host_async_operations_suppress_deadlock_detection() {
+        let tracker =
+            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
+        assert!(tracker.contains("STORE_ASYNC_STATE.pendingHostOperations++;"));
+        assert!(tracker.contains("Promise.resolve(result).finally(() =>"));
+        assert!(tracker.contains("STORE_ASYNC_STATE.pendingHostOperations--;"));
+        assert!(tracker.contains("_checkForDeadlock();"));
+
+        let future = render_intrinsic_body(Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::GenFutureHostInjectFn,
+        ));
+        assert!(future.contains("await _trackHostOperation(() => promise);"));
+
+        let stream = render_intrinsic_body(Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::PendingValueQueueClass,
+        ));
+        assert!(stream.contains("await _trackHostOperation(() => this.#readFn());"));
+    }
+
+    #[test]
     fn sync_start_fused_adapter_runs_in_the_caller_task() {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::SyncStartCall));
 
