@@ -20,6 +20,7 @@
       "jco:node/ffi@0.1.0": ["./src/wasi/0.2.x/node/26.x.x/ffi-interface.d.ts"],
       "jco:node/inspector@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/inspector-interface.d.ts"],
       "jco:node/http@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/http-interface.d.ts"],
+      "jco:node/http2@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/http2-interface.d.ts"],
       "wasi:http/types@0.2.3": ["./src/wasi/0.2.3/generated/types/interfaces/wasi-http-types.d.ts"],
       "wasi:cli/environment@0.2.3": [
         "./src/wasi/0.2.3/generated/types/interfaces/wasi-cli-environment.d.ts"
