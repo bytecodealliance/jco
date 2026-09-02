@@ -1,11 +1,12 @@
 import { join, basename, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
+import { rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { suite, test, assert, expect, beforeAll } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
-import { fileExists, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
+import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
@@ -19,6 +20,7 @@ interface WastTestModule {
     runWastTest(args: {
         instance?: object;
         instantiate(artifact: WastTestArtifact): Promise<object>;
+        validate(artifact: WastTestArtifact): Promise<void>;
         assert: typeof assert;
         expect: typeof expect;
     }): Promise<void>;
@@ -144,35 +146,49 @@ suite('component-model WAST', () => {
                     artifactPaths.set(artifact, artifactPath);
                 }
 
-                await mod.runWastTest({
-                    instance,
-                    instantiate: async (artifact) => {
-                        const artifactPath = artifactPaths.get(artifact);
-                        assert(artifactPath, 'WAST requested an unknown artifact');
+                const loadArtifact = (artifact: WastTestArtifact): Promise<() => Promise<object>> => {
+                    const artifactPath = artifactPaths.get(artifact);
+                    assert(artifactPath, 'WAST requested an unknown artifact');
 
-                        let loadInstantiator = artifactInstantiators.get(artifact);
-                        if (!loadInstantiator) {
-                            loadInstantiator = (async () => {
-                                if (artifact.kind === 'module') {
-                                    const module = await WebAssembly.compile(await readComponentBytes(artifactPath));
-                                    return async () => WebAssembly.instantiate(module, {});
-                                }
+                    let loadInstantiator = artifactInstantiators.get(artifact);
+                    if (!loadInstantiator) {
+                        loadInstantiator = (async () => {
+                            if (artifact.kind === 'module') {
+                                const module = await WebAssembly.compile(await readComponentBytes(artifactPath));
+                                return async () => WebAssembly.instantiate(module, {});
+                            }
 
-                                const artifactIdx = artifacts.indexOf(artifact);
+                            const artifactIdx = artifacts.indexOf(artifact);
+                            const outputDir = await getTmpDir();
+                            try {
                                 const setup = await setupAsyncTest({
                                     asyncMode: 'jspi',
                                     component: {
                                         name: `${componentName}-artifact-${artifactIdx}`,
                                         path: artifactPath,
+                                        outputDir,
                                         skipInstantiation: true,
                                     },
                                 });
                                 cleanups.push(setup.cleanup);
                                 return async () => setup.esModule.instantiate(undefined, {});
-                            })();
-                            artifactInstantiators.set(artifact, loadInstantiator);
-                        }
-                        return (await loadInstantiator)();
+                            } catch (error) {
+                                try {
+                                    await rm(outputDir, { recursive: true, force: true });
+                                } catch {}
+                                throw error;
+                            }
+                        })();
+                        artifactInstantiators.set(artifact, loadInstantiator);
+                    }
+                    return loadInstantiator;
+                };
+
+                await mod.runWastTest({
+                    instance,
+                    instantiate: async (artifact) => (await loadArtifact(artifact))(),
+                    validate: async (artifact) => {
+                        await loadArtifact(artifact);
                     },
                     assert,
                     expect,
