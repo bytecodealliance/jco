@@ -1340,7 +1340,10 @@ impl AsyncTaskIntrinsic {
                                 componentIdx: this.#componentIdx,
                             }});
 
-                            const keepGoing = await this.suspendUntil({{ readyFn, cancellable }});
+                            // A callback YIELD is an explicit request to let other work run.
+                            // Unlike waits whose condition is already ready, it must always
+                            // suspend for at least one scheduler turn.
+                            const keepGoing = await this.immediateSuspend({{ readyFn, cancellable }});
                             if (keepGoing) {{
                                 return {{
                                     code: {event_code_enum}.NONE,
