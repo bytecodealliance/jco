@@ -1,0 +1,6 @@
+package jco-fixtures:node-express;
+
+world component {
+    export start: func() -> u16;
+    export stop: func();
+}
