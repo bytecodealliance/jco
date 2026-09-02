@@ -375,7 +375,7 @@ queue their callbacks on a microtask, and promise APIs share the same descriptor
 state through promise `FileHandle`s.
 
 Common file and directory operations, metadata, directory entries, scalar and
-vector descriptor I/O, and their callback/promise facades are supported. 
+vector descriptor I/O, and their callback/promise facades are supported.
 
 > [!WARNING]
 > APIs whose contract requires long-lived streams or event sources are not yet supported
@@ -383,7 +383,7 @@ vector descriptor I/O, and their callback/promise facades are supported.
 > `openAsBlob`.
 >
 > These functions currently throw `ERR_JCO_UNSUPPORTED_NODE_API` because the typed WIT
-> interface does not model those resources. 
+> interface does not model those resources.
 
 ### Async hooks and synchronous scopes
 
@@ -629,11 +629,15 @@ boundary does not expose an outstanding c-ares request that a later guest call
 could cancel. The provider boundary otherwise remains Node-independent, leaving
 room for a future browser implementation.
 
-### HTTP and selectable transports
+### HTTP and selectable implementations
 
-The `node:http` adapter implements outbound `request()` and `get()` calls with
-Node-style `ClientRequest` and buffered `IncomingMessage` objects. Select the
-host boundary during componentization without changing application imports:
+The `node:http` adapter implements both client and server NodeJS HTTP APIs,
+with outbound `request()` and `get()` calls with Node-style `ClientRequest`
+and buffered `IncomingMessage` objects along with `http.Server`.
+
+As this API obviously requires access to the outside world of some sort, and
+there are actually many ways to achieve that on the host side, you must select
+the host implementation during componentization:
 
 ```console
 jco componentize component.js --wit wit --bundle \
@@ -641,23 +645,25 @@ jco componentize component.js --wit wit --bundle \
 ```
 
 | Value              | Component boundary                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+|--------------------|------------------------------------------------------------------------------------------------------------|
 | `direct` (default) | Typed `jco:node/http@0.1.0`; denied by default, with an opt-in Node `node:http` provider.                  |
 | `wasi-sockets`     | Preview 2 DNS lookup, TCP sockets, streams, and pollables; HTTP/1.1 framing and parsing live in the guest. |
 | `wasi-http`        | Preview 2 `wasi:http/outgoing-handler` and `wasi:http/types`.                                              |
 
 Jco injects only the selected mode's missing imports into the selected world,
 installs their pinned 0.2.12 dependency packages, and warns about the visible WIT
-changes. Repeated runs are idempotent. An existing incompatible `wasi:http` or
-`wasi:sockets` version is rejected rather than silently mixing interfaces.
+changes.
 
-The direct Node provider is asynchronous; Jco configures its typed `request`
+The `direct` implementation is asynchronous; Jco configures its typed `request`
 import for JSPI so it appears synchronous to the Preview 2 guest without a
-worker. All modes currently buffer complete request and response bodies.
-Connection pooling, upgrades, CONNECT tunnels, TLS/`https:`, and inbound server
-listening are explicit gaps. In particular, a `wasi:http/incoming-handler` is a
-component export contract and cannot transparently implement callback-based
-`server.listen()` through an import.
+worker.
+
+> [!WARNING]
+> All modes currently buffer complete request and response bodies.
+
+Note that depending on the implementation there may be parts that are hard/impossible to implement --
+for example, the `wasi-http` implementation is based on `wasi:http`, and may not be able to deliver
+fine grained socket control in the same way that the `wasi-sockets` or `direct` implementations can.
 
 ### Buffer
 
