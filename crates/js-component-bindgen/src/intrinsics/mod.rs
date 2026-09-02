@@ -1697,6 +1697,20 @@ mod tests {
     }
 
     #[test]
+    fn traps_lock_down_only_the_current_component_instance() {
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+
+        assert!(state.contains("#trapped = false;"));
+        assert!(state.contains("this.#trapped = true;"));
+        assert!(state.contains(
+            r#"throw new WebAssemblyRuntimeError("wasm trap: cannot enter component instance");"#
+        ));
+        assert!(!state.contains("if (STORE_TRAP.error !== null) { throw STORE_TRAP.error; }"));
+    }
+
+    #[test]
     fn sync_start_fused_adapter_runs_in_the_caller_task() {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::SyncStartCall));
 
@@ -1930,7 +1944,7 @@ mod tests {
                 .find("const removedStreamEnd = deleteStreamEnd(")
                 .expect("stream drop should remove a validated idle end");
 
-            assert!(source.contains(&format!("throw new Error('{error}');")));
+            assert!(source.contains(&format!("throw new WebAssemblyRuntimeError('{error}');")));
             assert!(busy_check < removal, "busy validation must precede removal");
             assert!(source.contains("if (removedStreamEnd !== streamEnd) {"));
         }
