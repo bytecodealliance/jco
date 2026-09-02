@@ -2,8 +2,13 @@ use anyhow::{Context as _, Result, bail, ensure};
 use heck::ToLowerCamelCase;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use wast::core::WastRetCore;
+
+struct InlineArtifact {
+    file_name: String,
+    kind: &'static str,
+}
 
 fn js_string(value: &str) -> Result<String> {
     serde_json::to_string(value).context("failed to encode JavaScript string")
@@ -38,15 +43,15 @@ fn convert_wast_file(
         r#"
           export async function runWastTest(args) {{
               if (!args) {{ throw new Error('missing args'); }}
-              if (!args.instance) {{ throw new Error('missing loaded wasm instance'); }}
               if (!args.assert) {{ throw new Error('missing assert obj'); }}
               if (!args.expect) {{ throw new Error('missing expect obj'); }}
-              const {{ instance, assert, expect }} = args;
+              const {{ instance, instantiate, assert, expect }} = args;
               let res;
         "#
     )?;
 
     let mut module_seen = false;
+    let mut inline_artifacts = Vec::new();
     for directive in parsed.directives {
         match directive {
             wast::WastDirective::Module(mut quote_wat) => {
@@ -97,18 +102,39 @@ fn convert_wast_file(
                     args_to_js_params(&invoke.args)?,
                 )?;
             }
-            wast::WastDirective::AssertTrap { exec, message, .. } => {
-                let (export_name, args) = extract_export_fn(&exec)?;
-                writeln!(
-                    output_js,
-                    r#"
-                      await expect(async () => instance[{}]({})).rejects.toThrow({});
-                    "#,
-                    js_export_name(export_name)?,
-                    args_to_js_params(args)?,
-                    js_string(message)?,
-                )?;
-            }
+            wast::WastDirective::AssertTrap { exec, message, .. } => match exec {
+                wast::WastExecute::Invoke(invoke) => {
+                    let invoke = wast::WastExecute::Invoke(invoke);
+                    let (export_name, args) = extract_export_fn(&invoke)?;
+                    writeln!(
+                        output_js,
+                        r#"
+                              await expect(async () => instance[{}]({})).rejects.toThrow({});
+                            "#,
+                        js_export_name(export_name)?,
+                        args_to_js_params(args)?,
+                        js_string(message)?,
+                    )?;
+                }
+                wast::WastExecute::Wat(wat) => {
+                    let artifact_idx = inline_artifacts.len();
+                    inline_artifacts.push(write_inline_artifact(
+                        wat,
+                        input_wast_path,
+                        artifact_idx,
+                    )?);
+                    writeln!(
+                        output_js,
+                        r#"
+                              await expect(() => instantiate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});
+                            "#,
+                        js_string(message)?,
+                    )?;
+                }
+                wast::WastExecute::Get { .. } => {
+                    bail!("unsupported wast execute type WastExecute::Get")
+                }
+            },
             wast::WastDirective::AssertReturn { exec, results, .. } => {
                 let (export_name, args) = extract_export_fn(&exec)?;
                 let expected = results
@@ -153,13 +179,80 @@ fn convert_wast_file(
         }
     }
 
-    ensure!(module_seen, "wast file did not contain a module directive");
+    ensure!(
+        module_seen || !inline_artifacts.is_empty(),
+        "wast file did not contain an executable module or component"
+    );
 
     // Close out the function
     writeln!(output_js, "}}",)?;
+    writeln!(
+        output_js,
+        "export const wastTestRequiresInstance = {module_seen};"
+    )?;
+    let artifact_metadata = inline_artifacts
+        .iter()
+        .map(|artifact| {
+            Ok(format!(
+                "{{ path: {}, kind: {} }}",
+                js_string(&artifact.file_name)?,
+                js_string(artifact.kind)?,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    writeln!(
+        output_js,
+        "export const wastTestArtifacts = [{}];",
+        artifact_metadata.join(", ")
+    )?;
 
     output_js.flush()?;
     Ok(())
+}
+
+fn write_inline_artifact(
+    mut wat: wast::Wat<'_>,
+    input_wast_path: &Path,
+    artifact_idx: usize,
+) -> Result<InlineArtifact> {
+    let kind = match &wat {
+        wast::Wat::Module(_) => "module",
+        wast::Wat::Component(_) => "component",
+    };
+    let encoded = wat.encode().with_context(|| {
+        format!(
+            "failed to encode inline {kind} in WAT [{}]",
+            input_wast_path.display()
+        )
+    })?;
+
+    let mut artifact_path = PathBuf::from(input_wast_path);
+    artifact_path.set_extension(format!("wast.{artifact_idx}.wasm"));
+    let mut artifact_file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&artifact_path)
+        .with_context(|| {
+            format!(
+                "failed to open inline {kind} output [{}]",
+                artifact_path.display()
+            )
+        })?;
+    artifact_file.write_all(&encoded).with_context(|| {
+        format!(
+            "failed to write inline {kind} output [{}]",
+            artifact_path.display()
+        )
+    })?;
+    artifact_file.flush()?;
+
+    let file_name = artifact_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("inline WAT artifact path was not valid UTF-8")?
+        .to_owned();
+    Ok(InlineArtifact { file_name, kind })
 }
 
 /// Generate a list of JS params
@@ -425,6 +518,64 @@ mod tests {
                     script.contains("rejects.toThrow(\"unreachable\")"),
                     "missing trap assertion"
                 );
+                ensure!(
+                    script.contains("export const wastTestRequiresInstance = true;"),
+                    "missing primary-instance metadata"
+                );
+                ensure!(
+                    script.contains("export const wastTestArtifacts = [];"),
+                    "unexpected inline artifact metadata"
+                );
+                Ok(())
+            },
+        )
+    }
+
+    #[test]
+    fn builds_inline_wat_execution_artifacts_in_directive_order() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (assert_trap (component) "component trap")
+                (assert_trap
+                    (module
+                        (func $start unreachable)
+                        (start $start)
+                    )
+                    "module trap"
+                )
+            "#,
+            |wast_path| {
+                run(wast_path)?;
+
+                let component_path = wast_path.with_extension("wast.0.wasm");
+                let module_path = wast_path.with_extension("wast.1.wasm");
+                ensure!(
+                    !fs::read(component_path)?.is_empty(),
+                    "missing encoded inline component"
+                );
+                ensure!(
+                    !fs::read(module_path)?.is_empty(),
+                    "missing encoded inline module"
+                );
+
+                let script = fs::read_to_string(wast_path.with_extension("wast.js"))?;
+                ensure!(
+                    script.contains("export const wastTestRequiresInstance = false;"),
+                    "inline-only WAST unexpectedly requires a primary instance"
+                );
+                ensure!(
+                    script.contains(
+                        r#"{ path: "fixture.wast.0.wasm", kind: "component" }, { path: "fixture.wast.1.wasm", kind: "module" }"#
+                    ),
+                    "missing inline artifact metadata"
+                );
+                let first = script
+                    .find("instantiate(wastTestArtifacts[0])")
+                    .context("missing first inline execution")?;
+                let second = script
+                    .find("instantiate(wastTestArtifacts[1])")
+                    .context("missing second inline execution")?;
+                ensure!(first < second, "inline execution order was not preserved");
                 Ok(())
             },
         )

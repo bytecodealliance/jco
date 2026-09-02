@@ -1,11 +1,11 @@
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 import { suite, test, assert, expect, beforeAll } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
-import { fileExists, setupAsyncTest } from '../../../helpers.js';
+import { fileExists, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
@@ -14,7 +14,19 @@ interface WastTest {
 }
 
 interface WastTestModule {
-    runWastTest(args: { instance: object; assert: typeof assert; expect: typeof expect }): Promise<void>;
+    wastTestRequiresInstance?: boolean;
+    wastTestArtifacts?: readonly WastTestArtifact[];
+    runWastTest(args: {
+        instance?: object;
+        instantiate(artifact: WastTestArtifact): Promise<object>;
+        assert: typeof assert;
+        expect: typeof expect;
+    }): Promise<void>;
+}
+
+interface WastTestArtifact {
+    path: string;
+    kind: 'module' | 'component';
 }
 
 const WAST_TESTS: readonly WastTest[] = [
@@ -88,36 +100,80 @@ suite('component-model WAST', () => {
 
         const t = skip ? test.skip : test.concurrent;
         t(relPath, async () => {
-            assert(await fileExists(wasmPath), `missing generated wasm component @ [${wasmPath}]`);
             assert(await fileExists(scriptPath), `missing generated script @ [${scriptPath}]`);
 
-            let cleanup;
+            const cleanups: (() => Promise<void>)[] = [];
             try {
-                const setup = await setupAsyncTest({
-                    asyncMode: 'jspi',
-                    component: {
-                        name: basename(relPath).replace('.wast', ''),
-                        path: wasmPath,
-                    },
-                    // jco: {
-                    //     transpile: {
-                    //         extraArgs: {
-                    //             minify: false,
-                    //         },
-                    //     },
-                    // },
-                });
-                cleanup = setup.cleanup;
-                const instance = setup.instance;
-
                 const mod = (await import(pathToFileURL(scriptPath).href)) as WastTestModule;
+                const artifacts = mod.wastTestArtifacts ?? [];
+                const requiresInstance = mod.wastTestRequiresInstance ?? true;
+                const componentName = basename(relPath).replace('.wast', '');
+
+                let instance;
+                if (requiresInstance) {
+                    assert(await fileExists(wasmPath), `missing generated wasm component @ [${wasmPath}]`);
+                    const setup = await setupAsyncTest({
+                        asyncMode: 'jspi',
+                        component: {
+                            name: componentName,
+                            path: wasmPath,
+                        },
+                        // jco: {
+                        //     transpile: {
+                        //         extraArgs: {
+                        //             minify: false,
+                        //         },
+                        //     },
+                        // },
+                    });
+                    cleanups.push(setup.cleanup);
+                    instance = setup.instance;
+                }
+
+                const artifactPaths = new Map<WastTestArtifact, string>();
+                for (const artifact of artifacts) {
+                    assert.include(
+                        ['module', 'component'],
+                        artifact.kind,
+                        `invalid artifact kind for ${artifact.path}`,
+                    );
+                    const artifactPath = join(dirname(wastPath), artifact.path);
+                    assert(await fileExists(artifactPath), `missing generated WAT artifact @ [${artifactPath}]`);
+                    artifactPaths.set(artifact, artifactPath);
+                }
+
                 await mod.runWastTest({
                     instance,
+                    instantiate: async (artifact) => {
+                        const artifactPath = artifactPaths.get(artifact);
+                        assert(artifactPath, 'WAST requested an unknown inline artifact');
+                        if (artifact.kind === 'module') {
+                            const { instance } = await WebAssembly.instantiate(
+                                await readComponentBytes(artifactPath),
+                                {},
+                            );
+                            return instance;
+                        }
+
+                        const artifactIdx = artifacts.indexOf(artifact);
+                        const setup = await setupAsyncTest({
+                            asyncMode: 'jspi',
+                            component: {
+                                name: `${componentName}-inline-${artifactIdx}`,
+                                path: artifactPath,
+                                skipInstantiation: true,
+                            },
+                        });
+                        cleanups.push(setup.cleanup);
+                        return setup.esModule.instantiate(undefined, {});
+                    },
                     assert,
                     expect,
                 });
             } finally {
-                await cleanup?.();
+                for (const cleanup of cleanups.reverse()) {
+                    await cleanup();
+                }
             }
         });
     }
