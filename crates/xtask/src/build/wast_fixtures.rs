@@ -47,7 +47,8 @@ fn convert_wast_file(
               if (!args.assert) {{ throw new Error('missing assert obj'); }}
               if (!args.expect) {{ throw new Error('missing expect obj'); }}
               if (!args.instantiate) {{ throw new Error('missing artifact instantiator'); }}
-              const {{ instantiate, assert, expect }} = args;
+              if (!args.validate) {{ throw new Error('missing artifact validator'); }}
+              const {{ instantiate, validate, assert, expect }} = args;
               const namedInstances = new Map();
               let currentInstance;
               const getInstance = (name) => {{
@@ -145,8 +146,18 @@ fn convert_wast_file(
             wast::WastDirective::AssertMalformed { .. } => {
                 bail!("unsupported directive AssertMalformed")
             }
-            wast::WastDirective::AssertInvalid { .. } => {
-                bail!("unsupported directive AssertInvalid")
+            wast::WastDirective::AssertInvalid {
+                module, message, ..
+            } => {
+                let artifact_idx = artifacts.len();
+                artifacts.push(write_quote_artifact(module, input_wast_path, artifact_idx)?);
+                writeln!(
+                    output_js,
+                    r#"
+                          await expect(() => validate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});
+                        "#,
+                    js_string(message)?,
+                )?;
             }
             wast::WastDirective::Register { .. } => {
                 bail!("unsupported directive Register")
@@ -751,6 +762,82 @@ mod tests {
                     .find("instantiate(wastTestArtifacts[1])")
                     .context("missing second inline execution")?;
                 ensure!(first < second, "inline execution order was not preserved");
+                Ok(())
+            },
+        )
+    }
+
+    #[test]
+    fn builds_invalid_artifact_assertions_in_directive_order() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (component $valid
+                    (core module $m (func (export "run")))
+                    (core instance $i (instantiate $m))
+                    (func (export "run") (canon lift (core func $i "run")))
+                )
+                (assert_invalid
+                    (component (type (stream char)))
+                    "`stream<char>` is not valid"
+                )
+                (assert_invalid
+                    (module (func (result i32)))
+                    "type mismatch"
+                )
+                (assert_return (invoke "run"))
+            "#,
+            |wast_path| {
+                run(wast_path)?;
+
+                let component_path = wast_path.with_extension("wast.1.wasm");
+                let module_path = wast_path.with_extension("wast.2.wasm");
+                ensure!(
+                    !fs::read(component_path)?.is_empty(),
+                    "missing invalid component artifact"
+                );
+                ensure!(
+                    !fs::read(module_path)?.is_empty(),
+                    "missing invalid core module artifact"
+                );
+
+                let script = fs::read_to_string(wast_path.with_extension("wast.js"))?;
+                ensure!(
+                    script.contains(
+                        r#"{ path: "fixture.wast.wasm", kind: "component" }, { path: "fixture.wast.1.wasm", kind: "component" }, { path: "fixture.wast.2.wasm", kind: "module" }"#
+                    ),
+                    "invalid directive artifacts were not typed in directive order"
+                );
+                ensure!(
+                    script.contains(
+                        r#"validate(wastTestArtifacts[1])).rejects.toThrow("`stream<char>` is not valid")"#
+                    ),
+                    "missing invalid component assertion"
+                );
+                ensure!(
+                    script.contains(
+                        r#"validate(wastTestArtifacts[2])).rejects.toThrow("type mismatch")"#
+                    ),
+                    "missing invalid core module assertion"
+                );
+
+                let valid_instance = script
+                    .find("currentInstance = await instantiate(wastTestArtifacts[0]);")
+                    .context("missing ordinary component instantiation")?;
+                let invalid_component = script
+                    .find("validate(wastTestArtifacts[1])")
+                    .context("missing invalid component validation")?;
+                let invalid_module = script
+                    .find("validate(wastTestArtifacts[2])")
+                    .context("missing invalid core module validation")?;
+                let final_assertion = script
+                    .find("res = await getInstance(null)[\"run\"]();")
+                    .context("missing assertion against the preserved current instance")?;
+                ensure!(
+                    valid_instance < invalid_component
+                        && invalid_component < invalid_module
+                        && invalid_module < final_assertion,
+                    "invalid assertion directive ordering was not preserved"
+                );
                 Ok(())
             },
         )
