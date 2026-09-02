@@ -1727,6 +1727,19 @@ mod tests {
     }
 
     #[test]
+    fn future_writer_preserves_component_identity_when_blocked() {
+        let writer = render_intrinsic_body(Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::FutureWritableEndClass,
+        ));
+        let pending_meta = writer
+            .split_once("this.setPendingBufferMeta({")
+            .and_then(|(_, rest)| rest.split_once("});"))
+            .map(|(args, _)| args)
+            .expect("writer should save a blocked operation");
+        assert!(pending_meta.contains("componentIdx,"));
+    }
+
+    #[test]
     fn stream_new_allocates_the_readable_end_first() {
         let source =
             render_intrinsic_body(Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream));

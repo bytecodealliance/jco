@@ -896,6 +896,7 @@ impl AsyncFutureIntrinsic {
                               if (!meta.buffer) {{
                                   this.setPendingBufferMeta({{
                                       buffer,
+                                      componentIdx,
                                       onCopyDoneFn,
                                   }});
                                   return;
