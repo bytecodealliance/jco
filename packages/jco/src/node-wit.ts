@@ -45,68 +45,51 @@ export interface WitDependencyPackage {
 /** Types the Node API interfaces share; every interface file depends on it. */
 const SHARED_TYPES_SOURCE = fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/types.wit", import.meta.url));
 
-export const CHILD_PROCESS_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:child_process",
-    witImport: "jco:node/child-process@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [
-        SHARED_TYPES_SOURCE,
-        fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/child-process.wit", import.meta.url)),
-    ],
-};
+/**
+ * Build the requirement for one `jco:node/<interface>@0.1.0` import.
+ *
+ * Every Node API interface lives in `jco-node-0.1.0/<interface>.wit`; those that `use` the shared
+ * `types` interface also install `types.wit` beside it. Mirrors `wasiRequirement` below for the
+ * WASI side.
+ */
+function nodeRequirement(
+    nodeSpecifier: string,
+    witInterface: string,
+    extra: Partial<Pick<NodeWitRequirement, "witExport" | "guestExports">> & { sharedTypes?: boolean } = {},
+): NodeWitRequirement {
+    const { sharedTypes = false, ...rest } = extra;
+    const source = fileURLToPath(new URL(`../lib/wit/builtin/jco-node-0.1.0/${witInterface}.wit`, import.meta.url));
+    return {
+        nodeSpecifier,
+        witImport: `jco:node/${witInterface}@0.1.0`,
+        ...rest,
+        dependencyDirectory: "jco-node-0.1.0",
+        dependencySources: sharedTypes ? [SHARED_TYPES_SOURCE, source] : [source],
+    };
+}
 
-export const CLUSTER_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:cluster",
-    witImport: "jco:node/cluster@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [
-        SHARED_TYPES_SOURCE,
-        fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/cluster.wit", import.meta.url)),
-    ],
-};
+export const CHILD_PROCESS_WIT_REQUIREMENT = nodeRequirement("node:child_process", "child-process", {
+    sharedTypes: true,
+});
 
-export const CONSOLE_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:console",
-    witImport: "jco:node/console@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/console.wit", import.meta.url))],
-};
+export const CLUSTER_WIT_REQUIREMENT = nodeRequirement("node:cluster", "cluster", { sharedTypes: true });
 
-export const DNS_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:dns",
-    witImport: "jco:node/dns@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/dns.wit", import.meta.url))],
-};
+export const CONSOLE_WIT_REQUIREMENT = nodeRequirement("node:console", "console");
+
+export const DNS_WIT_REQUIREMENT = nodeRequirement("node:dns", "dns");
 
 export const DNS_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
     ...DNS_WIT_REQUIREMENT,
     nodeSpecifier: "node:dns/promises",
 };
 
-export const FS_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:fs",
-    witImport: "jco:node/fs@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/fs.wit", import.meta.url))],
-};
+export const FS_WIT_REQUIREMENT = nodeRequirement("node:fs", "fs");
 
-export const OS_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:os",
-    witImport: "jco:node/os@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/os.wit", import.meta.url))],
-};
+export const OS_WIT_REQUIREMENT = nodeRequirement("node:os", "os");
 
-export const FFI_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:ffi",
-    witImport: "jco:node/ffi@0.1.0",
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/ffi.wit", import.meta.url))],
-};
-export const INSPECTOR_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:inspector",
-    witImport: "jco:node/inspector@0.1.0",
+export const FFI_WIT_REQUIREMENT = nodeRequirement("node:ffi", "ffi");
+
+export const INSPECTOR_WIT_REQUIREMENT = nodeRequirement("node:inspector", "inspector", {
     witExport: "jco:node/inspector-callbacks@0.1.0",
     guestExports: [
         {
@@ -115,18 +98,14 @@ export const INSPECTOR_WIT_REQUIREMENT: NodeWitRequirement = {
             moduleSpecifier: "jco:node-inspector-callbacks",
         },
     ],
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/inspector.wit", import.meta.url))],
-};
+});
 
 export const INSPECTOR_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
     ...INSPECTOR_WIT_REQUIREMENT,
     nodeSpecifier: "node:inspector/promises",
 };
 
-export const HTTP_WIT_REQUIREMENT: NodeWitRequirement = {
-    nodeSpecifier: "node:http",
-    witImport: "jco:node/http@0.1.0",
+export const HTTP_WIT_REQUIREMENT = nodeRequirement("node:http", "http", {
     guestExports: [
         {
             witExport: "jco:node/http-callbacks@0.1.0",
@@ -134,9 +113,7 @@ export const HTTP_WIT_REQUIREMENT: NodeWitRequirement = {
             moduleSpecifier: "jco:node-http-callbacks",
         },
     ],
-    dependencyDirectory: "jco-node-0.1.0",
-    dependencySources: [fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/http.wit", import.meta.url))],
-};
+});
 
 const WASI_0_2_12_ROOT = new URL("../lib/wit/builtin/0.2.12/", import.meta.url);
 
