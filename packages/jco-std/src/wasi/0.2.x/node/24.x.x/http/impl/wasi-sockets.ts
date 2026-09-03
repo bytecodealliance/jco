@@ -85,14 +85,20 @@ export interface WasiSocketsProvider {
   tcpCreateSocket: {
     createTcpSocket(family: "ipv4" | "ipv6"): WasiTcpSocket;
   };
+  /** Convert a safe integer to the component engine's WIT u64 representation. */
+  u64?: (value: number) => bigint;
   schedule?: (task: () => void | Promise<void>) => void;
 }
 
-function dispose(resource: { [Symbol.dispose]?(): void } | undefined): void {
+export function wasiU64(provider: WasiSocketsProvider, value: number): bigint {
+  return provider.u64?.(value) ?? BigInt(value);
+}
+
+export function dispose(resource: { [Symbol.dispose]?(): void } | undefined): void {
   resource?.[Symbol.dispose]?.();
 }
 
-function errorCode(error: unknown): string | undefined {
+export function errorCode(error: unknown): string | undefined {
   if (typeof error === "string") {
     return error;
   }
@@ -103,7 +109,7 @@ function errorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-function socketError(error: unknown, syscall: string, hostname?: string): Error {
+export function socketError(error: unknown, syscall: string, hostname?: string): Error {
   const code = errorCode(error) ?? "unknown";
   const nodeCodes: Record<string, string> = {
     "access-denied": "EACCES",
@@ -144,7 +150,7 @@ function parseIpv4(value: string): [number, number, number, number] | undefined 
     : undefined;
 }
 
-function localAddress(host: string, port: number): WasiIpSocketAddress {
+export function localAddress(host: string, port: number): WasiIpSocketAddress {
   const normalized = host === "localhost" ? "127.0.0.1" : host;
   const ipv4 = parseIpv4(normalized);
   if (ipv4) {
@@ -167,7 +173,7 @@ function localAddress(host: string, port: number): WasiIpSocketAddress {
   );
 }
 
-function nodeAddress(address: WasiIpSocketAddress): Exclude<HttpServerAddress, string> {
+export function nodeAddress(address: WasiIpSocketAddress): Exclude<HttpServerAddress, string> {
   if (address.tag === "ipv4") {
     return {
       address: address.val.address.join("."),
@@ -181,7 +187,7 @@ function nodeAddress(address: WasiIpSocketAddress): Exclude<HttpServerAddress, s
   return { address: addressText, family: "IPv6", port: address.val.port };
 }
 
-function authority(value: string): { hostname: string; port: number } {
+export function authority(value: string): { hostname: string; port: number } {
   try {
     const url = new URL(`http://${value}`);
     return { hostname: url.hostname.replace(/^\[|\]$/g, ""), port: Number(url.port || 80) };
@@ -208,7 +214,7 @@ function nextAddress(stream: WasiResolveAddressStream): WasiIpAddress | undefine
   }
 }
 
-function connect(
+export function connect(
   provider: WasiSocketsProvider,
   hostname: string,
   port: number,
@@ -263,6 +269,7 @@ function connect(
 }
 
 function readResponse(
+  provider: WasiSocketsProvider,
   input: WasiInputStream,
   request: HttpImplementationRequest,
 ): HttpImplementationResponse {
@@ -278,7 +285,7 @@ function readResponse(
       throw socketError("connection-terminated", "read");
     }
     try {
-      chunks.push(input.blockingRead(65_536n));
+      chunks.push(input.blockingRead(wasiU64(provider, 65_536)));
     } catch (error) {
       if (errorCode(error) !== "closed") {
         throw socketError(error, "read");
@@ -288,7 +295,7 @@ function readResponse(
   }
 }
 
-function finishPending(operation: () => void, socket: WasiTcpSocket): void {
+export function finishPending(operation: () => void, socket: WasiTcpSocket): void {
   for (;;) {
     try {
       operation();
@@ -307,7 +314,10 @@ function finishPending(operation: () => void, socket: WasiTcpSocket): void {
   }
 }
 
-function readRequest(input: WasiInputStream): HttpIncomingRequestData {
+function readRequest(
+  provider: WasiSocketsProvider,
+  input: WasiInputStream,
+): HttpIncomingRequestData {
   const chunks: Uint8Array[] = [];
   let closed = false;
   for (;;) {
@@ -319,7 +329,7 @@ function readRequest(input: WasiInputStream): HttpIncomingRequestData {
       throw socketError("connection-terminated", "read");
     }
     try {
-      chunks.push(input.blockingRead(65_536n));
+      chunks.push(input.blockingRead(wasiU64(provider, 65_536)));
     } catch (error) {
       if (errorCode(error) !== "closed") {
         throw error;
@@ -405,7 +415,7 @@ class WasiSocketsHttpServer implements HttpServerImplementation {
     }
     try {
       if (options.backlog !== undefined) {
-        socket.setListenBacklogSize?.(BigInt(options.backlog));
+        socket.setListenBacklogSize?.(wasiU64(this.#provider, options.backlog));
       }
       socket.startBind(network, address);
       finishPending(() => socket.finishBind!(), socket);
@@ -491,7 +501,7 @@ class WasiSocketsHttpServer implements HttpServerImplementation {
         }
       }
       this.#connections.add(connection);
-      const request = readRequest(input);
+      const request = readRequest(this.#provider, input);
       if (
         request.httpVersion === "1.1" &&
         !request.headers.some(({ name }) => name.toLowerCase() === "host")
@@ -576,7 +586,7 @@ export function createWasiSocketsHttpImplementation(
       const { socket, input, output } = connect(provider, hostname, port);
       try {
         output.blockingWriteAndFlush(serializeHttp1Request(request));
-        return readResponse(input, request);
+        return readResponse(provider, input, request);
       } catch (error) {
         if (error instanceof Error && "code" in error) {
           throw error;

@@ -835,11 +835,11 @@ jco componentize component.js --wit wit --bundle \
   --with-nodejs-http2-via direct -o component.wasm
 ```
 
-| Value              | Behavior                                                                                                                                                    |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `direct` (default) | Typed `jco:node/http2@0.1.0`, denied by default; an opt-in Node host uses real h2c and TLS/ALPN clients and servers.                                        |
-| `wasi-sockets`     | Rejects clients and servers: HTTP/2 framing, HPACK, multiplexing, flow control, TLS, and ALPN are not implemented over the available raw socket interfaces. |
-| `wasi-http`        | Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.                      |
+| Value              | Behavior                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `direct` (default) | Typed `jco:node/http2@0.1.0`, denied by default; an opt-in Node host uses real h2c and TLS/ALPN clients and servers.                                   |
+| `wasi-sockets`     | Cleartext prior-knowledge HTTP/2 (`h2c`) clients and TCP servers, with guest-side framing, HPACK, settings, ping, reset, and stream/connection flow control. |
+| `wasi-http`        | Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.                 |
 
 Direct mode models sessions, streams, and servers as typed host-owned WIT
 resources. Stream and server-error callbacks are separate guest-owned resources
@@ -857,6 +857,15 @@ listen, and close operations use JSPI, not workers. Bodies are currently
 buffered; low-level sockets, priority, push, flow-control windows, and operations
 that cannot cross the boundary throw explicit errors. Constants and settings
 packing are capability-free in every mode.
+
+Raw TCP is sufficient to carry every HTTP/2 frame and therefore the complete
+cleartext protocol. It is not, by itself, an HTTPS transport: negotiating `h2`
+for an `https:` authority also requires TLS and ALPN plus certificate/trust,
+entropy, and time facilities. The `wasi-sockets` provider currently rejects that
+secure path. It also deliberately omits server push, HTTP/1.1 `Upgrade: h2c`,
+Unix-domain sockets, and Node's arbitrary `createConnection`/custom duplex
+transport hooks. These are adapter coverage or capability-boundary gaps, not a
+reason that core HTTP/2 cannot run over WASI TCP.
 
 ### Buffer
 

@@ -2,6 +2,7 @@ package test:http2;
 
 world component {
   export start-server: func() -> u16;
+  export serve-one: async func();
   export stop-server: func();
-  export run-client: func(authority: string) -> string;
+  export run-client: async func(authority: string, path: string, request-authority: string) -> string;
 }

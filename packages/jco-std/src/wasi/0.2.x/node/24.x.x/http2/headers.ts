@@ -73,7 +73,7 @@ export function fieldsToHeaders(fields: readonly HttpHeaderField[]): {
     rawHeaders.push(name, text);
     const current = headers[name];
     if (current === undefined) {
-      headers[name] = name === "set-cookie" ? [text] : text;
+      headers[name] = name === "set-cookie" ? [text] : name === ":status" ? Number(text) : text;
     } else if (name === "set-cookie") {
       headers[name] = [...(Array.isArray(current) ? current : [String(current)]), text];
     } else {

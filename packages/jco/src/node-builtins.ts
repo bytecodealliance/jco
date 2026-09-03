@@ -12,6 +12,7 @@ import {
     FS_WIT_REQUIREMENT,
     FFI_WIT_REQUIREMENT,
     HTTP_WASI_HTTP_WIT_REQUIREMENTS,
+    HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
     HTTP_WIT_REQUIREMENT,
     HTTP2_WIT_REQUIREMENT,
@@ -295,6 +296,8 @@ export interface NodeBuiltinOptions {
     httpWasiHttpImplementationModule?: string;
     /** Implementation used for `node:http2` host operations. */
     nodejsHttp2Via?: NodejsHttp2Via;
+    /** WASI socket module version supplied by the selected component engine. */
+    wasiSocketsVersion?: "0.2.10" | "0.2.12";
     /** Paths to jco-std's HTTP/2 modules (overridable for tests). */
     http2Module?: string;
     http2CoreModule?: string;
@@ -705,14 +708,15 @@ function httpCallbacksAdapter(httpModule: string): string {
     return `export { httpCallbacks } from ${JSON.stringify(httpModule)};`;
 }
 
-function httpWasiSocketsAdapter(coreModule: string, implementationModule: string): string {
+function httpWasiSocketsAdapter(coreModule: string, implementationModule: string, version: string): string {
+    const schedule = version === "0.2.10" ? ", schedule: task => setTimeout(task, 0)" : "";
     return `
-import * as instanceNetwork from "wasi:sockets/instance-network@0.2.12";
-import * as ipNameLookup from "wasi:sockets/ip-name-lookup@0.2.12";
-import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@0.2.12";
+import * as instanceNetwork from "wasi:sockets/instance-network@${version}";
+import * as ipNameLookup from "wasi:sockets/ip-name-lookup@${version}";
+import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@${version}";
 import { createHttp } from ${JSON.stringify(coreModule)};
 import { createWasiSocketsHttpImplementation } from ${JSON.stringify(implementationModule)};
-${httpExports("createHttp(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket }))")}
+${httpExports(`createHttp(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${version === "0.2.10" ? "BigInt(value)" : "value"}${schedule} }))`)}
 `;
 }
 
@@ -764,17 +768,35 @@ function http2PortableAdapter(
     coreModule: string,
     implementationModule: string,
     via: Exclude<NodejsHttp2Via, "direct">,
+    version: string,
 ): string {
     const factory =
         via === "wasi-sockets" ? "createWasiSocketsHttp2Implementation" : "createWasiHttpHttp2Implementation";
+    const provider =
+        via === "wasi-sockets"
+            ? `
+import * as instanceNetwork from "wasi:sockets/instance-network@${version}";
+import * as ipNameLookup from "wasi:sockets/ip-name-lookup@${version}";
+import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@${version}";
+`
+            : "";
+    const factoryArguments =
+        via === "wasi-sockets"
+            ? `{ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${version === "0.2.10" ? "BigInt(value)" : "value"}${version === "0.2.10" ? ", schedule: task => setTimeout(task, 0)" : ""} }`
+            : "";
     return `
+${provider}
 import { createHttp2 } from ${JSON.stringify(coreModule)};
 import { ${factory} } from ${JSON.stringify(implementationModule)};
-${http2Exports(`createHttp2(${factory}())`)}
+${http2Exports(`createHttp2(${factory}(${factoryArguments}))`)}
 `;
 }
 
-function requireWasiHttpVersion(worldMetadata: WorldMetadata, via: Exclude<NodejsHttpVia, "direct">): void {
+function requireWasiHttpVersion(
+    worldMetadata: WorldMetadata,
+    via: Exclude<NodejsHttpVia, "direct">,
+    version = "0.2.12",
+): void {
     const packageName = via === "wasi-http" ? "http" : "sockets";
     const incompatible = (worldMetadata.imports ?? []).find(
         (iface) =>
@@ -782,12 +804,12 @@ function requireWasiHttpVersion(worldMetadata: WorldMetadata, via: Exclude<Nodej
             iface.package === packageName &&
             iface.version !== null &&
             iface.version !== undefined &&
-            (iface.version.major !== 0n || iface.version.minor !== 2n || iface.version.patch !== 12n),
+            `${iface.version.major}.${iface.version.minor}.${iface.version.patch}` !== version,
     );
     if (incompatible) {
         const { major, minor, patch } = incompatible.version!;
         throw new Error(
-            `node:http via ${via} requires wasi:${packageName}@0.2.12, but the selected WIT world imports wasi:${packageName}@${major}.${minor}.${patch}`,
+            `node:http via ${via} requires wasi:${packageName}@${version}, but the selected WIT world imports wasi:${packageName}@${major}.${minor}.${patch}`,
         );
     }
 }
@@ -995,6 +1017,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const httpWasiHttpImplementationModule = () =>
         stdModule(options.httpWasiHttpImplementationModule, "http/impl/wasi-http");
     const httpVia = options.nodejsHttpVia ?? "direct";
+    const wasiSocketsVersion = options.wasiSocketsVersion ?? "0.2.12";
     const http2Module = () =>
         options.http2Module ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2"));
@@ -1105,10 +1128,16 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 if (httpVia === "direct") {
                     options.onWitRequirement?.(HTTP_WIT_REQUIREMENT);
                 } else {
-                    requireWasiHttpVersion(worldMetadata, httpVia);
+                    requireWasiHttpVersion(
+                        worldMetadata,
+                        httpVia,
+                        httpVia === "wasi-sockets" ? wasiSocketsVersion : "0.2.12",
+                    );
                     const requirements =
                         httpVia === "wasi-sockets"
-                            ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
+                            ? wasiSocketsVersion === "0.2.12"
+                                ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
+                                : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS
                             : HTTP_WASI_HTTP_WIT_REQUIREMENTS;
                     for (const requirement of requirements) {
                         options.onWitRequirement?.(requirement);
@@ -1119,6 +1148,13 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             if (id === HTTP2_SPECIFIER) {
                 if (http2Via === "direct") {
                     options.onWitRequirement?.(HTTP2_WIT_REQUIREMENT);
+                } else if (http2Via === "wasi-sockets") {
+                    requireWasiHttpVersion(worldMetadata, http2Via, wasiSocketsVersion);
+                    for (const requirement of wasiSocketsVersion === "0.2.12"
+                        ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
+                        : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS) {
+                        options.onWitRequirement?.(requirement);
+                    }
                 }
                 return `${VIRTUAL_PREFIX}${id}`;
             }
@@ -1207,7 +1243,11 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                     return httpDirectAdapter(httpModule());
                 }
                 return httpVia === "wasi-sockets"
-                    ? httpWasiSocketsAdapter(httpCoreModule(), httpWasiSocketsImplementationModule())
+                    ? httpWasiSocketsAdapter(
+                          httpCoreModule(),
+                          httpWasiSocketsImplementationModule(),
+                          wasiSocketsVersion,
+                      )
                     : httpWasiHttpAdapter(httpCoreModule(), httpWasiHttpImplementationModule());
             }
             if (value === HTTP2_SPECIFIER) {
@@ -1220,6 +1260,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                         ? http2WasiSocketsImplementationModule()
                         : http2WasiHttpImplementationModule(),
                     http2Via,
+                    wasiSocketsVersion,
                 );
             }
             if (AUDITED_UNENV_SPECIFIERS.has(value)) {

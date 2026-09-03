@@ -43,6 +43,8 @@ export interface ComponentizeOptions {
     bundleConfig?: string;
     nodejsHttpVia?: NodejsHttpVia;
     nodejsHttp2Via?: NodejsHttp2Via;
+    withNodejsHttpVia?: NodejsHttpVia;
+    withNodejsHttp2Via?: NodejsHttp2Via;
     backend?: ComponentizeJSBackend;
     backendQjsDisableAysnc: boolean;
     aot?: boolean;
@@ -197,8 +199,11 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             // why `node:path` only works together with `--bundle`.
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
-                    nodejsHttpVia: opts.nodejsHttpVia,
-                    nodejsHttp2Via: opts.nodejsHttp2Via,
+                    nodejsHttpVia: opts.nodejsHttpVia ?? opts.withNodejsHttpVia,
+                    nodejsHttp2Via: opts.nodejsHttp2Via ?? opts.withNodejsHttp2Via,
+                    // StarlingMonkey's built-in socket modules are currently WASI 0.2.10.
+                    // Using that exact version preserves its cross-interface resource identities.
+                    wasiSocketsVersion: backend === "starlingmonkey" ? "0.2.10" : "0.2.12",
                     onWitRequirement(requirement: NodeWitRequirement) {
                         witRequirements.set(requirement.witImport, requirement);
                     },

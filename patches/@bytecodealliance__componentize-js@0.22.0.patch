@@ -1,0 +1,46 @@
+diff --git a/src/componentize.js b/src/componentize.js
+index 66e5942..fdec74d 100644
+--- a/src/componentize.js
++++ b/src/componentize.js
+@@ -159,0 +160 @@ export async function componentize(
++  jsBindings = addMissingMethodlessResourceClasses(jsBindings);
+@@ -440,0 +442,39 @@ export async function componentize(
++// The 0.22 splicer references cross-interface methodless resources while omitting
++// their wrapper class. Restore the same disposable wrapper emitted for resources
++// with methods. This can be removed after the equivalent bindgen fix is released.
++function addMissingMethodlessResourceClasses(jsBindings) {
++  const declared = new Set(
++    [...jsBindings.matchAll(/\bclass (import_[\w$]+)/g)].map((match) => match[1]),
++  );
++  const missing = new Set(
++    [...jsBindings.matchAll(/\b(import_[\w$]+)\.prototype/g)]
++      .map((match) => match[1])
++      .filter((name) => !declared.has(name)),
++  );
++  if (missing.size === 0) return jsBindings;
++
++  const classes = [];
++  for (const name of missing) {
++    const reference = jsBindings.indexOf(`${name}.prototype`);
++    const registration = jsBindings
++      .slice(reference, reference + 1_000)
++      .match(/(finalizationRegistry_[\w$]+)\.register\(/);
++    if (!registration) continue;
++    const registry = registration[1];
++    const registryDefinition = jsBindings.match(
++      new RegExp(`const ${registry.replaceAll('$', '\\$')} = new FinalizationRegistry\\(\\(handle\\) => \\{\\s*([\\w$]+)\\(handle\\);`),
++    );
++    if (!registryDefinition) continue;
++    const drop = registryDefinition[1];
++    classes.push(`class ${name} {
++  [symbolDispose]() {
++    ${registry}.unregister(this);
++    ${drop}(this[symbolRscHandle]);
++    this[symbolRscHandle] = undefined;
++  }
++}`);
++  }
++  if (classes.length === 0) return jsBindings;
++  const marker = "const symbolRscHandle = Symbol('handle');";
++  return jsBindings.replace(marker, `${marker}\n${classes.join('\n')}`);
++}

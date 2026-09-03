@@ -131,8 +131,9 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
   `wasi:sockets` support servers, and `wasi:http` rejects server construction;
 - the `node:http2` settings API plus typed session, stream, and server resources.
   Its direct provider delegates to real Node HTTP/2 after explicit host mapping;
-  the `wasi-sockets` and `wasi-http` choices reject session and server operations
-  whose semantics those interfaces cannot currently preserve;
+  `wasi-sockets` implements cleartext prior-knowledge HTTP/2 clients and TCP
+  servers in the guest, while `wasi-http` rejects session and server operations
+  whose semantics an individual-request interface cannot preserve;
 - `node:stream/consumers`, implemented as portable iterable collection over the
   engine's Blob, typed-array, and text-codec globals; and
 - the experimental Node 24.20 `node:stream/iter` API, including portable sources,

@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 import { describe, expect, test, vi } from "vitest";
@@ -9,7 +10,7 @@ import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
 import { HTTP2_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { HTTP2_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
-import { componentizeFixture, getTmpDir } from "../helpers.js";
+import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
 
 const modulePaths = {
     http2Module: "/jco/http2.js",
@@ -20,10 +21,10 @@ const modulePaths = {
 
 describe("node:http2 builtin adapter", () => {
     test.each([
-        ["direct", "/jco/http2.js"],
-        ["wasi-sockets", "/jco/http2/wasi-sockets.js"],
-        ["wasi-http", "/jco/http2/wasi-http.js"],
-    ])("generates the %s implementation facade", (nodejsHttp2Via, implementationModule) => {
+        ["direct", "/jco/http2.js", "jco:node/http2@0.1.0"],
+        ["wasi-sockets", "/jco/http2/wasi-sockets.js", "wasi:sockets/instance-network@0.2.12"],
+        ["wasi-http", "/jco/http2/wasi-http.js", undefined],
+    ])("generates the %s implementation facade", (nodejsHttp2Via, implementationModule, capability) => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -35,6 +36,9 @@ describe("node:http2 builtin adapter", () => {
         expect(source).toContain(implementationModule);
         expect(source).toContain("export default http2");
         expect(source).toContain("getPackedSettings");
+        if (capability) {
+            expect(onWitRequirement).toHaveBeenCalledWith(expect.objectContaining({ witImport: capability }));
+        }
         if (nodejsHttp2Via === "direct") {
             expect(onWitRequirement).toHaveBeenCalledWith(HTTP2_WIT_REQUIREMENT);
             expect(onWitRequirement).toHaveBeenCalledWith(
@@ -48,8 +52,11 @@ describe("node:http2 builtin adapter", () => {
                     ],
                 }),
             );
-        } else {
+        } else if (nodejsHttp2Via === "wasi-http") {
             expect(onWitRequirement).not.toHaveBeenCalled();
+        }
+        if (nodejsHttp2Via === "wasi-sockets") {
+            expect(source).toContain("wasi:sockets/tcp-create-socket@0.2.12");
         }
     });
 
@@ -159,7 +166,81 @@ describe("node:http2 WIT installation", () => {
     });
 });
 
-describe("node:http2 in a StarlingMonkey component", () => {
+describe("node:http2 in a fully formed component", () => {
+    const expectedLocalReport = {
+        local: { status: 201, contentType: "text/plain", body: "large:POST:/large:131072:x:x" },
+        guest: { length: 131072, first: "s", last: "s" },
+    };
+
+    test("runs a fully formed wasi:sockets component against local HTTP/2 clients and servers", async () => {
+        const { componentPath, stderr } = await componentizeFixture({
+            fixture: "node-http2",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "quickjs", "--with-nodejs-http2-via", "wasi-sockets"],
+        });
+        expect(stderr).toContain("wasi:sockets/instance-network@0.2.12");
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http2-wasi-sockets", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
+        });
+        try {
+            const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
+            const output = await exec(runner, esModuleOutputPath);
+            expect(JSON.parse(output.stdout)).toEqual(expectedLocalReport);
+        } finally {
+            await cleanup();
+        }
+    }, 600_000);
+
+    test("runs the same wasi:sockets component under StarlingMonkey", async () => {
+        const { componentPath, stderr } = await componentizeFixture({
+            fixture: "node-http2",
+            wit: "wit-starling",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http2-via", "wasi-sockets"],
+        });
+        expect(stderr).toContain("wasi:sockets/instance-network@0.2.10");
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http2-starling-wasi-sockets", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
+        });
+        try {
+            const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
+            const output = await exec(runner, esModuleOutputPath);
+            expect(JSON.parse(output.stdout)).toEqual(expectedLocalReport);
+        } finally {
+            await cleanup();
+        }
+    }, 600_000);
+
+    test.runIf(process.env.JCO_EXTERNAL_NETWORK_TESTS)(
+        "runs the component against the public nghttp2.org h2c server",
+        async () => {
+            const { componentPath } = await componentizeFixture({
+                fixture: "node-http2",
+                bundle: true,
+                copy: true,
+                extraArgs: ["--backend", "quickjs", "--with-nodejs-http2-via", "wasi-sockets"],
+            });
+            const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+                component: { name: "node-http2-wasi-sockets-external", path: componentPath, skipInstantiation: true },
+                jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
+            });
+            try {
+                const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
+                const output = await exec(runner, esModuleOutputPath, "external");
+                const report = JSON.parse(output.stdout);
+                expect(report.external).toMatchObject({ status: 200, contentType: "application/json" });
+                expect(JSON.parse(report.external.body).data).toBe("client");
+            } finally {
+                await cleanup();
+            }
+        },
+        600_000,
+    );
+
     // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
     test.skip("componentizes idiomatic client and server code through the direct boundary", async () => {
         const { stderr } = await componentizeFixture({
