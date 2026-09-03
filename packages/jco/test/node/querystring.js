@@ -7,10 +7,10 @@ import { pathToFileURL } from "node:url";
 import unenvDefault, * as unenvQuerystring from "unenv/node/querystring";
 import { suite, test } from "vitest";
 import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
-import { exec, getTmpDir, jcoPath } from "../helpers.js";
+import { exec, getTmpDir, jcoPath, materializeUnenvAdapter } from "../helpers.js";
 
 suite("node:querystring", () => {
-    test("matches the Node 24 module and alias contract", () => {
+    test.concurrent("matches the Node 24 module and alias contract", () => {
         assert.deepEqual(Object.keys(unenvQuerystring).sort(), Object.keys(nodeQuerystring).sort());
         assert.strictEqual(unenvQuerystring.default, unenvDefault);
         assert.strictEqual(unenvQuerystring.decode, unenvQuerystring.parse);
@@ -28,7 +28,7 @@ suite("node:querystring", () => {
         assert.deepEqual(unenvQuerystring.parse(input), nodeQuerystring.parse(input));
     });
 
-    test("matches custom parsing options and null-prototype results", () => {
+    test.concurrent("matches custom parsing options and null-prototype results", () => {
         const input = "first:one;second:two;third:three";
         const options = { maxKeys: 2, decodeURIComponent: (value) => `decoded(${value})` };
         const actual = unenvQuerystring.parse(input, ";", ":", options);
@@ -38,7 +38,7 @@ suite("node:querystring", () => {
         assert.strictEqual(Object.getPrototypeOf(actual), null);
     });
 
-    test("falls back compatibly when a custom decoder throws", () => {
+    test.concurrent("falls back compatibly when a custom decoder throws", () => {
         const options = {
             decodeURIComponent() {
                 throw new Error("decoder failed");
@@ -58,7 +58,7 @@ suite("node:querystring", () => {
         assert.strictEqual(unenvQuerystring.stringify(value), nodeQuerystring.stringify(value));
     });
 
-    test("matches custom separators and encoders", () => {
+    test.concurrent("matches custom separators and encoders", () => {
         const value = { first: "one", second: "two words" };
         const options = { encodeURIComponent: (part) => `[${part}]` };
         assert.strictEqual(
@@ -71,7 +71,7 @@ suite("node:querystring", () => {
         assert.strictEqual(unenvQuerystring.escape(value), nodeQuerystring.escape(value));
     });
 
-    test("matches Node errors for invalid UTF-16 input", () => {
+    test.concurrent("matches Node errors for invalid UTF-16 input", () => {
         assert.throws(() => nodeQuerystring.escape("\ud800"), { name: "URIError", code: "ERR_INVALID_URI" });
         assert.throws(() => unenvQuerystring.escape("\ud800"), { name: "URIError", code: "ERR_INVALID_URI" });
     });
@@ -86,6 +86,31 @@ suite("node:querystring", () => {
             );
         },
     );
+
+    // Sequential on purpose: the adapter imports the generated buffer core for its side effects,
+    // which installs the guarded class as the global `Buffer`; this test restores it when done.
+    test("executes the adapter Jco generates, not just its source", async () => {
+        const previousGlobalBuffer = globalThis.Buffer;
+        try {
+            const { module } = await materializeUnenvAdapter("node:querystring");
+
+            // The adapter forwards unenv's whole named surface plus the default namespace, so the
+            // module a component sees matches Node's export and alias contract.
+            assert.deepEqual(Object.keys(module).sort(), Object.keys(nodeQuerystring).sort());
+            assert.strictEqual(module.default.parse, module.parse);
+            assert.strictEqual(module.decode, module.parse);
+            assert.strictEqual(module.encode, module.stringify);
+
+            const query = "value=one&value=two+words&empty=&flag";
+            assert.deepEqual(module.parse(query), nodeQuerystring.parse(query));
+            const record = { value: ["one", "two words"], empty: "" };
+            assert.strictEqual(module.stringify(record), nodeQuerystring.stringify(record));
+            assert.strictEqual(module.escape("snowman ☃"), nodeQuerystring.escape("snowman ☃"));
+            assert.strictEqual(module.unescape("%E2%98%83"), nodeQuerystring.unescape("%E2%98%83"));
+        } finally {
+            globalThis.Buffer = previousGlobalBuffer;
+        }
+    });
 
     // TODO(unskip): global Error injection resolves jco-std's versioned Errors module, which is
     // not published yet. Unskip once a release carrying that export is available to Jco's tests.

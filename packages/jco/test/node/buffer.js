@@ -4,10 +4,14 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Buffer as UnenvBuffer } from "unenv/node/internal/buffer/buffer";
+import {
+    Buffer as UnenvBuffer,
+    INSPECT_MAX_BYTES as UNENV_INSPECT_MAX_BYTES,
+    kMaxLength as UNENV_K_MAX_LENGTH,
+} from "unenv/node/internal/buffer/buffer";
 import { suite, test } from "vitest";
 import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
-import { exec, getTmpDir, jcoPath } from "../helpers.js";
+import { exec, getTmpDir, jcoPath, materializeUnenvAdapter } from "../helpers.js";
 
 function bytes(value) {
     return [...value];
@@ -25,11 +29,11 @@ suite("node:buffer", () => {
         },
     );
 
-    test("exposes the audited base64url compatibility gap", () => {
+    test.concurrent("exposes the audited base64url compatibility gap", () => {
         assert.throws(() => UnenvBuffer.from("SGVsbG8", "base64url"), /Unknown encoding: base64url/);
     });
 
-    test("matches allocation, filling, concatenation, and comparison", () => {
+    test.concurrent("matches allocation, filling, concatenation, and comparison", () => {
         assert.deepEqual(bytes(UnenvBuffer.alloc(5, "ab")), bytes(NodeBuffer.alloc(5, "ab")));
         assert.deepEqual(
             bytes(UnenvBuffer.concat([UnenvBuffer.from("one"), UnenvBuffer.from("two")], 5)),
@@ -40,7 +44,7 @@ suite("node:buffer", () => {
         assert.strictEqual(UnenvBuffer.isBuffer(UnenvBuffer.alloc(0)), true);
     });
 
-    test("matches integer and floating-point reads and writes", () => {
+    test.concurrent("matches integer and floating-point reads and writes", () => {
         const actual = UnenvBuffer.alloc(24);
         const expected = NodeBuffer.alloc(24);
 
@@ -60,7 +64,7 @@ suite("node:buffer", () => {
         assert.strictEqual(actual.readDoubleBE(12), expected.readDoubleBE(12));
     });
 
-    test("matches searching, slicing, copying, swapping, and JSON output", () => {
+    test.concurrent("matches searching, slicing, copying, swapping, and JSON output", () => {
         const actual = UnenvBuffer.from("001122334455", "hex");
         const expected = NodeBuffer.from("001122334455", "hex");
 
@@ -75,6 +79,76 @@ suite("node:buffer", () => {
         const expectedTarget = NodeBuffer.alloc(4);
         assert.strictEqual(actual.copy(actualTarget, 0, 1, 5), expected.copy(expectedTarget, 0, 1, 5));
         assert.deepEqual(bytes(actualTarget), bytes(expectedTarget));
+    });
+
+    // Sequential on purpose: importing the generated core installs the guarded class as the global
+    // `Buffer` (as Node does), which this test restores when it is done.
+    test("executes the adapter Jco generates, not just its source", async () => {
+        const previousGlobalBuffer = globalThis.Buffer;
+        try {
+            const { module } = await materializeUnenvAdapter("node:buffer");
+            const { Buffer, SlowBuffer, default: namespace } = module;
+
+            // The public class is unenv's Buffer behind a guard that refuses the deprecated
+            // constructor while leaving every static and TypedArray-derived path intact.
+            assert.strictEqual(namespace.Buffer, Buffer);
+            assert.strictEqual(Buffer.from("hi").toString(), "hi");
+            assert.strictEqual(Buffer.isBuffer(Buffer.alloc(1)), true);
+            assert.strictEqual(Buffer.prototype.constructor, Buffer);
+            assert.strictEqual(Buffer[Symbol.species], UnenvBuffer);
+            assert.strictEqual(Buffer.isBuffer(Buffer.from("abc").subarray(1)), true);
+            const deprecated = {
+                code: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
+                message:
+                    "The deprecated Buffer() constructor is not supported; use Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() instead",
+            };
+            assert.throws(() => new Buffer(1), deprecated);
+            assert.throws(() => Buffer(1), deprecated);
+            assert.throws(() => new SlowBuffer(1), deprecated);
+            assert.throws(() => SlowBuffer(1), deprecated);
+
+            // Jco-controlled exports: refusals, constants, and runtime-dependent members.
+            for (const api of ["isAscii", "isUtf8", "resolveObjectURL", "transcode"]) {
+                assert.throws(() => module[api](), {
+                    code: "ERR_JCO_UNSUPPORTED_NODE_API",
+                    message: `buffer.${api} is not supported by the Jco component runtime`,
+                });
+            }
+            assert.strictEqual(module.kStringMaxLength, 536870888);
+            assert.deepEqual(module.constants, {
+                MAX_LENGTH: Number.MAX_SAFE_INTEGER,
+                MAX_STRING_LENGTH: 536870888,
+            });
+            assert.strictEqual(module.INSPECT_MAX_BYTES, UNENV_INSPECT_MAX_BYTES);
+            assert.strictEqual(module.kMaxLength, UNENV_K_MAX_LENGTH);
+            assert.strictEqual(module.atob("SGVsbG8="), "Hello");
+            assert.strictEqual(module.btoa("Hello"), "SGVsbG8=");
+            assert.strictEqual(module.Blob, globalThis.Blob);
+            assert.strictEqual(module.File, globalThis.File);
+            assert.deepEqual(Object.keys(namespace).sort(), [
+                "Blob",
+                "Buffer",
+                "File",
+                "INSPECT_MAX_BYTES",
+                "SlowBuffer",
+                "atob",
+                "btoa",
+                "constants",
+                "isAscii",
+                "isUtf8",
+                "kMaxLength",
+                "kStringMaxLength",
+                "resolveObjectURL",
+                "transcode",
+            ]);
+
+            // Importing the adapter installs the guarded class as the global, as Node does, and the
+            // audited base64url gap is reachable through it.
+            assert.strictEqual(globalThis.Buffer, Buffer);
+            assert.throws(() => Buffer.from("SGVsbG8", "base64url"), /Unknown encoding: base64url/);
+        } finally {
+            globalThis.Buffer = previousGlobalBuffer;
+        }
     });
 
     // TODO(unskip): global Error injection resolves jco-std's versioned Errors module, which is
