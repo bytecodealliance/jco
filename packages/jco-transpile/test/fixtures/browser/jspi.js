@@ -25,15 +25,19 @@ export async function jspi(modulePath) {
         throw new Error('runSync() did not return the synchronous import result');
     }
 
-    let ticks = 0;
-    const interval = setInterval(() => ticks++, 5);
+    // One queued timer proves that JSPI yielded without depending on how many
+    // interval callbacks a loaded CI runner happens to schedule in 50 ms.
+    let eventLoopProgressed = false;
+    const eventLoopProbe = setTimeout(() => {
+        eventLoopProgressed = true;
+    }, 0);
     try {
         const responseText = await instance.runAsync();
-        if (ticks < 2) {
-            throw new Error(`event loop was blocked during JSPI call; observed only ${ticks} ticks`);
+        if (!eventLoopProgressed) {
+            throw new Error('event loop did not progress during JSPI call');
         }
         return { responseText };
     } finally {
-        clearInterval(interval);
+        clearTimeout(eventLoopProbe);
     }
 }
