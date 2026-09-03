@@ -17,6 +17,7 @@ import {
   outOfRange as sharedOutOfRange,
   unsupportedNodeApi,
 } from "../errors/core.js";
+import { decodeErrno } from "../internal/host-error.js";
 
 import type { DirectHttpError, HttpErrorData } from "./types.js";
 
@@ -106,12 +107,7 @@ export function fromImplementationError(value: HttpErrorData | DirectHttpError):
     value.message,
   );
   const errno = value.errno;
-  error.errno =
-    typeof errno === "object" && errno !== null
-      ? errno.tag === "number"
-        ? Number(errno.val)
-        : errno.val
-      : errno;
+  error.errno = typeof errno === "object" && errno !== null ? decodeErrno(errno) : errno;
   error.syscall = value.syscall;
   error.hostname = value.hostname;
   error.address = value.address;

@@ -2,7 +2,6 @@ import type {
   CpuInfo,
   NetworkInterfaces,
   OsConstantEntry,
-  OsErrno,
   OsError,
   OsErrorInfo,
   OsHostConstants,
@@ -14,57 +13,35 @@ import type {
   OsStaticProperties,
   UserInfo,
 } from "./types.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function stringField(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function errnoField(value: unknown): OsErrno | undefined {
-  if (typeof value === "number") {
-    return { tag: "number", val: BigInt(value) };
-  }
-  if (typeof value === "string") {
-    return { tag: "symbolic", val: value };
-  }
-  return undefined;
-}
+import {
+  capture,
+  encodeErrno,
+  errorRecord,
+  serializeHostError,
+  stringField,
+} from "../internal/host-error.js";
 
 function errorInfo(value: unknown): OsErrorInfo | undefined {
-  if (!isRecord(value)) {
+  if (typeof value !== "object" || value === null) {
     return undefined;
   }
+  const record = errorRecord(value);
   return {
-    errno: errnoField(value.errno),
-    code: stringField(value.code),
-    message: stringField(value.message),
-    syscall: stringField(value.syscall),
+    errno: encodeErrno(record.errno),
+    code: stringField(record.code),
+    message: stringField(record.message),
+    syscall: stringField(record.syscall),
   };
 }
 
 /** Serialize a thrown provider error into the typed OS component boundary. */
 export function serializeOsError(error: unknown): OsError {
-  const value = isRecord(error) ? error : {};
-  return {
-    name: stringField(value.name) ?? "Error",
-    message: stringField(value.message) ?? String(error),
-    code: stringField(value.code),
-    errno: errnoField(value.errno),
-    syscall: stringField(value.syscall),
-    info: errorInfo(value.info),
-  };
+  return { ...serializeHostError(error), info: errorInfo(errorRecord(error).info) };
 }
 
 /** Run a synchronous provider operation and preserve its structured error. */
 export function captureOsCall<T>(operation: () => T): OsResult<T> {
-  try {
-    return { tag: "ok", val: operation() };
-  } catch (error) {
-    return { tag: "err", val: serializeOsError(error) };
-  }
+  return capture(operation, serializeOsError);
 }
 
 function constantEntries(values: object): OsConstantEntry[] {

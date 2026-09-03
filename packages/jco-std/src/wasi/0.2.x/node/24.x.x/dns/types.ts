@@ -1,3 +1,5 @@
+import type { HostErrno, HostErrorBase, HostResult } from "../internal/wit-types.js";
+
 export type DnsResultOrder = "ipv4first" | "ipv6first" | "verbatim";
 export type DnsFamily = 0 | 4 | 6;
 
@@ -100,18 +102,13 @@ export interface ResolverOptions {
   maxTimeout?: number;
 }
 
-export interface DnsErrorData {
-  name: string;
-  message: string;
-  code?: string;
-  errno?: DnsErrno;
-  syscall?: string;
+export interface DnsErrorData extends HostErrorBase {
   hostname?: string;
 }
 
-export type DnsResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: DnsErrorData };
+export type DnsResult<T> = HostResult<T, DnsErrorData>;
 
-export type DnsErrno = { tag: "number"; val: bigint } | { tag: "symbolic"; val: string };
+export type DnsErrno = HostErrno;
 
 export type DnsHostFamily = "unspecified" | "ipv4" | "ipv6";
 export type DnsHostResultOrder = "ipv4-first" | "ipv6-first" | "verbatim";

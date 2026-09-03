@@ -19,6 +19,7 @@ import {
   systemError,
   unsupportedNodeApi,
 } from "../errors/core.js";
+import { decodeErrno } from "../internal/host-error.js";
 
 import { Dir, Dirent, Stats } from "./classes.js";
 import type {
@@ -255,12 +256,7 @@ function unwrap<T>(result: FsResult<T>): T {
   const error = systemError({
     message: value.message,
     code: value.code ?? "UNKNOWN",
-    errno:
-      value.errno?.tag === "number"
-        ? Number(value.errno.val)
-        : value.errno?.tag === "symbolic"
-          ? value.errno.val
-          : undefined,
+    errno: decodeErrno(value.errno),
     syscall: value.syscall,
     path: value.path,
     dest: value.dest,

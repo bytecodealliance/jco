@@ -19,28 +19,18 @@ import type {
   DirectHttpServerConstructor,
   DirectHttpServerOptions,
 } from "./http/types.js";
+import { serializeHostError, stringField } from "./internal/host-error.js";
 
 type AsyncResult<T> = Promise<DirectHttpResult<T>>;
 type Timer = ReturnType<typeof setTimeout>;
 
 function serializeError(error: unknown): DirectHttpError {
-  const value =
-    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
-  const errno =
-    typeof value.errno === "number"
-      ? { tag: "number" as const, val: BigInt(value.errno) }
-      : typeof value.errno === "string"
-        ? { tag: "symbolic" as const, val: value.errno }
-        : undefined;
+  const value = error as Record<string, unknown> | null;
   return {
-    name: typeof value.name === "string" ? value.name : "Error",
-    message: typeof value.message === "string" ? value.message : String(error),
-    code: typeof value.code === "string" ? value.code : undefined,
-    errno,
-    syscall: typeof value.syscall === "string" ? value.syscall : undefined,
-    hostname: typeof value.hostname === "string" ? value.hostname : undefined,
-    address: typeof value.address === "string" ? value.address : undefined,
-    port: typeof value.port === "number" ? value.port : undefined,
+    ...serializeHostError(error),
+    hostname: stringField(value?.hostname),
+    address: stringField(value?.address),
+    port: typeof value?.port === "number" ? value.port : undefined,
   };
 }
 

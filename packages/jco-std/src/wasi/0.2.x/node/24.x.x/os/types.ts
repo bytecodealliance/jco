@@ -1,5 +1,7 @@
 import type { Buffer } from "node:buffer";
 
+import type { HostErrno, HostErrorBase, HostResult } from "../internal/wit-types.js";
+
 export type Architecture =
   | "arm"
   | "arm64"
@@ -137,7 +139,7 @@ export interface OsModule {
   version(): string;
 }
 
-export type OsErrno = { tag: "number"; val: bigint } | { tag: "symbolic"; val: string };
+export type OsErrno = HostErrno;
 
 export interface OsErrorInfo {
   errno?: OsErrno;
@@ -146,16 +148,11 @@ export interface OsErrorInfo {
   syscall?: string;
 }
 
-export interface OsError {
-  name: string;
-  message: string;
-  code?: string;
-  errno?: OsErrno;
-  syscall?: string;
+export interface OsError extends HostErrorBase {
   info?: OsErrorInfo;
 }
 
-export type OsResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: OsError };
+export type OsResult<T> = HostResult<T, OsError>;
 
 export interface OsConstantEntry {
   name: string;

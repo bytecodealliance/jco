@@ -9,6 +9,7 @@
 import { Buffer } from "node:buffer";
 
 import { invalidArgType, outOfRange, systemError } from "../errors.js";
+import { decodeErrno } from "../internal/host-error.js";
 import type {
   Architecture,
   CpuInfo,
@@ -30,7 +31,7 @@ import type {
 } from "./types.js";
 
 function errnoValue(value?: OsErrno): number | string | undefined {
-  return value?.tag === "number" ? Number(value.val) : value?.val;
+  return decodeErrno(value);
 }
 
 function providerError(data: OsError): Error {

@@ -1,3 +1,5 @@
+import type { HostErrno, HostErrorBase } from "../internal/wit-types.js";
+
 export type HttpHeaderValue = string | number | readonly string[];
 export type HttpHeaders = Record<string, HttpHeaderValue | undefined>;
 
@@ -180,14 +182,9 @@ export interface HttpModule {
   validateHeaderValue: (name: string, value: string) => void;
 }
 
-export type DirectErrno = { tag: "number"; val: bigint } | { tag: "symbolic"; val: string };
+export type DirectErrno = HostErrno;
 
-export interface DirectHttpError {
-  name: string;
-  message: string;
-  code?: string;
-  errno?: DirectErrno;
-  syscall?: string;
+export interface DirectHttpError extends HostErrorBase {
   hostname?: string;
   address?: string;
   port?: number;

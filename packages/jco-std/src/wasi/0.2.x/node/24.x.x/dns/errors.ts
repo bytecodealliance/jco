@@ -11,6 +11,7 @@ import {
   invalidArgType as sharedInvalidArgType,
   unsupportedNodeApi,
 } from "../errors/core.js";
+import { decodeErrno } from "../internal/host-error.js";
 
 import type { DnsError, DnsErrorData } from "./types.js";
 
@@ -42,12 +43,7 @@ export function dnsError(data: DnsErrorData): DnsError {
   const error = new Error(data.message) as DnsError;
   error.name = data.name;
   error.code = data.code;
-  error.errno =
-    data.errno?.tag === "number"
-      ? Number(data.errno.val)
-      : data.errno?.tag === "symbolic"
-        ? data.errno.val
-        : undefined;
+  error.errno = decodeErrno(data.errno);
   error.syscall = data.syscall;
   error.hostname = data.hostname;
   return error;
