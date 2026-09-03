@@ -21,7 +21,6 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | Export                                       | Description                                                                   |
 | -------------------------------------------- | ----------------------------------------------------------------------------- |
 | `http/adapters/hono`                         | Enables easier building of [Hono][hono] HTTP servers                          |
-| `http/adapters/express`                      | Provides a simple [Express][express]-like interface for building HTTP servers |
 | `wasi/0.2.x/node/24.x.x/assert`              | `node:assert` adapter, Node 24 on WASI p2                                     |
 | `wasi/0.2.x/node/24.x.x/console`             | `node:console` guest adapter over an explicit host capability                 |
 | `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
@@ -47,8 +46,27 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/inspector/host/node` | Opt-in host over the runtime's real `node:inspector`                          |
 | `wasi/0.2.x/node/24.x.x/stream/consumers`    | Portable `node:stream/consumers`, Node 24                                     |
 | `wasi/0.2.x/node/24.x.x/stream/iter`         | Experimental iterable streams from Node 24.20                                 |
+| `wasi/0.2.x/node/24.x.x/child-process/host`  | Deny-by-default host for `jco:node/child-process`                             |
+| `wasi/0.2.x/node/24.x.x/child-process/host/node` | Opt-in host over the runtime's real `node:child_process`                  |
+| `wasi/0.2.x/node/24.x.x/cluster/host`        | Deny-by-default host for `jco:node/cluster`                                   |
+| `wasi/0.2.x/node/24.x.x/cluster/host/node`   | Opt-in host over the runtime's real `node:cluster`                            |
+| `wasi/0.2.x/node/24.x.x/console/host`        | Deny-by-default host for `jco:node/console`                                   |
+| `wasi/0.2.x/node/24.x.x/console/host/node`   | Opt-in host over the runtime's real `node:console`                            |
+| `wasi/0.2.x/node/24.x.x/dns/promises`        | `node:dns/promises`, sharing one core with `node:dns`                         |
+| `wasi/0.2.x/node/24.x.x/dns/host`            | Deny-by-default host for `jco:node/dns`                                       |
+| `wasi/0.2.x/node/24.x.x/dns/host/node`       | Opt-in host over the runtime's real `node:dns`                                |
+| `wasi/0.2.x/node/24.x.x/fs/promises`         | `node:fs/promises`, sharing one core with `node:fs`                           |
+| `wasi/0.2.x/node/24.x.x/fs/host`             | Deny-by-default host for `jco:node/fs`                                        |
+| `wasi/0.2.x/node/24.x.x/fs/host/node`        | Opt-in host over the runtime's real `node:fs`                                 |
+| `wasi/0.2.x/node/24.x.x/http/core`           | `node:http` core shared by the selectable implementations                     |
+| `wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets` | `node:http` implementation over WASI Preview 2 sockets                     |
+| `wasi/0.2.x/node/24.x.x/http/impl/wasi-http` | `node:http` implementation over WASI Preview 2 HTTP                           |
+| `wasi/0.2.x/node/24.x.x/http/host`           | Deny-by-default host for `jco:node/http`                                      |
+| `wasi/0.2.x/node/24.x.x/http/host/node`      | Opt-in host over the runtime's real `node:http`                               |
+| `wasi/0.2.x/node/24.x.x/os/host`             | Deny-by-default host for `jco:node/os`                                        |
+| `wasi/0.2.x/node/24.x.x/os/host/node`        | Opt-in host over the runtime's real `node:os`                                 |
+| `node/path`                                  | Legacy unversioned alias for `wasi/0.2.x/node/24.x.x/path`                    |
 
-[express]: https://expressjs.com
 
 # Quickstart
 
