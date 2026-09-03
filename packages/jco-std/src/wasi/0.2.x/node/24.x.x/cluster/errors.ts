@@ -3,24 +3,15 @@
  *
  * Each one names what was attempted and why it cannot work, rather than failing as a missing
  * property would. Nothing here is a silent omission: every case has a test.
+ *
+ * The coded-error factory, codes, and message templates are the shared ones in
+ * `../errors/core.js`, so cluster errors carry the same identity, stack header, and `toString`
+ * as every other jco-std builtin.
  */
 
-/** Error code carried by every unsupported-API failure Jco raises for Node builtins. */
-export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API";
+import { deprecatedNodeApi, unsupportedNodeApi } from "../errors/core.js";
 
-/** Error code for APIs Node itself has deprecated, which Jco declines to implement. */
-export const DEPRECATED_CODE = "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API";
-
-interface CodedErrorInit {
-  code: string;
-  message: string;
-}
-
-function codedError({ code, message }: CodedErrorInit): Error & { code: string } {
-  const error = new Error(message) as Error & { code: string };
-  error.code = code;
-  return error;
-}
+export { DEPRECATED_CODE, UNSUPPORTED_CODE } from "../errors/core.js";
 
 /**
  * Thrown for cluster behavior that has no component equivalent.
@@ -29,10 +20,7 @@ function codedError({ code, message }: CodedErrorInit): Error & { code: string }
  * @param reason - why it cannot work here
  */
 export function unsupported(api: string, reason: string): Error & { code: string } {
-  return codedError({
-    code: UNSUPPORTED_CODE,
-    message: `${api} is not supported in a WebAssembly component: ${reason}`,
-  });
+  return unsupportedNodeApi(api, reason);
 }
 
 /**
@@ -44,8 +32,5 @@ export function unsupported(api: string, reason: string): Error & { code: string
  * @param replacement - the API Node's documentation directs users to instead
  */
 export function deprecated(api: string, replacement: string): Error & { code: string } {
-  return codedError({
-    code: DEPRECATED_CODE,
-    message: `${api} is deprecated in Node.js and not implemented by Jco; use ${replacement} instead`,
-  });
+  return deprecatedNodeApi(api, replacement);
 }

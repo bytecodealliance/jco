@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
 
+import { unsupportedNodeApi } from "../errors/core.js";
+
 import type {
   ChildProcessHost,
   HostProcessError,
@@ -40,9 +42,7 @@ export interface SpawnSyncReturns<T> {
 }
 
 function unsupported(api: string): never {
-  const error = new Error(`${api} is not supported by the Jco child_process adapter`);
-  Object.assign(error, { code: "ERR_JCO_UNSUPPORTED_NODE_API" });
-  throw error;
+  throw unsupportedNodeApi(api, "the Jco child_process adapter does not implement it");
 }
 
 function requireString(value: unknown, name: string): asserts value is string {

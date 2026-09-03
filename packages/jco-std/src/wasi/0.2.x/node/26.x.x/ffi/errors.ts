@@ -5,22 +5,28 @@
  * so a guest branching on `ERR_FFI_CALL_FAILED` behaves as it would on Node. Things a component
  * cannot express carry `ERR_JCO_UNSUPPORTED_NODE_API` and say why -- they are refusals, not
  * passed-through failures, and must never be mistaken for one.
+ *
+ * The coded-error factory and codes are the shared ones in `24.x.x/errors/core.js`: that module
+ * is Node-major-agnostic infrastructure, not a Node 24 port, so the Node 26 shim reuses it rather
+ * than carrying a second copy of the same identity.
  */
 
-/** Error code carried by every unsupported-API failure Jco raises for Node builtins. */
-export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API";
+import {
+  type CodedError as SharedCodedError,
+  codedError,
+  UNSUPPORTED_CODE,
+  unsupportedNodeApi,
+} from "../../24.x.x/errors/core.js";
+
+export { UNSUPPORTED_CODE } from "../../24.x.x/errors/core.js";
 
 /** Error code raised when no FFI host capability was granted. */
-export const ADAPTER_REQUIRED_CODE = "ERR_JCO_FFI_ADAPTER_REQUIRED";
+export const ADAPTER_REQUIRED_CODE = "ERR_JCO_FFI_ADAPTER_REQUIRED" as const;
 
-interface CodedError extends Error {
-  code: string;
-}
+type CodedError = SharedCodedError<Error, string>;
 
 function coded(code: string, message: string): CodedError {
-  const error = new Error(message) as CodedError;
-  error.code = code;
-  return error;
+  return codedError(new Error(message), code);
 }
 
 /**
@@ -30,7 +36,7 @@ function coded(code: string, message: string): CodedError {
  * @param reason - why it cannot work here
  */
 export function unsupported(api: string, reason: string): CodedError {
-  return coded(UNSUPPORTED_CODE, `${api} is not supported in a WebAssembly component: ${reason}`);
+  return unsupportedNodeApi(api, reason);
 }
 
 /** The WIT `variant error`, in the shape a transpiled import throws it. */

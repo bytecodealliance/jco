@@ -2,6 +2,8 @@
 // lib/internal/console/{constructor,global}.js and lib/internal/cli_table.js.
 // Node.js is distributed under the MIT license. See https://github.com/nodejs/node.
 
+import { unsupportedNodeApi } from "../errors/core.js";
+
 const customInspect = Symbol.for("nodejs.util.inspect.custom");
 const clocks = new WeakMap<object, () => number>();
 const consoleMethods = [
@@ -338,11 +340,10 @@ function validateInspectOptions(value: unknown): asserts value is InspectOptions
     if ((value as InspectOptions)[key] !== undefined) {
       // These options depend on Node's full util.inspect implementation. Failing
       // explicitly avoids accepting configuration that the portable inspector ignores.
-      const error = new Error(
-        `console inspect option '${key}' is not supported by the Jco adapter`,
+      throw unsupportedNodeApi(
+        `console inspect option '${key}'`,
+        "it depends on Node's full util.inspect implementation, which the portable inspector does not provide",
       );
-      Object.assign(error, { code: "ERR_JCO_UNSUPPORTED_NODE_API" });
-      throw error;
     }
   }
 }
