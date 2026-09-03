@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::sync::Mutex;
 
+use wasmtime_environ::Trap;
+
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
@@ -107,6 +109,9 @@ pub enum Intrinsic {
     ComponentError,
     WebAssemblyRuntimeError,
 
+    /// Canonical trap messages indexed by their FACT discriminant.
+    FactTrapMessages,
+
     // WASI object helpers
     GetErrorPayload,
     GetErrorPayloadString,
@@ -194,6 +199,15 @@ impl_from_intrinsic! {
     AsyncFutureIntrinsic => AsyncFuture,
     ComponentIntrinsic => Component,
     HostIntrinsic => Host,
+}
+
+fn fact_trap_messages_js() -> String {
+    let messages = (0..=u8::MAX)
+        .filter_map(|code| {
+            Trap::from_u8(code).map(|trap| format!("{code}: {:?}", trap.to_string()))
+        })
+        .collect::<Vec<_>>();
+    format!("{{ {} }}", messages.join(", "))
 }
 
 impl Intrinsic {
@@ -329,6 +343,15 @@ impl Intrinsic {
 
             Intrinsic::WebAssemblyRuntimeError => {
                 output.push_str("const WebAssemblyRuntimeError = WebAssembly.RuntimeError;\n")
+            }
+
+            Intrinsic::FactTrapMessages => {
+                uwriteln!(
+                    output,
+                    "const {name} = {messages};",
+                    name = self.name(),
+                    messages = fact_trap_messages_js(),
+                );
             }
 
             Intrinsic::FinalizationRegistryCreate => output.push_str(
@@ -1273,6 +1296,28 @@ mod tests {
     }
 
     #[test]
+    fn fact_trap_messages_are_shared_and_emitted_on_demand() {
+        let (source, intrinsics) = render([Intrinsic::FactTrapMessages]);
+
+        assert_eq!(intrinsics, BTreeSet::from([Intrinsic::FactTrapMessages]));
+        assert_eq!(source.matches("const FACT_TRAP_MESSAGES =").count(), 1);
+        assert!(source.contains(&format!(
+            "{}: {:?}",
+            Trap::CannotEnterComponent as u8,
+            "wasm trap: cannot enter component instance"
+        )));
+        assert!(source.contains(&format!(
+            "{}: {:?}",
+            Trap::CannotLeaveComponent as u8,
+            "wasm trap: cannot leave component instance"
+        )));
+
+        let (source, intrinsics) = render([Intrinsic::WebAssemblyRuntimeError]);
+        assert!(!intrinsics.contains(&Intrinsic::FactTrapMessages));
+        assert!(!source.contains("FACT_TRAP_MESSAGES"));
+    }
+
+    #[test]
     fn component_async_state_does_not_pull_in_create_stream_or_create_future() {
         let state = Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass);
         let create_stream = Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream);
@@ -2187,6 +2232,7 @@ impl Intrinsic {
                 "clampGuest",
                 "ComponentError",
                 "WebAssemblyRuntimeError",
+                "FACT_TRAP_MESSAGES",
                 "fetchCompile",
                 "finalizationRegistryCreate",
                 "getErrorPayload",
@@ -2253,6 +2299,7 @@ impl Intrinsic {
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",
             Intrinsic::WebAssemblyRuntimeError => "WebAssemblyRuntimeError",
+            Intrinsic::FactTrapMessages => "FACT_TRAP_MESSAGES",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::FinalizationRegistryCreate => "finalizationRegistryCreate",
             Intrinsic::GetErrorPayload => "getErrorPayload",
