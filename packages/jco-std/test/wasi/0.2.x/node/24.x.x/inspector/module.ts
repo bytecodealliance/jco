@@ -14,7 +14,7 @@ import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/inspecto
 const core = createInspectorCore(nodeHost);
 
 describe("node:inspector core surface", () => {
-  test("exposes every module member", () => {
+  test.concurrent("exposes every module member", () => {
     expect(typeof core.open).toBe("function");
     expect(typeof core.close).toBe("function");
     expect(typeof core.url).toBe("function");
@@ -27,7 +27,7 @@ describe("node:inspector core surface", () => {
     expect(typeof core.NetworkResources).toBe("object");
   });
 
-  test("the promises Session extends the callback Session", () => {
+  test.concurrent("the promises Session extends the callback Session", () => {
     expect(Object.getPrototypeOf(core.PromisesSession.prototype)).toBe(core.Session.prototype);
     expect(Object.getOwnPropertyNames(core.PromisesSession.prototype).sort()).toEqual([
       "constructor",
@@ -36,7 +36,7 @@ describe("node:inspector core surface", () => {
     expect(core.PromisesSession.prototype.post.length).toBe(3);
   });
 
-  test("Session extends an EventEmitter", () => {
+  test.concurrent("Session extends an EventEmitter", () => {
     expect(Object.getPrototypeOf(core.Session.prototype).constructor.name).toBe("EventEmitter");
     expect(Object.getOwnPropertyNames(core.Session.prototype).sort()).toEqual([
       "connect",
@@ -47,7 +47,7 @@ describe("node:inspector core surface", () => {
     ]);
   });
 
-  test("the deny host throws the adapter-required error from every entry point", () => {
+  test.concurrent("the deny host throws the adapter-required error from every entry point", () => {
     for (const call of [
       () => denyHost.open(undefined, undefined, false),
       () => denyHost.close(),
@@ -66,7 +66,7 @@ describe("node:inspector core surface", () => {
 });
 
 describe("inspector callback registry", () => {
-  test("registers and takes a post callback once", () => {
+  test.concurrent("registers and takes a post callback once", () => {
     const registry = new CallbackRegistry();
     const seen: unknown[] = [];
     const id = registry.registerPost((error, result) => seen.push([error, result]));
@@ -79,7 +79,7 @@ describe("inspector callback registry", () => {
     expect(seen).toEqual([[null, { ok: true }]]);
   });
 
-  test("reconstructs a coded error from a post callback payload", () => {
+  test.concurrent("reconstructs a coded error from a post callback payload", () => {
     const registry = new CallbackRegistry();
     let captured: (Error & { code?: string }) | null = null;
     const id = registry.registerPost((error) => {
@@ -92,7 +92,7 @@ describe("inspector callback registry", () => {
     expect(captured!.message).toBe("boom");
   });
 
-  test("registers and takes a notification listener", () => {
+  test.concurrent("registers and takes a notification listener", () => {
     const registry = new CallbackRegistry();
     const seen: unknown[] = [];
     const id = registry.registerListener((method, paramsJson) => seen.push([method, paramsJson]));
@@ -103,7 +103,7 @@ describe("inspector callback registry", () => {
     expect(seen).toEqual([["Runtime.consoleAPICalled", "{}"]]);
   });
 
-  test("post and listener ids never collide", () => {
+  test.concurrent("post and listener ids never collide", () => {
     const registry = new CallbackRegistry();
     const postId = registry.registerPost(() => {});
     const listenerId = registry.registerListener(() => {});
@@ -114,7 +114,7 @@ describe("inspector callback registry", () => {
     expect(callbacks.takePostCallback(listenerId)).toBeUndefined();
   });
 
-  test("a released registration cannot be taken", () => {
+  test.concurrent("a released registration cannot be taken", () => {
     const registry = new CallbackRegistry();
     const id = registry.registerPost(() => {});
     registry.releasePost(id);

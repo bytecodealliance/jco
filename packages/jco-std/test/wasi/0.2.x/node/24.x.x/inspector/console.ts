@@ -8,11 +8,11 @@ import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/inspecto
 const core = createInspectorCore(nodeHost);
 
 describe("node:inspector.console", () => {
-  test("matches Node's method set", () => {
+  test.concurrent("matches Node's method set", () => {
     expect(Object.keys(core.console).sort()).toEqual(Object.keys(inspector.console).sort());
   });
 
-  test("every method forwards and returns undefined", () => {
+  test.concurrent("every method forwards and returns undefined", () => {
     for (const key of Object.keys(core.console)) {
       if (key === "context") {
         continue;
@@ -22,7 +22,7 @@ describe("node:inspector.console", () => {
     }
   });
 
-  test("context(name) returns a console with Node's context shape", () => {
+  test.concurrent("context(name) returns a console with Node's context shape", () => {
     const context = core.console.context("app");
     // Node's context console has no nested context and spells the method dirXml (capital X).
     const nodeContextKeys = Object.keys(
@@ -34,7 +34,7 @@ describe("node:inspector.console", () => {
     expect(Object.keys(context)).not.toContain("context");
   });
 
-  test("a cyclic argument does not throw", () => {
+  test.concurrent("a cyclic argument does not throw", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     expect(() => core.console.log(cyclic)).not.toThrow();

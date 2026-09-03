@@ -15,11 +15,11 @@ const snapshot: WorkerInfo = {
 };
 
 describe("cluster.Worker against the Node host", () => {
-  test("exposes the id the host reported", () => {
+  test.concurrent("exposes the id the host reported", () => {
     expect(new Worker(nodeHost, snapshot).id).toBe(4242);
   });
 
-  test("falls back to the last snapshot when the host no longer knows the worker", () => {
+  test.concurrent("falls back to the last snapshot when the host no longer knows the worker", () => {
     // The Node host cannot answer for an id it never forked, which is what a worker sees after
     // it exits; the last known state has to remain readable.
     const worker = new Worker(nodeHost, snapshot);
@@ -28,7 +28,7 @@ describe("cluster.Worker against the Node host", () => {
     expect(worker.isDead()).toBe(false);
   });
 
-  test("worker.process explains that a ChildProcess cannot cross the boundary", () => {
+  test.concurrent("worker.process explains that a ChildProcess cannot cross the boundary", () => {
     const worker = new Worker(nodeHost, snapshot);
     expect(() => worker.process).toThrow(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
@@ -36,7 +36,7 @@ describe("cluster.Worker against the Node host", () => {
     expect(() => worker.process).toThrowError(/ChildProcess/);
   });
 
-  test("send rejects values JSON cannot represent, before reaching the host", () => {
+  test.concurrent("send rejects values JSON cannot represent, before reaching the host", () => {
     const worker = new Worker(nodeHost, snapshot);
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
@@ -44,7 +44,7 @@ describe("cluster.Worker against the Node host", () => {
     expect(() => worker.send(() => undefined)).toThrowError(/JSON/);
   });
 
-  test("operations on a worker the host does not know fail loudly", () => {
+  test.concurrent("operations on a worker the host does not know fail loudly", () => {
     const worker = new Worker(nodeHost, snapshot);
     expect(() => worker.send({ ok: true })).toThrow();
     expect(() => worker.disconnect()).toThrow();

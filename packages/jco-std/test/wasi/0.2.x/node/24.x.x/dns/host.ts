@@ -5,7 +5,7 @@ import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/dns-host
 import { createDns } from "../../../../../../src/wasi/0.2.x/node/24.x.x/dns/core.js";
 
 describe("node:dns host providers", () => {
-  test("denies DNS by default", () => {
+  test.concurrent("denies DNS by default", () => {
     expect(() => denyHost.getServers()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_DNS_ADAPTER_REQUIRED" }),
     );
@@ -17,7 +17,7 @@ describe("node:dns host providers", () => {
     expect(modules.promises.getDefaultResultOrder()).toBe("ipv6first");
   });
 
-  test("uses the real Node DNS implementation when explicitly selected", async () => {
+  test.concurrent("uses the real Node DNS implementation when explicitly selected", async () => {
     const lookup = nodeHost.lookup("localhost", {
       family: "unspecified",
       hints: 0,
@@ -35,7 +35,7 @@ describe("node:dns host providers", () => {
     }
   });
 
-  test("resolves the external IANA example domain", async () => {
+  test.concurrent("resolves the external IANA example domain", async () => {
     const response = await nodeHost.resolve4("example.com", false);
 
     expect(response.tag).toBe("ok");
@@ -48,7 +48,7 @@ describe("node:dns host providers", () => {
     }
   });
 
-  test("exports named DNS operations", () => {
+  test.concurrent("exports named DNS operations", () => {
     expect(nodeHost).toEqual(
       expect.objectContaining({
         lookup: expect.any(Function),

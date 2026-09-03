@@ -4,7 +4,7 @@ import type { IncomingMessage } from "../../../../../../src/wasi/0.2.x/node/24.x
 import { nextTurn, recordingImplementation } from "./helpers/index.js";
 
 describe("node:http client requests", () => {
-  test("normalizes URL options and buffers a request body", async () => {
+  test.concurrent("normalizes URL options and buffers a request body", async () => {
     const { http, requests } = recordingImplementation();
     const events: string[] = [];
     const response = new Promise<IncomingMessage>((resolve) => {
@@ -41,7 +41,7 @@ describe("node:http client requests", () => {
     expect(message.statusCode).toBe(200);
   });
 
-  test("get ends automatically and delivers buffered response events asynchronously", async () => {
+  test.concurrent("get ends automatically and delivers buffered response events asynchronously", async () => {
     const { http } = recordingImplementation();
     const order: string[] = [];
     http.get("http://example.com/", (message) => {
@@ -56,14 +56,14 @@ describe("node:http client requests", () => {
     expect(order).toEqual(["sync", "response", "data:response body", "end"]);
   });
 
-  test("rejects protocols that do not belong to node:http", () => {
+  test.concurrent("rejects protocols that do not belong to node:http", () => {
     const { http } = recordingImplementation();
     expect(() => http.request("https://example.com/")).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_PROTOCOL" }),
     );
   });
 
-  test("makes deprecated and socket-owned operations explicit", () => {
+  test.concurrent("makes deprecated and socket-owned operations explicit", () => {
     const { http } = recordingImplementation();
     const request = http.request("http://example.com/");
     expect(() => request.abort()).toThrow(
@@ -74,7 +74,7 @@ describe("node:http client requests", () => {
     );
   });
 
-  test("does not cross the implementation boundary for an already-aborted signal", async () => {
+  test.concurrent("does not cross the implementation boundary for an already-aborted signal", async () => {
     const controller = new AbortController();
     controller.abort("cancelled");
     const { http, requests } = recordingImplementation();
@@ -85,7 +85,7 @@ describe("node:http client requests", () => {
     expect(requests).toHaveLength(0);
   });
 
-  test("validates implementation timeout values before sending", () => {
+  test.concurrent("validates implementation timeout values before sending", () => {
     const { http } = recordingImplementation();
     const request = http.request("http://example.com/");
     expect(() => request.setTimeout("10" as never)).toThrow(

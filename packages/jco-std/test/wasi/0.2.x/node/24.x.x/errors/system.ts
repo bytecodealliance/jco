@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { systemError } from "../../../../../../src/wasi/0.2.x/node/24.x.x/errors.js";
 
 describe("Node system error shape", () => {
-  test("preserves documented system error fields", () => {
+  test.concurrent("preserves documented system error fields", () => {
     const info = { reason: "fixture" };
     const error = systemError({
       address: "127.0.0.1",
@@ -41,7 +41,7 @@ describe("Node system error shape", () => {
     ]);
   });
 
-  test("omits optional fields that the host did not provide", () => {
+  test.concurrent("omits optional fields that the host did not provide", () => {
     const error = systemError({ code: "ENOENT", message: "open ENOENT", syscall: "open" });
     expect(error).toMatchObject({ code: "ENOENT", syscall: "open" });
     expect(error).not.toHaveProperty("path");

@@ -10,20 +10,20 @@ const cluster = createCluster(nodeHost);
  * property or a silent no-op would surface far from the cause.
  */
 describe("unsupported cluster behavior", () => {
-  test("setupPrimary rejects settings that configure the host runner", () => {
+  test.concurrent("setupPrimary rejects settings that configure the host runner", () => {
     for (const key of ["exec", "execArgv", "stdio", "uid", "gid", "inspectPort", "serialization"]) {
       expect(() => cluster.setupPrimary({ [key]: "x" } as never), key).toThrowError(/host runner/);
     }
   });
 
-  test("rejecting those settings leaves the running cluster untouched", async () => {
+  test.concurrent("rejecting those settings leaves the running cluster untouched", async () => {
     const nodeCluster = await import("node:cluster");
     const before = nodeCluster.default.settings.exec;
     expect(() => cluster.setupPrimary({ exec: "other.js" } as never)).toThrow();
     expect(nodeCluster.default.settings.exec).toBe(before);
   });
 
-  test("the events meta-events are refused rather than silently ignored", () => {
+  test.concurrent("the events meta-events are refused rather than silently ignored", () => {
     expect(() => cluster.on("newListener", () => undefined)).toThrowError(/meta-event/);
     expect(() => cluster.on("removeListener", () => undefined)).toThrowError(/meta-event/);
   });

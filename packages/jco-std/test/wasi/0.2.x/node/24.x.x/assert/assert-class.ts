@@ -5,19 +5,19 @@ import {
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.Assert", () => {
-  test("defaults legacy-named methods to strict behavior", () => {
+  test.concurrent("defaults legacy-named methods to strict behavior", () => {
     const instance = new Assert();
     expect(instance.equal).toBe(instance.strictEqual);
     expect(instance.deepEqual).toBe(instance.deepStrictEqual);
     expect(() => instance.equal(1, "1")).toThrow(AssertionError);
   });
 
-  test("supports non-strict instances", () => {
+  test.concurrent("supports non-strict instances", () => {
     const instance = new Assert({ strict: false });
     expect(() => instance.equal(1, "1")).not.toThrow();
   });
 
-  test("supports skipPrototype and validates diff", () => {
+  test.concurrent("supports skipPrototype and validates diff", () => {
     class Left {
       value = 1;
     }
@@ -31,7 +31,7 @@ describe("assert.Assert", () => {
     expect(() => new Assert({ diff: "invalid" as "simple" })).toThrowError(/options\.diff/);
   });
 
-  test("requires construction with new", () => {
+  test.concurrent("requires construction with new", () => {
     expect(() => Reflect.apply(Assert, undefined, [])).toThrowError(
       expect.objectContaining({ code: "ERR_CONSTRUCT_CALL_REQUIRED" }),
     );

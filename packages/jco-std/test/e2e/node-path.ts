@@ -118,7 +118,7 @@ function expectInvalidArgType(operation: () => unknown): void {
 }
 
 describe("node:path factory", () => {
-  test("matches the complete Node 24 module surface", () => {
+  test.concurrent("matches the complete Node 24 module surface", () => {
     const path = factory();
     expect(Object.keys(path)).toEqual(Object.keys(nodePath));
     expect(Object.keys(path.posix)).toEqual(Object.keys(nodePath.posix));
@@ -128,19 +128,19 @@ describe("node:path factory", () => {
     expect(path.win32._makeLong).toBe(path.win32.toNamespacedPath);
   });
 
-  test("matches Node 24 POSIX algorithms", () => {
+  test.concurrent("matches Node 24 POSIX algorithms", () => {
     const path = factory(cwd).posix;
     compareUnary(path, nodePath.posix);
     compareComposed(path, nodePath.posix);
   });
 
-  test("matches Node 24 Windows algorithms", () => {
+  test.concurrent("matches Node 24 Windows algorithms", () => {
     const path = factory(cwd).win32;
     compareUnary(path, nodePath.win32);
     compareComposed(path, nodePath.win32);
   });
 
-  test("uses POSIX as the WASI default and preserves namespace identities", () => {
+  test.concurrent("uses POSIX as the WASI default and preserves namespace identities", () => {
     const path = factory();
     expect(path.sep).toBe("/");
     expect(path.delimiter).toBe(":");
@@ -151,7 +151,7 @@ describe("node:path factory", () => {
     expect(path.posix.win32).toBe(path.win32);
   });
 
-  test("does not access WASI providers for lexical operations", () => {
+  test.concurrent("does not access WASI providers for lexical operations", () => {
     const fail = vi.fn((): never => {
       throw new Error("provider accessed");
     });
@@ -161,7 +161,7 @@ describe("node:path factory", () => {
     expect(fail).not.toHaveBeenCalled();
   });
 
-  test("reads initial cwd lazily only when resolution needs it", () => {
+  test.concurrent("reads initial cwd lazily only when resolution needs it", () => {
     const initialCwd = vi.fn(() => "/workspace/project");
     const path = factory(initialCwd);
     expect(path.resolve("src", "index.js")).toBe("/workspace/project/src/index.js");
@@ -173,13 +173,13 @@ describe("node:path factory", () => {
     expect(initialCwd).not.toHaveBeenCalled();
   });
 
-  test("fails clearly when an operation requires an unavailable cwd", () => {
+  test.concurrent("fails clearly when an operation requires an unavailable cwd", () => {
     const path = factory(() => undefined);
     expect(() => path.resolve("relative")).toThrow(/wasi:cli\/environment initial-cwd/);
     expect(path.resolve("/absolute")).toBe("/absolute");
   });
 
-  test("uses case-insensitive per-drive Windows working directories", () => {
+  test.concurrent("uses case-insensitive per-drive Windows working directories", () => {
     const getEnvironment = vi.fn((): Array<[string, string]> => [["=c:", "C:\\users\\me"]]);
     const path = createPath({
       initialCwd: () => "D:\\workspace",
@@ -189,7 +189,7 @@ describe("node:path factory", () => {
     expect(getEnvironment).toHaveBeenCalledOnce();
   });
 
-  test("validates factory providers before returning a module", () => {
+  test.concurrent("validates factory providers before returning a module", () => {
     expect(() => createPath(undefined as unknown as Parameters<typeof createPath>[0])).toThrow(
       /initialCwd and getEnvironment providers/,
     );
@@ -198,7 +198,7 @@ describe("node:path factory", () => {
     );
   });
 
-  test("uses Node-style type errors and validation order", () => {
+  test.concurrent("uses Node-style type errors and validation order", () => {
     const path = factory();
     expectInvalidArgType(() => path.join("ok", 1 as unknown as string));
     expectInvalidArgType(() => path.basename("ok", 1 as unknown as string));

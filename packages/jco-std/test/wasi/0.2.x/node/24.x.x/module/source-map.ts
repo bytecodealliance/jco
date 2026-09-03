@@ -22,20 +22,20 @@ describe("SourceMap matches Node", () => {
   const mine = new SourceMap(PAYLOAD);
   const theirs = new NodeSourceMap(PAYLOAD);
 
-  test("payload is a copy, not the object passed in", () => {
+  test.concurrent("payload is a copy, not the object passed in", () => {
     expect(mine.payload).toEqual(PAYLOAD);
     expect(mine.payload).not.toBe(PAYLOAD);
     expect(theirs.payload).not.toBe(PAYLOAD);
   });
 
-  test("lineLengths is undefined unless supplied, and echoed when it is", () => {
+  test.concurrent("lineLengths is undefined unless supplied, and echoed when it is", () => {
     expect(mine.lineLengths).toBe(theirs.lineLengths);
     expect(new SourceMap(PAYLOAD, { lineLengths: [10, 20] }).lineLengths).toEqual(
       new NodeSourceMap(PAYLOAD, { lineLengths: [10, 20] }).lineLengths,
     );
   });
 
-  test("findEntry and findOrigin agree across a grid of positions", () => {
+  test.concurrent("findEntry and findOrigin agree across a grid of positions", () => {
     // Includes positions before the first mapping and past the last, where the two easy mistakes
     // live: returning {} instead of the last entry, and snapping findOrigin to the entry's origin
     // instead of preserving the caller's offset within it.
@@ -55,14 +55,14 @@ describe("SourceMap matches Node", () => {
     expect(mismatches).toEqual([]);
   });
 
-  test("findOrigin keeps the offset within the mapped region", () => {
+  test.concurrent("findOrigin keeps the offset within the mapped region", () => {
     // Node does not snap to the entry's original position: it shifts by how far the query sat past
     // the entry, so a query beyond the last mapping extrapolates and can report a negative column.
     expect(mine.findOrigin(100, 1)).toEqual(theirs.findOrigin(100, 1));
     expect(mine.findOrigin(100, 1).columnNumber).toBeLessThan(0);
   });
 
-  test("a query before any mapping yields nothing", () => {
+  test.concurrent("a query before any mapping yields nothing", () => {
     expect(mine.findEntry(0, -1)).toEqual(theirs.findEntry(0, -1));
     expect(mine.findEntry(0, -1)).toEqual({});
   });
@@ -78,7 +78,7 @@ describe("SourceMap matches Node", () => {
     expect(theirConstruct).toThrowError(expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }));
   });
 
-  test("an empty mappings string decodes to no entries", () => {
+  test.concurrent("an empty mappings string decodes to no entries", () => {
     const empty = { version: 3, sources: [], names: [], mappings: "" };
     expect(new SourceMap(empty).findEntry(0, 0)).toEqual(new NodeSourceMap(empty).findEntry(0, 0));
   });

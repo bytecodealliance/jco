@@ -3,7 +3,7 @@ import assert from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js
 import { compareOutcome, describeDifferential, nodeAssert } from "../helpers/assert.js";
 
 describeDifferential("assert.throws", () => {
-  test("supports no matcher, constructors, regexps, predicates, and objects", () => {
+  test.concurrent("supports no matcher, constructors, regexps, predicates, and objects", () => {
     const cases: Array<[() => unknown, Parameters<typeof assert.throws>[1]]> = [
       [
         () => {
@@ -45,7 +45,7 @@ describeDifferential("assert.throws", () => {
     }
   });
 
-  test("reports missing and mismatched exceptions", () => {
+  test.concurrent("reports missing and mismatched exceptions", () => {
     compareOutcome(
       () => assert.throws(() => undefined),
       () => nodeAssert.throws(() => undefined),
@@ -62,7 +62,7 @@ describeDifferential("assert.throws", () => {
     );
   });
 
-  test("rejects an ambiguous string message", () => {
+  test.concurrent("rejects an ambiguous string message", () => {
     expect(() =>
       assert.throws(() => {
         throw new Error("same");

@@ -5,7 +5,7 @@ import * as constants from "../../../../../../src/wasi/0.2.x/node/24.x.x/dns/cor
 import { fakeDns } from "./helpers/index.js";
 
 describe("node:dns module contract", () => {
-  test("matches Node 24 DNS constants", () => {
+  test.concurrent("matches Node 24 DNS constants", () => {
     for (const key of [
       "ADDRCONFIG",
       "ALL",
@@ -39,7 +39,7 @@ describe("node:dns module contract", () => {
     }
   });
 
-  test("shares state between callback and promise facades", () => {
+  test.concurrent("shares state between callback and promise facades", () => {
     const { modules } = fakeDns();
     modules.callback.setDefaultResultOrder("ipv6first");
     expect(modules.promises.getDefaultResultOrder()).toBe("ipv6first");

@@ -9,7 +9,7 @@ import {
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/stream/iter/index.js";
 
 describe("stream/iter pipeTo", () => {
-  test("uses batch writes, closes, and reports byte count", async () => {
+  test.concurrent("uses batch writes, closes, and reports byte count", async () => {
     const chunks: ByteBatch = [];
     let ended = false;
     const count = await pipeTo(from(["ab", "c"]), {
@@ -31,7 +31,7 @@ describe("stream/iter pipeTo", () => {
     expect(ended).toBe(true);
   });
 
-  test("supports synchronous writers and preventClose", () => {
+  test.concurrent("supports synchronous writers and preventClose", () => {
     const chunks: ByteBatch = [];
     let ended = false;
     const count = pipeToSync(
@@ -52,7 +52,7 @@ describe("stream/iter pipeTo", () => {
     expect(ended).toBe(false);
   });
 
-  test("fails the destination when a source throws", async () => {
+  test.concurrent("fails the destination when a source throws", async () => {
     const failure = new Error("source failed");
     let received: unknown;
     async function* source(): AsyncIterable<string> {

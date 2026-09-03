@@ -16,7 +16,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 describe("node:http wasi:http implementation", () => {
-  test("translates a buffered exchange and disposes child streams before their bodies", () => {
+  test.concurrent("translates a buffered exchange and disposes child streams before their bodies", () => {
     const events: string[] = [];
     let requestMethod: unknown;
     let requestAuthority: string | undefined;
@@ -175,7 +175,7 @@ describe("node:http wasi:http implementation", () => {
     expect(events).toContain("future blocked");
   });
 
-  test("maps wasi:http failures to Node-style errors", () => {
+  test.concurrent("maps wasi:http failures to Node-style errors", () => {
     const provider = {
       outgoingHandler: {
         handle() {
@@ -227,7 +227,7 @@ describe("node:http wasi:http implementation", () => {
     ).toThrow(expect.objectContaining({ code: "ECONNREFUSED" }));
   });
 
-  test("rejects server construction immediately", () => {
+  test.concurrent("rejects server construction immediately", () => {
     const implementation = createWasiHttpImplementation({} as never);
     expect(() => createHttp(implementation).createServer()).toThrow(
       expect.objectContaining({

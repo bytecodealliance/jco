@@ -2,12 +2,12 @@ import { describe, expect, test } from "vitest";
 import assert from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.doesNotReject", () => {
-  test("accepts fulfilled promises", async () => {
+  test.concurrent("accepts fulfilled promises", async () => {
     await expect(assert.doesNotReject(Promise.resolve(1))).resolves.toBeUndefined();
     await expect(assert.doesNotReject(async () => 1)).resolves.toBeUndefined();
   });
 
-  test("rejects matching failures and rethrows non-matches", async () => {
+  test.concurrent("rejects matching failures and rethrows non-matches", async () => {
     await expect(
       assert.doesNotReject(Promise.reject(new TypeError("boom")), TypeError),
     ).rejects.toMatchObject({
@@ -17,13 +17,13 @@ describe("assert.doesNotReject", () => {
     await expect(assert.doesNotReject(Promise.reject(error), SyntaxError)).rejects.toBe(error);
   });
 
-  test("validates returned promises", async () => {
+  test.concurrent("validates returned promises", async () => {
     await expect(Reflect.apply(assert.doesNotReject, undefined, [() => 1])).rejects.toMatchObject({
       code: "ERR_INVALID_RETURN_VALUE",
     });
   });
 
-  test("rejects non-Promise thenables", async () => {
+  test.concurrent("rejects non-Promise thenables", async () => {
     await expect(
       Reflect.apply(assert.doesNotReject, undefined, [
         { then: (resolve: () => void) => resolve() },

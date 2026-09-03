@@ -25,7 +25,7 @@ describeDifferential("assert.deepStrictEqual", () => {
     );
   });
 
-  test("compares enumerable symbols", () => {
+  test.concurrent("compares enumerable symbols", () => {
     const key = Symbol("key");
     compareOutcome(
       () => assert.deepStrictEqual({ [key]: 1 }, { [key]: 2 }),
@@ -33,7 +33,7 @@ describeDifferential("assert.deepStrictEqual", () => {
     );
   });
 
-  test("compares array symbols and shared array buffers", () => {
+  test.concurrent("compares array symbols and shared array buffers", () => {
     const symbol = Symbol("metadata");
     const left = [1];
     const right = [1];
@@ -56,7 +56,7 @@ describeDifferential("assert.deepStrictEqual", () => {
     }
   });
 
-  test("preserves graph topology for cycles", () => {
+  test.concurrent("preserves graph topology for cycles", () => {
     const actual: { child?: unknown } = {};
     const expected: { child?: unknown } = {};
     actual.child = actual;

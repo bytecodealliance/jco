@@ -43,7 +43,7 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     return new ffi.DynamicLibrary(null);
   }
 
-  test("calls a native function and returns its result", () => {
+  test.concurrent("calls a native function and returns its result", () => {
     const lib = processImage();
     try {
       const abs = lib.getFunction("abs", { arguments: ["int32"], return: "int32" }) as (
@@ -56,7 +56,7 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     }
   });
 
-  test("resolves a symbol to a non-null address", () => {
+  test.concurrent("resolves a symbol to a non-null address", () => {
     const lib = processImage();
     try {
       const address = lib.getSymbol("abs");
@@ -68,7 +68,7 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     }
   });
 
-  test("round-trips a primitive through host memory", () => {
+  test.concurrent("round-trips a primitive through host memory", () => {
     const lib = processImage();
     try {
       const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" }) as (
@@ -89,7 +89,7 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     }
   });
 
-  test("native code reads a string the guest wrote", () => {
+  test.concurrent("native code reads a string the guest wrote", () => {
     const lib = processImage();
     try {
       const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" }) as (
@@ -114,7 +114,7 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     }
   });
 
-  test("toArrayBuffer copies rather than viewing", () => {
+  test.concurrent("toArrayBuffer copies rather than viewing", () => {
     const lib = processImage();
     try {
       const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" }) as (
@@ -134,11 +134,11 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     }
   });
 
-  test("reports the event loop address", () => {
+  test.concurrent("reports the event loop address", () => {
     expect(typeof ffi.getCurrentEventLoop()).toBe("bigint");
   });
 
-  test("a missing symbol fails with Node's code", () => {
+  test.concurrent("a missing symbol fails with Node's code", () => {
     const lib = processImage();
     try {
       expect(() =>
@@ -149,7 +149,7 @@ describe.skipIf(!available)("node:ffi passes through to the host", () => {
     }
   });
 
-  test("a closed library reports Node's closed-library code", () => {
+  test.concurrent("a closed library reports Node's closed-library code", () => {
     const lib = processImage();
     lib.close();
     expect(() => lib.getSymbol("abs")).toThrowError(
@@ -162,7 +162,7 @@ describe("the host adapter's suffix is configurable", () => {
   // The guest cannot ask the host for this at module load (Wizer refuses imported calls during
   // initialization), so an application serving a guest that names `.dylib` or `.dll` files sets it
   // host-side instead.
-  test("an explicit value overrides the runtime's own", () => {
+  test.concurrent("an explicit value overrides the runtime's own", () => {
     const original = available ? nodeHost.suffix() : undefined;
     try {
       nodeHost.setSuffix("dylib");
@@ -182,7 +182,7 @@ describe("the host adapter's suffix is configurable", () => {
 });
 
 describe.skipIf(available)("without host FFI", () => {
-  test("reports that the host has no node:ffi, naming the version and flag", () => {
+  test.concurrent("reports that the host has no node:ffi, naming the version and flag", () => {
     let error: (Error & { code?: string }) | undefined;
     try {
       new ffi.DynamicLibrary(null);

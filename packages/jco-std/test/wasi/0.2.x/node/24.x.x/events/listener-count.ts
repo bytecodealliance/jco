@@ -13,7 +13,7 @@ import { completeEvents } from "../../../../../../src/wasi/0.2.x/node/24.x.x/eve
 const { listenerCount } = completeEvents(nodeEvents);
 
 describe("listenerCount", () => {
-  test("counts registered listeners", () => {
+  test.concurrent("counts registered listeners", () => {
     const emitter = new EventEmitter();
     emitter.on("x", () => {});
     emitter.on("x", () => {});
@@ -21,20 +21,20 @@ describe("listenerCount", () => {
     expect(listenerCount(emitter, "x")).toBe(2);
   });
 
-  test("is zero for an event with no listeners", () => {
+  test.concurrent("is zero for an event with no listeners", () => {
     const emitter = new EventEmitter();
     expect(listenerCount(emitter, "missing")).toBe(nodeListenerCount(emitter, "missing"));
     expect(listenerCount(emitter, "missing")).toBe(0);
   });
 
-  test("counts symbol-keyed events", () => {
+  test.concurrent("counts symbol-keyed events", () => {
     const emitter = new EventEmitter();
     const key = Symbol("event");
     emitter.on(key, () => {});
     expect(listenerCount(emitter, key)).toBe(nodeListenerCount(emitter, key));
   });
 
-  test("counts a once listener until it fires", () => {
+  test.concurrent("counts a once listener until it fires", () => {
     const emitter = new EventEmitter();
     emitter.once("x", () => {});
     expect(listenerCount(emitter, "x")).toBe(1);
@@ -42,7 +42,7 @@ describe("listenerCount", () => {
     expect(listenerCount(emitter, "x")).toBe(0);
   });
 
-  test("defers to an emitter that overrides listenerCount", () => {
+  test.concurrent("defers to an emitter that overrides listenerCount", () => {
     // Node delegates to the emitter's own method, so a subclass that counts differently is
     // honoured rather than bypassed.
     class Counted extends EventEmitter {

@@ -12,7 +12,7 @@ import {
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/errors.js";
 
 describe("Node validation errors", () => {
-  test("matches Node 24 invalid argument type errors", () => {
+  test.concurrent("matches Node 24 invalid argument type errors", () => {
     let nodeError: unknown;
     try {
       new NodeAsyncResource(42 as unknown as string);
@@ -27,7 +27,7 @@ describe("Node validation errors", () => {
     });
   });
 
-  test("formats common coded validation failures", () => {
+  test.concurrent("formats common coded validation failures", () => {
     expect(invalidArgValue("encoding", "bad", "is not supported")).toMatchObject({
       code: "ERR_INVALID_ARG_VALUE",
       message: "The argument 'encoding' is not supported. Received 'bad'",
@@ -46,7 +46,7 @@ describe("Node validation errors", () => {
     });
   });
 
-  test("describes boundary values without host dependencies", () => {
+  test.concurrent("describes boundary values without host dependencies", () => {
     expect(determineSpecificType(-0)).toBe("type number (-0)");
     expect(determineSpecificType(Number.NaN)).toBe("type number (NaN)");
     expect(determineSpecificType(1n)).toBe("type bigint (1n)");

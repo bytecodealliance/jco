@@ -20,7 +20,7 @@ describeDifferential("assert.strictEqual", () => {
     ),
   );
 
-  test("sets stable failure fields", () => {
+  test.concurrent("sets stable failure fields", () => {
     expectAssertion(() => assert.strictEqual(1, 2), {
       actual: 1,
       expected: 2,
@@ -28,7 +28,7 @@ describeDifferential("assert.strictEqual", () => {
     });
   });
 
-  test("throws a supplied Error", () => {
+  test.concurrent("throws a supplied Error", () => {
     const error = new Error("custom");
     expect(() => assert.strictEqual(1, 2, error)).toThrow(error);
   });

@@ -24,7 +24,7 @@ describe("node:http headers", () => {
     },
   );
 
-  test("preserves casing, repeated values, and latin-1 bytes", () => {
+  test.concurrent("preserves casing, repeated values, and latin-1 bytes", () => {
     const store = new HeaderStore();
     store.set("X-Name", "caf\u00e9");
     store.append("X-Name", "second");
@@ -37,7 +37,7 @@ describe("node:http headers", () => {
     ]);
   });
 
-  test("rejects mutation after headers are sent", () => {
+  test.concurrent("rejects mutation after headers are sent", () => {
     const store = new HeaderStore({ Accept: "text/plain" });
     store.markSent();
     expect(() => store.set("Accept", "application/json")).toThrow(

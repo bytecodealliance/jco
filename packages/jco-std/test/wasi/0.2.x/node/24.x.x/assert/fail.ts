@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import assert from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.fail", () => {
-  test("supports the current zero and one argument forms", () => {
+  test.concurrent("supports the current zero and one argument forms", () => {
     expect(() => assert.fail()).toThrowError(
       expect.objectContaining({ code: "ERR_ASSERTION", message: "Failed" }),
     );
@@ -13,13 +13,13 @@ describe("assert.fail", () => {
     expect(() => assert.fail(error)).toThrow(error);
   });
 
-  test("stubs the deprecated multi-argument form immediately", () => {
+  test.concurrent("stubs the deprecated multi-argument form immediately", () => {
     expect(() => Reflect.apply(assert.fail, undefined, [1, 2])).toThrowError(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API" }),
     );
   });
 
-  test("does not inspect deprecated-form arguments", () => {
+  test.concurrent("does not inspect deprecated-form arguments", () => {
     let accessed = false;
     const value = Object.defineProperty({}, "property", { get: () => (accessed = true) });
     expect(() => Reflect.apply(assert.fail, undefined, [value, value])).toThrow();

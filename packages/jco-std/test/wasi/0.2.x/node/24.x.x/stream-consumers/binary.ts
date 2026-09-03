@@ -13,14 +13,14 @@ async function* chunks(): AsyncIterable<Uint8Array | string> {
 }
 
 describe("node:stream/consumers binary consumers", () => {
-  test("collects ArrayBuffer, Uint8Array, Buffer, and Blob results", async () => {
+  test.concurrent("collects ArrayBuffer, Uint8Array, Buffer, and Blob results", async () => {
     expect(new TextDecoder().decode(await arrayBuffer(chunks()))).toBe("hello world");
     expect(new TextDecoder().decode(await bytes(chunks()))).toBe("hello world");
     expect((await buffer(chunks())).toString()).toBe("hello world");
     expect(await (await blob(chunks())).text()).toBe("hello world");
   });
 
-  test("handles empty streams", async () => {
+  test.concurrent("handles empty streams", async () => {
     expect((await arrayBuffer([])).byteLength).toBe(0);
     expect((await bytes([])).byteLength).toBe(0);
     expect((await buffer([])).byteLength).toBe(0);

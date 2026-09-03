@@ -4,7 +4,7 @@ import { createDns } from "../../../../../../src/wasi/0.2.x/node/24.x.x/dns/core
 import { fakeDns } from "./helpers/index.js";
 
 describe("node:dns Resolver and record queries", () => {
-  test("tracks independent resolver configuration", async () => {
+  test.concurrent("tracks independent resolver configuration", async () => {
     const { modules, host } = fakeDns();
     const resolver = new modules.promises.Resolver({ timeout: 250, tries: 2 });
     resolver.setServers(["203.0.113.53"]);
@@ -19,7 +19,7 @@ describe("node:dns Resolver and record queries", () => {
     });
   });
 
-  test("supports callback record families", async () => {
+  test.concurrent("supports callback record families", async () => {
     const { modules } = fakeDns();
     const callback = vi.fn();
     modules.callback.resolveMx("example.test", callback);
@@ -27,14 +27,14 @@ describe("node:dns Resolver and record queries", () => {
     expect(callback).toHaveBeenCalledWith(null, [{ exchange: "mail.example", priority: 10 }]);
   });
 
-  test("rejects unsupported record types explicitly", () => {
+  test.concurrent("rejects unsupported record types explicitly", () => {
     const { modules } = fakeDns();
     expect(() => modules.callback.resolve("example.test", "BOGUS", vi.fn())).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_ARG_VALUE" }),
     );
   });
 
-  test("makes cancellation an explicit unsupported operation", () => {
+  test.concurrent("makes cancellation an explicit unsupported operation", () => {
     const { modules } = fakeDns();
     expect(() => new modules.callback.Resolver().cancel()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
@@ -44,7 +44,7 @@ describe("node:dns Resolver and record queries", () => {
     );
   });
 
-  test("validates resolver options before accessing the provider", () => {
+  test.concurrent("validates resolver options before accessing the provider", () => {
     const { modules, host } = fakeDns();
     expect(() => new modules.callback.Resolver({ tries: 0 })).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_ARG_VALUE" }),
@@ -56,7 +56,7 @@ describe("node:dns Resolver and record queries", () => {
     expect(host.resolve4).not.toHaveBeenCalled();
   });
 
-  test("preserves TLSA bytes across the typed boundary", async () => {
+  test.concurrent("preserves TLSA bytes across the typed boundary", async () => {
     const { host } = fakeDns();
     host.resolveTlsa.mockReturnValue({
       tag: "ok",

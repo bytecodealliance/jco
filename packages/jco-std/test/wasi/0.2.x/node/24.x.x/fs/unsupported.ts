@@ -7,7 +7,7 @@ import { createFsPromises } from "../../../../../../src/wasi/0.2.x/node/24.x.x/f
 import { fs, promises } from "../helpers/fs.js";
 
 describe("node:fs denied and unsupported behavior", () => {
-  test("denies host access by default", () => {
+  test.concurrent("denies host access by default", () => {
     expect(() => denyHost.access({ tag: "text", val: "ignored" }, 0)).toThrow(
       expect.objectContaining({ code: "ERR_JCO_FS_ADAPTER_REQUIRED" }),
     );
@@ -32,7 +32,7 @@ describe("node:fs denied and unsupported behavior", () => {
     expect(invoke).toThrow(expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }));
   });
 
-  test("deprecated APIs throw before observing arguments", async () => {
+  test.concurrent("deprecated APIs throw before observing arguments", async () => {
     const getter = vi.fn();
     const hostile = Object.defineProperty({}, "toString", { get: getter });
     expect(() => fs.exists(hostile, vi.fn())).toThrow(
