@@ -147,6 +147,9 @@ export interface TranspilationOptions {
     /** Whether to run bindgen in strict mode */
     strict?: boolean;
 
+    /** ES module providing the Component Model runtime implementation */
+    runtimeModule?: string;
+
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
 
@@ -328,6 +331,7 @@ export async function transpileBytes(
         multiMemory: opts.multiMemory === true,
         bindgenEnableWasmExnref: opts.bindgenEnableWasmExnref === true,
         strict: opts.strict === true,
+        runtimeModule: opts.runtimeModule,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,

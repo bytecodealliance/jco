@@ -76,6 +76,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .guest(options.guest.unwrap_or(false))
             .maybe_async_mode(options.async_mode.map(Into::into))
             .strict(options.strict.unwrap_or(false))
+            .maybe_runtime_module(options.runtime_module)
             .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
             .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
