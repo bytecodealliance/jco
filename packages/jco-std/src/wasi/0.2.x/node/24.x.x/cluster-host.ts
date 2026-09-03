@@ -1,4 +1,5 @@
 import type { ClusterHost } from "./cluster/types.js";
+import { adapterRequiredMessage, denyThrow } from "./internal/deny-host.js";
 
 /**
  * The default adapter intentionally grants no process-control capability.
@@ -7,11 +8,10 @@ import type { ClusterHost } from "./cluster/types.js";
  * explicitly provide a host implementation, such as the separately exported Node adapter, when it
  * maps or instantiates a component.
  */
-function required(): never {
-  const error = new Error("node:cluster requires an application-provided host adapter");
-  Object.assign(error, { code: "ERR_JCO_CLUSTER_ADAPTER_REQUIRED" });
-  throw error;
-}
+const required = denyThrow(
+  "ERR_JCO_CLUSTER_ADAPTER_REQUIRED",
+  adapterRequiredMessage("node:cluster"),
+);
 
 export const isPrimary: ClusterHost["isPrimary"] = () => required();
 export const currentWorker: ClusterHost["currentWorker"] = () => required();

@@ -1,4 +1,5 @@
 import type { InspectorHost } from "./inspector/types.js";
+import { denyVariant } from "./internal/deny-host.js";
 
 /**
  * The default adapter grants no inspector capability.
@@ -10,12 +11,7 @@ import type { InspectorHost } from "./inspector/types.js";
  * The refusal is thrown in the shape of the WIT `variant error` `denied` case, so the guest reports
  * it the same way it reports any other host failure -- as `ERR_JCO_INSPECTOR_ADAPTER_REQUIRED`.
  */
-function denied(): never {
-  throw {
-    tag: "denied",
-    val: "map jco:node/inspector@0.1.0 to a host adapter to grant it",
-  };
-}
+const denied = denyVariant("jco:node/inspector@0.1.0");
 
 export const open: InspectorHost["open"] = denied;
 export const close: InspectorHost["close"] = denied;

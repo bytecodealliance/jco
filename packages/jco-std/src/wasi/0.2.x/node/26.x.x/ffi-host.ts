@@ -1,3 +1,4 @@
+import { denyVariant } from "../24.x.x/internal/deny-host.js";
 import type { FfiHost } from "./ffi/types.js";
 
 /**
@@ -11,12 +12,7 @@ import type { FfiHost } from "./ffi/types.js";
  * The refusal is thrown in the shape of the WIT `variant error`, so the guest reports it the same
  * way it reports any other host failure.
  */
-function denied(): never {
-  throw {
-    tag: "denied",
-    val: "map jco:node/ffi@0.1.0 to a host adapter to grant it",
-  };
-}
+const denied = denyVariant("jco:node/ffi@0.1.0");
 
 export const suffix: FfiHost["suffix"] = denied;
 export const open: FfiHost["open"] = denied;
