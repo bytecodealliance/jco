@@ -1141,15 +1141,13 @@ impl Intrinsic {
                 ));
             }
 
-            // Under JSPI a wasm stack may suspend inside a task's callback
-            // slice; other tasks then set the per-component current-task
-            // register. Preserve synchronous results and failures so a core
-            // start function that is not allowed to block receives the
-            // canonical trap instead of asking V8 to suspend a non-promising
-            // frame. For an allowed suspension, restoring the captured entry
-            // when the promise settles is the last JS to run before the
-            // suspended stack resumes, so context and exit bookkeeping address
-            // the task that is actually executing.
+            // Reject a core start synchronously, before V8 can abandon an
+            // unobserved promise. For allowed calls, retain async/await around
+            // the import: Promise.prototype.finally changes JSPI continuation
+            // scheduling and can strand later stream operations. Restoring the
+            // captured entry is the last JS to run before the suspended stack
+            // resumes, so context and exit bookkeeping address the task that
+            // is actually executing.
             Self::SuspendingImportWrapperFn => {
                 let suspending_import_wrapper_fn =
                     args.require_intrinsic(Self::SuspendingImportWrapperFn);
@@ -1171,33 +1169,13 @@ impl Intrinsic {
                                   throw new {runtime_error_class}('cannot block a synchronous task before returning');
                               }}
 
-                              let result;
-                              try {{
-                                  result = fn.apply(null, args);
-                              }} catch (err) {{
-                                  {global_current_task_meta_obj}[componentIdx] = saved;
-                                  throw err;
-                              }}
-
-                              if (result === null ||
-                                  (typeof result !== 'object' && typeof result !== 'function') ||
-                                  typeof result.then !== 'function') {{
-                                  {global_current_task_meta_obj}[componentIdx] = saved;
-                                  return result;
-                              }}
-
-                              if ({current_task_may_block}.value === 0) {{
-                                  // The helper may already have returned a rejected promise.
-                                  // Mark it handled before replacing it with the canonical
-                                  // synchronous-task trap.
-                                  Promise.resolve(result).catch(() => {{}});
-                                  {global_current_task_meta_obj}[componentIdx] = saved;
-                                  throw new {runtime_error_class}('cannot block a synchronous task before returning');
-                              }}
-
-                              return Promise.resolve(result).finally(() => {{
-                                  {global_current_task_meta_obj}[componentIdx] = saved;
-                              }});
+                              return (async () => {{
+                                  try {{
+                                      return await fn.apply(null, args);
+                                  }} finally {{
+                                      {global_current_task_meta_obj}[componentIdx] = saved;
+                                  }}
+                              }})();
                           }};
                       }}
                     "#,
@@ -1403,19 +1381,17 @@ mod tests {
     }
 
     #[test]
-    fn suspending_import_preserves_sync_results_and_rejects_disallowed_blocking() {
+    fn suspending_import_restores_current_task_after_suspension() {
         let source = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
 
         assert!(source.contains("return function (...args) {"));
-        assert!(!source.contains("return async function (...args) {"));
         assert!(source.contains("if (!saved && CURRENT_TASK_MAY_BLOCK.value === 0) {"));
-        assert!(source.contains("result = fn.apply(null, args);"));
-        assert!(source.contains("typeof result.then !== 'function'"));
-        assert!(source.contains("Promise.resolve(result).catch(() => {});"));
         assert!(source.contains(
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
-        assert!(source.contains("return Promise.resolve(result).finally(() => {"));
+        assert!(source.contains("return (async () => {"));
+        assert!(source.contains("return await fn.apply(null, args);"));
+        assert!(source.contains("CURRENT_TASK_META[componentIdx] = saved;"));
     }
 
     #[test]
@@ -1423,6 +1399,7 @@ mod tests {
         let source =
             render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
 
+        assert!(source.contains("isManualAsync() { return this.#isManualAsync; }"));
         assert!(source.contains(
             "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() }"
         ));

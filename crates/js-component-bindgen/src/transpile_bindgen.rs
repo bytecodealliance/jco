@@ -558,6 +558,16 @@ impl JsBindgen<'_> {
                             {};
                         }})();
                         let promise, resolve, reject;
+                        function normalizeInstantiationError (e) {{
+                            // Native JSPI rejects a suspending import called from a
+                            // core start function before entering its JS wrapper.
+                            // At component instantiation time that always means the
+                            // implicit synchronous task attempted to block.
+                            if (typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                                return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
+                            }}
+                            return e;
+                        }}
                         function runNext (value) {{
                             try {{
                                 let done;
@@ -569,9 +579,10 @@ impl JsBindgen<'_> {
                                     else return value;
                                 }}
                                 if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
-                                value.then(nextVal => done ? resolve() : runNext(nextVal), reject);
+                                value.then(nextVal => done ? resolve() : runNext(nextVal), e => reject(normalizeInstantiationError(e)));
                             }}
                             catch (e) {{
+                                e = normalizeInstantiationError(e);
                                 if (reject) reject(e);
                                 else throw e;
                             }}
@@ -615,6 +626,16 @@ impl JsBindgen<'_> {
                             {}\
                         }})();
                         let promise, resolve, reject;
+                        function normalizeInstantiationError (e) {{
+                            // Native JSPI rejects a suspending import called from a
+                            // core start function before entering its JS wrapper.
+                            // At component instantiation time that always means the
+                            // implicit synchronous task attempted to block.
+                            if (typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                                return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
+                            }}
+                            return e;
+                        }}
                         function runNext (value) {{
                             try {{
                                 let done;
@@ -626,9 +647,10 @@ impl JsBindgen<'_> {
                                     else return value;
                                 }}
                                 if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
-                                value.then(runNext, reject);
+                                value.then(runNext, e => reject(normalizeInstantiationError(e)));
                             }}
                             catch (e) {{
+                                e = normalizeInstantiationError(e);
                                 if (reject) reject(e);
                                 else throw e;
                             }}
