@@ -1199,19 +1199,18 @@ impl Intrinsic {
                                       // Mark it handled before replacing it with the canonical
                                       // synchronous-task trap.
                                       Promise.resolve(result).catch(() => {{}});
-
-                                     {global_current_task_meta_obj}[componentIdx] = saved;
-                                     throw new {runtime_error_class}('cannot block a synchronous task before returning');
-
                                       throw new {runtime_error_class}('cannot block a synchronous task before returning');
                                   }}
                                   return result;
                               }}
 
-                              return Promise.resolve(result).finally(() => {{
-                                  {global_current_task_meta_obj}[componentIdx] = saved;
-                              }});
-
+                              return (async () => {{
+                                  try {{
+                                      return await fn.apply(null, args);
+                                  }} finally {{
+                                      {global_current_task_meta_obj}[componentIdx] = saved;
+                                  }}
+                              }})();
                           }};
                       }}
                     "#,
