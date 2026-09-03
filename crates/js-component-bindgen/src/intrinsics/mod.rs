@@ -1446,7 +1446,15 @@ mod tests {
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
         assert!(source.contains("preparedTask.setCalleeIsAsync((flags & 1) !== 0);"));
-        assert!(source.contains("const enteredSynchronously = preparedTask.tryEnter();"));
+        // An async callee enters synchronously only when it is a sync callee, when it is
+        // started from within a blocking synchronous slice, or when the caller is not
+        // callback-driven; otherwise entry is deferred so a cancellation-before-start is
+        // still observable.
+        assert!(source.contains("const mayStartSynchronously = !calleeIsAsync"));
+        assert!(source.contains("|| ASYNC_BLOCKING_CALL_DEPTH.value > 0"));
+        assert!(source.contains("|| !subtask.getParentTask().hasCallback();"));
+        assert!(source.contains("const enteredSynchronously = mayStartSynchronously"));
+        assert!(source.contains("? preparedTask.tryEnter()"));
         assert!(source.contains("fn: () => callee.apply(null, startRes),"));
         assert!(source.contains("const driveJspiCallee = async () => {"));
         assert!(source.contains("if (enteredSynchronously === true) {"));
