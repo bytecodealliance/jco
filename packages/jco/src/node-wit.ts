@@ -9,14 +9,13 @@ export interface NodeWitRequirement {
      * A WIT interface the bundled source must export, retained for requirements with one
      * companion callback interface.
      *
-     * `node:inspector` is the only builtin that needs this: the host calls back into the component
-     * through a guest-exported callbacks interface (a component cannot implement a resource on an
-     * imported interface). Jco pairs the export injection here with a two-pass bundle that adds the
-     * matching JS export.
+     * Host-backed builtins whose host calls *back* into the component (`node:inspector` and
+     * `node:http` today) declare a guest-exported callbacks interface, because a component cannot
+     * implement a resource on an imported interface. Jco pairs the export injection here with a
+     * two-pass bundle that adds the matching JS export. Prefer `guestExports`, which carries the
+     * same interface together with the JS export that implements it.
      */
     witExport?: string;
-    /** Companion guest interfaces exported so imported host resources can invoke guest callbacks. */
-    witExports?: string[];
     /** JavaScript exports that implement companion guest callback interfaces. */
     guestExports?: NodeGuestExport[];
     dependencyDirectory: string;
@@ -334,7 +333,6 @@ function requirementWitExports(requirement: NodeWitRequirement): string[] {
     return [
         ...new Set([
             ...(requirement.witExport ? [requirement.witExport] : []),
-            ...(requirement.witExports ?? []),
             ...(requirement.guestExports ?? []).map(({ witExport }) => witExport),
         ]),
     ];
