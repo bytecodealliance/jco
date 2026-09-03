@@ -1,13 +1,14 @@
-import { codedError } from "./errors/core.js";
-
 import type { FsHost } from "./fs/types.js";
+import { denyThrow } from "./internal/deny-host.js";
 
-function deny(..._args: unknown[]): never {
-  throw codedError(
-    new Error("node:fs requires an explicitly configured filesystem host provider"),
-    "ERR_JCO_FS_ADAPTER_REQUIRED",
-  );
-}
+/**
+ * The default adapter intentionally grants no filesystem capability. Applications must map
+ * `jco:node/fs@0.1.0` to a host implementation, such as the separately exported Node adapter.
+ */
+const deny = denyThrow(
+  "ERR_JCO_FS_ADAPTER_REQUIRED",
+  "node:fs requires an explicitly configured filesystem host provider",
+);
 
 export const access: FsHost["access"] = deny;
 

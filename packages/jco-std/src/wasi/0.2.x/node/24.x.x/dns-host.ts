@@ -1,10 +1,11 @@
 import type { DnsHost } from "./dns/types.js";
+import { adapterRequiredMessage, denyThrow } from "./internal/deny-host.js";
 
-function deny(..._args: unknown[]): never {
-  const error = new Error("node:dns requires an application-provided host adapter");
-  Object.assign(error, { code: "ERR_JCO_DNS_ADAPTER_REQUIRED" });
-  throw error;
-}
+/**
+ * The default adapter intentionally grants no name-resolution capability. Applications must map
+ * `jco:node/dns@0.1.0` to a host implementation, such as the separately exported Node adapter.
+ */
+const deny = denyThrow("ERR_JCO_DNS_ADAPTER_REQUIRED", adapterRequiredMessage("node:dns"));
 
 export const getServers: DnsHost["getServers"] = deny;
 

@@ -1,16 +1,16 @@
+import { adapterRequiredMessage, denyResult } from "./internal/deny-host.js";
 import { POSIX_STATIC_PROPERTIES } from "./os/constants.js";
-import type { OsHost, OsResult } from "./os/types.js";
+import type { OsError, OsHost } from "./os/types.js";
 
-function denied<T>(): OsResult<T> {
-  return {
-    tag: "err",
-    val: {
-      name: "Error",
-      message: "node:os requires an application-provided host adapter",
-      code: "ERR_JCO_OS_ADAPTER_REQUIRED",
-    },
-  };
-}
+/**
+ * Every `jco:node/os` operation returns `result<T, error>`, so the refusal is returned as the
+ * `err` case rather than thrown: the guest rebuilds it through the same path as any host failure.
+ */
+const denied = denyResult<OsError>({
+  name: "Error",
+  message: adapterRequiredMessage("node:os"),
+  code: "ERR_JCO_OS_ADAPTER_REQUIRED",
+});
 
 /**
  * Static POSIX/WASI module values reveal no machine state and allow importing
