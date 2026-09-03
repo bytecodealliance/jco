@@ -9,7 +9,7 @@ import { OS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js"
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
 
 suite("node:os in a component", () => {
-    test("installs the typed OS WIT dependency idempotently", async () => {
+    test.concurrent("installs the typed OS WIT dependency idempotently", async () => {
         const root = await getTmpDir();
         const world = join(root, "component.wit");
         await writeFile(world, "package test:os;\nworld component {}\n");

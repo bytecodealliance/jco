@@ -60,14 +60,14 @@ describe("node:http builtin adapter", () => {
         }
     });
 
-    test("resolves the direct callback implementation for an entry wrapper", () => {
+    test.concurrent("resolves the direct callback implementation for an entry wrapper", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ...modulePaths, nodejsHttpVia: "direct" });
         const id = plugin.resolveId(HTTP_CALLBACKS_SPECIFIER);
         expect(id).toBe("\0jco-node-builtin:http-callbacks");
         expect(plugin.load(id)).toBe('export { httpCallbacks } from "/jco/http.js";');
     });
 
-    test("keeps the callback resource as an entry export after bundling", async () => {
+    test.concurrent("keeps the callback resource as an entry export after bundling", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const httpModule = join(root, "http.js");
@@ -83,7 +83,7 @@ describe("node:http builtin adapter", () => {
         expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
 
-    test("does not intercept the bare http specifier", () => {
+    test.concurrent("does not intercept the bare http specifier", () => {
         expect(nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths).resolveId("http")).toBeNull();
     });
 
@@ -108,7 +108,7 @@ describe("node:http builtin adapter", () => {
         expect(() => plugin.resolveId("node:http")).toThrow(/requires wasi:.*@0\.2\.12/);
     });
 
-    test("configures an opt-in direct Node provider as a JSPI import", () => {
+    test.concurrent("configures an opt-in direct Node provider as a JSPI import", () => {
         const opts = withDefaultNodeCapabilities({
             map: { "jco:node/http@0.1.0": "/application/http-host.js" },
         });
@@ -124,7 +124,7 @@ describe("node:http builtin adapter", () => {
 });
 
 describe("node:http WIT installation", () => {
-    test("installs the typed direct interface idempotently", async () => {
+    test.concurrent("installs the typed direct interface idempotently", async () => {
         const root = await getTmpDir();
         const world = join(root, "component.wit");
         await writeFile(world, "package test:http;\nworld component {}\n");
@@ -142,7 +142,7 @@ describe("node:http WIT installation", () => {
         );
     });
 
-    test("adds only the missing side of the direct callback boundary", async () => {
+    test.concurrent("adds only the missing side of the direct callback boundary", async () => {
         const root = await getTmpDir();
         const world = join(root, "component.wit");
         await writeFile(world, "package test:http;\nworld component {\n  import jco:node/http@0.1.0;\n}\n");
@@ -153,7 +153,7 @@ describe("node:http WIT installation", () => {
         expect(source.match(/export jco:node\/http-callbacks@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    test("preserves an aliased callback export while adding the missing import", async () => {
+    test.concurrent("preserves an aliased callback export while adding the missing import", async () => {
         const root = await getTmpDir();
         const world = join(root, "component.wit");
         await writeFile(

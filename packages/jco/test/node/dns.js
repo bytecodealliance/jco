@@ -12,7 +12,7 @@ const NODE_HOST = pathToFileURL(
 ).href;
 
 suite("node:dns in a component", () => {
-    test("installs the DNS WIT dependency without duplicating it", async () => {
+    test.concurrent("installs the DNS WIT dependency without duplicating it", async () => {
         const root = await getTmpDir();
         const world = join(root, "component.wit");
         await writeFile(world, "package test:dns;\nworld component {}\n");

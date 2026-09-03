@@ -32,7 +32,7 @@ const unenvAliases = {
 };
 
 describe("Node builtin adapters", () => {
-    test("maps host-backed Node APIs to deny providers unless the application opts in", () => {
+    test.concurrent("maps host-backed Node APIs to deny providers unless the application opts in", () => {
         expect(withDefaultNodeCapabilityMap()).toEqual({
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -63,7 +63,7 @@ describe("Node builtin adapters", () => {
         });
     });
 
-    test("maps every injected jco:node host interface to a deny provider by default", () => {
+    test.concurrent("maps every injected jco:node host interface to a deny provider by default", () => {
         // Derive the expected keys from the WIT requirements themselves so that adding a new
         // host-backed builtin without a default deny mapping fails here instead of surfacing as an
         // unresolved import in a transpiled component.
@@ -80,7 +80,7 @@ describe("Node builtin adapters", () => {
         }
     });
 
-    test("configures custom DNS providers as JSPI imports", () => {
+    test.concurrent("configures custom DNS providers as JSPI imports", () => {
         const opts = withDefaultNodeCapabilities({
             map: { "jco:node/dns@0.1.0": "/application/dns-host.js" },
             asyncImports: ["application:custom/host#load"],
@@ -97,7 +97,7 @@ describe("Node builtin adapters", () => {
         expect(opts.asyncExports).toHaveLength(2);
     });
 
-    test("keeps the default DNS deny provider synchronous", () => {
+    test.concurrent("keeps the default DNS deny provider synchronous", () => {
         const opts = withDefaultNodeCapabilities({});
         expect(opts.asyncMode).toBeUndefined();
         expect(opts.asyncImports).toBeUndefined();
@@ -167,7 +167,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.load(id)).toEqual(expect.any(String));
     });
 
-    test("generates a capability-free adapter for node:string_decoder", () => {
+    test.concurrent("generates a capability-free adapter for node:string_decoder", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -181,19 +181,19 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test("does not intercept the legacy bare string_decoder specifier", () => {
+    test.concurrent("does not intercept the legacy bare string_decoder specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
         expect(plugin.resolveId("string_decoder")).toBeNull();
     });
 
-    test("loads the Errors globals module lazily", () => {
+    test.concurrent("loads the Errors globals module lazily", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { errorsModule: "/jco/node/errors.js" });
         const id = plugin.resolveId("jco:node-error-globals");
         expect(id).toBe("\0jco-node-builtin:error-globals");
         expect(plugin.load(id)).toBe('export * from "/jco/node/errors.js";');
     });
 
-    test("generates an adapter for node:child_process when its capability is imported", () => {
+    test.concurrent("generates an adapter for node:child_process when its capability is imported", () => {
         const plugin = nodeBuiltinPlugin(childProcess(), { childProcessModule: "/jco/node/child-process.js" });
         const id = plugin.resolveId("node:child_process");
         expect(id).toBe("\0jco-node-builtin:node:child_process");
@@ -202,7 +202,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("spawnSync");
     });
 
-    test("generates a capability-free adapter for node:module", () => {
+    test.concurrent("generates a capability-free adapter for node:module", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { moduleModule: "/jco/node/module.js" });
         const id = plugin.resolveId("node:module");
         expect(id).toBe("\0jco-node-builtin:node:module");
@@ -212,7 +212,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("SourceMap");
     });
 
-    test("node:module requires no WIT capability", () => {
+    test.concurrent("node:module requires no WIT capability", () => {
         // Nothing reaches a host: what works is computation, and what does not is unimplementable
         // rather than unprovisioned.
         const onWitRequirement = vi.fn();
@@ -224,12 +224,12 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test("does not intercept the bare module specifier", () => {
+    test.concurrent("does not intercept the bare module specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { moduleModule: "/jco/node/module.js" });
         expect(plugin.resolveId("module")).toBeNull();
     });
 
-    test("generates a host-backed adapter for node:ffi", () => {
+    test.concurrent("generates a host-backed adapter for node:ffi", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ffiModule: "/jco/node/ffi.js" });
         const id = plugin.resolveId("node:ffi");
         expect(id).toBe("\0jco-node-builtin:node:ffi");
@@ -239,7 +239,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("dlopen");
     });
 
-    test("reports the WIT capability required by node:ffi", () => {
+    test.concurrent("reports the WIT capability required by node:ffi", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -251,12 +251,12 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("does not intercept the bare ffi specifier", () => {
+    test.concurrent("does not intercept the bare ffi specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ffiModule: "/jco/node/ffi.js" });
         expect(plugin.resolveId("ffi")).toBeNull();
     });
 
-    test("generates a host-backed adapter for node:inspector", () => {
+    test.concurrent("generates a host-backed adapter for node:inspector", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { inspectorModule: "/jco/node/inspector.js" });
         const id = plugin.resolveId("node:inspector");
         expect(id).toBe("\0jco-node-builtin:node:inspector");
@@ -266,7 +266,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("NetworkResources");
     });
 
-    test("generates a shared-core adapter for node:inspector/promises", () => {
+    test.concurrent("generates a shared-core adapter for node:inspector/promises", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { inspectorPromisesModule: "/jco/node/inspector-promises.js" },
@@ -278,7 +278,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("Session");
     });
 
-    test("resolves the callbacks virtual to the base inspector module", () => {
+    test.concurrent("resolves the callbacks virtual to the base inspector module", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { inspectorModule: "/jco/node/inspector.js" });
         const id = plugin.resolveId("jco:node-inspector-callbacks");
         expect(id).toBe("\0jco-node-builtin:inspector-callbacks");
@@ -287,7 +287,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain('from "/jco/node/inspector.js"');
     });
 
-    test("reports the WIT import and export required by node:inspector", () => {
+    test.concurrent("reports the WIT import and export required by node:inspector", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -303,7 +303,7 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("node:inspector/promises reports the same capability under its own specifier", () => {
+    test.concurrent("node:inspector/promises reports the same capability under its own specifier", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -319,12 +319,12 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("does not intercept the bare inspector specifier", () => {
+    test.concurrent("does not intercept the bare inspector specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { inspectorModule: "/jco/node/inspector.js" });
         expect(plugin.resolveId("inspector")).toBeNull();
     });
 
-    test("generates an adapter for node:domain that refuses at runtime", () => {
+    test.concurrent("generates an adapter for node:domain that refuses at runtime", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { domainModule: "/jco/node/domain.js" });
         const id = plugin.resolveId("node:domain");
         expect(id).toBe("\0jco-node-builtin:node:domain");
@@ -333,7 +333,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("createDomain");
     });
 
-    test("node:domain requires no WIT capability", () => {
+    test.concurrent("node:domain requires no WIT capability", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -343,12 +343,12 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test("does not intercept the bare domain specifier", () => {
+    test.concurrent("does not intercept the bare domain specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { domainModule: "/jco/node/domain.js" });
         expect(plugin.resolveId("domain")).toBeNull();
     });
 
-    test("generates a capability-free adapter for node:diagnostics_channel", () => {
+    test.concurrent("generates a capability-free adapter for node:diagnostics_channel", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { diagnosticsChannelModule: "/jco/node/diagnostics-channel.js" },
@@ -360,7 +360,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("tracingChannel");
     });
 
-    test("node:diagnostics_channel requires no WIT capability", () => {
+    test.concurrent("node:diagnostics_channel requires no WIT capability", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -370,7 +370,7 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test("does not intercept the bare diagnostics_channel specifier", () => {
+    test.concurrent("does not intercept the bare diagnostics_channel specifier", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { diagnosticsChannelModule: "/jco/node/diagnostics-channel.js" },
@@ -378,7 +378,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("diagnostics_channel")).toBeNull();
     });
 
-    test("generates a capability-free adapter for node:async_hooks", () => {
+    test.concurrent("generates a capability-free adapter for node:async_hooks", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { asyncHooksModule: "/jco/node/async-hooks.js" },
@@ -390,7 +390,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("AsyncLocalStorage");
     });
 
-    test("node:async_hooks requires no WIT capability", () => {
+    test.concurrent("node:async_hooks requires no WIT capability", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -400,7 +400,7 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test("does not intercept the bare async_hooks specifier", () => {
+    test.concurrent("does not intercept the bare async_hooks specifier", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { asyncHooksModule: "/jco/node/async-hooks.js" },
@@ -408,7 +408,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("async_hooks")).toBeNull();
     });
 
-    test("generates an adapter for node:cluster", () => {
+    test.concurrent("generates an adapter for node:cluster", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { clusterModule: "/jco/node/cluster.js" });
         const id = plugin.resolveId("node:cluster");
         expect(id).toBe("\0jco-node-builtin:node:cluster");
@@ -418,7 +418,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("SCHED_RR");
     });
 
-    test("reports the WIT capability required by node:cluster", () => {
+    test.concurrent("reports the WIT capability required by node:cluster", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -434,12 +434,12 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("does not intercept the bare cluster specifier", () => {
+    test.concurrent("does not intercept the bare cluster specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { clusterModule: "/jco/node/cluster.js" });
         expect(plugin.resolveId("cluster")).toBeNull();
     });
 
-    test("reports the WIT capability required by node:child_process", () => {
+    test.concurrent("reports the WIT capability required by node:child_process", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -458,7 +458,7 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("generates an explicitly host-backed node:console adapter", () => {
+    test.concurrent("generates an explicitly host-backed node:console adapter", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { consoleModule: "/jco/node/console.js" });
         const id = plugin.resolveId("node:console");
         expect(id).toBe("\0jco-node-builtin:node:console");
@@ -468,7 +468,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain('from "/jco/node/console.js"');
     });
 
-    test("generates an explicitly host-backed node:os adapter", () => {
+    test.concurrent("generates an explicitly host-backed node:os adapter", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { osModule: "/jco/node/os.js" });
         const id = plugin.resolveId("node:os");
         expect(id).toBe("\0jco-node-builtin:node:os");
@@ -478,7 +478,7 @@ describe("Node builtin adapters", () => {
         expect(source).toContain('from "/jco/node/os.js"');
     });
 
-    test("reports the WIT capability required by node:os", () => {
+    test.concurrent("reports the WIT capability required by node:os", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -491,7 +491,7 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("does not intercept the bare os specifier", () => {
+    test.concurrent("does not intercept the bare os specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { osModule: "/jco/node/os.js" });
         expect(plugin.resolveId("os")).toBeNull();
     });
@@ -521,7 +521,7 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test("layers audited unenv modules below Jco overrides", () => {
+    test.concurrent("layers audited unenv modules below Jco overrides", () => {
         const plugin = nodeBuiltinPlugin(environment(), {
             assertModule: "/jco/node/assert.js",
             pathFactory: "/jco/node/path.js",
@@ -536,7 +536,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.load("\0jco-node-builtin:node:querystring")).toEqual(expect.any(String));
     });
 
-    test("layers jco-std's entry points over unenv's emitter for node:events", () => {
+    test.concurrent("layers jco-std's entry points over unenv's emitter for node:events", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { unenvAliases, eventsModule: "/jco/node/events.js" },
@@ -553,7 +553,7 @@ describe("Node builtin adapters", () => {
         }
     });
 
-    test("reports a missing unenv emitter for node:events", () => {
+    test.concurrent("reports a missing unenv emitter for node:events", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { unenvAliases: {}, eventsModule: "/jco/node/events.js" },
@@ -561,7 +561,7 @@ describe("Node builtin adapters", () => {
         expect(() => plugin.load("\0jco-node-builtin:node:events")).toThrow(/audited builtin node:events/);
     });
 
-    test("node:events requires no WIT capability", () => {
+    test.concurrent("node:events requires no WIT capability", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -571,7 +571,7 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test("does not intercept the bare events specifier", () => {
+    test.concurrent("does not intercept the bare events specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { unenvAliases });
         expect(plugin.resolveId("events")).toBeNull();
     });
@@ -596,13 +596,13 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId(specifier)).toBeNull();
     });
 
-    test("resolves audited unenv modules without unrelated WASI capabilities", () => {
+    test.concurrent("resolves audited unenv modules without unrelated WASI capabilities", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { unenvAliases });
         expect(plugin.resolveId("node:buffer")).toBe("\0jco-node-builtin:node:buffer");
         expect(plugin.resolveId("node:querystring")).toBe("\0jco-node-builtin:node:querystring");
     });
 
-    test("reports missing transitive unenv implementations", () => {
+    test.concurrent("reports missing transitive unenv implementations", () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             {
@@ -616,7 +616,7 @@ describe("Node builtin adapters", () => {
         expect(() => plugin.load("\0jco-node-builtin:unenv-buffer-core")).toThrow(/audited builtin unenv:buffer-core/);
     });
 
-    test("ignores unsupported and legacy bare specifiers", () => {
+    test.concurrent("ignores unsupported and legacy bare specifiers", () => {
         const plugin = nodeBuiltinPlugin(environment(), { pathFactory: "/jco/node/path.js" });
         expect(plugin.resolveId("path")).toBeNull();
         expect(plugin.resolveId("assert")).toBeNull();
@@ -633,20 +633,20 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("os")).toBeNull();
     });
 
-    test("reports a missing environment capability only when node:path is used", () => {
+    test.concurrent("reports a missing environment capability only when node:path is used", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { pathFactory: "/jco/node/path.js" });
         expect(plugin.resolveId("./local.js")).toBeNull();
         expect(() => plugin.resolveId("node:path")).toThrow(/import wasi:cli\/environment@0\.2\.x/);
     });
 
-    test("rejects ambiguous environment versions", () => {
+    test.concurrent("rejects ambiguous environment versions", () => {
         const metadata = environment();
         metadata.imports.push(environment(3n).imports[0]);
         const plugin = nodeBuiltinPlugin(metadata, { pathFactory: "/jco/node/path.js" });
         expect(() => plugin.resolveId("node:path")).toThrow(/multiple wasi:cli\/environment/);
     });
 
-    test("reports the WIT capability required by node:console", () => {
+    test.concurrent("reports the WIT capability required by node:console", () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
