@@ -87,8 +87,9 @@ compatibility suites.
 
 These entry points are namespaced by two independent versions: the WASI version they adapt
 Node to, and the Node major they implement. The modules below live under
-`wasi/0.2.x/node/24.x.x`, where `0.2.x` means the latest WASI p2 release and `24.x.x` means any
-Node 24. Both axes move on their own -- Node's builtin semantics change across majors, and the
+`wasi/0.2.x/node/<major>.x.x`, where `0.2.x` means the latest WASI p2 release and `<major>.x.x`
+means any release of that Node major -- most modules under `24.x.x`, and `node:ffi`, which does not
+exist before Node 26, under `26.x.x`. Both axes move on their own -- Node's builtin semantics change across majors, and the
 same module adapted to WASI p3 is a different implementation -- so a new Node major or a p3
 adaptation is added alongside rather than replacing what is there.
 
@@ -122,6 +123,7 @@ is planned.
 | `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                              |
 | `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Outbound client API over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Server listening is explicitly unsupported.                     |
 | `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.  |
+| `node:os`                                         | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os`                                                | Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider -- see below.                  |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                          |
 | `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                       |
 | `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                               |
@@ -432,6 +434,42 @@ vector descriptor I/O, and their callback/promise facades are supported.
 >
 > These functions currently throw `ERR_JCO_UNSUPPORTED_NODE_API` because the typed WIT
 > interface does not model those resources.
+
+### OS and host capabilities
+
+A WebAssembly guest has no view of the machine it runs on. When bundled source
+imports `node:os`, Jco ensures that the selected world declares the dedicated
+interface, following the same in-place WIT editing described for
+`node:child_process`:
+
+```wit
+world app {
+  import jco:node/os@0.1.0;
+  // component imports and exports...
+}
+```
+
+Declaring or generating the import does not grant host access: Jco's default
+transpilation map uses a provider that fails every inspecting or mutating call
+with `ERR_JCO_OS_ADAPTER_REQUIRED`. Static POSIX values that reveal no machine
+state -- `EOL`, `devNull`, and `constants` -- resolve without a provider, so the
+module can be imported and used for its constants even when access is denied. An
+application must make the security decision explicitly, for example by mapping
+the Node host provider:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
+```
+
+That produces the call path guest `node:os` → WIT capability → host adapter →
+Node `node:os`.
+
+The interface supports `arch`, `availableParallelism`, `cpus`, `endianness`,
+`freemem`, `getPriority`, `homedir`, `hostname`, `loadavg`, `machine`,
+`networkInterfaces`, `platform`, `release`, `setPriority`, `tmpdir`, `totalmem`,
+`type`, `uptime`, `userInfo`, and `version`, with Node's argument validation and
+`ERR_SYSTEM_ERROR` reconstruction for failing calls.
 
 ### Async hooks and synchronous scopes
 
