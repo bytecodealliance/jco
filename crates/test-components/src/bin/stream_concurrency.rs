@@ -90,7 +90,17 @@ impl stream_concurrency_test::Guest for Component {
                 StreamResult::Cancelled => {
                     assert!(consecutive_cancellations < 10);
                     consecutive_cancellations += 1;
-                    rx.read(Vec::new()).await;
+                    // The readiness read can itself observe end-of-stream. Once it does,
+                    // another read must trap under the canonical terminal-state rules.
+                    let (status, readiness_buffer) = rx.read(Vec::new()).await;
+                    assert!(readiness_buffer.is_empty());
+                    match status {
+                        StreamResult::Complete(count) => assert_eq!(count, 0),
+                        StreamResult::Dropped => break,
+                        StreamResult::Cancelled => {
+                            panic!("awaited readiness read was unexpectedly cancelled")
+                        }
+                    }
                 }
             }
         }
