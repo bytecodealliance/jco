@@ -96,7 +96,7 @@ const NODE_26_TYPES = {
 const inertHost = {} as unknown as FfiHost;
 
 describe("node:ffi matches the Node 26 surface", () => {
-  test("the factory plus the entry's two data exports cover Node's surface", () => {
+  test.concurrent("the factory plus the entry's two data exports cover Node's surface", () => {
     // `suffix` and `types` are added by the entry module rather than the factory: they are
     // specification data, and the entry cannot be imported here because it imports the WIT
     // interface, which only resolves inside a component.
@@ -104,19 +104,19 @@ describe("node:ffi matches the Node 26 surface", () => {
     expect(built.sort()).toEqual([...NODE_26_EXPORTS].sort());
   });
 
-  test("DynamicLibrary.prototype has exactly Node's members", () => {
+  test.concurrent("DynamicLibrary.prototype has exactly Node's members", () => {
     const { DynamicLibrary } = createFfi(inertHost);
     expect(Object.getOwnPropertyNames(DynamicLibrary.prototype).sort()).toEqual(
       [...NODE_26_PROTOTYPE].sort(),
     );
   });
 
-  test("DynamicLibrary is disposable, as Node's is", () => {
+  test.concurrent("DynamicLibrary is disposable, as Node's is", () => {
     const { DynamicLibrary } = createFfi(inertHost);
     expect(typeof DynamicLibrary.prototype[Symbol.dispose]).toBe("function");
   });
 
-  test("functions is an accessor, not a data property", () => {
+  test.concurrent("functions is an accessor, not a data property", () => {
     // Node exposes it as a getter; a plain property would be a visible difference to anything
     // reading descriptors.
     const { DynamicLibrary } = createFfi(inertHost);
@@ -124,7 +124,7 @@ describe("node:ffi matches the Node 26 surface", () => {
     expect(typeof descriptor?.get).toBe("function");
   });
 
-  test("types matches Node's constant exactly and is frozen", () => {
+  test.concurrent("types matches Node's constant exactly and is frozen", () => {
     expect({ ...types }).toEqual(NODE_26_TYPES);
     expect(Object.isFrozen(types)).toBe(true);
   });

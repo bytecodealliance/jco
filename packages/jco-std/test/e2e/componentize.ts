@@ -16,7 +16,7 @@ const CASES = [
 
 suite("WASI HTTP adapter componentization", () => {
   for (const { version, world, componentize, alias = version } of CASES) {
-    test(`builds the ${alias} adapter against a ${version} world`, async () => {
+    test.concurrent(`builds the ${alias} adapter against a ${version} world`, async () => {
       const entry = `@bytecodealliance/jco-std/wasi/${alias}/http/adapters/hono/server`;
       const source = `
         import { Hono } from "hono";
@@ -66,7 +66,7 @@ suite("WASI HTTP adapter componentization", () => {
 });
 
 suite("Node child_process componentization", () => {
-  test("builds a guest that imports the dedicated host capability", async () => {
+  test.concurrent("builds a guest that imports the dedicated host capability", async () => {
     const entry = join(JCO_STD_DIR, "dist/wasi/0.2.x/node/24.x.x/child-process.js");
     const bundle = await rolldown({
       input: "virtual:child-process-entry",

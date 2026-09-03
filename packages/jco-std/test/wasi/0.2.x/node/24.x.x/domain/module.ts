@@ -16,7 +16,7 @@ const DEPRECATED = expect.objectContaining({ code: DEPRECATED_CODE });
  * test is that it still resolves and refuses clearly, rather than failing as an unknown import.
  */
 describe("node:domain is refused, not implemented", () => {
-  test("carries Node's module shape", () => {
+  test.concurrent("carries Node's module shape", () => {
     // Checked with `in` rather than by reading: touching `active` or `_stack` is itself a use, and
     // throws by design.
     for (const key of Object.keys(nodeDomain)) {
@@ -24,7 +24,7 @@ describe("node:domain is refused, not implemented", () => {
     }
   });
 
-  test("importing does not throw; only using does", () => {
+  test.concurrent("importing does not throw; only using does", () => {
     // Reaching this line at all is the assertion: the module evaluated cleanly.
     expect(typeof create).toBe("function");
     expect(typeof createDomain).toBe("function");
@@ -41,7 +41,7 @@ describe("node:domain is refused, not implemented", () => {
     expect(use).toThrow(DEPRECATED);
   });
 
-  test("the error names the API and a way forward", () => {
+  test.concurrent("the error names the API and a way forward", () => {
     try {
       create();
       expect.unreachable("expected a refusal");
@@ -52,12 +52,12 @@ describe("node:domain is refused, not implemented", () => {
     }
   });
 
-  test("Domain cannot be subclassed into something usable either", () => {
+  test.concurrent("Domain cannot be subclassed into something usable either", () => {
     class Custom extends Domain {}
     expect(() => new Custom()).toThrow(DEPRECATED);
   });
 
-  test("the same code is used as other deprecated Node APIs", () => {
+  test.concurrent("the same code is used as other deprecated Node APIs", () => {
     expect(DEPRECATED_CODE).toBe("ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API");
   });
 });

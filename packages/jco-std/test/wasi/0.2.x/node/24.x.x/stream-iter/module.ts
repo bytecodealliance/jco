@@ -44,7 +44,7 @@ const DEFAULT_KEYS = [
 ];
 
 describe("node:stream/iter module", () => {
-  test("matches Node 24.20's export keys", () => {
+  test.concurrent("matches Node 24.20's export keys", () => {
     expect(Object.keys(streamIter).sort()).toEqual(DEFAULT_KEYS);
     expect(
       Object.keys(namespace)
@@ -53,7 +53,7 @@ describe("node:stream/iter module", () => {
     ).toEqual(DEFAULT_KEYS);
   });
 
-  test("shares named/default identities and freezes the Stream namespace", () => {
+  test.concurrent("shares named/default identities and freezes the Stream namespace", () => {
     for (const key of DEFAULT_KEYS) {
       expect(streamIter[key as keyof typeof streamIter]).toBe(
         namespace[key as keyof typeof namespace],

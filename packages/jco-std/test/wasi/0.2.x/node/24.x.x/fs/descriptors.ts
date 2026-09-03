@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 import { fs, promises, withFsFixture } from "../helpers/fs.js";
 
 describe("node:fs descriptors and handles", () => {
-  test("supports positional scalar and vector I/O", async () => {
+  test.concurrent("supports positional scalar and vector I/O", async () => {
     await withFsFixture((root) => {
       const path = join(root, "descriptor.txt");
       const fd = fs.openSync(path, "w+");
@@ -29,7 +29,7 @@ describe("node:fs descriptors and handles", () => {
     });
   });
 
-  test("FileHandle reuses the descriptor core", async () => {
+  test.concurrent("FileHandle reuses the descriptor core", async () => {
     await withFsFixture(async (root) => {
       const path = join(root, "handle.txt");
       const handle = await promises.open(path, "w+");

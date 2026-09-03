@@ -22,12 +22,12 @@ describeDifferential("assert.ok", () => {
     );
   });
 
-  test("throws a supplied Error unchanged", () => {
+  test.concurrent("throws a supplied Error unchanged", () => {
     const error = new TypeError("custom");
     expect(() => assert.ok(false, error)).toThrow(error);
   });
 
-  test("distinguishes an omitted argument", () => {
+  test.concurrent("distinguishes an omitted argument", () => {
     expectAssertion(() => Reflect.apply(assert.ok, undefined, [])).message.includes(
       "No value argument",
     );

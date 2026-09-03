@@ -2,20 +2,20 @@ import { describe, expect, test } from "vitest";
 import { CallTracker } from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.CallTracker deprecated stub", () => {
-  test("throws immediately from construction", () => {
+  test.concurrent("throws immediately from construction", () => {
     expect(() => new CallTracker()).toThrowError(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API" }),
     );
   });
 
-  test("does not inspect constructor arguments", () => {
+  test.concurrent("does not inspect constructor arguments", () => {
     let accessed = false;
     const input = Object.defineProperty({}, "value", { get: () => (accessed = true) });
     expect(() => Reflect.construct(CallTracker, [input])).toThrow();
     expect(accessed).toBe(false);
   });
 
-  test("keeps every prototype entry point as an immediate-error stub", () => {
+  test.concurrent("keeps every prototype entry point as an immediate-error stub", () => {
     const tracker = Object.create(CallTracker.prototype) as CallTracker;
     let invoked = false;
     const fn = () => {

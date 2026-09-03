@@ -13,24 +13,24 @@ const UNSUPPORTED = expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_AP
  * `undefined` after an await and leaves the caller to discover it somewhere else.
  */
 describe("asynchronous use is refused, not silently wrong", () => {
-  test("run rejects a callback that returns a promise", () => {
+  test.concurrent("run rejects a callback that returns a promise", () => {
     const als = new AsyncLocalStorage();
     expect(() => als.run({ v: 1 }, () => Promise.resolve())).toThrow(UNSUPPORTED);
     expect(() => als.run({ v: 1 }, async () => undefined)).toThrowError(/await/);
   });
 
-  test("exit and withScope reject the same way", () => {
+  test.concurrent("exit and withScope reject the same way", () => {
     const als = new AsyncLocalStorage();
     expect(() => als.exit(async () => undefined)).toThrow(UNSUPPORTED);
     expect(() => als.withScope(async () => undefined)).toThrow(UNSUPPORTED);
   });
 
-  test("a snapshot callback returning a promise is refused", () => {
+  test.concurrent("a snapshot callback returning a promise is refused", () => {
     const run = AsyncLocalStorage.snapshot();
     expect(() => run(async () => undefined)).toThrow(UNSUPPORTED);
   });
 
-  test("the error explains why rather than just refusing", () => {
+  test.concurrent("the error explains why rather than just refusing", () => {
     const als = new AsyncLocalStorage();
     try {
       als.run({ v: 1 }, async () => undefined);
@@ -41,7 +41,7 @@ describe("asynchronous use is refused, not silently wrong", () => {
     }
   });
 
-  test("the synchronous scope is still restored after a refusal", () => {
+  test.concurrent("the synchronous scope is still restored after a refusal", () => {
     const als = new AsyncLocalStorage();
     expect(() => als.run({ v: 1 }, async () => undefined)).toThrow();
     expect(als.getStore()).toBeUndefined();
@@ -57,11 +57,11 @@ describe("APIs describing the async resource graph", () => {
     },
   );
 
-  test("emitDestroy throws rather than silently doing nothing", () => {
+  test.concurrent("emitDestroy throws rather than silently doing nothing", () => {
     expect(() => new AsyncResource("thing").emitDestroy()).toThrow(UNSUPPORTED);
   });
 
-  test("asyncWrapProviders is an empty frozen table", () => {
+  test.concurrent("asyncWrapProviders is an empty frozen table", () => {
     expect(Object.isFrozen(asyncHooks.asyncWrapProviders)).toBe(true);
     expect(Object.keys(asyncHooks.asyncWrapProviders)).toEqual([]);
   });

@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import errors, * as errorGlobals from "../../../../../../src/wasi/0.2.x/node/24.x.x/errors.js";
 
 describe("Node Errors global contract", () => {
-  test("retains the engine's standard constructor identities", () => {
+  test.concurrent("retains the engine's standard constructor identities", () => {
     expect(errorGlobals.Error).toBe(globalThis.Error);
     expect(errorGlobals.EvalError).toBe(globalThis.EvalError);
     expect(errorGlobals.RangeError).toBe(globalThis.RangeError);
@@ -16,7 +16,7 @@ describe("Node Errors global contract", () => {
     expect(errorGlobals.SuppressedError).toBe(globalThis.SuppressedError);
   });
 
-  test("exposes the constructors from its default compatibility namespace", () => {
+  test.concurrent("exposes the constructors from its default compatibility namespace", () => {
     for (const name of [
       "AbortError",
       "AggregateError",
@@ -34,7 +34,7 @@ describe("Node Errors global contract", () => {
     }
   });
 
-  test("supports cause, aggregate, suppressed, and DOM error fields", () => {
+  test.concurrent("supports cause, aggregate, suppressed, and DOM error fields", () => {
     const cause = new errorGlobals.Error("cause");
     expect(new errorGlobals.Error("outer", { cause }).cause).toBe(cause);
     expect(new errorGlobals.AggregateError([cause], "aggregate").errors).toEqual([cause]);

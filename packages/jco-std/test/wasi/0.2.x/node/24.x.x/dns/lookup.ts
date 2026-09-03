@@ -4,7 +4,7 @@ import { fakeDns } from "./helpers/index.js";
 import { createDns } from "../../../../../../src/wasi/0.2.x/node/24.x.x/dns/core.js";
 
 describe("node:dns lookup APIs", () => {
-  test("supports callback lookup overloads and schedules callbacks", async () => {
+  test.concurrent("supports callback lookup overloads and schedules callbacks", async () => {
     const { modules, host } = fakeDns();
     const callback = vi.fn();
     modules.callback.lookup("example.test", { family: 6, all: true }, callback);
@@ -17,7 +17,7 @@ describe("node:dns lookup APIs", () => {
     );
   });
 
-  test("resolves IP literals without consulting the provider", async () => {
+  test.concurrent("resolves IP literals without consulting the provider", async () => {
     const { modules, host } = fakeDns();
     await expect(modules.promises.lookup("127.0.0.1")).resolves.toEqual({
       address: "127.0.0.1",
@@ -26,7 +26,7 @@ describe("node:dns lookup APIs", () => {
     expect(host.lookup).not.toHaveBeenCalled();
   });
 
-  test("supports promise lookup and lookupService", async () => {
+  test.concurrent("supports promise lookup and lookupService", async () => {
     const { modules } = fakeDns();
     await expect(modules.promises.lookup("example.test", { family: 4 })).resolves.toEqual({
       address: "192.0.2.1",
@@ -38,7 +38,7 @@ describe("node:dns lookup APIs", () => {
     });
   });
 
-  test("validates options before host access", () => {
+  test.concurrent("validates options before host access", () => {
     const { modules, host } = fakeDns();
     expect(() => modules.callback.lookup("example.test", { family: 5 }, vi.fn())).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_ARG_VALUE" }),
@@ -49,7 +49,7 @@ describe("node:dns lookup APIs", () => {
     expect(host.lookup).not.toHaveBeenCalled();
   });
 
-  test("validates lookupService addresses and ports synchronously", () => {
+  test.concurrent("validates lookupService addresses and ports synchronously", () => {
     const { modules, host } = fakeDns();
     expect(() => modules.callback.lookupService("not-an-ip", 80, vi.fn())).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_ARG_VALUE" }),
@@ -60,7 +60,7 @@ describe("node:dns lookup APIs", () => {
     expect(host.lookupService).not.toHaveBeenCalled();
   });
 
-  test("preserves structured provider errors", async () => {
+  test.concurrent("preserves structured provider errors", async () => {
     const { host } = fakeDns();
     host.lookup.mockReturnValue({
       tag: "err",

@@ -7,26 +7,26 @@ import jcoModule from "../../../../../../src/wasi/0.2.x/node/24.x.x/module.js";
 const UNSUPPORTED = "ERR_JCO_UNSUPPORTED_NODE_API";
 
 describe("createRequire", () => {
-  test("succeeds, because code creates a require it may never call", () => {
+  test.concurrent("succeeds, because code creates a require it may never call", () => {
     // Refusing here would break any module that writes `const require = createRequire(...)` at top
     // level and only requires something on a branch it does not take.
     expect(() => jcoModule.createRequire("/app/index.js")).not.toThrow();
     expect(typeof jcoModule.createRequire("/app/index.js")).toBe("function");
   });
 
-  test("has Node's own properties", () => {
+  test.concurrent("has Node's own properties", () => {
     expect(Object.keys(jcoModule.createRequire("/app/index.js")).sort()).toEqual(
       Object.keys(nodeModule.createRequire("/app/index.js")).sort(),
     );
   });
 
-  test("main is undefined and cache is empty, as they genuinely are", () => {
+  test.concurrent("main is undefined and cache is empty, as they genuinely are", () => {
     const require = jcoModule.createRequire("/app/index.js");
     expect(require.main).toBe(undefined);
     expect(Object.keys(require.cache)).toEqual([]);
   });
 
-  test("calling it refuses and points at static import", () => {
+  test.concurrent("calling it refuses and points at static import", () => {
     const require = jcoModule.createRequire("/app/index.js");
     let error: (Error & { code?: string }) | undefined;
     try {
@@ -47,14 +47,14 @@ describe("createRequire", () => {
       expect(mine.resolve(specifier)).toBe(theirs.resolve(specifier));
     });
 
-    test("reports MODULE_NOT_FOUND for a package, which is the truth here", () => {
+    test.concurrent("reports MODULE_NOT_FOUND for a package, which is the truth here", () => {
       const require = jcoModule.createRequire("/app/index.js");
       expect(() => require.resolve("lodash")).toThrowError(
         expect.objectContaining({ code: "MODULE_NOT_FOUND" }),
       );
     });
 
-    test("resolve.paths matches Node for a builtin", () => {
+    test.concurrent("resolve.paths matches Node for a builtin", () => {
       expect(jcoModule.createRequire("/app/index.js").resolve.paths("fs")).toBe(
         nodeModule.createRequire("/app/index.js").resolve.paths("fs"),
       );
@@ -89,7 +89,7 @@ describe("the loading half refuses", () => {
     expect(call).toThrowError(expect.objectContaining({ code: UNSUPPORTED }));
   });
 
-  test("every refusal explains that there is no loader", () => {
+  test.concurrent("every refusal explains that there is no loader", () => {
     for (const [, call] of calls) {
       try {
         call();
@@ -99,7 +99,7 @@ describe("the loading half refuses", () => {
     }
   });
 
-  test("the refused list plus the implemented list covers the whole surface", () => {
+  test.concurrent("the refused list plus the implemented list covers the whole surface", () => {
     // Guards against an export being added later and silently doing nothing.
     const refused = new Set(
       calls.map(([name]) => name).filter((name) => !name.startsWith("Module.prototype")),

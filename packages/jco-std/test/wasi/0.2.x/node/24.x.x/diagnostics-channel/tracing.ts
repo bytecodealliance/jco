@@ -31,7 +31,7 @@ function events(
 }
 
 describe("TracingChannel matches Node", () => {
-  test("hasSubscribers reflects the sub-channels", () => {
+  test.concurrent("hasSubscribers reflects the sub-channels", () => {
     for (const dc of [ours as unknown as Dc, nodeDc]) {
       const tc = dc.tracingChannel("has-subs");
       expect(tc.hasSubscribers).toBe(false);
@@ -40,13 +40,13 @@ describe("TracingChannel matches Node", () => {
     }
   });
 
-  test("traceSync emits start then end", async () => {
+  test.concurrent("traceSync emits start then end", async () => {
     expect(await events(ours as unknown as Dc, "sync-ok", (tc) => tc.traceSync(() => 1))).toEqual(
       await events(nodeDc, "sync-ok", (tc) => tc.traceSync(() => 1)),
     );
   });
 
-  test("a throwing traceSync emits start, error, end", async () => {
+  test.concurrent("a throwing traceSync emits start, error, end", async () => {
     const body = (tc: ReturnType<Dc["tracingChannel"]>) => {
       try {
         tc.traceSync(() => {
@@ -61,14 +61,14 @@ describe("TracingChannel matches Node", () => {
     );
   });
 
-  test("tracePromise brackets the asynchronous portion", async () => {
+  test.concurrent("tracePromise brackets the asynchronous portion", async () => {
     const body = (tc: ReturnType<Dc["tracingChannel"]>) => tc.tracePromise(async () => 1);
     expect(await events(ours as unknown as Dc, "promise-ok", body)).toEqual(
       await events(nodeDc, "promise-ok", body),
     );
   });
 
-  test("a rejecting tracePromise reports the error", async () => {
+  test.concurrent("a rejecting tracePromise reports the error", async () => {
     const body = (tc: ReturnType<Dc["tracingChannel"]>) =>
       tc.tracePromise(async () => {
         throw new Error("boom");
@@ -78,7 +78,7 @@ describe("TracingChannel matches Node", () => {
     );
   });
 
-  test("subscribe and unsubscribe are symmetric", () => {
+  test.concurrent("subscribe and unsubscribe are symmetric", () => {
     for (const dc of [ours as unknown as Dc, nodeDc]) {
       const tc = dc.tracingChannel("sub-unsub");
       const handlers = { start: () => undefined, end: () => undefined };
@@ -88,7 +88,7 @@ describe("TracingChannel matches Node", () => {
     }
   });
 
-  test("the traced value is returned unchanged", () => {
+  test.concurrent("the traced value is returned unchanged", () => {
     for (const dc of [ours as unknown as Dc, nodeDc]) {
       expect(dc.tracingChannel("returns").traceSync(() => 42)).toBe(42);
     }

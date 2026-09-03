@@ -7,7 +7,7 @@ import { createOs } from "../../../../../../src/wasi/0.2.x/node/24.x.x/os/core.j
 import type { OsHost } from "../../../../../../src/wasi/0.2.x/node/24.x.x/os/types.js";
 
 describe("node:os module", () => {
-  test("matches the stable Node 24 module surface", () => {
+  test.concurrent("matches the stable Node 24 module surface", () => {
     const os = createOs(nodeHost);
 
     expect(Object.keys(os).sort()).toEqual(Object.keys(nativeOs).sort());
@@ -22,7 +22,7 @@ describe("node:os module", () => {
     expect(Object.isFrozen(os.constants.signals)).toBe(true);
   });
 
-  test("passes machine information through the opt-in Node host", () => {
+  test.concurrent("passes machine information through the opt-in Node host", () => {
     const os = createOs(nodeHost);
 
     expect(os.arch()).toBe(nativeOs.arch());
@@ -74,7 +74,7 @@ describe("node:os module", () => {
     expect(os.constants).toEqual(nativeOs.constants);
   });
 
-  test("preserves string and Buffer user information", () => {
+  test.concurrent("preserves string and Buffer user information", () => {
     const os = createOs(nodeHost);
 
     expect(os.userInfo()).toEqual(nativeOs.userInfo());
@@ -85,7 +85,7 @@ describe("node:os module", () => {
     expect(Buffer.isBuffer(buffered.homedir)).toBe(true);
   });
 
-  test("adds Node coercion hooks to scalar functions", () => {
+  test.concurrent("adds Node coercion hooks to scalar functions", () => {
     const os = createOs(nodeHost);
 
     expect(`${os.arch}`).toBe(nativeOs.arch());
@@ -94,7 +94,7 @@ describe("node:os module", () => {
     expect(Object.hasOwn(os.cpus, Symbol.toPrimitive)).toBe(false);
   });
 
-  test("denies machine inspection by default with a stable error", () => {
+  test.concurrent("denies machine inspection by default with a stable error", () => {
     const os = createOs(denyHost);
 
     expect(os.EOL).toBe("\n");
@@ -125,7 +125,7 @@ describe("node:os module", () => {
     }
   });
 
-  test("validates priority arguments before calling the provider", () => {
+  test.concurrent("validates priority arguments before calling the provider", () => {
     const setPriority = vi.fn<OsHost["setPriority"]>(() => ({ tag: "ok", val: undefined }));
     const os = createOs({ ...denyHost, setPriority });
 
@@ -144,7 +144,7 @@ describe("node:os module", () => {
     expect(setPriority).toHaveBeenNthCalledWith(2, 34, -5);
   });
 
-  test("reconstructs structured provider failures as Node system errors", () => {
+  test.concurrent("reconstructs structured provider failures as Node system errors", () => {
     const getPriority: OsHost["getPriority"] = () => ({
       tag: "err",
       val: {

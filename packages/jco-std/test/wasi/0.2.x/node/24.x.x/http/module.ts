@@ -8,7 +8,7 @@ import { createDirectHttpImplementation } from "../../../../../../src/wasi/0.2.x
 import { recordingImplementation } from "./helpers/index.js";
 
 describe("node:http module", () => {
-  test("exposes the Node 24 module surface", () => {
+  test.concurrent("exposes the Node 24 module surface", () => {
     const { http } = recordingImplementation();
     expect(Object.keys(http).sort()).toEqual(Object.keys(nodeHttp).sort());
     expect(http.METHODS).toEqual(nodeHttp.METHODS);
@@ -18,7 +18,7 @@ describe("node:http module", () => {
     expect(http.globalAgent.keepAlive).toBe(nodeHttp.globalAgent.keepAlive);
   });
 
-  test("denies the direct capability by default", async () => {
+  test.concurrent("denies the direct capability by default", async () => {
     const http = createHttp(createDirectHttpImplementation(denyHost));
     expect(() => http.createServer()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_HTTP_ADAPTER_REQUIRED" }),
@@ -29,14 +29,14 @@ describe("node:http module", () => {
     await expect(error).resolves.toMatchObject({ code: "ERR_JCO_HTTP_ADAPTER_REQUIRED" });
   });
 
-  test("rejects server construction when an implementation cannot listen", () => {
+  test.concurrent("rejects server construction when an implementation cannot listen", () => {
     const { http } = recordingImplementation();
     expect(() => http.createServer(() => undefined)).toThrow(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
     );
   });
 
-  test("matches stable parser-limit validation codes", () => {
+  test.concurrent("matches stable parser-limit validation codes", () => {
     const { http } = recordingImplementation();
     expect(() => http.setMaxIdleHTTPParsers("1" as never)).toThrow(
       expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }),

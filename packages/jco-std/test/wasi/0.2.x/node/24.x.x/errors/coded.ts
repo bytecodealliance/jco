@@ -8,7 +8,7 @@ import {
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/errors.js";
 
 describe("Node coded errors", () => {
-  test("preserves the base class and stable code contract", () => {
+  test.concurrent("preserves the base class and stable code contract", () => {
     const error = codedError(new TypeError("wrong"), "ERR_EXAMPLE");
     expect(error).toBeInstanceOf(TypeError);
     expect(error.name).toBe("TypeError");
@@ -22,7 +22,7 @@ describe("Node coded errors", () => {
     expect(error.stack?.split("\n")[0]).toBe("TypeError [ERR_EXAMPLE]: wrong");
   });
 
-  test("constructs Node's AbortError shape", () => {
+  test.concurrent("constructs Node's AbortError shape", () => {
     const cause = new Error("cause");
     const error = new AbortError(undefined, { cause });
     expect(error).toBeInstanceOf(Error);
@@ -34,7 +34,7 @@ describe("Node coded errors", () => {
     });
   });
 
-  test("constructs generic and explicit unsupported failures", () => {
+  test.concurrent("constructs generic and explicit unsupported failures", () => {
     expect(genericNodeError("failed", { code: "EFAIL", syscall: "open" })).toMatchObject({
       message: "failed",
       code: "EFAIL",

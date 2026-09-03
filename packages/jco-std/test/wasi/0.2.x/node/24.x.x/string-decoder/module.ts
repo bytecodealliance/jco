@@ -18,7 +18,7 @@ function errorCode(action: () => unknown): string | undefined {
 }
 
 describe("node:string_decoder module", () => {
-  test("matches Node's module and prototype shape", () => {
+  test.concurrent("matches Node's module and prototype shape", () => {
     expect(stringDecoder.StringDecoder).toBe(StringDecoder);
     expect(nodeStringDecoder.StringDecoder).toBe(NodeStringDecoder);
     expect(StringDecoder.name).toBe(NodeStringDecoder.name);
@@ -43,7 +43,7 @@ describe("node:string_decoder module", () => {
     expect(new StringDecoder(input).encoding).toBe(normalized);
   });
 
-  test("uses Node error codes for unsupported encodings and invalid input", () => {
+  test.concurrent("uses Node error codes for unsupported encodings and invalid input", () => {
     expect(errorCode(() => new StringDecoder("rot13" as StringDecoderInputEncoding))).toBe(
       "ERR_UNKNOWN_ENCODING",
     );
@@ -55,7 +55,7 @@ describe("node:string_decoder module", () => {
     );
   });
 
-  test("buffers split UTF-8 sequences and malformed boundary sequences like Node", () => {
+  test.concurrent("buffers split UTF-8 sequences and malformed boundary sequences like Node", () => {
     for (const chunks of [
       [[0xe2], [0x82], [0xac]],
       [[0xc0], [0x80]],
@@ -98,7 +98,7 @@ describe("node:string_decoder module", () => {
     },
   );
 
-  test("honors ArrayBufferView byte offsets and accepts DataView", () => {
+  test.concurrent("honors ArrayBufferView byte offsets and accepts DataView", () => {
     const storage = Uint8Array.from([0xff, 0xe2, 0x82, 0xac, 0xff]);
     const typed = storage.subarray(1, 4);
     const data = new DataView(storage.buffer, 1, 3);
@@ -106,7 +106,7 @@ describe("node:string_decoder module", () => {
     expect(new StringDecoder().end(data)).toBe("€");
   });
 
-  test("retains Node's legacy state accessors and text method", () => {
+  test.concurrent("retains Node's legacy state accessors and text method", () => {
     const decoder = new StringDecoder("utf8");
     expect(decoder.write(Uint8Array.of(0xe2))).toBe("");
     expect(decoder.lastNeed).toBe(2);
@@ -116,7 +116,7 @@ describe("node:string_decoder module", () => {
     expect(decoder.lastNeed).toBe(0);
   });
 
-  test("passes strings through without consuming buffered bytes and can be reused after end", () => {
+  test.concurrent("passes strings through without consuming buffered bytes and can be reused after end", () => {
     const decoder = new StringDecoder();
     decoder.write(Uint8Array.of(0xe2));
     expect(decoder.write("literal")).toBe("literal");
@@ -125,7 +125,7 @@ describe("node:string_decoder module", () => {
     expect(decoder.end(Buffer.from("again"))).toBe("again");
   });
 
-  test("matches Node over deterministic chunk and view combinations", () => {
+  test.concurrent("matches Node over deterministic chunk and view combinations", () => {
     const encodings = [
       undefined,
       "utf8",

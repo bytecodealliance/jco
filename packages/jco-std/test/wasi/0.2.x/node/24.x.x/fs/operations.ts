@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { fs, withFsFixture } from "../helpers/fs.js";
 
 describe("node:fs path operations", () => {
-  test("reads, writes, appends, copies, and renames files", async () => {
+  test.concurrent("reads, writes, appends, copies, and renames files", async () => {
     await withFsFixture((root) => {
       const source = join(root, "source.txt");
       const copy = join(root, "copy.txt");
@@ -27,7 +27,7 @@ describe("node:fs path operations", () => {
     });
   });
 
-  test("creates, lists, stats, and recursively removes directories", async () => {
+  test.concurrent("creates, lists, stats, and recursively removes directories", async () => {
     await withFsFixture((root) => {
       const nested = join(root, "a", "b");
       expect(fs.mkdirSync(nested, { recursive: true })).toContain(join(root, "a"));
@@ -50,7 +50,7 @@ describe("node:fs path operations", () => {
     });
   });
 
-  test("preserves stable system error fields", async () => {
+  test.concurrent("preserves stable system error fields", async () => {
     await withFsFixture((root) => {
       const missing = join(root, "missing");
       expect(() => fs.readFileSync(missing)).toThrow(
@@ -59,7 +59,7 @@ describe("node:fs path operations", () => {
     });
   });
 
-  test("preserves file URLs through the typed host boundary", async () => {
+  test.concurrent("preserves file URLs through the typed host boundary", async () => {
     await withFsFixture((root) => {
       const url = pathToFileURL(join(root, "file URL.txt"));
       fs.writeFileSync(url, "url");
@@ -70,7 +70,7 @@ describe("node:fs path operations", () => {
     });
   });
 
-  test("reports closed directory handles with Node's stable code", async () => {
+  test.concurrent("reports closed directory handles with Node's stable code", async () => {
     await withFsFixture((root) => {
       const directory = fs.opendirSync(root);
       directory.closeSync();

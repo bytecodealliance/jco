@@ -34,14 +34,14 @@ class FakeReadable {
 }
 
 describe("stream/iter classic adapters", () => {
-  test("duck-types readable inputs and caches adapters", async () => {
+  test.concurrent("duck-types readable inputs and caches adapters", async () => {
     const readable = new FakeReadable();
     const adapted = fromReadable(readable);
     expect(fromReadable(readable)).toBe(adapted);
     await expect(text(adapted)).resolves.toBe("classic");
   });
 
-  test("duck-types writable inputs and caches per policy", async () => {
+  test.concurrent("duck-types writable inputs and caches per policy", async () => {
     const chunks: Uint8Array[] = [];
     const writable = {
       write(chunk: Uint8Array, callback?: (error?: Error | null) => void): boolean {

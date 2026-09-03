@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import assert from "../../../../../../src/wasi/0.2.x/node/24.x.x/assert/index.js";
 
 describe("assert.rejects", () => {
-  test("accepts rejected promises and async functions", async () => {
+  test.concurrent("accepts rejected promises and async functions", async () => {
     await expect(assert.rejects(Promise.reject(new Error("boom")))).resolves.toBeUndefined();
     await expect(
       assert.rejects(async () => {
@@ -24,7 +24,7 @@ describe("assert.rejects", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("rejects fulfilled and invalid return values", async () => {
+  test.concurrent("rejects fulfilled and invalid return values", async () => {
     await expect(assert.rejects(Promise.resolve(1))).rejects.toMatchObject({
       code: "ERR_ASSERTION",
     });
@@ -41,7 +41,7 @@ describe("assert.rejects", () => {
     ).rejects.toMatchObject({ code: "ERR_INVALID_ARG_TYPE" });
   });
 
-  test("preserves synchronous throws from the promise function", async () => {
+  test.concurrent("preserves synchronous throws from the promise function", async () => {
     const error = new Error("sync");
     await expect(
       assert.rejects(() => {

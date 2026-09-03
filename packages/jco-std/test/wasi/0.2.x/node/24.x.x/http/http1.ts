@@ -26,7 +26,7 @@ function request(body = ""): HttpImplementationRequest {
 }
 
 describe("HTTP/1.1 framing", () => {
-  test("serializes a request and closes first-version connections", () => {
+  test.concurrent("serializes a request and closes first-version connections", () => {
     expect(decoder.decode(serializeHttp1Request(request("hello")))).toBe(
       "POST /submit?q=1 HTTP/1.1\r\n" +
         "Host: example.com\r\n" +
@@ -36,7 +36,7 @@ describe("HTTP/1.1 framing", () => {
     );
   });
 
-  test("waits for a fragmented content-length response", () => {
+  test.concurrent("waits for a fragmented content-length response", () => {
     const first = encoder.encode("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhel");
     expect(parseHttp1Response(first, "GET")).toBeUndefined();
     const complete = encoder.encode("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
@@ -47,7 +47,7 @@ describe("HTTP/1.1 framing", () => {
     });
   });
 
-  test("decodes chunk extensions, trailers, and informational responses", () => {
+  test.concurrent("decodes chunk extensions, trailers, and informational responses", () => {
     const wire = encoder.encode(
       "HTTP/1.1 100 Continue\r\n\r\n" +
         "HTTP/1.1 201 Created\r\nTransfer-Encoding: chunked\r\n\r\n" +
@@ -58,20 +58,20 @@ describe("HTTP/1.1 framing", () => {
     expect(decoder.decode(result?.body)).toBe("hello world");
   });
 
-  test("uses connection close to delimit an otherwise unframed body", () => {
+  test.concurrent("uses connection close to delimit an otherwise unframed body", () => {
     const wire = encoder.encode("HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\nhello");
     expect(parseHttp1Response(wire, "GET", false)).toBeUndefined();
     expect(decoder.decode(parseHttp1Response(wire, "GET", true)?.body)).toBe("hello");
   });
 
-  test("never consumes a body for HEAD and no-content statuses", () => {
+  test.concurrent("never consumes a body for HEAD and no-content statuses", () => {
     const head = encoder.encode("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n");
     const noContent = encoder.encode("HTTP/1.1 204 No Content\r\n\r\n");
     expect(parseHttp1Response(head, "HEAD")?.body).toHaveLength(0);
     expect(parseHttp1Response(noContent, "GET")?.body).toHaveLength(0);
   });
 
-  test("parses an inbound request and serializes a framed response", () => {
+  test.concurrent("parses an inbound request and serializes a framed response", () => {
     const parsed = parseHttp1Request(
       encoder.encode(
         "POST /submit HTTP/1.1\r\nHost: example.com\r\nContent-Length: 5\r\n\r\nhello",
@@ -103,7 +103,7 @@ describe("HTTP/1.1 framing", () => {
     );
   });
 
-  test("waits for an incomplete inbound body", () => {
+  test.concurrent("waits for an incomplete inbound body", () => {
     expect(
       parseHttp1Request(encoder.encode("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhel")),
     ).toBeUndefined();

@@ -5,7 +5,7 @@ import * as denyHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/inspecto
 import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/inspector-host-node.js";
 
 describe("node:inspector activation", () => {
-  test("the deny host surfaces ERR_JCO_INSPECTOR_ADAPTER_REQUIRED", () => {
+  test.concurrent("the deny host surfaces ERR_JCO_INSPECTOR_ADAPTER_REQUIRED", () => {
     const denied = createInspectorCore(denyHost);
     expect(() => denied.open()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_INSPECTOR_ADAPTER_REQUIRED" }),
@@ -18,7 +18,7 @@ describe("node:inspector activation", () => {
     );
   });
 
-  test("open returns a null-prototype Disposable holding only Symbol.dispose", () => {
+  test.concurrent("open returns a null-prototype Disposable holding only Symbol.dispose", () => {
     const core = createInspectorCore(nodeHost);
     let activation: { [Symbol.dispose](): void } | undefined;
     try {
@@ -36,7 +36,7 @@ describe("node:inspector activation", () => {
     expect(core.url()).toBeUndefined();
   });
 
-  test("waitForDebugger without an active inspector throws ERR_INSPECTOR_NOT_ACTIVE", () => {
+  test.concurrent("waitForDebugger without an active inspector throws ERR_INSPECTOR_NOT_ACTIVE", () => {
     const core = createInspectorCore(nodeHost);
     if (core.url() !== undefined) {
       // An inspector is already active in this runner; the precondition does not hold.

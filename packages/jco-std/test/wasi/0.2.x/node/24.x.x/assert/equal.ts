@@ -16,7 +16,7 @@ describeDifferential("assert.equal", () => {
     ),
   );
 
-  test("requires both operands", () => {
+  test.concurrent("requires both operands", () => {
     compareOutcome(
       () => Reflect.apply(assert.equal, undefined, [1]),
       () => Reflect.apply(nodeAssert.equal, undefined, [1]),

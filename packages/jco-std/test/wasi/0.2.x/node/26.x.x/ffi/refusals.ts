@@ -34,28 +34,28 @@ function unreachableHost(): FfiHost {
 }
 
 describe("what a component cannot express is refused before the host is reached", () => {
-  test("getRawPointer: guest memory has no host address", () => {
+  test.concurrent("getRawPointer: guest memory has no host address", () => {
     const ffi = createFfi(unreachableHost());
     expect(() => ffi.getRawPointer(new ArrayBuffer(8))).toThrowError(
       expect.objectContaining({ code: UNSUPPORTED }),
     );
   });
 
-  test("toBuffer with copy: false asks for a live view", () => {
+  test.concurrent("toBuffer with copy: false asks for a live view", () => {
     const ffi = createFfi(unreachableHost());
     expect(() => ffi.toBuffer(1n, 4, false)).toThrowError(
       expect.objectContaining({ code: UNSUPPORTED }),
     );
   });
 
-  test("toArrayBuffer with copy: false asks for a live view", () => {
+  test.concurrent("toArrayBuffer with copy: false asks for a live view", () => {
     const ffi = createFfi(unreachableHost());
     expect(() => ffi.toArrayBuffer(1n, 4, false)).toThrowError(
       expect.objectContaining({ code: UNSUPPORTED }),
     );
   });
 
-  test("a buffer-typed argument would be copied silently", () => {
+  test.concurrent("a buffer-typed argument would be copied silently", () => {
     // Refused when the signature is declared, not when the call is made, so the message names the
     // offending type rather than surfacing later as a marshalling failure.
     const ffi = createFfi({
@@ -68,7 +68,7 @@ describe("what a component cannot express is refused before the host is reached"
     );
   });
 
-  test("an arraybuffer-typed argument is refused the same way", () => {
+  test.concurrent("an arraybuffer-typed argument is refused the same way", () => {
     const ffi = createFfi({ ...unreachableHost(), open: () => 1 } as unknown as FfiHost);
     const lib = new ffi.DynamicLibrary("/nonexistent");
     expect(() => lib.getFunction("f", { arguments: ["arraybuffer"], return: "void" })).toThrowError(
@@ -76,7 +76,7 @@ describe("what a component cannot express is refused before the host is reached"
     );
   });
 
-  test("a function-typed argument needs a call back into the guest", () => {
+  test.concurrent("a function-typed argument needs a call back into the guest", () => {
     const ffi = createFfi({ ...unreachableHost(), open: () => 1 } as unknown as FfiHost);
     const lib = new ffi.DynamicLibrary("/nonexistent");
     expect(() =>
@@ -84,7 +84,7 @@ describe("what a component cannot express is refused before the host is reached"
     ).toThrowError(expect.objectContaining({ code: UNSUPPORTED }));
   });
 
-  test("registerCallback and its companions are refused", () => {
+  test.concurrent("registerCallback and its companions are refused", () => {
     const ffi = createFfi({ ...unreachableHost(), open: () => 1 } as unknown as FfiHost);
     const lib = new ffi.DynamicLibrary("/nonexistent");
     for (const call of [
@@ -99,14 +99,14 @@ describe("what a component cannot express is refused before the host is reached"
 });
 
 describe("argument checking happens without the host", () => {
-  test("a non-string path is rejected as Node rejects it", () => {
+  test.concurrent("a non-string path is rejected as Node rejects it", () => {
     const ffi = createFfi(unreachableHost());
     expect(() => new ffi.DynamicLibrary(42 as unknown as string)).toThrowError(
       expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }),
     );
   });
 
-  test("a closed library refuses further use", () => {
+  test.concurrent("a closed library refuses further use", () => {
     let closed = 0;
     const ffi = createFfi({
       ...unreachableHost(),
@@ -123,7 +123,7 @@ describe("argument checking happens without the host", () => {
     );
   });
 
-  test("the wrong number of arguments is rejected before marshalling", () => {
+  test.concurrent("the wrong number of arguments is rejected before marshalling", () => {
     const ffi = createFfi({
       ...unreachableHost(),
       open: () => 1,

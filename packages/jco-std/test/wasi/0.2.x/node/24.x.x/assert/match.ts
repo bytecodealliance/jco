@@ -14,7 +14,7 @@ describeDifferential("assert.match", () => {
     ),
   );
 
-  test("validates the regexp and forwards Error messages", () => {
+  test.concurrent("validates the regexp and forwards Error messages", () => {
     expect(() => Reflect.apply(assert.match, undefined, ["value", "value"])).toThrowError(
       expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }),
     );

@@ -20,7 +20,7 @@ describeDifferential("assert.deepEqual", () => {
     );
   });
 
-  test("supports equivalent cycles", () => {
+  test.concurrent("supports equivalent cycles", () => {
     const actual: { self?: unknown; value: number } = { value: 1 };
     const expected: { self?: unknown; value: string } = { value: "1" };
     actual.self = actual;
@@ -31,7 +31,7 @@ describeDifferential("assert.deepEqual", () => {
     );
   });
 
-  test("uses numeric comparison for loose float arrays", () => {
+  test.concurrent("uses numeric comparison for loose float arrays", () => {
     compareOutcome(
       () => assert.deepEqual(new Float32Array([0]), new Float32Array([-0])),
       () => nodeAssert.deepEqual(new Float32Array([0]), new Float32Array([-0])),

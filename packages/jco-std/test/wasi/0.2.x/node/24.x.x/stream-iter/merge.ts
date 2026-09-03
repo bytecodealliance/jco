@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { merge, text } from "../../../../../../src/wasi/0.2.x/node/24.x.x/stream/iter/index.js";
 
 describe("stream/iter merge", () => {
-  test("emits batches as their sources become ready", async () => {
+  test.concurrent("emits batches as their sources become ready", async () => {
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
@@ -20,14 +20,14 @@ describe("stream/iter merge", () => {
     expect(await output).toBe("fastslow");
   });
 
-  test("supports empty input and cancellation", async () => {
+  test.concurrent("supports empty input and cancellation", async () => {
     expect(await text(merge())).toBe("");
 
     const signal = AbortSignal.abort(new Error("stop"));
     await expect(text(merge("unread", { signal }))).rejects.toThrow("stop");
   });
 
-  test("propagates source failures", async () => {
+  test.concurrent("propagates source failures", async () => {
     async function* failing(): AsyncIterable<string> {
       yield "before";
       throw new Error("source failed");

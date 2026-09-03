@@ -8,23 +8,23 @@ import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/inspecto
 const core = createInspectorCore(nodeHost);
 
 describe("node:inspector experimental broadcast namespaces", () => {
-  test("Network matches Node's method set", () => {
+  test.concurrent("Network matches Node's method set", () => {
     expect(Object.keys(core.Network).sort()).toEqual(Object.keys(inspector.Network).sort());
   });
 
-  test("DOMStorage matches Node's method set", () => {
+  test.concurrent("DOMStorage matches Node's method set", () => {
     const nodeKeys = Object.keys(
       (inspector as unknown as { DOMStorage: object }).DOMStorage,
     ).sort();
     expect(Object.keys(core.DOMStorage).sort()).toEqual(nodeKeys);
   });
 
-  test("a params object is accepted and undefined defaults to an empty object", () => {
+  test.concurrent("a params object is accepted and undefined defaults to an empty object", () => {
     expect(() => core.Network.requestWillBeSent({ requestId: "1" })).not.toThrow();
     expect(() => core.Network.requestWillBeSent()).not.toThrow();
   });
 
-  test("null, arrays, and primitives throw ERR_INVALID_ARG_TYPE", () => {
+  test.concurrent("null, arrays, and primitives throw ERR_INVALID_ARG_TYPE", () => {
     expect(() => core.Network.requestWillBeSent(null as unknown as object)).toThrow(
       expect.objectContaining({
         code: "ERR_INVALID_ARG_TYPE",
@@ -39,7 +39,7 @@ describe("node:inspector experimental broadcast namespaces", () => {
     );
   });
 
-  test("NetworkResources.put forwards two string arguments", () => {
+  test.concurrent("NetworkResources.put forwards two string arguments", () => {
     expect(typeof core.NetworkResources.put).toBe("function");
     expect(core.NetworkResources.put.length).toBe(2);
     expect(() => core.NetworkResources.put("http://x/y", "body")).not.toThrow();

@@ -75,19 +75,19 @@ describe("AsyncResource identity", () => {
     expect(() => new NodeAR(type as never)).toThrow(TypeError);
   });
 
-  test("accepts an empty type, as Node does", () => {
+  test.concurrent("accepts an empty type, as Node does", () => {
     expect(() => new AsyncResource("")).not.toThrow();
     expect(() => new NodeAR("")).not.toThrow();
   });
 
-  test("ids are stable per resource and unique across them", () => {
+  test.concurrent("ids are stable per resource and unique across them", () => {
     const a = new AsyncResource("a");
     const b = new AsyncResource("b");
     expect(a.asyncId()).toBe(a.asyncId());
     expect(a.asyncId()).not.toBe(b.asyncId());
   });
 
-  test("triggerAsyncId defaults to 0 and honours the option", () => {
+  test.concurrent("triggerAsyncId defaults to 0 and honours the option", () => {
     expect(new AsyncResource("a").triggerAsyncId()).toBe(0);
     expect(new AsyncResource("a", { triggerAsyncId: 7 }).triggerAsyncId()).toBe(7);
   });
