@@ -426,23 +426,14 @@ export {
 `;
 }
 
-/** Source of the `node:inspector/promises` adapter, sharing one core with `node:inspector`. */
+/**
+ * Source of the `node:inspector/promises` adapter, sharing one core with `node:inspector`.
+ *
+ * The promises entry point re-exports the same public surface as `node:inspector`, so the adapter
+ * source is identical apart from the module it points at.
+ */
 function inspectorPromisesAdapter(inspectorPromisesModule: string): string {
-    return `
-import inspector from ${JSON.stringify(inspectorPromisesModule)};
-export default inspector;
-export {
-    close,
-    console,
-    DOMStorage,
-    Network,
-    NetworkResources,
-    open,
-    Session,
-    url,
-    waitForDebugger,
-} from ${JSON.stringify(inspectorPromisesModule)};
-`;
+    return inspectorAdapter(inspectorPromisesModule);
 }
 
 /**
@@ -594,21 +585,25 @@ export {
 `;
 }
 
-/** Source of a capability-free Node stream submodule adapter. */
-function streamAdapter(module: string): string {
+/**
+ * Source of an adapter that forwards a module's default export and re-exports its whole named
+ * surface. `localName` only names the default-import binding in the generated source.
+ */
+function starReexportAdapter(module: string, localName: string): string {
     return `
-import streamModule from ${JSON.stringify(module)};
-export default streamModule;
+import ${localName} from ${JSON.stringify(module)};
+export default ${localName};
 export * from ${JSON.stringify(module)};
 `;
 }
 
+/** Source of a capability-free Node stream submodule adapter. */
+function streamAdapter(module: string): string {
+    return starReexportAdapter(module, "streamModule");
+}
+
 function dnsAdapter(dnsModule: string): string {
-    return `
-import dns from ${JSON.stringify(dnsModule)};
-export default dns;
-export * from ${JSON.stringify(dnsModule)};
-`;
+    return starReexportAdapter(dnsModule, "dns");
 }
 
 /** Source of the host-backed `node:os` ESM facade. */
@@ -902,83 +897,43 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     // semantics change across majors, and the same module adapted to WASI p3 is a different
     // implementation -- so both are pinned here rather than resolved through an unversioned
     // alias. Selecting either at build time, or detecting them, is future work.
-    const pathFactory = () =>
-        options.pathFactory ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path"));
-    const assertModule = () =>
-        options.assertModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert"));
-    const moduleModule = () =>
-        options.moduleModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module"));
+    // Resolve a jco-std module under `wasi/0.2.x/node/<major>.x.x/<subpath>` unless a test override
+    // is supplied. Resolution stays lazy (a thunk) so nothing touches the package until a builtin
+    // is actually bundled.
+    const stdModule = (override: string | undefined, subpath: string, major = "24.x.x"): string =>
+        override ?? fileURLToPath(import.meta.resolve(`@bytecodealliance/jco-std/wasi/0.2.x/node/${major}/${subpath}`));
+    const pathFactory = () => stdModule(options.pathFactory, "path");
+    const assertModule = () => stdModule(options.assertModule, "assert");
+    const moduleModule = () => stdModule(options.moduleModule, "module");
     // NOTE: `node:ffi` resolves under `node/26.x.x`, not 24: it does not exist in Node 24. This is
     // the first place the Node major in the path differs per module rather than per build.
-    const ffiModule = () =>
-        options.ffiModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi"));
-    const inspectorModule = () =>
-        options.inspectorModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector"));
-    const inspectorPromisesModule = () =>
-        options.inspectorPromisesModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/promises"));
-    const domainModule = () =>
-        options.domainModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/domain"));
-    const diagnosticsChannelModule = () =>
-        options.diagnosticsChannelModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel"));
-    const asyncHooksModule = () =>
-        options.asyncHooksModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks"));
-    const eventsModule = () =>
-        options.eventsModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events"));
-    const osModule = () =>
-        options.osModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os"));
-    const stringDecoderModule = () =>
-        options.stringDecoderModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder"));
-    const streamConsumersModule = () =>
-        options.streamConsumersModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers"));
-    const streamIterModule = () =>
-        options.streamIterModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter"));
-    const clusterModule = () =>
-        options.clusterModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster"));
-    const childProcessModule = () =>
-        options.childProcessModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process"));
-    const consoleModule = () =>
-        options.consoleModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console"));
-    const fsModule = () =>
-        options.fsModule ?? fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs"));
-    const fsPromisesModule = () =>
-        options.fsPromisesModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/promises"));
-    const errorsModule = () =>
-        options.errorsModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors"));
+    const ffiModule = () => stdModule(options.ffiModule, "ffi", "26.x.x");
+    const inspectorModule = () => stdModule(options.inspectorModule, "inspector");
+    const inspectorPromisesModule = () => stdModule(options.inspectorPromisesModule, "inspector/promises");
+    const domainModule = () => stdModule(options.domainModule, "domain");
+    const diagnosticsChannelModule = () => stdModule(options.diagnosticsChannelModule, "diagnostics-channel");
+    const asyncHooksModule = () => stdModule(options.asyncHooksModule, "async-hooks");
+    const eventsModule = () => stdModule(options.eventsModule, "events");
+    const osModule = () => stdModule(options.osModule, "os");
+    const stringDecoderModule = () => stdModule(options.stringDecoderModule, "string-decoder");
+    const streamConsumersModule = () => stdModule(options.streamConsumersModule, "stream/consumers");
+    const streamIterModule = () => stdModule(options.streamIterModule, "stream/iter");
+    const clusterModule = () => stdModule(options.clusterModule, "cluster");
+    const childProcessModule = () => stdModule(options.childProcessModule, "child-process");
+    const consoleModule = () => stdModule(options.consoleModule, "console");
+    const fsModule = () => stdModule(options.fsModule, "fs");
+    const fsPromisesModule = () => stdModule(options.fsPromisesModule, "fs/promises");
+    const errorsModule = () => stdModule(options.errorsModule, "errors");
     const dnsModule = (specifier: string) =>
         specifier === "node:dns/promises"
-            ? (options.dnsPromisesModule ??
-              fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/promises")))
-            : (options.dnsModule ??
-              fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns")));
-    const httpModule = () =>
-        options.httpModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http"));
-    const httpCoreModule = () =>
-        options.httpCoreModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/core"));
+            ? stdModule(options.dnsPromisesModule, "dns/promises")
+            : stdModule(options.dnsModule, "dns");
+    const httpModule = () => stdModule(options.httpModule, "http");
+    const httpCoreModule = () => stdModule(options.httpCoreModule, "http/core");
     const httpWasiSocketsImplementationModule = () =>
-        options.httpWasiSocketsImplementationModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets"));
+        stdModule(options.httpWasiSocketsImplementationModule, "http/impl/wasi-sockets");
     const httpWasiHttpImplementationModule = () =>
-        options.httpWasiHttpImplementationModule ??
-        fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/wasi-http"));
+        stdModule(options.httpWasiHttpImplementationModule, "http/impl/wasi-http");
     const httpVia = options.nodejsHttpVia ?? "direct";
     return {
         name: "jco-node-builtins",
