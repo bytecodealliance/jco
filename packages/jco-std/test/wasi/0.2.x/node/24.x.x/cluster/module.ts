@@ -7,8 +7,9 @@ import * as denyHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster-
 import * as nodeHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/cluster-host-node.js";
 
 // Driven by the real Node host, so what these assert is Node's own cluster behavior rather than a
-// stand-in's. Forking is covered separately in fork.ts, which spawns its own process: cluster.fork()
-// re-executes the current entry, so forking here would fork the test runner.
+// stand-in's. Forking is covered separately in fork.ts: cluster.fork() re-executes the current
+// entry, so fork.ts points the primary at a dedicated worker script via cluster.setupPrimary({ exec })
+// instead of forking the test runner.
 const cluster = createCluster(nodeHost);
 
 describe("node:cluster guest adapter", () => {
