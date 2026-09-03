@@ -1,3 +1,5 @@
+package jco:node@0.1.0;
+
 /// Guest-owned callbacks used by the direct Node-compatible HTTP implementation.
 interface http-callbacks {
   variant errno {

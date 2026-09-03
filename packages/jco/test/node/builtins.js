@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { withDefaultNodeCapabilities, withDefaultNodeCapabilityMap } from "../../src/cmd/transpile.js";
+import * as nodeWit from "../../src/node-wit.js";
 
 const environment = (patch = 6n) => ({
     imports: [
@@ -40,6 +41,7 @@ describe("Node builtin adapters", () => {
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
             "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
+            "jco:node/inspector@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host",
             "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
         });
         expect(
@@ -56,8 +58,26 @@ describe("Node builtin adapters", () => {
             "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
             "jco:node/fs@0.1.0": "/application/fs-host.js",
             "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
+            "jco:node/inspector@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host",
             "jco:node/os@0.1.0": "/application/os-host.js",
         });
+    });
+
+    test("maps every injected jco:node host interface to a deny provider by default", () => {
+        // Derive the expected keys from the WIT requirements themselves so that adding a new
+        // host-backed builtin without a default deny mapping fails here instead of surfacing as an
+        // unresolved import in a transpiled component.
+        const map = withDefaultNodeCapabilityMap();
+        const witImports = new Set(
+            Object.values(nodeWit)
+                .filter((value) => value && typeof value === "object" && typeof value.witImport === "string")
+                .map((value) => value.witImport)
+                .filter((witImport) => witImport.startsWith("jco:node/")),
+        );
+        expect(witImports.size).toBeGreaterThan(0);
+        for (const witImport of witImports) {
+            expect(map, `${witImport} must map to a deny-by-default host provider`).toHaveProperty(witImport);
+        }
     });
 
     test("configures custom DNS providers as JSPI imports", () => {
