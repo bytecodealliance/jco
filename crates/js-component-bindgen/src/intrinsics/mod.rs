@@ -9,6 +9,11 @@ use wasmtime_environ::Trap;
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
+pub(crate) const RUNTIME_ABI_VERSION: u32 = 1;
+pub(crate) const RUNTIME_PROVIDER_LOCAL_NAME: &str = "_jcoRuntimeProvider";
+const RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
+const RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
+
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
 
@@ -193,6 +198,25 @@ pub enum Intrinsic {
 
     /// Compiled Wasm of the conditional-suspending trampolines, by trampoline name
     ConditionalSuspendingWasm,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum IntrinsicBinding {
+    Inline {
+        local_name: &'static str,
+    },
+    Runtime {
+        local_name: &'static str,
+        path: &'static str,
+    },
+}
+
+impl IntrinsicBinding {
+    fn local_name(self) -> &'static str {
+        match self {
+            Self::Inline { local_name } | Self::Runtime { local_name, .. } => local_name,
+        }
+    }
 }
 
 macro_rules! impl_from_intrinsic {
@@ -1458,6 +1482,8 @@ mod tests {
         let remove = Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove);
         let (source, _) = render([get, remove]);
 
+        assert!(source.contains("const rscTableGet = _jcoIntrinsics.resource.tableGet;"));
+        assert!(!source.contains("function rscTableGet(table, handle)"));
         assert!(source.contains(
             "throw new WebAssemblyRuntimeError(`unknown handle index ${(handle << 1) + 1}`);"
         ));
@@ -1531,10 +1557,15 @@ mod tests {
         }
         assert!(!intrinsics.contains(&table_remove));
 
+        let runtime_position = source.find("_jcoRuntimeProvider.create").unwrap();
+        let get_position = source
+            .find("const rscTableGet = _jcoIntrinsics.resource.tableGet")
+            .unwrap();
         let flag_position = source.find("const T_FLAG").unwrap();
-        let get_position = source.find("function rscTableGet").unwrap();
         let transfer_position = source.find("function resourceTransferBorrow").unwrap();
-        assert!(flag_position < get_position);
+        assert!(runtime_position < get_position);
+        assert!(get_position < flag_position);
+        assert!(flag_position < transfer_position);
         assert!(get_position < transfer_position);
     }
 
@@ -1981,7 +2012,9 @@ mod tests {
                 .build(),
         );
 
-        assert!(source.contains("function rscTableGet(table, handle)"));
+        assert!(source.contains("const rscTableGet = _jcoIntrinsics.resource.tableGet;"));
+        assert!(!source.contains("function rscTableGet(table, handle)"));
+        assert!(!source.contains("function rscTableRemove(table, handle)"));
         assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
         assert!(!source.contains("if (!own) rscTableRemove(fromTable, handle);"));
         assert!(source.contains("fromTable[handle << 1]++;"));
@@ -2389,7 +2422,7 @@ impl RenderIntrinsicsArgs<'_> {
             .lock()
             .expect("intrinsic dependency collector lock should not be poisoned")
             .insert(intrinsic);
-        intrinsic.name()
+        intrinsic.binding().local_name()
     }
 
     fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {
@@ -2420,7 +2453,9 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
 
         debug_assert!(args.take_discovered_intrinsics().is_empty());
         let mut source = Source::default();
-        intrinsic.render(&mut source, args);
+        if matches!(intrinsic.binding(), IntrinsicBinding::Inline { .. }) {
+            intrinsic.render(&mut source, args);
+        }
         let discovered = args.take_discovered_intrinsics();
         for dependency in &discovered {
             if !rendered.contains_key(dependency) {
@@ -2433,6 +2468,48 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
     }
 
     let mut output = Source::default();
+    if uses_external_runtime(args.intrinsics) {
+        uwriteln!(
+            output,
+            r#"
+                if (typeof {RUNTIME_PROVIDER_LOCAL_NAME}?.create !== 'function') {{
+                    throw new TypeError('Jco Component Model runtime provider must define create(options)');
+                }}
+                if ({RUNTIME_PROVIDER_LOCAL_NAME}.abiVersion !== {RUNTIME_ABI_VERSION}) {{
+                    throw new Error(`incompatible Jco Component Model runtime ABI: requested {RUNTIME_ABI_VERSION}, supported ${{{RUNTIME_PROVIDER_LOCAL_NAME}.abiVersion}}`);
+                }}
+                const {RUNTIME_LOCAL_NAME} = {RUNTIME_PROVIDER_LOCAL_NAME}.create({{
+                    requestedAbiVersion: {RUNTIME_ABI_VERSION},
+                    strict: {strict},
+                    flagsAsBigInt: {flags_as_bigint},
+                    nodejsCompat: {nodejs_compat},
+                    asyncDeterminism: '{determinism}',
+                }});
+                if ({RUNTIME_LOCAL_NAME}?.abiVersion !== {RUNTIME_ABI_VERSION}) {{
+                    throw new Error(`incompatible Jco Component Model runtime instance ABI: requested {RUNTIME_ABI_VERSION}, received ${{{RUNTIME_LOCAL_NAME}?.abiVersion}}`);
+                }}
+                const {RUNTIME_INTRINSICS_LOCAL_NAME} = {RUNTIME_LOCAL_NAME}.intrinsics;
+            "#,
+            strict = args.transpile_opts.strict,
+            flags_as_bigint = args.transpile_opts.flags_as_bigint,
+            nodejs_compat = !args.transpile_opts.nodejs_compat_disabled,
+            determinism = args.determinism_profile,
+        );
+
+        for intrinsic in args.intrinsics.iter() {
+            let IntrinsicBinding::Runtime { local_name, path } = intrinsic.binding() else {
+                continue;
+            };
+            uwriteln!(
+                output,
+                "const {local_name} = {RUNTIME_INTRINSICS_LOCAL_NAME}.{path};"
+            );
+            uwriteln!(
+                output,
+                "if (typeof {local_name} !== 'function') throw new TypeError('Jco Component Model runtime intrinsic {path} must be a function');"
+            );
+        }
+    }
     if args
         .intrinsics
         .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
@@ -2548,6 +2625,22 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 ];
 
 impl Intrinsic {
+    pub(crate) fn binding(&self) -> IntrinsicBinding {
+        match self {
+            Self::Resource(ResourceIntrinsic::ResourceTableGet) => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: "resource.tableGet",
+            },
+            _ => IntrinsicBinding::Inline {
+                local_name: self.name(),
+            },
+        }
+    }
+
+    pub(crate) fn is_runtime_provided(&self) -> bool {
+        matches!(self.binding(), IntrinsicBinding::Runtime { .. })
+    }
+
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         JsHelperIntrinsic::get_global_names()
             .into_iter()
@@ -2567,6 +2660,9 @@ impl Intrinsic {
                 "imports",
                 "instantiateCore",
                 "isLE",
+                RUNTIME_PROVIDER_LOCAL_NAME,
+                RUNTIME_LOCAL_NAME,
+                RUNTIME_INTRINSICS_LOCAL_NAME,
                 "scopeId",
                 "symbolCabiDispose",
                 "symbolCabiLower",
@@ -2746,4 +2842,8 @@ impl Intrinsic {
             self.compile_conditional_suspending_js()
         )
     }
+}
+
+pub(crate) fn uses_external_runtime(intrinsics: &BTreeSet<Intrinsic>) -> bool {
+    intrinsics.iter().any(Intrinsic::is_runtime_provided)
 }

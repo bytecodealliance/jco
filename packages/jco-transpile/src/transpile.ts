@@ -160,6 +160,8 @@ export interface TranspilationOptions {
      * Strings are validated by default, as the canonical ABI requires.
      */
     perfStringsSkipCopyUtf16Validation?: boolean;
+    /** ES module providing the Component Model runtime implementation */
+    runtimeModule?: string;
 
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
@@ -344,6 +346,7 @@ export async function transpileBytes(
         strict: opts.strict === true,
         perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
+        runtimeModule: opts.runtimeModule,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,

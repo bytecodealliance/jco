@@ -182,6 +182,7 @@ program
     )
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
+    .option("--runtime-module <specifier>", "Component Model runtime provider module")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
     .addOption(

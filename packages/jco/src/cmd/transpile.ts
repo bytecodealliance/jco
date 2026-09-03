@@ -166,6 +166,7 @@ export interface TranspileOpts {
     quiet?: boolean;
     noTypescript?: boolean;
     wasiShim?: boolean;
+    runtimeModule?: string;
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;

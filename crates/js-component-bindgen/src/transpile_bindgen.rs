@@ -49,9 +49,12 @@ use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{
-    AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs, render_intrinsics,
+    AsyncDeterminismProfile, Intrinsic, RUNTIME_PROVIDER_LOCAL_NAME, RenderIntrinsicsArgs,
+    render_intrinsics, uses_external_runtime,
 };
-use crate::names::{LocalNames, is_js_reserved_word, maybe_quote_id, maybe_quote_member};
+use crate::names::{
+    LocalNames, is_js_reserved_word, js_string_literal, maybe_quote_id, maybe_quote_member,
+};
 use crate::{
     FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
     requires_async_porcelain, source, uwrite, uwriteln,
@@ -62,6 +65,8 @@ use crate::{
 const MAX_FLAT_PARAMS: usize = 16;
 /// Maximum direct flat results for sync canonical lowering.
 const MAX_FLAT_RESULTS: usize = 1;
+
+pub const DEFAULT_RUNTIME_MODULE: &str = "@bytecodealliance/jco-cm-runtime";
 
 #[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
@@ -134,6 +139,9 @@ pub struct TranspileOpts {
     /// passing unpaired surrogates on to the receiving component.
     #[builder(default)]
     pub perf_strings_skip_copy_utf16_validation: bool,
+    /// ES module providing the Component Model runtime implementation used by
+    /// generated bindings. The module must export a `runtime` provider.
+    pub runtime_module: Option<String>,
     /// Represent WIT flags as bigint values instead of objects of booleans.
     #[builder(default)]
     pub flags_as_bigint: bool,
@@ -170,6 +178,14 @@ impl TranspileOpts {
     /// Whether the trampoline Wasm is loaded through `getCoreModule`
     pub(crate) fn loads_conditional_suspending_wasm(&self) -> bool {
         self.emit_conditional_suspending_wasm && self.instantiation_mode.is_some()
+    }
+}
+
+impl TranspileOpts {
+    pub fn runtime_module(&self) -> &str {
+        self.runtime_module
+            .as_deref()
+            .unwrap_or(DEFAULT_RUNTIME_MODULE)
     }
 }
 
@@ -590,6 +606,13 @@ impl JsBindgen<'_> {
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
+        if uses_external_runtime(&self.all_intrinsics) {
+            uwriteln!(
+                output,
+                "import {{ runtime as {RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
+                js_string_literal(opts.runtime_module()),
+            );
+        }
 
         // Write out instantiation
         if let Some(instantiation) = &self.opts.instantiation_mode {
