@@ -332,7 +332,7 @@ fn write_artifact(
                 artifact_path.display()
             )
         })?;
-    artifact_file.write_all(&encoded).with_context(|| {
+    artifact_file.write_all(encoded).with_context(|| {
         format!(
             "failed to write inline {kind} output [{}]",
             artifact_path.display()
