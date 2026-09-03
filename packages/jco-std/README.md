@@ -18,55 +18,54 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 
 ## HTTP
 
-| Export                                       | Description                                                                   |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `http/adapters/hono`                         | Enables easier building of [Hono][hono] HTTP servers                          |
-| `wasi/0.2.x/node/24.x.x/assert`              | `node:assert` adapter, Node 24 on WASI p2                                     |
-| `wasi/0.2.x/node/24.x.x/console`             | `node:console` guest adapter over an explicit host capability                 |
-| `wasi/0.2.x/node/24.x.x/errors`              | Node 24 global error constructors and shared coded-error behavior             |
-| `wasi/0.2.x/node/24.x.x/dns`                 | `node:dns` guest adapter over an explicit host capability                     |
-| `wasi/0.2.x/node/24.x.x/fs`                  | `node:fs` and `node:fs/promises` over an explicit host capability             |
-| `wasi/0.2.x/node/24.x.x/http`                | `node:http` API with direct, WASI sockets, and WASI HTTP implementations      |
-| `wasi/0.2.x/node/24.x.x/os`                  | `node:os` guest adapter over an explicit host capability                      |
-| `wasi/0.2.x/node/24.x.x/path`                | `node:path` adapter, Node 24 on WASI p2                                       |
-| `wasi/0.2.x/node/24.x.x/string-decoder`      | Guest-local `node:string_decoder` implementation for Node 24                  |
-| `wasi/0.2.x/node/24.x.x/domain`              | `node:domain`, deprecated upstream: every use throws                          |
-| `wasi/0.2.x/node/24.x.x/async-hooks`         | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
-| `wasi/0.2.x/node/24.x.x/diagnostics-channel` | `node:diagnostics_channel` guest adapter, Node 24                             |
-| `wasi/0.2.x/node/24.x.x/child-process`       | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
-| `wasi/0.2.x/node/24.x.x/cluster`             | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
-| `wasi/0.2.x/node/24.x.x/events`              | `node:events` entry points Jco implements over a supplied emitter core        |
-| `wasi/0.2.x/node/24.x.x/module`              | `node:module`, Node 24: classification and source maps; loading refuses       |
-| `wasi/0.2.x/node/26.x.x/ffi`                 | `node:ffi` guest adapter, Node 26 over an explicit host capability            |
-| `wasi/0.2.x/node/26.x.x/ffi/host`            | Deny-by-default host for `jco:node/ffi`                                       |
-| `wasi/0.2.x/node/26.x.x/ffi/host/node`       | Opt-in host over the runtime's real `node:ffi`; `setSuffix()` pins the suffix |
-| `wasi/0.2.x/node/24.x.x/inspector`           | `node:inspector` guest adapter, Node 24 over an explicit host capability      |
-| `wasi/0.2.x/node/24.x.x/inspector/promises`  | `node:inspector/promises`, sharing one core with `node:inspector`             |
-| `wasi/0.2.x/node/24.x.x/inspector/host`      | Deny-by-default host for `jco:node/inspector`                                 |
-| `wasi/0.2.x/node/24.x.x/inspector/host/node` | Opt-in host over the runtime's real `node:inspector`                          |
-| `wasi/0.2.x/node/24.x.x/stream/consumers`    | Portable `node:stream/consumers`, Node 24                                     |
-| `wasi/0.2.x/node/24.x.x/stream/iter`         | Experimental iterable streams from Node 24.20                                 |
-| `wasi/0.2.x/node/24.x.x/child-process/host`  | Deny-by-default host for `jco:node/child-process`                             |
-| `wasi/0.2.x/node/24.x.x/child-process/host/node` | Opt-in host over the runtime's real `node:child_process`                  |
-| `wasi/0.2.x/node/24.x.x/cluster/host`        | Deny-by-default host for `jco:node/cluster`                                   |
-| `wasi/0.2.x/node/24.x.x/cluster/host/node`   | Opt-in host over the runtime's real `node:cluster`                            |
-| `wasi/0.2.x/node/24.x.x/console/host`        | Deny-by-default host for `jco:node/console`                                   |
-| `wasi/0.2.x/node/24.x.x/console/host/node`   | Opt-in host over the runtime's real `node:console`                            |
-| `wasi/0.2.x/node/24.x.x/dns/promises`        | `node:dns/promises`, sharing one core with `node:dns`                         |
-| `wasi/0.2.x/node/24.x.x/dns/host`            | Deny-by-default host for `jco:node/dns`                                       |
-| `wasi/0.2.x/node/24.x.x/dns/host/node`       | Opt-in host over the runtime's real `node:dns`                                |
-| `wasi/0.2.x/node/24.x.x/fs/promises`         | `node:fs/promises`, sharing one core with `node:fs`                           |
-| `wasi/0.2.x/node/24.x.x/fs/host`             | Deny-by-default host for `jco:node/fs`                                        |
-| `wasi/0.2.x/node/24.x.x/fs/host/node`        | Opt-in host over the runtime's real `node:fs`                                 |
-| `wasi/0.2.x/node/24.x.x/http/core`           | `node:http` core shared by the selectable implementations                     |
-| `wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets` | `node:http` implementation over WASI Preview 2 sockets                     |
-| `wasi/0.2.x/node/24.x.x/http/impl/wasi-http` | `node:http` implementation over WASI Preview 2 HTTP                           |
-| `wasi/0.2.x/node/24.x.x/http/host`           | Deny-by-default host for `jco:node/http`                                      |
-| `wasi/0.2.x/node/24.x.x/http/host/node`      | Opt-in host over the runtime's real `node:http`                               |
-| `wasi/0.2.x/node/24.x.x/os/host`             | Deny-by-default host for `jco:node/os`                                        |
-| `wasi/0.2.x/node/24.x.x/os/host/node`        | Opt-in host over the runtime's real `node:os`                                 |
-| `node/path`                                  | Legacy unversioned alias for `wasi/0.2.x/node/24.x.x/path`                    |
-
+| Export                                           | Description                                                                   |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `http/adapters/hono`                             | Enables easier building of [Hono][hono] HTTP servers                          |
+| `wasi/0.2.x/node/24.x.x/assert`                  | `node:assert` adapter, Node 24 on WASI p2                                     |
+| `wasi/0.2.x/node/24.x.x/console`                 | `node:console` guest adapter over an explicit host capability                 |
+| `wasi/0.2.x/node/24.x.x/errors`                  | Node 24 global error constructors and shared coded-error behavior             |
+| `wasi/0.2.x/node/24.x.x/dns`                     | `node:dns` guest adapter over an explicit host capability                     |
+| `wasi/0.2.x/node/24.x.x/fs`                      | `node:fs` and `node:fs/promises` over an explicit host capability             |
+| `wasi/0.2.x/node/24.x.x/http`                    | `node:http` API with direct, WASI sockets, and WASI HTTP implementations      |
+| `wasi/0.2.x/node/24.x.x/os`                      | `node:os` guest adapter over an explicit host capability                      |
+| `wasi/0.2.x/node/24.x.x/path`                    | `node:path` adapter, Node 24 on WASI p2                                       |
+| `wasi/0.2.x/node/24.x.x/string-decoder`          | Guest-local `node:string_decoder` implementation for Node 24                  |
+| `wasi/0.2.x/node/24.x.x/domain`                  | `node:domain`, deprecated upstream: every use throws                          |
+| `wasi/0.2.x/node/24.x.x/async-hooks`             | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
+| `wasi/0.2.x/node/24.x.x/diagnostics-channel`     | `node:diagnostics_channel` guest adapter, Node 24                             |
+| `wasi/0.2.x/node/24.x.x/child-process`           | `node:child_process` guest adapter, Node 24 over an explicit host capability  |
+| `wasi/0.2.x/node/24.x.x/cluster`                 | `node:cluster` guest adapter, Node 24 over an explicit host capability        |
+| `wasi/0.2.x/node/24.x.x/events`                  | `node:events` entry points Jco implements over a supplied emitter core        |
+| `wasi/0.2.x/node/24.x.x/module`                  | `node:module`, Node 24: classification and source maps; loading refuses       |
+| `wasi/0.2.x/node/26.x.x/ffi`                     | `node:ffi` guest adapter, Node 26 over an explicit host capability            |
+| `wasi/0.2.x/node/26.x.x/ffi/host`                | Deny-by-default host for `jco:node/ffi`                                       |
+| `wasi/0.2.x/node/26.x.x/ffi/host/node`           | Opt-in host over the runtime's real `node:ffi`; `setSuffix()` pins the suffix |
+| `wasi/0.2.x/node/24.x.x/inspector`               | `node:inspector` guest adapter, Node 24 over an explicit host capability      |
+| `wasi/0.2.x/node/24.x.x/inspector/promises`      | `node:inspector/promises`, sharing one core with `node:inspector`             |
+| `wasi/0.2.x/node/24.x.x/inspector/host`          | Deny-by-default host for `jco:node/inspector`                                 |
+| `wasi/0.2.x/node/24.x.x/inspector/host/node`     | Opt-in host over the runtime's real `node:inspector`                          |
+| `wasi/0.2.x/node/24.x.x/stream/consumers`        | Portable `node:stream/consumers`, Node 24                                     |
+| `wasi/0.2.x/node/24.x.x/stream/iter`             | Experimental iterable streams from Node 24.20                                 |
+| `wasi/0.2.x/node/24.x.x/child-process/host`      | Deny-by-default host for `jco:node/child-process`                             |
+| `wasi/0.2.x/node/24.x.x/child-process/host/node` | Opt-in host over the runtime's real `node:child_process`                      |
+| `wasi/0.2.x/node/24.x.x/cluster/host`            | Deny-by-default host for `jco:node/cluster`                                   |
+| `wasi/0.2.x/node/24.x.x/cluster/host/node`       | Opt-in host over the runtime's real `node:cluster`                            |
+| `wasi/0.2.x/node/24.x.x/console/host`            | Deny-by-default host for `jco:node/console`                                   |
+| `wasi/0.2.x/node/24.x.x/console/host/node`       | Opt-in host over the runtime's real `node:console`                            |
+| `wasi/0.2.x/node/24.x.x/dns/promises`            | `node:dns/promises`, sharing one core with `node:dns`                         |
+| `wasi/0.2.x/node/24.x.x/dns/host`                | Deny-by-default host for `jco:node/dns`                                       |
+| `wasi/0.2.x/node/24.x.x/dns/host/node`           | Opt-in host over the runtime's real `node:dns`                                |
+| `wasi/0.2.x/node/24.x.x/fs/promises`             | `node:fs/promises`, sharing one core with `node:fs`                           |
+| `wasi/0.2.x/node/24.x.x/fs/host`                 | Deny-by-default host for `jco:node/fs`                                        |
+| `wasi/0.2.x/node/24.x.x/fs/host/node`            | Opt-in host over the runtime's real `node:fs`                                 |
+| `wasi/0.2.x/node/24.x.x/http/core`               | `node:http` core shared by the selectable implementations                     |
+| `wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets`  | `node:http` implementation over WASI Preview 2 sockets                        |
+| `wasi/0.2.x/node/24.x.x/http/impl/wasi-http`     | `node:http` implementation over WASI Preview 2 HTTP                           |
+| `wasi/0.2.x/node/24.x.x/http/host`               | Deny-by-default host for `jco:node/http`                                      |
+| `wasi/0.2.x/node/24.x.x/http/host/node`          | Opt-in host over the runtime's real `node:http`                               |
+| `wasi/0.2.x/node/24.x.x/os/host`                 | Deny-by-default host for `jco:node/os`                                        |
+| `wasi/0.2.x/node/24.x.x/os/host/node`            | Opt-in host over the runtime's real `node:os`                                 |
+| `node/path`                                      | Legacy unversioned alias for `wasi/0.2.x/node/24.x.x/path`                    |
 
 # Quickstart
 
