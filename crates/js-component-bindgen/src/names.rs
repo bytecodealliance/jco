@@ -166,6 +166,32 @@ pub fn maybe_quote_member(name: &str) -> String {
     }
 }
 
+/// Quote arbitrary text as a JavaScript string literal.
+pub fn js_string_literal(value: &str) -> String {
+    let mut literal = String::with_capacity(value.len() + 2);
+    literal.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => literal.push_str("\\\""),
+            '\\' => literal.push_str("\\\\"),
+            '\n' => literal.push_str("\\n"),
+            '\r' => literal.push_str("\\r"),
+            '\t' => literal.push_str("\\t"),
+            '\u{08}' => literal.push_str("\\b"),
+            '\u{0c}' => literal.push_str("\\f"),
+            '\u{2028}' => literal.push_str("\\u2028"),
+            '\u{2029}' => literal.push_str("\\u2029"),
+            ch if ch.is_control() => {
+                use std::fmt::Write as _;
+                write!(literal, "\\u{:04x}", ch as u32).unwrap();
+            }
+            ch => literal.push(ch),
+        }
+    }
+    literal.push('"');
+    literal
+}
+
 pub(crate) const RESERVED_KEYWORDS: &[&str] = &[
     "await",
     "break",
@@ -248,5 +274,13 @@ mod tests {
         assert!(!is_valid_js_identifier("eval"));
         assert_ne!(to_js_identifier("eval"), "eval");
         assert!(is_valid_js_identifier(&to_js_identifier("eval")));
+    }
+
+    #[test]
+    fn quotes_javascript_string_literals() {
+        assert_eq!(
+            js_string_literal("pkg/\"quoted\"\\path\u{2028}"),
+            "\"pkg/\\\"quoted\\\"\\\\path\\u2028\""
+        );
     }
 }

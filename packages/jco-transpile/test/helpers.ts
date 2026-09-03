@@ -19,6 +19,8 @@ import { componentize } from '@bytecodealliance/componentize-js';
 import { transpileBytes } from '../src/index.js';
 import type { TranspilationOptions } from '../src/transpile.js';
 
+const DEFAULT_TEST_RUNTIME_MODULE = new URL('../../jco-cm-runtime/dist/index.js', import.meta.url).href;
+
 /** Stable path to the jco's fixture directory containing WIT files */
 export const JCO_WIT_FIXTURE_DIR = fileURLToPath(new URL('../../jco/test/fixtures/wit', import.meta.url));
 
@@ -259,6 +261,7 @@ export async function setupAsyncTest(args) {
 
     const transpileOpts: TranspilationOptions = {
         name: componentName,
+        runtimeModule: DEFAULT_TEST_RUNTIME_MODULE,
         minify: true,
         validLiftingOptimization: true,
         tlaCompat: true,
@@ -640,6 +643,13 @@ export async function readFixtureFlags(fixturePath: string): Promise<Transpilati
             opts.tlaCompat = true;
         } else if (arg === '--strict') {
             opts.strict = true;
+        } else if (arg === '--runtime-module') {
+            const runtimeModule = args[idx + 1];
+            if (!runtimeModule) {
+                throw new Error('missing runtime module specifier');
+            }
+            opts.runtimeModule = runtimeModule;
+            idx++;
         } else if (arg === '--flags-as-bigint') {
             opts.flagsAsBigInt = true;
         } else if (arg === '--variants-inline-cases') {
