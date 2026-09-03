@@ -33,7 +33,7 @@ suite("node:path in a component", () => {
         }
     });
 
-    test("requires the world to import wasi:cli/environment", async () => {
+    test.concurrent("requires the world to import wasi:cli/environment", async () => {
         await expect(componentizeFixture({ fixture: "node-path-missing-environment", bundle: true })).rejects.toThrow(
             /import wasi:cli\/environment@0\.2\.x/,
         );

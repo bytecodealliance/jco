@@ -14,7 +14,7 @@ const NODE_HOST = pathToFileURL(
 ).href;
 
 suite("node:inspector WIT injection", () => {
-    test("adds the import and the callbacks export, once, with its dependency", async () => {
+    test.concurrent("adds the import and the callbacks export, once, with its dependency", async () => {
         const root = await getTmpDir();
         const world = join(root, "component.wit");
         await writeFile(world, "package test:inspector;\nworld component {}\n");

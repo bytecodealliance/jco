@@ -13,7 +13,7 @@ const NODE_HOST = pathToFileURL(
 ).href;
 
 suite("node:fs in a component", () => {
-    test("injects one filesystem capability into the selected world", async () => {
+    test.concurrent("injects one filesystem capability into the selected world", async () => {
         const root = await getTmpDir();
         const wit = join(root, "worlds.wit");
         await writeFile(

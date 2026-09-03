@@ -67,14 +67,14 @@ async function writeInjectionModules(root) {
 }
 
 suite("Node globals", () => {
-    test("does not invent a globals builtin module", () => {
+    test.concurrent("does not invent a globals builtin module", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
 
         expect(plugin.resolveId("node:globals")).toBeNull();
         expect(plugin.resolveId("globals")).toBeNull();
     });
 
-    test("maps only globals backed by Jco implementations", () => {
+    test.concurrent("maps only globals backed by Jco implementations", () => {
         expect(nodeGlobals({ bufferModule: "/buffer.js", errorsModule: "/errors.js" })).toEqual({
             AggregateError: ["/errors.js", "AggregateError"],
             Buffer: ["/buffer.js", "Buffer"],
@@ -90,7 +90,7 @@ suite("Node globals", () => {
         });
     });
 
-    test("injects Buffer when its free identifier is used", async () => {
+    test.concurrent("injects Buffer when its free identifier is used", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const modules = await writeInjectionModules(root);
@@ -103,7 +103,7 @@ suite("Node globals", () => {
         assert.include(source, "__BUFFER_GLOBAL_MARKER__");
     });
 
-    test("routes the Buffer global through the audited Node builtin adapter", async () => {
+    test.concurrent("routes the Buffer global through the audited Node builtin adapter", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const modules = await writeInjectionModules(root);
@@ -118,7 +118,7 @@ suite("Node globals", () => {
         assert.include(source, "globalThis.Buffer = Buffer");
     });
 
-    test("omits the Buffer adapter when its global is unused or shadowed", async () => {
+    test.concurrent("omits the Buffer adapter when its global is unused or shadowed", async () => {
         const root = await getTmpDir();
         const modules = await writeInjectionModules(root);
         const unusedEntry = join(root, "unused.js");
@@ -135,7 +135,7 @@ suite("Node globals", () => {
         }
     });
 
-    test("keeps an explicit bundle injection override", async () => {
+    test.concurrent("keeps an explicit bundle injection override", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const modules = await writeInjectionModules(root);

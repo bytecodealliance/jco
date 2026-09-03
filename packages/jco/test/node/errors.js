@@ -8,7 +8,7 @@ import { nodeErrorGlobals } from "../../src/node-builtins.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
 
 suite("Node Errors globals", () => {
-    test("maps the complete Node 24 error global set", () => {
+    test.concurrent("maps the complete Node 24 error global set", () => {
         expect(Object.keys(nodeErrorGlobals({ errorsModule: "/errors.js" })).sort()).toEqual([
             "AggregateError",
             "DOMException",
@@ -23,7 +23,7 @@ suite("Node Errors globals", () => {
         ]);
     });
 
-    test("injects a referenced error constructor", async () => {
+    test.concurrent("injects a referenced error constructor", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const errors = join(root, "errors.js");
@@ -38,7 +38,7 @@ suite("Node Errors globals", () => {
         assert.include(source, "new Error");
     });
 
-    test("omits the errors shim when no injected builtin is used", async () => {
+    test.concurrent("omits the errors shim when no injected builtin is used", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const errors = join(root, "errors.js");
@@ -54,7 +54,7 @@ suite("Node Errors globals", () => {
         assert.include(source, "Error = class");
     });
 
-    test("keeps explicit bundle injection overrides", async () => {
+    test.concurrent("keeps explicit bundle injection overrides", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const defaults = join(root, "default-errors.js");
