@@ -36,7 +36,16 @@ const NODE_FS_HOST = pathToFileURL(
 const ASYNC_EXPORTS = ["start", "stop", "jco:node/http-callbacks@0.1.0#handle-request"];
 
 describe("express in a component", () => {
-    test("serves an unmodified Express application over a socket", async () => {
+    // TODO(unskip): Express reaches `node:path`, which cannot be pre-initialized at
+    // present: its implementation imports `minimatch` for `matchesGlob`, `minimatch`
+    // imports `brace-expansion`, and `brace-expansion` builds its sentinel strings with
+    // `Math.random()` at module scope. The engine seeds its RNG from
+    // `wasi:random/random@0.2.10#get-random-u64` on that first call, and no WASI import may
+    // be called during Wizer pre-initialization, so the build traps. No componentize flag
+    // avoids it -- the seeding belongs to the engine rather than the `random` feature, which
+    // stays imported with `--disable random`. Unskip once `matchesGlob` no longer pulls
+    // module-scope randomness into the graph.
+    test.skip("serves an unmodified Express application over a socket", async () => {
         // Componentizing rewrites the world in place to add the Node WIT imports, so the
         // fixture is built from a copy. The copy stays inside this package because the
         // fixture imports `express` by name, and a copy outside the workspace would not
