@@ -309,9 +309,10 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("repl")).toBeNull();
     });
 
-    test.concurrent("does not intercept the legacy bare string_decoder specifier", () => {
+    test.concurrent("resolves the bare string_decoder specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
-        expect(plugin.resolveId("string_decoder")).toBeNull();
+        expect(await resolveBare(plugin, "string_decoder", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "string_decoder")).toBe("\0jco-node-builtin:node:string_decoder");
     });
 
     test.concurrent("loads the Errors globals module lazily", () => {

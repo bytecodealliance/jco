@@ -88,7 +88,6 @@ const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 const PORTABLE_UNENV_SPECIFIERS = new Set([
     "node:https",
     "node:net",
-    "node:os",
     "node:process",
     STREAM_SPECIFIER,
     "node:stream/promises",
