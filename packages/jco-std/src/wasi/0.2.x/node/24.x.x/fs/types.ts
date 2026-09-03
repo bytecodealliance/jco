@@ -1,4 +1,6 @@
-export type FsResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: FsError };
+import type { HostErrno, HostErrorBase, HostResult } from "../internal/wit-types.js";
+
+export type FsResult<T> = HostResult<T, FsError>;
 
 export type FsPath =
   | { tag: "text"; val: string }
@@ -11,14 +13,9 @@ export type FsMode = { tag: "number"; val: number } | { tag: "symbolic"; val: st
 
 export type FsOpenMode = { tag: "number"; val: number } | { tag: "symbolic"; val: string };
 
-export type FsErrno = { tag: "number"; val: bigint } | { tag: "symbolic"; val: string };
+export type FsErrno = HostErrno;
 
-export interface FsError {
-  name: string;
-  message: string;
-  code?: string;
-  errno?: FsErrno;
-  syscall?: string;
+export interface FsError extends HostErrorBase {
   path?: string;
   dest?: string;
 }

@@ -19,43 +19,27 @@ import type {
   SoaRecord,
   SrvRecord,
 } from "./dns/types.js";
+import {
+  capture as captureHost,
+  captureAsync as captureHostAsync,
+  serializeHostError,
+  stringField,
+} from "./internal/host-error.js";
 
 type AsyncResult<T> = Promise<DnsResult<T>>;
 type ResolverTarget = typeof dnsPromises | dnsPromises.Resolver;
 
 function serializeError(error: unknown): DnsErrorData {
-  const value =
-    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
-  const errno =
-    typeof value.errno === "number"
-      ? { tag: "number" as const, val: BigInt(value.errno) }
-      : typeof value.errno === "string"
-        ? { tag: "symbolic" as const, val: value.errno }
-        : undefined;
-  return {
-    name: typeof value.name === "string" ? value.name : "Error",
-    message: typeof value.message === "string" ? value.message : String(error),
-    code: typeof value.code === "string" ? value.code : undefined,
-    errno,
-    syscall: typeof value.syscall === "string" ? value.syscall : undefined,
-    hostname: typeof value.hostname === "string" ? value.hostname : undefined,
-  };
+  const value = error as Record<string, unknown> | null;
+  return { ...serializeHostError(error), hostname: stringField(value?.hostname) };
 }
 
 function capture<T>(operation: () => T): DnsResult<T> {
-  try {
-    return { tag: "ok", val: operation() };
-  } catch (error) {
-    return { tag: "err", val: serializeError(error) };
-  }
+  return captureHost(operation, serializeError);
 }
 
-async function captureAsync<T>(operation: () => Promise<T>): AsyncResult<T> {
-  try {
-    return { tag: "ok", val: await operation() };
-  } catch (error) {
-    return { tag: "err", val: serializeError(error) };
-  }
+function captureAsync<T>(operation: () => Promise<T>): AsyncResult<T> {
+  return captureHostAsync(operation, serializeError);
 }
 
 function target(configuration?: DnsResolverConfig): ResolverTarget {

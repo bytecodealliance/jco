@@ -33,6 +33,7 @@ import type {
   FsStats,
   FsWriteFileOptions,
 } from "./fs/types.js";
+import { capture as captureHost, serializeHostError, stringField } from "./internal/host-error.js";
 
 interface FileTypeMethods {
   isBlockDevice(): boolean;
@@ -63,36 +64,17 @@ const STATS_FIELDS = [
 
 const STATFS_FIELDS = ["type", "bsize", "blocks", "bfree", "bavail", "files", "ffree"] as const;
 
-function ok<T>(val: T): FsResult<T> {
-  return { tag: "ok", val };
-}
-
 function serializeError(error: unknown): FsError {
-  const value =
-    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
-  const errno =
-    typeof value.errno === "number"
-      ? { tag: "number" as const, val: BigInt(value.errno) }
-      : typeof value.errno === "string"
-        ? { tag: "symbolic" as const, val: value.errno }
-        : undefined;
+  const value = error as Record<string, unknown> | null;
   return {
-    name: typeof value.name === "string" ? value.name : "Error",
-    message: typeof value.message === "string" ? value.message : String(error),
-    code: typeof value.code === "string" ? value.code : undefined,
-    errno,
-    syscall: typeof value.syscall === "string" ? value.syscall : undefined,
-    path: typeof value.path === "string" ? value.path : undefined,
-    dest: typeof value.dest === "string" ? value.dest : undefined,
+    ...serializeHostError(error),
+    path: stringField(value?.path),
+    dest: stringField(value?.dest),
   };
 }
 
 function capture<T>(operation: () => T): FsResult<T> {
-  try {
-    return ok(operation());
-  } catch (error) {
-    return { tag: "err", val: serializeError(error) };
-  }
+  return captureHost(operation, serializeError);
 }
 
 function path(value: FsPath): string | Buffer | URL {
