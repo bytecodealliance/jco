@@ -258,26 +258,7 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTableGet => {
-                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
-                let runtime_error =
-                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                uwriteln!(
-                    output,
-                    r#"
-                function rscTableGet(table, handle) {{
-                    const scope = table[handle << 1];
-                    const val = table[(handle << 1) + 1];
-                    const own = (val & {table_flag}) !== 0;
-                    const rep = val & ~{table_flag};
-                    // (a freed or never allocated index has no entry in this table: its
-                    // index may belong to another handle kind of the instance)
-                    if (val === undefined || rep === 0 || (scope & {table_flag}) !== 0) {{
-                        throw new {runtime_error}(`unknown handle index ${{handle}}`);
-                    }}
-                    return {{ rep, scope, own }};
-                }}
-            "#
-                )
+                unreachable!("resource.tableGet is provided by the external runtime")
             }
 
             Self::ResourceTableEnsureBorrowDrop => output.push_str(

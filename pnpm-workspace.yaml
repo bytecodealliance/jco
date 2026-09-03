@@ -19,6 +19,7 @@ overrides:
 packages:
   - crates/jco-tests
   - packages/jco
+  - packages/jco-cm-runtime
   - packages/bare-jco
   - packages/jco-transpile
   - packages/jco-std
