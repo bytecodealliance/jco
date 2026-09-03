@@ -289,6 +289,8 @@ impl HostIntrinsic {
                     render_args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
                 let current_component_idx_globals = render_args
                     .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
+                let blocking_call_depth =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::AsyncBlockingCallDepth);
                 let get_current_task_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
@@ -323,6 +325,7 @@ impl HostIntrinsic {
                         if (!preparedTask) {{ throw new Error('unexpectedly missing current task'); }}
                         if (!preparedTask.subtaskMeta) {{ throw new Error('missing subtask meta from prepare'); }}
                         preparedTask.setCalleeIsAsync((flags & 1) !== 0);
+                        const calleeIsAsync = (flags & 1) !== 0;
 
                         const {{
                             subtask,
@@ -560,6 +563,12 @@ impl HostIntrinsic {
 
                         const driveJspiCallee = async () => {{
                             let callbackResult;
+                            // A synchronous callee blocks its caller until it fully returns (it may
+                            // suspend mid-way, e.g. on a nested blocking import). Hold the blocking
+                            // marker for the whole execution so any async subtask it starts -- even
+                            // one dispatched after a suspension -- is recognised as originating from
+                            // a blocking function and enters in-slice rather than being deferred.
+                            if (!calleeIsAsync) {{ {blocking_call_depth}.value++; }}
                             try {{
                                 let jspiCallee;
                                 if (callee._cachedPromising) {{
@@ -577,6 +586,8 @@ impl HostIntrinsic {
                             }} catch(err) {{
                                 handleCalleeError(err);
                                 return;
+                            }} finally {{
+                                if (!calleeIsAsync) {{ {blocking_call_depth}.value--; }}
                             }}
 
                             try {{
@@ -588,6 +599,7 @@ impl HostIntrinsic {
 
                         const driveDirectCallee = () => {{
                             let callbackResult;
+                            if (!calleeIsAsync) {{ {blocking_call_depth}.value++; }}
                             try {{
                                 callbackResult = {with_global_current_task_meta_fn}({{
                                     taskID: preparedTask.id(),
@@ -596,6 +608,8 @@ impl HostIntrinsic {
                                 }});
                             }} catch (err) {{
                                 handleCalleeError(err);
+                            }} finally {{
+                                if (!calleeIsAsync) {{ {blocking_call_depth}.value--; }}
                             }}
                             if (callbackResult !== undefined) {{
                                 driveCallback(callbackResult)?.catch(err => {{
@@ -604,14 +618,26 @@ impl HostIntrinsic {
                             }}
                         }};
 
-                        // A non-suspending initial slice can run before the lower returns,
-                        // allowing task.return to report RETURNED eagerly. A stack-switching
-                        // caller also continues in this Wasm slice, so the callee must reach its
-                        // first suspension before the caller can observe or cancel the subtask.
+                        // Decide whether the callee may enter (and run) synchronously in this
+                        // slice, or must yield to the event loop first.
+                        //
+                        // A synchronous callee (flags bit 0 clear) has no suspension point and must
+                        // run here so task.return can report RETURNED eagerly. An async subtask
+                        // started from within a blocking synchronous slice (blocking-call depth > 0)
+                        // must likewise run in-slice: its caller is blocked on the result and cannot
+                        // yield. Otherwise, when the caller is callback-driven (has a callback and so
+                        // returns to the event loop before the callee runs), defer entry so a
+                        // cancellation-before-start stays observable.
+                        //
                         // Reserve component entry before returning so a following call observes
                         // either explicit backpressure or the in-flight component slice. Only a
                         // successfully entered task transitions from STARTING to STARTED.
-                        const enteredSynchronously = preparedTask.tryEnter();
+                        const mayStartSynchronously = !calleeIsAsync
+                            || {blocking_call_depth}.value > 0
+                            || !subtask.getParentTask().hasCallback();
+                        const enteredSynchronously = mayStartSynchronously
+                            ? preparedTask.tryEnter()
+                            : null;
                         if (enteredSynchronously === true) {{
                             // Directly returned STARTED is not also delivered as an event, so
                             // install the progress handler only after the state transition.

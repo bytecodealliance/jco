@@ -253,6 +253,13 @@ pub enum AsyncTaskIntrinsic {
     /// see `CoreDef::TaskMayBlock`
     CurrentTaskMayBlock,
 
+    /// Global counter tracking how many blocking (synchronous, non-async) callee
+    /// slices are currently executing on the JS stack. While it is non-zero, an
+    /// async subtask started by the running callee originates from a blocking
+    /// function and must enter synchronously (the caller cannot yield to observe
+    /// or cancel it before it runs).
+    AsyncBlockingCallDepth,
+
     /// Called before entering sync-to-sync guest-to-guest call
     EnterSymmetricSyncGuestCall,
 
@@ -268,6 +275,7 @@ impl AsyncTaskIntrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
             Self::CurrentTaskMayBlock.name(),
+            Self::AsyncBlockingCallDepth.name(),
             Self::AsyncBlockedConstant.name(),
             Self::AsyncSubtaskClass.name(),
             Self::AsyncTaskClass.name(),
@@ -298,6 +306,7 @@ impl AsyncTaskIntrinsic {
     pub fn name(&self) -> &'static str {
         match self {
             Self::CurrentTaskMayBlock => "CURRENT_TASK_MAY_BLOCK",
+            Self::AsyncBlockingCallDepth => "ASYNC_BLOCKING_CALL_DEPTH",
             Self::AsyncBlockedConstant => "ASYNC_BLOCKED_CODE",
             Self::AsyncSubtaskClass => "AsyncSubtask",
             Self::AsyncTaskClass => "AsyncTask",
@@ -333,6 +342,16 @@ impl AsyncTaskIntrinsic {
                     output,
                     r#"
                       const {var_name} = globalThis.WebAssembly ? new globalThis.WebAssembly.Global({{ value: 'i32', mutable: true }}, 0) : false;
+                    "#
+                );
+            }
+
+            Self::AsyncBlockingCallDepth => {
+                let var_name = self.name();
+                uwriteln!(
+                    output,
+                    r#"
+                      const {var_name} = globalThis.WebAssembly ? new globalThis.WebAssembly.Global({{ value: 'i32', mutable: true }}, 0) : {{ value: 0 }};
                     "#
                 );
             }
