@@ -7,6 +7,7 @@ import { suite, test, assert, expect, beforeAll, vi } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
+import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime-provider.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
@@ -174,6 +175,13 @@ suite('component-model WAST', () => {
 
             const cleanups: (() => Promise<void>)[] = [];
             try {
+                const instrumentRuntime = relPath === 'async/passing-resources.wast';
+                if (instrumentRuntime) {
+                    resetTableGetCallCount();
+                }
+                const runtimeModule = instrumentRuntime
+                    ? new URL('../../../fixtures/custom-runtime-provider.js', import.meta.url).href
+                    : undefined;
                 const mod = (await import(pathToFileURL(scriptPath).href)) as WastTestModule;
                 const artifacts = mod.wastTestArtifacts ?? [];
                 const requiresInstance = mod.wastTestRequiresInstance ?? true;
@@ -189,13 +197,13 @@ suite('component-model WAST', () => {
                             name: componentName,
                             path: wasmPath,
                         },
-                        // jco: {
-                        //     transpile: {
-                        //         extraArgs: {
-                        //             minify: false,
-                        //         },
-                        //     },
-                        // },
+                        jco: runtimeModule
+                            ? {
+                                  transpile: {
+                                      extraArgs: { runtimeModule },
+                                  },
+                              }
+                            : undefined,
                     });
                     cleanups.push(setup.cleanup);
                     instance = setup.instance;
@@ -236,6 +244,13 @@ suite('component-model WAST', () => {
                                         outputDir,
                                         skipInstantiation: true,
                                     },
+                                    jco: runtimeModule
+                                        ? {
+                                              transpile: {
+                                                  extraArgs: { runtimeModule },
+                                              },
+                                          }
+                                        : undefined,
                                 });
                                 cleanups.push(setup.cleanup);
                                 return async () => setup.esModule.instantiate(undefined, {});
@@ -260,6 +275,13 @@ suite('component-model WAST', () => {
                     assert,
                     expect,
                 });
+                if (instrumentRuntime) {
+                    assert.isAbove(
+                        tableGetCallCount,
+                        0,
+                        'resource.rep should call resource.tableGet on the selected runtime provider',
+                    );
+                }
             } finally {
                 for (const cleanup of cleanups.reverse()) {
                     await cleanup();

@@ -1,0 +1,44 @@
+{
+    "name": "@bytecodealliance/jco-cm-runtime",
+    "version": "0.1.0",
+    "description": "Default Component Model runtime for Jco-generated JavaScript",
+    "keywords": [
+        "Component",
+        "Wasm",
+        "WebAssembly"
+    ],
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
+    },
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git"
+    },
+    "files": [
+        "dist"
+    ],
+    "type": "module",
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "types:check": "tsc -p tsconfig.json",
+        "fmt": "oxfmt",
+        "fmt:check": "oxfmt --check",
+        "lint": "oxlint",
+        "lint:fix": "oxlint --fix",
+        "test": "vitest run",
+        "prepack": "pnpm run build"
+    },
+    "devDependencies": {
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}

@@ -522,6 +522,15 @@ importers:
         specifier: ^2.0.2
         version: 2.0.2
 
+  packages/jco-cm-runtime:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@24.13.3)(vite@8.3.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
+
   packages/jco-node-fs:
     devDependencies:
       '@napi-rs/cli':
@@ -591,6 +600,9 @@ importers:
 
   packages/jco-transpile:
     dependencies:
+      '@bytecodealliance/jco-cm-runtime':
+        specifier: workspace:^
+        version: link:../jco-cm-runtime
       '@bytecodealliance/preview2-shim':
         specifier: ^0.26.0
         version: 0.26.0
