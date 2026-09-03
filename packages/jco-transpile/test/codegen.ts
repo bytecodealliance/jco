@@ -9,6 +9,7 @@ import { transpile, transpileBytes, writeFiles } from '../src/index.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 
 import { COMPONENT_FIXTURES_DIR, getDefaultComponentFixtures } from './common.js';
+import { resetRuntimeCreateCallCount, runtimeCreateCallCount } from './fixtures/custom-runtime-provider.js';
 import { getRandomPort, getTmpDir, readFixtureFlags } from './helpers.js';
 
 suite('codegen', async () => {
@@ -209,6 +210,68 @@ suite('Directive Prologue', () => {
         const { files } = await transpileBytes(bytes, { name: 'adder' });
         const bindingsSource = new TextDecoder().decode(files['adder.js']);
         assert.isOk(bindingsSource.includes('"use components";'));
+    });
+});
+
+suite('External Component Model runtime', () => {
+    const fixture = fileURLToPath(new URL('./fixtures/components/runtime/resources.2.component.wat', import.meta.url));
+
+    test('binds canon resource.rep through the default runtime', async () => {
+        const { files, imports } = await transpile(fixture, { name: 'external-runtime-resource' });
+        const source = new TextDecoder().decode(files['external-runtime-resource.js']);
+
+        assert.include(source, 'import { runtime as _jcoRuntimeProvider } from "@bytecodealliance/jco-cm-runtime";');
+        assert.include(source, 'const rscTableGet = _jcoIntrinsics.resource.tableGet;');
+        assert.notInclude(source, 'function rscTableGet(table, handle)');
+        assert.include(source, 'rscTableGet(');
+        assert.lengthOf(source.match(/_jcoRuntimeProvider\.create\(/g) ?? [], 1);
+        assert.notInclude(imports, '@bytecodealliance/jco-cm-runtime');
+    });
+
+    test('places custom runtime creation inside each instantiation', async () => {
+        const runtimeModule = './test-runtime-provider.js';
+        const { files, imports } = await transpile(fixture, {
+            name: 'external-runtime-instantiation',
+            instantiation: 'sync',
+            runtimeModule,
+        });
+        const source = new TextDecoder().decode(files['external-runtime-instantiation.js']);
+        const importPosition = source.indexOf(
+            'import { runtime as _jcoRuntimeProvider } from "./test-runtime-provider.js";',
+        );
+        const instantiatePosition = source.indexOf('export function instantiate(');
+        const createPosition = source.indexOf('_jcoRuntimeProvider.create(');
+
+        assert.isAtLeast(importPosition, 0);
+        assert.isAbove(instantiatePosition, importPosition);
+        assert.isAbove(createPosition, instantiatePosition);
+        assert.lengthOf(source.match(/_jcoRuntimeProvider\.create\(/g) ?? [], 1);
+        assert.notInclude(imports, runtimeModule);
+    });
+
+    test('creates a fresh runtime instance for each generated store', async () => {
+        const outDir = await getTmpDir();
+        const name = 'external-runtime-two-stores';
+        const runtimeModule = new URL('./fixtures/custom-runtime-provider.js', import.meta.url).href;
+        resetRuntimeCreateCallCount();
+
+        try {
+            const { files } = await transpile(fixture, {
+                name,
+                instantiation: 'sync',
+                runtimeModule,
+            });
+            await writeFiles(files, { baseDir: outDir });
+            const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
+            const getCoreModule = (moduleName: string) => new WebAssembly.Module(files[moduleName]);
+
+            bindings.instantiate(getCoreModule, {});
+            bindings.instantiate(getCoreModule, {});
+
+            assert.strictEqual(runtimeCreateCallCount, 2);
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
+        }
     });
 });
 

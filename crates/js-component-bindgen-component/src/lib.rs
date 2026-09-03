@@ -86,6 +86,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
                     .perf_strings_skip_copy_utf16_validation
                     .unwrap_or(false),
             )
+            .maybe_runtime_module(options.runtime_module)
             .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
             .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
