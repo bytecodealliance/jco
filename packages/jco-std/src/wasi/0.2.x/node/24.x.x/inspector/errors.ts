@@ -7,20 +7,24 @@
  * from the host's `failure` record. `ERR_JCO_INSPECTOR_ADAPTER_REQUIRED` reports the deny-by-default
  * adapter.
  *
- * The `Received ...` clause reproduces Node's internal `determineSpecificType`
- * (`lib/internal/errors.js`, Node 24.20.0) so `ERR_INVALID_ARG_TYPE` messages are byte-identical.
+ * The coded-error factory and the `Received ...` clause of `ERR_INVALID_ARG_TYPE` are the shared
+ * ones in `../errors/core.js` (which follow nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/internal/errors.js, MIT license). The
+ * `ERR_INSPECTOR_*` messages below are verbatim from the same file.
  */
+
+import {
+  type CodedError as SharedCodedError,
+  codedError,
+  invalidArgType as sharedInvalidArgType,
+} from "../errors/core.js";
 
 import type { HostError, HostFailure } from "./types.js";
 
-export interface CodedError extends Error {
-  code: string;
-}
+export type CodedError = SharedCodedError<Error, string>;
 
 function coded(code: string, message: string): CodedError {
-  const error = new Error(message) as CodedError;
-  error.code = code;
-  return error;
+  return codedError(new Error(message), code);
 }
 
 export function notConnected(): CodedError {
@@ -54,41 +58,6 @@ export function adapterRequired(): CodedError {
 }
 
 /**
- * Node's `determineSpecificType`: the `Received ...` tail of an `ERR_INVALID_ARG_TYPE` message.
- */
-function receivedType(value: unknown): string {
-  if (value === null) {
-    return "null";
-  }
-  if (value === undefined) {
-    return "undefined";
-  }
-  const type = typeof value;
-  if (type === "function") {
-    const name = (value as { name?: unknown }).name;
-    return typeof name === "string" && name.length > 0 ? `function ${name}` : "function";
-  }
-  if (type === "object") {
-    const constructor = (value as object).constructor;
-    const name = typeof constructor === "function" ? constructor.name : undefined;
-    return name ? `an instance of ${name}` : "an instance of Object";
-  }
-  let rendered: string;
-  if (type === "bigint") {
-    rendered = `${String(value)}n`;
-  } else if (type === "string") {
-    let inner = value as string;
-    if (inner.length > 25) {
-      inner = `${inner.slice(0, 25)}...`;
-    }
-    rendered = `'${inner}'`;
-  } else {
-    rendered = String(value);
-  }
-  return `type ${type} (${rendered})`;
-}
-
-/**
  * Node's `ERR_INVALID_ARG_TYPE` for a single expected type.
  *
  * @param name - the argument name, as Node names it
@@ -96,10 +65,7 @@ function receivedType(value: unknown): string {
  * @param actual - the value received
  */
 export function invalidArgType(name: string, expected: string, actual: unknown): CodedError {
-  return coded(
-    "ERR_INVALID_ARG_TYPE",
-    `The "${name}" argument must be of type ${expected}. Received ${receivedType(actual)}`,
-  );
+  return sharedInvalidArgType(name, expected, actual);
 }
 
 /** Reconstruct the `Error` a protocol/host failure should surface as, preserving Node's code. */

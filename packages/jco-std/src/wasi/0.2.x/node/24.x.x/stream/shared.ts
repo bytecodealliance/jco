@@ -8,7 +8,7 @@
  * portable Node error helpers instead of primordials and internal bindings.
  */
 
-import { invalidArgType, invalidArgValue, outOfRange } from "../errors/core.js";
+import { invalidArgType, invalidArgValue, outOfRange, unsupportedNodeApi } from "../errors/core.js";
 
 import type {
   ConsumeOptions,
@@ -215,9 +215,5 @@ export async function abortableNext<T>(
 }
 
 export function unsupportedClassicAdapter(name: string): Error & { code: string } {
-  const error = new Error(
-    `${name} is not supported in a WebAssembly component until a faithful node:stream implementation is available`,
-  ) as Error & { code: string };
-  error.code = "ERR_JCO_UNSUPPORTED_NODE_API";
-  return error;
+  return unsupportedNodeApi(name, "no faithful node:stream implementation is available yet");
 }

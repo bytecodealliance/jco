@@ -1,5 +1,6 @@
 import { EventEmitter } from "../internal/event-emitter.js";
 import { STATUS_CODES } from "./constants.js";
+import { codedError } from "../errors/core.js";
 import { invalidArgType, invalidArgValue, unsupported } from "./errors.js";
 import { IncomingMessage } from "./incoming-message.js";
 import { OutgoingMessage } from "./outgoing-message.js";
@@ -248,9 +249,10 @@ export class ServerBase extends EventEmitter {
       );
     }
     if (this.listening) {
-      const error = new Error("Listen method has been called more than once without closing.");
-      Object.assign(error, { code: "ERR_SERVER_ALREADY_LISTEN" });
-      throw error;
+      throw codedError(
+        new Error("Listen method has been called more than once without closing."),
+        "ERR_SERVER_ALREADY_LISTEN",
+      );
     }
     const address = this.#server.listen(options);
     this.listening = true;

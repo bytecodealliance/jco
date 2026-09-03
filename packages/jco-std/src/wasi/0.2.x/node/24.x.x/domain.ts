@@ -10,8 +10,9 @@
  * throws.
  */
 
-/** Error code carried by APIs Node itself has deprecated, which Jco declines to implement. */
-export const DEPRECATED_CODE = "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API";
+import { DEPRECATED_CODE, codedError } from "./errors/core.js";
+
+export { DEPRECATED_CODE };
 
 /**
  * Refuse a use of the module.
@@ -19,13 +20,14 @@ export const DEPRECATED_CODE = "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API";
  * @param api - the entry point being used, as a user would write it
  */
 function deprecated(api: string): Error & { code: string } {
-  const error = new Error(
-    `${api} is not supported: node:domain is deprecated in Node.js and not implemented by Jco. ` +
-      "Use AsyncLocalStorage from node:async_hooks to carry context, and handle errors where they " +
-      "occur; note Jco's AsyncLocalStorage is scoped synchronously.",
-  ) as Error & { code: string };
-  error.code = DEPRECATED_CODE;
-  return error;
+  return codedError(
+    new Error(
+      `${api} is not supported: node:domain is deprecated in Node.js and not implemented by Jco. ` +
+        "Use AsyncLocalStorage from node:async_hooks to carry context, and handle errors where they " +
+        "occur; note Jco's AsyncLocalStorage is scoped synchronously.",
+    ),
+    DEPRECATED_CODE,
+  );
 }
 
 /**

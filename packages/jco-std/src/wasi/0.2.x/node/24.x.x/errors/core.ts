@@ -18,7 +18,24 @@ export type ErrorCode =
   | "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API"
   | "ERR_JCO_UNSUPPORTED_NODE_API"
   | "ERR_MISSING_ARGS"
-  | "ERR_OUT_OF_RANGE";
+  | "ERR_OUT_OF_RANGE"
+  // Jco-specific codes. Every `ERR_JCO_*` code a shim raises is declared here so the set is
+  // auditable in one place; per-builtin modules import these rather than restating literals.
+  | "ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED"
+  | "ERR_JCO_CLUSTER_ADAPTER_REQUIRED"
+  | "ERR_JCO_CONSOLE_ADAPTER_REQUIRED"
+  | "ERR_JCO_DNS_ADAPTER_REQUIRED"
+  | "ERR_JCO_FFI_ADAPTER_REQUIRED"
+  | "ERR_JCO_FS_ADAPTER_REQUIRED"
+  | "ERR_JCO_HTTP_ADAPTER_REQUIRED"
+  | "ERR_JCO_INSPECTOR_ADAPTER_REQUIRED"
+  | "ERR_JCO_OS_ADAPTER_REQUIRED"
+  | "ERR_JCO_HTTP_IMPLEMENTATION"
+  | "ERR_JCO_INSPECTOR_HOST"
+  | "ERR_JCO_INSPECTOR_UNAVAILABLE"
+  | "ERR_JCO_WASI_HTTP"
+  | "ERR_JCO_WASI_HTTP_STATE"
+  | "ERR_JCO_WASI_SOCKET";
 
 export type CodedError<T extends Error = Error, C extends string = string> = T & { code: C };
 
@@ -335,6 +352,12 @@ export function unsupportedNodeApi(
     "ERR_JCO_UNSUPPORTED_NODE_API",
   );
 }
+
+/** Error code carried by every unsupported-API failure Jco raises for Node builtins. */
+export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API" as const;
+
+/** Error code for APIs Node itself has deprecated, which Jco declines to implement. */
+export const DEPRECATED_CODE = "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API" as const;
 
 export function outOfRange(
   name: string,

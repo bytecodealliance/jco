@@ -3,33 +3,20 @@
  *
  * These mirror Node's own argument validation rather than Jco's unsupported-API errors: the
  * functions here are supported, so a caller passing bad arguments must see what Node raises,
- * message included.
+ * message included. The factory, message templates, and `Received ...` clause are the shared
+ * ones in `../errors/core.js`.
  */
 
-interface CodedError extends Error {
-  code: string;
-}
+import {
+  type CodedError as SharedCodedError,
+  codedError,
+  determineSpecificType,
+  formatList,
+  invalidArgType as sharedInvalidArgType,
+  outOfRange as sharedOutOfRange,
+} from "../errors/core.js";
 
-function codedError(code: string, message: string): CodedError {
-  const error = new Error(message) as CodedError;
-  error.code = code;
-  return error;
-}
-
-/** Describe a value the way Node's `ERR_INVALID_ARG_TYPE` message does. */
-function describe(value: unknown): string {
-  if (value === null || value === undefined) {
-    return String(value);
-  }
-  if (typeof value === "object" || typeof value === "function") {
-    const name = (value as { constructor?: { name?: string } }).constructor?.name;
-    return name ? `an instance of ${name}` : "an object";
-  }
-  if (typeof value === "string") {
-    return `type string ('${value}')`;
-  }
-  return `type ${typeof value} (${String(value)})`;
-}
+type CodedError = SharedCodedError<Error, string>;
 
 /**
  * Node's `ERR_INVALID_ARG_TYPE`, phrased for a primitive type.
@@ -39,10 +26,7 @@ function describe(value: unknown): string {
  * @param actual - the value that was passed
  */
 export function invalidArgType(name: string, expected: string, actual: unknown): CodedError {
-  return codedError(
-    "ERR_INVALID_ARG_TYPE",
-    `The "${name}" argument must be of type ${expected}. Received ${describe(actual)}`,
-  );
+  return sharedInvalidArgType(name, expected, actual);
 }
 
 /**
@@ -54,8 +38,10 @@ export function invalidArgType(name: string, expected: string, actual: unknown):
  */
 export function invalidArgInstance(name: string, expected: string[], actual: unknown): CodedError {
   return codedError(
+    new TypeError(
+      `The "${name}" argument must be an instance of ${formatList(expected, "or")}. Received ${determineSpecificType(actual)}`,
+    ),
     "ERR_INVALID_ARG_TYPE",
-    `The "${name}" argument must be an instance of ${expected.join(" or ")}. Received ${describe(actual)}`,
   );
 }
 
@@ -67,8 +53,5 @@ export function invalidArgInstance(name: string, expected: string[], actual: unk
  * @param actual - the value that was passed
  */
 export function outOfRange(name: string, range: string, actual: unknown): CodedError {
-  return codedError(
-    "ERR_OUT_OF_RANGE",
-    `The value of "${name}" is out of range. It must be ${range}. Received ${String(actual)}`,
-  );
+  return sharedOutOfRange(name, range, actual);
 }

@@ -15,7 +15,7 @@
  * implementation instead of tracking unenv's separately.
  */
 
-import { unsupported } from "../cluster/errors.js";
+import { unsupportedNodeApi } from "../errors/core.js";
 
 type Listener = (...args: never[]) => unknown;
 
@@ -30,9 +30,9 @@ export class EventEmitter {
 
   #add(event: string, listener: Listener, once: boolean, prepend: boolean): this {
     if (event === "newListener" || event === "removeListener") {
-      throw unsupported(
+      throw unsupportedNodeApi(
         `EventEmitter '${event}' meta-event`,
-        "Jco's cluster shim implements only the ordinary event surface",
+        "jco-std's internal EventEmitter implements only the ordinary event surface",
       );
     }
     const registrations = this.#events.get(event) ?? [];

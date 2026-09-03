@@ -1,7 +1,6 @@
-import { unsupportedNodeApi } from "../errors/core.js";
+import { UNSUPPORTED_CODE, unsupportedNodeApi } from "../errors/core.js";
 
-/** Error code carried by every unsupported-API failure Jco raises for Node builtins. */
-export const UNSUPPORTED_CODE = "ERR_JCO_UNSUPPORTED_NODE_API" as const;
+export { UNSUPPORTED_CODE };
 
 /**
  * Thrown for `node:async_hooks` behavior that cannot work in a component.
