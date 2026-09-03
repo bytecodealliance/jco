@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-595eafe3.js";
+            window.path_to_searchindex_js = "../searchindex-eee8869a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -276,6 +276,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
 <tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
+<tr><td><code>node:module</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module</code></td><td>Classification, source maps and <code>require.resolve</code> are exact. Everything that <strong>loads</strong> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> – see below. Requires no WIT capability.</td></tr>
 <tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store – see below.</td></tr>
 <tr><td><code>node:diagnostics_channel</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel</code></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
@@ -677,6 +678,50 @@ also fires those callbacks synchronously.</li>
 <li><strong>Notifications arrive between guest tasks</strong>, like <code>node:cluster</code>’s events: the host queues each
 notification and delivers it once no exported call is in flight, never into a suspended <code>await</code>.</li>
 </ul>
+<h3 id="modules"><a class="header" href="#modules">Modules</a></h3>
+<p><code>node:module</code> splits cleanly in two, and the split is not about effort.</p>
+<p><strong>There is no module loader in a component.</strong> <code>jco componentize</code> bundles the whole graph ahead of
+time, and StarlingMonkey cannot compile or link a module that was not present at build time – no
+<code>dlopen</code>, no filesystem, no loader to hook. No host capability would fix this: the missing piece is
+the guest engine’s ability to instantiate new code. So every entry point whose job is to load
+something throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> and says why:</p>
+<p><code>register</code> · <code>registerHooks</code> · <code>runMain</code> · <code>findPackageJSON</code> · <code>stripTypeScriptTypes</code> ·
+<code>setSourceMapsSupport</code> · <code>Module.prototype.require</code> / <code>load</code> / <code>_compile</code> · and the <code>_*</code> loader
+internals (<code>_load</code>, <code>_resolveFilename</code>, <code>_findPath</code>, <code>_nodeModulePaths</code>, and the rest).</p>
+<p><strong>Everything else is real</strong>, because it is classification or arithmetic:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td><code>builtinModules</code>, <code>isBuiltin</code></td><td>Node 24’s list, verbatim. <code>isBuiltin</code> agrees with Node on every builtin in every spelling, including prefix-only ones – <code>isBuiltin("node:test")</code> is true and <code>isBuiltin("test")</code> is false</td></tr>
+<tr><td><code>SourceMap</code></td><td>Implemented in full: VLQ decoding, <code>findEntry</code>, <code>findOrigin</code>, <code>payload</code>, <code>lineLengths</code></td></tr>
+<tr><td><code>wrap</code>, <code>wrapper</code></td><td>Deprecated upstream but pure string work, so they behave as Node’s do, including <code>wrap</code> reading a mutated <code>wrapper</code> live</td></tr>
+<tr><td><code>constants</code>, <code>findSourceMap</code>, <code>getSourceMapsSupport</code>, <code>getCompileCacheDir</code>, <code>flushCompileCache</code>, <code>syncBuiltinESMExports</code></td><td>Exact, down to Node’s null-prototype return objects</td></tr>
+<tr><td><code>globalPaths</code></td><td><code>[]</code> – a true statement, not a refusal: there is no <code>$HOME/.node_modules</code> to search</td></tr>
+<tr><td><code>enableCompileCache</code></td><td>Reports <code>{ status: FAILED, message }</code>. Node’s own protocol for “could not”, so callers that branch on <code>status</code> keep working instead of catching</td></tr>
+<tr><td><code>new Module(id)</code></td><td>Constructs, with Node’s own-property shape. Its <em>methods</em> are what need a loader</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="createrequire"><a class="header" href="#createrequire"><code>createRequire</code></a></h4>
+<p><code>createRequire()</code> <strong>succeeds</strong>. Code routinely writes <code>const require = createRequire(import.meta.url)</code>
+at module top level and only calls it on some paths; refusing at creation would break modules that
+require nothing.</p>
+<p>Calling the returned <code>require()</code> refuses and points at static <code>import</code>. But <code>require.resolve</code> is not
+a refusal – it answers truthfully:</p>
+<pre><code class="language-js">const require = createRequire(import.meta.url);
+require.resolve("node:path");   // "node:path", exactly as Node answers
+require.resolve("lodash");      // throws MODULE_NOT_FOUND -- which is the truth here
+require.cache;                  // genuinely empty
+require.main;                   // genuinely undefined
+</code></pre>
+<h4 id="a-caveat-on-builtinmodules"><a class="header" href="#a-caveat-on-builtinmodules">A caveat on <code>builtinModules</code></a></h4>
+<p>It reports Node’s list, not the modules Jco resolves. <code>isBuiltin</code> asks “is this a Node builtin?”,
+which is a classification question, so answering for Node is the faithful thing. A guest that writes
+<code>if (isBuiltin(x)) require(x)</code> therefore gets a true answer followed by a refusal. The table at the
+top of this page is what says which builtins a component can actually import.</p>
 <h3 id="diagnostics-channels"><a class="header" href="#diagnostics-channels">Diagnostics channels</a></h3>
 <p>Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
 are interned by name: a publisher and a subscriber that never share a reference still meet on the
@@ -859,9 +904,9 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http</code>, <code>node:http2</code>, <code>node:https</code>,
-<code>node:module</code>, <code>node:net</code>, <code>node:perf_hooks</code>, <code>node:process</code>, <code>node:repl</code>,
-<code>node:sqlite</code>, <code>node:stream</code>, <code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
+<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>, <code>node:https</code>, <code>node:net</code>,
+<code>node:perf_hooks</code>, <code>node:process</code>, <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>,
+<code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
