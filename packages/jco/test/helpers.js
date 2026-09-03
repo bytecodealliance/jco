@@ -11,6 +11,7 @@ import mime from "mime";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
+import { nodeBuiltinPlugin } from "../src/node-builtins.js";
 import { COMPONENT_JS_FIXTURES_DIR, JCO_JS_PATH } from "./common.js";
 import { getRandomPort } from "./bench/server-helpers.js";
 
@@ -99,6 +100,27 @@ export async function exec(cmd, ...args) {
  */
 export async function getTmpDir() {
     return mkdtemp(normalize(tmpdir() + sep));
+}
+
+/**
+ * Materialize the ESM adapter Jco generates for an audited unenv builtin so a test can import and
+ * execute it rather than string-match its source.
+ *
+ * The plugin emits two virtual modules for `node:buffer` -- the public adapter and the shared
+ * `unenv:buffer-core` it re-exports -- and `node:querystring` re-exports unenv's module while
+ * importing the buffer core for its side effects. Both are written to a fresh temp dir with the
+ * virtual core specifier rewritten to a sibling file, then imported for real.
+ */
+export async function materializeUnenvAdapter(specifier) {
+    const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
+    const coreId = "\0jco-node-builtin:unenv-buffer-core";
+    const adapterId = plugin.resolveId(specifier);
+    const dir = await getTmpDir();
+    const coreFile = "./unenv-buffer-core.mjs";
+    const adapterPath = join(dir, `${specifier.replace(":", "-")}.mjs`);
+    await writeFile(join(dir, coreFile), plugin.load(coreId));
+    await writeFile(adapterPath, plugin.load(adapterId).replaceAll(JSON.stringify(coreId), JSON.stringify(coreFile)));
+    return { module: await import(pathToFileURL(adapterPath).href), dir };
 }
 
 /**
