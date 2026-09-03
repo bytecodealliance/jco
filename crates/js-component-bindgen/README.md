@@ -30,6 +30,11 @@
 $ cargo add js-component-bindgen
 ```
 
+Generated JavaScript that uses Component Model runtime intrinsics imports
+`@bytecodealliance/jco-cm-runtime` by default. Applications using this crate
+directly must make that package, or the module selected with
+`TranspileOpts::runtime_module`, resolvable from the generated output.
+
 # License
 
 This project is licensed under the Apache 2.0 license with the LLVM exception.

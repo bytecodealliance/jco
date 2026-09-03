@@ -13,6 +13,8 @@ on:
       - "jco-node-fs-v[0-9]+.[0-9]+.[0-9]+-*"
       - "jco-transpile-v[0-9]+.[0-9]+.[0-9]+*"
       - "jco-transpile-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "jco-cm-runtime-v[0-9]+.[0-9]+.[0-9]+*"
+      - "jco-cm-runtime-v[0-9]+.[0-9]+.[0-9]+-*"
       - "jco-std-v[0-9]+.[0-9]+.[0-9]+*"
       - "jco-std-v[0-9]+.[0-9]+.[0-9]+-*"
       - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
@@ -32,6 +34,8 @@ on:
       - "prep-release-jco-node-fs-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-jco-transpile-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-jco-transpile-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "prep-release-jco-cm-runtime-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-jco-cm-runtime-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-jco-std-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-jco-std-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
@@ -54,6 +58,7 @@ on:
           - bare-jco
           - jco-node-fs
           - jco-transpile
+          - jco-cm-runtime
           - jco-std
           - js-component-bindgen
           - preview2-shim
@@ -181,6 +186,15 @@ jobs:
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="packages/jco-transpile/bytecodealliance-jco-transpile-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-jco-transpile-$NEXT_VERSION.tgz";
+              ;;
+            jco-cm-runtime)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export PROJECT_PACKAGE_NAME="@bytecodealliance/$PROJECT";
+              CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export CURRENT_VERSION;
+              export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="packages/jco-cm-runtime/bytecodealliance-jco-cm-runtime-*.tgz";
+              export ARTIFACT_NAME="bytecodealliance-jco-cm-runtime-$NEXT_VERSION.tgz";
               ;;
             jco-std)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
@@ -559,6 +573,20 @@ jobs:
           cd /tmp/test
           pnpm install --save "$PACKAGE_DIR"
           pnpm run all
+
+      - name: Test built Component Model runtime NPM package
+        if: ${{ needs.meta.outputs.project == 'jco-cm-runtime' }}
+        shell: bash
+        env:
+          ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
+          GH_WORKSPACE: ${{ github.workspace }}
+        run: |
+          export PACKAGE_PATH="$GH_WORKSPACE/gh-artifacts/$ARTIFACT_NAME"
+          mkdir -p /tmp/test-jco-cm-runtime
+          cd /tmp/test-jco-cm-runtime
+          echo '{"private":true,"type":"module"}' > package.json
+          pnpm install "$PACKAGE_PATH"
+          node --input-type=module -e "import { runtime, RUNTIME_ABI_VERSION } from '@bytecodealliance/jco-cm-runtime'; const instance = runtime.create({ requestedAbiVersion: RUNTIME_ABI_VERSION, strict: false, flagsAsBigInt: false, nodejsCompat: true, asyncDeterminism: 'random' }); const entry = instance.intrinsics.resource.tableGet([1 << 30, 0, 7, 42 | (1 << 30)], 1); if (entry.rep !== 42 || !entry.own) throw new Error('runtime smoke test failed');"
 
       - name: Test built jco-node-fs NPM package
         if: ${{ needs.meta.outputs.project == 'jco-node-fs' }}

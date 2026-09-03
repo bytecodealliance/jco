@@ -6,6 +6,7 @@ import { suite, test, assert, expect, beforeAll } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, setupAsyncTest } from '../../../helpers.js';
+import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime-provider.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
@@ -93,19 +94,28 @@ suite('component-model WAST', () => {
 
             let cleanup;
             try {
+                const instrumentRuntime = relPath === 'async/passing-resources.wast';
+                if (instrumentRuntime) {
+                    resetTableGetCallCount();
+                }
                 const setup = await setupAsyncTest({
                     asyncMode: 'jspi',
                     component: {
                         name: basename(relPath).replace('.wast', ''),
                         path: wasmPath,
                     },
-                    // jco: {
-                    //     transpile: {
-                    //         extraArgs: {
-                    //             minify: false,
-                    //         },
-                    //     },
-                    // },
+                    jco: instrumentRuntime
+                        ? {
+                              transpile: {
+                                  extraArgs: {
+                                      runtimeModule: new URL(
+                                          '../../../fixtures/custom-runtime-provider.js',
+                                          import.meta.url,
+                                      ).href,
+                                  },
+                              },
+                          }
+                        : undefined,
                 });
                 cleanup = setup.cleanup;
                 const instance = setup.instance;
@@ -116,6 +126,13 @@ suite('component-model WAST', () => {
                     assert,
                     expect,
                 });
+                if (instrumentRuntime) {
+                    assert.isAbove(
+                        tableGetCallCount,
+                        0,
+                        'resource.rep should call resource.tableGet on the selected runtime provider',
+                    );
+                }
             } finally {
                 await cleanup?.();
             }

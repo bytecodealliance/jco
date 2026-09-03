@@ -667,6 +667,7 @@ dependencies = [
  "wasm-encoder 0.254.0",
  "wasmparser 0.254.0",
  "wasmtime-environ",
+ "wat",
  "wit-bindgen-core",
  "wit-component",
  "wit-parser 0.254.0",

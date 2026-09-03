@@ -13,6 +13,7 @@ on:
           - bare-jco
           - jco-node-fs
           - jco-transpile
+          - jco-cm-runtime
           - jco-std
           - js-component-bindgen
           - preview2-shim
@@ -110,6 +111,12 @@ jobs:
               export IS_NAPI_PROJECT=true;
               ;;
             jco-transpile)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
+              export CURRENT_VERSION;
+              export IS_JS_PROJECT=true;
+              ;;
+            jco-cm-runtime)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               CURRENT_VERSION="$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)")";
               export CURRENT_VERSION;

@@ -53,6 +53,7 @@
         }
     },
     "scripts": {
+        "setup:jco-cm-runtime:build": "pnpm run --filter '@bytecodealliance/jco-cm-runtime' build",
         "setup:jco:build": "pnpm run --filter '@bytecodealliance/jco' build",
         "setup:jco:build:release": "pnpm run --filter '@bytecodealliance/jco' build:release",
         "setup:jco:vendor": "cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
@@ -63,8 +64,8 @@
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "build:ts": "tsc -p tsconfig.json",
-        "build": "pnpm run build:vendor && pnpm run build:ts",
-        "build:release": "pnpm run build:vendor:release && pnpm run build:ts",
+        "build": "pnpm run setup:jco-cm-runtime:build && pnpm run build:vendor && pnpm run build:ts",
+        "build:release": "pnpm run setup:jco-cm-runtime:build && pnpm run build:vendor:release && pnpm run build:ts",
         "test:build:components": "pnpm run -w build:test:components",
         "test": "vitest run -c test/vitest.ts",
         "test:extended": "vitest run -c test/vitest.extended.ts",
@@ -72,6 +73,7 @@
         "prepack": "pnpm run build:release"
     },
     "dependencies": {
+        "@bytecodealliance/jco-cm-runtime": "workspace:^",
         "@bytecodealliance/preview2-shim": "^0.22.0",
         "@bytecodealliance/preview3-shim": "^0.5.0",
         "binaryen": "^130.0.0",

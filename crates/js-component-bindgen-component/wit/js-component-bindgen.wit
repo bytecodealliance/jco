@@ -98,6 +98,9 @@ world js-component-bindgen {
     /// Configure whether to generate code that includes strict type checks
     strict: option<bool>,
 
+    /// ES module providing the Component Model runtime implementation.
+    runtime-module: option<string>,
+
     /// Represent WIT flags as bigint values instead of objects of booleans.
     flags-as-bigint: option<bool>,
 
