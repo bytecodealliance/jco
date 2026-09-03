@@ -132,11 +132,13 @@ export const HTTP2_WIT_REQUIREMENT: NodeWitRequirement = {
 };
 
 const WASI_0_2_12_ROOT = new URL("../lib/wit/builtin/0.2.12/", import.meta.url);
+const WASI_0_2_10_ROOT = new URL("../lib/wit/builtin/0.2.10/", import.meta.url);
 
-function wasiDependency(name: string): WitDependencyPackage {
+function wasiDependency(name: string, version = "0.2.12"): WitDependencyPackage {
+    const root = version === "0.2.10" ? WASI_0_2_10_ROOT : WASI_0_2_12_ROOT;
     return {
-        dependencyDirectory: `${name}-0.2.12`,
-        dependencySources: [fileURLToPath(new URL(`${name}/package.wit`, WASI_0_2_12_ROOT))],
+        dependencyDirectory: `${name}-${version}`,
+        dependencySources: [fileURLToPath(new URL(`${name}/package.wit`, root))],
     };
 }
 
@@ -166,8 +168,28 @@ function wasiRequirement(witImport: string, dependencies: WitDependencyPackage[]
 
 export const HTTP_WASI_SOCKETS_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:sockets/instance-network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/ip-name-lookup@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/tcp-create-socket@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/tcp@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:io/streams@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:io/poll@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+] as const;
+
+const WASI_SOCKETS_0_2_10_DEPENDENCIES = [
+    wasiDependency("wasi-io", "0.2.10"),
+    wasiDependency("wasi-clocks", "0.2.10"),
+    wasiDependency("wasi-sockets", "0.2.10"),
+];
+
+export const HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
+    wasiRequirement("wasi:sockets/instance-network@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/network@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/ip-name-lookup@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/tcp-create-socket@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/tcp@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
+    wasiRequirement("wasi:io/streams@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
+    wasiRequirement("wasi:io/poll@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
 ] as const;
 
 export const HTTP_WASI_HTTP_WIT_REQUIREMENTS = [

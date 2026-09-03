@@ -4,6 +4,9 @@ allowBuilds:
   esbuild: true
   puppeteer: true
 
+patchedDependencies:
+  '@bytecodealliance/componentize-js@0.22.0': patches/@bytecodealliance__componentize-js@0.22.0.patch
+
 packages:
   - crates/jco-tests
   - packages/jco

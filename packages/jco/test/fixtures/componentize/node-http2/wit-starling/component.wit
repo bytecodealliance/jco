@@ -1,0 +1,8 @@
+package test:http2;
+
+world component {
+  export start-server: func() -> u16;
+  export serve-one: func();
+  export stop-server: func();
+  export run-client: func(authority: string, path: string, request-authority: string) -> string;
+}

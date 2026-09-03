@@ -27,6 +27,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/dns`                     | `node:dns` guest adapter over an explicit host capability                     |
 | `wasi/0.2.x/node/24.x.x/fs`                      | `node:fs` and `node:fs/promises` over an explicit host capability             |
 | `wasi/0.2.x/node/24.x.x/http`                    | `node:http` API with direct, WASI sockets, and WASI HTTP implementations      |
+| `wasi/0.2.x/node/24.x.x/http2`                   | `node:http2` API with direct and cleartext WASI sockets implementations       |
 | `wasi/0.2.x/node/24.x.x/os`                      | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                    | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/string-decoder`          | Guest-local `node:string_decoder` implementation for Node 24                  |
@@ -667,14 +668,21 @@ settings, ping, listen, and close operations use JSPI rather than workers. The
 initial boundary buffers bodies; socket objects, priority, server push, and
 low-level flow-control access are explicitly unsupported.
 
-`wasi-sockets` rejects client and server construction with
-`ERR_JCO_UNSUPPORTED_NODE_API`. Raw Preview 2 sockets do not supply HTTP/2
-framing, HPACK, multiplexing, flow control, TLS, or ALPN, and this implementation
-does not substitute an HTTP/1 facade. `wasi-http` rejects these operations too:
-an outgoing handler represents individual requests, not observable Node HTTP/2
-sessions or arbitrary inbound servers. Capability-free constants and settings
-packing remain available in all three modes. Jco's generated WIT edits are
-commented, warned about, alias-aware, selected-world aware, and idempotent.
+`wasi-sockets` implements cleartext prior-knowledge HTTP/2 (`h2c`) in the guest:
+the client preface, framing, HPACK, multiplexed stream identifiers, settings,
+ping, reset, and connection- and stream-level flow control all run over Preview
+2 TCP streams. Both clients and TCP servers are supported. The implementation
+currently buffers complete request and response bodies and rejects HTTPS,
+secure servers, server push, Unix-domain listeners, arbitrary custom transports,
+and HTTP/1.1 `Upgrade: h2c`. HTTPS is not a limitation of TCP as a byte stream;
+it needs an additional guest TLS implementation with ALPN, certificate and trust
+handling, entropy, and time capabilities that this provider does not yet have.
+
+`wasi-http` still rejects session and server operations: an outgoing handler
+represents individual requests, not observable Node HTTP/2 sessions or arbitrary
+inbound servers. Capability-free constants and settings packing remain available
+in all three modes. Jco's generated WIT edits are commented, warned about,
+alias-aware, selected-world aware, and idempotent.
 
 # License
 
