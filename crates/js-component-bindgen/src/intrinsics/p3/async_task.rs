@@ -1093,6 +1093,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         isAsync() {{ return this.#isAsync; }}
+                        isManualAsync() {{ return this.#isManualAsync; }}
                         isSync() {{ return !this.isAsync(); }}
 
                         getErrHandling() {{ return this.#errHandling; }}
@@ -1171,7 +1172,9 @@ impl AsyncTaskIntrinsic {
                             return this.#getCalleeParamsFn();
                         }}
 
-                        mayBlock() {{ return this.isAsync() || this.isResolvedState() }}
+                        // Legacy manually-async exports are sync-typed in the component
+                        // but use JSPI precisely so their guest stack may suspend.
+                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -2987,6 +2990,10 @@ impl AsyncTaskIntrinsic {
                         const [newTask, newTaskID] = {create_new_current_task_fn}({{
                             componentIdx: calleeComponentIdx,
                             isAsync: !!calleeIsAsync,
+                            // A manually-async root uses one JSPI stack through any
+                            // sync-typed component adapters on the way to its configured
+                            // async import, so preserve that compatibility mode here.
+                            isManualAsync: callerTask.isManualAsync(),
                             entryFnName: [
                                 'task',
                                 callerTask.id(),

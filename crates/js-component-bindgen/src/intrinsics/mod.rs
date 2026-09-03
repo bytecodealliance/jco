@@ -1419,6 +1419,16 @@ mod tests {
     }
 
     #[test]
+    fn manually_async_tasks_may_block() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+
+        assert!(source.contains(
+            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() }"
+        ));
+    }
+
+    #[test]
     fn resource_destructor_call_creates_and_completes_a_sync_guest_task() {
         let source = render_intrinsic_body(Intrinsic::Resource(
             ResourceIntrinsic::ResourceDestructorCall,
@@ -1640,6 +1650,7 @@ mod tests {
         assert!(!enter.contains("symmetric sync guest->guest call should not be async"));
         assert!(enter.contains("isAsync: false,"));
         assert!(enter.contains("isAsync: !!calleeIsAsync,"));
+        assert!(enter.contains("isManualAsync: callerTask.isManualAsync(),"));
         assert!(enter.contains("previousTaskMayBlock: CURRENT_TASK_MAY_BLOCK.value,"));
         assert!(enter.contains("CURRENT_TASK_MAY_BLOCK.value = newTask.mayBlock() ? 1 : 0;"));
 
