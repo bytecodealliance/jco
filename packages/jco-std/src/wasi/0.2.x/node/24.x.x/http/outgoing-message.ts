@@ -1,3 +1,13 @@
+/**
+ * Buffered OutgoingMessage base for the portable node:http shim.
+ *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/_http_outgoing.js (MIT
+ * license). The header API and public state fields are kept; the
+ * socket-backed output queue is replaced by an in-memory body that is handed
+ * to the implementation once on end().
+ */
+
 import { EventEmitter } from "../internal/event-emitter.js";
 import { bodyBytes, concatBytes } from "./body.js";
 import { invalidArgType, outOfRange, unsupported, writeAfterEnd } from "./errors.js";

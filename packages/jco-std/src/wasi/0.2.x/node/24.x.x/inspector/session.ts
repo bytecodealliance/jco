@@ -1,6 +1,12 @@
 /**
  * `inspector.Session` and `inspector/promises.Session`.
  *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/inspector.js and
+ * lib/inspector/promises.js (MIT license). The native `Connection` and
+ * message-id map are replaced by a typed WIT host and a guest-exported
+ * callback registry; argument validation keeps Node's order.
+ *
  * `Session` extends jco-std's internal `EventEmitter` (shim code cannot pull one from `node:events`;
  * see `../internal/event-emitter.ts`). Session ids are guest-allocated `u32`s, so `new Session()`
  * touches no host state -- state lives here and only `connect`/`post`/`disconnect` reach the host.

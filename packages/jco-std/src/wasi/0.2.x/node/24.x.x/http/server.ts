@@ -1,3 +1,14 @@
+/**
+ * Server and ServerResponse for the portable node:http shim.
+ *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/_http_server.js and the
+ * listen errors in lib/internal/errors.js (MIT license). Option defaults and
+ * the writeHead contract are kept; net.Server, the connection parser, and
+ * per-socket timers are replaced by a typed server implementation that
+ * returns one buffered response per request.
+ */
+
 import { EventEmitter } from "../internal/event-emitter.js";
 import { STATUS_CODES } from "./constants.js";
 import { codedError } from "../errors/core.js";

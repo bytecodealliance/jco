@@ -1,3 +1,13 @@
+/**
+ * Node's `TracingChannel`: a group of channels describing one traced operation.
+ *
+ * Adapted from nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/diagnostics_channel.js (MIT
+ * license). `traceSync`, `tracePromise`, and `traceCallback` keep the upstream
+ * publish order and context mutation; primordials, the native channel binding,
+ * and the subscriber fast path are dropped, and the surface is typed.
+ */
+
 import { channel, type Channel } from "./channel.js";
 import { TRACING_EVENTS, type TracingChannelSubscribers, type TracingEvent } from "./types.js";
 

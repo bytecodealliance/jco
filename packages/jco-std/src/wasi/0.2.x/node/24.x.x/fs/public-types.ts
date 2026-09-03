@@ -1,3 +1,11 @@
+/**
+ * Public `node:fs` option and value types.
+ *
+ * Adapted from the MIT-licensed @types/node 24.13.3 fs.d.ts
+ * (https://unpkg.com/@types/node@24.13.3/fs.d.ts); option groups are merged
+ * and renamed where the shim exposes one facade for several Node overloads.
+ */
+
 export type PathLike = string | URL | Uint8Array;
 export type Mode = number | string;
 export type TimeLike = string | number | Date;

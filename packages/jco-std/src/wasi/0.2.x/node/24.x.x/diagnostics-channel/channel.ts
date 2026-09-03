@@ -3,6 +3,11 @@ import type { BoundStore, MessageHandler, StoreTransform } from "./types.js";
 /**
  * A named publish/subscribe channel, matching Node's `diagnostics_channel.Channel`.
  *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/diagnostics_channel.js (MIT
+ * license). The active/inactive prototype swap, weak channel map, and native
+ * binding are replaced by one interned `Map` and a plain subscriber array.
+ *
  * Channels are interned by name so `channel(name)` returns the same object every time, which is
  * what lets a publisher and a subscriber find each other without sharing a reference.
  */

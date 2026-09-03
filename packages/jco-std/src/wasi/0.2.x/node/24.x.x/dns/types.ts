@@ -1,3 +1,13 @@
+/**
+ * Node.js DNS type surface and the typed host contract behind it.
+ *
+ * The public option and record shapes (LookupOptions, LookupAddress,
+ * ResolveOptions, the *Record interfaces, AnyRecord, ResolverOptions) are
+ * adapted from the MIT-licensed @types/node 24.13.3 dns.d.ts
+ * (https://unpkg.com/@types/node@24.13.3/dns.d.ts). The Dns* host records and
+ * DnsHost interface are Jco's WIT-facing contract.
+ */
+
 import type { HostErrno, HostErrorBase, HostResult } from "../internal/wit-types.js";
 
 export type DnsResultOrder = "ipv4first" | "ipv6first" | "verbatim";
