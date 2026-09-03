@@ -3,6 +3,12 @@ import { invalidArgType } from "./errors.js";
 /**
  * Node's `module.SourceMap`.
  *
+ * The API and lookup semantics follow nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/internal/source_map/source_map.js
+ * (MIT license; itself derived from the BSD-3-Clause V8/Blink SourceMap.js,
+ * Copyright 2012-2013 Google Inc.). The VLQ decoder, mapping table, and binary
+ * search are rewritten in typed form; indexed sections are not supported.
+ *
  * The one part of `node:module` that is pure arithmetic rather than loading, so it is implemented
  * in full rather than refused: decoding the mappings and answering position queries needs no
  * filesystem, no loader, and no host.

@@ -1,3 +1,14 @@
+/**
+ * Buffered ClientRequest for the portable node:http shim.
+ *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/_http_client.js and the
+ * urlToHttpOptions helper in lib/internal/url.js (MIT license). Option
+ * normalisation, Host/Authorization defaults, and validation errors are kept;
+ * agents, sockets, and the streaming parser are replaced by one typed
+ * request/response exchange with the selected implementation.
+ */
+
 import { Agent, globalAgent } from "./agent.js";
 import { base64 } from "./body.js";
 import { deprecated, invalidArgType, invalidArgValue, unsupported } from "./errors.js";

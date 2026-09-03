@@ -1,3 +1,13 @@
+/**
+ * Header validation and storage for the portable node:http shim.
+ *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/_http_outgoing.js,
+ * lib/_http_common.js, and lib/_http_incoming.js (MIT license). Node's
+ * kOutHeaders store and header-line folding are reimplemented over a typed
+ * Map so headers can cross the WIT boundary as byte fields.
+ */
+
 import {
   headerAlreadySent,
   invalidArgType,

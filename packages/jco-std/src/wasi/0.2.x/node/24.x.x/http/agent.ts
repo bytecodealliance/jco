@@ -1,3 +1,12 @@
+/**
+ * Inert Agent for the portable node:http shim.
+ *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/_http_agent.js (MIT license).
+ * Option defaults and getName() are kept for compatibility; socket pooling is
+ * owned by the selected implementation.
+ */
+
 import { EventEmitter } from "../internal/event-emitter.js";
 import { unsupported } from "./errors.js";
 

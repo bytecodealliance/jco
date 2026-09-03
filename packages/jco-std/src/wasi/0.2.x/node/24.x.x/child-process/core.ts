@@ -1,3 +1,14 @@
+/**
+ * Portable `node:child_process` core over a synchronous WIT spawn host.
+ *
+ * The operation mapping follows nodejs/node v24.19.0, commit
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/child_process.js (MIT
+ * license): the spawnSync/execFileSync/execSync flow, default maxBuffer and
+ * killSignal, and the "Command failed" error shape. Argument validation and
+ * stdio normalization are rewritten for a typed host provider; asynchronous
+ * entry points and ChildProcess are refused rather than emulated.
+ */
+
 import { Buffer } from "node:buffer";
 
 import { unsupportedNodeApi } from "../errors/core.js";

@@ -1,3 +1,13 @@
+/**
+ * Node.js OS type surface and the typed host contract behind it.
+ *
+ * The public value shapes (Architecture, Platform, CpuInfo, NetworkInterface*,
+ * UserInfo, and the option types) are adapted from the MIT-licensed
+ * @types/node 24.13.3 os.d.ts and process.d.ts
+ * (https://unpkg.com/@types/node@24.13.3/os.d.ts). The Os* host records and
+ * OsHost interface are Jco's WIT-facing contract.
+ */
+
 import type { Buffer } from "node:buffer";
 
 import type { HostErrno, HostErrorBase, HostResult } from "../internal/wit-types.js";
