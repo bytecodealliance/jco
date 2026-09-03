@@ -486,6 +486,11 @@ world stream-concurrency {
   export stream-concurrency-test;
 }
 
+world p3-sockets-tcp-streams {
+  import wasi:sockets/types@0.3.0;
+  export wasi:cli/run@0.3.0;
+}
+
 interface fixed-length-lists-fn {
   takes-returns-fixed: func(bools: list<bool, 17>) -> result<list<u8, 32>, string>;
 }

@@ -2,7 +2,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { P3_COMPONENT_FIXTURES_DIR } from '../../common.js';
+import { LOCAL_TEST_COMPONENTS_DIR, P3_COMPONENT_FIXTURES_DIR } from '../../common.js';
 import { setupAsyncTest } from '../../helpers.js';
 
 const CHAIN_HTTP_HELPER_MODULE = new URL('./chain-http.js', import.meta.url).href;
@@ -43,7 +43,10 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: 'sockets/p3-sockets-tcp-sample-application.wasm' },
     { path: 'sockets/p3-sockets-tcp-sockopts.wasm' },
     { path: 'sockets/p3-sockets-tcp-states.wasm' },
-    { path: 'sockets/p3-sockets-tcp-streams.wasm' },
+    {
+        path: 'sockets/p3-sockets-tcp-streams.wasm',
+        componentPath: join(LOCAL_TEST_COMPONENTS_DIR, 'p3-sockets-tcp-streams.wasm'),
+    },
     { path: 'sockets/p3-sockets-udp-bind.wasm' },
     { path: 'sockets/p3-sockets-udp-connect.wasm' },
     { path: 'sockets/p3-sockets-udp-receive.wasm' },
@@ -140,7 +143,7 @@ async function setupP3Fixture({ fixture, outputRootDir, asyncExports, preopen = 
         const setup = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
-                path: join(P3_COMPONENT_FIXTURES_DIR, fixture.path),
+                path: fixture.componentPath ?? join(P3_COMPONENT_FIXTURES_DIR, fixture.path),
                 outputDir,
                 skipInstantiation: true,
             },

@@ -1,0 +1,66 @@
+package wasi:sockets@0.3.0;
+
+// This is the subset of the Preview 3 sockets interface used by
+// p3_sockets_tcp_streams.rs. The supplied host interface may contain the
+// remaining socket operations because component imports are structurally
+// matched.
+interface types {
+  variant error-code {
+    access-denied,
+    not-supported,
+    invalid-argument,
+    out-of-memory,
+    timeout,
+    invalid-state,
+    address-not-bindable,
+    address-in-use,
+    remote-unreachable,
+    connection-refused,
+    connection-broken,
+    connection-reset,
+    connection-aborted,
+    datagram-too-large,
+    other(option<string>),
+  }
+
+  enum ip-address-family {
+    ipv4,
+    ipv6,
+  }
+
+  type ipv4-address = tuple<u8, u8, u8, u8>;
+  type ipv6-address = tuple<u16, u16, u16, u16, u16, u16, u16, u16>;
+
+  variant ip-address {
+    ipv4(ipv4-address),
+    ipv6(ipv6-address),
+  }
+
+  record ipv4-socket-address {
+    port: u16,
+    address: ipv4-address,
+  }
+
+  record ipv6-socket-address {
+    port: u16,
+    flow-info: u32,
+    address: ipv6-address,
+    scope-id: u32,
+  }
+
+  variant ip-socket-address {
+    ipv4(ipv4-socket-address),
+    ipv6(ipv6-socket-address),
+  }
+
+  resource tcp-socket {
+    create: static func(address-family: ip-address-family) -> result<tcp-socket, error-code>;
+    bind: func(local-address: ip-socket-address) -> result<_, error-code>;
+    connect: async func(remote-address: ip-socket-address) -> result<_, error-code>;
+    listen: func() -> result<stream<tcp-socket>, error-code>;
+    send: func(data: stream<u8>) -> future<result<_, error-code>>;
+    receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>;
+    get-local-address: func() -> result<ip-socket-address, error-code>;
+    set-send-buffer-size: func(value: u64) -> result<_, error-code>;
+  }
+}
