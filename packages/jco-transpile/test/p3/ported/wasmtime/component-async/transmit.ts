@@ -1,8 +1,48 @@
+import assert from 'node:assert';
 import { join } from 'node:path';
 
 import { suite, test } from 'vitest';
 
 import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from './common.js';
+
+async function yieldTimes(count) {
+    for (let i = 0; i < count; i++) {
+        await Promise.resolve();
+    }
+}
+
+async function* values(items) {
+    yield* items;
+}
+
+async function collect(stream) {
+    const result = [];
+    for await (const item of stream) {
+        result.push(item);
+    }
+    return result;
+}
+
+async function runTransmit(instance) {
+    const control = values([
+        { tag: 'read-stream', val: 'a' },
+        { tag: 'read-future', val: 'b' },
+        { tag: 'write-stream', val: 'c' },
+        { tag: 'write-future', val: 'd' },
+    ]);
+    const never = new Promise(() => {});
+
+    const [calleeStream, calleeFuture1] = await instance.transmit.exchange(
+        control,
+        values(['a']),
+        Promise.resolve('b'),
+        never,
+    );
+
+    const [streamValues, futureValue] = await Promise.all([collect(calleeStream), calleeFuture1]);
+    assert.deepStrictEqual(streamValues, ['c']);
+    assert.strictEqual(futureValue, 'd');
+}
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
@@ -23,17 +63,11 @@ suite('transmit scenario', () => {
 
             const res = await buildAndTranspile({
                 componentPath,
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            void [instance, cleanup];
 
-            throw new Error('not implemented');
+            await instance['local:local/run'].run();
         } finally {
             if (cleanup) {
                 await cleanup();
@@ -48,17 +82,11 @@ suite('transmit scenario', () => {
             const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-transmit-callee.wasm');
             const res = await buildAndTranspile({
                 componentPath,
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            void [instance, cleanup];
 
-            throw new Error('not implemented');
+            await runTransmit(instance);
         } finally {
             if (cleanup) {
                 await cleanup();
@@ -73,17 +101,37 @@ suite('transmit scenario', () => {
             const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-readiness.wasm');
             const res = await buildAndTranspile({
                 componentPath,
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            void [instance, cleanup];
 
-            throw new Error('not implemented');
+            const expected = new Uint8Array([2, 4, 6, 8, 9]);
+            let delivered = false;
+            const input = {
+                [Symbol.asyncIterator]() {
+                    return this;
+                },
+                async next() {
+                    if (delivered) {
+                        return { value: undefined, done: true };
+                    }
+                    await yieldTimes(10);
+                    delivered = true;
+                    // Match Wasmtime's BufferStreamProducer: write the complete
+                    // numeric buffer and report the producer dropped in one poll.
+                    return { value: expected, done: true };
+                },
+            };
+
+            const [output, returnedExpected] = await instance.readiness.start(input, expected);
+            await yieldTimes(10);
+            const outputResult = await output.read({
+                count: returnedExpected.length,
+                dropAfterCopy: true,
+            });
+            assert.strictEqual(outputResult.done, false);
+            assert.deepStrictEqual(outputResult.value, returnedExpected);
+            assert.deepStrictEqual(await output.next(), { value: undefined, done: true });
         } finally {
             if (cleanup) {
                 await cleanup();

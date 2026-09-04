@@ -548,7 +548,7 @@ impl AsyncTaskIntrinsic {
 
                         let liftCtx = {{ memory, useDirectParams, params, componentIdx, stringEncoding }};
                         if (!useDirectParams) {{
-                            if (!ctx.memory) {{
+                            if (!memory) {{
                                 {debug_log_fn}('missing memory despite indirect param usage', {{ useDirectParams, liftCtx, ctx }});
                                 throw new Error('missing memory despite indirect param usage');
                             }}
@@ -659,7 +659,7 @@ impl AsyncTaskIntrinsic {
                             throw new Error('missing/invalid subtask [' + subtaskRep + '] specified for cancel in component instance');
                         }}
                         if (subtask.resolveDelivered()) {{
-                            throw new Error('cannot cancel subtask whose resolution has already been delivered');
+                            throw new Error('`subtask.cancel` called after terminal status delivered');
                         }}
                         if (subtask.cancellationRequested()) {{
                             throw new Error('cancellation has already been requested for this subtask');
@@ -669,31 +669,26 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         if (!subtask.isResolved()) {{
+                            // Subscribe before requesting cancellation: the request itself
+                            // resumes a child that is suspended at a cancellable point.
+                            // Waiting for the next suspension/exit gives that child exactly
+                            // one execution slice in which to acknowledge via `task.cancel`.
+                            const childTask = subtask.getChildTask();
+                            const childProgress = childTask?.waitForProgress();
                             subtask.requestCancellation();
 
-                            if (!subtask.isResolved()) {{
-                                // Cancellation immediately resumes one cancellable child
-                                // execution slice. Wait until that slice releases component
-                                // entry by exiting or suspending again before deciding whether
-                                // the cancel blocked.
-                                const childTask = subtask.getChildTask();
-                                if (childTask) {{
-                                    const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
-                                    if (childState.suspendedTaskReady(childTask.id())) {{
-                                        const progress = childTask.waitForProgress();
-                                        if (!childState.resumeTaskByID(childTask.id())) {{
-                                            throw new Error('failed to resume cancellable subtask');
-                                        }}
-                                        await progress;
-                                    }}
+                            if (!subtask.isResolved() && childProgress) {{
+                                await childProgress;
+                                if (!subtask.isResolved()) {{
+                                    // The resumed callee blocked again: async-lowered cancels
+                                    // report BLOCKED (resolution will arrive via a later SUBTASK event),
+                                    // while sync-lowered cancels block the current task until the
+                                    // subtask resolves.
+                                    if (isAsync) {{ return 0xFFFFFFFF; }}
                                 }}
                             }}
 
                             if (!subtask.isResolved()) {{
-                                // The resumed callee blocked again: async-lowered cancels
-                                // report BLOCKED (resolution will arrive via a later SUBTASK event),
-                                // while sync-lowered cancels block the current task until the
-                                // subtask resolves.
                                 if (isAsync) {{ return 0xFFFFFFFF; }}
 
                                 const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
@@ -965,6 +960,8 @@ impl AsyncTaskIntrinsic {
                         #onResolveHandlers = [];
                         #progressWaiters = [];
                         #completionPromise = null;
+                        #completionValue;
+                        #completionReady = false;
                         #rejected = false;
 
                         #exitPromise = null;
@@ -1044,22 +1041,50 @@ impl AsyncTaskIntrinsic {
                            // original rejected promise for the eventual caller.
                            completionPromise.catch(() => {{}});
 
+                           let completionSettled = false;
+                           const completionContainsAsyncValue = (value, seen = new Set()) => {{
+                               if (value === null || value === undefined) {{ return false; }}
+                               const ty = typeof value;
+                               if (ty !== 'object' && ty !== 'function') {{ return false; }}
+                               if (typeof value.then === 'function') {{ return true; }}
+                               if (typeof value[Symbol.asyncIterator] === 'function') {{ return true; }}
+                               if (seen.has(value)) {{ return false; }}
+                               seen.add(value);
+                               return Object.values(value).some((item) =>
+                                   completionContainsAsyncValue(item, seen)
+                               );
+                           }};
+                           const settleCompletionPromise = () => {{
+                               if (completionSettled || !this.#completionReady) {{ return; }}
+                               completionSettled = true;
+                               if (this.#errored !== null) {{
+                                   rejectCompletionPromise(this.#errored);
+                               }} else if (this.#rejected) {{
+                                   rejectCompletionPromise(this.#completionValue);
+                               }} else if (
+                                   this.#preserveFutureResult
+                                   && this.#completionValue instanceof {future_value_class}
+                               ) {{
+                                   this.#completionValue.resolveAsValue(resolveCompletionPromise);
+                               }} else {{
+                                   resolveCompletionPromise(this.#completionValue);
+                               }}
+                           }};
+
                            this.#onResolveHandlers.push((results) => {{
                                if (this.#parentSubtask !== null) {{ return; }}
                                if (!this.#isAsync && !this.#isManualAsync) {{ return; }}
-
-                               if (this.#errored !== null) {{
-                                   rejectCompletionPromise(this.#errored);
-                                   return;
-                               }} else if (this.#rejected) {{
-                                   rejectCompletionPromise(results);
-                                   return;
-                               }}
-
-                               if (this.#preserveFutureResult && results instanceof {future_value_class}) {{
-                                   results.resolveAsValue(resolveCompletionPromise);
-                               }} else {{
-                                   resolveCompletionPromise(results);
+                               // `task.return` makes the result available to a supertask,
+                               // but the host-facing promise cannot settle until the task
+                               // exits: guest cleanup and spawned work may still trap.
+                               this.#completionValue = results;
+                               this.#completionReady = true;
+                               // Streams and futures must be exposed at task.return so the
+                               // host can drive the operations the task itself may be
+                               // waiting on. Plain results wait for EXIT, preserving any
+                               // cleanup trap.
+                               if (completionContainsAsyncValue(results)) {{
+                                   settleCompletionPromise();
                                }}
                            }});
 
@@ -1071,6 +1096,9 @@ impl AsyncTaskIntrinsic {
                            this.#exitPromise = exitPromise;
 
                            this.#onExitHandlers.push(() => {{
+                               if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) {{
+                                   settleCompletionPromise();
+                               }}
                                resolveExitPromise();
                            }});
 
@@ -1326,6 +1354,17 @@ impl AsyncTaskIntrinsic {
 
                             if (opts?.isHost) {{
                                 this.#entered = true;
+                                // A guest task may be synchronously blocked in this
+                                // host entry. Propagate that boundary so an async
+                                // cancellation driver can yield BLOCKED while the host
+                                // operation is outstanding.
+                                const parentTask = this.#parentSubtask?.getParentTask();
+                                if (
+                                    parentTask?.taskState() === {task_class}.State.CANCEL_DELIVERED
+                                    || (parentTask && !parentTask.hasCallback())
+                                ) {{
+                                    parentTask.notifyProgress();
+                                }}
                                 return this.#entered;
                             }}
 
@@ -1366,7 +1405,7 @@ impl AsyncTaskIntrinsic {
 
                                 cstate.removeBackpressureWaiter();
 
-                                if (result === {task_class}.BlockResult.CANCELLED) {{
+                                if (!result) {{
                                     this.cancel();
                                     return false;
                                 }}
@@ -1557,6 +1596,10 @@ impl AsyncTaskIntrinsic {
                             // host-driven rejection path (see `reject()`).
                             this.onResolve(args?.error ?? null);
                             this.#state = {task_class}.State.RESOLVED;
+                            // A task cancelled before entry has no driver loop that can
+                            // report its exit. Entered tasks notify after releasing their
+                            // component slice in `exit()`.
+                            if (!this.#entered) {{ this.notifyProgress(); }}
                         }}
 
                         onResolve(taskValue) {{
@@ -1635,7 +1678,12 @@ impl AsyncTaskIntrinsic {
                         isRejected() {{ return this.#rejected; }}
 
                         isErrored() {{ return this.#errored; }}
-                        setErrored(err) {{ this.#errored = err; }}
+                        setErrored(err) {{
+                            // Preserve the originating trap when unwinding through
+                            // additional guest frames produces secondary traps (often
+                            // an `unreachable` after a call which was expected to trap).
+                            if (this.#errored === null) {{ this.#errored = err; }}
+                        }}
 
                         reject(taskErr) {{
                             {debug_log_fn}('[{task_class}#reject()] args', {{
@@ -1648,7 +1696,19 @@ impl AsyncTaskIntrinsic {
                                 errMsg: taskErr.message,
                             }});
 
-                            if (this.isResolvedState() || this.#rejected) {{ return; }}
+                            this.setErrored(taskErr);
+                            if (this.#rejected) {{ return; }}
+
+                            // A task may call `task.return` before its callback exits.
+                            // A trap in cleanup or spawned work must still reject the
+                            // host call and poison the enclosing task chain.
+                            if (this.isResolvedState()) {{
+                                this.#rejected = true;
+                                this.#errored = taskErr;
+                                const parentTask = this.#parentSubtask?.getParentTask();
+                                if (parentTask) {{ parentTask.reject(taskErr); }}
+                                return;
+                            }}
 
                             this.#rejected = true;
                             this.cancelRequested = true;
@@ -2011,6 +2071,14 @@ impl AsyncTaskIntrinsic {
 
                             if (this.#onProgressFn) {{ this.#onProgressFn(); }}
 
+                            // Starting a nested operation is a task execution boundary.
+                            // In particular, a cancellation handler may synchronously
+                            // enter an import which then suspends in the host.  Wake a
+                            // supertask that is driving one cancellation slice so an
+                            // async `subtask.cancel` can report BLOCKED without waiting
+                            // for that nested operation to finish.
+                            this.#parentTask.notifyProgress();
+
                             this.#state = {subtask_class}.State.STARTED;
 
                             let result;
@@ -2102,7 +2170,7 @@ impl AsyncTaskIntrinsic {
                             const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}({{ componentIdx: this.#parentTask?.componentIdx() }})[0];
                             // NOTE: cancelled resolutions carry no value, so nothing is lowered
                             const returned = this.#state === {subtask_class}.State.RETURNED;
-                            if (returned && callMetadata && !callMetadata.returnFn && this.isAsync && callMetadata.resultPtr && memory) {{
+                            if (returned && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {{
                                 const {{ resultPtr, realloc }} = callMetadata;
                                 const lowers = callMetadata.lowers; // may have been updated in task.return of the child
                                 if (lowers && lowers.length > 0) {{
@@ -2395,6 +2463,9 @@ impl AsyncTaskIntrinsic {
                                 if (task.isRejected()) {{
                                     {debug_log_fn}('[{driver_loop_fn}()] detected task rejection, leaving early');
                                     componentState.exclusiveRelease(task.id());
+                                    if (!task.isExited()) {{
+                                        task.exit({{ skipExclusiveLockCheck: true }});
+                                    }}
                                     return;
                                 }}
 
@@ -2453,6 +2524,14 @@ impl AsyncTaskIntrinsic {
                             }});
                             task.setErrored(err);
                             task.reject(err);
+                            // A trapping callback has no later EXIT code to release its
+                            // component slice or wake a supertask synchronously driving
+                            // cancellation. Retire it here just like the call-site error
+                            // paths do; rejection has already propagated through the
+                            // subtask chain.
+                            if (!task.isExited()) {{
+                                task.exit({{ skipExclusiveLockCheck: true }});
+                            }}
                         }}
                     }}
                 "#,
@@ -2486,6 +2565,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let get_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let with_global_current_task_meta_async_fn =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let check_may_leave_fn = render_args
@@ -2548,6 +2629,7 @@ impl AsyncTaskIntrinsic {
                                getReallocFn,
                                resultPtr,
                                lowers: resultLowerFns,
+                               funcTypeIsAsync,
                                stringEncoding,
                            }}
                         }});
@@ -2580,7 +2662,11 @@ impl AsyncTaskIntrinsic {
                             const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
                                 try {{
-                                    await importFn(...params);
+                                    await {with_global_current_task_meta_async_fn}({{
+                                        taskID: task.id(),
+                                        componentIdx: task.componentIdx(),
+                                        fn: () => importFn(...params),
+                                    }});
                                     if (!subtask.isResolved()) {{
                                         await task.suspendUntil({{ readyFn: () => subtask.isResolved() }});
                                     }}
@@ -2638,7 +2724,11 @@ impl AsyncTaskIntrinsic {
                         queueMicrotask(async () => {{
                             try {{
                                 {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
-                                await importFn(...params);
+                                await {with_global_current_task_meta_async_fn}({{
+                                    taskID: task.id(),
+                                    componentIdx: task.componentIdx(),
+                                    fn: () => importFn(...params),
+                                }});
                                 if (requiresManualAsyncResult) {{
                                     manualAsyncResult.resolve(subtask.getResult());
                                 }}
@@ -2844,6 +2934,7 @@ impl AsyncTaskIntrinsic {
                                getReallocFn,
                                resultPtr,
                                lowers: resultLowerFns,
+                               funcTypeIsAsync,
                                stringEncoding,
                            }}
                         }});

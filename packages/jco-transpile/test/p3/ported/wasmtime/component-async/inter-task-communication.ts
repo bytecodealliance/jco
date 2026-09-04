@@ -25,8 +25,10 @@ suite('inter-task communications scenario', () => {
             const instance = res.instance;
             cleanup = res.cleanup;
 
-            await instance['local:local/run'].run();
-            await instance['local:local/run'].run();
+            // The first task deliberately waits on a set which only the second
+            // task can populate and wake.  Run both calls concurrently, matching
+            // Wasmtime's `run_concurrent` harness.
+            await Promise.all([instance['local:local/run'].run(), instance['local:local/run'].run()]);
         } finally {
             if (cleanup) {
                 await cleanup();
