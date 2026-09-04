@@ -1,7 +1,7 @@
 import * as denyHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2-host.js";
-import { createDirectHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/direct.js";
-import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http.js";
-import { createWasiSocketsHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets.js";
+import { createDirectHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.js";
+import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.js";
+import { createWasiSocketsHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets/index.js";
 import {
   CLIENT_PREFACE,
   concat,

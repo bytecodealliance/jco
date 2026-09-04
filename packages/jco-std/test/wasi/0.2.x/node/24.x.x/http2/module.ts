@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import { constants } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/constants.js";
 import { createHttp2 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/core.js";
-import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http.js";
+import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.js";
 
 describe("node:http2 module", () => {
   test("matches the Node 24 export contract", () => {

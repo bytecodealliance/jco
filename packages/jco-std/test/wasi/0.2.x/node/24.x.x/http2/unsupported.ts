@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import { createHttp2 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/core.js";
-import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http.js";
-import { createWasiSocketsHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets.js";
+import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.js";
+import { createWasiSocketsHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets/index.js";
 import type { WasiSocketsProvider } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
 
 describe("node:http2 via wasi-http", () => {

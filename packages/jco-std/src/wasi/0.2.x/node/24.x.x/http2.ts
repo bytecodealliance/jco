@@ -1,7 +1,7 @@
 import * as host from "jco:node/http2@0.1.0";
 
 import { createHttp2 } from "./http2/core.js";
-import { createDirectHttp2Implementation, http2Callbacks } from "./http2/impl/direct.js";
+import { createDirectHttp2Implementation, http2Callbacks } from "./http2/impl/direct/index.js";
 
 const http2 = createHttp2(createDirectHttp2Implementation(host));
 
