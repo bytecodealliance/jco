@@ -1,0 +1,6 @@
+package jco-fixtures:node-https-server;
+
+world component {
+    export start: func(key: string, cert: string) -> u16;
+    export stop: func();
+}
