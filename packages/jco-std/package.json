@@ -144,19 +144,19 @@
       "default": "./dist/wasi/0.2.x/node/24.x.x/http2/core.js"
     },
     "./wasi/0.2.x/node/24.x.x/http2/impl/direct": {
-      "types": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/direct.d.ts",
-      "browser": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/direct.js",
-      "default": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/direct.js"
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.js"
     },
     "./wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets": {
-      "types": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets.d.ts",
-      "browser": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets.js",
-      "default": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets.js"
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-sockets/index.js"
     },
     "./wasi/0.2.x/node/24.x.x/http2/impl/wasi-http": {
-      "types": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http.d.ts",
-      "browser": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http.js",
-      "default": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http.js"
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.js"
     },
     "./wasi/0.2.x/node/24.x.x/http2/host": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/http2-host.d.ts",

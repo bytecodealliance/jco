@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { createHttp2 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/core.js";
-import { createDirectHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/direct.js";
+import { createDirectHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.js";
 import type {
   DirectHttp2ClientOptions,
   DirectHttp2RequestOptions,
