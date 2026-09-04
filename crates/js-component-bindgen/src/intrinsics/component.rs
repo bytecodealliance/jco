@@ -161,6 +161,21 @@ impl ComponentIntrinsic {
                             if (unresolvedRoots.size === 0) {{ return; }}
 
                             const err = new {runtime_error_class}('wasm trap: deadlock detected: event loop cannot make further progress');
+                            // Which tasks were waiting, and on whose behalf. The message stays
+                            // exactly what the Canonical ABI calls for, so this rides alongside
+                            // it: a deadlock reported from a real program is otherwise a bare
+                            // sentence, and the state that produced it is gone by the time
+                            // anyone reads the failure.
+                            err.deadlockDetail = {{
+                                pendingHostOperations: {store_async_state}.pendingHostOperations,
+                                suspendedTasks: [...suspendedTasks].map((task) => ({{
+                                    taskID: task.id(),
+                                    componentIdx: task.componentIdx(),
+                                    state: task.state(),
+                                    rootTaskID: task.getRootTask().id(),
+                                }})),
+                                unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
+                            }};
                             {store_trap}.error = err;
                             for (const root of unresolvedRoots) {{
                                 root.setErrored(err);

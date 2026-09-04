@@ -17,6 +17,12 @@ const WASI_CLI_RUN_EXPORT = 'wasi:cli/run@0.3.0';
 
 function reportUnhandled(error) {
     console.error(error?.stack ?? error);
+    // A detected deadlock says only that the event loop stopped. What was waiting is
+    // attached to the error, and this is the last chance to print it: the run ends here,
+    // and on CI the captured output is all anyone gets.
+    if (error?.deadlockDetail) {
+        console.error(`deadlock detail: ${JSON.stringify(error.deadlockDetail, null, 2)}`);
+    }
     process.exit(1);
 }
 
