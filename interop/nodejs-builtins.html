@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eee8869a.js";
+            window.path_to_searchindex_js = "../searchindex-4ef17ccf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -250,8 +250,9 @@ audited against <code>unenv@2.0.0-rc.24</code>; upgrading unenv requires rerunni
 compatibility suites.</p>
 <p>These entry points are namespaced by two independent versions: the WASI version they adapt
 Node to, and the Node major they implement. The modules below live under
-<code>wasi/0.2.x/node/24.x.x</code>, where <code>0.2.x</code> means the latest WASI p2 release and <code>24.x.x</code> means any
-Node 24. Both axes move on their own – Node’s builtin semantics change across majors, and the
+<code>wasi/0.2.x/node/&lt;major&gt;.x.x</code>, where <code>0.2.x</code> means the latest WASI p2 release and <code>&lt;major&gt;.x.x</code>
+means any release of that Node major – most modules under <code>24.x.x</code>, and <code>node:ffi</code>, which does not
+exist before Node 26, under <code>26.x.x</code>. Both axes move on their own – Node’s builtin semantics change across majors, and the
 same module adapted to WASI p3 is a different implementation – so a new Node major or a p3
 adaptation is added alongside rather than replacing what is there.</p>
 <p>Downstream projects should use explicit versions matching what they target, and Jco pins both
@@ -286,6 +287,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
 <tr><td><code>node:http</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http</code></td><td>Outbound client API over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Server listening is explicitly unsupported.</td></tr>
 <tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
+<tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
@@ -542,6 +544,33 @@ vector descriptor I/O, and their callback/promise facades are supported.</p>
 <p>These functions currently throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> because the typed WIT
 interface does not model those resources.</p>
 </blockquote>
+<h3 id="os-and-host-capabilities"><a class="header" href="#os-and-host-capabilities">OS and host capabilities</a></h3>
+<p>A WebAssembly guest has no view of the machine it runs on. When bundled source
+imports <code>node:os</code>, Jco ensures that the selected world declares the dedicated
+interface, following the same in-place WIT editing described for
+<code>node:child_process</code>:</p>
+<pre><code class="language-wit">world app {
+  import jco:node/os@0.1.0;
+  // component imports and exports...
+}
+</code></pre>
+<p>Declaring or generating the import does not grant host access: Jco’s default
+transpilation map uses a provider that fails every inspecting or mutating call
+with <code>ERR_JCO_OS_ADAPTER_REQUIRED</code>. Static POSIX values that reveal no machine
+state – <code>EOL</code>, <code>devNull</code>, and <code>constants</code> – resolve without a provider, so the
+module can be imported and used for its constants even when access is denied. An
+application must make the security decision explicitly, for example by mapping
+the Node host provider:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
+</code></pre>
+<p>That produces the call path guest <code>node:os</code> → WIT capability → host adapter →
+Node <code>node:os</code>.</p>
+<p>The interface supports <code>arch</code>, <code>availableParallelism</code>, <code>cpus</code>, <code>endianness</code>,
+<code>freemem</code>, <code>getPriority</code>, <code>homedir</code>, <code>hostname</code>, <code>loadavg</code>, <code>machine</code>,
+<code>networkInterfaces</code>, <code>platform</code>, <code>release</code>, <code>setPriority</code>, <code>tmpdir</code>, <code>totalmem</code>,
+<code>type</code>, <code>uptime</code>, <code>userInfo</code>, and <code>version</code>, with Node’s argument validation and
+<code>ERR_SYSTEM_ERROR</code> reconstruction for failing calls.</p>
 <h3 id="async-hooks-and-synchronous-scopes"><a class="header" href="#async-hooks-and-synchronous-scopes">Async hooks and synchronous scopes</a></h3>
 <p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
 nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
