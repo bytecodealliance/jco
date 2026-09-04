@@ -218,31 +218,27 @@ describe("node:http2 in a fully formed component", () => {
     }, 600_000);
 
     // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
-    test.skip(
-        "runs the component against the public nghttp2.org h2c server",
-        async () => {
-            const { componentPath } = await componentizeFixture({
-                fixture: "node-http2",
-                bundle: true,
-                copy: true,
-                extraArgs: ["--backend", "quickjs", "--with-nodejs-http2-via", "wasi-sockets"],
-            });
-            const { esModuleOutputPath, cleanup } = await setupAsyncTest({
-                component: { name: "node-http2-wasi-sockets-external", path: componentPath, skipInstantiation: true },
-                jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
-            });
-            try {
-                const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
-                const output = await exec(runner, esModuleOutputPath, "external");
-                const report = JSON.parse(output.stdout);
-                expect(report.external).toMatchObject({ status: 200, contentType: "application/json" });
-                expect(JSON.parse(report.external.body).data).toBe("client");
-            } finally {
-                await cleanup();
-            }
-        },
-        600_000,
-    );
+    test.skip("runs the component against the public nghttp2.org h2c server", async () => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-http2",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "quickjs", "--with-nodejs-http2-via", "wasi-sockets"],
+        });
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http2-wasi-sockets-external", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
+        });
+        try {
+            const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
+            const output = await exec(runner, esModuleOutputPath, "external");
+            const report = JSON.parse(output.stdout);
+            expect(report.external).toMatchObject({ status: 200, contentType: "application/json" });
+            expect(JSON.parse(report.external.body).data).toBe("client");
+        } finally {
+            await cleanup();
+        }
+    }, 600_000);
 
     // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
     test.skip("componentizes idiomatic client and server code through the direct boundary", async () => {
