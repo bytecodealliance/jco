@@ -841,31 +841,22 @@ jco componentize component.js --wit wit --bundle \
 | `wasi-sockets`     | Cleartext prior-knowledge HTTP/2 (`h2c`) clients and TCP servers, with guest-side framing, HPACK, settings, ping, reset, and stream/connection flow control. |
 | `wasi-http`        | Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.                 |
 
-Direct mode models sessions, streams, and servers as typed host-owned WIT
-resources. Stream and server-error callbacks are separate guest-owned resources
-on the exported `jco:node/http2-callbacks@0.1.0` interface. Jco adds only missing
-imports and exports to the selected world and re-bundles the entry with the guest
-callback implementation on the final component export. It installs the matching
-WIT source, adds generated comments, and warns about each visible change. Aliased
-existing declarations are recognized and repeated runs are idempotent.
 
-The default provider rejects both `connect()` and server construction with
-`ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Mapping the import to
-`@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node` opts in to
-Node's real provider. Async connection, stream completion, settings, ping,
-listen, and close operations use JSPI, not workers. Bodies are currently
-buffered; low-level sockets, priority, push, flow-control windows, and operations
-that cannot cross the boundary throw explicit errors. Constants and settings
-packing are capability-free in every mode.
+By default, the provider rejects both `connect()` and server construction with
+`ERR_JCO_HTTP2_ADAPTER_REQUIRED`.
 
-Raw TCP is sufficient to carry every HTTP/2 frame and therefore the complete
-cleartext protocol. It is not, by itself, an HTTPS transport: negotiating `h2`
-for an `https:` authority also requires TLS and ALPN plus certificate/trust,
-entropy, and time facilities. The `wasi-sockets` provider currently rejects that
-secure path. It also deliberately omits server push, HTTP/1.1 `Upgrade: h2c`,
+`direct` mode models sessions, streams, and servers as typed host-owned WIT
+resources, with a passthrough implementation to NodeJS underneath. The WIT
+interface used is `jco:node/http2-callbacks@0.1.0`.
+
+> [!NOTE]
+> Under WASI p2, Bodies are currently buffered; low-level sockets, priority,
+> push, flow-control windows, and operations that cannot cross the boundary
+> throw explicit errors.
+
+The `wasi:sockets` implementation also deliberately omits server push, HTTP/1.1 `Upgrade: h2c`,
 Unix-domain sockets, and Node's arbitrary `createConnection`/custom duplex
-transport hooks. These are adapter coverage or capability-boundary gaps, not a
-reason that core HTTP/2 cannot run over WASI TCP.
+transport hooks.
 
 ### Buffer
 
