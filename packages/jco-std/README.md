@@ -643,7 +643,6 @@ server.listen(8080, "127.0.0.1");
 
 You can select the `node:http` implementation with `--with-nodejs-http2-via`:
 
-
 ```console
 jco componentize component.js \
   --wit wit \
