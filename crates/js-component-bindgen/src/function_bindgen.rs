@@ -3228,7 +3228,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 let result_var = format!("futureResult{tmp}");
 
                 // Optionally preform the lift for the future in question
-                match (self.is_async, self.for_import.unwrap_or_default()) {
+                match (
+                    self.canonical_abi_async,
+                    self.for_import.unwrap_or_default(),
+                ) {
                     // It is possible for lifting to be called both at the *start* and *end* of
                     // a given function depending on how it called:
                     //
@@ -3542,7 +3545,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 let result_var = format!("streamResult{tmp}");
 
                 // Optionally preform the lift for the stream in question
-                match (self.is_async, self.for_import.unwrap_or_default()) {
+                match (
+                    self.canonical_abi_async,
+                    self.for_import.unwrap_or_default(),
+                ) {
                     // It is possible for lifting to be called both at the *start* and *end* of
                     // a given function depending on how it called:
                     //

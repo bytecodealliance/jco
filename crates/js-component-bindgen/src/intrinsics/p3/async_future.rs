@@ -1641,15 +1641,15 @@ impl AsyncFutureIntrinsic {
                     ) {{
                         {debug_log_fn}('[{future_cancel_fn}()] args', {{
                             ctx,
-                            futureEndIdx,
+                            futureEndWaitableIdx,
                         }});
                         const {{ componentIdx, futureTableIdx, isAsync }} = ctx;
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx: futureEndIdx }});
-                        if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndIdx}}]`); }}
+                        const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
+                        if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new Error('invalid future end, expected value of type [{future_end_class}]');
                         }}
@@ -1657,6 +1657,15 @@ impl AsyncFutureIntrinsic {
                         if (!futureEnd.isCopying()) {{ throw new Error('future end is not copying, cannot cancel'); }}
 
                         futureEnd.setCopyState({future_end_class}.CopyState.CANCELLING_COPY);
+
+                        const finishCancel = () => {{
+                            const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
+                            if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
+                            if (code !== {event_code}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {event_code} + ']'); }}
+                            if (index !== futureEndWaitableIdx) {{ throw new Error('index does not match future end'); }}
+
+                            return payload;
+                        }};
 
                         if (!futureEnd.hasPendingEvent()) {{
                             futureEnd.cancel();
@@ -1666,16 +1675,13 @@ impl AsyncFutureIntrinsic {
 
                                 const taskMeta = {current_task_get_fn}(componentIdx);
                                 if (!taskMeta?.task) {{ throw new Error('missing current task while cancelling future'); }}
-                                await taskMeta.task.suspendUntil({{ readyFn: () => futureEnd.hasPendingEvent() }});
+                                return taskMeta.task
+                                    .suspendUntil({{ readyFn: () => futureEnd.hasPendingEvent() }})
+                                    .then(finishCancel);
                             }}
                         }}
 
-                        const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
-                        if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
-                        if (code !== {event_code}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {event_code} + ']'); }}
-                        if (index !== futureEndIdx) {{ throw new Error('index does not match future end'); }}
-
-                        return payload;
+                        return finishCancel();
                     }}
                 "#));
             }
