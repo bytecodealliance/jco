@@ -11,7 +11,8 @@ import { readComponentBytes } from './helpers.js';
 // - (2025/02/04) increased due to stabilization changes for async tasks
 // - (2025/12/16) increased due to additional async impl
 // - (2026/07/02) increased due to async launch (and actually enabling the tests)
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 190_000;
+// - (2026/09/04) increased due to per-component trap poisoning
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 191_000;
 
 suite('Transpile', async () => {
     const flavorfulWasmBytes = await readComponentBytes(
