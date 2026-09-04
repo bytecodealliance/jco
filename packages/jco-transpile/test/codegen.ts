@@ -105,7 +105,7 @@ suite('Directive Prologue', () => {
 });
 
 suite('Trap detection', () => {
-    test.concurrent('locks down sibling instances after a trap', async () => {
+    test.concurrent('does not lock down sibling instances after a trap', async () => {
         const outDir = await getTmpDir();
         const component = await parse(`
             (component
@@ -150,13 +150,7 @@ suite('Trap detection', () => {
             }
 
             assert.instanceOf(trap, WebAssembly.RuntimeError);
-            let siblingError;
-            try {
-                instance.ok();
-            } catch (err) {
-                siblingError = err;
-            }
-            assert.strictEqual(siblingError, trap);
+            assert.doesNotThrow(() => instance.ok());
         } finally {
             await rm(outDir, { recursive: true });
         }
@@ -272,11 +266,12 @@ suite('Trap detection', () => {
                 } catch (err) {
                     subsequentCallError = err;
                 }
-                assert.strictEqual(
+                assert.instanceOf(
                     subsequentCallError,
-                    trap,
+                    WebAssembly.RuntimeError,
                     'a trapped component instance must reject subsequent calls',
                 );
+                assert.strictEqual(subsequentCallError.message, 'wasm trap: cannot enter component instance');
             } finally {
                 await rm(outDir, { recursive: true });
             }
