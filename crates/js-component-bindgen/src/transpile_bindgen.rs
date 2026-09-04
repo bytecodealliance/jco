@@ -1908,7 +1908,7 @@ impl<'a> Instantiator<'a, '_> {
                         getMemoryFn: () => memory{memory_idx},
                     }});
                     const trampoline{i} = {conditional_suspending_fn}(
-                        {suspending_wrap_fn}({instance_idx}, (waitableSetRep, resultPtr) => trampoline{i}Wait(waitableSetRep, resultPtr, true)),
+                        {suspending_wrap_fn}({instance_idx}, (waitableSetRep, resultPtr) => trampoline{i}Wait(waitableSetRep, resultPtr, true), true),
                         {suspending_wrap_fn}({instance_idx}, trampoline{i}Wait),
                     );
                     "#,

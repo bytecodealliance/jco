@@ -1201,7 +1201,7 @@ impl Intrinsic {
 
                 output.push_str(&format!(
                     r#"
-                      function {suspending_import_wrapper_fn}(componentIdx, fn) {{
+                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false) {{
                           return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
@@ -1216,7 +1216,7 @@ impl Intrinsic {
                                   throw new {runtime_error_class}('cannot block a synchronous task before returning');
                               }}
 
-                              if (!mayBlock) {{
+                              if (syncOnly || !mayBlock) {{
                                   let result;
                                   try {{
                                       result = fn.apply(null, args);
@@ -1562,11 +1562,12 @@ mod tests {
         let source = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
 
         assert!(source.contains("return function (...args) {"));
+        assert!(source.contains("syncOnly = false"));
         assert!(
             source.contains("? (savedTask?.mayBlock() ?? (CURRENT_TASK_MAY_BLOCK.value !== 0))")
         );
         assert!(source.contains(": false;"));
-        assert!(source.contains("if (!mayBlock) {"));
+        assert!(source.contains("if (syncOnly || !mayBlock) {"));
 
         assert!(!source.contains("return async function (...args) {"));
         assert!(source.contains("if (!saved && !mayBlock) {"));
@@ -1574,7 +1575,7 @@ mod tests {
         assert!(source.contains("result = fn.apply(null, args);"));
         assert!(source.contains("typeof result.then === 'function'"));
         assert!(source.contains("Promise.resolve(result).catch(() => {});"));
-        assert!(source.contains("if (!mayBlock) {"));
+        assert!(source.contains("if (syncOnly || !mayBlock) {"));
         assert!(source.contains(
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
