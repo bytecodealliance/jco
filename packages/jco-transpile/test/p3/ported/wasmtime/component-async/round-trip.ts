@@ -10,7 +10,7 @@ import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from './common.js';
 // wasmtime/crates/misc/component-async-tests/tests/scenario/round_trip_direct.rs
 //
 suite('round-trip scenario', () => {
-    test.skip('direct stackless', async () => {
+    test('direct stackless', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -45,7 +45,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('many stackless', async () => {
+    test('many stackless', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -80,7 +80,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('many synchronous', async () => {
+    test('many synchronous', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -115,7 +115,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('many wait', async () => {
+    test('many wait', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -150,7 +150,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('wait', async () => {
+    test('wait', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -185,7 +185,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('stackless sync import', async () => {
+    test('stackless sync import', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -223,7 +223,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('indirect stackless', async () => {
+    test('indirect stackless', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -258,7 +258,7 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test.skip('synchronous', async () => {
+    test('synchronous', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({

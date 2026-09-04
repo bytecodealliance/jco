@@ -10,7 +10,7 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from '
 // wasmtime/crates/misc/component-async-tests/tests/scenario/transmit.rs
 // (`test_cancel` / `test_cancel_trap`)
 //
-// NOTE: these remain skipped because the `async-cancel-caller` fixture is
+// NOTE: these were skipped because the `async-cancel-caller` fixture is
 // hand-rolled ABI code that asserts wasmtime's scheduling model, which jco's
 // runtime does not currently provide:
 //
@@ -39,7 +39,7 @@ suite('cancel scenario', () => {
         });
     });
 
-    test.skip('normal', async () => {
+    test('normal', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -77,7 +77,7 @@ suite('cancel scenario', () => {
         }
     });
 
-    test.skip('trap', async () => {
+    test('trap', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
@@ -118,7 +118,7 @@ suite('cancel scenario', () => {
         }
     });
 
-    test.skip('cancel transmit', async () => {
+    test('cancel transmit', async () => {
         // test_synchronous_transmit
         // https://github.com/bytecodealliance/wasmtime/blob/aa140a1879828e8d595d5400566d2291bdeeb3f9/crates/misc/component-async-tests/tests/scenario/transmit.rs#L910
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/cancellation/async-cancel-transmit.wasm');

@@ -10,7 +10,7 @@ import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from './common.js';
 // wasmtime/crates/misc/component-async-tests/tests/scenario/streams.rs
 //
 suite('short reads scenario', () => {
-    test.skip('component', async () => {
+    test('component', async () => {
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-short-reads.wasm');
         let cleanup;
         try {
