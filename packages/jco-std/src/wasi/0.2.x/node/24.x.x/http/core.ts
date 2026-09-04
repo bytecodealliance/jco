@@ -50,7 +50,7 @@ export interface NodeHttpModule {
   WebSocket: RuntimeConstructor;
   _connectionListener: typeof connectionListener;
   createServer: (
-    optionsOrListener?: ServerOptions | RequestListener,
+    optionsOrListener?: ServerOptions | RequestListener | null,
     listener?: RequestListener,
   ) => ServerBase;
   get: (
@@ -96,7 +96,7 @@ export function createHttp(implementation: HttpImplementation): NodeHttpModule {
   }
 
   function createServer(
-    optionsOrListener: ServerOptions | RequestListener = {},
+    optionsOrListener: ServerOptions | RequestListener | null = {},
     listener?: RequestListener,
   ): ServerBase {
     return new Server(optionsOrListener, listener);

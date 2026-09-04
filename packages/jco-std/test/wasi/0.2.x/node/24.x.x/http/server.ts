@@ -1,3 +1,5 @@
+import nodeHttp from "node:http";
+
 import { describe, expect, test, vi } from "vitest";
 
 import { createHttp } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/core.js";
@@ -102,6 +104,28 @@ describe("node:http Server", () => {
     const backend = serverImplementation();
     const http = createHttp(backend.implementation);
     expect(new http.Server()).toBeInstanceOf(http.Server);
+    expect(new http.Server(null)).toBeInstanceOf(http.Server);
+    expect(new http.Server(null, () => undefined).listenerCount("request")).toBe(1);
+  });
+
+  test("rejects a non-object options argument the way Node does", () => {
+    const backend = serverImplementation();
+    const http = createHttp(backend.implementation);
+    for (const value of ["8080", 8080, true]) {
+      let native: unknown;
+      try {
+        nodeHttp.createServer(value as never);
+      } catch (error) {
+        native = error;
+      }
+      expect(native).toMatchObject({ code: "ERR_INVALID_ARG_TYPE" });
+      expect(() => http.createServer(value as never)).toThrow(
+        expect.objectContaining({
+          code: "ERR_INVALID_ARG_TYPE",
+          message: (native as Error).message,
+        }),
+      );
+    }
   });
 
   test("rejects server operations the buffered boundary cannot represent", async () => {
