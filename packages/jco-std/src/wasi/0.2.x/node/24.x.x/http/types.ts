@@ -3,7 +3,13 @@ import type { HostErrno, HostErrorBase } from "../internal/wit-types.js";
 export type HttpHeaderValue = string | number | readonly string[];
 export type HttpHeaders = Record<string, HttpHeaderValue | undefined>;
 
-export interface HttpRequestOptions {
+/**
+ * `http.request` options plus the TLS options `https.request` accepts.
+ *
+ * The TLS members are read only by the `node:https` profile; `node:http` ignores them the way
+ * Node's `net.connect` does.
+ */
+export interface HttpRequestOptions extends HttpTlsOptions {
   protocol?: string;
   host?: string | null;
   hostname?: string | null;
@@ -31,6 +37,70 @@ export interface HttpRequestOptions {
 
 export interface AgentLike {
   readonly options: Readonly<Record<string, unknown>>;
+  readonly defaultPort?: number;
+}
+
+/** PEM, DER, or PFX material as Node's TLS options accept it. */
+export type TlsMaterial = string | ArrayBufferView | ArrayBuffer;
+
+/**
+ * The subset of Node's `tls.createServer` / `tls.connect` options the typed WIT boundary
+ * carries.
+ *
+ * Follows nodejs/node v24.19.0, commit cdc1b38d40cb567b7ad0b39c86addf830a0af0ae,
+ * lib/_tls_common.js `configSecureContext` and lib/_tls_wrap.js. Options with no serializable
+ * representation (`secureContext`, `SNICallback`, `ALPNCallback`, `checkServerIdentity`,
+ * engine identifiers, sessions, ticket keys) are refused by `tlsMaterial()` rather than
+ * silently dropped.
+ */
+export interface HttpTlsOptions {
+  key?: TlsMaterial | readonly TlsMaterial[];
+  cert?: TlsMaterial | readonly TlsMaterial[];
+  pfx?: TlsMaterial | readonly TlsMaterial[];
+  passphrase?: string;
+  ca?: TlsMaterial | readonly TlsMaterial[];
+  crl?: TlsMaterial | readonly TlsMaterial[];
+  dhparam?: TlsMaterial;
+  ciphers?: string;
+  ecdhCurve?: string;
+  sigalgs?: string;
+  minVersion?: string;
+  maxVersion?: string;
+  secureProtocol?: string;
+  secureOptions?: number;
+  sessionIdContext?: string;
+  honorCipherOrder?: boolean;
+  ALPNProtocols?: readonly string[] | TlsMaterial;
+  servername?: string;
+  rejectUnauthorized?: boolean;
+  requestCert?: boolean;
+}
+
+/**
+ * Normalized TLS material handed to an implementation; mirrors the `tls-options` record of
+ * `jco:node/http@0.1.0` field for field.
+ */
+export interface HttpTlsMaterial {
+  key?: Uint8Array[];
+  cert?: Uint8Array[];
+  pfx?: Uint8Array[];
+  passphrase?: string;
+  ca?: Uint8Array[];
+  crl?: Uint8Array[];
+  dhparam?: Uint8Array;
+  ciphers?: string;
+  ecdhCurve?: string;
+  sigalgs?: string;
+  minVersion?: string;
+  maxVersion?: string;
+  secureProtocol?: string;
+  secureOptions?: number;
+  sessionIdContext?: string;
+  honorCipherOrder?: boolean;
+  alpnProtocols?: string[];
+  servername?: string;
+  rejectUnauthorized?: boolean;
+  requestCert?: boolean;
 }
 
 export type HttpBodyChunk = string | ArrayBuffer | ArrayBufferView;
@@ -50,6 +120,8 @@ export interface HttpImplementationRequest {
   connectTimeoutMs?: number;
   firstByteTimeoutMs?: number;
   betweenBytesTimeoutMs?: number;
+  /** Client TLS configuration; only ever set by `node:https`, and only when options carry some. */
+  tls?: HttpTlsMaterial;
 }
 
 export interface HttpImplementationResponse {
@@ -93,6 +165,12 @@ export interface HttpServerOptions {
   highWaterMark?: number;
   insecureHTTPParser?: boolean;
   uniqueHeaders?: Array<string | string[]>;
+  /**
+   * Present for every `node:https` server, even when no material was supplied, so that an
+   * implementation without a TLS stack refuses instead of serving plaintext. Absent for
+   * `node:http` servers.
+   */
+  tls?: HttpTlsMaterial;
   [name: string]: unknown;
 }
 
@@ -200,6 +278,7 @@ export interface DirectHttpRequest {
   connectTimeoutMs?: number;
   firstByteTimeoutMs?: number;
   betweenBytesTimeoutMs?: number;
+  tls?: DirectTlsOptions;
 }
 
 export interface DirectHttpResponse {
@@ -211,6 +290,9 @@ export interface DirectHttpResponse {
 }
 
 export type DirectHttpResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: DirectHttpError };
+
+/** The `tls-options` record of `jco:node/http@0.1.0`. */
+export type DirectTlsOptions = HttpTlsMaterial;
 
 export interface DirectHttpServerOptions {
   requestTimeout?: number;
@@ -226,6 +308,7 @@ export interface DirectHttpServerOptions {
   keepAliveInitialDelay?: number;
   rejectNonStandardBodyWrites?: boolean;
   optimizeEmptyRequests?: boolean;
+  tls?: DirectTlsOptions;
 }
 
 export interface DirectHttpListenOptions {

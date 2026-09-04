@@ -2,11 +2,16 @@
  * Opt-in Node.js HTTP provider.
  *
  * The operation mapping follows nodejs/node v24.19.0, commit
- * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/http.js and
+ * cdc1b38d40cb567b7ad0b39c86addf830a0af0ae, lib/http.js, lib/https.js, and
  * lib/_http_client.js (MIT license). The Node stream lifecycle is adapted to
- * one buffered, typed WIT request/response exchange.
+ * one buffered, typed WIT request/response exchange. Requests with the `https`
+ * scheme and servers carrying a `tls` record go through real `node:https`, so
+ * TLS is terminated by the host's own stack.
  */
+import { Buffer } from "node:buffer";
 import * as nodeHttp from "node:http";
+import * as nodeHttps from "node:https";
+import type * as nodeTls from "node:tls";
 
 import {
   fieldsToRawHeaders,
@@ -22,9 +27,55 @@ import type {
   DirectHttpServerAddress,
   DirectHttpServerConstructor,
   DirectHttpServerOptions,
+  DirectTlsOptions,
 } from "./http/types.js";
 type AsyncResult<T> = Promise<DirectHttpResult<T>>;
 type Timer = ReturnType<typeof setTimeout>;
+
+type NodeTlsOptions = nodeTls.SecureContextOptions &
+  Pick<nodeTls.TlsOptions, "ALPNProtocols" | "requestCert" | "rejectUnauthorized"> &
+  Pick<nodeTls.ConnectionOptions, "servername">;
+
+function buffers(values: Uint8Array[]): Buffer[] {
+  return values.map((value) => Buffer.from(value));
+}
+
+/**
+ * Maps the WIT `tls-options` record onto the option names `node:tls` reads.
+ *
+ * Only present fields are copied, so Node applies its own defaults for the rest exactly as it
+ * would for a native caller.
+ */
+function nodeTlsOptions(tls: DirectTlsOptions): NodeTlsOptions {
+  const options: NodeTlsOptions = {
+    key: tls.key && buffers(tls.key),
+    cert: tls.cert && buffers(tls.cert),
+    pfx: tls.pfx && buffers(tls.pfx),
+    passphrase: tls.passphrase,
+    ca: tls.ca && buffers(tls.ca),
+    crl: tls.crl && buffers(tls.crl),
+    dhparam: tls.dhparam && Buffer.from(tls.dhparam),
+    ciphers: tls.ciphers,
+    ecdhCurve: tls.ecdhCurve,
+    sigalgs: tls.sigalgs,
+    minVersion: tls.minVersion as nodeTls.SecureVersion | undefined,
+    maxVersion: tls.maxVersion as nodeTls.SecureVersion | undefined,
+    secureProtocol: tls.secureProtocol,
+    secureOptions: tls.secureOptions,
+    sessionIdContext: tls.sessionIdContext,
+    honorCipherOrder: tls.honorCipherOrder,
+    ALPNProtocols: tls.alpnProtocols,
+    servername: tls.servername,
+    rejectUnauthorized: tls.rejectUnauthorized,
+    requestCert: tls.requestCert,
+  };
+  for (const [name, value] of Object.entries(options)) {
+    if (value === undefined) {
+      delete options[name as keyof NodeTlsOptions];
+    }
+  }
+  return options;
+}
 
 function timeoutError(syscall: string): Error & { code: string; syscall: string } {
   return Object.assign(new Error(`HTTP ${syscall} timed out`), {
@@ -42,12 +93,16 @@ export async function request(options: DirectHttpRequest): AsyncResult<DirectHtt
       clearTimeout(firstByteTimer);
       resolve(result);
     };
-    const request = nodeHttp.request(
+    // lib/https.js `request` is lib/_http_client.js with the https agent and tls.connect, so
+    // the scheme selects the module and the TLS record becomes its connect options.
+    const client = options.scheme === "https" ? nodeHttps : nodeHttp;
+    const request = client.request(
       new URL(`${options.scheme}://${options.authority}${options.pathWithQuery}`),
       {
         method: options.method,
         headers: fieldsToRawHeaders(options.headers),
         joinDuplicateHeaders: true,
+        ...(options.tls === undefined ? {} : nodeTlsOptions(options.tls)),
       },
       (response) => {
         clearTimeout(connectTimer);
@@ -135,11 +190,22 @@ function serverAddress(
 
 class NodeHttpServer {
   readonly #listener: DirectHttpRequestListener;
-  readonly #server: nodeHttp.Server;
+  readonly #server: nodeHttp.Server | nodeHttps.Server;
 
   constructor(options: DirectHttpServerOptions, listener: DirectHttpRequestListener) {
     this.#listener = listener;
-    this.#server = nodeHttp.createServer(nodeServerOptions(options), async (request, response) => {
+    // A `tls` record, even an empty one, means the guest constructed an https.Server; Node's
+    // own https.Server accepts a missing certificate at construction and fails the handshake.
+    const create =
+      options.tls === undefined
+        ? (handler: nodeHttp.RequestListener) =>
+            nodeHttp.createServer(nodeServerOptions(options), handler)
+        : (handler: nodeHttp.RequestListener) =>
+            nodeHttps.createServer(
+              { ...nodeServerOptions(options), ...nodeTlsOptions(options.tls!) },
+              handler,
+            );
+    this.#server = create(async (request, response) => {
       try {
         const chunks: Uint8Array[] = [];
         for await (const chunk of request) {
