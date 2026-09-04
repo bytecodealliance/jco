@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ef17ccf.js";
+            window.path_to_searchindex_js = "../searchindex-2c51b535.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -283,6 +283,11 @@ to the host; and</li>
 <code>jco:node/http@0.1.0</code>, Preview 2 <code>wasi:sockets</code>, or Preview 2 <code>wasi:http</code>
 implementation. The direct provider denies access by default, direct and
 <code>wasi:sockets</code> support servers, and <code>wasi:http</code> rejects server construction;</li>
+<li>the <code>node:http2</code> settings API plus typed session, stream, and server resources.
+Its direct provider delegates to real Node HTTP/2 after explicit host mapping;
+<code>wasi-sockets</code> implements cleartext prior-knowledge HTTP/2 clients and TCP
+servers in the guest, while <code>wasi-http</code> rejects session and server operations
+whose semantics an individual-request interface cannot preserve;</li>
 <li><code>node:stream/consumers</code>, implemented as portable iterable collection over the
 engine’s Blob, typed-array, and text-codec globals; and</li>
 <li>the experimental Node 24.20 <code>node:stream/iter</code> API, including portable sources,

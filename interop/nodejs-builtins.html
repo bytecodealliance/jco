@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ef17ccf.js";
+            window.path_to_searchindex_js = "../searchindex-2c51b535.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -611,19 +611,19 @@ must itself be Node 26 started with <code>--experimental-ffi</code>.</p>
 than a missing-module error.</p>
 </blockquote>
 <p>using the load-call-read-write cycle would look something liek this:</p>
-<pre><code class="language-js">import { DynamicLibrary, exportString, getInt32, setInt32, toString } from "node:ffi";
+<pre><code class="language-js">import { DynamicLibrary, exportString, getInt32, setInt32, toString } from 'node:ffi';
 
 // null resolves symbols from the host process image, which links libc.
 const lib = new DynamicLibrary(null);
-const malloc = lib.getFunction("malloc", { arguments: ["uint64"], return: "pointer" });
-const strlen = lib.getFunction("strlen", { arguments: ["pointer"], return: "uint64" });
+const malloc = lib.getFunction('malloc', { arguments: ['uint64'], return: 'pointer' });
+const strlen = lib.getFunction('strlen', { arguments: ['pointer'], return: 'uint64' });
 
 const pointer = malloc(64n);
 setInt32(pointer, 0, 123456);
-getInt32(pointer, 0);          // 123456, read back out of host memory
-exportString("hello ffi", pointer, 64);
-strlen(pointer);               // 9n -- native code reading what the guest wrote
-toString(pointer);             // "hello ffi"
+getInt32(pointer, 0); // 123456, read back out of host memory
+exportString('hello ffi', pointer, 64);
+strlen(pointer); // 9n -- native code reading what the guest wrote
+toString(pointer); // "hello ffi"
 </code></pre>
 <p>Pointers cross as <code>bigint</code>, matching NodeJS.</p>
 <p>Errors keep NodeJS’s own codes, so <code>ERR_FFI_LIBRARY_CLOSED</code> and friends behave as they would on Node.</p>
@@ -653,9 +653,9 @@ the host – or on the first read of <code>ffi.suffix</code>, which syncs before
 the documented <code>dlopen(`./lib.${suffix}`)</code> idiom.</p>
 <p>The host adapter therefore lets the application set it, which is the reliable way to
 serve a guest that names <code>.dylib</code> or <code>.dll</code> files:</p>
-<pre><code class="language-js">import { setSuffix } from "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node";
+<pre><code class="language-js">import { setSuffix } from '@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host/node';
 
-setSuffix("dylib");   // before instantiating the component
+setSuffix('dylib'); // before instantiating the component
 </code></pre>
 <p>Note that you may not need to change the suffix if the runtime already has it set properly, as
 <code>suffix</code> defaults to the runtime’s own <code>ffi.suffix</code>.</p>
@@ -852,6 +852,52 @@ connections.</p>
 <p>Connection pooling, upgrades, CONNECT tunnels, and HTTPS are explicit gaps.
 Unavailable operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> rather than silently
 doing nothing.</p>
+<h3 id="http2"><a class="header" href="#http2">HTTP/2</a></h3>
+<p>Client and server code uses Node’s normal session and stream APIs:</p>
+<pre><code class="language-js">import { connect, createServer } from 'node:http2';
+
+export function requestStatus(authority) {
+    const session = connect(authority);
+    const stream = session.request({ ':path': '/status' });
+    stream.end();
+    return session;
+}
+
+export const server = createServer((request, response) =&gt; {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end(`received ${request.url}`);
+});
+</code></pre>
+<p>Select its implementation independently:</p>
+<pre><code class="language-console">jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http2-via direct -o component.wasm
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Value</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td><code>direct</code> (default)</td><td>Typed <code>jco:node/http2@0.1.0</code>, denied by default; an opt-in Node host uses real h2c and TLS/ALPN clients and servers.</td></tr>
+<tr><td><code>wasi-sockets</code></td><td>Cleartext prior-knowledge HTTP/2 (<code>h2c</code>) clients and TCP servers, with guest-side framing, HPACK, settings, ping, reset, and stream/connection flow control.</td></tr>
+<tr><td><code>wasi-http</code></td><td>Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.</td></tr>
+</tbody>
+</table>
+</div>
+<p>By default, the provider rejects both <code>connect()</code> and server construction with
+<code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>.</p>
+<p><code>direct</code> mode models sessions, streams, and servers as typed host-owned WIT
+resources, with a passthrough implementation to NodeJS underneath. The WIT
+interface used is <code>jco:node/http2-callbacks@0.1.0</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Under WASI p2, Bodies are currently buffered; low-level sockets, priority,
+push, flow-control windows, and operations that cannot cross the boundary
+throw explicit errors.</p>
+</blockquote>
+<p>The <code>wasi:sockets</code> implementation also deliberately omits server push, HTTP/1.1 <code>Upgrade: h2c</code>,
+Unix-domain sockets, and Node’s arbitrary <code>createConnection</code>/custom duplex
+transport hooks.</p>
 <h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
 <p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
 <a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
