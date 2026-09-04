@@ -24,7 +24,7 @@
         (i32.wrap_i64 (local.get $ret64))
       )
       (func $write4 (export "write4")
-        ;; write 6 bytes into the stream, expecting to rendezvous with a stream.read
+        ;; write 4 bytes into the stream, expecting to rendezvous with a stream.read
         (local $ret i32)
         (i32.store (i32.const 8) (i32.const 0x12345678))
         (local.set $ret (call $stream.write (global.get $sw) (i32.const 8) (i32.const 4)))
@@ -49,7 +49,7 @@
     )
     (type $ST (stream u8))
     (canon stream.new $ST (core func $stream.new))
-    (canon stream.write $ST async (memory $memory "mem") (core func $stream.write))
+    (canon stream.write $ST async (memory (core memory $memory "mem")) (core func $stream.write))
     (canon stream.drop-writable $ST (core func $stream.drop-writable))
     (core instance $cm (instantiate $CM (with "" (instance
       (export "mem" (memory $memory "mem"))
@@ -126,8 +126,8 @@
     )
     (type $ST (stream u8))
     (canon stream.new $ST (core func $stream.new))
-    (canon stream.read $ST async (memory $memory "mem") (core func $stream.read))
-    (canon stream.write $ST async (memory $memory "mem") (core func $stream.write))
+    (canon stream.read $ST async (memory (core memory $memory "mem")) (core func $stream.read))
+    (canon stream.write $ST async (memory (core memory $memory "mem")) (core func $stream.write))
     (canon stream.drop-readable $ST (core func $stream.drop-readable))
     (canon stream.drop-writable $ST (core func $stream.drop-writable))
     (canon lower (func $c "start-stream") (core func $start-stream'))
