@@ -149,6 +149,17 @@ function method(value: string): WasiHttpMethod {
     : { tag: "other", val: value };
 }
 
+function scheme(value: string): WasiHttpScheme {
+  switch (value) {
+    case "http":
+      return { tag: "HTTP" };
+    case "https":
+      return { tag: "HTTPS" };
+    default:
+      return { tag: "other", val: value };
+  }
+}
+
 function duration(milliseconds: number | undefined): bigint | undefined {
   return milliseconds === undefined ? undefined : BigInt(milliseconds) * 1_000_000n;
 }
@@ -229,6 +240,12 @@ export function createWasiHttpImplementation(provider: WasiHttpProvider): HttpIm
       "wasi:http outgoing-handler cannot accept arbitrary inbound HTTP connections",
 
     request(request) {
+      if (request.tls !== undefined) {
+        unsupported(
+          `${request.scheme}.request TLS options with the wasi-http implementation`,
+          "wasi:http/outgoing-handler owns certificate validation and cannot take per-request TLS configuration",
+        );
+      }
       try {
         const host = request.headers.find(({ name }) => name.toLowerCase() === "host");
         if (
@@ -250,9 +267,7 @@ export function createWasiHttpImplementation(provider: WasiHttpProvider): HttpIm
         );
         const outgoing = new provider.types.OutgoingRequest(fields);
         outgoing.setMethod(method(request.method));
-        outgoing.setScheme(
-          request.scheme === "http" ? { tag: "HTTP" } : { tag: "other", val: request.scheme },
-        );
+        outgoing.setScheme(scheme(request.scheme));
         outgoing.setAuthority(request.authority);
         outgoing.setPathWithQuery(request.pathWithQuery);
         const body = outgoing.body();
