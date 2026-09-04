@@ -78,7 +78,10 @@ program
     .option("--bundle", "bundle source and its dependencies before componentization (automatic for TypeScript)")
     .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
     .addOption(
-        new Option("--with-nodejs-http-via <implementation>", "implementation used by bundled node:http code")
+        new Option(
+            "--with-nodejs-http-via <implementation>",
+            "implementation used by bundled node:http and node:https code",
+        )
             .choices(["direct", "wasi-sockets", "wasi-http"])
             .default("direct"),
     )
