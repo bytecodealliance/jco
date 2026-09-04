@@ -28,6 +28,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/fs`                      | `node:fs` and `node:fs/promises` over an explicit host capability             |
 | `wasi/0.2.x/node/24.x.x/http`                    | `node:http` API with direct, WASI sockets, and WASI HTTP implementations      |
 | `wasi/0.2.x/node/24.x.x/http2`                   | `node:http2` API with direct and cleartext WASI sockets implementations       |
+| `wasi/0.2.x/node/24.x.x/https`                   | `node:https` API sharing the `node:http` core and implementations             |
 | `wasi/0.2.x/node/24.x.x/os`                      | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                    | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/string-decoder`          | Guest-local `node:string_decoder` implementation for Node 24                  |
@@ -63,7 +64,8 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 | `wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets`  | `node:http` implementation over WASI Preview 2 sockets                        |
 | `wasi/0.2.x/node/24.x.x/http/impl/wasi-http`     | `node:http` implementation over WASI Preview 2 HTTP                           |
 | `wasi/0.2.x/node/24.x.x/http/host`               | Deny-by-default host for `jco:node/http`                                      |
-| `wasi/0.2.x/node/24.x.x/http/host/node`          | Opt-in host over the runtime's real `node:http`                               |
+| `wasi/0.2.x/node/24.x.x/http/host/node`          | Opt-in host over the runtime's real `node:http` and `node:https`              |
+| `wasi/0.2.x/node/24.x.x/https/core`              | `node:https` core shared by the selectable implementations                    |
 | `wasi/0.2.x/node/24.x.x/os/host`                 | Deny-by-default host for `jco:node/os`                                        |
 | `wasi/0.2.x/node/24.x.x/os/host/node`            | Opt-in host over the runtime's real `node:os`                                 |
 | `node/path`                                      | Legacy unversioned alias for `wasi/0.2.x/node/24.x.x/path`                    |
@@ -146,8 +148,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector` and the
   application-provided `jco:node/inspector@0.1.0` capability, with the host
   calling back into the component through a guest-exported callbacks interface;
-- the `node:http` API, with selectable direct, `wasi:sockets`, and `wasi:http`
-  implementations;
+- the `node:http` and `node:https` APIs, with selectable direct,
+  `wasi:sockets`, and `wasi:http` implementations;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
@@ -577,7 +579,19 @@ const server = createServer((request, response) => {
 server.listen(8080, "127.0.0.1");
 ```
 
-Bundle it and select how `node:http` reaches the host:
+`node:https` is the same core with the `https:` profile, port 443, and a
+TLS-aware `Agent`. Servers take Node's TLS options and clients take the
+`tls.connect` subset (`ca`, `cert`, `key`, `rejectUnauthorized`, `servername`,
+`ALPNProtocols`, and so on), which cross the boundary as a typed record:
+
+```js
+import { createServer, get } from "node:https";
+
+createServer({ key, cert }, (request, response) => response.end("secure")).listen(8443);
+get("https://localhost:8443/", { ca: cert }, (response) => response.resume());
+```
+
+Bundle it and select how `node:http` and `node:https` reach the host:
 
 ```console
 jco componentize component.js --wit wit --bundle \
@@ -589,12 +603,17 @@ jco componentize component.js --wit wit --bundle \
 - `direct` (the default), which adds `jco:node/http@0.1.0`; its default provider
   throws `ERR_JCO_HTTP_ADAPTER_REQUIRED`, and a Node application can explicitly
   map `wasi/0.2.x/node/24.x.x/http/host/node` when transpiling. It supports
-  clients and servers through real `node:http`;
+  clients and servers through real `node:http`, and terminates TLS for
+  `node:https` through real `node:https`;
 - `wasi-sockets`, which implements HTTP/1.1 in the guest using only Preview 2
-  socket and IO capabilities, including TCP servers; and
+  socket and IO capabilities, including TCP servers. It has no TLS stack, so
+  `node:https` clients and servers are refused rather than served in
+  plaintext; and
 - `wasi-http`, which translates requests to Preview 2
-  `wasi:http/outgoing-handler`. It rejects `Server` construction immediately
-  because an outgoing-handler cannot listen for arbitrary inbound connections.
+  `wasi:http/outgoing-handler`, including `https` URLs, though per-request TLS
+  options are refused because the outgoing-handler owns certificate
+  validation. It rejects `Server` construction immediately because an
+  outgoing-handler cannot listen for arbitrary inbound connections.
 
 When the selected world is missing a required import or callback export, Jco
 edits that world in place, adds generated comments and declarations, installs
@@ -608,9 +627,10 @@ WIT package defines multiple worlds.
 
 The initial implementation buffers each request and response at the
 implementation boundary. Client and server objects retain Node-style callbacks
-and events inside the guest. Connection pooling, upgrades, CONNECT tunnels,
-HTTPS, and persistent HTTP/1.1 connections in the `wasi-sockets` implementation
-are not implemented; unavailable operations throw explicit errors.
+and events inside the guest. Connection pooling, upgrades, CONNECT proxy
+tunnels, and persistent HTTP/1.1 connections in the `wasi-sockets`
+implementation are not implemented; unavailable operations throw explicit
+errors.
 
 ### HTTP/2
 

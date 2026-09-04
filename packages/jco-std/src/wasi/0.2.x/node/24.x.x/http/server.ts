@@ -16,6 +16,8 @@ import { codedError } from "../errors/core.js";
 import { invalidArgType, invalidArgValue, unsupported } from "./errors.js";
 import { IncomingMessage } from "./incoming-message.js";
 import { OutgoingMessage } from "./outgoing-message.js";
+import type { ProtocolProfile } from "./profile.js";
+import { tlsMaterial } from "./tls.js";
 import type {
   HttpBodyChunk,
   HttpCallback,
@@ -27,12 +29,19 @@ import type {
   HttpOutgoingResponseData,
   HttpServerAddress,
   HttpServerImplementation,
+  HttpTlsOptions,
 } from "./types.js";
 
 export type RequestListener = (request: IncomingMessage, response: ServerResponse) => void;
 export type GetConnectionsCallback = (error: Error | null, count: number) => void;
 
-export interface ServerOptions {
+/**
+ * `http.createServer` options plus the TLS material `https.createServer` accepts.
+ *
+ * Node routes the TLS half to `tls.Server` and the rest to `_http_server`; the shim keeps one
+ * option bag and lets the profile decide whether the TLS half is read at all.
+ */
+export interface ServerOptions extends HttpTlsOptions {
   requestTimeout?: number;
   headersTimeout?: number;
   keepAliveTimeout?: number;
@@ -53,6 +62,22 @@ export interface ServerOptions {
   insecureHTTPParser?: boolean;
   uniqueHeaders?: Array<string | string[]>;
   [name: string]: unknown;
+}
+
+/**
+ * Reads the first `Server` argument the way lib/_http_server.js does.
+ *
+ * A listener or a nullish value means "no options"; any other non-object is
+ * `ERR_INVALID_ARG_TYPE` rather than being read as an option bag.
+ */
+function serverOptions(value: ServerOptions | RequestListener | null | undefined): ServerOptions {
+  if (typeof value === "function" || value === null || value === undefined) {
+    return {};
+  }
+  if (typeof value !== "object") {
+    throw invalidArgType("options", "object", value);
+  }
+  return value;
 }
 
 export class ServerResponse extends OutgoingMessage {
@@ -176,20 +201,24 @@ export class ServerBase extends EventEmitter {
   requestTimeout: number;
   #server: HttpServerImplementation;
 
+  readonly #profile: ProtocolProfile;
+
   constructor(
     implementation: HttpImplementation,
-    optionsOrListener: ServerOptions | RequestListener = {},
+    profile: ProtocolProfile,
+    optionsOrListener: ServerOptions | RequestListener | null = {},
     listener?: RequestListener,
   ) {
     super();
+    this.#profile = profile;
     if (!implementation.createServer) {
       unsupported(
-        "http.Server",
+        `${profile.module}.Server`,
         implementation.serverUnsupportedReason ??
           "the selected HTTP implementation cannot accept inbound connections",
       );
     }
-    const options = typeof optionsOrListener === "function" ? {} : optionsOrListener;
+    const options = serverOptions(optionsOrListener);
     const requestListener = typeof optionsOrListener === "function" ? optionsOrListener : listener;
     for (const name of [
       "IncomingMessage",
@@ -201,7 +230,7 @@ export class ServerBase extends EventEmitter {
     ] as const) {
       if (options[name] !== undefined) {
         unsupported(
-          `http.Server option ${name}`,
+          `${profile.module}.Server option ${name}`,
           "this option cannot be represented by the current typed WIT boundary",
         );
       }
@@ -214,8 +243,17 @@ export class ServerBase extends EventEmitter {
     if (requestListener) {
       this.on("request", requestListener);
     }
+    // `tls.Server` terminates TLS below the HTTP layer, so the material is normalized once
+    // here and carried by the implementation rather than by any HTTP-level option. An https
+    // server always carries the record, even an empty one, so an implementation with no TLS
+    // stack refuses it rather than serving plaintext; Node itself constructs an https.Server
+    // without a certificate and fails each handshake instead.
+    const tls =
+      profile.scheme === "https"
+        ? (tlsMaterial(options, `${profile.module}.createServer option`) ?? {})
+        : undefined;
     this.#server = implementation.createServer(
-      options,
+      { ...options, tls },
       (request) => this.#handle(request),
       (error) => queueMicrotask(() => this.emit("error", error)),
     );
@@ -225,7 +263,7 @@ export class ServerBase extends EventEmitter {
     const { options, callback } = parseListenArguments(args);
     if (options.signal !== undefined) {
       unsupported(
-        "http.Server.listen signal",
+        `${this.#profile.module}.Server.listen signal`,
         "an AbortSignal cannot be retained across the current WIT server resource boundary",
       );
     }
@@ -284,7 +322,7 @@ export class ServerBase extends EventEmitter {
   setTimeout(milliseconds = 0, callback?: (...args: never[]) => unknown): this {
     if (milliseconds !== 0 || callback !== undefined) {
       unsupported(
-        "http.Server.setTimeout",
+        `${this.#profile.module}.Server.setTimeout`,
         "timeout events require an additional server callback across the WIT boundary",
       );
     }
@@ -316,7 +354,7 @@ export class ServerBase extends EventEmitter {
     const request = new IncomingMessage(data);
     const response = new ServerResponse(request);
     if (!this.emit("request", request, response)) {
-      unsupported("http.Server request", "the server has no request listener");
+      unsupported(`${this.#profile.module}.Server request`, "the server has no request listener");
     }
     request._start();
     return response._completed();
@@ -324,16 +362,22 @@ export class ServerBase extends EventEmitter {
 }
 
 export interface ServerConstructor {
-  new (optionsOrListener?: ServerOptions | RequestListener, listener?: RequestListener): ServerBase;
+  new (
+    optionsOrListener?: ServerOptions | RequestListener | null,
+    listener?: RequestListener,
+  ): ServerBase;
 }
 
-export function createServerConstructor(implementation: HttpImplementation): ServerConstructor {
+export function createServerConstructor(
+  implementation: HttpImplementation,
+  profile: ProtocolProfile,
+): ServerConstructor {
   return class Server extends ServerBase {
     constructor(
-      optionsOrListener: ServerOptions | RequestListener = {},
+      optionsOrListener: ServerOptions | RequestListener | null = {},
       listener?: RequestListener,
     ) {
-      super(implementation, optionsOrListener, listener);
+      super(implementation, profile, optionsOrListener, listener);
     }
   };
 }

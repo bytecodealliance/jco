@@ -565,12 +565,21 @@ export function createWasiSocketsHttpImplementation(
 ): HttpImplementation {
   return {
     createServer(options, handler, onError) {
+      if (options.tls !== undefined) {
+        unsupported(
+          "https.Server with the wasi-sockets implementation",
+          "wasi:sockets carries no TLS stack, so a server can only speak plaintext HTTP/1.1",
+        );
+      }
       return new WasiSocketsHttpServer(provider, options, handler, onError);
     },
 
     request(request) {
       if (request.scheme !== "http") {
-        throw invalidArgValue("protocol", `${request.scheme}:`);
+        unsupported(
+          `${request.scheme}: requests with the wasi-sockets implementation`,
+          "wasi:sockets carries no TLS stack, so a client can only speak plaintext HTTP/1.1",
+        );
       }
       if (
         request.connectTimeoutMs !== undefined ||

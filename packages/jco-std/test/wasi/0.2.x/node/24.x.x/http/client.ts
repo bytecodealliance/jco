@@ -4,6 +4,16 @@ import type { IncomingMessage } from "../../../../../../src/wasi/0.2.x/node/24.x
 import { nextTurn, recordingImplementation } from "./helpers/index.js";
 
 describe("node:http client requests", () => {
+  test.concurrent("gives an agent: false request a fresh agent instead of none", () => {
+    const { http } = recordingImplementation();
+    const request = http.request({ host: "example.com", agent: false });
+    expect(request.agent).toBeInstanceOf(http.Agent);
+    expect(request.agent).not.toBe(http.globalAgent);
+    expect(request.agent.keepAlive).toBe(false);
+    expect(http.request({ host: "example.com", agent: null }).agent).toBe(http.globalAgent);
+    expect(http.request({ host: "example.com" }).agent).toBe(http.globalAgent);
+  });
+
   test.concurrent("normalizes URL options and buffers a request body", async () => {
     const { http, requests } = recordingImplementation();
     const events: string[] = [];

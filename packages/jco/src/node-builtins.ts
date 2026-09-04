@@ -15,6 +15,10 @@ import {
     HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
     HTTP_WIT_REQUIREMENT,
+    HTTPS_WASI_HTTP_WIT_REQUIREMENTS,
+    HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
+    HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS,
+    HTTPS_WIT_REQUIREMENT,
     HTTP2_WIT_REQUIREMENT,
     INSPECTOR_PROMISES_WIT_REQUIREMENT,
     INSPECTOR_WIT_REQUIREMENT,
@@ -56,6 +60,7 @@ const STREAM_CONSUMERS_SPECIFIER = "node:stream/consumers";
 const STREAM_ITER_SPECIFIER = "node:stream/iter";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
 const HTTP_SPECIFIER = "node:http";
+const HTTPS_SPECIFIER = "node:https";
 export const HTTP_CALLBACKS_SPECIFIER = "jco:node-http-callbacks";
 const HTTP2_SPECIFIER = "node:http2";
 export const HTTP2_CALLBACKS_SPECIFIER = "jco:node-http2-callbacks";
@@ -294,6 +299,9 @@ export interface NodeBuiltinOptions {
     httpCoreModule?: string;
     httpWasiSocketsImplementationModule?: string;
     httpWasiHttpImplementationModule?: string;
+    /** Paths to jco-std's HTTPS modules (overridable for tests). */
+    httpsModule?: string;
+    httpsCoreModule?: string;
     /** Implementation used for `node:http2` host operations. */
     nodejsHttp2Via?: NodejsHttp2Via;
     /** WASI socket module version supplied by the selected component engine. */
@@ -688,18 +696,32 @@ const HTTP_EXPORTS = [
     "validateHeaderValue",
 ] as const;
 
-function httpExports(moduleExpression: string): string {
+/** `node:https` at the pinned release: six exports, no deprecated members. */
+const HTTPS_EXPORTS = ["Agent", "Server", "createServer", "get", "globalAgent", "request"] as const;
+
+/** The two protocol modules share one core, one implementation set, and one host interface. */
+type HttpProtocol = "http" | "https";
+
+const PROTOCOL_EXPORTS: Record<HttpProtocol, readonly string[]> = {
+    http: HTTP_EXPORTS,
+    https: HTTPS_EXPORTS,
+};
+
+/** Factory exported by the protocol's core module (`createHttp` / `createHttps`). */
+const PROTOCOL_FACTORY: Record<HttpProtocol, string> = { http: "createHttp", https: "createHttps" };
+
+function protocolExports(protocol: HttpProtocol, moduleExpression: string): string {
     return `
-const http = ${moduleExpression};
-export default http;
-export const { ${HTTP_EXPORTS.join(", ")} } = http;
+const ${protocol} = ${moduleExpression};
+export default ${protocol};
+export const { ${PROTOCOL_EXPORTS[protocol].join(", ")} } = ${protocol};
 `;
 }
 
-function httpDirectAdapter(httpModule: string): string {
+function protocolDirectAdapter(protocol: HttpProtocol, entryModule: string): string {
     return `
-import directHttp from ${JSON.stringify(httpModule)};
-${httpExports("directHttp")}
+import direct from ${JSON.stringify(entryModule)};
+${protocolExports(protocol, "direct")}
 `;
 }
 
@@ -708,26 +730,52 @@ function httpCallbacksAdapter(httpModule: string): string {
     return `export { httpCallbacks } from ${JSON.stringify(httpModule)};`;
 }
 
-function httpWasiSocketsAdapter(coreModule: string, implementationModule: string, version: string): string {
+function protocolWasiSocketsAdapter(
+    protocol: HttpProtocol,
+    coreModule: string,
+    implementationModule: string,
+    version: string,
+): string {
+    const factory = PROTOCOL_FACTORY[protocol];
     const schedule = version === "0.2.10" ? ", schedule: task => setTimeout(task, 0)" : "";
     return `
 import * as instanceNetwork from "wasi:sockets/instance-network@${version}";
 import * as ipNameLookup from "wasi:sockets/ip-name-lookup@${version}";
 import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@${version}";
-import { createHttp } from ${JSON.stringify(coreModule)};
+import { ${factory} } from ${JSON.stringify(coreModule)};
 import { createWasiSocketsHttpImplementation } from ${JSON.stringify(implementationModule)};
-${httpExports(`createHttp(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${version === "0.2.10" ? "BigInt(value)" : "value"}${schedule} }))`)}
+${protocolExports(protocol, `${factory}(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${version === "0.2.10" ? "BigInt(value)" : "value"}${schedule} }))`)}
 `;
 }
 
-function httpWasiHttpAdapter(coreModule: string, implementationModule: string): string {
+function protocolWasiHttpAdapter(protocol: HttpProtocol, coreModule: string, implementationModule: string): string {
+    const factory = PROTOCOL_FACTORY[protocol];
     return `
 import * as outgoingHandler from "wasi:http/outgoing-handler@0.2.12";
 import * as types from "wasi:http/types@0.2.12";
-import { createHttp } from ${JSON.stringify(coreModule)};
+import { ${factory} } from ${JSON.stringify(coreModule)};
 import { createWasiHttpImplementation } from ${JSON.stringify(implementationModule)};
-${httpExports("createHttp(createWasiHttpImplementation({ outgoingHandler, types }))")}
+${protocolExports(protocol, `${factory}(createWasiHttpImplementation({ outgoingHandler, types }))`)}
 `;
+}
+
+/** WIT requirements for one protocol module under one `--with-nodejs-http-via` selection. */
+function protocolWitRequirements(
+    protocol: HttpProtocol,
+    via: NodejsHttpVia,
+    wasiSocketsVersion: string,
+): readonly NodeWitRequirement[] {
+    const https = protocol === "https";
+    if (via === "direct") {
+        return [https ? HTTPS_WIT_REQUIREMENT : HTTP_WIT_REQUIREMENT];
+    }
+    if (via === "wasi-sockets") {
+        if (wasiSocketsVersion === "0.2.12") {
+            return https ? HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS : HTTP_WASI_SOCKETS_WIT_REQUIREMENTS;
+        }
+        return https ? HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS;
+    }
+    return https ? HTTPS_WASI_HTTP_WIT_REQUIREMENTS : HTTP_WASI_HTTP_WIT_REQUIREMENTS;
 }
 
 const HTTP2_EXPORTS = [
@@ -794,6 +842,7 @@ ${http2Exports(`createHttp2(${factory}(${factoryArguments}))`)}
 
 function requireWasiHttpVersion(
     worldMetadata: WorldMetadata,
+    specifier: string,
     via: Exclude<NodejsHttpVia, "direct">,
     version = "0.2.12",
 ): void {
@@ -809,7 +858,7 @@ function requireWasiHttpVersion(
     if (incompatible) {
         const { major, minor, patch } = incompatible.version!;
         throw new Error(
-            `node:http via ${via} requires wasi:${packageName}@${version}, but the selected WIT world imports wasi:${packageName}@${major}.${minor}.${patch}`,
+            `${specifier} via ${via} requires wasi:${packageName}@${version}, but the selected WIT world imports wasi:${packageName}@${major}.${minor}.${patch}`,
         );
     }
 }
@@ -1016,8 +1065,31 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         stdModule(options.httpWasiSocketsImplementationModule, "http/impl/wasi-sockets");
     const httpWasiHttpImplementationModule = () =>
         stdModule(options.httpWasiHttpImplementationModule, "http/impl/wasi-http");
+    const httpsModule = () => stdModule(options.httpsModule, "https");
+    const httpsCoreModule = () => stdModule(options.httpsCoreModule, "https/core");
     const httpVia = options.nodejsHttpVia ?? "direct";
     const wasiSocketsVersion = options.wasiSocketsVersion ?? "0.2.12";
+    const protocolOf = (specifier: string): HttpProtocol | undefined =>
+        specifier === HTTP_SPECIFIER ? "http" : specifier === HTTPS_SPECIFIER ? "https" : undefined;
+    /**
+     * Facade for `node:http` or `node:https` under the selected implementation. Each jco-std
+     * path is resolved only on the branch that emits it, so a build never touches an entry point
+     * it does not use.
+     */
+    const protocolAdapter = (protocol: HttpProtocol): string => {
+        if (httpVia === "direct") {
+            return protocolDirectAdapter(protocol, protocol === "http" ? httpModule() : httpsModule());
+        }
+        const coreModule = protocol === "http" ? httpCoreModule() : httpsCoreModule();
+        return httpVia === "wasi-sockets"
+            ? protocolWasiSocketsAdapter(
+                  protocol,
+                  coreModule,
+                  httpWasiSocketsImplementationModule(),
+                  wasiSocketsVersion,
+              )
+            : protocolWasiHttpAdapter(protocol, coreModule, httpWasiHttpImplementationModule());
+    };
     const http2Module = () =>
         options.http2Module ??
         fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2"));
@@ -1124,24 +1196,18 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 options.onWitRequirement?.(FS_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
             }
-            if (id === HTTP_SPECIFIER) {
-                if (httpVia === "direct") {
-                    options.onWitRequirement?.(HTTP_WIT_REQUIREMENT);
-                } else {
+            const protocol = protocolOf(id);
+            if (protocol !== undefined) {
+                if (httpVia !== "direct") {
                     requireWasiHttpVersion(
                         worldMetadata,
+                        id,
                         httpVia,
                         httpVia === "wasi-sockets" ? wasiSocketsVersion : "0.2.12",
                     );
-                    const requirements =
-                        httpVia === "wasi-sockets"
-                            ? wasiSocketsVersion === "0.2.12"
-                                ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
-                                : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS
-                            : HTTP_WASI_HTTP_WIT_REQUIREMENTS;
-                    for (const requirement of requirements) {
-                        options.onWitRequirement?.(requirement);
-                    }
+                }
+                for (const requirement of protocolWitRequirements(protocol, httpVia, wasiSocketsVersion)) {
+                    options.onWitRequirement?.(requirement);
                 }
                 return `${VIRTUAL_PREFIX}${id}`;
             }
@@ -1149,7 +1215,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 if (http2Via === "direct") {
                     options.onWitRequirement?.(HTTP2_WIT_REQUIREMENT);
                 } else if (http2Via === "wasi-sockets") {
-                    requireWasiHttpVersion(worldMetadata, http2Via, wasiSocketsVersion);
+                    requireWasiHttpVersion(worldMetadata, HTTP2_SPECIFIER, http2Via, wasiSocketsVersion);
                     for (const requirement of wasiSocketsVersion === "0.2.12"
                         ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
                         : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS) {
@@ -1238,17 +1304,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             if (FS_SPECIFIERS.has(value)) {
                 return fsAdapter(value, fsModule(), fsPromisesModule());
             }
-            if (value === HTTP_SPECIFIER) {
-                if (httpVia === "direct") {
-                    return httpDirectAdapter(httpModule());
-                }
-                return httpVia === "wasi-sockets"
-                    ? httpWasiSocketsAdapter(
-                          httpCoreModule(),
-                          httpWasiSocketsImplementationModule(),
-                          wasiSocketsVersion,
-                      )
-                    : httpWasiHttpAdapter(httpCoreModule(), httpWasiHttpImplementationModule());
+            const protocol = protocolOf(value);
+            if (protocol !== undefined) {
+                return protocolAdapter(protocol);
             }
             if (value === HTTP2_SPECIFIER) {
                 if (http2Via === "direct") {

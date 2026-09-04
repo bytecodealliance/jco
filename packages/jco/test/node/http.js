@@ -235,7 +235,15 @@ describe("node:http in a component", () => {
                 copy: true,
                 extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", implementation],
             });
+            // `--with-nodejs-http-via` selects which capability is injected; a wrong mode still
+            // injects *something*, so the assertion names the interface the mode must add.
+            const injected = {
+                direct: "jco:node/http@0.1.0",
+                "wasi-sockets": "wasi:sockets/instance-network@0.2.12",
+                "wasi-http": "wasi:http/outgoing-handler@0.2.12",
+            }[implementation];
             expect(stderr).toContain("Jco added generated WIT import");
+            expect(stderr).toContain(injected);
             const map = implementation === "direct" ? { "jco:node/http@0.1.0": NODE_HOST } : undefined;
             const { esModuleOutputPath, cleanup } = await setupAsyncTest({
                 component: { name: `node-http-${implementation}`, path: componentPath, skipInstantiation: true },

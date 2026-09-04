@@ -9,17 +9,20 @@
  * request/response exchange with the selected implementation.
  */
 
-import { Agent, globalAgent } from "./agent.js";
+import { Agent } from "./agent.js";
 import { base64 } from "./body.js";
 import { deprecated, invalidArgType, invalidArgValue, unsupported } from "./errors.js";
 import { validateHeaderName } from "./headers.js";
 import { IncomingMessage } from "./incoming-message.js";
 import { OutgoingMessage } from "./outgoing-message.js";
+import type { ProtocolProfile } from "./profile.js";
+import { tlsMaterial } from "./tls.js";
 import type {
   HttpImplementation,
   HttpImplementationRequest,
   HttpImplementationResponse,
   HttpRequestOptions,
+  HttpTlsMaterial,
 } from "./types.js";
 
 export type ResponseListener = (response: IncomingMessage) => void;
@@ -33,6 +36,22 @@ interface NormalizedRequest {
   port: number;
   authority: string;
   path: string;
+}
+
+/**
+ * Resolves the port assumed when the options carry none.
+ *
+ * lib/_http_client.js reads `options.defaultPort || (this.agent && this.agent.defaultPort)`,
+ * and an `agent: false` request still gets a fresh instance of the module's own agent class,
+ * so the profile's port is the correct final fallback for both modules.
+ */
+function resolvedDefaultPort(options: HttpRequestOptions, profile: ProtocolProfile): number {
+  const agent = options.agent;
+  const agentDefaultPort =
+    typeof agent === "object" && agent !== null && typeof agent.defaultPort === "number"
+      ? agent.defaultPort
+      : undefined;
+  return Number(options.defaultPort || agentDefaultPort || profile.defaultPort);
 }
 
 function urlOptions(input: string | URL): HttpRequestOptions {
@@ -60,17 +79,18 @@ function numericPort(value: number | string | null | undefined, fallback: number
 function normalizedRequest(
   input: RequestInput,
   extra: HttpRequestOptions | undefined,
+  profile: ProtocolProfile,
 ): NormalizedRequest {
   const base = typeof input === "string" || input instanceof URL ? urlOptions(input) : input;
   if (typeof base !== "object" || base === null) {
     throw invalidArgType("options", "object, string, or URL", input);
   }
   const options = { ...base, ...extra };
-  const protocol = options.protocol ?? "http:";
-  if (protocol !== "http:") {
+  const protocol = options.protocol ?? profile.protocol;
+  if (protocol !== profile.protocol) {
     const error = invalidArgValue("protocol", protocol);
     error.code = "ERR_INVALID_PROTOCOL";
-    error.message = `Protocol \"${protocol}\" not supported. Expected \"http:\"`;
+    error.message = `Protocol \"${protocol}\" not supported. Expected \"${profile.protocol}\"`;
     throw error;
   }
   let hostname = options.hostname ?? options.host ?? "localhost";
@@ -85,7 +105,8 @@ function normalizedRequest(
   } else if (hostname.split(":").length === 2) {
     [hostname, hostPort] = hostname.split(":");
   }
-  const port = numericPort(options.port ?? hostPort, Number(options.defaultPort ?? 80));
+  const defaultPort = resolvedDefaultPort(options, profile);
+  const port = numericPort(options.port ?? hostPort, defaultPort);
   const method = (options.method ?? "GET").toUpperCase();
   validateHeaderName(method, "Method");
   const path = options.path ?? "/";
@@ -105,7 +126,7 @@ function normalizedRequest(
     protocol,
     hostname,
     port,
-    authority: port === 80 ? authorityHost : `${authorityHost}:${port}`,
+    authority: port === defaultPort ? authorityHost : `${authorityHost}:${port}`,
     path,
   };
 }
@@ -121,7 +142,7 @@ function abortError(reason: unknown): Error & { code: string } {
 }
 
 export class ClientRequestBase extends OutgoingMessage {
-  readonly agent: Agent | undefined;
+  readonly agent: Agent;
   readonly protocol: string;
   readonly host: string;
   readonly path: string;
@@ -129,26 +150,38 @@ export class ClientRequestBase extends OutgoingMessage {
   readonly reusedSocket = false;
   maxHeadersCount: number | null = null;
   readonly #implementation: HttpImplementation;
+  readonly #profile: ProtocolProfile;
   readonly #hostname: string;
   readonly #port: number;
+  readonly #tls: HttpTlsMaterial | undefined;
   readonly #responseListener: ResponseListener | undefined;
 
   constructor(
     implementation: HttpImplementation,
+    profile: ProtocolProfile,
     input: RequestInput,
     options: HttpRequestOptions | undefined,
     responseListener: ResponseListener | undefined,
   ) {
-    const normalized = normalizedRequest(input, options);
+    const normalized = normalizedRequest(input, options, profile);
     super(normalized.options.headers);
     this.#implementation = implementation;
+    this.#profile = profile;
     this.#hostname = normalized.hostname;
     this.#port = normalized.port;
+    // lib/https.js hands the whole option bag to tls.connect; the shim carries the
+    // serializable subset and refuses the rest by name before anything is sent.
+    this.#tls =
+      profile.scheme === "https"
+        ? tlsMaterial(normalized.options, `${profile.module}.request option`)
+        : undefined;
     this.#responseListener = responseListener;
+    // lib/_http_client.js gives an `agent: false` request a fresh instance of the default
+    // agent's class rather than no agent at all, so the request never shares the global pool.
     this.agent =
       normalized.options.agent === false
-        ? undefined
-        : ((normalized.options.agent as Agent | undefined) ?? globalAgent);
+        ? new (profile.globalAgent.constructor as new () => Agent)()
+        : ((normalized.options.agent as Agent | null | undefined) ?? profile.globalAgent);
     this.protocol = normalized.protocol;
     this.host = normalized.authority;
     this.path = normalized.path;
@@ -174,19 +207,19 @@ export class ClientRequestBase extends OutgoingMessage {
   }
 
   abort(): never {
-    return deprecated("http.ClientRequest.abort", "request.destroy()");
+    return deprecated(`${this.#profile.module}.ClientRequest.abort`, "request.destroy()");
   }
 
   setNoDelay(_noDelay = true): never {
     return unsupported(
-      "http.ClientRequest.setNoDelay",
+      `${this.#profile.module}.ClientRequest.setNoDelay`,
       "the selected implementation owns the socket",
     );
   }
 
   setSocketKeepAlive(_enable = false, _initialDelay = 0): never {
     return unsupported(
-      "http.ClientRequest.setSocketKeepAlive",
+      `${this.#profile.module}.ClientRequest.setSocketKeepAlive`,
       "the selected implementation owns the socket",
     );
   }
@@ -204,7 +237,7 @@ export class ClientRequestBase extends OutgoingMessage {
     const timeout = this._timeout() || undefined;
     const request: HttpImplementationRequest = {
       method: this.method,
-      scheme: "http",
+      scheme: this.#profile.scheme,
       authority: this.host,
       pathWithQuery: this.path,
       headers: this._headers.fields(),
@@ -213,6 +246,9 @@ export class ClientRequestBase extends OutgoingMessage {
       firstByteTimeoutMs: timeout,
       betweenBytesTimeoutMs: timeout,
     };
+    if (this.#tls !== undefined) {
+      request.tls = this.#tls;
+    }
     const response = this.#implementation.request(request);
     return () => this.#deliver(response);
   }
@@ -240,7 +276,10 @@ export interface ClientRequestConstructor {
   ): ClientRequestBase;
 }
 
-export function createClientRequest(implementation: HttpImplementation): ClientRequestConstructor {
+export function createClientRequest(
+  implementation: HttpImplementation,
+  profile: ProtocolProfile,
+): ClientRequestConstructor {
   return class ClientRequest extends ClientRequestBase {
     constructor(
       input: RequestInput,
@@ -249,6 +288,7 @@ export function createClientRequest(implementation: HttpImplementation): ClientR
     ) {
       super(
         implementation,
+        profile,
         input,
         typeof options === "function" ? undefined : options,
         typeof options === "function" ? options : callback,
