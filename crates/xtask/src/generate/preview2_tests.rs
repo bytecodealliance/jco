@@ -13,6 +13,36 @@ const DEFAULT_TEST_FILTER: &[&str] = &[];
 
 const DEFAULT_ATTEMPTS: u32 = 5;
 
+/// Convert Wasmtime's current test-program names to the names historically used by
+/// this generator. Programs outside the Preview 1/2 conformance suites are skipped.
+fn conformance_test_name(name: &str) -> Option<String> {
+    if let Some(name) = name.strip_prefix("p1_") {
+        return Some(format!("preview1_{name}"));
+    }
+
+    if let Some(name) = name.strip_prefix("p2_") {
+        // Before Wasmtime gave every test program a preview-specific prefix, most
+        // Preview 2 programs had no prefix. Keep those stable names so the existing
+        // environment and skip policies continue to apply.
+        let had_preview2_prefix = matches!(
+            name,
+            "adapter_badfd" | "file_read_write" | "ip_name_lookup" | "random" | "sleep"
+        ) || name.starts_with("pollable_")
+            || name.starts_with("stream_")
+            || name.starts_with("tcp_")
+            || name.starts_with("tls_")
+            || name.starts_with("udp_");
+
+        return Some(if had_preview2_prefix {
+            format!("preview2_{name}")
+        } else {
+            name.to_owned()
+        });
+    }
+
+    name.starts_with("piped_").then(|| name.to_owned())
+}
+
 /// Tests that should be ignored
 const TEST_IGNORE: &[&str] = &[
     // Wasmtime run supports a `wasmtime run --argv0=...` argument to customize the argv0
@@ -20,6 +50,29 @@ const TEST_IGNORE: &[&str] = &[
     "cli_argv0",
     // We don't have interrupts.
     "cli_sleep_forever",
+    // These programs exercise Wasmtime runner limits or require runner-specific
+    // arguments and configuration that the generic JCO harness does not provide.
+    "cli_hostcall_fuel",
+    "cli_http_headers",
+    "cli_initial_cwd",
+    "cli_many_resources",
+    "cli_much_stdout",
+    "cli_no_tcp",
+    "cli_no_udp",
+    "preview1_cli_hostcall_fuel",
+    "preview1_cli_much_stdout",
+    // These programs require Wasmtime's read-only preopen fixture.
+    "file_hardlink_across_perms",
+    "file_rename_across_perms",
+    "file_truncation_readonly",
+    "preview1_file_hardlink_across_perms",
+    "preview1_file_rename_across_perms",
+    "preview1_file_truncation_readonly",
+    // TODO: support the newer HTTP, TLS, and UDP conformance cases.
+    "http_outbound_request_response_build",
+    "preview2_tls_sample_application",
+    "preview2_udp_connect",
+    "preview2_udp_send_too_much",
     // Don't currently support WASI config store.
     "config_get",
     "cli_serve_config",
@@ -184,11 +237,15 @@ pub fn run() -> Result<()> {
         }
 
         let file_name = String::from(entry.file_name().to_str().unwrap());
-        let test_name = String::from(&file_name[0..file_name.len() - 5]);
+        let module_name = String::from(&file_name[0..file_name.len() - 5]);
+
+        let Some(test_name) = conformance_test_name(&module_name) else {
+            continue;
+        };
 
         if KEYWORD_IGNORE
             .iter()
-            .any(|keyword_ignore| test_name.contains(keyword_ignore))
+            .any(|keyword_ignore| module_name.contains(keyword_ignore))
         {
             continue;
         }
@@ -197,7 +254,7 @@ pub fn run() -> Result<()> {
             continue;
         }
 
-        test_names.push(test_name);
+        test_names.push((module_name, test_name));
     }
     test_names.sort();
 
@@ -208,8 +265,8 @@ pub fn run() -> Result<()> {
     if !filtered_tests.is_empty() {
         test_names = test_names
             .drain(..)
-            .filter(|test_name| filtered_tests.contains(test_name))
-            .collect::<Vec<String>>();
+            .filter(|(_, test_name)| filtered_tests.contains(test_name))
+            .collect();
     }
 
     // Load the adapter
@@ -226,13 +283,13 @@ pub fn run() -> Result<()> {
     let jco_crate_dir = Arc::new(jco_crate_dir);
     let jco_script_path = Arc::new(jco_script_path);
     let mut handles = Vec::new();
-    for test_name in test_names {
+    for (module_name, test_name) in test_names {
         let adapter_bytes = Arc::clone(&adapter_bytes);
         let all_names = Arc::clone(&all_names);
         let jco_crate_dir = Arc::clone(&jco_crate_dir);
         let jco_script_path = Arc::clone(&jco_script_path);
 
-        let module_path = output_dir.join(format!("{test_name}.wasm"));
+        let module_path = output_dir.join(format!("{module_name}.wasm"));
         let module_bytes = std::fs::read(&module_path)
             .with_context(|| format!("failed to read module @ [{}]", module_path.display()))?;
 
@@ -314,7 +371,7 @@ pub fn run() -> Result<()> {
 
     // Wait for all handles
     for handle in handles {
-        let _ = handle.join().map_err(|e| anyhow!("{e:#?}"))?;
+        handle.join().map_err(|e| anyhow!("{e:#?}"))??;
     }
 
     // Sort all names
@@ -778,5 +835,28 @@ mod tests {
             "#[cfg_attr(windows, ignore = \"run separately to avoid socket contention\")]"
         ));
         assert!(!udp_src.contains("run separately to avoid socket contention"));
+    }
+
+    #[test]
+    fn selects_and_normalizes_wasmtime_conformance_programs() {
+        assert_eq!(
+            conformance_test_name("p1_file_write"),
+            Some("preview1_file_write".to_owned())
+        );
+        assert_eq!(
+            conformance_test_name("p2_cli_env"),
+            Some("cli_env".to_owned())
+        );
+        assert_eq!(
+            conformance_test_name("p2_tcp_listen"),
+            Some("preview2_tcp_listen".to_owned())
+        );
+        assert_eq!(
+            conformance_test_name("piped_simple"),
+            Some("piped_simple".to_owned())
+        );
+        assert_eq!(conformance_test_name("async_readiness"), None);
+        assert_eq!(conformance_test_name("p3_cli"), None);
+        assert_eq!(conformance_test_name("dwarf_simple"), None);
     }
 }
