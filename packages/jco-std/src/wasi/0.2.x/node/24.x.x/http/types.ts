@@ -255,21 +255,43 @@ export interface DirectHttpRequestListener extends Disposable {
 }
 
 export interface DirectHttpServer extends Disposable {
-  listen(options: DirectHttpListenOptions): DirectHttpResult<DirectHttpServerAddress>;
-  close(): DirectHttpResult<boolean>;
-  closeAllConnections(): DirectHttpResult<undefined>;
-  closeIdleConnections(): DirectHttpResult<undefined>;
-  getConnections(): DirectHttpResult<bigint>;
+  listen(options: DirectHttpListenOptions): DirectHttpServerAddress;
+  close(): boolean;
+  closeAllConnections(): void;
+  closeIdleConnections(): void;
+  getConnections(): bigint;
   address(): DirectHttpServerAddress | undefined;
   ref(): void;
   unref(): void;
 }
 
 export interface DirectHttpServerConstructor {
-  new (options: DirectHttpServerOptions, listener: DirectHttpRequestListener): DirectHttpServer;
+  new (options: DirectHttpServerOptions, listenerId: bigint): DirectHttpServer;
+}
+
+/**
+ * The guest side of `jco:node/http-callbacks`, as the host reaches it.
+ *
+ * The host is handed this after the component is instantiated; see
+ * {@link DirectHttpHost.setCallbacks}.
+ */
+export interface DirectHttpCallbacks {
+  handleRequest(
+    listenerId: bigint,
+    request: DirectHttpIncomingRequest,
+  ): Promise<DirectHttpOutgoingResponse>;
 }
 
 export interface DirectHttpHost {
-  request(options: DirectHttpRequest): DirectHttpResult<DirectHttpResponse>;
+  request(options: DirectHttpRequest): DirectHttpResponse;
   Server: DirectHttpServerConstructor;
+
+  /**
+   * Connect the host to the component's exported callbacks.
+   *
+   * A host provider is an import, so it cannot reach the component's exports on its own. The
+   * application wires the two together once the component is instantiated, before it starts
+   * a server.
+   */
+  setCallbacks?(callbacks: DirectHttpCallbacks): void;
 }

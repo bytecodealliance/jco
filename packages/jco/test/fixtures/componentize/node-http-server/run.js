@@ -4,10 +4,16 @@ import { pathToFileURL } from "node:url";
 
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
+const httpHost = await import(argv[3]);
 const { instantiate } = await import(pathToFileURL(argv[2]));
 const imports = new WASIShim().getImportObject();
-imports[argv[3]] = await import(argv[3]);
+imports[argv[3]] = httpHost;
 const instance = await instantiate(undefined, imports);
+
+// The host provider is one of the component's imports, so it cannot reach the component's
+// exports on its own. Connecting them is what lets the host call back into the guest.
+httpHost.setCallbacks(instance["jco:node/http-callbacks@0.1.0"]);
+
 const port = await instance.start();
 
 try {

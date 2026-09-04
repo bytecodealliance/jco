@@ -1,5 +1,8 @@
 import * as denyHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host.js";
-import { createDirectHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/direct.js";
+import {
+  createDirectHttpImplementation,
+  httpCallbacks,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/direct.js";
 import {
   createWasiHttpImplementation,
   type WasiHttpFields,
@@ -16,7 +19,6 @@ import {
   serializeHttp1Response,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/http1.js";
 import type {
-  DirectHttpRequestListener,
   DirectHttpServer,
   DirectHttpServerOptions,
   HttpImplementationResponse,
@@ -40,38 +42,33 @@ function clientResponse(): HttpImplementationResponse {
 }
 
 function directHarness(): HttpConformanceHarness {
-  let listener: DirectHttpRequestListener | undefined;
+  // The guest sees a WIT `result` as the value or a thrown error, so this host returns
+  // values rather than tagged objects.
+  let listenerId: bigint | undefined;
   const implementation = createDirectHttpImplementation({
-    request: () => ({ tag: "ok", val: clientResponse() }),
+    request: () => clientResponse(),
     Server: class implements DirectHttpServer {
-      constructor(_options: DirectHttpServerOptions, requestListener: DirectHttpRequestListener) {
-        listener = requestListener;
+      constructor(_options: DirectHttpServerOptions, id: bigint) {
+        listenerId = id;
       }
 
       listen() {
         return {
-          tag: "ok",
-          val: {
-            tag: "tcp",
-            val: { address: "127.0.0.1", family: "IPv4", port: 8080 },
-          },
+          tag: "tcp",
+          val: { address: "127.0.0.1", family: "IPv4", port: 8080 },
         } as const;
       }
 
       close() {
-        return { tag: "ok", val: true } as const;
+        return true;
       }
 
-      closeAllConnections() {
-        return { tag: "ok", val: undefined } as const;
-      }
+      closeAllConnections(): void {}
 
-      closeIdleConnections() {
-        return { tag: "ok", val: undefined } as const;
-      }
+      closeIdleConnections(): void {}
 
       getConnections() {
-        return { tag: "ok", val: 0n } as const;
+        return 0n;
       }
 
       address() {
@@ -91,11 +88,7 @@ function directHarness(): HttpConformanceHarness {
   return {
     implementation,
     async dispatchServerRequest(request) {
-      const result = await listener!.handle(request);
-      if (result.tag === "err") {
-        throw Object.assign(new Error(result.val.message), result.val);
-      }
-      return result.val;
+      return await httpCallbacks.handleRequest(listenerId!, request);
     },
   };
 }

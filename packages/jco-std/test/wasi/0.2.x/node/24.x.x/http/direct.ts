@@ -1,11 +1,13 @@
 import { describe, expect, test } from "vitest";
 
 import { createHttp } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/core.js";
-import { createDirectHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/direct.js";
+import {
+  createDirectHttpImplementation,
+  httpCallbacks,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/direct.js";
 import type {
   DirectHttpHost,
   DirectHttpRequest,
-  DirectHttpRequestListener,
   DirectHttpServer,
   DirectHttpServerOptions,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
@@ -21,7 +23,7 @@ describe("node:http direct implementation", () => {
     const implementation = createDirectHttpImplementation({
       request(options) {
         received = options;
-        return { tag: "ok", val: expected };
+        return expected;
       },
       Server: class {
         constructor() {
@@ -42,41 +44,34 @@ describe("node:http direct implementation", () => {
     expect(received).toEqual(request);
   });
 
-  test("passes a guest request listener resource to the host Server resource", async () => {
-    let listener: DirectHttpRequestListener | undefined;
+  test("routes a host request to the guest through the exported callback", async () => {
+    let listenerId: bigint | undefined;
     const host: DirectHttpHost = {
       request: () => {
         throw new Error("not used");
       },
       Server: class Server implements DirectHttpServer {
-        constructor(_options: DirectHttpServerOptions, requestListener: DirectHttpRequestListener) {
-          listener = requestListener;
+        constructor(_options: DirectHttpServerOptions, id: bigint) {
+          listenerId = id;
         }
 
         listen() {
           return {
-            tag: "ok",
-            val: {
-              tag: "tcp",
-              val: { address: "127.0.0.1", family: "IPv4", port: 8080 },
-            },
+            tag: "tcp",
+            val: { address: "127.0.0.1", family: "IPv4", port: 8080 },
           } as const;
         }
 
         close() {
-          return { tag: "ok", val: true } as const;
+          return true;
         }
 
-        closeAllConnections() {
-          return { tag: "ok", val: undefined } as const;
-        }
+        closeAllConnections(): void {}
 
-        closeIdleConnections() {
-          return { tag: "ok", val: undefined } as const;
-        }
+        closeIdleConnections(): void {}
 
         getConnections() {
-          return { tag: "ok", val: 1n } as const;
+          return 1n;
         }
 
         address() {
@@ -105,22 +100,15 @@ describe("node:http direct implementation", () => {
     });
     server.listen(8080, "127.0.0.1");
 
-    const result = await listener!.handle({
+    const result = await httpCallbacks.handleRequest(listenerId!, {
       method: "PUT",
       url: "/resource",
       httpVersion: "1.1",
       headers: [],
       body: encoder.encode("payload"),
     });
-    expect(result).toMatchObject({
-      tag: "ok",
-      val: { statusCode: 204, statusMessage: "No Content" },
-    });
-    if (result.tag === "ok") {
-      expect(result.val.headers).toEqual([
-        { name: "X-Guest", value: encoder.encode("PUT payload") },
-      ]);
-      expect(decoder.decode(result.val.body)).toBe("");
-    }
+    expect(result).toMatchObject({ statusCode: 204, statusMessage: "No Content" });
+    expect(result.headers).toEqual([{ name: "X-Guest", value: encoder.encode("PUT payload") }]);
+    expect(decoder.decode(result.body)).toBe("");
   });
 });

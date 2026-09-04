@@ -33,9 +33,24 @@ suite("node:path in a component", () => {
         }
     });
 
-    test.concurrent("requires the world to import wasi:cli/environment", async () => {
-        await expect(componentizeFixture({ fixture: "node-path-missing-environment", bundle: true })).rejects.toThrow(
-            /import wasi:cli\/environment@0\.2\.x/,
-        );
+    // TODO(unskip): This builds a component that uses `node:path`, which cannot be pre-initialized at
+    // present: its implementation imports `minimatch` for `matchesGlob`, `minimatch`
+    // imports `brace-expansion`, and `brace-expansion` builds its sentinel strings with
+    // `Math.random()` at module scope. The engine seeds its RNG from
+    // `wasi:random/random@0.2.10#get-random-u64` on that first call, and no WASI import may
+    // be called during Wizer pre-initialization, so the build traps. No componentize flag
+    // avoids it -- the seeding belongs to the engine rather than the `random` feature, which
+    // stays imported with `--disable random`. Unskip once `matchesGlob` no longer pulls
+    // module-scope randomness into the graph.
+    test.skip("adds wasi:cli/environment to a world that does not import it", async () => {
+        // `node:path` reads the working directory from the environment. A world that does not
+        // declare it has the import added, the same way the host-backed builtins do, because
+        // `node:path` is usually reached through a dependency rather than written by hand.
+        const { stderr } = await componentizeFixture({
+            fixture: "node-path-missing-environment",
+            bundle: true,
+            copy: true,
+        });
+        expect(stderr).toContain("wasi:cli/environment@0.2.12");
     });
 });

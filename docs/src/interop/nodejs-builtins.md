@@ -65,8 +65,11 @@ Resolution follows a deliberate quality order:
 4. Everything else remains unresolved. Jco never enables unenv's entire alias map
    merely because an alias exists.
 
-Only `node:` specifiers participate in this mechanism. Legacy bare specifiers such
-as `buffer`, `path`, and `querystring` are not rewritten.
+Bare specifiers participate too, but only as a fallback. A dependency written before the
+`node:` prefix existed says `require("stream")`, and leaving that unresolved fails the build
+for most of npm. So Jco resolves the specifier normally first, and only treats it as a
+builtin when nothing answers to the name -- a package that genuinely installs `buffer`,
+`punycode` or `process` still wins.
 
 ## Combining built-ins with `jco-std`
 
@@ -121,7 +124,7 @@ is planned.
 | `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.                |
 | `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                               |
 | `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                              |
-| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Outbound client API over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Server listening is explicitly unsupported.                     |
+| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP transport. Serving works on the `direct` transport; see below.          |
 | `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.  |
 | `node:os`                                         | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os`                                                | Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider -- see below.                  |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                          |
@@ -129,6 +132,9 @@ is planned.
 | `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                               |
 | `node:stream/consumers`                           | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`                                  | Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.                                                           |
 | `node:stream/iter`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`                                       | Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.                                          |
+| `node:crypto`                                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/crypto`                                            | Synchronous `sha1`/`sha256` digests and HMAC, implemented in the guest because Node-shaped code hashes inline and cannot await. Randomness is the engine's WebCrypto; ciphers, keys and signatures defer to `crypto.subtle`. |
+| `node:timers`                                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers`                                            | The engine's timers, plus `setImmediate`/`clearImmediate`, which are Node's rather than the web's.                                                                 |
+| `node:https`, `node:net`, `node:process`, `node:stream`, `node:stream/promises`, `node:tty`, `node:url`, `node:util`, `node:util/types`, `node:zlib` | unenv's portable implementations                                          | Carried as they are, behind a thin adapter that gives each a stable identity in the bundle. `node:stream`'s adapter is CommonJS so that `require("stream")` is the `Stream` constructor, as it is in Node. |
 
 ### Stream consumers and iterable streams
 
@@ -181,6 +187,27 @@ resolve that specifier. Bundled code can use `Buffer` without importing
 `node:buffer`; Rolldown injects Jco's existing audited Buffer adapter only when a
 free `Buffer` identifier is referenced. A source graph that never uses it pays no
 bundle-size or initialization cost.
+
+Three more Node globals are injected the same way, for the same reason -- package code
+reaches them without importing anything:
+
+- `process`, from `node:process`. Because it is defined, code that branches on
+  `typeof process === "undefined"` to detect a browser takes its Node path, which is the
+  same choice Node presents it with.
+- `setImmediate` and `clearImmediate`, from `node:timers`.
+
+### Regular-expression syntax the engine does not implement
+
+StarlingMonkey's SpiderMonkey is built without Unicode property escapes, so a regular
+expression containing `\p{...}` is a *syntax* error: the module carrying one cannot be
+parsed at all, and the failure surfaces during pre-initialization rather than where it was
+written.
+
+While bundling, Jco replaces each escape with the exact set of code points it matches,
+computed from the building runtime's own Unicode tables, so the rewritten expression matches
+what Node matches. An escape is left alone when its expression is not in `u`/`v` mode -- where
+`\p` is a literal `p` and rewriting would change the meaning -- or when the building runtime
+does not know the property.
 
 The component engine already supplies the portable Web globals shared with Node,
 so Jco leaves their identities and behavior untouched. With ComponentizeJS 0.22.0's
@@ -806,6 +833,124 @@ connections.
 Connection pooling, upgrades, CONNECT tunnels, and HTTPS are explicit gaps.
 Unavailable operations throw `ERR_JCO_UNSUPPORTED_NODE_API` rather than silently
 doing nothing.
+
+#### Serving requests
+
+`http.createServer()` and `server.listen()` work on the `direct` and `wasi-sockets`
+implementations. What `listen()` does differs between them, and an application that wants to
+report the port it is serving on has to know which.
+
+> [!IMPORTANT]
+> On `wasi-sockets` the guest owns the accept loop, so an export that starts a server has to
+> stay on the stack for as long as the server should run. A component only executes while a
+> call into it is in progress: return, and nothing is left running to accept connections.
+> Under Node the open socket keeps the process alive; here you write that out:
+>
+> ```js
+> export async function start() {
+>     const server = createServer(handler);
+>     server.listen(0, "127.0.0.1");
+>     console.error(`listening on ${server.address().port}`);   // runs; listen() returns
+>
+>     // Serve until the component is torn down.
+>     await new Promise(() => {});
+> }
+> ```
+>
+> Waiting like this is worth doing explicitly rather than relying on the accept loop to hold
+> the call open by itself: it keeps the export open no matter how the implementation
+> schedules that loop.
+>
+> While the guest waits, the host thread waits too. Preview 2's `pollable.block()` is served
+> by `preview2-shim` through a worker and `Atomics.wait`, so the JavaScript host is parked for
+> as long as the guest is waiting for a connection. A client in the *same* process therefore
+> deadlocks -- it never gets a turn to send -- and has to run somewhere else, which is why the
+> test for this drives the component from a separate process.
+>
+> Serving from an export that returns needs component model async -- WASI 0.3.x, with an
+> interface whose functions are declared async -- so the guest can hold a task the host keeps
+> driving after the call completes. A component may mix Preview 2 interfaces with component
+> model async, but `node:http`'s implementations deliberately do not: they are Preview 2
+> throughout.
+>
+> Until then, a program that has to carry on doing other work after `listen()` wants the host
+> to own the socket instead: use the `direct` implementation, or export
+> `wasi:http/incoming-handler` and skip `node:http`'s server entirely.
+>
+> On `direct` the host owns the socket, `listen()` returns, and the export finishes normally.
+> Requests arrive later, through the callbacks export.
+
+Two things have to be arranged around the `direct` implementation.
+
+The host provider is one of the component's *imports*, so it cannot reach the component's
+exports by itself. The application introduces them once, after instantiating:
+
+```js
+import * as httpHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node";
+
+const instance = await instantiate(undefined, imports);
+httpHost.setCallbacks(instance["jco:node/http-callbacks@0.1.0"]);
+```
+
+And the exports that suspend on an asynchronous import have to be named when transpiling:
+
+```console
+jco transpile app.wasm -o out --async-mode jspi \
+    --async-exports start --async-exports 'jco:node/http-callbacks@0.1.0#handle-request' \
+    --map 'jco:node/http@0.1.0=...'
+```
+
+> [!NOTE]
+> Name them rather than passing `--async-exports '*'`. The wildcard marks an export's
+> binding asynchronous without wrapping the export in `WebAssembly.promising`, so the first
+> call that suspends fails with `SuspendError`.
+
+A component serving over `wasi-sockets` is not portable to a stock WASI host.
+ComponentizeJS's guest bindings do not emit a class for an imported resource that has no
+methods, while still referencing one when lifting a returned handle -- and
+`wasi:sockets/network`'s `network` is the only resource in WASI shaped that way, so any guest
+calling `instance-network()` fails with `import_network_0_2_12$Network is not defined`. It
+reproduces in twelve lines of WIT, a `resource token;` returned from a function, and affects
+ComponentizeJS 0.19.3 through 0.22.0. Preview 2's `wasi:sockets` implementation is complete
+and is not involved.
+
+Jco works around it by declaring one unused method on `network` in the WIT it injects. That
+method is part of the component's imported interface, so the component declares a
+`wasi:sockets/network` that is not the standard one and a host implementing only the standard
+interface will refuse to link it. It runs against Jco's transpiled JavaScript host. The
+workaround is commented where it lives, in
+`packages/jco/lib/wit/builtin/0.2.12/wasi-sockets/package.wit`, and should be removed once
+ComponentizeJS emits the class on its own.
+
+### Express
+
+Express is the widest test of this compatibility layer: nothing about it is written for
+components, it is CommonJS throughout, and between `express`, `body-parser`, `send`,
+`router`, `depd` and `iconv-lite` its dependency graph reaches most of what is listed above.
+An ordinary Express program componentizes with no adapter and no WIT of its own:
+
+```console
+jco componentize app.js --bundle --wit wit -o app.wasm
+```
+
+Everything it needs -- `node:http`'s transport, `node:fs`, `wasi:cli/environment` for
+`node:path` -- is discovered while bundling and added to the world, with a warning naming
+what was added so it can be reviewed and committed.
+
+Two limits are worth knowing before writing one:
+
+- **Build the application inside a function, not at module scope.** `express()` resolves its
+  default views directory with `path.resolve()`, and Jco's `node:path` reads the working
+  directory from `wasi:cli/environment`. A component's module scope runs during
+  pre-initialization, where reaching a WASI import fails the build outright, so
+  `const app = express()` at the top level of a module cannot work. Building the application
+  on first use is the only change an ordinary Express program needs.
+- **`res.sendFile()`, `res.render()` and `express.static()` need a filesystem.** They work
+  only in a world that imports `jco:node/fs` with a host wired up; the deny-by-default
+  provider satisfies the import for an application that never calls them.
+- **`app.listen()` behaves differently per implementation.** On `direct` the export finishes
+  and requests arrive afterwards; on `wasi-sockets` the export has to wait for as long as the
+  server should run. See [Serving requests](#serving-requests).
 
 ### Buffer
 

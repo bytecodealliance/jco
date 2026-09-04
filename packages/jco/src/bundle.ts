@@ -104,6 +104,11 @@ export async function bundleComponentSource(
         external: mergeExternal(config.external, options.external),
         plugins: [config.plugins ?? [], options.plugins ?? []],
         resolve: {
+            // The "neutral" platform resolves nothing by default, so a CommonJS dependency that
+            // only declares `main` -- which most of npm still is -- would not resolve at all.
+            // Listing them here restores that without adopting the rest of a platform preset.
+            // A bundle configuration can still replace the list.
+            mainFields: ["module", "main"],
             ...config.resolve,
             alias: aliases,
         },

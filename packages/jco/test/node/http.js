@@ -1,5 +1,8 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import nodeHttp from "node:http";
+import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
@@ -83,8 +86,11 @@ describe("node:http builtin adapter", () => {
         expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
 
-    test.concurrent("does not intercept the bare http specifier", () => {
-        expect(nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths).resolveId("http")).toBeNull();
+    test.concurrent("resolves the bare http specifier only when nothing is installed under that name", async () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths);
+        const resolve = (installed) => plugin.resolveId.call({ resolve: async () => installed }, "http");
+        expect(await resolve({ id: "/app/node_modules/http/index.js" })).toBeNull();
+        expect(await resolve(null)).toBe("\0jco-node-builtin:node:http");
     });
 
     test.each([
@@ -195,8 +201,7 @@ describe("node:http WIT installation", () => {
 });
 
 describe("node:http in a component", () => {
-    // TODO(unskip): use the published jco-std HTTP server exports once a release containing them is available.
-    test.skip("serves a request through guest -> WIT callback resource -> host node:http", async () => {
+    test("serves a request through guest -> WIT callback -> host node:http", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http-server",
             bundle: true,
@@ -210,7 +215,10 @@ describe("node:http in a component", () => {
             jco: {
                 transpile: {
                     extraArgs: {
-                        asyncExports: ["*"],
+                        // Named rather than `"*"`: the wildcard marks an export's binding async
+                        // without wrapping the export in `WebAssembly.promising`, so a call
+                        // that suspends on an async import fails with `SuspendError`.
+                        asyncExports: ["start", "stop", "jco:node/http-callbacks@0.1.0#handle-request"],
                         map: { "jco:node/http@0.1.0": NODE_HOST },
                     },
                 },
@@ -221,6 +229,56 @@ describe("node:http in a component", () => {
             const output = await exec(runner, esModuleOutputPath, NODE_HOST);
             expect(output.stdout.trim()).toBe("POST /items: hello");
         } finally {
+            await cleanup();
+        }
+    }, 600_000);
+
+    test("serves a request over wasi:sockets", async () => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-http-sockets-server",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "wasi-sockets"],
+        });
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http-sockets-server", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["start", "stop"] } } },
+        });
+        const runner = fileURLToPath(
+            new URL("../fixtures/componentize/node-http-sockets-server/run.js", import.meta.url),
+        );
+        // The guest blocks inside `start()` to accept connections, so it runs as its own
+        // process and reports the port it chose on stderr.
+        const server = spawn(process.execPath, [runner, esModuleOutputPath]);
+        try {
+            const port = await new Promise((resolve, reject) => {
+                let output = "";
+                const timer = setTimeout(() => reject(new Error(`no port in: ${output}`)), 120_000);
+                server.stderr.on("data", (chunk) => {
+                    output += chunk;
+                    const match = /listening on (\d+)/.exec(output);
+                    if (match) {
+                        clearTimeout(timer);
+                        resolve(Number(match[1]));
+                    }
+                });
+                server.once("error", reject);
+                server.once("exit", (code) => reject(new Error(`exited with ${code}: ${output}`)));
+            });
+
+            const body = await new Promise((resolve, reject) => {
+                const request = nodeHttp.request(`http://127.0.0.1:${port}/items`, { method: "POST" }, (response) => {
+                    response.setEncoding("utf8");
+                    const chunks = [];
+                    response.on("data", (chunk) => chunks.push(chunk));
+                    response.once("end", () => resolve(chunks.join("")));
+                });
+                request.once("error", reject);
+                request.end("hello");
+            });
+            expect(body).toBe("POST /items: hello");
+        } finally {
+            server.kill();
             await cleanup();
         }
     }, 600_000);

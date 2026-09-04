@@ -3,6 +3,19 @@ import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { withDefaultNodeCapabilities, withDefaultNodeCapabilityMap } from "../../src/cmd/transpile.js";
 import * as nodeWit from "../../src/node-wit.js";
 
+/** Stands for a package installed under a builtin's bare name. */
+const INSTALLED = { id: "/app/node_modules/impostor/index.js" };
+
+/**
+ * Resolve a specifier the way Rolldown would.
+ *
+ * A bare builtin name is only treated as a builtin when nothing else answers to it, so the
+ * plugin asks the resolver first; `installed` is what that resolver finds.
+ */
+function resolveBare(plugin, specifier, installed = null) {
+    return plugin.resolveId.call({ resolve: async () => installed }, specifier);
+}
+
 const environment = (patch = 6n) => ({
     imports: [
         { namespace: "wasi", package: "cli", interface: "environment", version: { major: 0n, minor: 2n, patch } },
@@ -181,9 +194,10 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent("does not intercept the legacy bare string_decoder specifier", () => {
+    test.concurrent("resolves the bare string_decoder specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
-        expect(plugin.resolveId("string_decoder")).toBeNull();
+        expect(await resolveBare(plugin, "string_decoder", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "string_decoder")).toBe("\0jco-node-builtin:node:string_decoder");
     });
 
     test.concurrent("loads the Errors globals module lazily", () => {
@@ -343,9 +357,10 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent("does not intercept the bare domain specifier", () => {
+    test.concurrent("resolves the bare domain specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { domainModule: "/jco/node/domain.js" });
-        expect(plugin.resolveId("domain")).toBeNull();
+        expect(await resolveBare(plugin, "domain", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "domain")).toBe("\0jco-node-builtin:node:domain");
     });
 
     test.concurrent("generates a capability-free adapter for node:diagnostics_channel", () => {
@@ -370,12 +385,13 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent("does not intercept the bare diagnostics_channel specifier", () => {
+    test.concurrent("resolves the bare diagnostics_channel specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { diagnosticsChannelModule: "/jco/node/diagnostics-channel.js" },
         );
-        expect(plugin.resolveId("diagnostics_channel")).toBeNull();
+        expect(await resolveBare(plugin, "diagnostics_channel", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "diagnostics_channel")).toBe("\0jco-node-builtin:node:diagnostics_channel");
     });
 
     test.concurrent("generates a capability-free adapter for node:async_hooks", () => {
@@ -400,12 +416,13 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent("does not intercept the bare async_hooks specifier", () => {
+    test.concurrent("resolves the bare async_hooks specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
             { asyncHooksModule: "/jco/node/async-hooks.js" },
         );
-        expect(plugin.resolveId("async_hooks")).toBeNull();
+        expect(await resolveBare(plugin, "async_hooks", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "async_hooks")).toBe("\0jco-node-builtin:node:async_hooks");
     });
 
     test.concurrent("generates an adapter for node:cluster", () => {
@@ -434,9 +451,10 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test.concurrent("does not intercept the bare cluster specifier", () => {
+    test.concurrent("resolves the bare cluster specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { clusterModule: "/jco/node/cluster.js" });
-        expect(plugin.resolveId("cluster")).toBeNull();
+        expect(await resolveBare(plugin, "cluster", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "cluster")).toBe("\0jco-node-builtin:node:cluster");
     });
 
     test.concurrent("reports the WIT capability required by node:child_process", () => {
@@ -571,9 +589,10 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent("does not intercept the bare events specifier", () => {
+    test.concurrent("resolves the bare events specifier only when nothing is installed under that name", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { unenvAliases });
-        expect(plugin.resolveId("events")).toBeNull();
+        expect(await resolveBare(plugin, "events", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "events")).toBe("\0jco-node-builtin:node:events");
     });
 
     test.each([
@@ -616,27 +635,45 @@ describe("Node builtin adapters", () => {
         expect(() => plugin.load("\0jco-node-builtin:unenv-buffer-core")).toThrow(/audited builtin unenv:buffer-core/);
     });
 
-    test.concurrent("ignores unsupported and legacy bare specifiers", () => {
+    test.concurrent("leaves an installed package ahead of the builtin of the same name", async () => {
         const plugin = nodeBuiltinPlugin(environment(), { pathFactory: "/jco/node/path.js" });
-        expect(plugin.resolveId("path")).toBeNull();
-        expect(plugin.resolveId("assert")).toBeNull();
-        expect(plugin.resolveId("assert/strict")).toBeNull();
-        expect(plugin.resolveId("buffer")).toBeNull();
-        expect(plugin.resolveId("querystring")).toBeNull();
-        expect(plugin.resolveId("string_decoder")).toBeNull();
-        expect(plugin.resolveId("fs")).toBeNull();
-        expect(plugin.resolveId("node:errors")).toBeNull();
-        expect(plugin.resolveId("errors")).toBeNull();
-        expect(plugin.resolveId("console")).toBeNull();
-        expect(plugin.resolveId("dns")).toBeNull();
-        expect(plugin.resolveId("dns/promises")).toBeNull();
-        expect(plugin.resolveId("os")).toBeNull();
+        for (const specifier of [
+            "path",
+            "assert",
+            "assert/strict",
+            "buffer",
+            "querystring",
+            "fs",
+            "console",
+            "dns",
+            "dns/promises",
+            "string_decoder",
+            "os",
+        ]) {
+            expect(await resolveBare(plugin, specifier, INSTALLED), specifier).toBeNull();
+        }
     });
 
-    test.concurrent("reports a missing environment capability only when node:path is used", () => {
-        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { pathFactory: "/jco/node/path.js" });
+    test.concurrent("ignores specifiers that name no builtin", async () => {
+        const plugin = nodeBuiltinPlugin(environment(), { pathFactory: "/jco/node/path.js" });
+        expect(plugin.resolveId("node:errors")).toBeNull();
+        expect(await resolveBare(plugin, "errors")).toBeNull();
+        expect(await resolveBare(plugin, "./local.js")).toBeNull();
+    });
+
+    test.concurrent("adds the environment capability node:path needs when the world lacks it", () => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { pathFactory: "/jco/node/path.js", onWitRequirement },
+        );
         expect(plugin.resolveId("./local.js")).toBeNull();
-        expect(() => plugin.resolveId("node:path")).toThrow(/import wasi:cli\/environment@0\.2\.x/);
+        // `node:path` is usually reached through a dependency, so the import is added the way
+        // every other builtin's is rather than asking the author to write it themselves.
+        expect(plugin.resolveId("node:path")).toBe("\0jco-node-builtin:node:path@0.2.12");
+        expect(onWitRequirement).toHaveBeenCalledWith(
+            expect.objectContaining({ witImport: "wasi:cli/environment@0.2.12" }),
+        );
     });
 
     test.concurrent("rejects ambiguous environment versions", () => {
