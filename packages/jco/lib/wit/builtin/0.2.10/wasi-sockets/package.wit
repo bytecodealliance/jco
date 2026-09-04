@@ -3,7 +3,13 @@ package wasi:sockets@0.2.10;
 interface network {
   use wasi:io/error@0.2.10.{error};
 
-  resource network;
+  resource network {
+    /// Work around a ComponentizeJS 0.22 bindings bug: it omits the wrapper
+    /// class for a methodless resource when that resource crosses interfaces.
+    /// This method is deliberately never called and can be removed once the
+    /// bindings generator handles the canonical methodless WIT declaration.
+    noop: func();
+  }
 
   enum error-code {
     unknown,

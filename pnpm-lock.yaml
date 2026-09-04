@@ -28,9 +28,6 @@ catalogs:
       specifier: ^2.0.2
       version: 2.0.2
 
-patchedDependencies:
-  '@bytecodealliance/componentize-js@0.22.0': 0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60
-
 importers:
 
   .:
@@ -241,7 +238,7 @@ importers:
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: ^0.22.0
-        version: 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+        version: 0.22.0
       '@bytecodealliance/jco':
         specifier: 1.31.0
         version: 1.31.0
@@ -265,7 +262,7 @@ importers:
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: ^0.22.0
-        version: 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+        version: 0.22.0
       '@bytecodealliance/jco':
         specifier: 1.31.0
         version: 1.31.0
@@ -347,13 +344,13 @@ importers:
     dependencies:
       '@bytecodealliance/componentize-js':
         specifier: ^0.22.0
-        version: 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+        version: 0.22.0
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: workspace:^
-        version: link:../jco-std
+        specifier: ^0.2.1
+        version: 0.2.1
       '@bytecodealliance/jco-transpile':
         specifier: ^0.12.1
         version: 0.12.1
@@ -436,7 +433,7 @@ importers:
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: ^0.22.0
-        version: 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+        version: 0.22.0
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
@@ -485,7 +482,7 @@ importers:
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: 'catalog:'
-        version: 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+        version: 0.22.0
       '@npmcli/run-script':
         specifier: ^10.0.2
         version: 10.0.4
@@ -522,7 +519,7 @@ importers:
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: 0.22.0
-        version: 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+        version: 0.22.0
       '@bytecodealliance/jco':
         specifier: 1.25.2
         version: 1.25.2
@@ -4754,7 +4751,7 @@ snapshots:
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
 
-  '@bytecodealliance/componentize-js@0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)':
+  '@bytecodealliance/componentize-js@0.22.0':
     dependencies:
       '@bytecodealliance/jco': 1.31.0
       '@bytecodealliance/weval': 0.4.1
@@ -4843,7 +4840,7 @@ snapshots:
 
   '@bytecodealliance/jco@1.27.0':
     dependencies:
-      '@bytecodealliance/componentize-js': 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+      '@bytecodealliance/componentize-js': 0.22.0
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.6.1
       '@bytecodealliance/preview2-shim': 0.20.2
@@ -4857,7 +4854,7 @@ snapshots:
 
   '@bytecodealliance/jco@1.31.0':
     dependencies:
-      '@bytecodealliance/componentize-js': 0.22.0(patch_hash=0e5384735ffde1121ea4e83536a1c2498347b31eebedbe82ceed2d9821b6ed60)
+      '@bytecodealliance/componentize-js': 0.22.0
       '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-transpile': 0.11.0
       '@bytecodealliance/preview2-shim': 0.21.0

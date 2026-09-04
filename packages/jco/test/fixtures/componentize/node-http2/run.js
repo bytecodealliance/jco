@@ -42,6 +42,10 @@ const imports = new WASIShim().getImportObject();
 Object.assign(imports["wasi:sockets/instance-network"], imports["wasi:sockets/network"]);
 Object.assign(imports["wasi:sockets/ip-name-lookup"], imports["wasi:sockets/network"]);
 Object.assign(imports["wasi:sockets/tcp-create-socket"], imports["wasi:sockets/tcp"]);
+// ComponentizeJS 0.22 omits bindings for a methodless resource used across WIT interfaces.
+// The vendored 0.2.10 WIT adds this unused method to force binding generation, so the
+// canonical preview2-shim resource supplies a matching no-op during test instantiation.
+imports["wasi:sockets/network"].Network.prototype.noop ??= () => {};
 // WASI sockets 0.2.10 exposed this function; 0.2.12 removed it. The adapter never calls it,
 // but StarlingMonkey's exact 0.2.10 interface still requires a host implementation.
 imports["wasi:sockets/network"].networkErrorCode ??= () => undefined;
