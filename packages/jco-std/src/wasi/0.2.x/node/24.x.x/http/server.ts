@@ -55,6 +55,22 @@ export interface ServerOptions {
   [name: string]: unknown;
 }
 
+/**
+ * Reads the first `Server` argument the way lib/_http_server.js does.
+ *
+ * A listener or a nullish value means "no options"; any other non-object is
+ * `ERR_INVALID_ARG_TYPE` rather than being read as an option bag.
+ */
+function serverOptions(value: ServerOptions | RequestListener | null | undefined): ServerOptions {
+  if (typeof value === "function" || value === null || value === undefined) {
+    return {};
+  }
+  if (typeof value !== "object") {
+    throw invalidArgType("options", "object", value);
+  }
+  return value;
+}
+
 export class ServerResponse extends OutgoingMessage {
   readonly req: IncomingMessage;
   statusCode = 200;
@@ -178,7 +194,7 @@ export class ServerBase extends EventEmitter {
 
   constructor(
     implementation: HttpImplementation,
-    optionsOrListener: ServerOptions | RequestListener = {},
+    optionsOrListener: ServerOptions | RequestListener | null = {},
     listener?: RequestListener,
   ) {
     super();
@@ -189,7 +205,7 @@ export class ServerBase extends EventEmitter {
           "the selected HTTP implementation cannot accept inbound connections",
       );
     }
-    const options = typeof optionsOrListener === "function" ? {} : optionsOrListener;
+    const options = serverOptions(optionsOrListener);
     const requestListener = typeof optionsOrListener === "function" ? optionsOrListener : listener;
     for (const name of [
       "IncomingMessage",
@@ -324,13 +340,16 @@ export class ServerBase extends EventEmitter {
 }
 
 export interface ServerConstructor {
-  new (optionsOrListener?: ServerOptions | RequestListener, listener?: RequestListener): ServerBase;
+  new (
+    optionsOrListener?: ServerOptions | RequestListener | null,
+    listener?: RequestListener,
+  ): ServerBase;
 }
 
 export function createServerConstructor(implementation: HttpImplementation): ServerConstructor {
   return class Server extends ServerBase {
     constructor(
-      optionsOrListener: ServerOptions | RequestListener = {},
+      optionsOrListener: ServerOptions | RequestListener | null = {},
       listener?: RequestListener,
     ) {
       super(implementation, optionsOrListener, listener);
