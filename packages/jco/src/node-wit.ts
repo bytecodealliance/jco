@@ -114,6 +114,16 @@ export const HTTP_WIT_REQUIREMENT = nodeRequirement("node:http", "http", {
     ],
 });
 
+/**
+ * `node:https` is `node:http` with TLS terminated by the same host interface, so it shares the
+ * import and the callback export; only the comment naming the importing builtin differs, and
+ * injection dedupes by `witImport` when a guest uses both.
+ */
+export const HTTPS_WIT_REQUIREMENT: NodeWitRequirement = {
+    ...HTTP_WIT_REQUIREMENT,
+    nodeSpecifier: "node:https",
+};
+
 export const HTTP2_WIT_REQUIREMENT: NodeWitRequirement = {
     nodeSpecifier: "node:http2",
     witImport: "jco:node/http2@0.1.0",
@@ -196,6 +206,16 @@ export const HTTP_WASI_HTTP_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:http/outgoing-handler@0.2.12", WASI_HTTP_DEPENDENCIES),
     wasiRequirement("wasi:http/types@0.2.12", WASI_HTTP_DEPENDENCIES),
 ] as const;
+
+function forHttps(requirements: readonly NodeWitRequirement[]): NodeWitRequirement[] {
+    return requirements.map((requirement) => ({ ...requirement, nodeSpecifier: "node:https" }));
+}
+
+export const HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS = forHttps(HTTP_WASI_SOCKETS_WIT_REQUIREMENTS);
+
+export const HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = forHttps(HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS);
+
+export const HTTPS_WASI_HTTP_WIT_REQUIREMENTS = forHttps(HTTP_WASI_HTTP_WIT_REQUIREMENTS);
 
 export interface WitInjectionResult {
     witPath: string;

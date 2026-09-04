@@ -80,6 +80,8 @@ interface http {
     connect-timeout-ms: option<u32>,
     first-byte-timeout-ms: option<u32>,
     between-bytes-timeout-ms: option<u32>,
+    /// Set only for `https` requests that carry TLS options.
+    tls: option<tls-options>,
   }
 
   record response {
@@ -88,6 +90,34 @@ interface http {
     http-version: string,
     headers: list<header>,
     body: list<u8>,
+  }
+
+  /// TLS configuration for one side of a connection, mirroring the serializable subset of
+  /// Node's `tls.createServer` / `tls.connect` options. Material fields are lists because Node
+  /// accepts arrays of PEM/DER blobs and OpenSSL reads only the first key of a concatenated PEM.
+  record tls-options {
+    key: option<list<list<u8>>>,
+    cert: option<list<list<u8>>>,
+    pfx: option<list<list<u8>>>,
+    passphrase: option<string>,
+    ca: option<list<list<u8>>>,
+    crl: option<list<list<u8>>>,
+    dhparam: option<list<u8>>,
+    ciphers: option<string>,
+    ecdh-curve: option<string>,
+    sigalgs: option<string>,
+    min-version: option<string>,
+    max-version: option<string>,
+    secure-protocol: option<string>,
+    secure-options: option<u32>,
+    session-id-context: option<string>,
+    honor-cipher-order: option<bool>,
+    alpn-protocols: option<list<string>>,
+    /// Client side only: the SNI name sent to the server.
+    servername: option<string>,
+    reject-unauthorized: option<bool>,
+    /// Server side only: request a client certificate.
+    request-cert: option<bool>,
   }
 
   record server-options {
@@ -104,6 +134,8 @@ interface http {
     keep-alive-initial-delay: option<u32>,
     reject-non-standard-body-writes: option<bool>,
     optimize-empty-requests: option<bool>,
+    /// Present for every `node:https` server, even when empty: the host terminates TLS.
+    tls: option<tls-options>,
   }
 
   record listen-options {
