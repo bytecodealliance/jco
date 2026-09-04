@@ -641,48 +641,50 @@ server.on("stream", (stream, headers) => {
 server.listen(8080, "127.0.0.1");
 ```
 
-Select the implementation independently from `node:http`:
+You can select the `node:http` implementation with `--with-nodejs-http2-via`:
+
 
 ```console
-jco componentize component.js --wit wit --bundle \
-  --with-nodejs-http2-via direct -o component.wasm
+jco componentize component.js \
+  --wit wit \
+  --bundle \
+  --with-nodejs-http2-via direct \
+  -o component.wasm
 ```
 
-`direct` is the default. Jco adds the typed `jco:node/http2@0.1.0` import and
-`jco:node/http2-callbacks@0.1.0` export only when absent. Servers, sessions, and
-streams are WIT resources; the separate guest-owned stream and server-error
-listener resources let a real Node host call back into the component. Jco
-re-bundles a small entry wrapper so the callback implementation is present on
-the final component export. The default host mapping denies client and server
-capabilities with `ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Opt in to real Node HTTP/2
-when transpiling:
+The default host mapping denies client and server capabilities with
+`ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Opt in to real Node HTTP/2 when transpiling:
 
 ```console
 jco transpile component.wasm \
   --map 'jco:node/http2@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node'
 ```
 
-The direct provider uses Node's actual `node:http2` implementation for h2c and
-TLS, including TLS ALPN negotiation. Its async connect, stream completion,
-settings, ping, listen, and close operations use JSPI rather than workers. The
-initial boundary buffers bodies; socket objects, priority, server push, and
-low-level flow-control access are explicitly unsupported.
+`direct` is the default which uses the WIT `jco:node/http2@0.1.0` import and
+`jco:node/http2-callbacks@0.1.0` export only when absent. This implementation
+passes through calls to NodeJS std libary functions.Servers, sessions, and streams are
+WIT resources; the separate guest-owned stream and server-error listener resources
+let a real Node host call back into the component.
+
+> [!NOTE]
+> The direct provider buffers HTTP bodies; socket objects, priority, server push, and
+> low-level flow-control access are explicitly unsupported.
+
+Jco re-bundles a small entry wrapper so the callback implementation is present on
+the final component export.
 
 `wasi-sockets` implements cleartext prior-knowledge HTTP/2 (`h2c`) in the guest:
 the client preface, framing, HPACK, multiplexed stream identifiers, settings,
 ping, reset, and connection- and stream-level flow control all run over Preview
-2 TCP streams. Both clients and TCP servers are supported. The implementation
-currently buffers complete request and response bodies and rejects HTTPS,
-secure servers, server push, Unix-domain listeners, arbitrary custom transports,
-and HTTP/1.1 `Upgrade: h2c`. HTTPS is not a limitation of TCP as a byte stream;
-it needs an additional guest TLS implementation with ALPN, certificate and trust
-handling, entropy, and time capabilities that this provider does not yet have.
+2 TCP streams.
+
+Both clients and TCP servers are supported. The implementation currently buffers complete
+request and response bodies and rejects HTTPS, secure servers, server push,
+Unix-domain listeners, arbitrary custom transports, and HTTP/1.1 `Upgrade: h2c`.
 
 `wasi-http` still rejects session and server operations: an outgoing handler
 represents individual requests, not observable Node HTTP/2 sessions or arbitrary
-inbound servers. Capability-free constants and settings packing remain available
-in all three modes. Jco's generated WIT edits are commented, warned about,
-alias-aware, selected-world aware, and idempotent.
+inbound servers.
 
 # License
 
