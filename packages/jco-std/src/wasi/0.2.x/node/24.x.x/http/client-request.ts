@@ -121,7 +121,7 @@ function abortError(reason: unknown): Error & { code: string } {
 }
 
 export class ClientRequestBase extends OutgoingMessage {
-  readonly agent: Agent | undefined;
+  readonly agent: Agent;
   readonly protocol: string;
   readonly host: string;
   readonly path: string;
@@ -145,10 +145,12 @@ export class ClientRequestBase extends OutgoingMessage {
     this.#hostname = normalized.hostname;
     this.#port = normalized.port;
     this.#responseListener = responseListener;
+    // lib/_http_client.js gives an `agent: false` request a fresh instance of the default
+    // agent's class rather than no agent at all, so the request never shares the global pool.
     this.agent =
       normalized.options.agent === false
-        ? undefined
-        : ((normalized.options.agent as Agent | undefined) ?? globalAgent);
+        ? new (globalAgent.constructor as new () => Agent)()
+        : ((normalized.options.agent as Agent | null | undefined) ?? globalAgent);
     this.protocol = normalized.protocol;
     this.host = normalized.authority;
     this.path = normalized.path;
