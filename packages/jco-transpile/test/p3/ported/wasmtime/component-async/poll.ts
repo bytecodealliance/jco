@@ -10,7 +10,7 @@ import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from './common.js';
 // wasmtime/crates/misc/component-async-tests/tests/scenario/transmit.rs
 //
 suite('poll scenario', () => {
-    test.skip('stackless', async () => {
+    test('stackless', async () => {
         let cleanup;
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-poll-stackless.wasm');
         try {
@@ -47,7 +47,7 @@ suite('poll scenario', () => {
         }
     });
 
-    test.skip('synchronous', async () => {
+    test('synchronous', async () => {
         let cleanup;
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-poll-synchronous.wasm');
         try {

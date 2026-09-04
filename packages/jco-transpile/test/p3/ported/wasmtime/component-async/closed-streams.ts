@@ -9,7 +9,7 @@ import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from './common.js';
 // In the upstream wasmtime repo, see:
 // wasmtime/crates/misc/component-async-tests/tests/scenario/streams.rs
 //
-suite.skip('closed streams scenario', () => {
+suite('closed streams scenario', () => {
     test('host->host', async () => {
         // TODO: use direct & indirect producer, direct & indirect consumer (all combinations)
         // TODO: create 2 host streams which will send 1 object

@@ -14,7 +14,7 @@ import { setupAsyncTest } from '../../../../helpers.js';
 // wasmtime/crates/misc/component-async-tests/tests/scenario/streams.rs
 //
 suite('read resource stream', () => {
-    test.skip('component', async () => {
+    test('component', async () => {
         class X {
             foo() {}
         }

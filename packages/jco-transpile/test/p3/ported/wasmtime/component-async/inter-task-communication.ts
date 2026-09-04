@@ -9,7 +9,7 @@ import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from './common.js';
 // In the upstream wasmtime repo, see:
 // wasmtime/crates/misc/component-async-tests/tests/scenario/streams.rs
 //
-suite.skip('inter-task communications scenario', () => {
+suite('inter-task communications scenario', () => {
     test('component', async () => {
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-intertask-communication.wasm');
         let cleanup;

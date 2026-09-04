@@ -100,11 +100,11 @@ suite('borrowing scenario', () => {
         }
     });
 
-    // TODO(fix): this test actually may not make sense, currently disabled while semantics are double checked
+    // TODO(fix): this test may not make sense and was disabled while its semantics were double checked
     // for when spawned tasks are expected to execute.
     // Long story short, the double-drop of XResource below here is not guaranteed to happen *before*
     // the `run-bool#run` completes, thus there is an error, but it's not
-    test.skip('callee misbehaves', async () => {
+    test('callee misbehaves', async () => {
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-borrowing-callee.wasm');
 
         let calls = 0;

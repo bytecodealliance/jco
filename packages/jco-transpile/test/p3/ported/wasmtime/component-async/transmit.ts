@@ -10,7 +10,7 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from '
 // wasmtime/crates/misc/component-async-tests/tests/scenario/transmit.rs
 //
 suite('transmit scenario', () => {
-    test.skip('callee & caller', async () => {
+    test('callee & caller', async () => {
         let cleanup;
 
         try {
@@ -41,7 +41,7 @@ suite('transmit scenario', () => {
         }
     });
 
-    test.skip('callee', async () => {
+    test('callee', async () => {
         let cleanup;
 
         try {
@@ -66,7 +66,7 @@ suite('transmit scenario', () => {
         }
     });
 
-    test.skip('readiness', async () => {
+    test('readiness', async () => {
         let cleanup;
 
         try {
