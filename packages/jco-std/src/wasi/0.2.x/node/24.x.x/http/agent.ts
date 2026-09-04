@@ -20,6 +20,7 @@ export interface AgentOptions {
   timeout?: number;
   defaultPort?: number;
   protocol?: string;
+  noDelay?: boolean;
   [name: string]: unknown;
 }
 
@@ -50,7 +51,10 @@ export class Agent extends EventEmitter {
 
   constructor(options: AgentOptions = {}) {
     super();
-    this.options = { ...options };
+    // lib/_http_agent.js normalises two fields into `agent.options` itself: `noDelay`
+    // defaults to true, and `path` is forced to null so net does not read the bag as a
+    // pipe target. Both are observable through `agent.options`.
+    this.options = { ...options, noDelay: options.noDelay ?? true, path: null };
     this.defaultPort = options.defaultPort ?? 80;
     this.protocol = options.protocol ?? "http:";
     this.keepAlive = options.keepAlive ?? false;
@@ -69,14 +73,25 @@ export class Agent extends EventEmitter {
   }
 
   getName(options: AgentNameOptions = {}): string {
-    if (options.socketPath) {
-      return `${options.socketPath}:`;
+    // Field order and the conditional separators follow lib/_http_agent.js at the pinned
+    // commit: an absent port contributes an empty field rather than `defaultPort`, and
+    // `family` and `socketPath` are appended only when set, so the name is variable-length.
+    let name = options.host || "localhost";
+    name += ":";
+    if (options.port) {
+      name += options.port;
     }
-    const host = options.host ?? "localhost";
-    const port = options.port ?? this.defaultPort;
-    const localAddress = options.localAddress ?? "";
-    const family = options.family === 4 || options.family === 6 ? `:${options.family}` : "";
-    return `${host}:${port}:${localAddress}${family}`;
+    name += ":";
+    if (options.localAddress) {
+      name += options.localAddress;
+    }
+    if (options.family === 4 || options.family === 6) {
+      name += `:${options.family}`;
+    }
+    if (options.socketPath) {
+      name += `:${options.socketPath}`;
+    }
+    return name;
   }
 
   keepSocketAlive(_socket: unknown): boolean {
