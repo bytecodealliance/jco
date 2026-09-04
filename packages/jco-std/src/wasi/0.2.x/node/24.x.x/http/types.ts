@@ -14,7 +14,7 @@ export interface HttpRequestOptions {
   auth?: string | null;
   timeout?: number;
   signal?: AbortSignal;
-  agent?: AgentLike | boolean;
+  agent?: AgentLike | boolean | null;
   defaultPort?: number | string;
   family?: number;
   hints?: number;
