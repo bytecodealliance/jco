@@ -1660,6 +1660,21 @@ mod tests {
     }
 
     #[test]
+    fn detected_deadlocks_carry_the_state_that_produced_them() {
+        let check =
+            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));
+
+        // The message is what the Canonical ABI asks for and is asserted on elsewhere, so
+        // the state that produced the deadlock rides beside it rather than inside it.
+        assert!(check.contains("err.deadlockDetail = {"));
+        assert!(check.contains("pendingHostOperations: STORE_ASYNC_STATE.pendingHostOperations,"));
+        assert!(check.contains("taskID: task.id(),"));
+        assert!(check.contains("componentIdx: task.componentIdx(),"));
+        assert!(check.contains("rootTaskID: task.getRootTask().id(),"));
+        assert!(check.contains("unresolvedRootTaskIDs:"));
+    }
+
+    #[test]
     fn host_async_operations_suppress_deadlock_detection() {
         let tracker =
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
