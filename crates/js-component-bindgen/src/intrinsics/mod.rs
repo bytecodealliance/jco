@@ -1571,15 +1571,11 @@ mod tests {
             "fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),"
         ));
         assert!(source.contains("preparedTask.setCalleeIsAsync((flags & 1) !== 0);"));
-        // An async callee enters synchronously only when it is a sync callee, when it is
-        // started from within a blocking synchronous slice, or when the caller is not
-        // callback-driven; otherwise entry is deferred so a cancellation-before-start is
-        // still observable.
-        assert!(source.contains("const mayStartSynchronously = !calleeIsAsync"));
-        assert!(source.contains("|| ASYNC_BLOCKING_CALL_DEPTH.value > 0"));
-        assert!(source.contains("|| !subtask.getParentTask().hasCallback();"));
-        assert!(source.contains("const enteredSynchronously = mayStartSynchronously"));
-        assert!(source.contains("? preparedTask.tryEnter()"));
+        // Every callee attempts eager entry.  `tryEnter` preserves STARTING only for real
+        // backpressure or lock contention, while otherwise exposing STARTED after the
+        // callee has run to its first suspension point.
+        assert!(source.contains("const enteredSynchronously = preparedTask.tryEnter();"));
+        assert!(!source.contains("const mayStartSynchronously"));
         assert!(source.contains("fn: () => callee.apply(null, startRes),"));
         assert!(!source.contains("if (callbackResult !== undefined)"));
         assert!(source.contains("driveCallback(callbackResult)?.catch(err =>"));
@@ -1597,22 +1593,26 @@ mod tests {
     #[test]
     fn subtask_cancel_drives_one_cancellable_child_slice() {
         let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
-        assert!(cancel.contains("childState.suspendedTaskReady(childTask.id())"));
-        assert!(cancel.contains("const progress = childTask.waitForProgress();"));
-        assert!(cancel.contains("childState.resumeTaskByID(childTask.id())"));
-        assert!(cancel.contains("await progress;"));
+        assert!(cancel.contains("const childProgress = childTask?.waitForProgress();"));
+        assert!(cancel.contains("subtask.requestCancellation();"));
+        assert!(cancel.contains("await childProgress;"));
+        assert!(cancel.contains("if (isAsync) { return 0xFFFFFFFF; }"));
 
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
         assert!(task.contains("#progressWaiters = [];"));
         assert!(task.contains("waitForProgress()"));
-        assert_eq!(task.matches("this.notifyProgress();").count(), 1);
-        let release = task
+        let exit = task
+            .find("exit(args)")
+            .expect("task class should contain an exit method");
+        let exit_body = &task[exit..];
+        let release = exit_body
             .find("state.exclusiveRelease(this.#id);")
             .expect("task exit should release component entry");
-        let progress = task
+        let progress = exit_body
             .find("this.notifyProgress();")
             .expect("task exit should report progress");
         assert!(release < progress);
+        assert!(task.contains("parentTask.notifyProgress();"));
 
         let state = render_intrinsic_body(Intrinsic::Component(
             ComponentIntrinsic::ComponentAsyncStateClass,

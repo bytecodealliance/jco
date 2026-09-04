@@ -1181,10 +1181,15 @@ impl LiftIntrinsic {
                 output.push_str(&format!(
                     r#"
                     function {lift_flat_option_fn}(meta) {{
+                        const {{ payloadMaybeNull }} = meta;
                         const f = {lift_variant}(meta);
                         return function {lift_flat_option_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_option_fn}()] args', {{ ctx }});
-                            return f(ctx);
+                            const res = f(ctx);
+                            if (!payloadMaybeNull) {{
+                                res[0] = res[0].tag === 'none' ? undefined : res[0].val;
+                            }}
+                            return res;
                         }}
                     }}
                 "#
@@ -1201,7 +1206,9 @@ impl LiftIntrinsic {
                         const f = {lift_variant}(meta);
                         return function {lift_flat_result_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lift_flat_result_fn}()] args', {{ ctx }});
-                            return f(ctx);
+                            const res = f(ctx);
+                            if (!('val' in res[0])) {{ res[0].val = undefined; }}
+                            return res;
                         }}
                     }}
                     "#

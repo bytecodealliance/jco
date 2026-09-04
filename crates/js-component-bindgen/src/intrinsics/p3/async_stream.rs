@@ -817,9 +817,9 @@ impl AsyncStreamIntrinsic {
                             return event;
                         }};
 
-                        const onCopyFn = (reclaimBufferFn) => {{
+                        const onCopyFn = (reclaimBufferFn, result = {stream_end_class}.CopyResult.COMPLETED) => {{
                             streamEnd.setPendingEvent(() => {{
-                                return processFn({stream_end_class}.CopyResult.COMPLETED, reclaimBufferFn);
+                                return processFn(result, reclaimBufferFn);
                             }});
                         }};
 
@@ -846,7 +846,7 @@ impl AsyncStreamIntrinsic {
                         format!(
                             r#"
                             _write(args) {{
-                                const {{ buffer, onCopyFn, onCopyDoneFn, componentIdx }} = args;
+                                const {{ buffer, onCopyFn, onCopyDoneFn, componentIdx, dropAfterCopy }} = args;
                                 if (!buffer) {{ throw new TypeError('missing/invalid buffer'); }}
                                 if (!onCopyFn) {{ throw new TypeError("missing/invalid onCopy handler"); }}
                                 if (!onCopyDoneFn) {{ throw new TypeError("missing/invalid onCopyDone handler"); }}
@@ -867,7 +867,7 @@ impl AsyncStreamIntrinsic {
                                         onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
                                         return;
                                     }}
-                                    this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn }});
+                                    this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn, dropAfterCopy }});
                                     return;
                                 }}
 
@@ -896,9 +896,11 @@ impl AsyncStreamIntrinsic {
                                 // to clear up space in the buffer.
                                 if (this.#pendingBufferMeta.buffer.remaining() === 0) {{
                                     this.resetAndNotifyPending({stream_end_class}.CopyResult.COMPLETED);
-                                    this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn }});
+                                    this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn, dropAfterCopy }});
                                     return;
                                 }}
+
+                                const shouldDropAfterCopy = dropAfterCopy || this.#pendingBufferMeta.dropAfterCopy;
 
                                 // At this point it is implied that remaining is > 0,
                                 // so if there is still remaining capacity in the incoming buffer, perform copy of values
@@ -920,11 +922,20 @@ impl AsyncStreamIntrinsic {
                                         buffer.read(numElements, {{ transferResources }}),
                                         {{ transferResources }},
                                     );
-                                    this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
+                                    this.#pendingBufferMeta.onCopyFn(
+                                        () => this.resetPendingBufferMeta(),
+                                        shouldDropAfterCopy
+                                            ? {stream_end_class}.CopyResult.DROPPED
+                                            : {stream_end_class}.CopyResult.COMPLETED,
+                                    );
                                     transferred = true;
                                 }}
 
-                                onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
+                                onCopyDoneFn(
+                                    shouldDropAfterCopy
+                                        ? {stream_end_class}.CopyResult.DROPPED
+                                        : {stream_end_class}.CopyResult.COMPLETED,
+                                );
                             }}
                         "#,
                         ),
@@ -938,7 +949,7 @@ impl AsyncStreamIntrinsic {
                         format!(
                             r#"
                             _read(args) {{
-                                const {{ buffer, onCopyDoneFn, onCopyFn, componentIdx, rejectLength }} = args;
+                                const {{ buffer, onCopyDoneFn, onCopyFn, componentIdx, rejectLength, dropAfterCopy }} = args;
                                 if (this.isDropped()) {{
                                     onCopyDoneFn({stream_end_class}.CopyResult.DROPPED);
                                     return;
@@ -951,6 +962,7 @@ impl AsyncStreamIntrinsic {
                                         onCopyFn,
                                         onCopyDoneFn,
                                         rejectLength,
+                                        dropAfterCopy,
                                     }});
                                     return;
                                 }}
@@ -979,6 +991,7 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 const pendingRemaining = this.#pendingBufferMeta.buffer.remaining();
+                                const shouldDropAfterCopy = dropAfterCopy || this.#pendingBufferMeta.dropAfterCopy;
                                 let transferred = false;
                                 if (pendingRemaining > 0) {{
                                     const bufferRemaining = buffer.remaining();
@@ -995,17 +1008,26 @@ impl AsyncStreamIntrinsic {
                                             this.#pendingBufferMeta.buffer.read(count, {{ transferResources }}),
                                             {{ transferResources }},
                                         );
-                                        this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
+                                        this.#pendingBufferMeta.onCopyFn(
+                                            () => this.resetPendingBufferMeta(),
+                                            shouldDropAfterCopy
+                                                ? {stream_end_class}.CopyResult.DROPPED
+                                                : {stream_end_class}.CopyResult.COMPLETED,
+                                        );
                                         transferred = true;
                                     }}
 
-                                    onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
+                                    onCopyDoneFn(
+                                        shouldDropAfterCopy
+                                            ? {stream_end_class}.CopyResult.DROPPED
+                                            : {stream_end_class}.CopyResult.COMPLETED,
+                                    );
 
                                     return;
                                 }}
 
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.COMPLETED);
-                                this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn, rejectLength }});
+                                this.setPendingBufferMeta({{ componentIdx, buffer, onCopyFn, onCopyDoneFn, rejectLength, dropAfterCopy }});
                             }}
                             "#,
                         ),
@@ -1038,6 +1060,7 @@ impl AsyncStreamIntrinsic {
                                  reallocFn,
                                  rejectLength,
                                  elemMeta,
+                                 dropAfterCopy,
                              }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
 
@@ -1093,6 +1116,7 @@ impl AsyncStreamIntrinsic {
                                  onCopyDoneFn,
                                  componentIdx,
                                  rejectLength,
+                                 dropAfterCopy,
                              }});
 
                              let injectedWritePromise;
@@ -1223,7 +1247,7 @@ impl AsyncStreamIntrinsic {
                             return this.writeMany(data);
                          }}
 
-                         async writeMany(values) {{
+                         async writeMany(values, opts = {{}}) {{
                             {debug_log_fn}('[{end_class_name}#writeMany()] args', {{ values }});
                             if (!Array.isArray(values)) {{ throw new TypeError("writeMany values must be an array"); }}
 
@@ -1276,6 +1300,7 @@ impl AsyncStreamIntrinsic {
                                     buffer,
                                     eventCode: {async_event_code_enum}.STREAM_WRITE,
                                     componentIdx: -1,
+                                    dropAfterCopy: opts.dropAfterCopy === true,
                                 }});
                                 if (this.#isHostOwned && this.hasPendingEvent()) {{
                                     // Host owned writes are just-in-time writes for an already pending guest read.
@@ -1374,7 +1399,7 @@ impl AsyncStreamIntrinsic {
                             if (this.#endOfStream) {{
                                 return {{ value: undefined, done: true }};
                             }}
-                            let {{ count, rejectLength }} = this.#readOpts(opts);
+                            let {{ count, rejectLength, dropAfterCopy }} = this.#readOpts(opts);
 
                             // Wait for an existing read operation to end, if present,
                             // otherwise register this read for any future operations.
@@ -1424,6 +1449,7 @@ impl AsyncStreamIntrinsic {
                                     eventCode: {async_event_code_enum}.STREAM_READ,
                                     componentIdx: -1,
                                     rejectLength,
+                                    dropAfterCopy,
                                 }});
 
                                 if (packedResult === {async_blocked_const}) {{
@@ -1514,7 +1540,8 @@ impl AsyncStreamIntrinsic {
                              if (rejectLength !== undefined && (!Number.isInteger(rejectLength) || rejectLength < 0)) {{
                                  throw new TypeError(`invalid stream read reject length [${{rejectLength}}]`);
                              }}
-                             return {{ count, rejectLength }};
+                             const dropAfterCopy = opts && typeof opts === "object" ? opts.dropAfterCopy === true : false;
+                             return {{ count, rejectLength, dropAfterCopy }};
                          }}
                         "#
                     ),
@@ -1610,16 +1637,17 @@ impl AsyncStreamIntrinsic {
                         {copy_impl}
 
                         setPendingBufferMeta(args) {{
-                            const {{ componentIdx, buffer, onCopyFn, onCopyDoneFn, rejectLength }} = args;
+                            const {{ componentIdx, buffer, onCopyFn, onCopyDoneFn, rejectLength, dropAfterCopy }} = args;
                             this.#pendingBufferMeta.componentIdx = componentIdx;
                             this.#pendingBufferMeta.buffer = buffer;
                             this.#pendingBufferMeta.onCopyFn = onCopyFn;
                             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
                             this.#pendingBufferMeta.rejectLength = rejectLength;
+                            this.#pendingBufferMeta.dropAfterCopy = dropAfterCopy;
                         }}
 
                         resetPendingBufferMeta() {{
-                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyFn: null, onCopyDoneFn: null, rejectLength: undefined }});
+                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyFn: null, onCopyDoneFn: null, rejectLength: undefined, dropAfterCopy: false }});
                         }}
 
                         getPendingBufferMeta() {{ return this.#pendingBufferMeta; }}
@@ -2009,7 +2037,8 @@ impl AsyncStreamIntrinsic {
                             if (rejectLength !== undefined && (!Number.isInteger(rejectLength) || rejectLength < 0)) {{
                                 throw new TypeError(`invalid stream read reject length [${{rejectLength}}]`);
                             }}
-                            return {{ count, rejectLength }};
+                            const dropAfterCopy = opts && typeof opts === "object" ? opts.dropAfterCopy === true : false;
+                            return {{ count, rejectLength, dropAfterCopy }};
                         }}
 
                         async write() {{
@@ -2577,8 +2606,8 @@ impl AsyncStreamIntrinsic {
                                   count -= pendingValues.drainInto(values, count);
                               }};
 
-                              const writeValues = async (writeValues) => {{
-                                  const writePromise = hostWriteEnd.writeMany(writeValues);
+                              const writeValues = async (writeValues, dropAfterCopy = false) => {{
+                                  const writePromise = hostWriteEnd.writeMany(writeValues, {{ dropAfterCopy }});
                                   if (hostWriteEnd.hasPendingEvent()) {{
                                       void writePromise.catch(() => {{}});
                                   }} else {{
@@ -2653,7 +2682,7 @@ impl AsyncStreamIntrinsic {
                               }}
 
                               if (!hasPendingReadBuffer()) {{ return bail(); }}
-                              await writeValues(values);
+                              await writeValues(values, pendingValues.done);
 
                               return doNothingFn;
                           }};

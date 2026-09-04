@@ -990,6 +990,7 @@ impl LowerIntrinsic {
                 output.push_str(&format!(
                     "
                     function {lower_flat_option_fn}(meta) {{
+                        const {{ payloadMaybeNull }} = meta;
                         const f = {lower_variant_fn}(meta);
                         return function {lower_flat_option_fn}Inner(ctx) {{
                             {debug_log_fn}('[{lower_flat_option_fn}()] args', {{ ctx }});
@@ -997,7 +998,7 @@ impl LowerIntrinsic {
                             const v = ctx.vals[0];
                             if (v === null || v === undefined) {{
                                 ctx.vals[0] = {{ tag: 'none' }};
-                            }} else {{
+                            }} else if (payloadMaybeNull) {{
                                 const isNotOptionObject = typeof v !== 'object'
                                                           || Object.keys(v).length !== 2
                                                           || !('tag' in v)
@@ -1006,6 +1007,8 @@ impl LowerIntrinsic {
                                 if (isNotOptionObject) {{
                                     ctx.vals[0] = {{ tag: 'some', val: v }};
                                 }}
+                            }} else {{
+                                ctx.vals[0] = {{ tag: 'some', val: v }};
                             }}
 
                             f(ctx);

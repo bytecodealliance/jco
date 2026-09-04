@@ -745,14 +745,15 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         setPendingBufferMeta(args) {{
-                            const {{ componentIdx, buffer, onCopyDoneFn }} = args;
+                            const {{ componentIdx, buffer, isWrite, onCopyDoneFn }} = args;
                             this.#pendingBufferMeta.componentIdx = componentIdx;
                             this.#pendingBufferMeta.buffer = buffer;
+                            this.#pendingBufferMeta.isWrite = isWrite;
                             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
                         }}
 
                         resetPendingBufferMeta() {{
-                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyDoneFn: null }});
+                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, isWrite: null, onCopyDoneFn: null }});
                         }}
 
                         getPendingBufferMeta() {{ return this.#pendingBufferMeta; }}
@@ -801,7 +802,7 @@ impl AsyncFutureIntrinsic {
                             if (this.isDropped()) {{ throw new Error('future already dropped'); }}
 
                             if (this.#pendingBufferMeta.buffer) {{
-                                if (!this.#pendingBufferMeta.buffer.isWritable()) {{
+                                if (!this.#pendingBufferMeta.isWrite) {{
                                     throw new Error('non-writable pending buffer during drop (reader blocked)');
                                 }}
                                 this.resetAndNotifyPending({future_end_class}.CopyResult.DROPPED);
@@ -858,6 +859,7 @@ impl AsyncFutureIntrinsic {
                                   this.setPendingBufferMeta({{
                                       buffer,
                                       componentIdx,
+                                      isWrite: false,
                                       onCopyDoneFn,
                                   }});
                                   return;
@@ -902,6 +904,7 @@ impl AsyncFutureIntrinsic {
                                   this.setPendingBufferMeta({{
                                       buffer,
                                       componentIdx,
+                                      isWrite: true,
                                       onCopyDoneFn,
                                   }});
                                   return;
@@ -1605,8 +1608,6 @@ impl AsyncFutureIntrinsic {
             Self::FutureCancelRead | Self::FutureCancelWrite => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
-                let remove_future_end_from_table_fn =
-                    render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let is_cancel_write = matches!(self, Self::FutureCancelWrite);
                 let future_end_class = if is_cancel_write {
                     render_args.require_intrinsic(Self::FutureWritableEndClass)
@@ -1617,11 +1618,18 @@ impl AsyncFutureIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
+                let current_task_get_fn = render_args
+                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let event_code = if is_cancel_write {
+                    format!("{async_event_code_enum}.FUTURE_WRITE")
+                } else {
+                    format!("{async_event_code_enum}.FUTURE_READ")
+                };
 
                 output.push_str(&format!(r#"
                     async function {future_cancel_fn}(
@@ -1630,43 +1638,38 @@ impl AsyncFutureIntrinsic {
                     ) {{
                         {debug_log_fn}('[{future_cancel_fn}()] args', {{
                             ctx,
-                            futureEndWaitableIdx,
+                            futureEndIdx,
                         }});
                         const {{ componentIdx, futureTableIdx, isAsync }} = ctx;
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        let futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
-                        if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
+                        const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx: futureEndIdx }});
+                        if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndIdx}}]`); }}
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new Error('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
-                        futureEnd = {remove_future_end_from_table_fn}({{
-                            tableIdx: futureTableIdx,
-                            futureWaitableIdx: futureEndWaitableIdx,
-                        }});
-                        if (!futureEnd) {{ throw new Error(`missing future with idx [${{futureEndWaitableIdx}}]`); }}
-
                         if (!futureEnd.isCopying()) {{ throw new Error('future end is not copying, cannot cancel'); }}
 
+                        futureEnd.setCopyState({future_end_class}.CopyState.CANCELLING_COPY);
+
                         if (!futureEnd.hasPendingEvent()) {{
-                          // TODO: cancel the shared thing (waitable?)
-                          if (!futureEnd.hasPendingEvent()) {{
-                            if (!isAsync) {{
-                              // TODO: repalce with what task.blockOn used to do
-                              // await task.blockOn({{ promise: futureEnd.waitable, isAsync: false }});
-                              throw new Error('not implemented');
-                            }} else {{
-                              return {async_blocked_const};
+                            futureEnd.cancel();
+
+                            if (!futureEnd.hasPendingEvent()) {{
+                                if (isAsync) {{ return {async_blocked_const}; }}
+
+                                const taskMeta = {current_task_get_fn}(componentIdx);
+                                if (!taskMeta?.task) {{ throw new Error('missing current task while cancelling future'); }}
+                                await taskMeta.task.suspendUntil({{ readyFn: () => futureEnd.hasPendingEvent() }});
                             }}
-                          }}
                         }}
 
                         const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
                         if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
-                        if (code !== {async_event_code_enum}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {async_event_code_enum} + ']'); }}
+                        if (code !== {event_code}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {event_code} + ']'); }}
                         if (index !== futureEndIdx) {{ throw new Error('index does not match future end'); }}
 
                         return payload;

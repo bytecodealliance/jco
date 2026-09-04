@@ -217,6 +217,12 @@ pub struct FunctionBindgen<'a> {
     /// Whether the function is guest async lifted (i.e. WASI P3)
     pub is_async: bool,
 
+    /// Whether the canonical ABI call itself is async.
+    ///
+    /// This can differ from `is_async` when an async component function is
+    /// canonically lifted from a synchronous core function.
+    pub canonical_abi_async: bool,
+
     /// Whether an async export returning a future needs a non-async outer
     /// function to preserve the future as a distinct awaitable layer.
     pub wrap_async_future_result: bool,
@@ -624,7 +630,9 @@ impl FunctionBindgen<'_> {
                   errHandling: '{err_handling}',
                   callingWasmExport: true,
               }});
+              task.setCalleeIsAsync({canonical_abi_async});
             "#,
+            canonical_abi_async = self.canonical_abi_async,
         );
 
         if self.is_async || self.requires_async_porcelain {
@@ -2337,8 +2345,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         )
                     };
 
-                assert!(!self.is_async, "async functions should use AsyncTaskReturn");
-
                 // Depending how many values are on the stack after returning, we must execute differently.
                 //
                 // In particular, if this function is async (distinct from whether async porcelain was necessary or not),
@@ -2352,7 +2358,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 "{post_return_js}",
-                                post_return_js = gen_post_return_js((format!("{f}();"), None)),
+                                post_return_js = gen_post_return_js((
+                                    format!("{}{f}();", if self.is_async { "await " } else { "" }),
+                                    None,
+                                )),
                             );
                         } else {
                             uwriteln!(self.src, "task.exit();");
@@ -2376,7 +2385,13 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 "{}",
-                                gen_post_return_js((format!("{f}(ret);"), None))
+                                gen_post_return_js((
+                                    format!(
+                                        "{}{f}(ret);",
+                                        if self.is_async { "await " } else { "" }
+                                    ),
+                                    None,
+                                ))
                             );
                         } else {
                             uwriteln!(self.src, "task.exit();");
@@ -2429,7 +2444,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             // Generate the JS that should perform the post return w/ the result
                             // and pass a copy fo the result to the actual caller
                             let post_return_js = gen_post_return_js((
-                                format!("{post_return_fn}(ret);"),
+                                format!(
+                                    "{}{post_return_fn}(ret);",
+                                    if self.is_async { "await " } else { "" }
+                                ),
                                 Some([format!("return {post_return_val};")].join("\n")),
                             ));
                             uwriteln!(self.src, "{post_return_js}");
@@ -3072,13 +3090,13 @@ impl Bindgen for FunctionBindgen<'_> {
                         }}
 
                         // TODO(feat): facilitate non utf8 string encoding for lowered futures
-                        const stringEncoding = 'utf8';
+                        const stringEncoding{tmp} = 'utf8';
 
                         let outermostReadEnd{tmp};
                         let futuresList{tmp} = [];
                         let future{tmp} = {future_arg};
                         let nextFuture{tmp};
-                        let openedCount = -1;
+                        let openedCount{tmp} = -1;
                         // Lower exactly this future layer. If its payload is another
                         // future, elemMeta.lowerFn recursively creates that endpoint.
                         let futureNestingLevel{tmp} = 0;
@@ -3102,17 +3120,17 @@ impl Bindgen for FunctionBindgen<'_> {
                                     flatCount: {payload_flat_count_js},
                                     align32: {payload_align32_js},
                                     size32: {payload_size32_js},
-                                    stringEncoding,
+                                    stringEncoding: stringEncoding{tmp},
                                     getReallocFn: {get_realloc_fn_expr},
                                 }}
                             }});
 
-                            const hostInjectFn = {gen_future_host_inject_fn}({{
+                            const hostInjectFn{tmp} = {gen_future_host_inject_fn}({{
                                 promise: future{tmp},
-                                stringEncoding,
+                                stringEncoding: stringEncoding{tmp},
                                 hostWriteEnd: writeEnd,
                             }});
-                            readEnd.setHostInjectFn(hostInjectFn);
+                            readEnd.setHostInjectFn(hostInjectFn{tmp});
 
                             const meta{tmp} = {{
                                 isInnermost: futureNestingLevel{tmp} === {nesting_level},
@@ -3128,11 +3146,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             future{tmp}.componentIdx = {component_idx_expr};
                             future{tmp}.then = async (resolve, reject) => {{
                                 let p;
-                                if (openedCount === {nesting_level}) {{
+                                if (openedCount{tmp} === {nesting_level}) {{
                                     p = innerFuture;
                                 }} else {{
-                                    openedCount++;
-                                    p = futuresList{tmp}[futuresList{tmp}.length - (openedCount + 1)];
+                                    openedCount{tmp}++;
+                                    p = futuresList{tmp}[futuresList{tmp}.length - (openedCount{tmp} + 1)];
                                 }}
 
                                 try {{
@@ -3459,12 +3477,12 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         const readFn{tmp} = {gen_read_fn_from_lowerable_stream_fn}({stream_arg});
 
-                        const hostInjectFn = {gen_stream_host_inject_fn}({{
+                        const hostInjectFn{tmp} = {gen_stream_host_inject_fn}({{
                             readFn: readFn{tmp},
                             hostWriteEnd: hostWriteEnd{tmp},
                             readEnd: readEnd{tmp},
                         }});
-                        readEnd{tmp}.setHostInjectFn(hostInjectFn);
+                        readEnd{tmp}.setHostInjectFn(hostInjectFn{tmp});
                         readEnd{tmp}.setHostDropFn(readFn{tmp}.drop);
 
                         const {lowered_stream_waitable_idx} = readEnd{tmp}.waitableIdx();

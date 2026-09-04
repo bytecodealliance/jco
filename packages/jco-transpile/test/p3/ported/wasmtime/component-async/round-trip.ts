@@ -1,43 +1,119 @@
+import assert from 'node:assert';
 import { join } from 'node:path';
 
 import { suite, test } from 'vitest';
 
 import { buildAndTranspile, COMPONENT_FIXTURES_DIR } from './common.js';
 
-// These tests are ported from upstream wasmtime's component-async-tests
+// These tests are ported from upstream wasmtime's component-async-tests:
 //
-// In the upstream wasmtime repo, see:
-// wasmtime/crates/misc/component-async-tests/tests/scenario/round_trip_direct.rs
-//
+// - wasmtime/crates/misc/component-async-tests/tests/scenario/round_trip.rs
+// - wasmtime/crates/misc/component-async-tests/tests/scenario/round_trip_direct.rs
+// - wasmtime/crates/misc/component-async-tests/tests/scenario/round_trip_many.rs
+
+const inputs = ['hello, world!', '¡hola, mundo!', "hi y'all!"];
+
+async function yieldTimes(count) {
+    for (let i = 0; i < count; i++) {
+        await Promise.resolve();
+    }
+}
+
+async function roundTripHost(input) {
+    await yieldTimes(5);
+    return `${input} - entered host - exited host`;
+}
+
+function expectedOutput(input) {
+    return `${input} - entered guest - entered host - exited host - exited guest`;
+}
+
+async function testRoundTrip(componentName) {
+    let cleanup;
+    try {
+        const res = await buildAndTranspile({
+            componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip', componentName),
+            instantiation: {
+                imports: {
+                    'local:local/baz': { foo: roundTripHost },
+                },
+            },
+        });
+        cleanup = res.cleanup;
+
+        const outputs = await Promise.all(inputs.map((input) => res.instance.baz.foo(input)));
+        assert.deepStrictEqual(outputs, inputs.map(expectedOutput));
+    } finally {
+        if (cleanup) {
+            await cleanup();
+        }
+    }
+}
+
+function manyArguments(input) {
+    const stuff = {
+        a: new Int32Array(42).fill(42),
+        b: true,
+        c: 424242n,
+    };
+
+    return [
+        input,
+        42,
+        new Uint8Array(42).fill(42),
+        [4242n, 424242424242n],
+        stuff,
+        stuff,
+        { tag: 'err', val: undefined },
+    ];
+}
+
+async function roundTripManyHost(a, b, c, d, e, f, g) {
+    await yieldTimes(5);
+    return [`${a} - entered host - exited host`, b, c, d, e, f, g];
+}
+
+async function testRoundTripMany(componentName) {
+    let cleanup;
+    try {
+        const res = await buildAndTranspile({
+            componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip', componentName),
+            instantiation: {
+                imports: {
+                    'local:local/many': { foo: roundTripManyHost },
+                },
+            },
+        });
+        cleanup = res.cleanup;
+
+        const outputs = await Promise.all(inputs.map((input) => res.instance.many.foo(...manyArguments(input))));
+        assert.deepStrictEqual(
+            outputs,
+            inputs.map((input) => manyArguments(expectedOutput(input))),
+        );
+    } finally {
+        if (cleanup) {
+            await cleanup();
+        }
+    }
+}
+
 suite('round-trip scenario', () => {
     test('direct stackless', async () => {
         let cleanup;
         try {
             const res = await buildAndTranspile({
                 componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-direct-stackless.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
-
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
+                instantiation: {
+                    imports: {
+                        foo: { default: roundTripHost },
+                    },
+                },
             });
-            const instance = res.instance;
             cleanup = res.cleanup;
-            void [instance, cleanup];
 
-            throw new Error('not implemented');
+            const outputs = await Promise.all(inputs.map((input) => res.instance.foo(input)));
+            assert.deepStrictEqual(outputs, inputs.map(expectedOutput));
         } finally {
             if (cleanup) {
                 await cleanup();
@@ -45,251 +121,17 @@ suite('round-trip scenario', () => {
         }
     });
 
-    test('many stackless', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-many-stackless.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
+    test('many stackless', () => testRoundTripMany('async-round-trip-many-stackless.wasm'));
 
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
+    test('many synchronous', () => testRoundTripMany('async-round-trip-many-synchronous.wasm'));
 
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
+    test('many wait', () => testRoundTripMany('async-round-trip-many-wait.wasm'));
 
-    test('many synchronous', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-many-synchronous.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
+    test('wait', () => testRoundTrip('async-round-trip-wait.wasm'));
 
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
+    test('stackless sync import', () => testRoundTrip('async-round-trip-stackless-sync-import.wasm'));
 
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
+    test('indirect stackless', () => testRoundTrip('async-round-trip-stackless.wasm'));
 
-    test('many wait', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-many-wait.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
-
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
-
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
-    test('wait', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-wait.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
-
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
-
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
-    test('stackless sync import', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(
-                    COMPONENT_FIXTURES_DIR,
-                    'p3/round-trip/async-round-trip-stackless-sync-import.wasm',
-                ),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
-
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
-
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
-    test('indirect stackless', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-stackless.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
-
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
-
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
-    test('synchronous', async () => {
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath: join(COMPONENT_FIXTURES_DIR, 'p3/round-trip/async-round-trip-synchronous.wasm'),
-                // instantiation: {
-                //     imports: {
-                //         "local:local/borrowing-types": {
-                //             X: class XResource {
-                //                 foo() {
-                //                     calls += 1;
-                //                 }
-                //             },
-                //         },
-                //     },
-                // },
-
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-            void [instance, cleanup];
-
-            throw new Error('not implemented');
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
+    test('synchronous', () => testRoundTrip('async-round-trip-synchronous.wasm'));
 });

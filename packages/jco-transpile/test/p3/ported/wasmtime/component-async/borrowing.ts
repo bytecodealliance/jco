@@ -100,10 +100,6 @@ suite('borrowing scenario', () => {
         }
     });
 
-    // TODO(fix): this test may not make sense and was disabled while its semantics were double checked
-    // for when spawned tasks are expected to execute.
-    // Long story short, the double-drop of XResource below here is not guaranteed to happen *before*
-    // the `run-bool#run` completes, thus there is an error, but it's not
     test('callee misbehaves', async () => {
         const componentPath = join(COMPONENT_FIXTURES_DIR, 'p3/general/async-borrowing-callee.wasm');
 
@@ -134,11 +130,14 @@ suite('borrowing scenario', () => {
             cleanup = res.cleanup;
 
             try {
-                // the below line calls foo() twice
-                await instance['local:local/run-bool'].run(true);
+                await Promise.all([
+                    instance['local:local/run-bool'].run(true),
+                    instance['local:local/run-bool'].run(true),
+                    instance['local:local/run-bool'].run(true),
+                ]);
                 assert.fail('should have failed');
             } catch (err) {
-                assert.include(err.message.toLowerCase(), 'invalid handle');
+                assert.include(err.message.toLowerCase(), 'unknown handle index');
             }
         } finally {
             if (cleanup) {

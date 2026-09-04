@@ -3132,17 +3132,14 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Calculate the number of parameters required to represent the results,
                 // and whether they'll be stored in memory
-                let result_flat_param_total: usize = result_types
-                    .iter()
-                    .map(|t| {
-                        self.types
-                            .canonical_abi(t)
-                            .flat_count
-                            .map(usize::from)
-                            .unwrap_or(0)
-                    })
-                    .sum();
-                let use_direct_params = result_flat_param_total < MAX_FLAT_PARAMS;
+                let result_flat_param_total = result_types.iter().try_fold(0usize, |total, t| {
+                    self.types
+                        .canonical_abi(t)
+                        .flat_count
+                        .map(|count| total + usize::from(count))
+                });
+                let use_direct_params =
+                    result_flat_param_total.is_some_and(|count| count <= MAX_FLAT_PARAMS);
 
                 // Build up a list of all the lifting functions that will be needed for the types
                 // that are actually being passed through task.return
@@ -4860,6 +4857,7 @@ impl<'a> Instantiator<'a, '_> {
             resolve: self.resolve,
             requires_async_porcelain,
             is_async,
+            canonical_abi_async: opts.async_,
             wrap_async_future_result,
             result_ty: func.result.as_ref(),
             iface_name,
@@ -4906,7 +4904,7 @@ impl<'a> Instantiator<'a, '_> {
             },
             func,
             &mut f,
-            is_async,
+            if for_import { is_async } else { opts.async_ },
         );
 
         if is_guest_export {
@@ -5943,6 +5941,15 @@ fn flat_count_js_expr(flat_count: &Option<u8>) -> String {
         .unwrap_or_else(|| "null".into())
 }
 
+fn interface_type_maybe_null(component_types: &ComponentTypes, ty: &InterfaceType) -> bool {
+    match ty {
+        InterfaceType::Option(idx) => {
+            !interface_type_maybe_null(component_types, &component_types[*idx].ty)
+        }
+        _ => false,
+    }
+}
+
 /// The Canonical ABI `join` operation over flat core types, used when
 /// computing the flat representation of variant payloads.
 fn join_flat_core_types(a: &'static str, b: &'static str) -> &'static str {
@@ -6423,6 +6430,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 flat_core_types_js_expr(&flat_core_types(component_types, &option_ty.ty));
             let some_ty_lift_fn_js =
                 gen_flat_lift_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
+            let payload_maybe_null = interface_type_maybe_null(component_types, &option_ty.ty);
 
             format!(
                 r#"
@@ -6436,6 +6444,7 @@ pub fn gen_flat_lift_fn_js_expr(
                     variantPayloadOffset32: {option_payload_offset32},
                     variantFlatCount: {option_flat_count},
                     variantPayloadFlatTypes: {option_payload_flat_types},
+                    payloadMaybeNull: {payload_maybe_null},
                 }})
                 "#
             )
@@ -7084,6 +7093,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let some_ty_align32 = some_ty_abi.align32;
             let some_ty_lower_fn_js =
                 gen_flat_lower_fn_js_expr(instantiator, &option_ty.ty, extra_resource_map);
+            let payload_maybe_null = interface_type_maybe_null(component_types, &option_ty.ty);
 
             format!(
                 r#"
@@ -7096,6 +7106,7 @@ pub fn gen_flat_lower_fn_js_expr(
                        variantAlign32: {option_align32},
                        variantPayloadOffset32: {option_payload_offset32},
                        variantFlatCount: {option_flat_count},
+                       payloadMaybeNull: {payload_maybe_null},
                    }})
                 "#
             )

@@ -539,6 +539,7 @@ impl HostIntrinsic {
                                     calleeComponentState.exclusiveRelease(preparedTask.id());
                                 }}
                                 preparedTask.resolve([callbackResult]);
+                                preparedTask.exit({{ skipExclusiveLockCheck: true }});
                                 return;
                             }}
 
@@ -629,26 +630,12 @@ impl HostIntrinsic {
                             }});
                         }};
 
-                        // Decide whether the callee may enter (and run) synchronously in this
-                        // slice, or must yield to the event loop first.
-                        //
-                        // A synchronous callee (flags bit 0 clear) has no suspension point and must
-                        // run here so task.return can report RETURNED eagerly. An async subtask
-                        // started from within a blocking synchronous slice (blocking-call depth > 0)
-                        // must likewise run in-slice: its caller is blocked on the result and cannot
-                        // yield. Otherwise, when the caller is callback-driven (has a callback and so
-                        // returns to the event loop before the callee runs), defer entry so a
-                        // cancellation-before-start stays observable.
-                        //
-                        // Reserve component entry before returning so a following call observes
-                        // either explicit backpressure or the in-flight component slice. Only a
-                        // successfully entered task transitions from STARTING to STARTED.
-                        const mayStartSynchronously = !calleeIsAsync
-                            || {blocking_call_depth}.value > 0
-                            || !subtask.getParentTask().hasCallback();
-                        const enteredSynchronously = mayStartSynchronously
-                            ? preparedTask.tryEnter()
-                            : null;
+                        // Enter eagerly when backpressure and the per-component slice lock permit
+                        // it. `tryEnter()` returns null for real contention, preserving an
+                        // observable STARTING state only when the callee genuinely cannot start.
+                        // A successful async entry runs through its first suspension point before
+                        // returning STARTED, matching the canonical ABI scheduling contract.
+                        const enteredSynchronously = preparedTask.tryEnter();
                         if (enteredSynchronously === true) {{
                             // Directly returned STARTED is not also delivered as an event, so
                             // install the progress handler only after the state transition.
