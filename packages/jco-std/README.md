@@ -37,6 +37,8 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/http`                    | `node:http` API with direct, WASI sockets, and WASI HTTP implementations      |
 | `wasi/0.2.x/node/24.x.x/http2`                   | `node:http2` API with direct and cleartext WASI sockets implementations       |
 | `wasi/0.2.x/node/24.x.x/https`                   | `node:https` API sharing the `node:http` core and implementations             |
+| `wasi/0.2.x/node/24.x.x/net`                     | `node:net` module over WASI Preview 2 0.2.12 sockets                          |
+| `wasi/0.2.x/node/24.x.x/net/core`                | `node:net` core over injected WASI Preview 2 sockets                          |
 | `wasi/0.2.x/node/24.x.x/os`                      | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                    | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/string-decoder`          | Guest-local `node:string_decoder` implementation for Node 24                  |
@@ -158,6 +160,7 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   calling back into the component through a guest-exported callbacks interface;
 - the `node:http` and `node:https` APIs, with selectable direct,
   `wasi:sockets`, and `wasi:http` implementations;
+- the `node:net` TCP client/server and address APIs over `wasi:sockets`;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
@@ -552,6 +555,28 @@ exports are consequently promise-returning and must be awaited by JavaScript hos
 interface does not expose an in-flight c-ares request as a resource that a later
 guest call could cancel. The WIT boundary remains runtime-neutral so a browser DNS
 provider can be added later.
+
+### Net
+
+`node:net` uses Preview 2 DNS, TCP, IO streams, and pollables directly. Jco adds
+the matching `wasi:sockets` and `wasi:io` imports for the selected 0.2.12 or
+0.2.10 world; it does not add a Jco-specific network capability. Ordinary TCP
+client and server code remains unchanged:
+
+```js
+import { connect, createServer } from "node:net";
+
+createServer((socket) => socket.end("hello")).listen(8080, "127.0.0.1");
+connect(8080, "127.0.0.1").setEncoding("utf8").on("data", console.log);
+```
+
+The module also provides `BlockList`, `SocketAddress`, IP predicates,
+`BoundSocket`, family-selection defaults, and Node 24.19's exact named-export
+surface. Unix-domain sockets, named pipes, arbitrary file-descriptor/libuv
+handles, custom DNS callbacks, and socket options missing from Preview 2 are
+rejected explicitly. `Socket` provides the common Duplex-shaped API but cannot
+inherit from a classic `node:stream.Duplex` until that stream implementation is
+available.
 
 ### HTTP
 
