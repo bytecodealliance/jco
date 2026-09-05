@@ -123,6 +123,7 @@ is planned.
 | `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                                              |
 | `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation -- see below. Servers need `direct` or `wasi-sockets`.                   |
 | `node:https`                                      | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https`                                             | The `node:http` core with the `https:` profile and a TLS-aware `Agent`; same implementation selection. TLS uses the `direct` host or an explicit `wasi:tls` provider -- see below. |
+| `node:net`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/net/core`                                          | TCP clients, servers, and address utilities over Preview 2 `wasi:sockets`; native handles and IPC are unsupported -- see below.                                        |
 | `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.                  |
 | `node:os`                                         | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os`                                                | Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider -- see below.                                  |
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                                          |
@@ -776,6 +777,48 @@ boundary does not expose an outstanding c-ares request that a later guest call
 could cancel. The provider boundary otherwise remains Node-independent, leaving
 room for a future browser implementation.
 
+### TCP sockets
+
+`node:net` implements Node 24.19's 18-export module surface over Preview 2
+`wasi:sockets`. It includes TCP `Socket` and `Server`, `BoundSocket`,
+`SocketAddress`, `BlockList`, IP-family predicates, overload normalization, and
+the auto-family defaults. `connect` and `createConnection` are the same function,
+and `Socket` and `Stream` are the same constructor, as in Node.
+
+```js
+import { connect, createServer } from 'node:net';
+
+createServer((socket) => socket.end('hello')).listen(8080, '127.0.0.1');
+
+connect(8080, '127.0.0.1').setEncoding('utf8').on('data', console.log);
+```
+
+Jco injects only the selected world's Preview 2 DNS, TCP, stream, and pollable
+interfaces and their standard WIT packages. QuickJS worlds use 0.2.12;
+StarlingMonkey worlds can use 0.2.10. There is no Jco-specific network host
+interface and no bare `net` alias.
+
+Preview 2 has no Unix-domain sockets, Windows named pipes, OS file descriptors,
+libuv handles, TCP reset, IP type-of-service, or custom JavaScript DNS callback.
+Those operations throw `ERR_JCO_UNSUPPORTED_NODE_API`. Address attempts are
+sequential rather than reproducing Node's exact Happy Eyeballs timing. Socket
+objects provide the common readable/writable methods and events but do not yet
+inherit from classic `node:stream.Duplex`, because Jco does not have a faithful
+classic stream core.
+
+Reads support Node string encodings, buffered `read()`, and async iteration.
+Writable operations complete through blocking WASI writes and do not yet provide
+classic stream backpressure. `setNoDelay()`, `ref()`, and `unref()` preserve the
+callable surface but cannot control the host's TCP_NODELAY or event-loop references.
+Nonzero socket timeouts require an engine with JavaScript timers; engines without
+them reject `setTimeout()` explicitly. The deprecated `bufferSize` getter throws
+the Jco deprecated-API error; use `writableLength` instead.
+
+Half-close depends on the host honoring WASI's directional `shutdown`. The
+Preview 2 Node host shim 0.22.0 currently closes both directions; applications
+using that host should let the peer finish its response before closing the
+socket's writable side.
+
 ### HTTP and selectable implementations
 
 The `node:http` adapter implements both client and server NodeJS HTTP APIs,
@@ -1069,7 +1112,7 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:crypto`, `node:dgram`, `node:http2`, `node:net`,
+`node:crypto`, `node:dgram`, `node:http2`,
 `node:perf_hooks`, `node:process`, `node:repl`, `node:sqlite`, `node:stream`,
 `node:stream/promises`, `node:stream/web`, `node:timers`,
 `node:tls`, `node:util`, `node:util/types`, `node:v8`, `node:vm`, `node:wasi`,
