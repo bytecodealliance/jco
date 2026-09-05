@@ -207,33 +207,43 @@ export const HTTP_WASI_HTTP_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:http/types@0.2.12", WASI_HTTP_DEPENDENCIES),
 ] as const;
 
-function forHttps(requirements: readonly NodeWitRequirement[]): NodeWitRequirement[] {
-    return requirements.map((requirement) => ({ ...requirement, nodeSpecifier: "node:https" }));
+function forNodeSpecifier(requirements: readonly NodeWitRequirement[], nodeSpecifier: string): NodeWitRequirement[] {
+    return requirements.map((requirement) => ({ ...requirement, nodeSpecifier }));
 }
 
 function tlsRequirements(): NodeWitRequirement[] {
     const tlsRoot = new URL("../lib/wit/builtin/wasi-tls-0.2.0-draft/", import.meta.url);
-    return forHttps([
-        wasiRequirement("wasi:tls/types@0.2.0-draft", [
-            {
-                dependencyDirectory: "wasi-tls-0.2.0-draft",
-                dependencySources: ["world.wit", "types.wit"].map((name) => fileURLToPath(new URL(name, tlsRoot))),
-            },
-            WASI_IO_DEPENDENCY,
-        ]),
-    ]);
+    return forNodeSpecifier(
+        [
+            wasiRequirement("wasi:tls/types@0.2.0-draft", [
+                {
+                    dependencyDirectory: "wasi-tls-0.2.0-draft",
+                    dependencySources: ["world.wit", "types.wit"].map((name) => fileURLToPath(new URL(name, tlsRoot))),
+                },
+                WASI_IO_DEPENDENCY,
+            ]),
+        ],
+        "node:https",
+    );
 }
 export const HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
-    ...forHttps(HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS),
+    ...forNodeSpecifier(HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS, "node:https"),
     ...tlsRequirements(),
 ] as const;
 
 export const HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS = [
-    ...forHttps(HTTP_WASI_SOCKETS_WIT_REQUIREMENTS),
+    ...forNodeSpecifier(HTTP_WASI_SOCKETS_WIT_REQUIREMENTS, "node:https"),
     ...tlsRequirements(),
 ];
 
-export const HTTPS_WASI_HTTP_WIT_REQUIREMENTS = forHttps(HTTP_WASI_HTTP_WIT_REQUIREMENTS);
+export const HTTPS_WASI_HTTP_WIT_REQUIREMENTS = forNodeSpecifier(HTTP_WASI_HTTP_WIT_REQUIREMENTS, "node:https");
+
+export const NET_WASI_SOCKETS_WIT_REQUIREMENTS = forNodeSpecifier(HTTP_WASI_SOCKETS_WIT_REQUIREMENTS, "node:net");
+
+export const NET_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = forNodeSpecifier(
+    HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
+    "node:net",
+);
 
 export interface WitInjectionResult {
     witPath: string;
