@@ -1,7 +1,8 @@
 import {
+  accept,
+  bind,
   dispose,
-  finishPending,
-  localAddress,
+  listen as listenTcp,
   nodeAddress,
   socketError,
   wasiU64,
@@ -10,7 +11,7 @@ import {
   type WasiOutputStream,
   type WasiSocketsProvider,
   type WasiTcpSocket,
-} from "../../../http/impl/wasi-sockets/index.js";
+} from "../../../internal/wasi-sockets.js";
 import { unsupported } from "../../errors.js";
 import { getDefaultSettings, validateSettings } from "../../settings.js";
 import type {
@@ -93,41 +94,24 @@ class Http2Server implements Http2ServerImplementation {
     if (options.path !== undefined) {
       unsupported("http2.Server.listen path", "wasi:sockets does not expose Unix domain sockets");
     }
-    const address = localAddress(options.host ?? "::", options.port ?? 0);
-    const network = this.provider.instanceNetwork.instanceNetwork();
-    const socket = this.provider.tcpCreateSocket.createTcpSocket(address.tag);
-    if (
-      !socket.startBind ||
-      !socket.finishBind ||
-      !socket.startListen ||
-      !socket.finishListen ||
-      !socket.accept ||
-      !socket.localAddress
-    ) {
-      dispose(socket);
-      dispose(network);
-      unsupported(
-        "http2.Server",
-        "the supplied wasi:sockets provider does not expose TCP server operations",
-      );
-    }
+    const bound = bind(
+      this.provider,
+      options.host ?? "::",
+      options.port ?? 0,
+      options.backlog,
+      "http2.Server.listen",
+    );
     try {
-      if (options.backlog !== undefined) {
-        socket.setListenBacklogSize?.(wasiU64(this.provider, options.backlog));
-      }
-      socket.startBind(network, address);
-      finishPending(() => socket.finishBind!(), socket);
-      socket.startListen();
-      finishPending(() => socket.finishListen!(), socket);
-      this.#network = network;
-      this.#socket = socket;
-      this.#address = nodeAddress(socket.localAddress());
+      listenTcp(bound.socket);
+      this.#network = bound.network;
+      this.#socket = bound.socket;
+      this.#address = bound.address;
       this.#listening = true;
       this.#scheduleAccept();
       return this.#address;
     } catch (error) {
-      dispose(socket);
-      dispose(network);
+      dispose(bound.socket);
+      dispose(bound.network);
       throw socketError(error, "listen", options.host);
     }
   }
@@ -173,28 +157,7 @@ class Http2Server implements Http2ServerImplementation {
       return;
     }
     try {
-      let accepted: [WasiTcpSocket, WasiInputStream, WasiOutputStream];
-      for (;;) {
-        try {
-          accepted = listener.accept();
-          break;
-        } catch (error) {
-          const isWouldBlock =
-            typeof error === "object" &&
-            error !== null &&
-            "tag" in error &&
-            error.tag === "would-block";
-          if (!isWouldBlock) {
-            throw error;
-          }
-          const pollable = listener.subscribe();
-          try {
-            pollable.block();
-          } finally {
-            dispose(pollable);
-          }
-        }
-      }
+      const accepted = accept(listener);
       const connection = { socket: accepted[0], input: accepted[1], output: accepted[2] };
       this.#connections.add(connection);
       this.#schedule(async () => {
