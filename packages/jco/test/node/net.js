@@ -1,5 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test, vi } from "vitest";
 
@@ -10,7 +11,7 @@ import {
     NET_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
     NET_WASI_SOCKETS_WIT_REQUIREMENTS,
 } from "../../src/node-wit.js";
-import { getTmpDir } from "../helpers.js";
+import { exec, getTmpDir, jcoPath, setupAsyncTest } from "../helpers.js";
 
 const NET_EXPORTS = [
     "BlockList",
@@ -110,4 +111,49 @@ describe("node:net WIT installation", () => {
         expect(source).toContain("bundled source imports node:net");
         expect(source).not.toContain("jco:node/net");
     });
+});
+
+describe("node:net in a component", () => {
+    test.each(["quickjs", "starlingmonkey"])(
+        "runs TCP clients and servers using %s",
+        async (backend) => {
+            const root = await getTmpDir();
+            const fixture = fileURLToPath(new URL("../fixtures/componentize/node-net/", import.meta.url));
+            const wit = join(root, "wit");
+            await cp(join(fixture, backend === "quickjs" ? "wit" : "wit-starling"), wit, { recursive: true });
+            const requirements = [];
+            // Exercise the actual adapter against the workspace build, independent of npm publication.
+            const plugin = nodeBuiltinPlugin(
+                { imports: [], exports: [] },
+                {
+                    netCoreModule: fileURLToPath(
+                        new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/net/core.js", import.meta.url),
+                    ),
+                    wasiSocketsVersion: backend === "quickjs" ? "0.2.12" : "0.2.10",
+                    onWitRequirement: (requirement) => requirements.push(requirement),
+                },
+            );
+            const source = await bundleComponentSource(join(fixture, "component.js"), { plugins: [plugin] });
+            const entry = join(root, "component.js");
+            await writeFile(entry, source);
+            await injectNodeWitImports(wit, undefined, requirements);
+            const componentPath = join(root, "component.wasm");
+            await exec(jcoPath, "componentize", entry, "-w", wit, "-o", componentPath, "--backend", backend);
+            const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+                component: { name: `node-net-${backend}`, path: componentPath, skipInstantiation: true },
+                jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
+            });
+            try {
+                const output = await exec(join(fixture, "run.js"), esModuleOutputPath);
+                expect(JSON.parse(output.stdout)).toEqual({
+                    surface: { exports: NET_EXPORTS, aliases: true, ipv6: 6, blocked: true },
+                    client: "host:client",
+                    server: "guest:runner",
+                });
+            } finally {
+                await cleanup();
+            }
+        },
+        600_000,
+    );
 });

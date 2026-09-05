@@ -1,0 +1,8 @@
+package test:net;
+
+world component {
+  export surface: func() -> string;
+  export run-client: func(port: u16) -> string;
+  export start-server: func() -> u16;
+  export serve-one: func();
+}
