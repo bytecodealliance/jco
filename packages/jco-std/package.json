@@ -187,6 +187,16 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/https/core.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/https/core.js"
     },
+    "./wasi/0.2.x/node/24.x.x/net": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/net.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/net.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/net.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/net/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/net/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/net/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/net/core.js"
+    },
     "./wasi/0.2.x/node/24.x.x/path": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
