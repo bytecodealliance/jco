@@ -764,6 +764,10 @@ impl ComponentIntrinsic {
                             return !!this.#getSuspendedTaskMeta(taskID)?.cancellable;
                         }}
 
+                        isTaskSuspended(taskID) {{
+                            return this.#suspendedTasksByTaskID.has(taskID);
+                        }}
+
                         suspendedTaskMetas() {{
                             return this.#suspendedTasksByTaskID.values();
                         }}

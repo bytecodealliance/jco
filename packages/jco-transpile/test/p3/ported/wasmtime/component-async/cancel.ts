@@ -33,11 +33,13 @@ suite('cancel scenario', () => {
         let cleanup;
         try {
             const longYield = new Promise(() => {});
+            let cleanupYieldCalls = 0;
             const cancelYieldTimes = async (count) => {
                 if (count > 100n) {
                     await longYield;
                     return;
                 }
+                cleanupYieldCalls++;
                 await new Promise((resolve) => setTimeout(resolve, 0));
             };
             const res = await buildAndTranspile({
@@ -51,6 +53,9 @@ suite('cancel scenario', () => {
             cleanup = res.cleanup;
 
             await res.instance['local:local/cancel'].run({ tag: mode }, 100n);
+            // Cancellation callbacks must be allowed to issue host calls while
+            // unwinding, including the fixture's asynchronous cleanup delay.
+            assert.ok(cleanupYieldCalls > 0, 'cancellation cleanup should call the host');
         } finally {
             if (cleanup) {
                 await cleanup();
