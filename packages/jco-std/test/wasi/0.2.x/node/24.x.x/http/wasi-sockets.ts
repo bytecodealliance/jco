@@ -7,7 +7,7 @@ import type {
   WasiOutputStream,
   WasiSocketsProvider,
   WasiTcpSocket,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/internal/wasi-sockets.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

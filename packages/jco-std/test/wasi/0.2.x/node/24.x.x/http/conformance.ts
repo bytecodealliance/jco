@@ -5,11 +5,11 @@ import {
   type WasiHttpFields,
   type WasiHttpProvider,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-http.js";
-import {
-  createWasiSocketsHttpImplementation,
-  type WasiSocketsProvider,
-  type WasiTcpSocket,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
+import { createWasiSocketsHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
+import type {
+  WasiSocketsProvider,
+  WasiTcpSocket,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/internal/wasi-sockets.js";
 import {
   parseHttp1Response,
   serializeHttp1Request,

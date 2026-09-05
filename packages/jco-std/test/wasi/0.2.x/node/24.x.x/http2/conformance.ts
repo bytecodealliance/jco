@@ -14,7 +14,7 @@ import {
   encodeHeaders,
   HpackDecoder,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/hpack.js";
-import type { WasiSocketsProvider } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
+import type { WasiSocketsProvider } from "../../../../../../src/wasi/0.2.x/node/24.x.x/internal/wasi-sockets.js";
 import type {
   DirectHttp2Settings,
   DirectHttp2StreamListener,
