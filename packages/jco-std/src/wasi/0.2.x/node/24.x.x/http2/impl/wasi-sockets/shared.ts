@@ -3,7 +3,7 @@ import {
   type WasiInputStream,
   type WasiOutputStream,
   type WasiTcpSocket,
-} from "../../../http/impl/wasi-sockets/index.js";
+} from "../../../internal/wasi-sockets.js";
 import type { Http2Settings, HttpHeaderField } from "../../types.js";
 import { encodeFrame, FLAG, FRAME, type Http2Frame } from "../frames.js";
 import { encodeHeaders } from "../hpack.js";

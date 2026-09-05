@@ -1,4 +1,4 @@
-import type { WasiSocketsProvider } from "../../../http/impl/wasi-sockets/index.js";
+import type { WasiSocketsProvider } from "../../../internal/wasi-sockets.js";
 import type { Http2Implementation } from "../../types.js";
 import { createWasiSocketsHttp2Client } from "./client.js";
 import { createWasiSocketsHttp2Server } from "./server.js";

@@ -10,7 +10,7 @@ import {
   type WasiInputStream,
   type WasiOutputStream,
   type WasiPollable,
-} from "./index.js";
+} from "../../../internal/wasi-sockets.js";
 
 export interface WasiTlsError {
   toDebugString(): string;
