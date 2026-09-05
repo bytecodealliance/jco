@@ -995,6 +995,7 @@ impl AsyncTaskIntrinsic {
                         #completionPromise = null;
                         #completionValue;
                         #completionReady = false;
+                        #settleCompletionPromise;
                         #rejected = false;
 
                         #exitPromise = null;
@@ -1075,18 +1076,6 @@ impl AsyncTaskIntrinsic {
                            completionPromise.catch(() => {{}});
 
                            let completionSettled = false;
-                           const completionContainsAsyncValue = (value, seen = new Set()) => {{
-                               if (value === null || value === undefined) {{ return false; }}
-                               const ty = typeof value;
-                               if (ty !== 'object' && ty !== 'function') {{ return false; }}
-                               if (typeof value.then === 'function') {{ return true; }}
-                               if (typeof value[Symbol.asyncIterator] === 'function') {{ return true; }}
-                               if (seen.has(value)) {{ return false; }}
-                               seen.add(value);
-                               return Object.values(value).some((item) =>
-                                   completionContainsAsyncValue(item, seen)
-                               );
-                           }};
                            const settleCompletionPromise = () => {{
                                if (completionSettled || !this.#completionReady) {{ return; }}
                                completionSettled = true;
@@ -1104,21 +1093,16 @@ impl AsyncTaskIntrinsic {
                                }}
                            }};
 
+                           this.#settleCompletionPromise = settleCompletionPromise;
                            this.#onResolveHandlers.push((results) => {{
                                if (this.#parentSubtask !== null) {{ return; }}
                                if (!this.#isAsync && !this.#isManualAsync) {{ return; }}
-                               // `task.return` makes the result available to a supertask,
-                               // but the host-facing promise cannot settle until the task
-                               // exits: guest cleanup and spawned work may still trap.
                                this.#completionValue = results;
                                this.#completionReady = true;
-                               // Streams and futures must be exposed at task.return so the
-                               // host can drive the operations the task itself may be
-                               // waiting on. Plain results wait for EXIT, preserving any
-                               // cleanup trap.
-                               if (completionContainsAsyncValue(results)) {{
-                                   settleCompletionPromise();
-                               }}
+                               // Publish after the current guest slice returns, so a trap
+                               // in that slice can still reject the call. Do not wait for
+                               // task exit: detached work may require further host calls
+                               // or consumption of a returned resource's stream.
                            }});
 
                            const {{
@@ -1194,6 +1178,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         completionPromise() {{ return this.#completionPromise; }}
+                        settleCompletion() {{ this.#settleCompletionPromise(); }}
                         exitPromise() {{ return this.#exitPromise; }}
 
                         waitForProgress() {{
@@ -2517,6 +2502,7 @@ impl AsyncTaskIntrinsic {
                                                     payload1: 0,
                                                 }});
                                         }});
+                                        task.settleCompletion();
                                         return;
 
                                     case 2: // WAIT for a given waitable set
@@ -2539,6 +2525,7 @@ impl AsyncTaskIntrinsic {
                                             task,
                                             cancellable: true,
                                         }}, continueWithEvent);
+                                        task.settleCompletion();
                                         return;
 
                                     default:
