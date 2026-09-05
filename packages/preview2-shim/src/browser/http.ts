@@ -558,7 +558,16 @@ class IncomingBody implements TypesNamespace.IncomingBody {
                     }
                     return slice;
                 }
-                throw { tag: "would-block" };
+                // No data buffered yet, but the stream isn't closed or errored.
+                // `would-block` is not a valid `stream-error` variant (only
+                // `closed` and `last-operation-failed` are) - a non-blocking
+                // read with nothing available yet must return an empty list,
+                // not an error. Throwing here caused hosts driving this via
+                // JSPI to hang forever on the very first read of a body whose
+                // first chunk hadn't arrived yet (e.g. a slower response,
+                // while a fast one worked by luck).
+                startRead();
+                return new Uint8Array(0);
             },
             blockingRead(len: bigint): any {
                 checkReadError();
