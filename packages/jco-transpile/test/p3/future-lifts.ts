@@ -236,10 +236,8 @@ suite('future<T> lifts', () => {
             func: instance['jco:test-components/get-future-async'].getFutureVariant,
             typeName: 'variant<maybe-u32>',
             expectedValues: [
-                // TODO: wit type representation smoothing mismatch,
-                // non-nullable option<t> values are *not* wrapped as objects
-                { tag: 'maybe-u32', val: { tag: 'some', val: 123 } },
-                { tag: 'maybe-u32', val: { tag: 'none' } },
+                { tag: 'maybe-u32', val: 123 },
+                { tag: 'maybe-u32', val: undefined },
             ],
             assertEqFn: assert.deepEqual,
         });
@@ -321,11 +319,7 @@ suite('future<T> lifts', () => {
             vals,
             func: instance['jco:test-components/get-future-async'].getFutureOptionString,
             typeName: 'option<string>',
-            expectedValues: [
-                // TODO: wit type representation smoothing mismatch
-                { tag: 'some', val: 'present string' },
-                { tag: 'none' },
-            ],
+            expectedValues: ['present string', undefined],
             assertEqFn: assert.deepEqual,
         });
     });

@@ -123,7 +123,7 @@ export async function checkFutureValues(args) {
     for (const [idx, v] of vals.entries()) {
         future = await func(v);
         res = await future;
-        await eq(res, expectedValues[idx] ?? v, `${typeName} future read is incorrect`);
+        await eq(res, idx in expectedValues ? expectedValues[idx] : v, `${typeName} future read is incorrect`);
     }
 }
 

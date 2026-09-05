@@ -126,7 +126,7 @@ export async function runHandlerFixture({ esModule, outbound = {}, expect = {} }
             await bodyTx.write(Buffer.from(req.body));
         }
         await bodyTx.close();
-        const tval = req.trailers ? { tag: 'some', val: buildFields(req.trailers) } : { tag: 'none' };
+        const tval = req.trailers ? buildFields(req.trailers) : undefined;
         await trailersTx.write({ tag: 'ok', val: tval });
     })();
 
@@ -152,7 +152,7 @@ export async function runHandlerFixture({ esModule, outbound = {}, expect = {} }
     assert.strictEqual(trailerResult?.tag, 'ok', `trailers errored: ${JSON.stringify(trailerResult)}`);
 
     const maybeTrailer = trailerResult.val;
-    const actualTrailers = maybeTrailer?.tag === 'some' ? fieldsToObject(maybeTrailer.val) : {};
+    const actualTrailers = maybeTrailer ? fieldsToObject(maybeTrailer) : {};
 
     for (const [name, value] of Object.entries(exp.trailers ?? {})) {
         assert.strictEqual(actualTrailers[name], value, `response trailer ${name}`);
