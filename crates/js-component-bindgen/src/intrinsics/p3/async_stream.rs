@@ -1514,10 +1514,11 @@ impl AsyncStreamIntrinsic {
                                     const {{ typedArray }} = this.#elemMeta;
                                     const value = typedArray === undefined ? count === 1 ? values[0] : values : new typedArray(values);
                                     this.#result = null;
-                                    resolve(value);
+                                    // An option's none value is undefined, but still an item.
+                                    resolve({{ value, done: false }});
                                 }} else {{
                                     this.#result = null;
-                                    resolve(undefined);
+                                    resolve({{ value: undefined, done: true }});
                                 }}
 
                             }} catch (err) {{
@@ -1525,10 +1526,9 @@ impl AsyncStreamIntrinsic {
                                 reject(err);
                             }}
 
-                            const res = await promise;
+                            const result = await promise;
                             const rejectedLength = this.#rejectedLength;
                             this.#rejectedLength = null;
-                            const result = {{ value: res, done: res === undefined }};
                             if (rejectedLength !== null) {{
                                 result.rejectedLength = rejectedLength;
                             }}

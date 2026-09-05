@@ -344,9 +344,8 @@ suite('stream<T> lowers', () => {
                 createReadableStreamFromValues(vals),
             );
             assert.deepEqual(returnedVals, [
-                // TODO: wit type representation smoothing mismatch
-                { tag: 'maybe-u32', val: { tag: 'some', val: 123 } },
-                { tag: 'maybe-u32', val: { tag: 'none' } },
+                { tag: 'maybe-u32', val: 123 },
+                { tag: 'maybe-u32', val: undefined },
                 { tag: 'str', val: 'string-value' },
                 { tag: 'num', val: 1 },
             ]);
@@ -496,11 +495,7 @@ suite('stream<T> lowers', () => {
             const returnedVals = await instance['jco:test-components/stream-lower-async'].readStreamValuesOptionString(
                 createReadableStreamFromValues(vals),
             );
-            assert.deepEqual(returnedVals, [
-                // TODO: wit type representation smoothing mismatch
-                { tag: 'some', val: 'present string' },
-                { tag: 'none' },
-            ]);
+            assert.deepEqual(returnedVals, ['present string', undefined]);
         });
 
         test.concurrent('result<string>', async () => {

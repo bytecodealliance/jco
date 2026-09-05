@@ -10,7 +10,7 @@ const HOST_INTERFACE = 'jco:test-components/sync-lowered-async-import-host';
 const RUNNER_INTERFACE = 'jco:test-components/sync-lowered-async-import-runner';
 
 suite('sync-lowered async host import', () => {
-    test('invokes the host', async () => {
+    test('invokes the host and returns its scalar result', async () => {
         let hostCallCount = 0;
         let markHostCalled!: (value: number) => void;
         const hostCalled = new Promise<number>((resolve) => {
@@ -36,15 +36,14 @@ suite('sync-lowered async host import', () => {
         try {
             const run = instance[RUNNER_INTERFACE].run;
             assert.instanceOf(run, AsyncFunction);
-            // This test isolates issue #1898 bug 2. Awaiting the export would
-            // also exercise bug 4's independently broken completion promise.
-            void run();
+            const result = run();
             const hostValue = await Promise.race([
                 hostCalled,
                 new Promise((_, reject) => setTimeout(() => reject(new Error('export call timed out')), 5_000)),
             ]);
             assert.strictEqual(hostValue, 41);
             assert.strictEqual(hostCallCount, 1);
+            assert.strictEqual(await result, 42);
         } finally {
             await cleanup();
         }

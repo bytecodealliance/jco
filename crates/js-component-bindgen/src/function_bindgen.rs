@@ -698,7 +698,7 @@ impl FunctionBindgen<'_> {
             r#"
               if ({memory_idx_expr} !== null) {{
                   task.setReturnMemoryIdx({memory_idx_expr});
-                  task.setReturnMemory({get_memory_fn_expr}());
+                  task.setReturnMemory(({get_memory_fn_expr})());
               }}
             "#
         );
@@ -1967,12 +1967,19 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
 
+                // Argument lowering can await realloc and allow another task
+                // to run. Reinstall this task immediately before entering Wasm.
+                let call_wrapper = self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 uwriteln!(
                     self.src,
                     r#"
                       {vars_init}
                       try {{
-                           {assignment_lhs} {call_prefix}{callee_invoke};
+                           {assignment_lhs} {call_prefix}{call_wrapper}({{
+                               taskID: task.id(),
+                               componentIdx: task.componentIdx(),
+                               fn: () => {callee_invoke},
+                           }});
                       }} catch (err) {{
                           {call_err_cleanup}
                       }}

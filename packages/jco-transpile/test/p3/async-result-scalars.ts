@@ -74,18 +74,16 @@ suite('async export scalar results (direct-param task.return)', () => {
         assert.strictEqual(await api().getF32Only(1.5), 1.5);
     });
 
-    // NOTE: non-nullable option<T> lifts are currently represented as
-    // tagged objects rather than smoothed to the payload value
     test('option<u64>', async () => {
-        assert.deepEqual(await api().getOptionU64(42n), { tag: 'some', val: 42n });
+        assert.strictEqual(await api().getOptionU64(42n), 42n);
     });
 
     test('option<f64>', async () => {
-        assert.deepEqual(await api().getOptionF64(2.5), { tag: 'some', val: 2.5 });
+        assert.strictEqual(await api().getOptionF64(2.5), 2.5);
     });
 
     test('option<f32>', async () => {
-        assert.deepEqual(await api().getOptionF32(2.5), { tag: 'some', val: 2.5 });
+        assert.strictEqual(await api().getOptionF32(2.5), 2.5);
     });
 
     test('result<record{u64, u32}, string> ok (joined slots inside a record payload)', async () => {

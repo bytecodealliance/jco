@@ -2858,11 +2858,9 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Build the lower import call that will wrap the actual trampoline
                 let func_ty_async = func_ty.async_;
-                let max_direct_results = if is_async || func_ty_async {
-                    0
-                } else {
-                    MAX_FLAT_RESULTS
-                };
+                // Result storage follows the canonical lower, independently of
+                // whether the component function's WIT type is async.
+                let max_direct_results = if is_async { 0 } else { MAX_FLAT_RESULTS };
                 let has_result_pointer = result_flat_count
                     .map(|count| count > max_direct_results)
                     .unwrap_or(true);
