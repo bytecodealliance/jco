@@ -873,6 +873,7 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
     #result: any = undefined;
     #promise: Promise<void> | null = null;
     #controller: AbortController | null = null;
+    #settled = false;
 
     subscribe(): Pollable {
         return pollableCreate(this.#promise!);
@@ -888,7 +889,15 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
     }
 
     [symbolDispose]() {
-        this.#controller?.abort();
+        // Only abort if the request never settled. If fetch already
+        // resolved (even with an ok response whose body is still being
+        // streamed elsewhere), aborting here kills the underlying
+        // connection and body stream out from under whoever is still
+        // reading it, surfacing as a bogus "BodyStreamBuffer was aborted"
+        // error on a request that actually succeeded.
+        if (!this.#settled) {
+            this.#controller?.abort();
+        }
         this.#controller = null;
         this.#promise = null;
     }
@@ -929,6 +938,7 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
                     if (timer) {
                         clearTimeout(timer);
                     }
+                    future.#settled = true;
                     future.#result = {
                         tag: "ok",
                         val: {
@@ -941,6 +951,7 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
                     if (timer) {
                         clearTimeout(timer);
                     }
+                    future.#settled = true;
                     future.#result = {
                         tag: "ok",
                         val: {
