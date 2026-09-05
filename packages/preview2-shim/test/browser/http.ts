@@ -97,6 +97,55 @@ suite("Browser HTTP", () => {
         assert.match(await response.text(), /internal-error.*rejected/);
     });
 
+    test("browser incoming HTTP body read() returns empty instead of throwing before the first chunk arrives", async () => {
+        const { outgoingHandler, types } = await import("../../src/browser/http.js");
+        const originalFetch = globalThis.fetch;
+        let releaseChunk: () => void;
+        const gate = new Promise<void>((resolve) => {
+            releaseChunk = resolve;
+        });
+        globalThis.fetch = async () => {
+            const stream = new ReadableStream<Uint8Array>({
+                async start(controller) {
+                    // Delay the first chunk so a non-blocking read() lands
+                    // before any data is buffered - this is the exact
+                    // condition that used to throw an invalid `would-block`
+                    // stream-error and hang JSPI-driven callers forever.
+                    await gate;
+                    controller.enqueue(new TextEncoder().encode("delayed"));
+                    controller.close();
+                },
+            });
+            return new Response(stream, { status: 200 });
+        };
+        try {
+            const request = new types.OutgoingRequest(new types.Fields());
+            request.setMethod({ tag: "get" });
+            request.setScheme({ tag: "HTTPS" });
+            request.setAuthority("example.com");
+            request.setPathWithQuery("/");
+
+            const future = outgoingHandler.handle(request, undefined);
+            await future.subscribe().block();
+            const result = future.get();
+            if (!result || result.tag !== "ok" || result.val.tag !== "ok") {
+                throw new Error("expected an ok response result");
+            }
+            const incomingResponse = result.val.val;
+            const bodyStream = incomingResponse.consume().stream();
+
+            const firstRead = bodyStream.read(64n);
+            assert.deepStrictEqual(firstRead, new Uint8Array(0));
+
+            releaseChunk!();
+            await bodyStream.subscribe().block();
+            const secondRead = bodyStream.read(64n);
+            assert.strictEqual(new TextDecoder().decode(secondRead), "delayed");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     test("browser outgoing HTTP waits for the complete request body", async () => {
         const { _setRequestStreaming, outgoingHandler, types } =
             await import("../../src/browser/http.js");
