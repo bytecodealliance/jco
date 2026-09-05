@@ -1699,6 +1699,12 @@ mod tests {
         assert!(!cancel.contains("async function subtaskCancel"));
         assert!(cancel.contains(".then(finishCancel)"));
         assert!(cancel.contains("cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF"));
+        assert!(cancel.contains("childState.exclusivelyLockedBy(childTask.id())"));
+        assert!(cancel.contains("!childState.isTaskSuspended(childTask.id())"));
+        assert!(cancel.contains("return progress.then(() =>"));
+        let subscribe = cancel.find("childTask?.waitForProgress()").unwrap();
+        let request = cancel.find("subtask.requestCancellation();").unwrap();
+        assert!(subscribe < request);
 
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
         assert!(task.contains("suspendUntilCallback(opts, onResume)"));
@@ -1722,6 +1728,14 @@ mod tests {
         assert!(state.contains("suspendedTaskCancellable(taskID)"));
         assert!(state.contains("task.notifyProgress();"));
         assert!(state.contains("suspendedTaskReady(taskID)"));
+    }
+
+    #[test]
+    fn cancellation_cleanup_can_start_host_imports() {
+        let lower = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport));
+        assert!(lower.contains("subtask.cancellationRequested()"));
+        assert!(lower.contains("task.taskState() === AsyncTask.State.CANCEL_PENDING"));
+        assert!(!lower.contains("if (task.cancellationRequested())"));
     }
 
     #[test]

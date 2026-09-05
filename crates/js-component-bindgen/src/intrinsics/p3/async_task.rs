@@ -681,6 +681,15 @@ impl AsyncTaskIntrinsic {
                             }}
                             if (subtask.isResolved()) {{ return finishCancel(); }}
 
+                            if (subtask.cancelProgress) {{
+                                const progress = subtask.cancelProgress;
+                                subtask.cancelProgress = null;
+                                return progress.then(() => {{
+                                    if (subtask.isResolved()) {{ return finishCancel(); }}
+                                    return 0xFFFFFFFF;
+                                }});
+                            }}
+
                             const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
                             const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                             if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
@@ -693,6 +702,10 @@ impl AsyncTaskIntrinsic {
                         let cancellationWillCompleteAsync = false;
 
                         if (!subtask.isResolved()) {{
+                            const childTask = subtask.getChildTask();
+                            // Subscribe before resuming: a synchronous callback may
+                            // reach its next suspension during this call.
+                            const childProgress = isAsync ? childTask?.waitForProgress() : null;
                             subtask.requestCancellation();
 
                             if (!subtask.isResolved()) {{
@@ -700,7 +713,6 @@ impl AsyncTaskIntrinsic {
                                 // execution slice. Wait until that slice releases component
                                 // entry by exiting or suspending again before deciding whether
                                 // the cancel blocked.
-                                const childTask = subtask.getChildTask();
                                 if (childTask) {{
                                     const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
                                     if (subtask.getStateNumber() === 0 &&
@@ -713,6 +725,14 @@ impl AsyncTaskIntrinsic {
                                         if (!childState.resumeTaskByID(childTask.id())) {{
                                             throw new Error('failed to resume cancellable subtask');
                                         }}
+                                    }} else if (childTask.hasCallback() &&
+                                        childState.exclusivelyLockedBy(childTask.id()) &&
+                                        !childState.isTaskSuspended(childTask.id())) {{
+                                        // JSPI can still be returning the initial guest
+                                        // slice, before its callback wait is registered.
+                                        // An existing non-cancellable wait must instead
+                                        // report BLOCKED without waiting for progress.
+                                        cancellationWillCompleteAsync = true;
                                     }}
                                 }}
                             }}
@@ -723,6 +743,7 @@ impl AsyncTaskIntrinsic {
                                 // while sync-lowered cancels block the current task until the
                                 // subtask resolves.
                                 if (isAsync) {{
+                                    if (cancellationWillCompleteAsync) {{ subtask.cancelProgress = childProgress; }}
                                     // -1 is the canonical BLOCKED status. -2 is an
                                     // internal signal consumed by the conditional JSPI
                                     // trampoline when a cancellable child was resumed but
@@ -1989,6 +2010,8 @@ impl AsyncTaskIntrinsic {
                         target;
                         isAsync;
                         isManualAsync;
+                        // One execution slice awaited by the conditional cancel trampoline.
+                        cancelProgress = null;
 
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{
@@ -2635,6 +2658,7 @@ impl AsyncTaskIntrinsic {
             //
             Self::LowerImport => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let task_class = render_args.require_intrinsic(Self::AsyncTaskClass);
                 let lower_import_fn = render_args.require_intrinsic(Self::LowerImport);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -2803,10 +2827,12 @@ impl AsyncTaskIntrinsic {
                         queueMicrotask(async () => {{
                             try {{
                                 // The async host call has not started yet. If the
-                                // enclosing guest task was cancelled in the meantime,
+                                // enclosing guest task has pending cancellation,
                                 // leave this subtask for the guest cancellation callback
                                 // to retire without invoking host code after cancellation.
-                                if (task.cancellationRequested()) {{ return; }}
+                                // Imports issued by the cancellation callback itself
+                                // must still run so the guest can finish its cleanup.
+                                if (subtask.cancellationRequested() || task.taskState() === {task_class}.State.CANCEL_PENDING) {{ return; }}
                                 {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
                                 await {with_global_current_task_meta_async_fn}({{
                                     taskID: task.id(),
