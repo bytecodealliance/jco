@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname } from "node:path";
 
@@ -49,64 +49,12 @@ test("a component can drop its HTTP future before finishing a streamed body", as
             throw new Error("missing streaming server address");
         }
 
+        const source = await readFile(
+            new URL("../fixtures/browser/http-future/component.js", import.meta.url),
+            "utf8",
+        );
         const { component } = await componentize(
-            `
-import { Fields, OutgoingRequest, OutgoingBody } from "wasi:http/types@0.2.8";
-import { handle } from "wasi:http/outgoing-handler@0.2.8";
-
-const dispose = Symbol.dispose || Symbol.for("dispose");
-
-function fetchResponse(path) {
-    const req = new OutgoingRequest(new Fields());
-    req.setMethod({ tag: "get" });
-    req.setScheme({ tag: "HTTP" });
-    req.setAuthority("127.0.0.1:${address.port}");
-    req.setPathWithQuery(path);
-    OutgoingBody.finish(req.body(), undefined);
-    const future = handle(req, undefined);
-    const ready = future.subscribe();
-    ready.block();
-    ready[dispose]();
-    const result = future.get();
-    if (!result || result.tag !== "ok" || result.val.tag !== "ok") {
-        throw "request failed: " + JSON.stringify(result);
-    }
-    const response = result.val.val;
-    // Exercise the component's canonical resource-drop path, not a host-side
-    // prototype spy. Response headers are ready but the body is still live.
-    future[dispose]();
-    return response;
-}
-
-export const test = {
-    run() {
-        const response = fetchResponse("/stream");
-        if (response.status() !== 200) throw "expected 200";
-        const body = response.consume();
-        response[dispose]();
-        const stream = body.stream();
-
-        const released = fetchResponse("/release");
-        if (released.status() !== 204) throw "expected 204";
-        released[dispose]();
-
-        let text = "";
-        try {
-            for (;;) {
-                text += new TextDecoder().decode(stream.blockingRead(64n));
-            }
-        } catch (err) {
-            const error = err.payload || err;
-            if (error.tag !== "closed") throw "body read failed: " + JSON.stringify(error);
-        } finally {
-            stream[dispose]();
-            body[dispose]();
-        }
-        if (text !== "before disposal; after disposal") throw "incomplete body: " + text;
-        return text;
-    }
-}
-`,
+            source.replace("{{SERVER_AUTHORITY}}", `127.0.0.1:${address.port}`),
             { witPath: FIXTURES_WIT_DIR, worldName: "browser-http-fetch" } as ComponentizeOptions,
         );
         const { files } = await transpile(component, {
