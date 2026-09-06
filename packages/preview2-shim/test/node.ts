@@ -1257,9 +1257,8 @@ suite("Sandboxing", () => {
     test(
         "linkAt honors path-flags.symlink-follow for the old path",
         testWithGCWrap(async () => {
-            const { mkdtempSync, writeFileSync, symlinkSync, lstatSync, rmSync } = await import(
-                "node:fs"
-            );
+            const { mkdtempSync, writeFileSync, symlinkSync, lstatSync, rmSync } =
+                await import("node:fs");
             const { tmpdir } = await import("node:os");
             const { join } = await import("node:path");
             const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
@@ -1278,7 +1277,12 @@ suite("Sandboxing", () => {
                 // by this change, and implementation-defined by POSIX for symlinks).
                 // The fix under test is that `symlinkFollow: true` now resolves the old
                 // path's symlink chain before linking, instead of ignoring the flag.
-                rootDescriptor.linkAt({ symlinkFollow: true }, "link.txt", rootDescriptor, "followed.txt");
+                rootDescriptor.linkAt(
+                    { symlinkFollow: true },
+                    "link.txt",
+                    rootDescriptor,
+                    "followed.txt",
+                );
                 assert.strictEqual(
                     lstatSync(join(testDir, "followed.txt")).isSymbolicLink(),
                     false,
