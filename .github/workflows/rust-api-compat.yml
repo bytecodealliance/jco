@@ -1,14 +1,9 @@
-name: Rust API compatibility
+name: semver-checks
 
 on:
-  merge_group:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - main
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,17 +13,15 @@ permissions: {}
 
 jobs:
   semver-checks:
-    name: js-component-bindgen (${{ matrix.feature-group }})
+    name: semver-checks
+    if: startsWith(github.head_ref, 'prep-release-js-component-bindgen-v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        feature-group:
-          - all-features
-          - only-explicit-features
+    outputs:
+      all-features: ${{ steps.all-features.outcome }}
+      no-default-features: ${{ steps.no-default-features.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,8 +30,76 @@ jobs:
       # Check the published Rust library, not the unpublished component wrappers.
       # Leaving the baseline unset compares against the latest published release;
       # the crate's version determines the permitted SemVer changes.
-      - name: Check public Rust API
+      # Advisory release checks: preserve the raw outcomes for reporting without
+      # making API compatibility a merge gate.
+      - name: Check public Rust API (all features)
+        id: all-features
+        continue-on-error: true
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           package: js-component-bindgen
-          feature-group: ${{ matrix.feature-group }}
+          feature-group: all-features
+
+      - name: Check public Rust API (no default features)
+        id: no-default-features
+        continue-on-error: true
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+        with:
+          package: js-component-bindgen
+          feature-group: only-explicit-features
+
+  report:
+    name: Report semver-checks
+    needs: semver-checks
+    if: ${{ !cancelled() && needs.semver-checks.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      # No checkout: this write-enabled job never executes code from the PR.
+      - name: Summarize results and update the release PR
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ALL_FEATURES: ${{ needs.semver-checks.outputs.all-features }}
+          NO_DEFAULT_FEATURES: ${{ needs.semver-checks.outputs.no-default-features }}
+        with:
+          script: |
+            const marker = '<!-- js-component-bindgen-semver-checks -->';
+            const pr = context.payload.pull_request;
+            const all = process.env.ALL_FEATURES || 'not completed';
+            const minimal = process.env.NO_DEFAULT_FEATURES || 'not completed';
+            const passed = all === 'success' && minimal === 'success';
+            const runURL = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              '### js-component-bindgen semver-checks',
+              '',
+              `Commit: ${pr.head.sha}`,
+              '',
+              '| Feature set | Result |',
+              '| --- | --- |',
+              `| All features | ${all} |`,
+              `| No default features | ${minimal} |`,
+              '',
+              passed
+                ? 'Both checks now pass.'
+                : 'One or more checks did not pass. Review the logs for API incompatibilities or checker/build errors before releasing.',
+              '',
+              `This is advisory and does not block merging. [View detailed results](${runURL}).`,
+            ].join('\n');
+            await core.summary.addRaw(body).write();
+            if (pr.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.notice('Fork PR: results are in the job summary; the token cannot post a comment.');
+              return;
+            }
+            const issue = { ...context.repo, issue_number: pr.number };
+            const comments = await github.paginate(github.rest.issues.listComments, issue);
+            const existing = comments.find(comment =>
+              comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else if (!passed) {
+              await github.rest.issues.createComment({ ...issue, body });
+            }
