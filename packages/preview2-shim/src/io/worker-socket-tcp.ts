@@ -138,7 +138,7 @@ export function socketTcpBindStart(id: number, localAddress, family) {
                     return;
                 }
                 socket.localAddress = ipSocketAddress(
-                    boundAddress.family.toLowerCase() as IpSocketAddress["tag"],
+                    boundAddress.family,
                     boundAddress.address,
                     boundAddress.port,
                 );
@@ -316,11 +316,7 @@ export function socketTcpGetLocalAddress(id: number) {
     const socket = tcpSockets.get(id)!;
     const address = socket.tcpSocket?.address();
     if (address && typeof address !== "string" && "family" in address) {
-        return ipSocketAddress(
-            address.family.toLowerCase() as IpSocketAddress["tag"],
-            address.address,
-            address.port,
-        );
+        return ipSocketAddress(address.family, address.address, address.port);
     }
     if (socket.localAddress) {
         return socket.localAddress;
@@ -333,11 +329,7 @@ export function socketTcpGetRemoteAddress(id: number) {
     if (!tcpSocket?.remoteFamily || !tcpSocket.remoteAddress || !tcpSocket.remotePort) {
         throw "invalid-state";
     }
-    return ipSocketAddress(
-        tcpSocket.remoteFamily.toLowerCase() as IpSocketAddress["tag"],
-        tcpSocket.remoteAddress,
-        tcpSocket.remotePort,
-    );
+    return ipSocketAddress(tcpSocket.remoteFamily, tcpSocket.remoteAddress, tcpSocket.remotePort);
 }
 
 export function socketTcpShutdown(id: number, _shutdownType) {
