@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - fix/preview2-shim-release-ci
 
   pull_request:
     branches:
