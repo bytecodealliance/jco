@@ -698,9 +698,24 @@ fn generate_command_invocation(args: GenerateCommandArgs<'_>) -> String {
     };
 
     let stdin_setting = stdin.unwrap_or("Stdio::null()");
+    let preview2_shim_path = jco_crate_dir.join("node_modules/@bytecodealliance/preview2-shim");
     // NOTE: the jco script path needs to be relative to where this file is written
     format!(
-        r##"let mut {cmd_name} = Command::new("node");
+        r##"// Use the same workspace shim as the virtual environment. The runner
+        // preserves this link instead of linking its own installed shim.
+        let shim_link = std::path::Path::new(r#"{rundir_path}"#)
+            .join("node_modules/@bytecodealliance/preview2-shim");
+        fs::create_dir_all(shim_link.parent().unwrap())?;
+        if fs::symlink_metadata(&shim_link).is_ok() {{
+            fs::remove_dir_all(&shim_link)?;
+        }}
+        let shim_path = fs::canonicalize(r#"{preview2_shim_path}"#)?;
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&shim_path, &shim_link)?;
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(&shim_path, &shim_link)?;
+
+        let mut {cmd_name} = Command::new("node");
         {cmd_name}.arg(r#"{jco_script_path}"#);
         {cmd_name}.arg("run");
         {trace}
@@ -715,6 +730,7 @@ fn generate_command_invocation(args: GenerateCommandArgs<'_>) -> String {
         {cmd_name}.args(["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         {cmd_name}.stdin({stdin_setting});"##,
         component_path.display(),
+        preview2_shim_path = preview2_shim_path.display(),
     )
 }
 
