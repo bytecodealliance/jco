@@ -33,7 +33,6 @@ import {
     EWOULDBLOCK,
 } from "node:constants";
 import {
-    IpAddressFamily,
     IpSocketAddress,
     Ipv4Address,
     Ipv6Address,
@@ -287,11 +286,13 @@ export function ipv4ToTuple(ipv4: string) {
 }
 
 export function ipSocketAddress(
-    family: IpAddressFamily,
+    family: string | number,
     addr: string,
     port: number,
 ): IpSocketAddress {
-    if (family === "ipv4") {
+    // Node uses "IPv4"/"IPv6", while Deno's Node compatibility layer can
+    // return 4/6. Accept both, as well as the WASI address-family tags.
+    if (family === "ipv4" || family === "IPv4" || family === 4) {
         return {
             tag: "ipv4",
             val: {
@@ -299,6 +300,9 @@ export function ipSocketAddress(
                 address: ipv4ToTuple(addr),
             },
         };
+    }
+    if (family !== "ipv6" && family !== "IPv6" && family !== 6) {
+        throw "invalid-argument";
     }
     return {
         tag: "ipv6",

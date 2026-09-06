@@ -123,10 +123,9 @@ function createIncomingDatagramStream(socket: UdpSocketRecord): DatagramStreamRe
         udpSocket.off("error", onError);
     }
     function onMessage(data, rinfo) {
-        const family = rinfo.family.toLowerCase();
         datagramStream.queue?.push({
             data,
-            remoteAddress: ipSocketAddress(family, rinfo.address, rinfo.port),
+            remoteAddress: ipSocketAddress(rinfo.family, rinfo.address, rinfo.port),
         } as any);
         if (!pollState.ready) {
             pollStateReady(pollState);
@@ -238,7 +237,7 @@ export function socketUdpGetLocalAddress(id: number): IpSocketAddress {
     } catch (err) {
         throw convertSocketError(err);
     }
-    return ipSocketAddress(family.toLowerCase(), address, port);
+    return ipSocketAddress(family, address, port);
 }
 
 /**
@@ -253,7 +252,7 @@ export function socketUdpGetRemoteAddress(id) {
     } catch (err) {
         throw convertSocketError(err);
     }
-    return ipSocketAddress(family.toLowerCase(), address, port);
+    return ipSocketAddress(family, address, port);
 }
 
 export function socketUdpStream(id, remoteAddress) {
