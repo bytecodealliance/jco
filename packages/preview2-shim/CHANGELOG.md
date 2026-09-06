@@ -1,5 +1,105 @@
 # Changelog
 
+## [0.24.0] - 2026-09-06
+
+### 🚀 Features
+
+- _(p2-shim)_ support follow symlink for node get-full-path by @eduardomourar
+
+- _(p2-shim)_ implement advise method for in memory filesystem by @eduardomourar in #2047
+
+- _(p2-shim)_ add in-memory browser transports by @vados-cosmonic
+
+- _(p2-shim)_ accept Web incoming HTTP handlers by @vados-cosmonic
+
+- _(p2-shim)_ allow custom browser UDP sockets by @vados-cosmonic
+
+- _(p2-shim)_ allow custom browser TCP sockets by @vados-cosmonic
+
+- _(p2-shim)_ delegate custom filesystem preopens by @vados-cosmonic
+
+- _(p2-shim)_ allow browser request streaming by @vados-cosmonic
+
+- _(p2-shim)_ improve browser support by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ normalize numeric socket address families in Deno by @vados-cosmonic
+
+- _(p2-shim)_ retain HTTP bodies after response future disposal by @vados-cosmonic
+
+- _(p2-shim)_ preserve browser HTTP input stream semantics by @vados-cosmonic
+
+- _(p2-shim)_ throw invalid would-block from browser incoming-body read by @eduardomourar
+
+- _(p2-shim)_ preserve filesystem symlink error semantics by @vados-cosmonic in #2048
+
+- _(p2-shim)_ remove obsolete body helper by @vados-cosmonic
+
+- _(p2-shim)_ yield browser tasks from ready polls by @vados-cosmonic
+
+- _(p2-shim)_ delegate preopens to filesystem factories by @vados-cosmonic
+
+- _(p2-shim)_ isolate sandbox network capabilities by @vados-cosmonic
+
+- _(p2-shim)_ expose browser incoming HTTP handlers by @vados-cosmonic
+
+- _(p2-shim)_ align browser HTTP request options by @vados-cosmonic
+
+- _(p2-shim)_ await browser HTTP request bodies by @vados-cosmonic
+
+- _(p2-shim)_ wake invalidated browser pollables by @vados-cosmonic
+
+- _(p2-shim)_ share browser filesystem identity by @vados-cosmonic
+
+- _(p2-shim)_ preserve filesystem rename invariants by @vados-cosmonic
+
+- _(p2-shim)_ create only final filesystem paths by @vados-cosmonic
+
+- _(p2-shim)_ close browser io and clock gaps by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(p2-shim)_ extract HTTP future browser fixture by @vados-cosmonic in #2045
+
+- _(p2-shim)_ delegate browser filesystem descriptors by @vados-cosmonic
+
+- _(p2-shim)_ separate in-memory filesystem adapter by @vados-cosmonic
+
+- _(p2-shim)_ share browser u64 validation by @vados-cosmonic
+
+- _(p2-shim)_ name HTTP authority patterns by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ clean up browser HTTP regressions on failure by @vados-cosmonic
+
+- _(p2-shim)_ regress delayed browser HTTP reads through JSPI by @vados-cosmonic
+
+- _(p2-shim)_ cover browser HTTP stream readiness and lifecycles by @vados-cosmonic
+
+- _(p2-shim)_ cover settled HTTP future disposal by @vados-cosmonic
+
+- _(p2-shim)_ group browser tests by interface by @vados-cosmonic
+
+- _(p2-shim)_ split browser suites by @vados-cosmonic
+
+- _(p2-shim)_ separate browser and node suites by @vados-cosmonic
+
+- _(p2-shim)_ reuse browser TLS fixtures by @vados-cosmonic
+
+- _(p2-shim)_ add Map filesystem example by @vados-cosmonic
+
+- _(p2-shim)_ exercise Chromium request streaming by @vados-cosmonic
+
+- _(p2-shim)_ release browser harness resources by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ reproducing error in test by @eduardomourar
+
+- _(p2-shim)_ reproducing error in test by @eduardomourar
+
 ## [0.23.0] - 2026-08-24
 
 ### 🐛 Bug Fixes
