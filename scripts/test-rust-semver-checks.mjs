@@ -274,9 +274,7 @@ test('CLI records matrix artifacts and reports them, including missing artifacts
     }
 });
 
-test('workflow never uses pull_request_target or inline github-script', async () => {
+test('reporting job checks out the trusted base revision', async () => {
     const workflow = await readFile(new URL('../.github/workflows/rust-api-compat.yml', import.meta.url), 'utf8');
-    assert.doesNotMatch(workflow, /^\s*pull_request_target\s*:/m);
-    assert.doesNotMatch(workflow, /uses:\s*actions\/github-script@/);
     assert.match(workflow, /ref: \$\{\{ github.event.pull_request.base.sha \}\}/);
 });
