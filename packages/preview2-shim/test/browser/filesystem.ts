@@ -180,6 +180,71 @@ suite("Browser filesystem", () => {
         assert.deepStrictEqual(root.metadataHashAt({}, "link"), link.metadataHash());
     });
 
+    test("symlinkAt and readlinkAt create and report symlinks", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: { file: { source: "value" }, sub: { dir: {} } } });
+        const [[root]] = preopens.getDirectories();
+
+        root.symlinkAt("file", "link");
+        assert.strictEqual(root.readlinkAt("link"), "file");
+        assert.strictEqual(root.statAt({}, "link").type, "symbolic-link");
+        assert.strictEqual(root.statAt({ symlinkFollow: true }, "link").type, "regular-file");
+
+        assert.throws(() => root.symlinkAt("/absolute", "abs-link"), "not-permitted");
+        assert.throws(() => root.symlinkAt("file", "link"), "exist");
+        assert.throws(() => root.readlinkAt("file"), "invalid");
+    });
+
+    test("openAt follows symlinks only when symlink-follow is set", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: { file: { source: "value" } } });
+        const [[root]] = preopens.getDirectories();
+        root.symlinkAt("file", "link");
+
+        const followed = root.openAt({ symlinkFollow: true }, "link", {}, { read: true });
+        assert.strictEqual(followed.getType(), "regular-file");
+
+        assert.throws(() => root.openAt({}, "link", {}, { read: true }), "loop");
+    });
+
+    test("symlinks resolve through intermediate directory components", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({
+            dir: {
+                real: { dir: { file: { source: "nested" } } },
+                alias: { symlink: "real" },
+            },
+        });
+        const [[root]] = preopens.getDirectories();
+
+        assert.strictEqual(root.statAt({}, "alias/file").type, "regular-file");
+        assert.strictEqual(root.statAt({}, "alias/file").size, 6n);
+        root.createDirectoryAt("alias/child");
+        assert.strictEqual(root.statAt({}, "real/child").type, "directory");
+    });
+
+    test("cyclic symlinks raise loop instead of recursing forever", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: { a: { symlink: "b" }, b: { symlink: "a" } } });
+        const [[root]] = preopens.getDirectories();
+
+        assert.throws(() => root.statAt({ symlinkFollow: true }, "a"), "loop");
+    });
+
+    test("linkAt honors symlink-follow for the old path", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        const fileData = { dir: { file: { source: "value" } } };
+        _setFileData(fileData);
+        const [[root]] = preopens.getDirectories();
+        root.symlinkAt("file", "link");
+
+        root.linkAt({}, "link", root, "unfollowed");
+        assert.strictEqual(root.statAt({}, "unfollowed").type, "symbolic-link");
+
+        root.linkAt({ symlinkFollow: true }, "link", root, "followed");
+        assert.strictEqual(root.statAt({}, "followed").type, "regular-file");
+    });
+
     test("createFilesystem isolates explicitly selected in-memory roots", async () => {
         const { createFilesystem, InMemoryFilesystemAdapter } =
             await import("../../src/browser/filesystem.js");
