@@ -61,6 +61,18 @@ suite("Browser filesystem", () => {
         assert.throws(() => root.statAt({}, "empty"));
     });
 
+    test("advise accepts hints on files and rejects directories", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: { file: { source: new Uint8Array([1, 2, 3]) }, sub: { dir: {} } } });
+
+        const [[root]] = preopens.getDirectories();
+        const file = root.openAt({}, "file", {}, { read: true, write: true });
+        assert.doesNotThrow(() => file.advise(0n, 3n, "sequential"));
+
+        const dir = root.openAt({}, "sub", {}, { read: true });
+        assert.throws(() => dir.advise(0n, 0n, "normal"), "bad-descriptor");
+    });
+
     test("creates only the final path component", async () => {
         const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
         const fileData = { dir: { parent: { dir: {} }, existing: { dir: {} } } };
