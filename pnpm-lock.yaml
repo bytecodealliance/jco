@@ -72,8 +72,8 @@ importers:
         specifier: 0.2.0
         version: 0.2.0
       '@bytecodealliance/preview2-shim':
-        specifier: 0.22.0
-        version: 0.22.0
+        specifier: workspace:*
+        version: link:../../packages/preview2-shim
 
   examples/components/add:
     dependencies:
