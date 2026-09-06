@@ -1,0 +1,44 @@
+name: Rust API compatibility
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  semver-checks:
+    name: js-component-bindgen (${{ matrix.feature-group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        feature-group:
+          - all-features
+          - only-explicit-features
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Check the published Rust library, not the unpublished component wrappers.
+      # Leaving the baseline unset compares against the latest published release;
+      # the crate's version determines the permitted SemVer changes.
+      - name: Check public Rust API
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+        with:
+          package: js-component-bindgen
+          feature-group: ${{ matrix.feature-group }}
