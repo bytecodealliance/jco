@@ -653,7 +653,12 @@ impl HostIntrinsic {
                         }} else if (enteredSynchronously === null) {{
                             // A delayed transition to STARTED is guest-visible progress.
                             registerSubtaskProgress();
-                            const enterPromise = preparedTask.enter();
+                            const enterPromise = preparedTask.enter().then(started => {{
+                                // Entry can finish before the timer below runs. Keep that
+                                // runnable guest work visible to the deadlock detector.
+                                if (started) {{ calleeComponentState.addPendingTaskStart(); }}
+                                return started;
+                            }});
 
                             // Entry is blocked by backpressure or an in-flight component slice,
                             // so resume the call once the task is allowed to enter.
@@ -668,6 +673,7 @@ impl HostIntrinsic {
                                 // Entry queues FIFO when another slice of the callee
                                 // component is already in flight.
                                 const started = await enterPromise;
+                                if (started) {{ calleeComponentState.removePendingTaskStart(); }}
                                 if (!started) {{
                                     {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
                                         taskID: preparedTask.id(),

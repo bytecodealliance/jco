@@ -366,6 +366,7 @@ impl ComponentIntrinsic {
                         #lockHolderTaskID = null;
                         #lockWaiters = [];
                         #lockHandoffScheduled = false;
+                        #pendingTaskStarts = 0;
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
@@ -787,7 +788,11 @@ impl ComponentIntrinsic {
                             return this.#suspendedTasksByTaskID.values();
                         }}
 
+                        addPendingTaskStart() {{ this.#pendingTaskStarts++; }}
+                        removePendingTaskStart() {{ this.#pendingTaskStarts--; }}
+
                         hasPendingSchedulerWork() {{
+                            if (this.#pendingTaskStarts > 0) {{ return true; }}
                             if (this.#lockHandoffScheduled) {{ return true; }}
                             for (const meta of this.#suspendedTasksByTaskID.values()) {{
                                 if (meta.task.isRejected() || meta.readyFn()) {{ return true; }}
