@@ -865,4 +865,40 @@ mod tests {
         assert_eq!(conformance_test_name("p3_cli"), None);
         assert_eq!(conformance_test_name("dwarf_simple"), None);
     }
+
+    #[test]
+    fn excludes_async_invocation_fixture_from_command_tests() {
+        // This fixture exports an async echo function, not wasi:cli/run. Wasmtime's
+        // corresponding CLI test explicitly invokes echo("hello?").
+        assert_eq!(selected_conformance_test_name("p2_cli_invoke_async"), None);
+        assert_eq!(
+            selected_conformance_test_name("p2_cli_env"),
+            Some("cli_env".to_owned())
+        );
+        assert_eq!(
+            selected_conformance_test_name("p2_tcp_listen"),
+            Some("preview2_tcp_listen".to_owned())
+        );
+    }
+
+    #[test]
+    fn selection_preserves_existing_preview_and_runner_policies() {
+        for name in [
+            "p2_cli_hostcall_fuel",
+            "p1_cli_much_stdout",
+            "p2_cli_serve_keyvalue",
+            "p3_cli",
+            "async_readiness",
+        ] {
+            assert_eq!(selected_conformance_test_name(name), None, "{name}");
+        }
+        assert_eq!(
+            selected_conformance_test_name("p1_file_write"),
+            Some("preview1_file_write".to_owned())
+        );
+        assert_eq!(
+            selected_conformance_test_name("piped_simple"),
+            Some("piped_simple".to_owned())
+        );
+    }
 }
