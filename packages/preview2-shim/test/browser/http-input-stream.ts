@@ -7,8 +7,15 @@ import type { InputStream } from "../../types/interfaces/wasi-io-streams.js";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 const turn = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const resources = new Set<object>();
+
+function own<T extends object>(resource: T): T {
+    resources.add(resource);
+    return resource;
+}
 
 function dispose(resource: object): void {
+    resources.delete(resource);
     const method: unknown = Reflect.get(resource, Symbol.dispose || Symbol.for("dispose"));
     assert.ok(typeof method === "function");
     method.call(resource);
@@ -16,18 +23,20 @@ function dispose(resource: object): void {
 
 async function openBody(response: Response): Promise<InputStream> {
     vi.stubGlobal("fetch", async (): Promise<Response> => response);
-    const request = new types.OutgoingRequest(new types.Fields());
+    const request = own(new types.OutgoingRequest(new types.Fields()));
     request.setMethod({ tag: "get" });
     request.setScheme({ tag: "HTTPS" });
     request.setAuthority("example.com");
     request.setPathWithQuery("/");
-    const future = outgoingHandler.handle(request, undefined);
-    const pollable = future.subscribe();
+    const future = own(outgoingHandler.handle(request, undefined));
+    const pollable = own(future.subscribe());
     await pollable.block();
     dispose(pollable);
     const result = future.get();
     assert.ok(result?.tag === "ok" && result.val.tag === "ok");
-    return result.val.val.consume().stream();
+    const responseResource = own(result.val.val);
+    const body = own(responseResource.consume());
+    return own(body.stream());
 }
 
 async function controlledBody(cancel?: () => void | Promise<void>): Promise<{
@@ -48,7 +57,16 @@ async function controlledBody(cancel?: () => void | Promise<void>): Promise<{
     return { stream: await openBody(new Response(source)), controller, source };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    try {
+        // Also release pending readers and pollables when an assertion fails.
+        for (const resource of [...resources].reverse()) {
+            dispose(resource);
+        }
+    } finally {
+        vi.unstubAllGlobals();
+    }
+});
 
 suite("Browser HTTP input stream", () => {
     test.each([true, false])(
@@ -62,13 +80,13 @@ suite("Browser HTTP input stream", () => {
                     return new Response(null);
                 },
             );
-            const request = new types.OutgoingRequest(new types.Fields());
+            const request = own(new types.OutgoingRequest(new types.Fields()));
             request.setMethod({ tag: "get" });
             request.setScheme({ tag: "HTTPS" });
             request.setAuthority("example.com");
             request.setPathWithQuery("/");
-            const future = outgoingHandler.handle(request, undefined);
-            const pollable = future.subscribe();
+            const future = own(outgoingHandler.handle(request, undefined));
+            const pollable = own(future.subscribe());
             await pollable.block();
             dispose(pollable);
             assert.ok(signal);
@@ -83,8 +101,8 @@ suite("Browser HTTP input stream", () => {
 
     test("read and skip return empty across gaps and pollables remain level-triggered", async () => {
         const { stream, controller } = await controlledBody();
-        const first = stream.subscribe();
-        const second = stream.subscribe();
+        const first = own(stream.subscribe());
+        const second = own(stream.subscribe());
         assert.deepStrictEqual(stream.read(4n), new Uint8Array(0));
         assert.strictEqual(stream.skip(4n), 0n);
         assert.strictEqual(first.ready(), false);
@@ -118,7 +136,7 @@ suite("Browser HTTP input stream", () => {
         assert.strictEqual(stream.skip(0n), 0n);
         assert.strictEqual(stream.blockingSkip(0n), 0n);
         controller.enqueue(encode("x"));
-        const pollable = stream.subscribe();
+        const pollable = own(stream.subscribe());
         await pollable.block();
         assert.deepStrictEqual(stream.blockingRead(0n), new Uint8Array(0));
         assert.strictEqual(pollable.ready(), true);
@@ -133,7 +151,7 @@ suite("Browser HTTP input stream", () => {
 
     test("polling ignores empty Fetch chunks until bytes or EOF arrive", async () => {
         const { stream, controller } = await controlledBody();
-        const pollable = stream.subscribe();
+        const pollable = own(stream.subscribe());
         let settled = false;
         const wait = Promise.resolve(pollable.block()).then(() => {
             settled = true;
@@ -181,7 +199,7 @@ suite("Browser HTTP input stream", () => {
 
     test.each([null, new Uint8Array(0)])("empty response bodies reach EOF (%s)", async (body) => {
         const stream = await openBody(new Response(body));
-        const pollable = stream.subscribe();
+        const pollable = own(stream.subscribe());
         await pollable.block();
         assert.strictEqual(pollable.ready(), true);
         assert.throws(() => stream.read(1n), { tag: "closed" });
@@ -191,7 +209,7 @@ suite("Browser HTTP input stream", () => {
 
     test("read errors wake pollers, expose an IO error once, and then close", async () => {
         const { stream, controller, source } = await controlledBody();
-        const pollable = stream.subscribe();
+        const pollable = own(stream.subscribe());
         const wait = pollable.block();
         controller.error(new Error("body failed"));
         await wait;
@@ -228,7 +246,7 @@ suite("Browser HTTP input stream", () => {
             throw new Error("cancel failed");
         });
         const { stream, source } = await controlledBody(cancel);
-        const pollable = stream.subscribe();
+        const pollable = own(stream.subscribe());
         const wait = assert.rejects(Promise.resolve(pollable.block()), /disposed/);
         const read = assert.rejects(Promise.resolve(stream.blockingRead(1n)), { tag: "closed" });
         dispose(stream);
@@ -255,7 +273,7 @@ suite("Browser HTTP input stream", () => {
                 ),
             ),
         );
-        const pollable = stream.subscribe();
+        const pollable = own(stream.subscribe());
         await pollable.block();
         await turn();
         assert.strictEqual(pulls, 1);
