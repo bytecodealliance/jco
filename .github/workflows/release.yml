@@ -321,7 +321,7 @@ jobs:
             target: aarch64-unknown-linux-musl
             build-arg: "--cross-compile"
             zig: true
-    name: Build jco-node-fs (${{ matrix.settings.target }})
+    name: Build jco-node-fs
     runs-on: ${{ matrix.settings.host }}
     permissions:
       contents: read
