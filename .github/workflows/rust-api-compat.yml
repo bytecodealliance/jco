@@ -12,94 +12,124 @@ concurrency:
 permissions: {}
 
 jobs:
-  semver-checks:
-    name: semver-checks
-    if: startsWith(github.head_ref, 'prep-release-js-component-bindgen-v')
+  projects:
+    name: Select Rust release crates
+    if: startsWith(github.head_ref, 'prep-release-')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
-      all-features: ${{ steps.all-features.outcome }}
-      no-default-features: ${{ steps.no-default-features.outcome }}
+      plan: ${{ steps.projects.outputs.plan }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Test release selection and reporting
+        run: node --test scripts/test-rust-semver-checks.mjs
+      - name: Select crates and baselines
+        id: projects
+        env:
+          RELEASE_BRANCH: ${{ github.head_ref }}
+        run: node scripts/rust-semver-checks.mjs select
 
-      # Check the published Rust library, not the unpublished component wrappers.
-      # Leaving the baseline unset compares against the latest published release;
-      # the crate's version determines the permitted SemVer changes.
-      # Advisory release checks: preserve the raw outcomes for reporting without
-      # making API compatibility a merge gate.
+  semver-checks:
+    name: semver-checks (${{ matrix.package }})
+    needs: projects
+    if: fromJSON(needs.projects.outputs.plan).rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.projects.outputs.plan).matrix }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # Published crates use the registry baseline and their Cargo version bump.
+      # Unpublished crates use a previous project release tag and its version bump.
+      # Keep failures advisory, but preserve raw outcomes for the PR comment.
       - name: Check public Rust API (all features)
         id: all-features
+        if: matrix.check
         continue-on-error: true
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
-          package: js-component-bindgen
+          package: ${{ matrix.package }}
+          baseline-rev: ${{ matrix.baselineRev }}
+          release-type: ${{ matrix.releaseType }}
           feature-group: all-features
 
       - name: Check public Rust API (no default features)
         id: no-default-features
+        if: ${{ !cancelled() && matrix.check }}
         continue-on-error: true
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
-          package: js-component-bindgen
+          package: ${{ matrix.package }}
+          baseline-rev: ${{ matrix.baselineRev }}
+          release-type: ${{ matrix.releaseType }}
           feature-group: only-explicit-features
+
+      - name: Record check outcomes
+        if: ${{ !cancelled() }}
+        env:
+          CRATE: ${{ matrix.package }}
+          ALL_FEATURES: ${{ steps.all-features.outcome }}
+          NO_DEFAULT_FEATURES: ${{ steps.no-default-features.outcome }}
+          RESULTS_DIR: ${{ runner.temp }}/semver-results
+        run: node scripts/rust-semver-checks.mjs record
+      - name: Upload check outcomes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: semver-${{ matrix.package }}
+          path: ${{ runner.temp }}/semver-results
+          if-no-files-found: error
+          retention-days: 7
 
   report:
     name: Report semver-checks
-    needs: semver-checks
-    if: ${{ !cancelled() && needs.semver-checks.result != 'skipped' }}
+    needs: [projects, semver-checks]
+    if: ${{ !cancelled() && needs.projects.result == 'success' && fromJSON(needs.projects.outputs.plan).rust }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       pull-requests: write
     steps:
-      # No checkout: this write-enabled job never executes code from the PR.
+      # Never use pull_request_target. The comment-writing job executes only
+      # trusted base-revision scripts, never code or dependencies from the PR.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Download check outcomes
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: semver-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/semver-results
       - name: Summarize results and update the release PR
         continue-on-error: true
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          ALL_FEATURES: ${{ needs.semver-checks.outputs.all-features }}
-          NO_DEFAULT_FEATURES: ${{ needs.semver-checks.outputs.no-default-features }}
-        with:
-          script: |
-            const marker = '<!-- js-component-bindgen-semver-checks -->';
-            const pr = context.payload.pull_request;
-            const all = process.env.ALL_FEATURES || 'not completed';
-            const minimal = process.env.NO_DEFAULT_FEATURES || 'not completed';
-            const passed = all === 'success' && minimal === 'success';
-            const runURL = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = [
-              marker,
-              '### js-component-bindgen semver-checks',
-              '',
-              `Commit: ${pr.head.sha}`,
-              '',
-              '| Feature set | Result |',
-              '| --- | --- |',
-              `| All features | ${all} |`,
-              `| No default features | ${minimal} |`,
-              '',
-              passed
-                ? 'Both checks now pass.'
-                : 'One or more checks did not pass. Review the logs for API incompatibilities or checker/build errors before releasing.',
-              '',
-              `This is advisory and does not block merging. [View detailed results](${runURL}).`,
-            ].join('\n');
-            await core.summary.addRaw(body).write();
-            if (pr.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
-              core.notice('Fork PR: results are in the job summary; the token cannot post a comment.');
-              return;
-            }
-            const issue = { ...context.repo, issue_number: pr.number };
-            const comments = await github.paginate(github.rest.issues.listComments, issue);
-            const existing = comments.find(comment =>
-              comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
-            } else if (!passed) {
-              await github.rest.issues.createComment({ ...issue, body });
-            }
+          GITHUB_TOKEN: ${{ github.token }}
+          SEMVER_PLAN: ${{ needs.projects.outputs.plan }}
+          RESULTS_DIR: ${{ runner.temp }}/semver-results
+        run: node scripts/rust-semver-checks.mjs report
