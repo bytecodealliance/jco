@@ -303,7 +303,7 @@ class Descriptor implements IDescriptor {
     }
 
     createDirectoryAt(path) {
-        const fullPath = this.#getFullPath(path, undefined);
+        const fullPath = this.#getFullPath(path);
         try {
             mkdirSync(fullPath);
         } catch (e) {
@@ -333,7 +333,7 @@ class Descriptor implements IDescriptor {
     }
 
     statAt(pathFlags, path) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         let stats;
         try {
             stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, {
@@ -354,7 +354,7 @@ class Descriptor implements IDescriptor {
     }
 
     setTimesAt(pathFlags, path, dataAccessTimestamp, dataModificationTimestamp) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         let stats;
         if (
             dataAccessTimestamp.tag === "no-change" ||
@@ -383,14 +383,32 @@ class Descriptor implements IDescriptor {
     }
 
     linkAt(oldPathFlags, oldPath, newDescriptor, newPath) {
-        const oldFullPath = this.#getFullPath(oldPath, oldPathFlags.symlinkFollow);
-        const newFullPath = newDescriptor.#getFullPath(newPath, false);
+        const oldFullPath = this.#getFullPath(oldPath);
+        const newFullPath = newDescriptor.#getFullPath(newPath);
         // Windows doesn't automatically fail on trailing slashes
         if (isWindows && newFullPath.endsWith("/")) {
             throw "no-entry";
         }
         try {
-            linkSync(oldFullPath, newFullPath);
+            // Unlike open/stat, Node's link does not follow the final symlink.
+            // Resolve only this operation's source, propagating resolution errors
+            // instead of silently hard-linking a dangling or cyclic symlink.
+            let source = oldFullPath;
+            if (oldPathFlags.symlinkFollow) {
+                source = realpathSync(source);
+                // realpath strips trailing slashes; keep the caller's directory
+                // requirement so a regular-file source ending in '/' still fails.
+                if (oldFullPath.endsWith("/")) {
+                    // Windows may ignore a trailing slash even in linkSync.
+                    if (!statSync(source).isDirectory()) {
+                        throw "not-directory";
+                    }
+                    if (!source.endsWith("/")) {
+                        source += "/";
+                    }
+                }
+            }
+            linkSync(source, newFullPath);
         } catch (e) {
             throw convertFsError(e);
         }
@@ -400,7 +418,7 @@ class Descriptor implements IDescriptor {
         if (preopenEntries.length === 0) {
             throw "access";
         }
-        const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
+        const fullPath = this.#getFullPath(path);
         let fsOpenFlags = 0x0;
         if (openFlags.create) {
             fsOpenFlags |= constants.O_CREAT;
@@ -481,7 +499,7 @@ class Descriptor implements IDescriptor {
     }
 
     readlinkAt(path) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         try {
             return readlinkSync(fullPath);
         } catch (e) {
@@ -490,7 +508,7 @@ class Descriptor implements IDescriptor {
     }
 
     removeDirectoryAt(path) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         try {
             rmdirSync(fullPath);
         } catch (e: any) {
@@ -502,8 +520,8 @@ class Descriptor implements IDescriptor {
     }
 
     renameAt(oldPath, newDescriptor, newPath) {
-        const oldFullPath = this.#getFullPath(oldPath, false);
-        const newFullPath = newDescriptor.#getFullPath(newPath, false);
+        const oldFullPath = this.#getFullPath(oldPath);
+        const newFullPath = newDescriptor.#getFullPath(newPath);
         try {
             renameSync(oldFullPath, newFullPath);
         } catch (e: any) {
@@ -515,7 +533,7 @@ class Descriptor implements IDescriptor {
     }
 
     symlinkAt(target, path) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         if (target.startsWith("/")) {
             throw "not-permitted";
         }
@@ -543,7 +561,7 @@ class Descriptor implements IDescriptor {
     }
 
     unlinkFileAt(path) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         try {
             if (fullPath.endsWith("/")) {
                 let isDir = false;
@@ -585,7 +603,7 @@ class Descriptor implements IDescriptor {
     }
 
     metadataHashAt(pathFlags, path) {
-        const fullPath = this.#getFullPath(path, false);
+        const fullPath = this.#getFullPath(path);
         try {
             const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, {
                 bigint: true,
@@ -596,7 +614,8 @@ class Descriptor implements IDescriptor {
         }
     }
 
-    #getFullPath(subpath, followSymlinks) {
+    // Join paths lexically; each operation supplies its own symlink semantics.
+    #getFullPath(subpath) {
         let descriptor = this;
         if (subpath.indexOf("\\") !== -1) {
             subpath = subpath.replace(/\\/g, "/");
@@ -652,25 +671,11 @@ class Descriptor implements IDescriptor {
 
         subpath = segments.join("");
 
-        const fullPath = descriptor.#hostPreopen
+        return descriptor.#hostPreopen
             ? descriptor.#hostPreopen +
-              (descriptor.#hostPreopen.endsWith("/") ? "" : subpath.length > 0 ? "/" : "") +
-              subpath
+                  (descriptor.#hostPreopen.endsWith("/") ? "" : subpath.length > 0 ? "/" : "") +
+                  subpath
             : descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
-
-        if (!followSymlinks) {
-            return fullPath;
-        }
-        // Resolve any symlinks (including in intermediate path segments) so callers
-        // that request symlink-follow semantics operate on the real target rather
-        // than the syntactically-joined path. Fall back to the unresolved path if
-        // it doesn't exist yet (e.g. `open-at` with `create`) or otherwise can't be
-        // resolved - the underlying syscall reports the real error in that case.
-        try {
-            return realpathSync(fullPath);
-        } catch {
-            return fullPath;
-        }
     }
 }
 const descriptorCreatePreopen = Descriptor._createPreopen;
