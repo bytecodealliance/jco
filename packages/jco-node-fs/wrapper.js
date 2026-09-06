@@ -1,6 +1,6 @@
 const { getSystemErrorName } = require('node:util');
 
-const { fadviseRaw } = require('./index.js');
+const { fadviseRaw, renameRaw } = require('./index.js');
 
 const MAX_U64 = (1n << 64n) - 1n;
 const ADVICE = new Set(['normal', 'sequential', 'random', 'will-need', 'dont-need', 'no-reuse']);
@@ -35,3 +35,24 @@ function validateFilesize(value, name) {
 }
 
 module.exports.fadvise = fadvise;
+
+function rename(oldPath, newPath) {
+    for (const [name, value] of [
+        ['oldPath', oldPath],
+        ['newPath', newPath],
+    ]) {
+        if (typeof value !== 'string' || value.includes('\0')) {
+            throw new TypeError(`${name} must be a string without null bytes`);
+        }
+    }
+    try {
+        renameRaw(oldPath, newPath);
+    } catch (error) {
+        error.syscall = 'rename';
+        error.path = oldPath;
+        error.dest = newPath;
+        throw error;
+    }
+}
+
+module.exports.rename = rename;

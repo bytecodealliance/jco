@@ -7,3 +7,14 @@
  * turns the returned errno into a Node-style exception.
  */
 export declare function fadviseRaw(fd: number, offset: string, length: string, advice: string): number
+
+/**
+ * Rename using the host's atomic replacement operation.
+ *
+ * In particular, Rust's Windows implementation uses FileRenameInfoEx when
+ * MoveFileExW cannot replace an empty directory.
+ *
+ * The updated Wasmtime rename fixture requires this behavior. Removing the
+ * destination first would lose atomicity.
+ */
+export declare function renameRaw(oldPath: string, newPath: string): void

@@ -49,3 +49,35 @@ pub fn fadvise_raw(fd: i32, offset: String, length: String, advice: String) -> i
         0
     }
 }
+
+/// Rename using the host's atomic replacement operation.
+///
+/// In particular, Rust's Windows implementation uses FileRenameInfoEx when
+/// MoveFileExW cannot replace an empty directory.
+///
+/// The updated Wasmtime rename fixture requires this behavior. Removing the
+/// destination first would lose atomicity.
+#[napi(js_name = "renameRaw")]
+pub fn rename_raw(old_path: String, new_path: String) -> napi::Result<(), String> {
+    std::fs::rename(old_path, new_path).map_err(|error| {
+        use std::io::ErrorKind;
+
+        let code = match error.kind() {
+            ErrorKind::NotFound => "ENOENT",
+            ErrorKind::PermissionDenied => "EACCES",
+            ErrorKind::AlreadyExists => "EEXIST",
+            ErrorKind::InvalidInput | ErrorKind::InvalidFilename => "EINVAL",
+            ErrorKind::NotADirectory => "ENOTDIR",
+            ErrorKind::IsADirectory => "EISDIR",
+            ErrorKind::DirectoryNotEmpty => "ENOTEMPTY",
+            ErrorKind::ReadOnlyFilesystem => "EROFS",
+            ErrorKind::CrossesDevices => "EXDEV",
+            ErrorKind::StorageFull => "ENOSPC",
+            ErrorKind::ResourceBusy => "EBUSY",
+            ErrorKind::Interrupted => "EINTR",
+            ErrorKind::Unsupported => "ENOTSUP",
+            _ => "EIO",
+        };
+        napi::Error::new(code.to_owned(), error.to_string())
+    })
+}
