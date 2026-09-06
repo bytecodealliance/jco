@@ -882,6 +882,11 @@ class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
         }
         const result = this.#result;
         this.#result = { tag: "err" };
+        // The returned response now owns the body. Dropping this consumed future
+        // must not abort a Fetch body that the guest is still streaming.
+        if (result.tag === "ok" && result.val.tag === "ok") {
+            this.#controller = null;
+        }
         return result;
     }
 
