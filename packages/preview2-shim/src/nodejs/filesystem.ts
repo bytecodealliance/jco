@@ -485,9 +485,11 @@ class Descriptor implements IDescriptor {
                 flags: fsOpenFlags,
             });
             // Wasmtime's updated path_open_preopen test requires ISDIR for a
-            // writable directory on every platform. Windows may open it anyway;
-            // inspect the opened handle and release it before reporting the error.
+            // writable directory on every platform.
+            //
+            // Windows may still open it, so check the returned descriptor type.
             if (type === "directory" && descriptorFlags.write) {
+                // Release the opened handle before reporting the error.
                 closeFileResource(id);
                 throw "is-directory";
             }
@@ -678,9 +680,10 @@ class Descriptor implements IDescriptor {
 
         subpath = segments.join("");
 
-        // The default Windows preopen represents all drives. A guest may pass
-        // either a drive path or an already namespaced path; do not turn the
-        // former into an invalid UNC server name such as //C:/Users/...
+        // The default Windows preopen represents all drives.
+        //
+        // Convert drive paths to namespaced paths so joining them to the preopen
+        // does not produce an invalid UNC server name such as //C:/Users/...
         if (isWindows && descriptor.#hostPreopen === "//" && /^[a-zA-Z]:\//.test(subpath)) {
             return "//?/" + subpath;
         }
