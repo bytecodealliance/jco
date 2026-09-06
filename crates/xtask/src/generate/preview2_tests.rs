@@ -48,6 +48,9 @@ const TEST_IGNORE: &[&str] = &[
     // Wasmtime run supports a `wasmtime run --argv0=...` argument to customize the argv0
     // which this test assumes is being used. We don't support this feature.
     "cli_argv0",
+    // This reactor exports async echo for Wasmtime's `--invoke` CLI test, not
+    // wasi:cli/run. The generic `jco run` harness cannot exercise that export.
+    "cli_invoke_async",
     // We don't have interrupts.
     "cli_sleep_forever",
     // These programs exercise Wasmtime runner limits or require runner-specific
@@ -91,6 +94,20 @@ const TEST_IGNORE: &[&str] = &[
 /// We don't currently support these subsystems, but if someone wants to work on them we
 /// can add these anytime!
 const KEYWORD_IGNORE: &[&str] = &["nn_", "keyvalue", "runtime_config"];
+
+/// Select programs supported by the generic command harness before emitting
+/// either Node or Deno tests. Preview prefixes alone do not imply a CLI command.
+fn selected_conformance_test_name(module_name: &str) -> Option<String> {
+    let test_name = conformance_test_name(module_name)?;
+    if TEST_IGNORE.contains(&test_name.as_str())
+        || KEYWORD_IGNORE
+            .iter()
+            .any(|keyword| module_name.contains(keyword))
+    {
+        return None;
+    }
+    Some(test_name)
+}
 
 const DENO_IGNORE: &[&str] = &[
     "api_read_only",
@@ -239,20 +256,9 @@ pub fn run() -> Result<()> {
         let file_name = String::from(entry.file_name().to_str().unwrap());
         let module_name = String::from(&file_name[0..file_name.len() - 5]);
 
-        let Some(test_name) = conformance_test_name(&module_name) else {
+        let Some(test_name) = selected_conformance_test_name(&module_name) else {
             continue;
         };
-
-        if KEYWORD_IGNORE
-            .iter()
-            .any(|keyword_ignore| module_name.contains(keyword_ignore))
-        {
-            continue;
-        }
-
-        if TEST_IGNORE.contains(&test_name.as_ref()) {
-            continue;
-        }
 
         test_names.push((module_name, test_name));
     }
