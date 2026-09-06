@@ -109,6 +109,8 @@ fn selected_conformance_test_name(module_name: &str) -> Option<String> {
     Some(test_name)
 }
 
+/// Tests not run under Deno. The socket programs are here as a group: the Deno path through
+/// the Preview 2 shim does not deliver socket readiness the way these expect.
 const DENO_IGNORE: &[&str] = &[
     "api_read_only",
     "cli_directory_list",
@@ -149,6 +151,11 @@ const DENO_IGNORE: &[&str] = &[
     "preview2_file_read_write",
     "preview2_sleep",
     "preview2_tcp_bind",
+    // Busy-polls a zero-duration timer alongside a socket-readiness pollable, asserting the
+    // one does not starve the other. Under Deno the readiness never arrives, so the guest
+    // spins until the CI step's time limit rather than failing. Its siblings above and below
+    // are skipped for the same reason: Deno sockets are not exercised by this suite.
+    "preview2_tcp_busy_poll",
     "preview2_tcp_connect",
     "preview2_tcp_sample_application",
     "preview2_tcp_sockopts",
@@ -878,6 +885,41 @@ mod tests {
         assert_eq!(
             selected_conformance_test_name("p2_tcp_listen"),
             Some("preview2_tcp_listen".to_owned())
+        );
+    }
+
+    #[test]
+    fn deno_skips_the_socket_programs_as_a_group() {
+        // A socket program that Deno cannot satisfy does not fail, it spins: p2_tcp_busy_poll
+        // polls a zero-duration timer against a socket-readiness pollable a million times per
+        // connection, so a missed readiness costs the whole CI step rather than one test.
+        for module_name in [
+            "p2_tcp_bind",
+            "p2_tcp_busy_poll",
+            "p2_tcp_connect",
+            "p2_tcp_sample_application",
+            "p2_tcp_sockopts",
+            "p2_tcp_states",
+            "p2_tcp_streams",
+            "p2_udp_bind",
+            "p2_udp_connect",
+            "p2_udp_sample_application",
+            "p2_udp_states",
+        ] {
+            // Some are skipped everywhere; the rest must at least be skipped under Deno.
+            if let Some(test_name) = selected_conformance_test_name(module_name) {
+                assert!(
+                    DENO_IGNORE.contains(&test_name.as_str()),
+                    "{test_name} must be skipped under Deno",
+                );
+            }
+        }
+
+        // busy_poll in particular still runs under node, which is where its regression
+        // coverage lives.
+        assert_eq!(
+            selected_conformance_test_name("p2_tcp_busy_poll"),
+            Some("preview2_tcp_busy_poll".to_owned())
         );
     }
 
