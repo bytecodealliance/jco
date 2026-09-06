@@ -1253,6 +1253,42 @@ suite("Sandboxing", () => {
             );
         }),
     );
+
+    test(
+        "linkAt honors path-flags.symlink-follow for the old path",
+        testWithGCWrap(async () => {
+            const { mkdtempSync, writeFileSync, symlinkSync, lstatSync, rmSync } = await import(
+                "node:fs"
+            );
+            const { tmpdir } = await import("node:os");
+            const { join } = await import("node:path");
+            const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+            const testDir = mkdtempSync(join(tmpdir(), "jco-symlink-follow-"));
+            try {
+                writeFileSync(join(testDir, "real.txt"), "target contents");
+                symlinkSync(join(testDir, "real.txt"), join(testDir, "link.txt"));
+
+                const shim = new WASIShim({ sandbox: { preopens: { "/test": testDir } } });
+                const [rootDescriptor] = shim
+                    .getImportObject()
+                    ["wasi:filesystem/preopens"].getDirectories()[0];
+
+                // `symlinkFollow: false` is Node/OS-native `link()` behavior (unaffected
+                // by this change, and implementation-defined by POSIX for symlinks).
+                // The fix under test is that `symlinkFollow: true` now resolves the old
+                // path's symlink chain before linking, instead of ignoring the flag.
+                rootDescriptor.linkAt({ symlinkFollow: true }, "link.txt", rootDescriptor, "followed.txt");
+                assert.strictEqual(
+                    lstatSync(join(testDir, "followed.txt")).isSymbolicLink(),
+                    false,
+                    "following the symlink should hard-link the real file",
+                );
+            } finally {
+                rmSync(testDir, { recursive: true, force: true });
+            }
+        }),
+    );
 });
 function testWithGCWrap(asyncTestFn: any) {
     return async () => {

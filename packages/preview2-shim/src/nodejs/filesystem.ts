@@ -36,6 +36,7 @@ import {
     mkdirSync,
     opendirSync,
     readlinkSync,
+    realpathSync,
     renameSync,
     rmdirSync,
     statSync,
@@ -595,8 +596,7 @@ class Descriptor implements IDescriptor {
         }
     }
 
-    // TODO: support followSymlinks
-    #getFullPath(subpath, _followSymlinks) {
+    #getFullPath(subpath, followSymlinks) {
         let descriptor = this;
         if (subpath.indexOf("\\") !== -1) {
             subpath = subpath.replace(/\\/g, "/");
@@ -652,14 +652,25 @@ class Descriptor implements IDescriptor {
 
         subpath = segments.join("");
 
-        if (descriptor.#hostPreopen) {
-            return (
-                descriptor.#hostPreopen +
-                (descriptor.#hostPreopen.endsWith("/") ? "" : subpath.length > 0 ? "/" : "") +
-                subpath
-            );
+        const fullPath = descriptor.#hostPreopen
+            ? descriptor.#hostPreopen +
+              (descriptor.#hostPreopen.endsWith("/") ? "" : subpath.length > 0 ? "/" : "") +
+              subpath
+            : descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
+
+        if (!followSymlinks) {
+            return fullPath;
         }
-        return descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
+        // Resolve any symlinks (including in intermediate path segments) so callers
+        // that request symlink-follow semantics operate on the real target rather
+        // than the syntactically-joined path. Fall back to the unresolved path if
+        // it doesn't exist yet (e.g. `open-at` with `create`) or otherwise can't be
+        // resolved - the underlying syscall reports the real error in that case.
+        try {
+            return realpathSync(fullPath);
+        } catch {
+            return fullPath;
+        }
     }
 }
 const descriptorCreatePreopen = Descriptor._createPreopen;
