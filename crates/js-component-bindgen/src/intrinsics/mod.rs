@@ -1802,6 +1802,7 @@ mod tests {
         assert!(check.contains("pendingHostOperations: STORE_ASYNC_STATE.pendingHostOperations,"));
         assert!(check.contains("taskID: task.id(),"));
         assert!(check.contains("componentIdx: task.componentIdx(),"));
+        assert!(check.contains("state: task.taskState(),"));
         assert!(check.contains("rootTaskID: task.getRootTask().id(),"));
         assert!(check.contains("unresolvedRootTaskIDs:"));
     }
