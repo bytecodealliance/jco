@@ -20,6 +20,8 @@ export interface FileDataEntry {
     dir?: Record<string, FileDataEntry>;
     // File contents (present for files)
     source?: Uint8Array | string;
+    // Symlink target, stored verbatim as passed to `symlink-at` (present for symlinks)
+    symlink?: string;
 }
 
 /**
@@ -58,37 +60,76 @@ function coerceToSafeIntegerNumber(obj: number | bigint): number {
     return n;
 }
 
-function getChildEntry(parentEntry: FileDataEntry, subpath: string): FileDataEntry {
-    if (subpath === "." && rootEntries.has(parentEntry)) {
+// Linux's SYMLOOP_MAX; used to bound recursive symlink resolution so a cyclic
+// chain raises the WASI `loop` error instead of overflowing the call stack.
+const MAX_SYMLINK_DEPTH = 40;
+
+/**
+ * Resolve `subpath` from `dir`, following symlinks encountered along the way.
+ * Intermediate path segments always follow symlinks (matching POSIX path
+ * resolution); the final segment only does so when `followFinal` is set.
+ * Symlink targets are resolved relative to the directory that contains the
+ * symlink - this filesystem has no notion of a host-absolute root (a leading
+ * "/" is just an empty path segment, same as everywhere else in this file),
+ * so a target starting with "/" simply resolves from that same directory.
+ */
+function resolveEntry(
+    dir: FileDataEntry,
+    subpath: string,
+    followFinal: boolean,
+    depth: number,
+): FileDataEntry {
+    if (depth > MAX_SYMLINK_DEPTH) {
+        throw "loop";
+    }
+    if (subpath === "." && rootEntries.has(dir)) {
         subpath = _getCwd();
         if (subpath.startsWith("/") && subpath !== "/") {
             subpath = subpath.slice(1);
         }
     }
-    let entry: FileDataEntry | undefined = parentEntry;
+    let entry: FileDataEntry = dir;
     let segmentIdx: number;
     do {
-        if (!entry?.dir) {
+        if (!entry.dir) {
             throw "not-directory";
         }
         segmentIdx = subpath.indexOf("/");
         const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
+        const rest = subpath.slice(segmentIdx + 1);
         if (segment === "..") {
             throw "no-entry";
         }
-        if (segment === "." || segment === "") {
-        } else {
-            entry = entry.dir[segment];
-            if (!entry) {
+        if (segment !== "." && segment !== "") {
+            const child = entry.dir[segment];
+            if (!child) {
                 throw "no-entry";
             }
+            const isFinalSegment = segmentIdx === -1;
+            if (child.symlink !== undefined && (!isFinalSegment || followFinal)) {
+                return resolveEntry(
+                    entry,
+                    child.symlink + (isFinalSegment ? "" : "/" + rest),
+                    followFinal,
+                    depth + 1,
+                );
+            }
+            entry = child;
         }
-        subpath = subpath.slice(segmentIdx + 1);
+        subpath = rest;
     } while (segmentIdx !== -1);
-    if (!entry) {
-        throw "no-entry";
-    }
     return entry;
+}
+
+function getChildEntry(
+    parentEntry: FileDataEntry,
+    subpath: string,
+    // No default: `pathFlags.symlinkFollow` is `undefined` when unset, and a
+    // default parameter substitutes on `undefined` regardless of whether it's
+    // literal or a forwarded value - callers must pass an explicit boolean.
+    followFinal: boolean | undefined,
+): FileDataEntry {
+    return resolveEntry(parentEntry, subpath, !!followFinal, 0);
 }
 
 function getParentEntry(root: FileDataEntry, path: string): [FileDataEntry, string] {
@@ -99,9 +140,12 @@ function getParentEntry(root: FileDataEntry, path: string): [FileDataEntry, stri
     const name = segments.pop()!;
     let parent = root;
     for (const segment of segments) {
-        const child = parent.dir?.[segment];
+        let child = parent.dir?.[segment];
         if (!child) {
             throw "no-entry";
+        }
+        if (child.symlink !== undefined) {
+            child = resolveEntry(parent, child.symlink, true, 0);
         }
         if (!child.dir) {
             throw "not-directory";
@@ -119,6 +163,23 @@ function getSource(fileEntry: FileDataEntry): Uint8Array {
         fileEntry.source = new TextEncoder().encode(fileEntry.source);
     }
     return fileEntry.source!;
+}
+
+function describeEntry(entry: FileDataEntry): {
+    type: TypesNamespace.DescriptorType;
+    size: Filesize;
+} {
+    if (entry.symlink !== undefined) {
+        // Matches POSIX lstat: a symlink's size is the byte length of its target.
+        return {
+            type: "symbolic-link",
+            size: BigInt(new TextEncoder().encode(entry.symlink).byteLength),
+        };
+    }
+    if (entry.dir) {
+        return { type: "directory", size: 0n };
+    }
+    return { type: "regular-file", size: BigInt(getSource(entry).byteLength) };
 }
 
 function containsEntry(root: FileDataEntry, target: FileDataEntry): boolean {
@@ -190,7 +251,7 @@ class DirectoryEntryStream implements BrowserDirectoryEntryStream {
         this.idx += 1;
         return {
             name,
-            type: entry.dir ? "directory" : "regular-file",
+            type: describeEntry(entry).type,
         } as TypesNamespace.DirectoryEntry;
     }
 }
@@ -287,6 +348,9 @@ class Descriptor implements BrowserFilesystemDescriptor {
         if (this.#stream) {
             return "fifo";
         }
+        if (this.#entry.symlink !== undefined) {
+            return "symbolic-link";
+        }
         if (this.#entry.dir) {
             return "directory";
         }
@@ -359,7 +423,9 @@ class Descriptor implements BrowserFilesystemDescriptor {
 
     createDirectoryAt(path: string) {
         try {
-            getChildEntry(this.#entry, path);
+            // Existence is checked against the literal entry (mkdir never follows
+            // the final path component, even if it's a symlink).
+            getChildEntry(this.#entry, path, false);
             throw "exist";
         } catch (error) {
             if (error !== "no-entry") {
@@ -372,15 +438,7 @@ class Descriptor implements BrowserFilesystemDescriptor {
     }
 
     stat() {
-        let type: TypesNamespace.DescriptorType = "unknown";
-        let size = 0n;
-        if (this.#entry.source) {
-            type = "regular-file";
-            const source = getSource(this.#entry);
-            size = BigInt(source.byteLength);
-        } else if (this.#entry.dir) {
-            type = "directory";
-        }
+        const { type, size } = describeEntry(this.#entry);
         return {
             type,
             linkCount: metadata(this.#entry).linkCount,
@@ -391,17 +449,9 @@ class Descriptor implements BrowserFilesystemDescriptor {
         };
     }
 
-    statAt(_pathFlags: PathFlags, path: string) {
-        const entry = getChildEntry(this.#entry, path);
-        let type: TypesNamespace.DescriptorType = "unknown";
-        let size = 0n;
-        if (entry.source) {
-            type = "regular-file";
-            const source = getSource(entry);
-            size = BigInt(source.byteLength);
-        } else if (entry.dir) {
-            type = "directory";
-        }
+    statAt(pathFlags: PathFlags, path: string) {
+        const entry = getChildEntry(this.#entry, path, pathFlags.symlinkFollow);
+        const { type, size } = describeEntry(entry);
         return {
             type,
             linkCount: metadata(entry).linkCount,
@@ -412,8 +462,8 @@ class Descriptor implements BrowserFilesystemDescriptor {
         };
     }
 
-    setTimesAt(_pathFlags: PathFlags, path: string, _atime: any, mtime: any) {
-        const entry = getChildEntry(this.#entry, path);
+    setTimesAt(pathFlags: PathFlags, path: string, _atime: any, mtime: any) {
+        const entry = getChildEntry(this.#entry, path, pathFlags.symlinkFollow);
         if (mtime?.tag !== "no-change") {
             // Metadata is currently descriptor-local; touching the entry makes
             // the mutation visible through metadata hashes on newly opened handles.
@@ -423,12 +473,14 @@ class Descriptor implements BrowserFilesystemDescriptor {
     }
 
     linkAt(
-        _pathFlags: PathFlags,
+        oldPathFlags: PathFlags,
         oldPath: string,
         newDescriptor: BrowserFilesystemDescriptor,
         newPath: string,
     ) {
-        const entry = getChildEntry(this.#entry, oldPath);
+        // Unlike open/stat, link never follows the final symlink unless the
+        // caller explicitly asked for it via `symlink-follow`.
+        const entry = getChildEntry(this.#entry, oldPath, oldPathFlags.symlinkFollow);
         if (entry.dir) {
             throw "not-permitted";
         }
@@ -445,14 +497,14 @@ class Descriptor implements BrowserFilesystemDescriptor {
     }
 
     openAt(
-        _pathFlags: PathFlags,
+        pathFlags: PathFlags,
         path: string,
         openFlags: OpenFlags,
         _flags: TypesNamespace.DescriptorFlags,
     ) {
         let childEntry: FileDataEntry;
         try {
-            childEntry = getChildEntry(this.#entry, path);
+            childEntry = getChildEntry(this.#entry, path, pathFlags.symlinkFollow);
             if (openFlags.create && openFlags.exclusive) {
                 throw "exist";
             }
@@ -465,6 +517,11 @@ class Descriptor implements BrowserFilesystemDescriptor {
                 ? { dir: {} }
                 : { source: new Uint8Array() };
             touch(parent);
+        }
+        if (childEntry.symlink !== undefined) {
+            // `symlink-follow` was unset and the final path component is a
+            // symlink - matches opening with O_NOFOLLOW against a symlink.
+            throw "loop";
         }
         if (openFlags.directory && !childEntry.dir) {
             throw "not-directory";
@@ -479,8 +536,14 @@ class Descriptor implements BrowserFilesystemDescriptor {
         return descriptorCreate(childEntry);
     }
 
-    readlinkAt(_path: string): string {
-        throw "unsupported";
+    readlinkAt(path: string): string {
+        // The literal entry, never resolved - readlink always reports the
+        // immediate target, not what it ultimately points to.
+        const entry = getChildEntry(this.#entry, path, false);
+        if (entry.symlink === undefined) {
+            throw "invalid";
+        }
+        return entry.symlink;
     }
 
     removeDirectoryAt(path: string) {
@@ -537,8 +600,18 @@ class Descriptor implements BrowserFilesystemDescriptor {
         }
     }
 
-    symlinkAt() {
-        throw "unsupported";
+    symlinkAt(oldPath: string, newPath: string) {
+        // Matches the Node backend: guest-visible symlink targets are always
+        // relative, since this sandboxed filesystem has no host-absolute root.
+        if (oldPath.startsWith("/")) {
+            throw "not-permitted";
+        }
+        const [parent, name] = getParentEntry(this.#entry, newPath);
+        if (parent.dir![name]) {
+            throw "exist";
+        }
+        parent.dir![name] = { symlink: oldPath };
+        touch(parent);
     }
 
     unlinkFileAt(path: string) {
@@ -564,8 +637,8 @@ class Descriptor implements BrowserFilesystemDescriptor {
         return { upper: value.id, lower: value.version };
     }
 
-    metadataHashAt(_pathFlags: any, path: string) {
-        const value = metadata(getChildEntry(this.#entry, path));
+    metadataHashAt(pathFlags: PathFlags, path: string) {
+        const value = metadata(getChildEntry(this.#entry, path, pathFlags.symlinkFollow));
         return { upper: value.id, lower: value.version };
     }
 }
