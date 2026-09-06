@@ -24,7 +24,13 @@ import {
     ECONNABORTED,
     ECONNREFUSED,
     ECONNRESET,
+    EHOSTUNREACH,
     EINVAL,
+    EMFILE,
+    EMSGSIZE,
+    ENETDOWN,
+    ENETUNREACH,
+    ENFILE,
     ENOBUFS,
     ENOMEM,
     ENOTCONN,
@@ -146,18 +152,26 @@ export function convertSocketError(err) {
             return "concurrency-conflict";
         case "EWOULDBLOCK":
             return "would-block";
-        // TODO: return "new-socket-limit";
+        case "EMFILE":
+        case "ENFILE":
+            return "new-socket-limit";
         case "EADDRNOTAVAIL":
             return "address-not-bindable";
         case "EADDRINUSE":
             return "address-in-use";
-        // TODO: return "remote-unreachable";
+        case "EHOSTUNREACH":
+        case "EHOSTDOWN":
+        case "ENETUNREACH":
+        case "ENETDOWN":
+            return "remote-unreachable";
         case "ECONNREFUSED":
             return "connection-refused";
         case "ECONNRESET":
             return "connection-reset";
         case "ECONNABORTED":
             return "connection-aborted";
+        case "EMSGSIZE":
+            return "datagram-too-large";
         default:
             return "unknown";
     }
@@ -184,23 +198,30 @@ export function convertSocketErrorCode(code) {
             return "concurrency-conflict";
         case EWOULDBLOCK:
             return "would-block";
-        // TODO: return "new-socket-limit";
+        case EMFILE:
+        case ENFILE:
+            return "new-socket-limit";
         case 4090: // windows
         case EADDRNOTAVAIL:
             return "address-not-bindable";
         case 4091: // windows
         case EADDRINUSE:
             return "address-in-use";
-        // TODO: return "remote-unreachable";
+        case EHOSTUNREACH:
+        case ENETUNREACH:
+        case ENETDOWN:
+            return "remote-unreachable";
         case ECONNREFUSED:
             return "connection-refused";
         case ECONNRESET:
             return "connection-reset";
         case ECONNABORTED:
             return "connection-aborted";
-        // TODO: return "datagram-too-large";
-        // TODO: return "name-unresolvable";
-        // TODO: return "temporary-resolver-failure";
+        case EMSGSIZE:
+            return "datagram-too-large";
+        // name-unresolvable/temporary-resolver-failure are DNS lookup errors,
+        // which only surface here as string error codes (see
+        // socketResolveAddress above), never as a raw platform errno.
         default:
             // process._rawDebug('unknown error code', code);
             return "unknown";
