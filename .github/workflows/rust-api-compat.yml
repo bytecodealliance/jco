@@ -13,7 +13,7 @@ permissions: {}
 
 jobs:
   projects:
-    name: Select Rust release crates
+    name: Select published Rust release crates
     if: startsWith(github.head_ref, 'prep-release-')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -24,14 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-      - name: Test release selection and reporting
-        run: node --test scripts/test-rust-semver-checks.mjs
-      - name: Select crates and baselines
+      - name: Select published crates
         id: projects
         env:
           RELEASE_BRANCH: ${{ github.head_ref }}
@@ -51,35 +48,28 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
 
       # Published crates use the registry baseline and their Cargo version bump.
-      # Unpublished crates use a previous project release tag and its version bump.
       # Keep failures advisory, but preserve raw outcomes for the PR comment.
       - name: Check public Rust API (all features)
         id: all-features
-        if: matrix.check
         continue-on-error: true
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           package: ${{ matrix.package }}
-          baseline-rev: ${{ matrix.baselineRev }}
-          release-type: ${{ matrix.releaseType }}
           feature-group: all-features
 
       - name: Check public Rust API (no default features)
         id: no-default-features
-        if: ${{ !cancelled() && matrix.check }}
+        if: ${{ !cancelled() }}
         continue-on-error: true
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           package: ${{ matrix.package }}
-          baseline-rev: ${{ matrix.baselineRev }}
-          release-type: ${{ matrix.releaseType }}
           feature-group: only-explicit-features
 
       - name: Record check outcomes
