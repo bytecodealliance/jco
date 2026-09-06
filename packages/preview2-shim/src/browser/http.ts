@@ -5,6 +5,8 @@ import type {
 } from "../../types/http.js";
 import type { Error as IoError } from "../../types/interfaces/wasi-io-error.js";
 import type { Pollable } from "../../types/interfaces/wasi-io-poll.js";
+import type { StreamError } from "../../types/interfaces/wasi-io-streams.js";
+import type { InputStreamHandler } from "./io.js";
 import { inputStreamCreate, ioErrorCreate, outputStreamCreate, pollableCreate } from "./io.js";
 
 export { InMemoryHttpClient } from "./in-memory-http.js";
@@ -467,7 +469,7 @@ delete OutgoingRequest._handle;
 
 class IncomingBody implements TypesNamespace.IncomingBody {
     #finished = false;
-    #stream: any = undefined;
+    #stream: ReturnType<typeof inputStreamCreate> | null = null;
 
     stream() {
         if (!this.#stream) {
@@ -496,137 +498,123 @@ class IncomingBody implements TypesNamespace.IncomingBody {
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         let readPromise: Promise<void> | null = null;
         let readError: IoError | null = null;
+        let disposed = false;
 
-        function ensureReader() {
-            if (!reader && fetchResponse.body) {
-                reader = fetchResponse.body.getReader();
-            }
+        function ready(): boolean {
+            return done || (buffer !== null && bufferOffset < buffer.byteLength);
         }
 
-        function startRead() {
-            if (readPromise || done) {
+        function startRead(): void {
+            if (readPromise || ready()) {
                 return;
             }
-            ensureReader();
-            if (!reader) {
+            if (!fetchResponse.body) {
                 done = true;
                 return;
             }
-            readPromise = reader.read().then(
-                (result) => {
-                    readPromise = null;
-                    if (result.done) {
-                        done = true;
-                    } else {
-                        buffer = result.value;
-                        bufferOffset = 0;
+            reader ??= fetchResponse.body.getReader();
+            const activeReader = reader;
+            readPromise = (async (): Promise<void> => {
+                try {
+                    // Empty Fetch chunks do not make a WASI input stream readable.
+                    // Keep a single read in flight and buffer at most one nonempty chunk.
+                    while (!done) {
+                        const result = await activeReader.read();
+                        if (disposed) {
+                            return;
+                        }
+                        if (result.done) {
+                            done = true;
+                        } else if (result.value.byteLength > 0) {
+                            buffer = result.value;
+                            bufferOffset = 0;
+                            return;
+                        }
                     }
-                },
-                (cause) => {
-                    readPromise = null;
+                } catch (cause: unknown) {
                     done = true;
-                    readError = ioErrorCreate(
-                        cause instanceof Error ? cause.message : String(cause),
-                    );
-                },
-            );
+                    if (!disposed) {
+                        readError = ioErrorCreate(
+                            cause instanceof Error ? cause.message : String(cause),
+                        );
+                    }
+                } finally {
+                    readPromise = null;
+                    if (done) {
+                        activeReader.releaseLock();
+                    }
+                }
+            })();
         }
 
-        function checkReadError() {
-            if (readError) {
-                throw { tag: "last-operation-failed", val: readError };
+        async function waitForReadable(): Promise<void> {
+            while (!ready()) {
+                startRead();
+                await readPromise;
             }
+        }
+
+        function read(len: bigint): Uint8Array {
+            if (readError) {
+                const error = readError;
+                readError = null;
+                throw { tag: "last-operation-failed", val: error } satisfies StreamError;
+            }
+            if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
+                throw { tag: "closed" } satisfies StreamError;
+            }
+            if (buffer === null || bufferOffset >= buffer.byteLength) {
+                startRead();
+                return new Uint8Array(0);
+            }
+            const toRead = Math.min(Number(len), buffer.byteLength - bufferOffset);
+            const slice = buffer.slice(bufferOffset, bufferOffset + toRead);
+            bufferOffset += toRead;
+            if (bufferOffset >= buffer.byteLength) {
+                buffer = null;
+                bufferOffset = 0;
+                startRead();
+            }
+            return slice;
+        }
+
+        function blockingRead(len: bigint): Uint8Array | Promise<Uint8Array> {
+            if (len === 0n || ready()) {
+                return read(len);
+            }
+            return waitForReadable().then(() => read(len));
+        }
+
+        function blockingSkip(len: bigint): bigint | Promise<bigint> {
+            const result = blockingRead(len);
+            return result instanceof Promise
+                ? result.then((bytes) => BigInt(bytes.byteLength))
+                : BigInt(result.byteLength);
         }
 
         incomingBody.#stream = inputStreamCreate({
-            read(len: bigint) {
-                checkReadError();
-                if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
-                    throw { tag: "closed" };
-                }
-                if (buffer !== null && bufferOffset < buffer.byteLength) {
-                    const available = buffer.byteLength - bufferOffset;
-                    const toRead = Math.min(Number(len), available);
-                    const slice = buffer.slice(bufferOffset, bufferOffset + toRead);
-                    bufferOffset += toRead;
-                    if (bufferOffset >= buffer.byteLength) {
-                        buffer = null;
-                        bufferOffset = 0;
-                        if (!done) {
-                            startRead();
-                        }
-                    }
-                    return slice;
-                }
-                // No data buffered yet, but the stream isn't closed or errored.
-                // `would-block` is not a valid `stream-error` variant (only
-                // `closed` and `last-operation-failed` are) - a non-blocking
-                // read with nothing available yet must return an empty list,
-                // not an error. Throwing here caused hosts driving this via
-                // JSPI to hang forever on the very first read of a body whose
-                // first chunk hadn't arrived yet (e.g. a slower response,
-                // while a fast one worked by luck).
-                startRead();
-                return new Uint8Array(0);
-            },
-            blockingRead(len: bigint): any {
-                checkReadError();
-                if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
-                    throw { tag: "closed" };
-                }
-                if (buffer !== null && bufferOffset < buffer.byteLength) {
-                    const available = buffer.byteLength - bufferOffset;
-                    const toRead = Math.min(Number(len), available);
-                    const slice = buffer.slice(bufferOffset, bufferOffset + toRead);
-                    bufferOffset += toRead;
-                    if (bufferOffset >= buffer.byteLength) {
-                        buffer = null;
-                        bufferOffset = 0;
-                        if (!done) {
-                            startRead();
-                        }
-                    }
-                    return slice;
-                }
-                startRead();
-                const waitFor = readPromise || Promise.resolve();
-                return waitFor.then(() => {
-                    checkReadError();
-                    if (done && (buffer === null || bufferOffset >= buffer.byteLength)) {
-                        throw { tag: "closed" };
-                    }
-                    if (buffer !== null && bufferOffset < buffer.byteLength) {
-                        const available = buffer.byteLength - bufferOffset;
-                        const toRead = Math.min(Number(len), available);
-                        const slice = buffer.slice(bufferOffset, bufferOffset + toRead);
-                        bufferOffset += toRead;
-                        if (bufferOffset >= buffer.byteLength) {
-                            buffer = null;
-                            bufferOffset = 0;
-                            if (!done) {
-                                startRead();
-                            }
-                        }
-                        return slice;
-                    }
-                    throw { tag: "closed" };
-                });
-            },
+            read,
+            // WIT declares synchronous signatures; JSPI awaits these host results
+            // for blocking imports. Preserve synchronous results for buffered bodies.
+            blockingRead: blockingRead as InputStreamHandler["blockingRead"],
+            blockingSkip: blockingSkip as InputStreamHandler["blockingSkip"],
             subscribe() {
-                return pollableCreate({
-                    ready: () =>
-                        readError !== null ||
-                        done ||
-                        (buffer !== null && bufferOffset < buffer.byteLength),
-                    wait: () => {
-                        startRead();
-                        return readPromise ?? Promise.resolve();
-                    },
-                });
+                return pollableCreate({ ready, wait: waitForReadable });
             },
             drop() {
+                disposed = true;
                 done = true;
-                void reader?.cancel();
+                buffer = null;
+                readError = null;
+                if (reader) {
+                    const activeReader = reader;
+                    void activeReader
+                        .cancel()
+                        .catch(() => {})
+                        .finally(() => {
+                            activeReader.releaseLock();
+                        });
+                }
             },
         });
 
