@@ -26,7 +26,7 @@ export interface FileDataEntry {
 
 /**
  * Root file data structure representing a filesystem tree.
- * Each entry is either a directory (has `dir` property) or a file (has `source` property).
+ * Each entry is a directory (`dir`), a file (`source`), or a symbolic link (`symlink`).
  * @example
  * // A simple filesystem with one directory containing one file:
  * const fileData = {
@@ -60,98 +60,99 @@ function coerceToSafeIntegerNumber(obj: number | bigint): number {
     return n;
 }
 
-// Linux's SYMLOOP_MAX; used to bound recursive symlink resolution so a cyclic
-// chain raises the WASI `loop` error instead of overflowing the call stack.
+// Bound the total number of symlinks followed during a single path resolution.
 const MAX_SYMLINK_DEPTH = 40;
 
+interface ResolvedEntry {
+    entry: FileDataEntry | undefined;
+    parent: FileDataEntry;
+    name: string;
+}
+
 /**
- * Resolve `subpath` from `dir`, following symlinks encountered along the way.
- * Intermediate path segments always follow symlinks (matching POSIX path
- * resolution); the final segment only does so when `followFinal` is set.
- * Symlink targets are resolved relative to the directory that contains the
- * symlink - this filesystem has no notion of a host-absolute root (a leading
- * "/" is just an empty path segment, same as everywhere else in this file),
- * so a target starting with "/" simply resolves from that same directory.
+ * Resolve from the descriptor's base directory, retaining the directory stack
+ * across symlink expansions so `..` cannot escape that capability. Intermediate
+ * symlinks always follow; the final segment follows only when requested.
+ * Creation may return a missing final entry, together with its resolved parent.
  */
 function resolveEntry(
-    dir: FileDataEntry,
-    subpath: string,
+    root: FileDataEntry,
+    path: string,
     followFinal: boolean,
-    depth: number,
-): FileDataEntry {
-    if (depth > MAX_SYMLINK_DEPTH) {
-        throw "loop";
-    }
-    if (subpath === "." && rootEntries.has(dir)) {
-        subpath = _getCwd();
-        if (subpath.startsWith("/") && subpath !== "/") {
-            subpath = subpath.slice(1);
-        }
-    }
-    let entry: FileDataEntry = dir;
-    let segmentIdx: number;
-    do {
-        if (!entry.dir) {
+    allowMissingFinal = false,
+): ResolvedEntry {
+    const directories = [root];
+    const pending = path.split("/").reverse();
+    let followed = 0;
+    while (pending.length) {
+        const parent = directories[directories.length - 1];
+        if (!parent.dir) {
             throw "not-directory";
         }
-        segmentIdx = subpath.indexOf("/");
-        const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
-        const rest = subpath.slice(segmentIdx + 1);
-        if (segment === "..") {
+        const name = pending.pop()!;
+        if (name === "" || name === ".") {
+            continue;
+        }
+        if (name === "..") {
+            if (directories.length === 1) {
+                throw "not-permitted";
+            }
+            directories.pop();
+            continue;
+        }
+        const entry = parent.dir[name];
+        const isFinal = pending.length === 0;
+        if (!entry) {
+            if (isFinal && allowMissingFinal) {
+                return { entry: undefined, parent, name };
+            }
             throw "no-entry";
         }
-        if (segment !== "." && segment !== "") {
-            const child = entry.dir[segment];
-            if (!child) {
-                throw "no-entry";
+        if (entry.symlink !== undefined && (!isFinal || followFinal)) {
+            if (++followed > MAX_SYMLINK_DEPTH) {
+                throw "loop";
             }
-            const isFinalSegment = segmentIdx === -1;
-            if (child.symlink !== undefined && (!isFinalSegment || followFinal)) {
-                return resolveEntry(
-                    entry,
-                    child.symlink + (isFinalSegment ? "" : "/" + rest),
-                    followFinal,
-                    depth + 1,
-                );
+            if (entry.symlink.startsWith("/")) {
+                throw "not-permitted";
             }
-            entry = child;
+            for (const segment of entry.symlink.split("/").reverse()) {
+                pending.push(segment);
+            }
+            continue;
         }
-        subpath = rest;
-    } while (segmentIdx !== -1);
-    return entry;
+        if (isFinal) {
+            return { entry, parent, name };
+        }
+        directories.push(entry);
+    }
+    const entry = directories[directories.length - 1];
+    return { entry, parent: entry, name: "" };
+}
+
+// Preserve the legacy root lookup of `.` without applying CWD substitution to
+// symlink targets or to the parent paths used by mutations.
+function lookupPath(root: FileDataEntry, path: string): string {
+    if (path === "." && rootEntries.has(root)) {
+        return _getCwd();
+    }
+    return path;
 }
 
 function getChildEntry(
     parentEntry: FileDataEntry,
     subpath: string,
-    // No default: `pathFlags.symlinkFollow` is `undefined` when unset, and a
-    // default parameter substitutes on `undefined` regardless of whether it's
-    // literal or a forwarded value - callers must pass an explicit boolean.
     followFinal: boolean | undefined,
 ): FileDataEntry {
-    return resolveEntry(parentEntry, subpath, !!followFinal, 0);
+    return resolveEntry(parentEntry, lookupPath(parentEntry, subpath), !!followFinal).entry!;
 }
 
 function getParentEntry(root: FileDataEntry, path: string): [FileDataEntry, string] {
     const segments = path.split("/").filter((segment) => segment !== "" && segment !== ".");
-    if (segments.length === 0 || segments.some((segment) => segment === "..")) {
+    const name = segments.pop();
+    if (!name || name === "..") {
         throw "invalid";
     }
-    const name = segments.pop()!;
-    let parent = root;
-    for (const segment of segments) {
-        let child = parent.dir?.[segment];
-        if (!child) {
-            throw "no-entry";
-        }
-        if (child.symlink !== undefined) {
-            child = resolveEntry(parent, child.symlink, true, 0);
-        }
-        if (!child.dir) {
-            throw "not-directory";
-        }
-        parent = child;
-    }
+    const parent = resolveEntry(root, segments.join("/"), true).entry!;
     if (!parent.dir) {
         throw "not-directory";
     }
@@ -502,17 +503,19 @@ class Descriptor implements BrowserFilesystemDescriptor {
         openFlags: OpenFlags,
         _flags: TypesNamespace.DescriptorFlags,
     ) {
-        let childEntry: FileDataEntry;
-        try {
-            childEntry = getChildEntry(this.#entry, path, pathFlags.symlinkFollow);
-            if (openFlags.create && openFlags.exclusive) {
-                throw "exist";
-            }
-        } catch (error) {
-            if (error !== "no-entry" || !openFlags.create) {
-                throw error;
-            }
-            const [parent, name] = getParentEntry(this.#entry, path);
+        const exclusiveCreate = !!(openFlags.create && openFlags.exclusive);
+        const resolved = resolveEntry(
+            this.#entry,
+            lookupPath(this.#entry, path),
+            !!pathFlags.symlinkFollow && !exclusiveCreate,
+            !!openFlags.create,
+        );
+        let childEntry = resolved.entry;
+        if (childEntry && exclusiveCreate) {
+            throw "exist";
+        }
+        if (!childEntry) {
+            const { parent, name } = resolved;
             childEntry = parent.dir![name] = openFlags.directory
                 ? { dir: {} }
                 : { source: new Uint8Array() };
@@ -542,6 +545,9 @@ class Descriptor implements BrowserFilesystemDescriptor {
         const entry = getChildEntry(this.#entry, path, false);
         if (entry.symlink === undefined) {
             throw "invalid";
+        }
+        if (entry.symlink.startsWith("/")) {
+            throw "not-permitted";
         }
         return entry.symlink;
     }
