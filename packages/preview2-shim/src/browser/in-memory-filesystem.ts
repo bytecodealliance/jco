@@ -207,6 +207,7 @@ class Descriptor implements BrowserFilesystemDescriptor {
         write: true,
         mutateDirectory: true,
     };
+    #advice: TypesNamespace.Advice = "normal";
 
     _getEntry(descriptor: Descriptor): FileDataEntry {
         return descriptor.#entry;
@@ -266,10 +267,14 @@ class Descriptor implements BrowserFilesystemDescriptor {
         return this.writeViaStream(this.stat().size);
     }
 
-    advise(_offset: Filesize, _length: Filesize, _advice: TypesNamespace.Advice) {
+    advise(_offset: Filesize, _length: Filesize, advice: TypesNamespace.Advice) {
         if (this.getType() === "directory") {
             throw "bad-descriptor";
         }
+        // All data is already resident in memory, so there's nothing to prefetch or
+        // evict here. Retain the last hint so it can be inspected by adapters that
+        // do have a real backing store to optimize (e.g. a persistent/OPFS adapter).
+        this.#advice = advice;
     }
 
     syncData() {}
