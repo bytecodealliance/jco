@@ -102,6 +102,38 @@ suite('component-model WAST', () => {
         }
     });
 
+    test.each([false, true])('deadlock diagnostics preserve the trap (minify=%s)', async (minify) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'deadlock-detail',
+                path: join(COMPONENT_MODEL_FIXTURES_WAST_DIR, 'async/deadlock.wast.wasm'),
+            },
+            jco: { transpile: { extraArgs: { minify } } },
+        });
+        try {
+            // The fixture deliberately deadlocks. Collecting diagnostics must not
+            // throw from the scheduler timer and leave the guest promise pending.
+            await expect(instance.f()).rejects.toMatchObject({
+                message: 'wasm trap: deadlock detected: event loop cannot make further progress',
+                deadlockDetail: {
+                    pendingHostOperations: 0,
+                    suspendedTasks: expect.arrayContaining([
+                        expect.objectContaining({
+                            taskID: expect.any(BigInt),
+                            componentIdx: expect.any(Number),
+                            state: 'initial',
+                            rootTaskID: expect.any(BigInt),
+                        }),
+                    ]),
+                    unresolvedRootTaskIDs: expect.arrayContaining([expect.any(BigInt)]),
+                },
+            });
+        } finally {
+            await cleanup();
+        }
+    });
+
     for (const { relPath, skip } of WAST_TESTS) {
         const wastPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, relPath);
         const wasmPath = wastPath.replace(/\.wast$/, '.wast.wasm');

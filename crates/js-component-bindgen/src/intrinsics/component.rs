@@ -171,7 +171,7 @@ impl ComponentIntrinsic {
                                 suspendedTasks: [...suspendedTasks].map((task) => ({{
                                     taskID: task.id(),
                                     componentIdx: task.componentIdx(),
-                                    state: task.state(),
+                                    state: task.taskState(),
                                     rootTaskID: task.getRootTask().id(),
                                 }})),
                                 unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
