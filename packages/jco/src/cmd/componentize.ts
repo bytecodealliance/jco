@@ -104,7 +104,7 @@ const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
  * @param {string} witPath
  * @returns bool
  */
-async function worldMetadataFor(witPath: string, worldName?: string): Promise<WorldMetadata> {
+export async function worldMetadataFor(witPath: string, worldName?: string): Promise<WorldMetadata> {
     const path = (isWindows ? "//?/" : "") + resolve(witPath);
     return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
 }

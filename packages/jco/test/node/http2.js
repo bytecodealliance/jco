@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
+import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { describe, expect, test, vi } from "vitest";
 
 import { bundleComponentSource } from "../../src/bundle.js";
@@ -131,7 +131,7 @@ describe("node:http2 WIT installation", () => {
         expect(source).toContain("resource client-session");
         expect(source).toContain("resource client-stream");
         expect(source).toContain("resource stream-listener");
-        const metadata = await componentWitMetadataForWorld({ tag: "path", val: root }, "component");
+        const metadata = await worldMetadataFor(root, "component");
         expect(metadata.imports).toContainEqual(
             expect.objectContaining({ namespace: "jco", package: "node", interface: "http2" }),
         );
