@@ -1,5 +1,169 @@
 # Changelog
 
+## [2.9.0] - 2026-09-06
+
+### 🚀 Features
+
+- _(bindgen)_ report the state behind a detected deadlock by @vados-cosmonic in #2041
+
+- _(bindgen)_ support wildcard async functions by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ track guest starts during deadlock detection by @vados-cosmonic
+
+- _(bindgen)_ use taskState when reporting deadlocks by @vados-cosmonic in #2049
+
+- _(bindgen)_ drive cancellation cleanup through JSPI suspension by @vados-cosmonic in #2033
+
+- _(bindgen)_ resolve async transpilation regressions by @vados-cosmonic
+
+- _(bindgen)_ reconcile eager async scheduling by @vados-cosmonic
+
+- _(bindgen)_ preserve eager canonical async scheduling by @vados-cosmonic
+
+- _(bindgen)_ enforce canonical async operation state by @vados-cosmonic
+
+- _(bindgen)_ reject transfers from waitable sets by @vados-cosmonic
+
+- _(bindgen)_ poison trapped component instances by @vados-cosmonic
+
+- _(bindgen)_ canonicalize core WebAssembly traps by @vados-cosmonic
+
+- _(bindgen)_ restore suspending import invocation by @vados-cosmonic
+
+- _(bindgen)_ preserve canonical FACT trap messages by @vados-cosmonic
+
+- _(bindgen)_ complete void cross-ABI calls eagerly by @vados-cosmonic
+
+- _(bindgen)_ classify suspension by current task by @vados-cosmonic
+
+- _(bindgen)_ complete void cross-ABI calls eagerly by @vados-cosmonic
+
+- _(bindgen)_ lift callbackless async results by @vados-cosmonic
+
+- _(bindgen)_ reject terminal future and stream use by @vados-cosmonic
+
+- _(bindgen)_ track resource borrows per task by @vados-cosmonic
+
+- _(bindgen)_ use canonical intra-component future trap by @vados-cosmonic
+
+- _(bindgen)_ track blocked future writer component by @vados-cosmonic
+
+- _(bindgen)_ reject dropping busy streams by @vados-cosmonic
+
+- _(bindgen)_ preserve synchronous suspending imports by @vados-cosmonic in #2014
+
+- _(bindgen)_ preserve JSPI continuation scheduling by @vados-cosmonic
+
+- _(bindgen)_ let manually async tasks suspend by @vados-cosmonic
+
+- _(bindgen)_ trap blocking component starts by @vados-cosmonic
+
+- _(bindgen)_ split sync return from callee exit by @vados-cosmonic
+
+- _(bindgen)_ track external async wake sources by @vados-cosmonic
+
+- _(bindgen)_ detect store-wide async deadlocks by @vados-cosmonic
+
+- _(bindgen)_ suspend cancellable thread yields by @vados-cosmonic
+
+- _(bindgen)_ propagate cancellable wait metadata by @vados-cosmonic
+
+- _(bindgen)_ enter async subtasks of blocking callees synchronously by @vados-cosmonic in #2008
+
+- _(bindgen)_ finish cancelled slices before resuming by @vados-cosmonic
+
+- _(bindgen)_ defer callback yields to the scheduler by @vados-cosmonic
+
+- _(bindgen)_ reserve async callee entry before start by @vados-cosmonic
+
+- _(bindgen)_ hold sync callee entry until return by @vados-cosmonic
+
+- _(bindgen)_ preserve host-injected stream data across read cancellation by @vados-cosmonic in #2029
+
+- _(bindgen)_ keep async stream operations synchronous by @vados-cosmonic
+
+- _(bindgen)_ allocate readable stream handles first by @vados-cosmonic
+
+- _(bindgen)_ return sync lowers at task return by @vados-cosmonic
+
+- _(bindgen)_ preserve cancellation after partial stream copies by @vados-cosmonic
+
+- _(bindgen)_ start suspending async lowers immediately by @vados-cosmonic
+
+- _(bindgen)_ skip return lowering for cancelled tasks by @vados-cosmonic
+
+- _(bindgen)_ resume cancellable subtasks immediately by @vados-cosmonic
+
+- _(bindgen)_ avoid promoting mutable table exports by @vados-cosmonic in #2000
+
+- _(bindgen)_ gate sync-call suspension on JSPI by @vados-cosmonic
+
+- _(bindgen)_ detect suspension through mutable tables by @vados-cosmonic
+
+- _(bindgen)_ defer entry for suspending async callees by @vados-cosmonic
+
+- _(bindgen)_ complete non-suspending async lowers eagerly by @vados-cosmonic
+
+- _(bindgen)_ avoid suspending async future operations by @vados-cosmonic
+
+- _(bindgen)_ propagate suspending sync call exports by @vados-cosmonic
+
+- _(bindgen)_ allocate readable future handles first by @vados-cosmonic
+
+- _(bindgen)_ align invalid resource handle traps by @vados-cosmonic
+
+- _(bindgen)_ report dropped partial streams by @vados-cosmonic
+
+- _(bindgen)_ transfer owned stream resources by @vados-cosmonic
+
+- _(bindgen)_ clean up blocking call subtasks by @vados-cosmonic
+
+- _(bindgen)_ align unresolved subtask drop trap by @vados-cosmonic
+
+- _(bindgen)_ complete callbackless async lifts by @vados-cosmonic
+
+- _(bindgen)_ track blocking state across guest calls by @vados-cosmonic
+
+- _(bindgen)_ avoid inferred async name markers by @vados-cosmonic
+
+- _(bindgen)_ preserve synchronous export bindings by @vados-cosmonic
+
+- _(bindgen)_ separate future endpoint drop state by @vados-cosmonic
+
+- _(bindgen)_ settle manually async task failures by @vados-cosmonic
+
+- _(bindgen)_ infer suspending component exports by @vados-cosmonic
+
+- _(bindgen)_ share future endpoint drop state by @vados-cosmonic
+
+- _(bindgen)_ match waitable-set drop trap by @vados-cosmonic
+
+- _(bindgen)_ start async subtasks before returning by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ share canonical trap messages by @vados-cosmonic in #2024
+
+- _(bindgen)_ consolidate async analysis state by @vados-cosmonic in #1992
+
+- _(bindgen)_ name transpile bindgen results by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(bindgen)_ cover async deadlock scheduling by @vados-cosmonic
+
+- _(bindgen)_ cover cancellable suspension intrinsics by @vados-cosmonic
+
+- _(bindgen)_ cover async call admission ordering by @vados-cosmonic
+
+
+
+
 ## [2.8.1] - 2026-08-24
 
 ### 🐛 Bug Fixes
