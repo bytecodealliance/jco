@@ -100,10 +100,12 @@ suite("Browser HTTP", () => {
     test("browser incoming HTTP body read() returns empty instead of throwing before the first chunk arrives", async () => {
         const { outgoingHandler, types } = await import("../../src/browser/http.js");
         const originalFetch = globalThis.fetch;
-        let releaseChunk: () => void;
-        const gate = new Promise<void>((resolve) => {
-            releaseChunk = resolve;
-        });
+        const { promise: gate, resolve: releaseChunk } = Promise.withResolvers<void>();
+        const resources: object[] = [];
+        const own = <T extends object>(resource: T): T => {
+            resources.push(resource);
+            return resource;
+        };
         globalThis.fetch = async () => {
             const stream = new ReadableStream<Uint8Array>({
                 async start(controller) {
@@ -119,30 +121,38 @@ suite("Browser HTTP", () => {
             return new Response(stream, { status: 200 });
         };
         try {
-            const request = new types.OutgoingRequest(new types.Fields());
+            const request = own(new types.OutgoingRequest(new types.Fields()));
             request.setMethod({ tag: "get" });
             request.setScheme({ tag: "HTTPS" });
             request.setAuthority("example.com");
             request.setPathWithQuery("/");
 
-            const future = outgoingHandler.handle(request, undefined);
-            await future.subscribe().block();
+            const future = own(outgoingHandler.handle(request, undefined));
+            await own(future.subscribe()).block();
             const result = future.get();
             if (!result || result.tag !== "ok" || result.val.tag !== "ok") {
                 throw new Error("expected an ok response result");
             }
-            const incomingResponse = result.val.val;
-            const bodyStream = incomingResponse.consume().stream();
+            const incomingResponse = own(result.val.val);
+            const body = own(incomingResponse.consume());
+            const bodyStream = own(body.stream());
 
             const firstRead = bodyStream.read(64n);
             assert.deepStrictEqual(firstRead, new Uint8Array(0));
 
-            releaseChunk!();
-            await bodyStream.subscribe().block();
+            releaseChunk();
+            await own(bodyStream.subscribe()).block();
             const secondRead = bodyStream.read(64n);
             assert.strictEqual(new TextDecoder().decode(secondRead), "delayed");
         } finally {
             globalThis.fetch = originalFetch;
+            // Unblock start() even when an assertion fails, before cancelling its reader.
+            releaseChunk();
+            await gate;
+            for (const resource of resources.reverse()) {
+                const dispose = Reflect.get(resource, Symbol.dispose || Symbol.for("dispose"));
+                dispose.call(resource);
+            }
         }
     });
 
