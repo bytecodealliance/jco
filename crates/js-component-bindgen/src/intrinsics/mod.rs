@@ -1685,7 +1685,7 @@ mod tests {
         assert!(source.contains("registerSubtaskProgress();"));
         assert!(source.contains("driveJspiCallee();"));
         assert!(source.contains("} else if (enteredSynchronously === null) {"));
-        assert!(source.contains("const enterPromise = preparedTask.enter();"));
+        assert!(source.contains("const enterPromise = preparedTask.enter().then(started => {"));
         assert!(source.contains("if (subtask.isReturned()) {"));
         assert!(source.contains("callerComponentState.handles.remove(subtask.waitableRep())"));
     }

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-import { suite, test, assert, expect, beforeAll } from 'vitest';
+import { suite, test, assert, expect, beforeAll, vi } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
@@ -130,6 +130,37 @@ suite('component-model WAST', () => {
                 },
             });
         } finally {
+            await cleanup();
+        }
+    });
+
+    test.each([false, true])('delayed guest entry is not a deadlock (minify=%s)', async (minify) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'delayed-guest-entry',
+                path: join(COMPONENT_MODEL_FIXTURES_WAST_DIR, 'async/sync-streams.wast.wasm'),
+            },
+            jco: { transpile: { extraArgs: { minify } } },
+        });
+
+        // Let the deadlock check run while an asynchronous timer callback is
+        // ready but has not started. A busy event loop can expose this gap.
+        const realSetTimeout = globalThis.setTimeout;
+        let delayedCallbacks = 0;
+        const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn, delay, ...args) => {
+            if (!delay && fn.constructor.name === 'AsyncFunction') {
+                delayedCallbacks++;
+                return realSetTimeout(fn, 50, ...args);
+            }
+            return realSetTimeout(fn, delay, ...args);
+        });
+
+        try {
+            await expect(instance.run()).resolves.toBe(42);
+            expect(delayedCallbacks).toBeGreaterThan(0);
+        } finally {
+            timer.mockRestore();
             await cleanup();
         }
     });
