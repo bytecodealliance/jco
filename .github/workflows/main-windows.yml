@@ -10,6 +10,9 @@
 name: main-windows
 
 on:
+  push:
+    branches:
+      - fix/preview2-shim-release-ci
   pull_request:
     branches:
       - main
@@ -26,7 +29,7 @@ permissions: {}
 
 jobs:
   build:
-    if: ${{ startsWith(github.event.pull_request.title, 'release:') }}
+    if: ${{ startsWith(github.event.pull_request.title, 'release:') || github.head_ref == 'fix/preview2-shim-release-ci' || github.ref == 'refs/heads/fix/preview2-shim-release-ci' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -111,7 +114,7 @@ jobs:
           path: packages/preview2-shim/dist
 
   test-jco:
-    if: ${{ startsWith(github.event.pull_request.title, 'release:') }}
+    if: ${{ startsWith(github.event.pull_request.title, 'release:') || github.head_ref == 'fix/preview2-shim-release-ci' || github.ref == 'refs/heads/fix/preview2-shim-release-ci' }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -246,7 +249,7 @@ jobs:
           pnpm --filter '@bytecodealliance/jco' run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   test-wasi-node:
-    if: ${{ startsWith(github.event.pull_request.title, 'release:') }}
+    if: ${{ startsWith(github.event.pull_request.title, 'release:') || github.head_ref == 'fix/preview2-shim-release-ci' || github.ref == 'refs/heads/fix/preview2-shim-release-ci' }}
     needs:
       - build
     runs-on: ${{ matrix.os }}
@@ -322,6 +325,9 @@ jobs:
       - name: Generate tests
         run: |
           cargo xtask generate tests preview2
+
+      - name: Test Windows filesystem behavior
+        run: pnpm --filter '@bytecodealliance/preview2-shim' exec vitest run -c test/vitest.ts test/node-filesystem-windows.ts test/node-filesystem-symlinks.ts
 
       - name: WASI Preview 2 Conformance
         run: |

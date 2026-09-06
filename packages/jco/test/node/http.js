@@ -2,7 +2,7 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
+import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { describe, expect, test, vi } from "vitest";
 
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
@@ -136,7 +136,7 @@ describe("node:http WIT installation", () => {
         const source = await readFile(join(root, "deps/jco-node-0.1.0/http.wit"), "utf8");
         expect(source).toContain("request: func(options: request-options)");
         expect(source).toContain("resource server");
-        const metadata = await componentWitMetadataForWorld({ tag: "path", val: root }, "component");
+        const metadata = await worldMetadataFor(root, "component");
         expect(metadata.exports).toContainEqual(
             expect.objectContaining({ namespace: "jco", package: "node", interface: "http-callbacks" }),
         );
@@ -181,7 +181,7 @@ describe("node:http WIT installation", () => {
             await injectNodeWitImports(root, "component", [...requirements]);
             expect(await injectNodeWitImports(root, "component", [...requirements])).toBeUndefined();
             await expect(stat(join(root, `deps/${dependency}/package.wit`))).resolves.toBeDefined();
-            const metadata = await componentWitMetadataForWorld({ tag: "path", val: root }, "component");
+            const metadata = await worldMetadataFor(root, "component");
             for (const requirement of requirements) {
                 const [namespaceAndPackage, interfaceAndVersion] = requirement.witImport.split("/");
                 const [namespace, packageName] = namespaceAndPackage.split(":");

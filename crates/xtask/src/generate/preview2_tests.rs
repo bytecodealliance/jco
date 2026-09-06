@@ -172,6 +172,10 @@ const DENO_IGNORE: &[&str] = &[
 
 /// Tests that cannot be implemented on Windows
 const TEST_IGNORE_WINDOWS: &[&str] = &[
+    // The updated Wasmtime fixture requires atomic replacement of an empty
+    // directory. Node's Windows rename cannot do this; enable it once the
+    // native jco-node-fs rename binding is available.
+    "preview1_path_rename",
     // openAt implementation should carry directory permissions through to nested
     // open calls. But our openAt implementation is currently path-based and not
     // proper segmented access based. If/when this changes we should be able to

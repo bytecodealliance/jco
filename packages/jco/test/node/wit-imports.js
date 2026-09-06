@@ -2,7 +2,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, test } from "vitest";
-import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
+import { worldMetadataFor } from "../../src/cmd/componentize.js";
 
 import { CHILD_PROCESS_WIT_REQUIREMENT, injectNodeWitImports, witInjectionWarnings } from "../../src/node-wit.js";
 import { getTmpDir } from "../helpers.js";
@@ -41,7 +41,7 @@ describe("Node API WIT import injection", () => {
         expect(source).toContain("import jco:node/child-process@0.1.0;");
         await expect(stat(join(root, "deps/jco-node-0.1.0/child-process.wit"))).resolves.toBeDefined();
         await expect(stat(join(root, "deps/jco-node-0.1.0/types.wit"))).resolves.toBeDefined();
-        const metadata = await componentWitMetadataForWorld({ tag: "path", val: root }, "app");
+        const metadata = await worldMetadataFor(root, "app");
         expect(metadata.imports).toContainEqual(
             expect.objectContaining({ namespace: "jco", package: "node", interface: "child-process" }),
         );
@@ -146,7 +146,7 @@ describe("Node API WIT import injection", () => {
         expect(source.replaceAll("\r\n", "")).not.toContain("\n");
         await expect(stat(join(root, "deps/jco-node-0.1.0/child-process.wit"))).resolves.toBeDefined();
         await expect(stat(join(root, "deps/jco-node-0.1.0/types.wit"))).resolves.toBeDefined();
-        const metadata = await componentWitMetadataForWorld({ tag: "path", val: result.witPath }, "app");
+        const metadata = await worldMetadataFor(result.witPath, "app");
         expect(metadata.imports).toContainEqual(expect.objectContaining({ interface: "child-process" }));
     });
 
