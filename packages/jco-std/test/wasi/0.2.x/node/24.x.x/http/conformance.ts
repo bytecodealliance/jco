@@ -9,7 +9,7 @@ import {
   createWasiSocketsHttpImplementation,
   type WasiSocketsProvider,
   type WasiTcpSocket,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
 import {
   parseHttp1Response,
   serializeHttp1Request,

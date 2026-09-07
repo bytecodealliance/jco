@@ -1,13 +1,13 @@
 import { describe, expect, test } from "vitest";
 
 import { createHttp } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/core.js";
-import { createWasiSocketsHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
+import { createWasiSocketsHttpImplementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
 import type {
   WasiInputStream,
   WasiOutputStream,
   WasiSocketsProvider,
   WasiTcpSocket,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
