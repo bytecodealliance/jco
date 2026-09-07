@@ -28,13 +28,13 @@ function untouchedProvider(): WasiSocketsProvider {
 }
 
 describe("node:https wasi:sockets implementation", () => {
-  test.concurrent("refuses client requests before touching the network", async () => {
+  test.concurrent("reports missing TLS capability before touching the network", async () => {
     const https = createHttps(createWasiSocketsHttpImplementation(untouchedProvider()));
     const request = https.request("https://example.com/");
     const error = new Promise<Error>((resolve) => request.once("error", resolve));
     request.end();
     await expect(error).resolves.toMatchObject({
-      code: "ERR_JCO_UNSUPPORTED_NODE_API",
+      code: "ERR_JCO_TLS_ADAPTER_REQUIRED",
       message: expect.stringMatching(/https: requests with the wasi-sockets implementation.*TLS/),
     });
   });
