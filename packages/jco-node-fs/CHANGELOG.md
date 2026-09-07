@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] - 2026-09-07
+
+### 🚀 Features
+
+- _(node-fs)_ support atomic directory rename on Windows by @vados-cosmonic in #2054
+
+
 ## [0.2.0] - 2026-08-23
 
 ## [0.1.0] - 2026-08-23
