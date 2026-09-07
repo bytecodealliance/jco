@@ -400,7 +400,7 @@ async function componentizeQJS(args: BackendComponentizeArgs) {
             String(error).includes("mismatched resource types")
         ) {
             throw new Error(
-                "QuickJS's built-in wasi:tls uses incompatible IO resource types for the pinned wasi:tls@0.2.0-draft (wasi:io@0.2.6). Use --backend starlingmonkey for HTTPS over wasi-sockets.",
+                "QuickJS's snapshot linker cannot reconcile the shared IO resource types imported by wasi:tls@0.2.0-draft (wasi:io@0.2.6). This is a componentize-qjs build-time limitation; --backend starlingmonkey is a workaround.",
                 { cause: error },
             );
         }
