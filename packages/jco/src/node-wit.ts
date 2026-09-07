@@ -211,38 +211,26 @@ function forHttps(requirements: readonly NodeWitRequirement[]): NodeWitRequireme
     return requirements.map((requirement) => ({ ...requirement, nodeSpecifier: "node:https" }));
 }
 
-function tlsRequirements(version: "0.2.10" | "0.2.12"): NodeWitRequirement[] {
+function tlsRequirements(): NodeWitRequirement[] {
     const tlsRoot = new URL("../lib/wit/builtin/wasi-tls-0.2.0-draft/", import.meta.url);
-    const bridge = `tls-streams-${version.replaceAll(".", "-")}`;
-    const dependencies: WitDependencyPackage[] = [
-        {
-            dependencyDirectory: "wasi-tls-0.2.0-draft",
-            dependencySources: ["world.wit", "types.wit"].map((name) => fileURLToPath(new URL(name, tlsRoot))),
-        },
-        {
-            dependencyDirectory: "wasi-io-0.2.6",
-            dependencySources: ["world.wit", "streams.wit", "poll.wit", "error.wit"].map((name) =>
-                fileURLToPath(new URL(`deps/io/${name}`, tlsRoot)),
-            ),
-        },
-        wasiDependency("wasi-io", version),
-        {
-            dependencyDirectory: bridge,
-            dependencySources: [fileURLToPath(new URL(`../lib/wit/builtin/${bridge}/package.wit`, import.meta.url))],
-        },
-    ];
     return forHttps([
-        wasiRequirement("wasi:tls/types@0.2.0-draft", dependencies),
-        wasiRequirement(`jco:${bridge}/bridge@0.1.0`, dependencies),
+        wasiRequirement("wasi:tls/types@0.2.0-draft", [
+            {
+                dependencyDirectory: "wasi-tls-0.2.0-draft",
+                dependencySources: ["world.wit", "types.wit"].map((name) => fileURLToPath(new URL(name, tlsRoot))),
+            },
+            WASI_IO_DEPENDENCY,
+        ]),
     ]);
 }
-export const HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS = [
-    ...forHttps(HTTP_WASI_SOCKETS_WIT_REQUIREMENTS),
-    ...tlsRequirements("0.2.12"),
-];
 export const HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
     ...forHttps(HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS),
-    ...tlsRequirements("0.2.10"),
+    ...tlsRequirements(),
+] as const;
+
+export const HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS = [
+    ...forHttps(HTTP_WASI_SOCKETS_WIT_REQUIREMENTS),
+    ...tlsRequirements(),
 ];
 
 export const HTTPS_WASI_HTTP_WIT_REQUIREMENTS = forHttps(HTTP_WASI_HTTP_WIT_REQUIREMENTS);
