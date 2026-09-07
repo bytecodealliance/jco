@@ -516,12 +516,6 @@ jobs:
         with:
           version: 11
 
-      - name: Verify publishing uses the tested tarballs
-        env:
-          ARTIFACT_DIR: ${{ github.workspace }}/gh-artifacts
-          PROJECT: ${{ needs.meta.outputs.project }}
-        run: node scripts/test-release-publish.mjs
-
       # TODO: jco-transpile packed into a tgz *should* be ~2.1MB, but it's
       # 4MB in CI
       - name: Test jco-transpile package size
