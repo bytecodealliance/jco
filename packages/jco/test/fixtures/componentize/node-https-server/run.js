@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
-const tls = new URL("../../../../../preview2-shim/test/fixtures/tls/", import.meta.url);
+const tls = new URL("../../../../../jco-std/test/wasi/0.2.x/node/24.x.x/https/helpers/tls/", import.meta.url);
 const cert = await readFile(new URL("localhost.crt", tls), "utf8");
 const key = await readFile(new URL("localhost.key", tls), "utf8");
 
