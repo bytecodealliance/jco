@@ -1,0 +1,9 @@
+// Jco-owned resource version bridge; this is not part of wasi:tls.
+package jco:tls-streams-0-2-12@0.1.0;
+interface bridge {
+    use wasi:io/streams@0.2.12.{input-stream, output-stream};
+    use wasi:io/streams@0.2.6.{input-stream as tls-input, output-stream as tls-output};
+    // Query before connecting so a denied TLS capability never sends plaintext.
+    is-available: func() -> bool;
+    adapt: func(input: input-stream, output: output-stream) -> tuple<tls-input, tls-output>;
+}
