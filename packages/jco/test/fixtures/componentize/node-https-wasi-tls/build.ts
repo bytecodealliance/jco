@@ -28,7 +28,7 @@ const source = await bundleComponentSource(join(fixture, "component.js"), {
                 wasiSocketsVersion: backend === "starlingmonkey" ? "0.2.10" : "0.2.12",
                 httpsCoreModule: join(std, "https/core.js"),
                 httpCoreModule: join(std, "http/core.js"),
-                httpWasiSocketsImplementationModule: join(std, "http/impl/wasi-sockets.js"),
+                httpWasiSocketsImplementationModule: join(std, "http/impl/wasi-sockets/index.js"),
                 onWitRequirement: (requirement: NodeWitRequirement): void => {
                     requirements.push(requirement);
                 },
