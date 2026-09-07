@@ -257,13 +257,13 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this project by you, as defined in the Apache-2.0 license,
 shall be licensed as above, without any additional terms or conditions.
 
-### Opt-in TLS
+### Host IO extensions
 
-`@bytecodealliance/preview2-shim/tls` is a Node-only provider for the pinned
-`wasi:tls/types@0.2.0-draft` interface (upstream revision
-`6781ae26084100c0628ef72cc44e4517c6c48ae5`). It wraps existing WASI TCP streams with
-native TLS, verifies certificate chains and names, and offers HTTP/1.1 ALPN.
-It is never enabled by the default WASI mappings. `createTlsProvider({ ca,
-handshakeTimeoutMs })` configures host trust and handshake deadlines. The module
-also exports the separate Jco IO version bridge (`adapt`, `isAvailable`).
-The draft supports clients only; it cannot express guest CA or TLS settings.
+Opt-in providers can use the Node-only `@bytecodealliance/preview2-shim/io-worker`
+entry point to operate on existing streams in the shim's IO worker. Host-selected
+modules load lazily and share the worker's stream, future, and poll ownership rules.
+Guest code cannot select extension modules.
+
+The Node `wasi:tls` provider and its TLS policy live in
+[`jco-std`](../jco-std/README.md#http-1), which wraps the supplied TCP streams
+without opening a replacement connection.
