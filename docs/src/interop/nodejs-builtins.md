@@ -914,7 +914,7 @@ rejected. TLS support is independent of the componentization backend.
 > the TLS interface's shared IO resources, even for an otherwise empty component.
 > StarlingMonkey is a workaround for this build-time issue.
 
-The enabled `https-wasi-tls.test.ts` suite includes deterministic
+The enabled `https-wasi-tls.ts` suite includes deterministic
 local TLS tests and a separately named public test requiring DNS and TCP/443 to
 `example.com` (20-second execution deadline).
 
