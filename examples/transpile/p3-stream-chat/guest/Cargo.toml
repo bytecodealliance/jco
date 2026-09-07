@@ -8,4 +8,4 @@ publish = false
 resolver = "2"
 
 [dependencies]
-wit-bindgen = { version = "0.58.0", default-features = false, features = ["macros", "async-spawn"] }
+wit-bindgen = { version = "0.61.1", default-features = false, features = ["macros", "async-spawn"] }

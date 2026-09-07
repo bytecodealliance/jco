@@ -149,7 +149,8 @@ pub enum Intrinsic {
     /// Tracking of component memories
     LookupMemoriesForComponent,
 
-    /// Global that tracks the current task
+    /// Per-component task registers plus `current`, the task executing core Wasm.
+    /// FACT adapters use `current` because they have no owning component.
     GlobalCurrentTaskMeta,
 
     /// Gets the current global task state
@@ -1012,10 +1013,9 @@ impl Intrinsic {
                     output,
                     r#"
                       function {get_current_global_task_meta_fn}(componentIdx) {{
-                          if (componentIdx === null || componentIdx === undefined) {{
-                              throw new Error("missing/invalid component idx");
-                          }}
-                          const v = {global_current_task_meta_obj}[componentIdx];
+                          const v = componentIdx === undefined || componentIdx === null
+                              ? {global_current_task_meta_obj}.current
+                              : {global_current_task_meta_obj}[componentIdx];
                           if (v === undefined || v === null) {{
                               return undefined;
                           }}
@@ -1038,7 +1038,8 @@ impl Intrinsic {
                           if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
                           if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
                           const {{ taskID, componentIdx }} = args;
-                          return {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
+                          return {global_current_task_meta_obj}.current =
+                              {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
                       }}
                     "#,
                 );
@@ -1061,9 +1062,11 @@ impl Intrinsic {
                           if (!args.fn) {{ throw new TypeError('missing fn'); }}
                           const {{ taskID, componentIdx, fn }} = args;
                           const previous = {global_current_task_meta_obj}[componentIdx] ?? null;
+                          const previousCurrent = {global_current_task_meta_obj}.current ?? null;
 
                           try {{
-                              {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
+                              {global_current_task_meta_obj}.current =
+                                  {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
                               return fn();
                           }} catch (err) {{
                               {debug_log_fn}("error while executing sync callee/callback", {{
@@ -1077,6 +1080,7 @@ impl Intrinsic {
                               // helper core exports (for example fused return adapters) can
                               // temporarily run under a different task of the same component.
                               {global_current_task_meta_obj}[componentIdx] = previous;
+                              {global_current_task_meta_obj}.current = previousCurrent;
                           }}
                       }}
                     "#,
@@ -1128,7 +1132,8 @@ impl Intrinsic {
                           const {{ taskID, componentIdx, fn }} = args;
 
                           try {{
-                              {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
+                              {global_current_task_meta_obj}.current =
+                                  {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
                               return await fn();
                           }} catch (err) {{
                               {debug_log_fn}("error while executing async callee/callback", {{
@@ -1138,6 +1143,9 @@ impl Intrinsic {
                               throw err;
                           }} finally {{
                               {global_current_task_meta_obj}[componentIdx] = null;
+                              if ({global_current_task_meta_obj}.current?.taskID === taskID) {{
+                                  {global_current_task_meta_obj}.current = null;
+                              }}
                           }}
                       }}
                     "#,
@@ -1171,6 +1179,9 @@ impl Intrinsic {
                           }}
 
                           {global_current_task_meta_obj}[componentIdx] = null;
+                          if ({global_current_task_meta_obj}.current?.taskID === taskID) {{
+                              {global_current_task_meta_obj}.current = null;
+                          }}
                       }}
                     "#,
                 ));
@@ -1185,7 +1196,8 @@ impl Intrinsic {
             // the helper invocation outside that function changes JSPI
             // continuation scheduling and can strand later stream operations.
             // Restoring the captured entry is the last JS to run before the
-            // suspended stack resumes.
+            // suspended stack resumes. EnterSyncCall instead leaves the newly
+            // entered callee current (switchesTask), including after lock contention.
             Self::SuspendingImportWrapperFn => {
                 let suspending_import_wrapper_fn =
                     args.require_intrinsic(Self::SuspendingImportWrapperFn);
@@ -1201,7 +1213,7 @@ impl Intrinsic {
 
                 output.push_str(&format!(
                     r#"
-                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false) {{
+                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false, switchesTask = false) {{
                           return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
@@ -1222,10 +1234,12 @@ impl Intrinsic {
                                       result = fn.apply(null, args);
                                   }} catch (err) {{
                                       {global_current_task_meta_obj}[componentIdx] = saved;
+                                      if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
                                       throw err;
                                   }}
 
                                   {global_current_task_meta_obj}[componentIdx] = saved;
+                                  if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
 
                                   if (result !== null &&
                                       (typeof result === 'object' || typeof result === 'function') &&
@@ -1244,6 +1258,7 @@ impl Intrinsic {
                                       return await fn.apply(null, args);
                                   }} finally {{
                                       {global_current_task_meta_obj}[componentIdx] = saved;
+                                      if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
                                   }}
                               }})();
                           }};

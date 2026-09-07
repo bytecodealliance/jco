@@ -1510,7 +1510,6 @@ impl<'a> Instantiator<'a, '_> {
     ) -> Option<RuntimeComponentInstanceIndex> {
         let instance = match trampoline {
             Trampoline::ResourceRep { .. }
-            | Trampoline::ThreadIndex
             | Trampoline::BackpressureInc { .. }
             | Trampoline::BackpressureDec { .. }
             | Trampoline::ResourceTransferOwn
@@ -1544,12 +1543,14 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::WaitableSetDrop { instance }
             | Trampoline::WaitableJoin { instance }
             | Trampoline::ThreadYield { instance, .. }
+            | Trampoline::ThreadIndex { instance }
             | Trampoline::ThreadNewIndirect { instance, .. }
             | Trampoline::ThreadSuspend { instance, .. }
-            | Trampoline::ThreadSuspendToSuspended { instance, .. }
-            | Trampoline::ThreadSuspendTo { instance, .. }
-            | Trampoline::ThreadUnsuspend { instance, .. }
-            | Trampoline::ThreadYieldToSuspended { instance, .. }
+            | Trampoline::ThreadSuspendThenPromote { instance, .. }
+            | Trampoline::ThreadSuspendThenResume { instance, .. }
+            | Trampoline::ThreadResumeLater { instance, .. }
+            | Trampoline::ThreadYieldThenPromote { instance, .. }
+            | Trampoline::ThreadYieldThenResume { instance, .. }
             | Trampoline::SubtaskDrop { instance }
             | Trampoline::SubtaskCancel { instance, .. }
             | Trampoline::ErrorContextNew { instance, .. }
@@ -1778,7 +1779,8 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::TaskCancel { .. }
                 | Trampoline::TaskReturn { .. }
                 | Trampoline::ThreadYield { .. }
-                | Trampoline::ThreadYieldToSuspended { .. }
+                | Trampoline::ThreadYieldThenPromote { .. }
+                | Trampoline::ThreadYieldThenResume { .. }
                 | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
                 | Trampoline::WaitableSetNew { .. }
@@ -3270,16 +3272,21 @@ impl<'a> Instantiator<'a, '_> {
                     "#,
                 );
             }
-            Trampoline::ThreadIndex => todo!("Trampoline::ThreadIndex"),
+            Trampoline::ThreadIndex { .. } => todo!("Trampoline::ThreadIndex"),
             Trampoline::ThreadNewIndirect { .. } => todo!("Trampoline::ThreadNewIndirect"),
             Trampoline::ThreadSuspend { .. } => todo!("Trampoline::ThreadSuspend"),
-            Trampoline::ThreadSuspendTo { .. } => todo!("Trampoline::ThreadSuspendTo"),
-            Trampoline::ThreadUnsuspend { .. } => todo!("Trampoline::ThreadUnsuspend"),
-            Trampoline::ThreadYieldToSuspended { .. } => {
-                todo!("Trampoline::ThreadYieldToSuspended")
+            Trampoline::ThreadSuspendThenResume { .. } => {
+                todo!("Trampoline::ThreadSuspendThenResume")
             }
-            Trampoline::ThreadSuspendToSuspended { .. } => {
-                todo!("Trampoline::ThreadYieldToSuspended")
+            Trampoline::ThreadResumeLater { .. } => todo!("Trampoline::ThreadResumeLater"),
+            Trampoline::ThreadYieldThenPromote { .. } => {
+                todo!("Trampoline::ThreadYieldThenPromote")
+            }
+            Trampoline::ThreadSuspendThenPromote { .. } => {
+                todo!("Trampoline::ThreadSuspendThenPromote")
+            }
+            Trampoline::ThreadYieldThenResume { .. } => {
+                todo!("Trampoline::ThreadYieldThenResume")
             }
 
             Trampoline::Trap => {
@@ -3326,7 +3333,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                           const trampoline{i} = {conditional_suspending_fn}(
                               (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true),
-                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}(callerComponentIdx, {enter_symmetric_sync_guest_call_fn})(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
+                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}(callerComponentIdx, {enter_symmetric_sync_guest_call_fn}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
                           );
                         "#,
                     );
@@ -3537,6 +3544,22 @@ impl<'a> Instantiator<'a, '_> {
                 imports.push_str("},\n");
             }
             imports.push('}');
+        }
+
+        // Select the start function's task after the compiled module is yielded,
+        // immediately before instantiation. Other components have initialization
+        // tasks too, so the last task created need not own this core module.
+        if let Some(component_idx) =
+            instance.filter(|idx| self.context_components.borrow().contains(idx))
+        {
+            let set_task_meta = self
+                .bindgen
+                .intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+            let idx = component_idx.as_u32();
+            let import_object = imports.strip_prefix(", ").unwrap_or("{}");
+            imports = format!(
+                ", ({set_task_meta}({{ componentIdx: {idx}, taskID: _initTaskID{idx} }}), {import_object})"
+            );
         }
 
         let jspi_enabled = self
@@ -5104,58 +5127,26 @@ impl<'a> Instantiator<'a, '_> {
                 self.used_instance_flags.borrow_mut().insert(*i);
                 format!("instanceFlags{}", i.as_u32())
             }
-            CoreDef::UnsafeIntrinsic(ui) => match ui {
-                wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_0 => {
-                    let context_get_fn = self
-                        .bindgen
-                        .intrinsic(AsyncTaskIntrinsic::ContextGet.into());
-                    let component_idx = self.init_current_module.expect("missing current module");
+            CoreDef::UnsafeIntrinsic(ui) => {
+                use wasmtime_environ::component::UnsafeIntrinsic;
+                let (intrinsic, slot) = match ui {
+                    UnsafeIntrinsic::ContextGetI32_0 => (AsyncTaskIntrinsic::ContextGet, 0),
+                    UnsafeIntrinsic::ContextSetI32_0 => (AsyncTaskIntrinsic::ContextSet, 0),
+                    UnsafeIntrinsic::ContextGetI32_1 => (AsyncTaskIntrinsic::ContextGet, 1),
+                    UnsafeIntrinsic::ContextSetI32_1 => (AsyncTaskIntrinsic::ContextSet, 1),
+                    ui => return format!("unsafeIntrinsic{}", ui.index()),
+                };
+                let context_fn = self.bindgen.intrinsic(intrinsic.into());
+                // FACT adapters have no owning component: their context operations
+                // follow the executing task as enter/exit-sync-call switches it.
+                let component = if let Some(component_idx) = self.init_current_module {
                     self.context_components.borrow_mut().insert(component_idx);
-                    format!(
-                        "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
-                        component_idx.as_u32(),
-                    )
-                }
-                wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_0 => {
-                    let context_set_fn = self
-                        .bindgen
-                        .intrinsic(AsyncTaskIntrinsic::ContextSet.into());
-                    let component_idx = self.init_current_module.expect("missing current module");
-                    self.context_components.borrow_mut().insert(component_idx);
-                    format!(
-                        "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 0 }})",
-                        component_idx.as_u32(),
-                    )
-                }
-                wasmtime_environ::component::UnsafeIntrinsic::ContextGetI32_1 => {
-                    let context_get_fn = self
-                        .bindgen
-                        .intrinsic(AsyncTaskIntrinsic::ContextGet.into());
-                    let component_idx = self.init_current_module.expect("missing current module");
-                    self.context_components.borrow_mut().insert(component_idx);
-                    format!(
-                        "{context_get_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
-                        component_idx.as_u32(),
-                    )
-                }
-                wasmtime_environ::component::UnsafeIntrinsic::ContextSetI32_1 => {
-                    let context_set_fn = self
-                        .bindgen
-                        .intrinsic(AsyncTaskIntrinsic::ContextSet.into());
-                    let component_idx = self.init_current_module.expect("missing current module");
-                    self.context_components.borrow_mut().insert(component_idx);
-                    format!(
-                        "{context_set_fn}.bind(null, {{ componentIdx: {}, slot: 1 }})",
-                        component_idx.as_u32(),
-                    )
-                }
-
-                // All other intriniscs can be set generically
-                ui => {
-                    let idx = ui.index();
-                    format!("unsafeIntrinsic{idx}")
-                }
-            },
+                    format!("componentIdx: {}, ", component_idx.as_u32())
+                } else {
+                    String::new()
+                };
+                format!("{context_fn}.bind(null, {{ {component}slot: {slot} }})")
+            }
         }
     }
 
