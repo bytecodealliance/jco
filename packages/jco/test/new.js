@@ -160,15 +160,17 @@ suite("jco scaffold", () => {
             "test",
             "tsconfig.json",
             "types",
+            "vitest.config.ts",
             "wit",
         ]);
         assert.include(
             await readFile(join(project, "src/component.ts"), "utf8"),
             "export const foo1: typeof World.foo1",
         );
-        const generatedTest = await readFile(join(project, "test/component.test.ts"), "utf8");
+        const generatedTest = await readFile(join(project, "test/component.ts"), "utf8");
         assert.include(generatedTest, 'component["foo1"]');
         assert.include(generatedTest, '["foo"]');
+        assert.include(await readFile(join(project, "vitest.config.ts"), "utf8"), '"test/**/*.{ts,js}"');
         const packageJson = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
         assert.equal(packageJson.packageManager, `pnpm@${DEFAULT_PNPM_VERSION}`);
         assert.equal(packageJson.scripts.check, "pnpm run check:types");
