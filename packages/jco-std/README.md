@@ -613,15 +613,25 @@ jco componentize component.js --wit wit --bundle \
   map `wasi/0.2.x/node/24.x.x/http/host/node` when transpiling. It supports
   clients and servers through real `node:http`, and terminates TLS for
   `node:https` through real `node:https`;
-- `wasi-sockets`, which implements HTTP/1.1 in the guest using only Preview 2
-  socket and IO capabilities, including TCP servers. It has no TLS stack, so
-  `node:https` clients and servers are refused rather than served in
-  plaintext; and
+- `wasi-sockets`, which implements HTTP/1.1 in the guest over Preview 2 TCP.
+  TLS connections implicitly require the additional `wasi:tls` capability;
+  `node:https` adds its import automatically. Verified HTTPS clients work with
+  an explicit host provider; HTTPS servers remain unsupported by the pinned
+  client-only TLS interface; and
 - `wasi-http`, which translates requests to Preview 2
   `wasi:http/outgoing-handler`, including `https` URLs, though per-request TLS
   options are refused because the outgoing-handler owns certificate
   validation. It rejects `Server` construction immediately because an
   outgoing-handler cannot listen for arbitrary inbound connections.
+
+For HTTPS over sockets, use `--backend starlingmonkey` and explicitly map both
+`wasi:tls/types@0.2.0-draft` and `jco:tls-streams-0-2-10/bridge@0.1.0` to
+`@bytecodealliance/preview2-shim/tls`. The default mapping denies TLS before
+connecting. The Node provider wraps the existing TCP streams, validates the
+certificate chain and hostname, and offers HTTP/1.1 ALPN. The draft accepts only
+`servername` (and `rejectUnauthorized: true`); other per-request TLS settings,
+including `ca`, are rejected. Hosts can configure trust with `createTlsProvider`.
+See the [provider example](../../docs/src/interop/nodejs-builtins.md#https).
 
 When the selected world is missing a required import or callback export, Jco
 edits that world in place, adds generated comments and declarations, installs
