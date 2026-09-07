@@ -50,9 +50,18 @@ async function main() {
         args.push('--tag', PRERELEASE_TAG);
     }
 
+    const failures = [];
     for (const tarball of tarballs) {
-        // Pass the artifact directly; workspace filtering would repack source.
-        execFileSync('pnpm', [...args, resolve(artifactDir, tarball)], { stdio: 'inherit' });
+        try {
+            // Pass the artifact directly; workspace filtering would repack source.
+            execFileSync('pnpm', [...args, resolve(artifactDir, tarball)], { stdio: 'inherit' });
+        } catch (error) {
+            console.error(`Failed to publish ${tarball}:`, error);
+            failures.push(tarball);
+        }
+    }
+    if (failures.length > 0) {
+        throw new Error(`Failed to publish ${failures.length} of ${tarballs.length} tarballs: ${failures.join(', ')}`);
     }
 }
 
