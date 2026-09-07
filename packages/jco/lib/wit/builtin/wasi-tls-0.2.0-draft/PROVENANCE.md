@@ -1,8 +1,5 @@
-WIT files vendored unchanged from WebAssembly/wasi-tls, revision
-`6781ae26084100c0628ef72cc44e4517c6c48ae5`, directory `wit/`.
-Package: `wasi:tls@0.2.0-draft`; dependency: `wasi:io@0.2.6`.
-The IO WIT files are vendored in `deps/io/`; no dependency fetch is needed.
-Upstream wit-deps manifests and lockfiles are omitted; Jco does not use wit-deps.
-License: W3C Community Contributor License Agreement; see LICENSE.md.
-The `tls` unstable WIT feature must be enabled. Client-only: no server,
-trust configuration, verification bypass, cipher or ALPN configuration.
+Adapted from WebAssembly/wasi-tls `wit/`, revision
+`6781ae26084100c0628ef72cc44e4517c6c48ae5` (W3C Community CLA; see LICENSE.md).
+Local changes: `wasi:io@0.2.12`, `is-available`, and no unstable-feature gate; see README.md.
+IO WIT is copied from Jco's existing `builtin/0.2.12/wasi-io/package.wit`.
+Upstream wit-deps metadata is omitted; dependencies are vendored.
