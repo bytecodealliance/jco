@@ -2,7 +2,6 @@ import {
   handshake,
   validateTlsOptions,
   type WasiTlsProvider,
-  type WasiTlsStreamBridge,
   type WasiTlsConnection,
 } from "./tls.js";
 import { concatBytes } from "../../body.js";
@@ -84,7 +83,6 @@ export interface WasiNetwork {
 
 export interface WasiSocketsProvider {
   tls?: WasiTlsProvider;
-  tlsStreamBridge?: WasiTlsStreamBridge;
   instanceNetwork: {
     instanceNetwork(): WasiNetwork;
   };
@@ -582,7 +580,7 @@ export function createWasiSocketsHttpImplementation(
     request(request) {
       if (request.scheme === "https") {
         validateTlsOptions(request.tls);
-        if (!provider.tls || provider.tlsStreamBridge?.isAvailable() === false) {
+        if (!provider.tls?.isAvailable()) {
           throw fromImplementationError({
             name: "Error",
             code: "ERR_JCO_TLS_ADAPTER_REQUIRED",
@@ -615,7 +613,6 @@ export function createWasiSocketsHttpImplementation(
           output = undefined;
           [tlsConnection, input, output] = handshake(
             provider.tls!,
-            provider.tlsStreamBridge,
             request.tls?.servername ?? hostname,
             tcp.input,
             tcp.output,
