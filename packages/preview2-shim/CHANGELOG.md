@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.24.1] - 2026-09-07
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ update jco-node-fs to v0.3.2 by @vados-cosmonic in #2071
+
 ## [0.24.0] - 2026-09-07
 
 ### 🚀 Features
