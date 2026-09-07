@@ -3,14 +3,14 @@
  * 6781ae26084100c0628ef72cc44e4517c6c48ae5 (W3C Community CLA).
  * The IO version adapter is a separate Jco interface, never an upstream extension.
  */
-import { fromImplementationError, unsupported } from "../errors.js";
-import type { HttpTlsMaterial } from "../types.js";
+import { fromImplementationError, unsupported } from "../../errors.js";
+import type { HttpTlsMaterial } from "../../types.js";
 import {
   dispose,
   type WasiInputStream,
   type WasiOutputStream,
   type WasiPollable,
-} from "./wasi-sockets.js";
+} from "./index.js";
 
 export interface WasiTlsError {
   toDebugString(): string;

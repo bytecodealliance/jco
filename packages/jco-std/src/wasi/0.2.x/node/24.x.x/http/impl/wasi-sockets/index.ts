@@ -4,15 +4,15 @@ import {
   type WasiTlsProvider,
   type WasiTlsStreamBridge,
   type WasiTlsConnection,
-} from "./wasi-tls.js";
-import { concatBytes } from "../body.js";
-import { fromImplementationError, invalidArgValue, unsupported, wasiErrorCode } from "../errors.js";
+} from "./tls.js";
+import { concatBytes } from "../../body.js";
+import { fromImplementationError, invalidArgValue, unsupported, wasiErrorCode } from "../../errors.js";
 import {
   parseHttp1Request,
   parseHttp1Response,
   serializeHttp1Request,
   serializeHttp1Response,
-} from "../http1.js";
+} from "../../http1.js";
 import type {
   HttpImplementation,
   HttpImplementationRequest,
@@ -23,7 +23,7 @@ import type {
   HttpServerAddress,
   HttpServerImplementation,
   HttpServerOptions,
-} from "../types.js";
+} from "../../types.js";
 
 export type WasiIpAddress =
   | { tag: "ipv4"; val: [number, number, number, number] }

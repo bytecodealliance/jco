@@ -10,7 +10,7 @@ import {
   type WasiOutputStream,
   type WasiSocketsProvider,
   type WasiTcpSocket,
-} from "../../../http/impl/wasi-sockets.js";
+} from "../../../http/impl/wasi-sockets/index.js";
 import { unsupported } from "../../errors.js";
 import { getDefaultSettings, validateSettings } from "../../settings.js";
 import type {

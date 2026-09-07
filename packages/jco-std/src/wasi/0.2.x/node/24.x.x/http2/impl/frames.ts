@@ -1,4 +1,4 @@
-import type { WasiInputStream, WasiOutputStream } from "../../http/impl/wasi-sockets.js";
+import type { WasiInputStream, WasiOutputStream } from "../../http/impl/wasi-sockets/index.js";
 
 export const FRAME = {
   data: 0,
