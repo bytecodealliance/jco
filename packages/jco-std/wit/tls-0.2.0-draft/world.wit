@@ -1,7 +1,8 @@
+// Adapted from WebAssembly/wasi-tls wit/world.wit at
+// 6781ae26084100c0628ef72cc44e4517c6c48ae5 (W3C Community CLA).
+// Local change: omit unstable-feature gates; see README.md.
 package wasi:tls@0.2.0-draft;
 
-@unstable(feature = tls)
 world imports {
-    @unstable(feature = tls)
     import types;
 }
