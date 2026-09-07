@@ -747,13 +747,19 @@ function protocolWasiSocketsAdapter(
 ): string {
     const factory = PROTOCOL_FACTORY[protocol];
     const schedule = version === "0.2.10" ? ", schedule: task => setTimeout(task, 0)" : "";
+    const tlsImports =
+        protocol === "https"
+            ? `import * as tls from "wasi:tls/types@0.2.0-draft";
+import * as tlsStreamBridge from "jco:tls-streams-${version.replaceAll(".", "-")}/bridge@0.1.0";`
+            : "";
     return `
 import * as instanceNetwork from "wasi:sockets/instance-network@${version}";
 import * as ipNameLookup from "wasi:sockets/ip-name-lookup@${version}";
 import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@${version}";
+${tlsImports}
 import { ${factory} } from ${JSON.stringify(coreModule)};
 import { createWasiSocketsHttpImplementation } from ${JSON.stringify(implementationModule)};
-${protocolExports(protocol, `${factory}(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${version === "0.2.10" ? "BigInt(value)" : "value"}${schedule} }))`)}
+${protocolExports(protocol, `${factory}(createWasiSocketsHttpImplementation({ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${version === "0.2.10" ? "BigInt(value)" : "value"}${schedule}${protocol === "https" ? ", tls, tlsStreamBridge" : ""} }))`)}
 `;
 }
 

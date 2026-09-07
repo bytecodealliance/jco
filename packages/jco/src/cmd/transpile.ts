@@ -45,6 +45,9 @@ const HTTP2_ASYNC_IMPORTS = [
     `${HTTP2_CAPABILITY}#[method]server.close`,
 ];
 const DEFAULT_NODE_CAPABILITY_MAP = {
+    "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
+    "jco:tls-streams-0-2-10/bridge@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
+    "jco:tls-streams-0-2-12/bridge@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
     "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
