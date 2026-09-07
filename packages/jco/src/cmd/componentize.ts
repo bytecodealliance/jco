@@ -1,4 +1,3 @@
-import { resolveWitFeatures } from "../wit-features.js";
 import { mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, basename, dirname, extname, join } from "node:path";
@@ -107,24 +106,7 @@ const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
  */
 export async function worldMetadataFor(witPath: string, worldName?: string): Promise<WorldMetadata> {
     const path = (isWindows ? "//?/" : "") + resolve(witPath);
-    try {
-        return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
-    } catch (error) {
-        // wasi:tls is an explicitly imported unstable proposal. Resolve its feature
-        // without stripping annotations from the user's or vendored WIT.
-        if (!String(error).includes("interface not found in package")) {
-            throw error;
-        }
-        const resolved = await resolveWitFeatures(path, worldName, ["tls"]);
-        try {
-            return (await componentWitMetadataForWorld(
-                { tag: "path", val: resolved.witPath },
-                resolved.worldName,
-            )) as WorldMetadata;
-        } finally {
-            await resolved.cleanup();
-        }
-    }
+    return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
 }
 
 /** Re-bundle an entry wrapper that explicitly implements guest callback interface exports. */
@@ -221,8 +203,7 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
                     nodejsHttpVia: opts.nodejsHttpVia ?? opts.withNodejsHttpVia,
                     nodejsHttp2Via: opts.nodejsHttp2Via ?? opts.withNodejsHttp2Via,
-                    // StarlingMonkey's built-in socket modules are currently WASI 0.2.10.
-                    // Using that exact version preserves its cross-interface resource identities.
+                    // Match the socket bindings supplied by the selected component engine.
                     wasiSocketsVersion: backend === "starlingmonkey" ? "0.2.10" : "0.2.12",
                     onWitRequirement(requirement: NodeWitRequirement) {
                         witRequirements.set(requirement.witImport, requirement);
@@ -256,15 +237,7 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
 
     // Build the component
     let component;
-    const requiresTls = source.includes("wasi:tls/types@0.2.0-draft");
-    const resolvedWit = requiresTls ? await resolveWitFeatures(witPath, opts.worldName, ["tls"]) : undefined;
-    const backendArgs = {
-        source,
-        sourceName,
-        jsSource,
-        witPath: resolvedWit?.witPath ?? witPath,
-        opts: resolvedWit ? { ...opts, worldName: resolvedWit.worldName } : opts,
-    };
+    const backendArgs = { source, sourceName, jsSource, witPath, opts };
     // componentize-js reads the process working directory to decide the path prefix baked into
     // the component and the directory it preopens. Pin it so the build does not depend on where
     // the command ran, restoring the caller's directory afterwards.
@@ -296,7 +269,6 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         throw err;
     } finally {
         process.chdir(callerCwd);
-        await resolvedWit?.cleanup();
     }
 
     // Write out the component
@@ -385,27 +357,14 @@ function calculateFeatureSet(opts: ComponentizeOptions) {
 async function componentizeQJS(args: BackendComponentizeArgs) {
     const { source, jsSource, opts, witPath } = args;
     const componentizeQJSModule = await eval('import("componentize-qjs")');
-    try {
-        const result = await componentizeQJSModule.componentize({
-            witPath,
-            jsSource: source,
-            jsPath: resolve(jsSource),
-            world: opts.worldName,
-            sync: opts.backendQjsDisableAysnc,
-        });
-        return result.component;
-    } catch (error) {
-        if (
-            String(error).includes("wasi:tls/types@0.2.0-draft") &&
-            String(error).includes("mismatched resource types")
-        ) {
-            throw new Error(
-                "QuickJS's snapshot linker cannot reconcile the shared IO resource types imported by wasi:tls@0.2.0-draft (wasi:io@0.2.6). This is a componentize-qjs build-time limitation; --backend starlingmonkey is a workaround.",
-                { cause: error },
-            );
-        }
-        throw error;
-    }
+    const result = await componentizeQJSModule.componentize({
+        witPath,
+        jsSource: source,
+        jsPath: resolve(jsSource),
+        world: opts.worldName,
+        sync: opts.backendQjsDisableAysnc,
+    });
+    return result.component;
 }
 
 /** Componentize with componentize-js (StarlingMonkey) */
