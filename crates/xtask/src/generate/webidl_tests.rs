@@ -12,7 +12,7 @@ const IDL_VERSION_MINOR: u64 = 0;
 const IDL_VERSION_PATCH: u64 = 1;
 
 pub(crate) fn run() -> Result<()> {
-    for file in read_dir("packages/jco/test/fixtures/idl")? {
+    for file in read_dir("packages/jco/test/fixtures/wit/idl")? {
         let file = file?;
         let file_name = file.file_name();
         let file_name_str = file_name.to_string_lossy().to_string();
@@ -55,7 +55,12 @@ pub(crate) fn run() -> Result<()> {
             },
         )?;
 
-        let wit_str = wit.to_string();
+        // Preserve the fixture's existing workaround for the window.window name
+        // collision until webidl2wit disambiguates resource and method names.
+        let wit_str = wit.to_string().replace(
+            "    window: func() -> window-proxy;",
+            "    get-window: func() -> window-proxy;",
+        );
 
         let world_definition = if interface_name == "console" {
             format!(
@@ -72,7 +77,7 @@ pub(crate) fn run() -> Result<()> {
             .to_string()
         };
 
-        let output_file = format!("packages/jco/test/fixtures/idl/{name}.wit");
+        let output_file = format!("packages/jco/test/fixtures/wit/idl/{name}.wit");
         write(
             &output_file,
             format!(
