@@ -420,7 +420,7 @@ importers:
     devDependencies:
       '@napi-rs/cli':
         specifier: ^3.4.1
-        version: 3.8.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(@types/node@24.13.3)
+        version: 3.8.6(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@24.13.3)
       oxfmt:
         specifier: ^0.32.0
         version: 0.32.0
@@ -460,7 +460,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.0.8
-        version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
+        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
       which:
         specifier: ^5.0.0
         version: 5.0.0
@@ -514,8 +514,8 @@ importers:
   packages/preview2-shim:
     dependencies:
       '@bytecodealliance/jco-node-fs':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.2
+        version: 0.3.2
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: 0.22.0
@@ -540,7 +540,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
+        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
 
   packages/preview3-shim:
     dependencies:
@@ -574,7 +574,7 @@ importers:
     dependencies:
       '@bytecodealliance/jco':
         specifier: ^1.27.0
-        version: 1.27.0
+        version: 1.31.0
       '@rollup/pluginutils':
         specifier: ^5.3.0
         version: 5.4.0(rollup@4.62.3)
@@ -593,7 +593,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
+        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
 
 packages:
 
@@ -681,14 +681,33 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@bytecodealliance/jco-node-fs-darwin-arm64@0.3.2':
+    resolution: {integrity: sha512-WXQq1tRVUWhbK+ImH0G8Kni2AR0sdokLf/KyXRw5P6n4A9ZbgMHOuPfN/PEsYgw4eosuTAonutK0xILk/hA81A==}
+    engines: {node: '>=20'}
+    cpu: [arm64]
+    os: [darwin]
+
   '@bytecodealliance/jco-node-fs-darwin-x64@0.2.0':
     resolution: {integrity: sha512-HUF+dPyBBAnIbYuL7EdmdfA7kj0F2ceQ5szNTF0HCPrPCoTtP1oWYtNEx4N6zLC5hZ2hJc01BeRgBfWJ1i6JRw==}
     engines: {node: '>=20'}
     cpu: [x64]
     os: [darwin]
 
+  '@bytecodealliance/jco-node-fs-darwin-x64@0.3.2':
+    resolution: {integrity: sha512-Fy/OjHnto7hNE5ksewVkmAMXG/uXyj+RAKFZWQFTzFkp73UyT5vuPjKq3nvx9KolUGWBG37BudEMb4ZAoD9TbQ==}
+    engines: {node: '>=20'}
+    cpu: [x64]
+    os: [darwin]
+
   '@bytecodealliance/jco-node-fs-linux-arm64-gnu@0.2.0':
     resolution: {integrity: sha512-OOPNHz8T6gJJjuteRMVpgHuNKDADgTafaelqy2RUj5hSqRHV+18Rf+mvHdL5Ci0fqG3DCwCmlQIqIEC6yJwOcQ==}
+    engines: {node: '>=20'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@bytecodealliance/jco-node-fs-linux-arm64-gnu@0.3.2':
+    resolution: {integrity: sha512-OafRtRu3tfOFQARfkia/LDEqSo2R3yAL1xPwzf4RcRW6JqkOY7qKWsUS5+LPVo/aFaSkMX7F7bdFGpFPmcoZJg==}
     engines: {node: '>=20'}
     cpu: [arm64]
     os: [linux]
@@ -701,8 +720,22 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@bytecodealliance/jco-node-fs-linux-arm64-musl@0.3.2':
+    resolution: {integrity: sha512-JblDiwD7+Y+w0d/tjaNDX4QdGvh5lyuDc+S/jDeT7sYA1caA9yiwIjLa8PC/lm2xudqSxD+Cuy4AosXvl+qI0g==}
+    engines: {node: '>=20'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
   '@bytecodealliance/jco-node-fs-linux-x64-gnu@0.2.0':
     resolution: {integrity: sha512-IZ6oWJrQc37HOyf0GUJ21g3b1ArHfLEclQQiuTQ23f/Iy4OMVNhWwLV45R6HKQh5Mxqkr4t3k5lGRCcIFhC80g==}
+    engines: {node: '>=20'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@bytecodealliance/jco-node-fs-linux-x64-gnu@0.3.2':
+    resolution: {integrity: sha512-6FzmHoLOsa6b4X9AuFLsvlpNF66Dt4sRRftZHaT1I1pYzCWrJkkpgNJhRXxf67ZPmOwBZJT4dan/g752Rx4xRw==}
     engines: {node: '>=20'}
     cpu: [x64]
     os: [linux]
@@ -715,8 +748,21 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@bytecodealliance/jco-node-fs-linux-x64-musl@0.3.2':
+    resolution: {integrity: sha512-SbAJG2PDV8YAHBESHU9sVSckOitJyvlezdF4CGP5/mOp01JnijVkLVXzGK62yVSfa5TpAybbSd1rk+v36NAW/Q==}
+    engines: {node: '>=20'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@bytecodealliance/jco-node-fs-win32-arm64-msvc@0.2.0':
     resolution: {integrity: sha512-9NxrGFRmCqRav82PJ0gm9y4KMFtCRti9BykufdEA2GH+R5pAjaBPbCFmlZvaLWfLVover38xcOhn/KL7ZN+xpg==}
+    engines: {node: '>=20'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@bytecodealliance/jco-node-fs-win32-arm64-msvc@0.3.2':
+    resolution: {integrity: sha512-nUWYdFysRQJGsIOCk0KAYN2smkNYiHG7rZ7m+0ZXqP+5wqWxKEjkDsORwXiBjdaWFLVww0anZ3SBxrju6P7hXQ==}
     engines: {node: '>=20'}
     cpu: [arm64]
     os: [win32]
@@ -727,8 +773,18 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@bytecodealliance/jco-node-fs-win32-x64-msvc@0.3.2':
+    resolution: {integrity: sha512-RsPj2t8TvltsMWK7/Z7JcVC/IWPMi07/AJkNLiNTCuGTdT/sseqTThJJwhuz3sjFw7dJdxA+bSGT+23y/KT0fw==}
+    engines: {node: '>=20'}
+    cpu: [x64]
+    os: [win32]
+
   '@bytecodealliance/jco-node-fs@0.2.0':
     resolution: {integrity: sha512-AnEbgoANBlFYtrLtiV3Ht6N+uc/8oMA5WFRxPm54tZ161F8FYP00cTqnbB/FQaN6oU8G27zMElpxcQqv8lXuKA==}
+    engines: {node: '>=20'}
+
+  '@bytecodealliance/jco-node-fs@0.3.2':
+    resolution: {integrity: sha512-yxvqQreNcOQdMsEKZomkSqThtkxrAz3f1Cmy8BsV0UHi9saa2/D1KDB14IAXPYwDq/maS6lCzS+MuMQx6QkUgA==}
     engines: {node: '>=20'}
 
   '@bytecodealliance/jco-std@0.2.0':
@@ -746,15 +802,8 @@ packages:
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
 
-  '@bytecodealliance/jco-transpile@0.6.1':
-    resolution: {integrity: sha512-MFE+2u2MhTOkN2Yg6qDuIeC1tgtxTFl7JFeY3uAuNGST5/skov17Dbnlnf4O0nJuroKlDXguUzq/El8Gx9YFpw==}
-
   '@bytecodealliance/jco@1.25.2':
     resolution: {integrity: sha512-r9ch8vqtDkBxXtN5KzAEYpz+hjGCW+cQhc2b71U21DMuewE5HrTCI7X826gfL/1oU0ibsSpGodJV5YkwolH9Jg==}
-    hasBin: true
-
-  '@bytecodealliance/jco@1.27.0':
-    resolution: {integrity: sha512-MG3875pStjkVZt6hxm/2rszf9EgOR2VGIostrpliTyYLyx+3u6W6U3fWpGVmRwXcS8VW1pUolQl9kHO5RKeIbA==}
     hasBin: true
 
   '@bytecodealliance/jco@1.31.0':
@@ -766,9 +815,6 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.19.0':
     resolution: {integrity: sha512-OSUlcM62fXLuzYP0DjBn/SwjKMZ/y/2PMXZ8v5cRiiFcroauntlPRl/oCnx0xYjYiqdYvE0PY50VCNutll0xOw==}
-
-  '@bytecodealliance/preview2-shim@0.20.2':
-    resolution: {integrity: sha512-Bp1cer1jztaQamLv1YKdc4MimI9LNAAKM2lNxOtGTLs7/At5KlA0fW1HWTi3ZJ5McaWNwJUDWSe5Lr0EgUpsnA==}
 
   '@bytecodealliance/preview2-shim@0.21.0':
     resolution: {integrity: sha512-rl1NnsvBlL6Q912BUkYotiZ6L/LE8SJUnvJOuElp/kjULHnAaz8Zn4qeBiiiRmQcoZGYXXrW5dhEbPeYtcxXXQ==}
@@ -4765,25 +4811,49 @@ snapshots:
   '@bytecodealliance/jco-node-fs-darwin-arm64@0.2.0':
     optional: true
 
+  '@bytecodealliance/jco-node-fs-darwin-arm64@0.3.2':
+    optional: true
+
   '@bytecodealliance/jco-node-fs-darwin-x64@0.2.0':
+    optional: true
+
+  '@bytecodealliance/jco-node-fs-darwin-x64@0.3.2':
     optional: true
 
   '@bytecodealliance/jco-node-fs-linux-arm64-gnu@0.2.0':
     optional: true
 
+  '@bytecodealliance/jco-node-fs-linux-arm64-gnu@0.3.2':
+    optional: true
+
   '@bytecodealliance/jco-node-fs-linux-arm64-musl@0.2.0':
+    optional: true
+
+  '@bytecodealliance/jco-node-fs-linux-arm64-musl@0.3.2':
     optional: true
 
   '@bytecodealliance/jco-node-fs-linux-x64-gnu@0.2.0':
     optional: true
 
+  '@bytecodealliance/jco-node-fs-linux-x64-gnu@0.3.2':
+    optional: true
+
   '@bytecodealliance/jco-node-fs-linux-x64-musl@0.2.0':
+    optional: true
+
+  '@bytecodealliance/jco-node-fs-linux-x64-musl@0.3.2':
     optional: true
 
   '@bytecodealliance/jco-node-fs-win32-arm64-msvc@0.2.0':
     optional: true
 
+  '@bytecodealliance/jco-node-fs-win32-arm64-msvc@0.3.2':
+    optional: true
+
   '@bytecodealliance/jco-node-fs-win32-x64-msvc@0.2.0':
+    optional: true
+
+  '@bytecodealliance/jco-node-fs-win32-x64-msvc@0.3.2':
     optional: true
 
   '@bytecodealliance/jco-node-fs@0.2.0':
@@ -4796,6 +4866,17 @@ snapshots:
       '@bytecodealliance/jco-node-fs-linux-x64-musl': 0.2.0
       '@bytecodealliance/jco-node-fs-win32-arm64-msvc': 0.2.0
       '@bytecodealliance/jco-node-fs-win32-x64-msvc': 0.2.0
+
+  '@bytecodealliance/jco-node-fs@0.3.2':
+    optionalDependencies:
+      '@bytecodealliance/jco-node-fs-darwin-arm64': 0.3.2
+      '@bytecodealliance/jco-node-fs-darwin-x64': 0.3.2
+      '@bytecodealliance/jco-node-fs-linux-arm64-gnu': 0.3.2
+      '@bytecodealliance/jco-node-fs-linux-arm64-musl': 0.3.2
+      '@bytecodealliance/jco-node-fs-linux-x64-gnu': 0.3.2
+      '@bytecodealliance/jco-node-fs-linux-x64-musl': 0.3.2
+      '@bytecodealliance/jco-node-fs-win32-arm64-msvc': 0.3.2
+      '@bytecodealliance/jco-node-fs-win32-x64-msvc': 0.3.2
 
   '@bytecodealliance/jco-std@0.2.0': {}
 
@@ -4822,13 +4903,6 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
-  '@bytecodealliance/jco-transpile@0.6.1':
-    dependencies:
-      '@bytecodealliance/preview2-shim': 0.20.2
-      '@bytecodealliance/preview3-shim': 0.2.2
-      binaryen: 130.0.0
-      oxc-minify: 0.136.0
-
   '@bytecodealliance/jco@1.25.2':
     dependencies:
       '@bytecodealliance/componentize-js': 0.21.0
@@ -4840,20 +4914,6 @@ snapshots:
       commander: 14.0.3
       mkdirp: 3.0.1
       ora: 8.2.0
-
-  '@bytecodealliance/jco@1.27.0':
-    dependencies:
-      '@bytecodealliance/componentize-js': 0.22.0
-      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
-      '@bytecodealliance/jco-transpile': 0.6.1
-      '@bytecodealliance/preview2-shim': 0.20.2
-      '@bytecodealliance/preview3-shim': 0.2.2
-      binaryen: 130.0.0
-      commander: 14.0.3
-      componentize-qjs: 0.4.3
-      mkdirp: 3.0.1
-      ora: 8.2.0
-      rolldown: 1.2.0
 
   '@bytecodealliance/jco@1.31.0':
     dependencies:
@@ -4874,8 +4934,6 @@ snapshots:
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
   '@bytecodealliance/preview2-shim@0.19.0': {}
-
-  '@bytecodealliance/preview2-shim@0.20.2': {}
 
   '@bytecodealliance/preview2-shim@0.21.0': {}
 
@@ -5407,7 +5465,7 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@napi-rs/cli@3.8.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(@types/node@24.13.3)':
+  '@napi-rs/cli@3.8.6(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@24.13.3)':
     dependencies:
       '@inquirer/prompts': 8.5.2(@types/node@24.13.3)
       '@napi-rs/cross-toolchain': 1.0.3
@@ -5422,8 +5480,8 @@ snapshots:
       typanion: 3.14.0
       typescript: 6.0.3
     optionalDependencies:
-      '@emnapi/core': 1.11.2
-      '@emnapi/runtime': 1.11.2
+      '@emnapi/core': 1.9.2
+      '@emnapi/runtime': 1.9.2
     transitivePeerDependencies:
       - '@napi-rs/cross-toolchain-arm64-target-aarch64'
       - '@napi-rs/cross-toolchain-arm64-target-armv7'
@@ -6488,6 +6546,14 @@ snapshots:
       tinyrainbow: 3.1.1
 
   '@vitest/mocker@4.1.10(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0))':
+    dependencies:
+      '@vitest/spy': 4.1.10
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
+
+  '@vitest/mocker@4.1.10(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
@@ -8130,6 +8196,33 @@ snapshots:
     dependencies:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0))
+      '@vitest/pretty-format': 4.1.10
+      '@vitest/runner': 4.1.10
+      '@vitest/snapshot': 4.1.10
+      '@vitest/spy': 4.1.10
+      '@vitest/utils': 4.1.10
+      es-module-lexer: 2.3.1
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.4
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.1
+      vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.13.3
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)):
+    dependencies:
+      '@vitest/expect': 4.1.10
+      '@vitest/mocker': 4.1.10(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
