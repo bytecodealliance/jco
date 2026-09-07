@@ -106,30 +106,30 @@ is planned.
 > It is the only such alias: modules added after the split, including `node:assert`, are
 > available only under a versioned entry point.
 
-| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                                                  |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                                   |
-| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                                               |
-| `node:string_decoder`                             | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`                                    | Guest-local streaming decoder for Node 24. Requires no WIT capability.                                                                                                 |
-| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.                              |
-| `node:ffi`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi`                                               | **Node 26 only.** Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused -- see below.     |
-| `node:module`                                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`                                            | Classification, source maps and `require.resolve` are exact. Everything that **loads** throws `ERR_JCO_UNSUPPORTED_NODE_API` -- see below. Requires no WIT capability. |
-| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                                   |
-| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                                                      |
-| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                                             |
-| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                                              |
-| `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.                    |
-| `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                                   |
-| `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                                  |
-| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation -- see below. Servers need `direct` or `wasi-sockets`.       |
-| `node:https`                                      | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https`                                             | The `node:http` core with the `https:` profile and a TLS-aware `Agent`; same implementation selection. TLS is terminated by the `direct` host only -- see below.       |
-| `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.      |
-| `node:os`                                         | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os`                                                | Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider -- see below.                      |
-| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                              |
-| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                           |
-| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                                   |
-| `node:stream/consumers`                           | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`                                  | Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.                                                               |
-| `node:stream/iter`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`                                       | Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.                                              |
+| Imports                                           | Implementation                                                                                       | Notes                                                                                                                                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                                               |
+| `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                                                           |
+| `node:string_decoder`                             | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`                                    | Guest-local streaming decoder for Node 24. Requires no WIT capability.                                                                                                             |
+| `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.                                          |
+| `node:ffi`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi`                                               | **Node 26 only.** Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused -- see below.                 |
+| `node:module`                                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`                                            | Classification, source maps and `require.resolve` are exact. Everything that **loads** throws `ERR_JCO_UNSUPPORTED_NODE_API` -- see below. Requires no WIT capability.             |
+| `node:async_hooks`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`                                       | Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store -- see below.                                               |
+| `node:diagnostics_channel`                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`                               | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.                                                                                  |
+| `node:child_process`                              | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process`                                     | Synchronous APIs over an explicit application-provided host capability; denied by default.                                                                                         |
+| `node:cluster`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster`                                           | Primary/worker control over an explicit host capability. Partly unsupported -- see below.                                                                                          |
+| `node:console`                                    | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console`                                           | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.                                |
+| `node:dns`, `node:dns/promises`                   | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns`                                               | Name resolution over an explicit host capability; denied by default.                                                                                                               |
+| `node:fs`, `node:fs/promises`                     | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs`                                                | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.                                                                              |
+| `node:http`                                       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http`                                              | Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation -- see below. Servers need `direct` or `wasi-sockets`.                   |
+| `node:https`                                      | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https`                                             | The `node:http` core with the `https:` profile and a TLS-aware `Agent`; same implementation selection. TLS uses the `direct` host or an explicit `wasi:tls` provider -- see below. |
+| `node:inspector`, `node:inspector/promises`       | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector`                                         | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface -- see below.                  |
+| `node:os`                                         | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os`                                                | Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider -- see below.                                  |
+| `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                                          |
+| `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                                       |
+| `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                                               |
+| `node:stream/consumers`                           | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`                                  | Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.                                                                           |
+| `node:stream/iter`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`                                       | Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.                                                          |
 
 ### Stream consumers and iterable streams
 
@@ -871,8 +871,43 @@ being dropped.
 | Value          | `node:https` behaviour                                                                                                                                                                                                                                |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `direct`       | Clients and servers. The opt-in Node provider routes `https` requests to `node:https.request` with the carried TLS options, and a server carrying a `tls` record to `node:https.createServer`, so the host's own TLS stack terminates the connection. |
-| `wasi-sockets` | Refused for both directions: Preview 2 sockets carry no TLS stack, so the implementation throws instead of speaking plaintext on an `https` URL or `https.Server`.                                                                                    |
+| `wasi-sockets` | Verified clients over the existing TCP streams. TLS connections implicitly require `wasi:tls`, imported automatically for `node:https`. HTTPS servers are unsupported by the pinned client-only draft.                                                |
 | `wasi-http`    | Clients only, with the `HTTPS` scheme. `wasi:http/outgoing-handler` owns certificate validation, so any per-request TLS option is refused; servers are rejected as for `node:http`.                                                                   |
+
+For `wasi-sockets`, build with `--backend starlingmonkey` and explicitly grant TLS
+when transpiling:
+
+```sh
+jco transpile component.wasm -o out \
+  --map 'wasi:tls/types@0.2.0-draft=@bytecodealliance/preview2-shim/tls' \
+  --map 'jco:tls-streams-0-2-10/bridge@0.1.0=@bytecodealliance/preview2-shim/tls'
+```
+
+The Jco bridge transfers IO resource versions and checks capability availability;
+it is separate from the upstream TLS interface. Without this opt-in, HTTPS fails
+before connecting, with no plaintext fallback. Plain HTTP needs no TLS capability.
+The Node provider uses `node:tls` over the supplied TCP streams, system trust,
+hostname verification, and HTTP/1.1 ALPN. Hosts needing private trust can map both
+interfaces to a module exporting:
+
+```js
+import { createTlsProvider } from '@bytecodealliance/preview2-shim/tls';
+export { adapt, isAvailable } from '@bytecodealliance/preview2-shim/tls';
+export const { ClientHandshake, ClientConnection, FutureClientStreams } = createTlsProvider({
+    ca: [trustedCaPem],
+    handshakeTimeoutMs: 10_000,
+});
+```
+
+Pinned upstream: [`WebAssembly/wasi-tls` at `6781ae26084100c0628ef72cc44e4517c6c48ae5`](https://github.com/WebAssembly/wasi-tls/tree/6781ae26084100c0628ef72cc44e4517c6c48ae5/wit),
+`wasi:tls@0.2.0-draft`, depending on `wasi:io@0.2.6`. It exposes client handshake,
+future polling, streams, and output shutdown. It has no server handshake,
+certificate configuration, or ALPN controls. Only guest `servername` and
+`rejectUnauthorized: true` are supported; other TLS options, including `ca`, are
+rejected. QuickJS currently fails to link the draft's IO resource types; use
+StarlingMonkey. The enabled `https-wasi-tls.test.ts` suite includes deterministic
+local TLS tests and a separately named public test requiring DNS and TCP/443 to
+`example.com` (20-second execution deadline).
 
 An `https.Server` always carries its `tls` record, even when no material was
 supplied, so an implementation without a TLS stack refuses it; the `direct`
