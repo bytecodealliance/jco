@@ -112,8 +112,8 @@ importers:
   examples/components/fs-write-file:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.21.0
-        version: 0.21.0
+        specifier: ^0.24.0
+        version: 0.24.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.31.0
