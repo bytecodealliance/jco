@@ -256,3 +256,14 @@ See [LICENSE](LICENSE) for more details.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this project by you, as defined in the Apache-2.0 license,
 shall be licensed as above, without any additional terms or conditions.
+
+### Opt-in TLS
+
+`@bytecodealliance/preview2-shim/tls` is a Node-only provider for the pinned
+`wasi:tls/types@0.2.0-draft` interface (upstream revision
+`6781ae26084100c0628ef72cc44e4517c6c48ae5`). It wraps existing WASI TCP streams with
+native TLS, verifies certificate chains and names, and offers HTTP/1.1 ALPN.
+It is never enabled by the default WASI mappings. `createTlsProvider({ ca,
+handshakeTimeoutMs })` configures host trust and handshake deadlines. The module
+also exports the separate Jco IO version bridge (`adapt`, `isAvailable`).
+The draft supports clients only; it cannot express guest CA or TLS settings.
