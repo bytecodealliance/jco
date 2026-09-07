@@ -875,8 +875,8 @@ being dropped.
 | `wasi-http`    | Clients only, with the `HTTPS` scheme. `wasi:http/outgoing-handler` owns certificate validation, so any per-request TLS option is refused; servers are rejected as for `node:http`.                                                                   |
 
 TLS support is part of the `wasi-sockets` implementation, which uses the
-`wasi:tls` host capability for TLS connections. Build with `--backend starlingmonkey`
-and explicitly grant that capability when transpiling:
+`wasi:tls` host capability for TLS connections. Explicitly grant that capability
+and the bridge matching the component's imported IO version when transpiling:
 
 ```sh
 jco transpile component.wasm -o out \
@@ -884,6 +884,8 @@ jco transpile component.wasm -o out \
   --map 'jco:tls-streams-0-2-10/bridge@0.1.0=@bytecodealliance/preview2-shim/tls'
 ```
 
+This example maps the IO 0.2.10 bridge; for IO 0.2.12, map
+`jco:tls-streams-0-2-12/bridge@0.1.0` instead.
 The Jco bridge transfers IO resource versions and checks capability availability;
 it is separate from the upstream TLS interface. Without this opt-in, HTTPS fails
 before connecting, with no plaintext fallback. Plain HTTP needs no TLS capability.
@@ -905,8 +907,14 @@ Pinned upstream: [`WebAssembly/wasi-tls` at `6781ae26084100c0628ef72cc44e4517c6c
 future polling, streams, and output shutdown. It has no server handshake,
 certificate configuration, or ALPN controls. Only guest `servername` and
 `rejectUnauthorized: true` are supported; other TLS options, including `ca`, are
-rejected. QuickJS currently fails to link the draft's IO resource types; use
-StarlingMonkey. The enabled `https-wasi-tls.test.ts` suite includes deterministic
+rejected. TLS support is independent of the componentization backend.
+
+> [!NOTE]
+> `componentize-qjs` 0.4.3 currently fails during snapshot initialization when linking
+> the TLS interface's shared IO resources, even for an otherwise empty component.
+> StarlingMonkey is a workaround for this build-time issue.
+
+The enabled `https-wasi-tls.test.ts` suite includes deterministic
 local TLS tests and a separately named public test requiring DNS and TCP/443 to
 `example.com` (20-second execution deadline).
 
