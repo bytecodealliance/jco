@@ -1,3 +1,10 @@
+import {
+  handshake,
+  validateTlsOptions,
+  type WasiTlsProvider,
+  type WasiTlsStreamBridge,
+  type WasiTlsConnection,
+} from "./wasi-tls.js";
 import { concatBytes } from "../body.js";
 import { fromImplementationError, invalidArgValue, unsupported, wasiErrorCode } from "../errors.js";
 import {
@@ -76,6 +83,8 @@ export interface WasiNetwork {
 }
 
 export interface WasiSocketsProvider {
+  tls?: WasiTlsProvider;
+  tlsStreamBridge?: WasiTlsStreamBridge;
   instanceNetwork: {
     instanceNetwork(): WasiNetwork;
   };
@@ -178,10 +187,13 @@ export function nodeAddress(address: WasiIpSocketAddress): Exclude<HttpServerAdd
   return { address: addressText, family: "IPv6", port: address.val.port };
 }
 
-export function authority(value: string): { hostname: string; port: number } {
+export function authority(value: string, scheme = "http"): { hostname: string; port: number } {
   try {
-    const url = new URL(`http://${value}`);
-    return { hostname: url.hostname.replace(/^\[|\]$/g, ""), port: Number(url.port || 80) };
+    const url = new URL(`${scheme}://${value}`);
+    return {
+      hostname: url.hostname.replace(/^\[|\]$/g, ""),
+      port: Number(url.port || (scheme === "https" ? 443 : 80)),
+    };
   } catch {
     throw invalidArgValue("authority", value);
   }
@@ -215,6 +227,7 @@ export function connect(
   try {
     addresses = provider.ipNameLookup.resolveAddresses(network, hostname);
   } catch (error) {
+    dispose(network);
     throw socketError(error, "getaddrinfo", hostname);
   }
   try {
@@ -229,8 +242,9 @@ export function connect(
       if (!address) {
         throw socketError(lastError ?? "name-unresolvable", "connect", hostname);
       }
-      const socket = provider.tcpCreateSocket.createTcpSocket(address.tag);
+      let socket: WasiTcpSocket | undefined;
       try {
+        socket = provider.tcpCreateSocket.createTcpSocket(address.tag);
         socket.startConnect(network, remoteAddress(address, port));
         for (;;) {
           try {
@@ -559,18 +573,25 @@ export function createWasiSocketsHttpImplementation(
       if (options.tls !== undefined) {
         unsupported(
           "https.Server with the wasi-sockets implementation",
-          "wasi:sockets carries no TLS stack, so a server can only speak plaintext HTTP/1.1",
+          "wasi:tls@0.2.0-draft exposes only client TLS handshakes and has no server handshake or certificate configuration",
         );
       }
       return new WasiSocketsHttpServer(provider, options, handler, onError);
     },
 
     request(request) {
-      if (request.scheme !== "http") {
-        unsupported(
-          `${request.scheme}: requests with the wasi-sockets implementation`,
-          "wasi:sockets carries no TLS stack, so a client can only speak plaintext HTTP/1.1",
-        );
+      if (request.scheme === "https") {
+        validateTlsOptions(request.tls);
+        if (!provider.tls || provider.tlsStreamBridge?.isAvailable() === false) {
+          throw fromImplementationError({
+            name: "Error",
+            code: "ERR_JCO_TLS_ADAPTER_REQUIRED",
+            message:
+              "https: requests with the wasi-sockets implementation require the additional wasi:tls/types@0.2.0-draft TLS capability",
+          });
+        }
+      } else if (request.scheme !== "http") {
+        unsupported(`${request.scheme}: requests`, "only HTTP and HTTPS are supported");
       }
       if (
         request.connectTimeoutMs !== undefined ||
@@ -582,11 +603,30 @@ export function createWasiSocketsHttpImplementation(
           "deadline polling across Preview 2 socket and clock resources is not implemented",
         );
       }
-      const { hostname, port } = authority(request.authority);
-      const { socket, input, output } = connect(provider, hostname, port);
+      const { hostname, port } = authority(request.authority, request.scheme);
+      const tcp = connect(provider, hostname, port);
+      const socket = tcp.socket;
+      let input: WasiInputStream | undefined = tcp.input;
+      let output: WasiOutputStream | undefined = tcp.output;
+      let tlsConnection: WasiTlsConnection | undefined;
       try {
-        output.blockingWriteAndFlush(serializeHttp1Request(request));
-        return readResponse(provider, input, request);
+        if (request.scheme === "https") {
+          input = undefined;
+          output = undefined;
+          [tlsConnection, input, output] = handshake(
+            provider.tls!,
+            provider.tlsStreamBridge,
+            request.tls?.servername ?? hostname,
+            tcp.input,
+            tcp.output,
+          );
+        }
+        const bytes = serializeHttp1Request(request);
+        // wasi:io blocking-write-and-flush accepts at most 4096 bytes per call.
+        for (let offset = 0; offset < bytes.length; offset += 4096) {
+          output!.blockingWriteAndFlush(bytes.subarray(offset, offset + 4096));
+        }
+        return readResponse(provider, input!, request);
       } catch (error) {
         if (error instanceof Error && "code" in error) {
           throw error;
@@ -594,12 +634,18 @@ export function createWasiSocketsHttpImplementation(
         throw socketError(error, "request", hostname);
       } finally {
         try {
+          tlsConnection?.closeOutput();
+        } catch {
+          /* The peer may have closed. */
+        }
+        dispose(output);
+        dispose(input);
+        dispose(tlsConnection);
+        try {
           socket.shutdown("both");
         } catch {
           // The peer may already have closed the connection.
         }
-        dispose(output);
-        dispose(input);
         dispose(socket);
       }
     },

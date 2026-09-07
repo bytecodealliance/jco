@@ -33,6 +33,12 @@ const UNREPRESENTABLE_TLS_OPTIONS: Readonly<Record<string, string>> = {
   clientCertEngine: ENGINE,
   privateKeyEngine: ENGINE,
   privateKeyIdentifier: ENGINE,
+  allowPartialTrustChain: "partial-chain trust policy is not carried by the TLS boundary",
+  enableTrace: "native TLS tracing is not exposed by the TLS boundary",
+  requestOCSP: "OCSP negotiation is not exposed by the TLS boundary",
+  minDHSize: "the TLS boundary cannot configure a minimum Diffie-Hellman key size",
+  handshakeTimeout: "handshake deadlines are host policy at the TLS boundary",
+  sessionTimeout: "session lifetime is host policy at the TLS boundary",
 };
 
 const encoder = new TextEncoder();
