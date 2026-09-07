@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2026-09-07
+
+This release contains a fix to packaging that enables the ARM64 package which was previously
+not released for 0.3.0.
+
 ## [0.3.0] - 2026-09-07
 
 ### 🚀 Features
