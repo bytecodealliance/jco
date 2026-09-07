@@ -116,11 +116,9 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         )
     })?;
 
-    let mut encoder = ComponentEncoder::default()
-        .validate(true)
-        .module(&component)?;
-
-    encoder = encoder.adapter("wasi_snapshot_preview1", &adapter)?;
+    let mut encoder = ComponentEncoder::default();
+    encoder.validate(true).module(&component)?;
+    encoder.adapter("wasi_snapshot_preview1", &adapter)?;
 
     let obj_dir = WORKSPACE_DIR.join("packages/jco/obj");
     let mut adapted_component = encoder.encode()?;

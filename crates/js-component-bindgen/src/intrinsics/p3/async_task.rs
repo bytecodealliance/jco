@@ -387,16 +387,20 @@ impl AsyncTaskIntrinsic {
                     output,
                     r#"
                       function {context_set_fn}(ctx, value) {{
-                          const {{ componentIdx, slot }} = ctx;
-                          if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                          const {{ slot }} = ctx;
                           if (slot === undefined) {{ throw new TypeError("missing slot"); }}
                           if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
 
-                          const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                          // Guest callbacks use their component's task register. FACT
+                          // adapters have no component index; post-return also runs
+                          // after the callee register is cleared. Both use the executing
+                          // task, whose context FACT temporarily saves and restores.
+                          const currentTaskMeta = {get_global_current_task_meta_fn}(ctx.componentIdx)
+                              ?? {get_global_current_task_meta_fn}();
                           if (!currentTaskMeta) {{
-                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{ctx.componentIdx}}] during context set`);
                           }}
-                          const taskID = currentTaskMeta.taskID;
+                          const {{ taskID, componentIdx }} = currentTaskMeta;
 
                           const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                           if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
@@ -430,15 +434,19 @@ impl AsyncTaskIntrinsic {
                     output,
                     r#"
                       function {context_get_fn}(ctx) {{
-                          const {{ componentIdx, slot }} = ctx;
-                          if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                          const {{ slot }} = ctx;
                           if (slot === undefined) {{ throw new TypeError("missing slot"); }}
 
-                          const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                          // Guest callbacks use their component's task register. FACT
+                          // adapters have no component index; post-return also runs
+                          // after the callee register is cleared. Both use the executing
+                          // task, whose context FACT temporarily saves and restores.
+                          const currentTaskMeta = {get_global_current_task_meta_fn}(ctx.componentIdx)
+                              ?? {get_global_current_task_meta_fn}();
                           if (!currentTaskMeta) {{
-                              throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context get`);
+                              throw new Error(`missing/incomplete global current task meta for component idx [${{ctx.componentIdx}}] during context get`);
                           }}
-                          const taskID = currentTaskMeta.taskID;
+                          const {{ taskID, componentIdx }} = currentTaskMeta;
 
                           const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                           if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
@@ -3323,6 +3331,8 @@ impl AsyncTaskIntrinsic {
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let clear_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
+                let set_global_current_task_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
                 let symmetric_sync_guest_call_stack =
                     render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
                 let current_task_may_block =
@@ -3351,6 +3361,7 @@ impl AsyncTaskIntrinsic {
                             parent: task.getParentSubtask()?.getParentTask(),
                         }});
 
+                        const callerTask = task.getParentSubtask().getParentTask();
                         task.resolve([]);
                         task.exit();
 
@@ -3359,6 +3370,10 @@ impl AsyncTaskIntrinsic {
                         {clear_global_current_task_meta_fn}({{
                             taskID: task.id(),
                             componentIdx: task.componentIdx(),
+                        }});
+                        {set_global_current_task_meta_fn}({{
+                            taskID: callerTask.id(),
+                            componentIdx: callerTask.componentIdx(),
                         }});
                     }}
                     "#,

@@ -25,6 +25,6 @@ cargo_metadata = { version = "0.23.1", default-features = false }
 futures = { version = "0.3.32", default-features = false }
 heck = { version = "0.5.0", default-features = false }
 tokio = { version = "1.50.0", default-features = false }
-wasmtime = { version = "45.0.1", default-features = false }
+wasmtime = { version = "48.0.1", default-features = false }
 wit-bindgen = { version = "0.61.1", default-features = false }
 wit-component = { version = "0.258.0", default-features = false }

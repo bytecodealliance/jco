@@ -35,14 +35,15 @@ impl Guest for WasmToolsJs {
         binary: Vec<u8>,
         adapters: Option<Vec<(String, Vec<u8>)>>,
     ) -> Result<Vec<u8>, String> {
-        let mut encoder = ComponentEncoder::default()
+        let mut encoder = ComponentEncoder::default();
+        encoder
             .validate(true)
             .module(&binary)
             .map_err(|e| format!("Failed to decode Wasm\n{e:?}"))?;
 
         if let Some(adapters) = adapters {
             for (name, binary) in adapters {
-                encoder = encoder
+                encoder
                     .adapter(&name, &binary)
                     .map_err(|e| format!("{e:?}"))?;
             }
