@@ -36,7 +36,7 @@
         "lint": "cargo clippy --all-targets -- -D warnings",
         "prepare-release": "napi prepublish -t npm --no-gh-release --skip-optional-publish --root-publisher pnpm",
         "pretest": "pnpm run build:debug",
-        "test": "node --test test/*.test.js"
+        "test": "node --test test/*.js"
     },
     "devDependencies": {
         "@napi-rs/cli": "^3.4.1",
