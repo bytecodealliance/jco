@@ -13,7 +13,8 @@
     "lint:fix": "pnpm run -r lint:fix",
     "test:setup:puppeteer": "node scripts/install-puppeteer.mjs",
     "test:setup:firefox": "node scripts/install-puppeteer.mjs firefox",
-    "test:examples": "pnpm run -r all"
+    "test:examples": "pnpm run -r all",
+    "build:test:idl": "node scripts/create-idl-component.mjs"
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
