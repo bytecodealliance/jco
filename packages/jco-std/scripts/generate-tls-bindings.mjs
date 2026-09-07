@@ -1,8 +1,7 @@
-// Resolve the unmodified upstream draft with its explicit `tls` feature enabled.
+// Generate bindings for the documented local TLS contract.
 import { generateGuestTypes, writeFiles } from "@bytecodealliance/jco-transpile";
 const files = await generateGuestTypes("wit/tls-0.2.0-draft", {
-  features: ["tls"],
-  outDir: "src/wasi/0.2.6/generated/types/tls",
+  outDir: "src/wasi/0.2.12/generated/types/tls",
 });
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
