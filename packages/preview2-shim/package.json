@@ -55,9 +55,9 @@
         "./interfaces/*": {
             "types": "./types/interfaces/*.d.ts"
         },
-        "./tls": {
-            "types": "./dist/nodejs/tls.d.ts",
-            "node": "./dist/nodejs/tls.js"
+        "./io-worker": {
+            "types": "./dist/nodejs/io-worker.d.ts",
+            "node": "./dist/nodejs/io-worker.js"
         }
     },
     "scripts": {
