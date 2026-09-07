@@ -624,14 +624,20 @@ jco componentize component.js --wit wit --bundle \
   validation. It rejects `Server` construction immediately because an
   outgoing-handler cannot listen for arbitrary inbound connections.
 
-For HTTPS over sockets, use `--backend starlingmonkey` and explicitly map both
-`wasi:tls/types@0.2.0-draft` and `jco:tls-streams-0-2-10/bridge@0.1.0` to
-`@bytecodealliance/preview2-shim/tls`. The default mapping denies TLS before
+For HTTPS over sockets, explicitly map `wasi:tls/types@0.2.0-draft` and the
+component's `jco:tls-streams-0-2-10/bridge@0.1.0` (or `0-2-12`) import to
+`@bytecodealliance/preview2-shim/tls`. TLS support is backend-independent.
+The default mapping denies TLS before
 connecting. The Node provider wraps the existing TCP streams, validates the
 certificate chain and hostname, and offers HTTP/1.1 ALPN. The draft accepts only
 `servername` (and `rejectUnauthorized: true`); other per-request TLS settings,
 including `ca`, are rejected. Hosts can configure trust with `createTlsProvider`.
 See the [provider example](../../docs/src/interop/nodejs-builtins.md#https).
+
+> [!NOTE]
+> `componentize-qjs` 0.4.3 currently fails to link the TLS interface's shared IO
+> resources during snapshot initialization. StarlingMonkey is a workaround for
+> this build-time issue.
 
 When the selected world is missing a required import or callback export, Jco
 edits that world in place, adds generated comments and declarations, installs
