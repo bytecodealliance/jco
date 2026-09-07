@@ -115,7 +115,9 @@ async function scaffoldFiles(args: ScaffoldFilesArgs): Promise<Record<string, st
     const files: Record<string, string | Uint8Array> = {
         ".gitignore": "node_modules/\ndist/\n",
         [`src/${args.host ? "plugin" : "component"}.${extension}`]: args.source,
-        [`test/${args.host ? "plugin" : "component"}.test.${extension}`]: args.testSource,
+        [`test/${args.host ? "plugin" : "component"}.${extension}`]: args.testSource,
+        [`vitest.config.${extension}`]:
+            'import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  test: { include: ["test/**/*.{ts,js}"] },\n});\n',
     };
     for (const [name, contents] of Object.entries(args.generatedTypes)) {
         files[`types/generated/${name}`] = contents;
