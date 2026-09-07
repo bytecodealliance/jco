@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as sockets from "../../../../../preview2-shim/dist/nodejs/sockets.js";
-import * as tls from "../../../../../preview2-shim/dist/nodejs/tls.js";
+import * as tls from "../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls-host-node.js";
 import * as denied from "../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls-host.js";
 
 const root = resolve(process.argv[2]);
@@ -33,10 +33,7 @@ imports.sockets = {
         },
     },
 };
-imports.tls =
-    policy === "denied"
-        ? denied
-        : { ...provider, ClientHandshake: CountedHandshake, adapt: tls.adapt, isAvailable: tls.isAvailable };
+imports.tls = policy === "denied" ? denied : { ...provider, ClientHandshake: CountedHandshake };
 interface Report {
     status: number;
     body: string;

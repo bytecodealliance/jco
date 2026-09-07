@@ -96,6 +96,9 @@ for (const backend of ["starlingmonkey"]) {
             const imports = await readFile(join(root, "imports.wit"), "utf8");
             expect(imports).toContain("import wasi:tls/types@0.2.0-draft");
             expect(imports).toContain("import wasi:sockets/tcp@");
+            expect(imports).toContain("import wasi:io/streams@0.2.12");
+            expect(imports).not.toContain("wasi:io/streams@0.2.6");
+            expect(imports).not.toContain("jco:tls-streams");
             expect(imports).not.toContain("import jco:node/http@");
             expect(imports).not.toContain("import wasi:http/outgoing-handler@");
         }, 190_000);
@@ -272,7 +275,7 @@ test.concurrent("QuickJS reports its snapshot linker TLS resource incompatibilit
     try {
         await expect(
             exec(process.execPath, [build, root, "quickjs"], { timeout: 180_000, maxBuffer: 2_000_000 }),
-        ).rejects.toThrow(/QuickJS.*snapshot linker.*shared IO resource types.*starlingmonkey/);
+        ).rejects.toThrow(/wasi:tls.*mismatched resource types/);
     } finally {
         await rm(root, { recursive: true, force: true });
     }
