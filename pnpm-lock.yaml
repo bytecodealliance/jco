@@ -441,8 +441,8 @@ importers:
         specifier: ^0.12.1
         version: 0.12.1
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.21.0
-        version: 0.21.0
+        specifier: ^0.24.0
+        version: 0.24.0
       '@types/node':
         specifier: ^24.12.4
         version: 24.13.3
