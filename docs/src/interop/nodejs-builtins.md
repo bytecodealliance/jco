@@ -874,8 +874,9 @@ being dropped.
 | `wasi-sockets` | Verified clients over the existing TCP streams. TLS connections implicitly require `wasi:tls`, imported automatically for `node:https`. HTTPS servers are unsupported by the pinned client-only draft.                                                |
 | `wasi-http`    | Clients only, with the `HTTPS` scheme. `wasi:http/outgoing-handler` owns certificate validation, so any per-request TLS option is refused; servers are rejected as for `node:http`.                                                                   |
 
-For `wasi-sockets`, build with `--backend starlingmonkey` and explicitly grant TLS
-when transpiling:
+TLS support is part of the `wasi-sockets` implementation, which uses the
+`wasi:tls` host capability for TLS connections. Build with `--backend starlingmonkey`
+and explicitly grant that capability when transpiling:
 
 ```sh
 jco transpile component.wasm -o out \
