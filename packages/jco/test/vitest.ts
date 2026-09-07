@@ -16,7 +16,7 @@ export default defineConfig({
         printConsoleTrace: true,
         passWithNoTests: false,
         setupFiles: ["test/meta-resolve-stub.ts"],
-        include: ["test/**/*.js"],
+        include: ["test/**/*.js", "test/node/**/*.test.ts"],
         exclude: [
             "test/extended/*",
             "test/output/*",
