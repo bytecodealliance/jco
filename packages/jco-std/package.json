@@ -24,7 +24,8 @@
   },
   "files": [
     "dist",
-    "wit/node-0.1.0"
+    "wit/node-0.1.0",
+    "wit/tls-0.2.0-draft"
   ],
   "type": "module",
   "exports": {
@@ -356,6 +357,10 @@
       "types": "./dist/wasi/0.2.3/http/adapters/hono/middleware/env.d.ts",
       "browser": "./dist/wasi/0.2.3/http/adapters/hono/middleware/env.js",
       "default": "./dist/wasi/0.2.3/http/adapters/hono/middleware/env.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls-host.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tls-host.js"
     }
   },
   "scripts": {
@@ -367,11 +372,12 @@
     "build:bindings:wasi:http:0.2.6": "WIT_PATH=wit/http-v0m2p6 OUTPUT_DIR_PATH=src/wasi/0.2.6/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings:wasi:http:0.2.12": "WIT_PATH=wit/http-v0m2p12 OUTPUT_DIR_PATH=src/wasi/0.2.12/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings:wasi:http:0.2.3": "WIT_PATH=wit/http-v0m2p3 OUTPUT_DIR_PATH=src/wasi/0.2.3/generated/types node scripts/generate-wasi-bindings.mjs",
-    "build:bindings": "pnpm run build:bindings:wasi:http:0.2.3 && pnpm run build:bindings:wasi:http:0.2.6 && pnpm run build:bindings:wasi:http:0.2.12",
+    "build:bindings": "pnpm run build:bindings:wasi:http:0.2.3 && pnpm run build:bindings:wasi:http:0.2.6 && pnpm run build:bindings:wasi:http:0.2.12 && pnpm run build:bindings:wasi:tls",
     "build:ts": "tsc",
     "build": "pnpm run setup:jco-transpile:build && pnpm run build:bindings && pnpm run build:ts",
     "test": "vitest run -c test/vitest.ts",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "build:bindings:wasi:tls": "node scripts/generate-tls-bindings.mjs"
   },
   "dependencies": {
     "minimatch": "10.2.6"
