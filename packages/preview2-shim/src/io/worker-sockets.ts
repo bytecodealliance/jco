@@ -101,12 +101,10 @@ export function socketResolveAddress(name: string) {
         (addresses) => {
             return (Array.isArray(addresses) ? addresses : [addresses]).map(
                 ({ address, family }) => {
-                    return [
-                        {
-                            tag: "ipv" + family,
-                            val: (family === 4 ? ipv4ToTuple : ipv6ToTuple)(address),
-                        },
-                    ];
+                    return {
+                        tag: "ipv" + family,
+                        val: (family === 4 ? ipv4ToTuple : ipv6ToTuple)(address),
+                    };
                 },
             );
         },
