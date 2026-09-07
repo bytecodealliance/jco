@@ -54,6 +54,10 @@
         },
         "./interfaces/*": {
             "types": "./types/interfaces/*.d.ts"
+        },
+        "./tls": {
+            "types": "./dist/nodejs/tls.d.ts",
+            "node": "./dist/nodejs/tls.js"
         }
     },
     "scripts": {
