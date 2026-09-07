@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { suite, test } from "vitest";
 
-import { ipSocketAddress } from "../src/io/worker-sockets.js";
+import { ipSocketAddress, socketResolveAddress } from "../src/io/worker-sockets.js";
 import { checkTcpAddresses, checkUdpAddresses } from "./fixtures/sockets/address-families.mjs";
 
 suite("socket address families", () => {
@@ -29,4 +29,13 @@ suite("socket address families", () => {
 
     test.each(["ipv4", "ipv6"])("TCP worker addresses (%s)", checkTcpAddresses);
     test.each(["ipv4", "ipv6"])("UDP worker addresses (%s)", checkUdpAddresses);
+});
+
+test.concurrent("DNS lookup returns individual WASI address records", async (): Promise<void> => {
+    const addresses = await socketResolveAddress("localhost");
+    assert(addresses.length > 0);
+    for (const address of addresses) {
+        assert(address.tag === "ipv4" || address.tag === "ipv6");
+        assert.equal(address.val.length, address.tag === "ipv4" ? 4 : 8);
+    }
 });
