@@ -56,7 +56,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "pretest": "pnpm run build",
-    "test": "vitest --run",
+    "test": "vitest --run -c test/vitest.ts",
     "prebench": "pnpm run build",
     "bench": "vitest bench --run",
     "prepack": "pnpm run build"
