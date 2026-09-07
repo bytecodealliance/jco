@@ -112,8 +112,8 @@ importers:
   examples/components/fs-write-file:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.24.0
-        version: 0.24.0
+        specifier: ^0.24.1
+        version: 0.24.1
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.31.0
@@ -355,8 +355,8 @@ importers:
         specifier: ^0.12.1
         version: 0.12.1
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.24.0
-        version: 0.24.0
+        specifier: ^0.24.1
+        version: 0.24.1
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -441,8 +441,8 @@ importers:
         specifier: ^0.12.1
         version: 0.12.1
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.24.0
-        version: 0.24.0
+        specifier: ^0.24.1
+        version: 0.24.1
       '@types/node':
         specifier: ^24.12.4
         version: 24.13.3
@@ -468,8 +468,8 @@ importers:
   packages/jco-transpile:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.24.0
-        version: 0.24.0
+        specifier: ^0.24.1
+        version: 0.24.1
       '@bytecodealliance/preview3-shim':
         specifier: ^0.5.0
         version: 0.5.0
@@ -545,11 +545,11 @@ importers:
   packages/preview3-shim:
     dependencies:
       '@bytecodealliance/jco-node-fs':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.2
+        version: 0.3.2
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.24.0
-        version: 0.24.0
+        specifier: ^0.24.1
+        version: 0.24.1
     devDependencies:
       '@types/node':
         specifier: ^24.12.4
@@ -822,8 +822,8 @@ packages:
   '@bytecodealliance/preview2-shim@0.22.0':
     resolution: {integrity: sha512-xQclicSPicWpEkCJ7f4JiI1JuxZcktmVExh++fDxerPfP+MknUd7Yx3jjk5R9uYhTD9bdefYHw8J0zehXGQL1A==}
 
-  '@bytecodealliance/preview2-shim@0.24.0':
-    resolution: {integrity: sha512-w47lxOptKWkw43gI5z8cpMMnZ01LbyyDf1ZCvVcu44BQl6sfhhvDu7BDDC512PjW5o2tOtR2wFMh9pevxeByvQ==}
+  '@bytecodealliance/preview2-shim@0.24.1':
+    resolution: {integrity: sha512-QGZsKD5M76xBhwu3BzLWqYDEpaMX90QWrrfhkQPn2pN9t378koumtdAVH4lr25mqGCZt10YNXkWvyWkw/vJbLQ==}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -4941,9 +4941,9 @@ snapshots:
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.2.0
 
-  '@bytecodealliance/preview2-shim@0.24.0':
+  '@bytecodealliance/preview2-shim@0.24.1':
     dependencies:
-      '@bytecodealliance/jco-node-fs': 0.2.0
+      '@bytecodealliance/jco-node-fs': 0.3.2
 
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
