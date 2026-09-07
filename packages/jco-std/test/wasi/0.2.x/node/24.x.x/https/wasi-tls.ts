@@ -73,6 +73,7 @@ test.concurrent("polls a pending handshake and drops the poll before its future"
   const output = { blockingWriteAndFlush: (): void => {} };
   const connection = { closeOutput: (): void => {} };
   const provider: WasiTlsProvider = {
+    isAvailable: () => true,
     ClientHandshake: class {
       constructor(name: string, incoming: WasiInputStream, outgoing: WasiOutputStream) {
         expect(name).toBe("localhost");
@@ -98,11 +99,7 @@ test.concurrent("polls a pending handshake and drops the poll before its future"
       }
     },
   };
-  expect(handshake(provider, undefined, "localhost", input, output)).toEqual([
-    connection,
-    input,
-    output,
-  ]);
+  expect(handshake(provider, "localhost", input, output)).toEqual([connection, input, output]);
   expect(events).toEqual(["poll", "future"]);
 });
 
@@ -111,6 +108,7 @@ test.concurrent("drops a failed handshake's IO error and future", () => {
   const input = { blockingRead: (): Uint8Array => new Uint8Array() };
   const output = { blockingWriteAndFlush: (): void => {} };
   const provider: WasiTlsProvider = {
+    isAvailable: () => true,
     ClientHandshake: class {
       static finish(): ReturnType<WasiTlsProvider["ClientHandshake"]["finish"]> {
         return {
@@ -136,16 +134,13 @@ test.concurrent("drops a failed handshake's IO error and future", () => {
       }
     },
   };
-  expect(() => handshake(provider, undefined, "localhost", input, output)).toThrow(
-    /untrusted certificate/,
-  );
+  expect(() => handshake(provider, "localhost", input, output)).toThrow(/untrusted certificate/);
   expect(events).toEqual(["error", "future"]);
 });
 
 test.concurrent("default denial is lazy and refuses before acquiring TCP resources", () => {
   const implementation = createWasiSocketsHttpImplementation({
     tls: denied,
-    tlsStreamBridge: denied,
     instanceNetwork: {
       instanceNetwork: (): never => {
         throw new Error("network touched");
