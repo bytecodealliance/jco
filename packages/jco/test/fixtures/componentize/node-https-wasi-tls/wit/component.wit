@@ -1,0 +1,5 @@
+package jco-fixtures:https-wasi-tls;
+world component {
+    record report { status: u16, body: string, error: string }
+    export run: func(url: string, body: string, servername: string) -> report;
+}
