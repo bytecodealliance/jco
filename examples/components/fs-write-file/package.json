@@ -12,6 +12,6 @@
         "@bytecodealliance/jco": "1.31.0"
     },
     "dependencies": {
-        "@bytecodealliance/preview2-shim": "^0.21.0"
+        "@bytecodealliance/preview2-shim": "^0.24.0"
     }
 }
