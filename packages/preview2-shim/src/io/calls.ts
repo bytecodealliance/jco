@@ -130,12 +130,8 @@ export const SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST = ++call_id << CALL_SHIFT;
 export const SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST = ++call_id << CALL_SHIFT;
 export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
 
-// Opt-in wasi:tls provider operations, executed on the existing IO worker.
-export const TLS_START = ++call_id << CALL_SHIFT;
-export const TLS_CLOSE_OUTPUT = ++call_id << CALL_SHIFT;
-export const TLS_DISPOSE = ++call_id << CALL_SHIFT;
-export const TLS_STREAMS = ++call_id << CALL_SHIFT;
-export const TLS_RESOURCE_COUNTS = ++call_id << CALL_SHIFT;
+// Host extensions execute alongside the streams they operate on.
+export const WORKER_EXTENSION_CALL = ++call_id << CALL_SHIFT;
 
 export const reverseMap = {};
 

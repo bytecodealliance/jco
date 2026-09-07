@@ -1,17 +1,5 @@
-import {
-    TLS_START,
-    TLS_CLOSE_OUTPUT,
-    TLS_DISPOSE,
-    TLS_STREAMS,
-    TLS_RESOURCE_COUNTS,
-} from "./calls.js";
-import {
-    tlsStart,
-    tlsCloseOutput,
-    tlsDispose,
-    tlsStreams,
-    tlsConnectionCount,
-} from "./worker-tls.js";
+import { WORKER_EXTENSION_CALL } from "./calls.js";
+import type { WorkerExtension, WorkerExtensionContext } from "./extension.js";
 import { createReadStream, createWriteStream, PathLike } from "node:fs";
 import { hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
@@ -335,6 +323,30 @@ export function getStreamOrThrow(streamId) {
     return stream;
 }
 
+const extensions = new Map<string, Promise<WorkerExtension>>();
+async function callExtension(module: string, operation: string, args: unknown[]): Promise<unknown> {
+    let extension = extensions.get(module);
+    if (!extension) {
+        extension = import(module).then(({ default: create }) => {
+            const context: WorkerExtensionContext = {
+                createFuture: (promise) => createFuture(promise, undefined),
+                createReadableStream,
+                createWritableStream,
+                getStream: (id) => getStreamOrThrow(id).stream,
+                resourceCounts: () => ({
+                    streams: streams.size,
+                    futures: futures.size,
+                    polls: polls.size,
+                    sockets: tcpSockets.size,
+                }),
+            };
+            return create(context);
+        });
+        extensions.set(module, extension);
+    }
+    return (await extension)(operation, args);
+}
+
 /**
  * @param {number} call
  * @param {number | null} id
@@ -346,22 +358,8 @@ function handle(call, id, payload) {
         throw uncaughtException;
     }
     switch (call) {
-        case TLS_START:
-            return tlsStart(payload);
-        case TLS_STREAMS:
-            return tlsStreams(id);
-        case TLS_RESOURCE_COUNTS:
-            return {
-                tls: tlsConnectionCount(),
-                streams: streams.size,
-                futures: futures.size,
-                polls: polls.size,
-                sockets: tcpSockets.size,
-            };
-        case TLS_CLOSE_OUTPUT:
-            return tlsCloseOutput(id);
-        case TLS_DISPOSE:
-            return tlsDispose(id);
+        case WORKER_EXTENSION_CALL:
+            return callExtension(payload.module, payload.operation, payload.args);
         // Http
         case HTTP_CREATE_REQUEST: {
             const {
