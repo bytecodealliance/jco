@@ -624,11 +624,10 @@ jco componentize component.js --wit wit --bundle \
   validation. It rejects `Server` construction immediately because an
   outgoing-handler cannot listen for arbitrary inbound connections.
 
-For HTTPS over sockets, explicitly map `wasi:tls/types@0.2.0-draft` and the
-component's `jco:tls-streams-0-2-10/bridge@0.1.0` (or `0-2-12`) import to
-`@bytecodealliance/preview2-shim/tls`. TLS support is backend-independent.
-The default mapping denies TLS before
-connecting. The Node provider wraps the existing TCP streams, validates the
+For HTTPS over sockets, explicitly map `wasi:tls/types@0.2.0-draft` to
+`@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node`. TLS support is backend-independent.
+The [local TLS contract](wit/tls-0.2.0-draft/README.md) shares `wasi:io@0.2.12`
+resources with sockets directly. The default mapping denies TLS before connecting. The Node provider wraps the existing TCP streams, validates the
 certificate chain and hostname, and offers HTTP/1.1 ALPN. The draft accepts only
 `servername` (and `rejectUnauthorized: true`); other per-request TLS settings,
 including `ca`, are rejected. Hosts can configure trust with `createTlsProvider`.
