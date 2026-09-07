@@ -267,12 +267,12 @@ for (const backend of ["starlingmonkey"]) {
     });
 }
 
-test.concurrent("QuickJS reports the pinned TLS IO resource incompatibility", async () => {
+test.concurrent("QuickJS reports its snapshot linker TLS resource incompatibility", async () => {
     const root = await mkdtemp(join(tmpdir(), "jco-https-tls-qjs-"));
     try {
         await expect(
             exec(process.execPath, [build, root, "quickjs"], { timeout: 180_000, maxBuffer: 2_000_000 }),
-        ).rejects.toThrow(/QuickJS.*incompatible IO resource types.*starlingmonkey/);
+        ).rejects.toThrow(/QuickJS.*snapshot linker.*shared IO resource types.*starlingmonkey/);
     } finally {
         await rm(root, { recursive: true, force: true });
     }
