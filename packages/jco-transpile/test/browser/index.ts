@@ -104,7 +104,7 @@ suite('Browser', () => {
     for (const fixture of ['dom', 'console']) {
         test(`runs the ${fixture} Web IDL component`, async () => {
             const { component } = await componentize({
-                sourcePath: join(WEBIDL_FIXTURES_DIR, `${fixture}.test.js`),
+                sourcePath: join(WEBIDL_FIXTURES_DIR, `${fixture}.js`),
                 disableFeatures: ['clocks', 'random', 'stdio'],
                 witPath: join(WEBIDL_FIXTURES_DIR, `${fixture}.wit`),
                 worldName: `${fixture === 'dom' ? 'window' : fixture}-test`,
