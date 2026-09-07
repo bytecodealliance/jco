@@ -1,3 +1,17 @@
+import {
+    TLS_START,
+    TLS_CLOSE_OUTPUT,
+    TLS_DISPOSE,
+    TLS_STREAMS,
+    TLS_RESOURCE_COUNTS,
+} from "./calls.js";
+import {
+    tlsStart,
+    tlsCloseOutput,
+    tlsDispose,
+    tlsStreams,
+    tlsConnectionCount,
+} from "./worker-tls.js";
 import { createReadStream, createWriteStream, PathLike } from "node:fs";
 import { hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
@@ -332,6 +346,22 @@ function handle(call, id, payload) {
         throw uncaughtException;
     }
     switch (call) {
+        case TLS_START:
+            return tlsStart(payload);
+        case TLS_STREAMS:
+            return tlsStreams(id);
+        case TLS_RESOURCE_COUNTS:
+            return {
+                tls: tlsConnectionCount(),
+                streams: streams.size,
+                futures: futures.size,
+                polls: polls.size,
+                sockets: tcpSockets.size,
+            };
+        case TLS_CLOSE_OUTPUT:
+            return tlsCloseOutput(id);
+        case TLS_DISPOSE:
+            return tlsDispose(id);
         // Http
         case HTTP_CREATE_REQUEST: {
             const {
@@ -958,10 +988,7 @@ function handle(call, id, payload) {
             return futureTakeValue(id);
 
         case FUTURE_SUBSCRIBE: {
-            const { pollState } = futures.get(id);
-            const pollId = ++pollCnt;
-            polls.set(pollId, pollState);
-            return pollId;
+            return createPoll(futures.get(id).pollState);
         }
         case FUTURE_DISPOSE:
             return void futureDispose(id, true);
