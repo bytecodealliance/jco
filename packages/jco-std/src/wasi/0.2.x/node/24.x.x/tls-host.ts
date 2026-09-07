@@ -2,7 +2,7 @@
 function denied(): never {
   throw Object.assign(
     new Error(
-      "HTTPS over wasi:sockets requires an explicitly configured wasi:tls/types@0.2.0-draft host provider and IO version bridge",
+      "HTTPS over wasi:sockets requires an explicitly configured wasi:tls/types@0.2.0-draft host provider",
     ),
     { code: "ERR_JCO_TLS_ADAPTER_REQUIRED" },
   );
@@ -28,10 +28,7 @@ export class FutureClientStreams {
     return denied();
   }
 }
-/** Jco bridge operation, not part of the upstream wasi:tls interface. */
+/** Availability query in Jco's local TLS contract. */
 export function isAvailable(): boolean {
   return false;
-}
-export function adapt(_input: unknown, _output: unknown): never {
-  return denied();
 }

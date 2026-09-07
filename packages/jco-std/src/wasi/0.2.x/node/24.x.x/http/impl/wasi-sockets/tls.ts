@@ -1,7 +1,7 @@
 /**
  * Guest contract for WebAssembly/wasi-tls wit/types.wit, revision
  * 6781ae26084100c0628ef72cc44e4517c6c48ae5 (W3C Community CLA).
- * The IO version adapter is a separate Jco interface, never an upstream extension.
+ * Local contract: wasi:io@0.2.12 and an availability query (see vendored README.md).
  */
 import { fromImplementationError, unsupported } from "../../errors.js";
 import type { HttpTlsMaterial } from "../../types.js";
@@ -36,14 +36,11 @@ export interface WasiTlsFuture {
   [Symbol.dispose]?(): void;
 }
 export interface WasiTlsProvider {
+  isAvailable(): boolean;
   ClientHandshake: {
     new (serverName: string, input: WasiInputStream, output: WasiOutputStream): WasiTlsHandshake;
     finish(handshake: WasiTlsHandshake): WasiTlsFuture;
   };
-}
-export interface WasiTlsStreamBridge {
-  isAvailable(): boolean;
-  adapt(input: WasiInputStream, output: WasiOutputStream): [WasiInputStream, WasiOutputStream];
 }
 
 export function validateTlsOptions(options: HttpTlsMaterial | undefined): void {
@@ -71,7 +68,6 @@ export function validateTlsOptions(options: HttpTlsMaterial | undefined): void {
 /** Takes ownership of input/output, including on handshake failure. */
 export function handshake(
   provider: WasiTlsProvider,
-  bridge: WasiTlsStreamBridge | undefined,
   serverName: string,
   input: WasiInputStream,
   output: WasiOutputStream,
@@ -81,9 +77,6 @@ export function handshake(
   let pending: WasiTlsHandshake | undefined;
   let future: WasiTlsFuture | undefined;
   try {
-    if (bridge) {
-      [ownedInput, ownedOutput] = bridge.adapt(ownedInput, ownedOutput);
-    }
     pending = new provider.ClientHandshake(serverName, ownedInput, ownedOutput);
     ownedInput = undefined;
     ownedOutput = undefined;
