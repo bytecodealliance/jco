@@ -875,35 +875,33 @@ being dropped.
 | `wasi-http`    | Clients only, with the `HTTPS` scheme. `wasi:http/outgoing-handler` owns certificate validation, so any per-request TLS option is refused; servers are rejected as for `node:http`.                                                                   |
 
 TLS support is part of the `wasi-sockets` implementation, which uses the
-`wasi:tls` host capability for TLS connections. Explicitly grant that capability
-and the bridge matching the component's imported IO version when transpiling:
+`wasi:tls` host capability for TLS connections. Explicitly grant it when transpiling:
 
 ```sh
 jco transpile component.wasm -o out \
-  --map 'wasi:tls/types@0.2.0-draft=@bytecodealliance/preview2-shim/tls' \
-  --map 'jco:tls-streams-0-2-10/bridge@0.1.0=@bytecodealliance/preview2-shim/tls'
+  --map 'wasi:tls/types@0.2.0-draft=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node'
 ```
 
-This example maps the IO 0.2.10 bridge; for IO 0.2.12, map
-`jco:tls-streams-0-2-12/bridge@0.1.0` instead.
-The Jco bridge transfers IO resource versions and checks capability availability;
-it is separate from the upstream TLS interface. Without this opt-in, HTTPS fails
-before connecting, with no plaintext fallback. Plain HTTP needs no TLS capability.
+Sockets and TLS share `wasi:io@0.2.12` stream resources directly. Without this
+opt-in, HTTPS fails before connecting, with no plaintext fallback. Plain HTTP
+needs no TLS capability.
 The Node provider uses `node:tls` over the supplied TCP streams, system trust,
-hostname verification, and HTTP/1.1 ALPN. Hosts needing private trust can map both
-interfaces to a module exporting:
+hostname verification, and HTTP/1.1 ALPN. Hosts needing private trust can map the
+TLS interface to a module exporting:
 
 ```js
-import { createTlsProvider } from '@bytecodealliance/preview2-shim/tls';
-export { adapt, isAvailable } from '@bytecodealliance/preview2-shim/tls';
-export const { ClientHandshake, ClientConnection, FutureClientStreams } = createTlsProvider({
+import { createTlsProvider } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node';
+export const { ClientHandshake, ClientConnection, FutureClientStreams, isAvailable } = createTlsProvider({
     ca: [trustedCaPem],
     handshakeTimeoutMs: 10_000,
 });
 ```
 
-Pinned upstream: [`WebAssembly/wasi-tls` at `6781ae26084100c0628ef72cc44e4517c6c48ae5`](https://github.com/WebAssembly/wasi-tls/tree/6781ae26084100c0628ef72cc44e4517c6c48ae5/wit),
-`wasi:tls@0.2.0-draft`, depending on `wasi:io@0.2.6`. It exposes client handshake,
+Based on upstream [`WebAssembly/wasi-tls` at `6781ae26084100c0628ef72cc44e4517c6c48ae5`](https://github.com/WebAssembly/wasi-tls/tree/6781ae26084100c0628ef72cc44e4517c6c48ae5/wit),
+Jco's [local contract](https://github.com/bytecodealliance/jco/tree/main/packages/jco/lib/wit/builtin/wasi-tls-0.2.0-draft)
+retains `wasi:tls@0.2.0-draft` but uses `wasi:io@0.2.12`, adds `is-available`, and
+omits unstable-feature annotations. It is a provisional interface for Node.js,
+web, and other host implementations. It exposes client handshake,
 future polling, streams, and output shutdown. It has no server handshake,
 certificate configuration, or ALPN controls. Only guest `servername` and
 `rejectUnauthorized: true` are supported; other TLS options, including `ca`, are
