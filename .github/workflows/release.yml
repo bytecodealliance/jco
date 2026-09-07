@@ -636,52 +636,15 @@ jobs:
           name: ${{ needs.meta.outputs.project }}
           path: gh-artifacts
 
-      # NOTE: We install node modules because the pre-pack for various projects may require
-      # the cargo xtask build in release mode (even though we're using),
-      - name: Install node modules
-        run: |
-          pnpm install
-
       - name: Publish ${{ needs.meta.outputs.project }} to NPM
-        shell: bash
         env:
           PROJECT: ${{ needs.meta.outputs.project }}
+          ARTIFACT_DIR: ${{ github.workspace }}/gh-artifacts
           ARTIFACT_NAME: ${{ needs.meta.outputs.artifact-name }}
           IS_PRERELEASE: ${{ needs.meta.outputs.is-prerelease }}
           PRERELEASE_TAG: ${{ needs.meta.outputs.prerelease-tag }}
-          GH_WORKSPACE: ${{ github.workspace }}
           GH_REF_TYPE: ${{ github.ref_type }}
-          IS_TAG: ${{ github.ref_type == 'tag' }}
-        run: |
-          PUBLISH_ARGS=(--verbose --access=public --provenance)
-          if [ "tag" != "$GH_REF_TYPE" ]; then
-            PUBLISH_ARGS+=(--dry-run)
-          fi
-
-          if [ "true" == "$IS_PRERELEASE" ]; then
-            PUBLISH_ARGS+=(--tag "$PRERELEASE_TAG")
-          fi
-
-          if [ "true" == "$IS_TAG" ]; then
-            PUBLISH_ARGS+=(--no-git-checks)
-          fi
-
-          publish_package() {
-            # Publish the tested artifact, not a freshly packed workspace project.
-            pnpm publish \
-              "${PUBLISH_ARGS[@]}" \
-              "$1"
-          }
-
-          if [ "jco-node-fs" == "$PROJECT" ]; then
-            for PACKAGE_FILE_PATH in "$GH_WORKSPACE"/gh-artifacts/*.tgz; do
-              if [ "$(basename "$PACKAGE_FILE_PATH")" != "$ARTIFACT_NAME" ]; then
-                publish_package "$PACKAGE_FILE_PATH"
-              fi
-            done
-          fi
-
-          publish_package "$GH_WORKSPACE/gh-artifacts/$ARTIFACT_NAME"
+        run: node scripts/publish-npm-release.mjs
 
   create-gh-release:
     runs-on: ubuntu-24.04
