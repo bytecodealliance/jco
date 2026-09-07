@@ -65,6 +65,8 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 // Network class privately stores capabilities
 class Network implements NetworkNamespace.Network {
+    // Compatibility with the resource placeholder in the bundled WASI 0.2.10 WIT.
+    noop(): void {}
     #allowDnsLookup = true;
     #allowTcp = true;
     #allowUdp = true;
@@ -121,8 +123,26 @@ export const instanceNetwork: typeof InstanceNetworkNamespace = {
     },
 };
 
-export const network: typeof NetworkNamespace = {
+export const network: typeof NetworkNamespace & {
+    networkErrorCode(error: { toDebugString(): string }): NetworkNamespace.ErrorCode | undefined;
+} = {
     Network,
+    networkErrorCode(error): NetworkNamespace.ErrorCode | undefined {
+        const payload: unknown = "payload" in error ? error.payload : undefined;
+        if (typeof payload !== "object" || payload === null || !("code" in payload)) {
+            return undefined;
+        }
+        const codes: Partial<Record<string, NetworkNamespace.ErrorCode>> = {
+            ECONNRESET: "connection-reset",
+            ECONNREFUSED: "connection-refused",
+            ECONNABORTED: "connection-aborted",
+            ETIMEDOUT: "timeout",
+            EACCES: "access-denied",
+            EPERM: "access-denied",
+            ENETUNREACH: "remote-unreachable",
+        };
+        return typeof payload.code === "string" ? codes[payload.code] : undefined;
+    },
 };
 
 class ResolveAddressStream implements IpNameLookupNamespace.ResolveAddressStream {
