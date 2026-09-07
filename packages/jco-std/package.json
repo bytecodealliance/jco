@@ -361,6 +361,10 @@
     "./wasi/0.2.x/node/24.x.x/tls/host": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/tls-host.d.ts",
       "default": "./dist/wasi/0.2.x/node/24.x.x/tls-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/tls-host-node.js"
     }
   },
   "scripts": {
@@ -394,5 +398,13 @@
     "typescript": "catalog:",
     "vitest": "^4.1.11",
     "which": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@bytecodealliance/preview2-shim": "^0.24.0"
+  },
+  "peerDependenciesMeta": {
+    "@bytecodealliance/preview2-shim": {
+      "optional": true
+    }
   }
 }
