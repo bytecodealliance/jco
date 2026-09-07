@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   createWasiSocketsHttpImplementation,
   type WasiSocketsProvider,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
 import { createHttps } from "../../../../../../src/wasi/0.2.x/node/24.x.x/https/core.js";
 
 /** A provider that fails loudly if the implementation ever reaches the network. */

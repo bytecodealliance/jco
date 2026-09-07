@@ -6,13 +6,13 @@ import {
   createWasiSocketsHttpImplementation,
   type WasiInputStream,
   type WasiOutputStream,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/index.js";
 import {
   handshake,
   validateTlsOptions,
   type WasiTlsProvider,
   type WasiTlsResult,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-tls.js";
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets/tls.js";
 import type { HttpTlsMaterial } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
 import * as denied from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls-host.js";
 
