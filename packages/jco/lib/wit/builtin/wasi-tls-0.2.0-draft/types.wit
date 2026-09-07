@@ -1,33 +1,27 @@
-@unstable(feature = tls)
+// Adapted from WebAssembly/wasi-tls wit/types.wit,
+// 6781ae26084100c0628ef72cc44e4517c6c48ae5 (W3C Community CLA).
+// Local changes: wasi:io@0.2.12 and an availability query. See README.md.
 interface types {
-    @unstable(feature = tls)
-    use wasi:io/streams@0.2.6.{input-stream, output-stream};
-    @unstable(feature = tls)
-    use wasi:io/poll@0.2.6.{pollable};
-    @unstable(feature = tls)
-    use wasi:io/error@0.2.6.{error as io-error};
+    /// Whether the host grants TLS connections. This query performs no IO.
+    is-available: func() -> bool;
 
-    @unstable(feature = tls)
+    use wasi:io/streams@0.2.12.{input-stream, output-stream};
+    use wasi:io/poll@0.2.12.{pollable};
+    use wasi:io/error@0.2.12.{error as io-error};
+
     resource client-handshake {
-        @unstable(feature = tls)
         constructor(server-name: string, input: input-stream, output: output-stream);
 
-        @unstable(feature = tls)
         finish: static func(this: client-handshake) -> future-client-streams;
     }
 
-    @unstable(feature = tls)
     resource client-connection {
-        @unstable(feature = tls)
         close-output: func();
     }
 
-    @unstable(feature = tls)
     resource future-client-streams {
-        @unstable(feature = tls)
         subscribe: func() -> pollable;
 
-        @unstable(feature = tls)
         get: func() -> option<result<result<tuple<client-connection, input-stream, output-stream>, io-error>>>;
     }
 }
