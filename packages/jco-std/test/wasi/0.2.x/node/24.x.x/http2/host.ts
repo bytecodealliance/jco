@@ -105,18 +105,8 @@ describe("Node HTTP/2 host provider", () => {
 
   test("uses a real TLS client session with h2 ALPN", async () => {
     const [key, cert] = await Promise.all([
-      readFile(
-        new URL(
-          "../../../../../../../preview2-shim/test/fixtures/tls/localhost.key",
-          import.meta.url,
-        ),
-      ),
-      readFile(
-        new URL(
-          "../../../../../../../preview2-shim/test/fixtures/tls/localhost.crt",
-          import.meta.url,
-        ),
-      ),
+      readFile(new URL("../https/helpers/tls/localhost.key", import.meta.url)),
+      readFile(new URL("../https/helpers/tls/localhost.crt", import.meta.url)),
     ]);
     const server = nodeHttp2.createSecureServer({ key, cert });
     closeables.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -152,18 +142,8 @@ describe("Node HTTP/2 host provider", () => {
   test.each([false, true])("uses a real %s server callback round trip", async (secure) => {
     const [key, cert] = secure
       ? await Promise.all([
-          readFile(
-            new URL(
-              "../../../../../../../preview2-shim/test/fixtures/tls/localhost.key",
-              import.meta.url,
-            ),
-          ),
-          readFile(
-            new URL(
-              "../../../../../../../preview2-shim/test/fixtures/tls/localhost.crt",
-              import.meta.url,
-            ),
-          ),
+          readFile(new URL("../https/helpers/tls/localhost.key", import.meta.url)),
+          readFile(new URL("../https/helpers/tls/localhost.crt", import.meta.url)),
         ])
       : [undefined, undefined];
     const listener: DirectHttp2StreamListener = {

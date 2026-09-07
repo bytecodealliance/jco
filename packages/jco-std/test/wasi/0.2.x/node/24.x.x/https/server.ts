@@ -7,7 +7,7 @@ import { servingImplementation } from "./helpers/index.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const FIXTURES = new URL("../../../../../../../preview2-shim/test/fixtures/tls/", import.meta.url);
+const FIXTURES = new URL("./helpers/tls/", import.meta.url);
 const cert = readFileSync(new URL("localhost.crt", FIXTURES));
 const key = readFileSync(new URL("localhost.key", FIXTURES));
 
