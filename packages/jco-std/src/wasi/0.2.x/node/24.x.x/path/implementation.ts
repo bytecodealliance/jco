@@ -24,7 +24,7 @@
 // replaced by explicit WASI providers, and Node's bundled minimatch is an
 // ordinary package dependency. This file is mechanically converted to
 // TypeScript while keeping the upstream algorithms and control flow intact.
-import { Minimatch } from "minimatch";
+import { createMatcher } from "./matcher.cjs";
 
 import { invalidArgType } from "../errors.js";
 import type { FormatInputPathObject, PathModule, PathProviders } from "../path.js";
@@ -83,7 +83,7 @@ function validateObject(value: unknown, name: string): asserts value is FormatIn
   }
 }
 
-const patternCache = new Map<string, Minimatch>();
+const patternCache = new Map<string, ReturnType<typeof createMatcher>>();
 
 function matchGlobPattern(path: unknown, pattern: unknown, windows: boolean): boolean {
   validateString(path, "path");
@@ -91,7 +91,7 @@ function matchGlobPattern(path: unknown, pattern: unknown, windows: boolean): bo
   const key = `${windows ? "win32" : "posix"}:${pattern}`;
   let matcher = patternCache.get(key);
   if (!matcher) {
-    matcher = new Minimatch(pattern, {
+    matcher = createMatcher(pattern, {
       nocase: false,
       windowsPathsNoEscape: true,
       nonegate: true,

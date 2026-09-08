@@ -3,7 +3,7 @@
 // The adapter unit tests (`node-builtins.js`) call the plugin's hooks directly, which cannot
 // tell whether `jco componentize` uses it at all. These build a real component and run it.
 import { cwd } from "node:process";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 
 import { assert, expect, suite, test } from "vitest";
 
@@ -25,6 +25,24 @@ suite("node:path in a component", () => {
 
             // resolve() of a relative path goes through wasi:cli/environment#initial-cwd.
             assert.strictEqual(instance.fromCwd(), join(cwd(), "relative"));
+
+            // Exercise the lazily loaded matcher, including its brace-expansion dependency.
+            // Repeated calls also cover reuse after the first initialization.
+            for (const windows of [false, true]) {
+                const native = windows ? win32 : posix;
+                for (const [value, pattern] of [
+                    ["src/component.ts", "**/*.{js,ts}"],
+                    ["src/component.md", "**/*.{js,ts}"],
+                    ["file2.js", "file{1..3}.js"],
+                    ["file4.js", "file{1..3}.js"],
+                    ["a/b.js", "@(a|b)/*.js"],
+                    ["literal[1].js", "literal[[]1].js"],
+                    ["src\\component.ts", "src\\*.{js,ts}"],
+                    ["src/component.ts", "**/*.{js,ts}"],
+                ]) {
+                    assert.strictEqual(instance.match(value, pattern, windows), native.matchesGlob(value, pattern));
+                }
+            }
         } finally {
             await cleanup();
         }

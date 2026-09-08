@@ -14,3 +14,7 @@ export function lexical() {
 export function fromCwd() {
     return resolve("relative");
 }
+
+export function match(path, pattern, windows) {
+    return (windows ? win32.matchesGlob : matchesGlob)(path, pattern);
+}
