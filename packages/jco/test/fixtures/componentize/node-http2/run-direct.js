@@ -80,8 +80,12 @@ async function request(port, path, secure = false) {
 }
 
 const [key, cert] = await Promise.all([
-    readFile(new URL("../../../../../preview2-shim/test/fixtures/tls/localhost.key", import.meta.url)),
-    readFile(new URL("../../../../../preview2-shim/test/fixtures/tls/localhost.crt", import.meta.url)),
+    readFile(
+        new URL("../../../../../jco-std/test/wasi/0.2.x/node/24.x.x/https/helpers/tls/localhost.key", import.meta.url),
+    ),
+    readFile(
+        new URL("../../../../../jco-std/test/wasi/0.2.x/node/24.x.x/https/helpers/tls/localhost.crt", import.meta.url),
+    ),
 ]);
 const peer = http2.createServer();
 peer.on("stream", (stream) => {
