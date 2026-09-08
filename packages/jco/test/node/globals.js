@@ -158,6 +158,8 @@ suite("Node globals", () => {
     test("provides the supported Node globals to a StarlingMonkey guest", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-globals",
+            entry: "source.js",
+            wit: "source.wit",
             bundle: true,
             extraArgs: ["--backend", "starlingmonkey"],
         });
