@@ -5,4 +5,5 @@ world component {
 
     export lexical: func() -> string;
     export from-cwd: func() -> string;
+    export match: func(path: string, pattern: string, windows: bool) -> bool;
 }
