@@ -1,5 +1,187 @@
 # Changelog
 
+## [0.3.0] - 2026-09-08
+
+### 🚀 Features
+
+- _(std)_ implement node:http2 over wasi sockets by @vados-cosmonic
+
+- _(std)_ implement node http2 API by @vados-cosmonic
+
+- _(std)_ implement the computable half of node:module by @vados-cosmonic
+
+- _(std)_ publish Node stream entry points by @vados-cosmonic
+
+- _(std)_ implement Node iterable streams by @vados-cosmonic
+
+- _(std)_ implement Node stream consumers by @vados-cosmonic
+
+- _(std)_ implement Node HTTP servers by @vados-cosmonic
+
+- _(std)_ add WASI HTTP transport by @vados-cosmonic
+
+- _(std)_ add WASI sockets HTTP transport by @vados-cosmonic
+
+- _(std)_ add direct Node HTTP provider by @vados-cosmonic
+
+- _(std)_ implement Node HTTP client core by @vados-cosmonic
+
+- _(std)_ implement Node string decoder by @vados-cosmonic
+
+- _(std)_ implement the node:inspector guest adapter by @vados-cosmonic
+
+- _(std)_ align Node path with Node 24 by @vados-cosmonic
+
+- _(std)_ add Node OS adapters by @vados-cosmonic
+
+- _(std)_ add a host-backed node:ffi adapter for Node 26 by @vados-cosmonic
+
+- _(std)_ implement Node filesystem API by @vados-cosmonic
+
+- _(std)_ add filesystem host capability by @vados-cosmonic
+
+- _(std)_ publish Node DNS entry points by @vados-cosmonic
+
+- _(std)_ add the Node DNS adapter by @vados-cosmonic
+
+- _(std)_ implement the node:events entry points unenv leaves as stubs by @vados-cosmonic
+
+- _(std)_ add Node Errors compatibility by @vados-cosmonic
+
+- _(std)_ add node:diagnostics_channel support by @vados-cosmonic
+
+- _(std)_ refuse the deprecated node:domain module by @vados-cosmonic
+
+- _(std)_ add synchronous-scope node:async_hooks support by @vados-cosmonic
+
+- _(std)_ publish Node console entry points by @vados-cosmonic
+
+- _(std)_ add host-backed Node console adapter by @vados-cosmonic
+
+- _(std)_ publish the node:cluster entry point and document its limits by @vados-cosmonic
+
+- _(std)_ add host-backed node:cluster adapter by @vados-cosmonic
+
+- _(std)_ add Node child process adapter by @vados-cosmonic
+
+- _(std)_ add NodeJS shim for 'node:assert' by @vados-cosmonic
+
+- _(std)_ add WASI HTTP 0.2.12 adapter by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(std)_ satisfy filesystem host lint rules by @vados-cosmonic
+
+- _(std)_ close errors package export by @vados-cosmonic
+
+- _(std)_ exclude generated 0.2.12 bindings from lint by @vados-cosmonic in #1943
+
+### 🚜 Refactor
+
+- _(std)_ split HTTP2 client and server implementations by @vados-cosmonic
+
+- _(std)_ share deny-by-default host providers across node builtins by @vados-cosmonic
+
+- _(std)_ share host-boundary error serialization across node builtins by @vados-cosmonic
+
+- _(std)_ consolidate node builtin coded errors onto errors/core by @vados-cosmonic
+
+- _(std)_ type DNS host operations by @vados-cosmonic
+
+- _(std)_ type filesystem host operations by @vados-cosmonic
+
+- _(std)_ remove the Node DNS worker bridge by @vados-cosmonic
+
+- _(std)_ share the internal event emitter outside cluster by @vados-cosmonic
+
+- _(std)_ share Node error construction by @vados-cosmonic
+
+- _(std)_ match upstream conventions for the node:cluster adapter by @vados-cosmonic
+
+- _(std)_ align node:cluster with the Node WIT injection pattern by @vados-cosmonic
+
+- _(std)_ namespace Node builtin entry points by WASI version by @vados-cosmonic in #1978
+
+- _(std)_ pin Node builtin entry points to node24.x by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(std)_ cover node http2 implementations by @vados-cosmonic
+
+- _(std)_ add per-member node:path unit tests by @vados-cosmonic
+
+- _(std)_ cover the cluster fork lifecycle through the Node host adapter by @vados-cosmonic
+
+- _(std)_ run node builtin unit tests concurrently by @vados-cosmonic
+
+- _(std)_ check node:module against the host's own module by @vados-cosmonic
+
+- _(std)_ cover Node stream modules by @vados-cosmonic
+
+- _(std)_ cover Node HTTP implementations by @vados-cosmonic
+
+- _(std)_ cover Node HTTP transports by @vados-cosmonic
+
+- _(std)_ cover Node string decoder by @vados-cosmonic
+
+- _(std)_ cover node:inspector against the real Node passthrough by @vados-cosmonic
+
+- _(std)_ expand Node path conformance by @vados-cosmonic
+
+- _(std)_ cover Node OS providers by @vados-cosmonic
+
+- _(std)_ cover node:ffi against the real Node passthrough by @vados-cosmonic
+
+- _(std)_ remove dispatcher implementation checks by @vados-cosmonic
+
+- _(std)_ reject DNS query dispatch by @vados-cosmonic
+
+- _(std)_ reject filesystem query dispatch by @vados-cosmonic
+
+- _(std)_ cover Node filesystem compatibility by @vados-cosmonic
+
+- _(std)_ resolve external DNS with Node host by @vados-cosmonic
+
+- _(std)_ cover the asynchronous Node DNS host by @vados-cosmonic
+
+- _(std)_ cover the Node DNS adapter by @vados-cosmonic
+
+- _(std)_ check the node:events entry points against Node by @vados-cosmonic
+
+- _(std)_ cover Node Errors compatibility by @vados-cosmonic
+
+- _(std)_ cover node:diagnostics_channel against Node by @vados-cosmonic
+
+- _(std)_ cover the node:domain refusal by @vados-cosmonic
+
+- _(std)_ cover the Node console adapter by @vados-cosmonic
+
+- _(std)_ exercise the node:cluster adapter against the Node host by @vados-cosmonic
+
+- _(std)_ cover NodeJS assert shim by @vados-cosmonic
+
+- _(std)_ cover WASI HTTP compatibility matrix by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update jco-transpile to v0.13.0 by @vados-cosmonic in #2078
+
+- _(std)_ update preview2-shim dep to v0.24.1 by @vados-cosmonic
+
+- _(std)_ update preview2-shim to v0.24.0 by @vados-cosmonic
+
+- _(std)_ fmt by @vados-cosmonic in #2009
+
+- _(std)_ stop publishing internal os and http implementation modules by @vados-cosmonic
+
+- _(std)_ defer changelog updates to release tooling by @vados-cosmonic
+
+- _(std)_ update jco-transpile to v0.12.1 by @vados-cosmonic
+
+- _(std)_ normalize generated WASI bindings by @vados-cosmonic
+
+- _(std)_ update p2-shim to 0.21.0 by @vados-cosmonic
+
 ## [0.2.1] - 2026-08-04
 
 ### 🚀 Features
