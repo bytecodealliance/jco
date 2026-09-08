@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { resolve4 } from "node:dns/promises";
 import http2 from "node:http2";
 import { argv, stdout } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,18 +30,19 @@ function request(authority, path, body) {
     });
 }
 
+// Keep the native server in its own process so it can respond while the guest
+// waits on synchronous WASI socket operations.
 const localServer = spawnPeer("server");
-const localPort = await new Promise((resolve, reject) => {
-    localServer.once("error", reject);
-    localServer.stdout.once("data", (chunk) => resolve(Number(String(chunk).trim())));
-});
-
-const { instantiate } = await import(pathToFileURL(argv[2]));
-const imports = withWasiSockets(new WASIShim().getImportObject());
-const instance = await instantiate(undefined, imports);
 let componentServer;
 
 try {
+    const localPort = await new Promise((resolve, reject) => {
+        localServer.once("error", reject);
+        localServer.stdout.once("data", (chunk) => resolve(Number(String(chunk).trim())));
+    });
+    const { instantiate } = await import(pathToFileURL(argv[2]));
+    const imports = withWasiSockets(new WASIShim().getImportObject());
+    const instance = await instantiate(undefined, imports);
     const local = JSON.parse(await instance.runClient(`http://127.0.0.1:${localPort}`, "/large", ""));
 
     componentServer = spawn(
@@ -58,12 +58,11 @@ try {
     const guest = { length: guestBody.length, first: guestBody[0], last: guestBody.at(-1) };
     componentServer.kill();
 
-    let external;
-    if (argv[3] === "external") {
-        const [externalAddress] = await resolve4("nghttp2.org");
-        external = JSON.parse(await instance.runClient(`http://${externalAddress}`, "/httpbin/post", "nghttp2.org"));
+    let echo;
+    if (argv[3] === "echo") {
+        echo = JSON.parse(await instance.runClient(`http://127.0.0.1:${localPort}`, "/echo", "echo.test"));
     }
-    stdout.write(`${JSON.stringify({ local, guest, external })}\n`);
+    stdout.write(`${JSON.stringify({ local, guest, echo })}\n`);
 } finally {
     componentServer?.kill();
     localServer.kill();
