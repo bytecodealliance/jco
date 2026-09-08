@@ -15,32 +15,87 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 describe("node:http direct implementation", () => {
-  test("passes a client request through the direct host interface", () => {
-    let received: DirectHttpRequest | undefined;
-    const expected = response("direct response");
+  test("accepts unwrapped server results and reconstructs thrown WIT errors", () => {
+    const error = { name: "Error", message: "listen denied", code: "EACCES" };
     const implementation = createDirectHttpImplementation({
-      request(options) {
-        received = options;
-        return { tag: "ok", val: expected };
+      request() {
+        throw Object.assign(new Error("WIT error"), { payload: error });
       },
       Server: class {
-        constructor() {
-          throw new Error("not used");
+        listen() {
+          return { tag: "tcp" as const, val: { address: "127.0.0.1", family: "IPv4", port: 8080 } };
         }
-      } as never,
+        close() {
+          return true;
+        }
+        closeAllConnections() {}
+        closeIdleConnections() {
+          throw error;
+        }
+        getConnections() {
+          return 2n;
+        }
+        address() {
+          return undefined;
+        }
+        ref() {}
+        unref() {}
+        [Symbol.dispose]() {}
+      },
     });
-    const request: DirectHttpRequest = {
-      method: "POST",
-      scheme: "http",
-      authority: "example.com",
-      pathWithQuery: "/resource",
-      headers: [{ name: "Content-Type", value: encoder.encode("text/plain") }],
-      body: encoder.encode("payload"),
-    };
-
-    expect(implementation.request(request)).toBe(expected);
-    expect(received).toEqual(request);
+    const server = implementation.createServer!({}, async () => {
+      throw new Error("not called");
+    });
+    expect(server.listen({ port: 8080 })).toEqual({
+      address: "127.0.0.1",
+      family: "IPv4",
+      port: 8080,
+    });
+    expect(server.getConnections()).toBe(2);
+    expect(server.close()).toBe(true);
+    expect(server.closeAllConnections()).toBeUndefined();
+    expect(() => server.closeIdleConnections()).toThrow(expect.objectContaining(error));
+    expect(() =>
+      implementation.request({
+        method: "GET",
+        scheme: "http",
+        authority: "example.com",
+        pathWithQuery: "/",
+        headers: [],
+        body: new Uint8Array(),
+      }),
+    ).toThrow(expect.objectContaining(error));
   });
+
+  test.each(["tagged", "unwrapped"])(
+    "passes a client request through the %s direct host interface",
+    (representation) => {
+      let received: DirectHttpRequest | undefined;
+      const expected = response("direct response");
+      const implementation = createDirectHttpImplementation({
+        request(options) {
+          received = options;
+          return representation === "tagged" ? { tag: "ok" as const, val: expected } : expected;
+        },
+        Server: class {
+          constructor() {
+            throw new Error("not used");
+          }
+        } as never,
+      });
+      const request: DirectHttpRequest = {
+        method: "POST",
+        scheme: "http",
+        authority: "example.com",
+        pathWithQuery: "/resource",
+        headers: [{ name: "Content-Type", value: encoder.encode("text/plain") }],
+        body: encoder.encode("payload"),
+      };
+
+      expect(implementation.request(request)).toBe(expected);
+      expect(received).toEqual(request);
+    },
+  );
 
   test("passes a guest request listener resource to the host Server resource", async () => {
     let listener: DirectHttpRequestListener | undefined;

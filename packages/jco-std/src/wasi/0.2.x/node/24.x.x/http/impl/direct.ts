@@ -1,3 +1,5 @@
+import type { HostImports } from "../../internal/wit-types.js";
+import { callHost } from "../../internal/host-error.js";
 import { fromImplementationError } from "../errors.js";
 import type {
   DirectHttpHost,
@@ -53,55 +55,37 @@ function directAddress(address: DirectHttpServerAddress | undefined): HttpServer
       : address.val;
 }
 
-export function createDirectHttpImplementation(host: DirectHttpHost): HttpImplementation {
+export function createDirectHttpImplementation(
+  host: HostImports<DirectHttpHost>,
+): HttpImplementation {
   return {
     request(options) {
-      const result = host.request(options);
-      if (result.tag === "err") {
-        throw fromImplementationError(result.val);
-      }
-      return result.val;
+      return callHost(() => host.request(options), fromImplementationError);
     },
 
     createServer(options, handler) {
       const server = new host.Server(options, new RequestListener(handler));
       return {
         listen(listenOptions) {
-          const result = server.listen(listenOptions);
-          if (result.tag === "err") {
-            throw fromImplementationError(result.val);
-          }
-          return directAddress(result.val)!;
+          return directAddress(
+            callHost(() => server.listen(listenOptions), fromImplementationError),
+          )!;
         },
 
         close() {
-          const result = server.close();
-          if (result.tag === "err") {
-            throw fromImplementationError(result.val);
-          }
-          return result.val;
+          return callHost(() => server.close(), fromImplementationError);
         },
 
         closeAllConnections() {
-          const result = server.closeAllConnections();
-          if (result.tag === "err") {
-            throw fromImplementationError(result.val);
-          }
+          callHost(() => server.closeAllConnections(), fromImplementationError);
         },
 
         closeIdleConnections() {
-          const result = server.closeIdleConnections();
-          if (result.tag === "err") {
-            throw fromImplementationError(result.val);
-          }
+          callHost(() => server.closeIdleConnections(), fromImplementationError);
         },
 
         getConnections() {
-          const result = server.getConnections();
-          if (result.tag === "err") {
-            throw fromImplementationError(result.val);
-          }
-          return Number(result.val);
+          return Number(callHost(() => server.getConnections(), fromImplementationError));
         },
 
         address() {
