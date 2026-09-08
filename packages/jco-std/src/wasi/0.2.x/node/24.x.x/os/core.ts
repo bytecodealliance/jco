@@ -9,7 +9,8 @@
 import { Buffer } from "node:buffer";
 
 import { invalidArgType, outOfRange, systemError } from "../errors.js";
-import { decodeErrno } from "../internal/host-error.js";
+import { callHost, decodeErrno } from "../internal/host-error.js";
+import type { HostImports } from "../internal/wit-types.js";
 import type {
   Architecture,
   CpuInfo,
@@ -79,11 +80,8 @@ function providerError(data: OsError): Error {
   return error;
 }
 
-function unwrap<T>(result: OsResult<T>): T {
-  if (result.tag === "err") {
-    throw providerError(result.val);
-  }
-  return result.val;
+function unwrap<T>(operation: () => T | OsResult<T>): T {
+  return callHost(operation, providerError);
 }
 
 function constantsRecord(entries: OsConstantEntry[]): Record<string, number> {
@@ -122,8 +120,8 @@ function userInfoValue(value: OsHostUserInfoValue): string | Buffer {
 }
 
 /** Build a Node-shaped OS module from a synchronous typed host provider. */
-export function createOs(host: OsHost): OsModule {
-  const staticProperties = unwrap(host.getStaticProperties());
+export function createOs(host: HostImports<OsHost>): OsModule {
+  const staticProperties = unwrap(() => host.getStaticProperties());
   const constants: OsConstants = Object.assign(Object.create(null), {
     UV_UDP_REUSEADDR: staticProperties.constants.uvUdpReuseaddr,
     dlopen: constantsRecord(staticProperties.constants.dlopen),
@@ -133,15 +131,15 @@ export function createOs(host: OsHost): OsModule {
   });
 
   const arch = primitive(function arch(): Architecture {
-    return unwrap(host.arch());
+    return unwrap(() => host.arch());
   });
 
   const availableParallelism = primitive(function availableParallelism(): number {
-    return unwrap(host.availableParallelism());
+    return unwrap(() => host.availableParallelism());
   });
 
   function cpus(): CpuInfo[] {
-    return unwrap(host.cpus()).map((cpu) => ({
+    return unwrap(() => host.cpus()).map((cpu) => ({
       model: cpu.model,
       speed: cpu.speed,
       times: {
@@ -155,37 +153,37 @@ export function createOs(host: OsHost): OsModule {
   }
 
   const endianness = primitive(function endianness(): "BE" | "LE" {
-    return unwrap(host.endianness()) === "be" ? "BE" : "LE";
+    return unwrap(() => host.endianness()) === "be" ? "BE" : "LE";
   });
 
   const freemem = primitive(function freemem(): number {
-    return Number(unwrap(host.freemem()));
+    return Number(unwrap(() => host.freemem()));
   });
 
   function getPriority(pid?: number): number {
-    return unwrap(host.getPriority(pid === undefined ? 0 : validateInt32(pid, "pid")));
+    return unwrap(() => host.getPriority(pid === undefined ? 0 : validateInt32(pid, "pid")));
   }
 
   const homedir = primitive(function homedir(): string {
-    return unwrap(host.homedir());
+    return unwrap(() => host.homedir());
   });
 
   const hostname = primitive(function hostname(): string {
-    return unwrap(host.hostname());
+    return unwrap(() => host.hostname());
   });
 
   function loadavg(): number[] {
-    const average = unwrap(host.loadavg());
+    const average = unwrap(() => host.loadavg());
     return [average.one, average.five, average.fifteen];
   }
 
   const machine = primitive(function machine(): string {
-    return unwrap(host.machine());
+    return unwrap(() => host.machine());
   });
 
   function networkInterfaces(): NetworkInterfaces {
     const result: NetworkInterfaces = {};
-    for (const value of unwrap(host.networkInterfaces())) {
+    for (const value of unwrap(() => host.networkInterfaces())) {
       let address: NetworkInterfaceInfo;
       if (value.family === "ipv4") {
         address = {
@@ -216,11 +214,11 @@ export function createOs(host: OsHost): OsModule {
   }
 
   const platform = primitive(function platform(): Platform {
-    return unwrap(host.platform());
+    return unwrap(() => host.platform());
   });
 
   const release = primitive(function release(): string {
-    return unwrap(host.release());
+    return unwrap(() => host.release());
   });
 
   function setPriority(priority: number): void;
@@ -233,23 +231,23 @@ export function createOs(host: OsHost): OsModule {
       -20,
       19,
     );
-    unwrap(host.setPriority(pid, selectedPriority));
+    unwrap(() => host.setPriority(pid, selectedPriority));
   }
 
   const tmpdir = primitive(function tmpdir(): string {
-    return unwrap(host.tmpdir());
+    return unwrap(() => host.tmpdir());
   });
 
   const totalmem = primitive(function totalmem(): number {
-    return Number(unwrap(host.totalmem()));
+    return Number(unwrap(() => host.totalmem()));
   });
 
   const type = primitive(function type(): string {
-    return unwrap(host.type());
+    return unwrap(() => host.type());
   });
 
   const uptime = primitive(function uptime(): number {
-    return unwrap(host.uptime());
+    return unwrap(() => host.uptime());
   });
 
   function userInfo(options?: UserInfoOptionsWithStringEncoding): UserInfo<string>;
@@ -261,7 +259,7 @@ export function createOs(host: OsHost): OsModule {
       const candidate = (options as { encoding?: unknown }).encoding;
       encoding = typeof candidate === "string" ? candidate : undefined;
     }
-    const value = unwrap(host.userInfo(encoding));
+    const value = unwrap(() => host.userInfo(encoding));
     return {
       username: userInfoValue(value.username),
       uid: Number(value.uid),
@@ -272,7 +270,7 @@ export function createOs(host: OsHost): OsModule {
   }
 
   const version = primitive(function version(): string {
-    return unwrap(host.version());
+    return unwrap(() => host.version());
   });
 
   const os: OsModule = {
