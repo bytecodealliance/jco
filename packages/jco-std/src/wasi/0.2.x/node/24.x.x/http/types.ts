@@ -1,3 +1,4 @@
+import type { HostImports } from "../internal/wit-types.js";
 import type { HostErrno, HostErrorBase } from "../internal/wit-types.js";
 
 export type HttpHeaderValue = string | number | readonly string[];
@@ -266,7 +267,10 @@ export interface DirectHttpServer extends Disposable {
 }
 
 export interface DirectHttpServerConstructor {
-  new (options: DirectHttpServerOptions, listener: DirectHttpRequestListener): DirectHttpServer;
+  new (
+    options: DirectHttpServerOptions,
+    listener: DirectHttpRequestListener,
+  ): HostImports<DirectHttpServer>;
 }
 
 export interface DirectHttpHost {
