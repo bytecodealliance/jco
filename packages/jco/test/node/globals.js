@@ -9,6 +9,20 @@ import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
 
 const EXPECTED_REPORT = {
     abort: true,
+    abortCases: {
+        reasonIdentity: true,
+        thrownIdentity: true,
+        dependencyOrder: true,
+        oneEvent: true,
+        alreadyAborted: true,
+        nested: true,
+        empty: true,
+        defaultReason: true,
+        timeout: true,
+        invalidInputs: true,
+        invalidReceiver: true,
+        nativeIdentity: true,
+    },
     base64: true,
     blob: true,
     buffer: true,
@@ -35,7 +49,8 @@ const EXPECTED_REPORT = {
     timers: true,
     transformStream: true,
     url: true,
-    wasm: true,
+    // Update this capability expectation and add execution coverage when the engine supports it.
+    wasm: false,
     writableStream: true,
 };
 
@@ -75,7 +90,11 @@ suite("Node globals", () => {
     });
 
     test.concurrent("maps only globals backed by Jco implementations", () => {
-        expect(nodeGlobals({ bufferModule: "/buffer.js", errorsModule: "/errors.js" })).toEqual({
+        expect(
+            nodeGlobals({ bufferModule: "/buffer.js", errorsModule: "/errors.js", abortGlobalsModule: "/abort.js" }),
+        ).toEqual({
+            AbortController: ["/abort.js", "AbortController"],
+            AbortSignal: ["/abort.js", "AbortSignal"],
             AggregateError: ["/errors.js", "AggregateError"],
             Buffer: ["/buffer.js", "Buffer"],
             DOMException: ["/errors.js", "DOMException"],
@@ -88,6 +107,24 @@ suite("Node globals", () => {
             TypeError: ["/errors.js", "TypeError"],
             URIError: ["/errors.js", "URIError"],
         });
+    });
+
+    test.each([
+        ["export const value = new AbortController();", true],
+        ["export const value = AbortSignal.any([]);", true],
+        ["export const value = 24;", false],
+        ["class AbortSignal {} export const value = new AbortSignal();", false],
+    ])("loads Abort compatibility only for free global references: %s", async (entrySource, included) => {
+        const root = await getTmpDir();
+        const entry = join(root, "entry.js");
+        const abortGlobalsModule = join(root, "abort.js");
+        await writeFile(entry, entrySource);
+        await writeFile(
+            abortGlobalsModule,
+            "globalThis.__ABORT_GLOBAL_MARKER__ = true; export const AbortController = globalThis.AbortController; export const AbortSignal = globalThis.AbortSignal;",
+        );
+        const source = await bundleComponentSource(entry, { inject: nodeGlobals({ abortGlobalsModule }) });
+        expect(source.includes("__ABORT_GLOBAL_MARKER__")).toBe(included);
     });
 
     test.concurrent("injects Buffer when its free identifier is used", async () => {
@@ -155,13 +192,13 @@ suite("Node globals", () => {
         expect(source).not.toContain("__BUFFER_GLOBAL_MARKER__");
     });
 
-    // TODO(fix): ComponentizeJS 0.22 lacks WebAssembly and corrupts AbortSignal.any's abort reason.
-    test.skip("provides the supported Node globals to a StarlingMonkey guest", async () => {
+    test("provides the supported Node globals to a StarlingMonkey guest", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-globals",
             entry: "source.js",
             wit: "source.wit",
             bundle: true,
+            copy: true,
             extraArgs: ["--backend", "starlingmonkey"],
         });
         const { instance, cleanup } = await setupAsyncTest({

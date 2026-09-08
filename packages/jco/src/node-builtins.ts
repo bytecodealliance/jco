@@ -65,6 +65,8 @@ const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
 const HTTP_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http-callbacks`;
 const HTTP2_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http2-callbacks`;
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
+const ABORT_GLOBALS_SPECIFIER = "jco:node-abort-globals";
+const ABORT_GLOBALS_MODULE = `${VIRTUAL_PREFIX}abort-globals`;
 const ERROR_GLOBALS_SPECIFIER = "jco:node-error-globals";
 const ERROR_GLOBALS_MODULE = `${VIRTUAL_PREFIX}error-globals`;
 
@@ -87,6 +89,8 @@ export interface NodeErrorGlobalsOptions {
 }
 
 export interface NodeGlobalsOptions extends NodeErrorGlobalsOptions {
+    /** Path to the native Abort globals compatibility adapter (overridable for tests). */
+    abortGlobalsModule?: string;
     /** Path to Jco's audited `node:buffer` adapter (overridable for tests). */
     bufferModule?: string;
 }
@@ -107,12 +111,15 @@ export function nodeErrorGlobals(
 /**
  * Rolldown injection map for Node globals backed by Jco implementations.
  *
- * Web globals already supplied by the component engine are intentionally absent.
+ * Web globals are supplied by the engine; Abort globals have a compatibility adapter
+ * for engines with the legacy variadic AbortSignal.any implementation.
  * Rolldown includes these adapters only when their free identifiers survive bundling.
  */
 export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [module: string, exportName: string]> {
     return {
         ...nodeErrorGlobals(options),
+        AbortController: [options.abortGlobalsModule ?? ABORT_GLOBALS_SPECIFIER, "AbortController"],
+        AbortSignal: [options.abortGlobalsModule ?? ABORT_GLOBALS_SPECIFIER, "AbortSignal"],
         Buffer: [options.bufferModule ?? "node:buffer", "Buffer"],
     };
 }
@@ -273,6 +280,8 @@ export interface NodeBuiltinOptions {
     moduleModule?: string;
     /** Path to jco-std's versioned `node:diagnostics_channel` module (overridable for tests) */
     diagnosticsChannelModule?: string;
+    /** Path to the native Abort globals compatibility adapter (overridable for tests). */
+    abortGlobalsModule?: string;
     /** Path to jco-std's versioned Errors globals module (overridable for tests) */
     errorsModule?: string;
     /** Path to jco-std's versioned `node:events` module (overridable for tests) */
@@ -1006,6 +1015,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const fsModule = () => stdModule(options.fsModule, "fs");
     const fsPromisesModule = () => stdModule(options.fsPromisesModule, "fs/promises");
     const errorsModule = () => stdModule(options.errorsModule, "errors");
+    const abortGlobalsModule = () => stdModule(options.abortGlobalsModule, "abort-globals");
     const dnsModule = (specifier: string) =>
         specifier === "node:dns/promises"
             ? stdModule(options.dnsPromisesModule, "dns/promises")
@@ -1036,6 +1046,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         resolveId(id) {
             if (id.startsWith(VIRTUAL_PREFIX)) {
                 return id;
+            }
+            if (id === ABORT_GLOBALS_SPECIFIER) {
+                return ABORT_GLOBALS_MODULE;
             }
             if (id === ERROR_GLOBALS_SPECIFIER) {
                 return ERROR_GLOBALS_MODULE;
@@ -1171,6 +1184,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             const value = id.slice(VIRTUAL_PREFIX.length);
             if (id === UNENV_BUFFER_CORE) {
                 return unenvBufferCore(options);
+            }
+            if (id === ABORT_GLOBALS_MODULE) {
+                return `export * from ${JSON.stringify(abortGlobalsModule())};`;
             }
             if (id === ERROR_GLOBALS_MODULE) {
                 return `export * from ${JSON.stringify(errorsModule())};`;

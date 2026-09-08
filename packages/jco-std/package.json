@@ -28,6 +28,10 @@
   ],
   "type": "module",
   "exports": {
+    "./wasi/0.2.x/node/24.x.x/abort-globals": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/abort-globals.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/abort-globals.js"
+    },
     "./wasi/0.2.x/node/24.x.x/assert": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/assert/index.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/assert/index.js",
