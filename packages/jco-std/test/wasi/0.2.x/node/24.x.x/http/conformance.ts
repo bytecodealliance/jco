@@ -16,7 +16,6 @@ import {
   serializeHttp1Response,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/http1.js";
 import type {
-  DirectHttpRequestListener,
   DirectHttpServer,
   DirectHttpServerOptions,
   HttpImplementationResponse,
@@ -40,11 +39,11 @@ function clientResponse(): HttpImplementationResponse {
 }
 
 function directHarness(): HttpConformanceHarness {
-  let listener: DirectHttpRequestListener | undefined;
+  let listener: number | undefined;
   const implementation = createDirectHttpImplementation({
     request: () => ({ tag: "ok", val: clientResponse() }),
     Server: class implements DirectHttpServer {
-      constructor(_options: DirectHttpServerOptions, requestListener: DirectHttpRequestListener) {
+      constructor(_options: DirectHttpServerOptions, requestListener: number) {
         listener = requestListener;
       }
 
@@ -91,11 +90,7 @@ function directHarness(): HttpConformanceHarness {
   return {
     implementation,
     async dispatchServerRequest(request) {
-      const result = await listener!.handle(request);
-      if (result.tag === "err") {
-        throw Object.assign(new Error(result.val.message), result.val);
-      }
-      return result.val;
+      return implementation.httpCallbacks.handle(listener!, request);
     },
   };
 }

@@ -2,7 +2,10 @@ import nodeHttp from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { Server, request } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
+import {
+  createHttpHost,
+  request,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
 import type {
   DirectHttpResult,
   DirectHttpServerAddress,
@@ -44,24 +47,21 @@ async function listen(server: nodeHttp.Server): Promise<number> {
 }
 
 describe("node:http direct Node host", () => {
-  test("serves requests through a guest callback resource", async () => {
-    const server = new Server(
-      {},
-      {
-        handle: async (incoming) => ({
-          tag: "ok",
-          val: {
-            statusCode: 202,
-            statusMessage: "Accepted",
-            headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
-            body: new TextEncoder().encode(
-              `${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
-            ),
-          },
-        }),
-        [Symbol.dispose]: () => undefined,
+  test("serves requests through an instance-bound guest callback dispatcher", async () => {
+    const { Server } = createHttpHost(() => ({
+      handle: async (listener, incoming) => {
+        expect(listener).toBe(1);
+        return {
+          statusCode: 202,
+          statusMessage: "Accepted",
+          headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
+          body: new TextEncoder().encode(
+            `${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
+          ),
+        };
       },
-    );
+    }));
+    const server = new Server({}, 1);
     const started = (await server.listen({
       port: 0,
       host: "127.0.0.1",
@@ -90,6 +90,102 @@ describe("node:http direct Node host", () => {
       expect(new TextDecoder().decode(result.val.body)).toBe("POST /resource hello");
     }
     await server.close();
+  });
+
+  test("serializes callbacks, recovers from WIT errors, and drains callbacks after sockets close", async () => {
+    let active = 0;
+    let peak = 0;
+    let calls = 0;
+    let enter!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { Server } = createHttpHost(() => ({
+      async handle(id, incoming) {
+        expect(id).toBe(7);
+        active++;
+        peak = Math.max(peak, active);
+        calls++;
+        try {
+          if (incoming.url === "/error") {
+            throw Object.assign(new Error("component error"), {
+              payload: { name: "Error", message: "guest failed", code: "EIO" },
+            });
+          }
+          if (incoming.url === "/wait") {
+            enter();
+            await gate;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return {
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [],
+            body: new TextEncoder().encode(incoming.url),
+          };
+        } finally {
+          active--;
+        }
+      },
+    }));
+    const server = new Server({}, 7);
+    try {
+      const address = (await server.listen({
+        port: 0,
+        host: "127.0.0.1",
+      })) as DirectHttpResult<DirectHttpServerAddress>;
+      if (address.tag !== "ok" || address.val.tag !== "tcp") {
+        throw new Error("expected TCP address");
+      }
+      const authority = `127.0.0.1:${address.val.val.port}`;
+      const send = (pathWithQuery: string) =>
+        request({
+          method: "GET",
+          scheme: "http",
+          authority,
+          pathWithQuery,
+          headers: [{ name: "Host", value: new TextEncoder().encode(authority) }],
+          body: new Uint8Array(),
+        });
+      const results = await Promise.all([send("/error"), send("/one"), send("/two")]);
+      expect(results[0]).toMatchObject({
+        tag: "ok",
+        val: {
+          statusCode: 500,
+          body: new TextEncoder().encode("guest failed"),
+        },
+      });
+      expect(results.slice(1)).toMatchObject([
+        { tag: "ok", val: { statusCode: 200 } },
+        { tag: "ok", val: { statusCode: 200 } },
+      ]);
+      expect(calls).toBe(3);
+      expect(peak).toBe(1);
+      const waiting = send("/wait");
+      await entered;
+      server.closeAllConnections();
+      let closed = false;
+      const closing = Promise.resolve(server.close()).then((result) => {
+        closed = true;
+        return result;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(closed).toBe(false);
+      release();
+      expect(await closing).toEqual({ tag: "ok", val: true });
+      await waiting;
+      expect(active).toBe(0);
+      expect(calls).toBe(4);
+    } finally {
+      release();
+      server.closeAllConnections();
+      await server.close();
+      server[Symbol.dispose]();
+    }
   });
 
   test("performs the guest-boundary-shaped request through real node:http", async () => {

@@ -1,47 +1,16 @@
 import type { HostImports } from "../../internal/wit-types.js";
 import { callHost } from "../../internal/host-error.js";
+import { serializeNodeError } from "../../internal/http-host.js";
+import { codedError } from "../../errors/core.js";
 import { fromImplementationError } from "../errors.js";
 import type {
+  DirectHttpCallbacks,
   DirectHttpHost,
-  DirectHttpRequestListener,
   DirectHttpServerAddress,
   HttpImplementation,
   HttpRequestHandler,
   HttpServerAddress,
 } from "../types.js";
-
-class RequestListener implements DirectHttpRequestListener {
-  readonly #handler: HttpRequestHandler;
-
-  constructor(handler: HttpRequestHandler) {
-    this.#handler = handler;
-  }
-
-  async handle(request: Parameters<DirectHttpRequestListener["handle"]>[0]) {
-    try {
-      return { tag: "ok" as const, val: await this.#handler(request) };
-    } catch (error) {
-      const value =
-        typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
-      return {
-        tag: "err" as const,
-        val: {
-          name: typeof value.name === "string" ? value.name : "Error",
-          message: typeof value.message === "string" ? value.message : String(error),
-          code: typeof value.code === "string" ? value.code : undefined,
-          syscall: typeof value.syscall === "string" ? value.syscall : undefined,
-          hostname: typeof value.hostname === "string" ? value.hostname : undefined,
-          address: typeof value.address === "string" ? value.address : undefined,
-          port: typeof value.port === "number" ? value.port : undefined,
-        },
-      };
-    }
-  }
-
-  [Symbol.dispose](): void {}
-}
-
-export const httpCallbacks = { RequestListener };
 
 function directAddress(address: DirectHttpServerAddress | undefined): HttpServerAddress | null {
   return address === undefined
@@ -57,23 +26,61 @@ function directAddress(address: DirectHttpServerAddress | undefined): HttpServer
 
 export function createDirectHttpImplementation(
   host: HostImports<DirectHttpHost>,
-): HttpImplementation {
+): HttpImplementation & { httpCallbacks: DirectHttpCallbacks } {
+  // Each implementation (and bundled guest instance) owns its registrations.
+  const listeners = new Map<number, HttpRequestHandler>();
+  let nextListener = 1;
   return {
+    httpCallbacks: {
+      async handle(listener, request) {
+        try {
+          const handler = listeners.get(listener);
+          if (!handler) {
+            throw codedError(
+              new Error("HTTP callback registration is not active"),
+              "ERR_JCO_HTTP_CALLBACK_NOT_FOUND",
+            );
+          }
+          // Exported WIT results use JS return/throw, rather than tagged results.
+          return await handler(request);
+        } catch (error) {
+          throw serializeNodeError(error);
+        }
+      },
+    },
+
     request(options) {
       return callHost(() => host.request(options), fromImplementationError);
     },
 
     createServer(options, handler) {
-      const server = new host.Server(options, new RequestListener(handler));
+      if (nextListener > 0xffff_ffff) {
+        throw codedError(
+          new Error("HTTP callback registrations exhausted"),
+          "ERR_JCO_HTTP_CALLBACK_LIMIT",
+        );
+      }
+      const listener = nextListener++;
+      const server = new host.Server(options, listener);
       return {
         listen(listenOptions) {
-          return directAddress(
-            callHost(() => server.listen(listenOptions), fromImplementationError),
-          )!;
+          listeners.set(listener, handler);
+          try {
+            return directAddress(
+              callHost(() => server.listen(listenOptions), fromImplementationError),
+            )!;
+          } catch (error) {
+            listeners.delete(listener);
+            throw error;
+          }
         },
 
         close() {
-          return callHost(() => server.close(), fromImplementationError);
+          // The host drains accepted callbacks before close returns. On error,
+          // retain the registration because the server may still be active.
+          const wasListening = callHost(() => server.close(), fromImplementationError);
+          listeners.delete(listener);
+          return wasListening;
         },
 
         closeAllConnections() {
