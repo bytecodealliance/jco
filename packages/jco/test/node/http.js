@@ -15,6 +15,7 @@ import {
     injectNodeWitImports,
 } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const modulePaths = {
     httpModule: "/jco/http.js",
@@ -195,7 +196,7 @@ describe("node:http WIT installation", () => {
     );
 });
 
-describe("node:http in a component", () => {
+describe.skipIf(!hasJspi)("node:http in a component", () => {
     test("serves a request through guest -> WIT callback resource -> host node:http", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http-server",
