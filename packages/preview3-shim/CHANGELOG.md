@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0] - 2026-09-08
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ preview2-shim -> v0.24.1, jco-node-fs -> v0.3.2 by @vados-cosmonic
+
+- _(p3-shim)_ update preview2-shim to v0.24.0 by @vados-cosmonic
+
 ## [0.5.0] - 2026-08-23
 
 ### 🐛 Bug Fixes
