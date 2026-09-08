@@ -19,7 +19,7 @@ export function createDirectHttp2Client(
   });
   return {
     ready() {
-      const info = unwrap(session.ready());
+      const info = unwrap(() => session.ready());
       return {
         ...info,
         localSettings: fromDirectSettings(info.localSettings),
@@ -27,23 +27,23 @@ export function createDirectHttp2Client(
       };
     },
     request(headers, requestOptions) {
-      const stream = unwrap(session.request(headers, requestOptions));
+      const stream = unwrap(() => session.request(headers, requestOptions));
       return {
-        write: (chunk) => unwrap(stream.write(chunk)),
-        finish: () => unwrap(stream.finish()),
-        close: (code) => unwrap(stream.close(code)),
+        write: (chunk) => unwrap(() => stream.write(chunk)),
+        finish: () => unwrap(() => stream.finish()),
+        close: (code) => unwrap(() => stream.close(code)),
         id: () => stream.id(),
         state: () => stream.state(),
       };
     },
-    close: () => unwrap(session.close()),
-    destroy: (code) => unwrap(session.destroy(code)),
+    close: () => unwrap(() => session.close()),
+    destroy: (code) => unwrap(() => session.destroy(code)),
     settings(value) {
-      return fromDirectSettings(unwrap(session.settings(toDirectSettings(value))));
+      return fromDirectSettings(unwrap(() => session.settings(toDirectSettings(value))));
     },
-    ping: (payload) => unwrap(session.ping(payload)),
+    ping: (payload) => unwrap(() => session.ping(payload)),
     goaway: (code, lastStreamId, opaqueData) =>
-      unwrap(session.goaway(code, lastStreamId, opaqueData)),
+      unwrap(() => session.goaway(code, lastStreamId, opaqueData)),
     ref: () => session.ref(),
     unref: () => session.unref(),
   };

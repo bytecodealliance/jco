@@ -255,13 +255,23 @@ export interface DirectHttp2ClientSessionConstructor {
 export interface DirectHttp2StreamListener extends Disposable {
   handle(
     stream: Http2IncomingStreamData,
-  ):
-    | DirectHttp2Result<Http2OutgoingResponseData>
-    | Promise<DirectHttp2Result<Http2OutgoingResponseData>>;
+  ): Http2OutgoingResponseData | Promise<Http2OutgoingResponseData>;
 }
 
 export interface DirectHttp2ServerErrorListener extends Disposable {
-  handle(reason: DirectHttp2Error): void;
+  handle(reason: DirectHttp2Error): void | Promise<void>;
+}
+
+export interface DirectHttp2Callbacks {
+  takeStreamListener(
+    id: number,
+  ): DirectHttp2StreamListener | undefined | Promise<DirectHttp2StreamListener | undefined>;
+  takeServerErrorListener(
+    id: number,
+  ):
+    | DirectHttp2ServerErrorListener
+    | undefined
+    | Promise<DirectHttp2ServerErrorListener | undefined>;
 }
 
 export interface DirectHttp2Server extends Disposable {
@@ -278,8 +288,8 @@ export interface DirectHttp2Server extends Disposable {
 export interface DirectHttp2ServerConstructor {
   new (
     options: DirectHttp2ServerOptions,
-    listener: DirectHttp2StreamListener,
-    errorListener: DirectHttp2ServerErrorListener,
+    listener: number,
+    errorListener: number,
   ): DirectHttp2Server;
 }
 

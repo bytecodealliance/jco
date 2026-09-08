@@ -7,6 +7,11 @@
  * one buffered, typed WIT request/response exchange.
  */
 import * as nodeHttp from "node:http";
+import {
+  CallbackResource,
+  createCallbackQueue,
+  retireCallbacks,
+} from "./internal/callback-resource.js";
 
 import {
   fieldsToRawHeaders,
@@ -16,6 +21,7 @@ import {
 import type {
   DirectHttpListenOptions,
   DirectHttpRequest,
+  DirectHttpRequestListener,
   DirectHttpCallbacks,
   DirectHttpIncomingRequest,
   DirectHttpOutgoingResponse,
@@ -308,22 +314,33 @@ class NodeHttpServer {
   }
 }
 
-/** Bind one host provider to one component's exported dispatcher after instantiation. */
+/** Bind one host provider to one component's exported callback resources. */
 export function createHttpHost(callbacks: () => DirectHttpCallbacks) {
-  // ComponentizeJS callbacks share a guest event loop. Serialize entry while
-  // still allowing Node to collect multiple requests and their bodies.
-  let pending = Promise.resolve();
-  const dispatch = (listener: number, incoming: DirectHttpIncomingRequest) => {
-    const result = pending.then(() => callbacks().handle(listener, incoming));
-    pending = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  };
+  const enqueue = createCallbackQueue();
   class Server extends NodeHttpServer {
+    readonly #listener: CallbackResource<DirectHttpRequestListener>;
+
     constructor(options: DirectHttpServerOptions, listener: number) {
-      super(options, (incoming) => dispatch(listener, incoming));
+      const resource = new CallbackResource(
+        () => callbacks().takeRequestListener(listener),
+        "ERR_JCO_HTTP_CALLBACK_NOT_FOUND",
+      );
+      super(options, (incoming) => enqueue(async () => (await resource.get()).handle(incoming)));
+      this.#listener = resource;
+    }
+
+    override async close(): AsyncResult<boolean> {
+      const result = await super.close();
+      if (result.tag === "ok") {
+        retireCallbacks(enqueue, this.#listener);
+      }
+      return result;
+    }
+
+    override [Symbol.dispose](): void {
+      super[Symbol.dispose]();
+      // A resource destructor must not synchronously re-enter the guest.
+      void this.close();
     }
   }
   return { request, Server: Server as unknown as DirectHttpServerConstructor };

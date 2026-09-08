@@ -1,11 +1,12 @@
 import * as host from "jco:node/http2@0.1.0";
 
 import { createHttp2 } from "./http2/core.js";
-import { createDirectHttp2Implementation, http2Callbacks } from "./http2/impl/direct/index.js";
+import { createDirectHttp2Implementation } from "./http2/impl/direct/index.js";
 
-const http2 = createHttp2(createDirectHttp2Implementation(host));
+const implementation = createDirectHttp2Implementation(host);
+const http2 = createHttp2(implementation);
 
-export { http2Callbacks };
+export const http2Callbacks = implementation.http2Callbacks;
 
 export const connect = http2.connect;
 export const constants = http2.constants;

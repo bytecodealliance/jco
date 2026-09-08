@@ -2,6 +2,10 @@ package test:http2;
 
 world component {
   export start-server: func() -> u16;
+  export start-secure-server: func(key: list<u8>, cert: list<u8>) -> u16;
+  export restart-server: func() -> u16;
+  export count: func() -> u32;
+  export last-error: func() -> string;
   export serve-one: func();
   export stop-server: func();
   export run-client: func(authority: string, path: string, request-authority: string) -> string;
