@@ -11,6 +11,10 @@ export const LINTER_PATH = fileURLToPath(new URL("../../../node_modules/oxlint/b
 
 export const AsyncFunction = (async () => {}).constructor;
 
+// Node 22's experimental JSPI exposes the older Suspender API, which cannot
+// instantiate bindings that use promising/Suspending, even with its JSPI flag.
+export const hasJspi = typeof WebAssembly.promising === "function" && typeof WebAssembly.Suspending === "function";
+
 /** Path to Jco JS script */
 export const JCO_JS_PATH = fileURLToPath(new URL("../dist/jco.js", import.meta.url));
 

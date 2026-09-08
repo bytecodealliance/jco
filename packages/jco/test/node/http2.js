@@ -11,6 +11,7 @@ import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
 import { HTTP2_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { HTTP2_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const modulePaths = {
     http2Module: "/jco/http2.js",
@@ -169,7 +170,25 @@ describe("node:http2 WIT installation", () => {
     });
 });
 
-describe("node:http2 in a fully formed component", () => {
+test("reports an HTTP/2 component server startup failure without waiting for a port", async () => {
+    const root = await getTmpDir();
+    const component = join(root, "failed-server.mjs");
+    await writeFile(
+        component,
+        `
+export async function instantiate() {
+    return {
+        runClient() { return "{}"; },
+        startServer() { throw new Error("test server startup failed"); },
+    };
+}
+`,
+    );
+    const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
+    await expect(exec(runner, component)).rejects.toThrow(/HTTP\/2 server exited before announcing its port/);
+}, 10_000);
+
+describe.skipIf(!hasJspi)("node:http2 in a fully formed component", () => {
     const expectedLocalReport = {
         local: { status: 201, contentType: "text/plain", body: "large:POST:/large:131072:x:x" },
         guest: { length: 131072, first: "s", last: "s" },
