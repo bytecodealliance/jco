@@ -2,14 +2,12 @@ import { assert, expect, suite, test } from "vitest";
 
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { DNS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
 
-const NODE_HOST = pathToFileURL(
-    fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/dns-host-node.js", import.meta.url)),
-).href;
+const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node");
 
 suite("node:dns in a component", () => {
     test.concurrent("installs the DNS WIT dependency without duplicating it", async () => {
@@ -27,7 +25,7 @@ suite("node:dns in a component", () => {
         expect((await readFile(world, "utf8")).match(/import jco:node\/dns@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    // TODO(unskip): CI cannot resolve the workspace-built jco-std dns-host-node adapter (PR #2080).
+    // TODO(unskip): needs a jco-std release that accepts unwrapped DNS host results (PR #2080).
     test.skip("componentizes and resolves example.com through the opt-in Node host", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-dns",
@@ -38,11 +36,13 @@ suite("node:dns in a component", () => {
         assert.include(stderr, "Jco added generated WIT import jco:node/dns@0.1.0");
 
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            asyncMode: "jspi",
             component: { name: "node-dns", path: componentPath, skipInstantiation: true },
             jco: {
                 transpile: {
                     extraArgs: {
                         asyncExports: ["run"],
+                        asyncImports: ["jco:node/dns@0.1.0#resolve4"],
                         map: {
                             "jco:node/dns@0.1.0": NODE_HOST,
                         },
