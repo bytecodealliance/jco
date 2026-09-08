@@ -12,10 +12,10 @@
         "all": "pnpm run build && pnpm run test"
     },
     "dependencies": {
-        "@bytecodealliance/preview2-shim": "workspace:*"
+        "@bytecodealliance/preview2-shim": "^0.24.1"
     },
     "devDependencies": {
-        "@bytecodealliance/jco": "workspace:*",
+        "@bytecodealliance/jco": "^1.32.1",
         "puppeteer": "catalog:"
     }
 }

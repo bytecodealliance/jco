@@ -90,12 +90,12 @@ importers:
   examples/components/browser-p2-shims:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: workspace:*
-        version: link:../../../packages/preview2-shim
+        specifier: ^0.24.1
+        version: 0.24.1
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: ^1.32.1
+        version: 1.32.1
       puppeteer:
         specifier: 'catalog:'
         version: 25.4.0(yauzl@2.10.0)
@@ -188,12 +188,12 @@ importers:
   examples/components/native-messaging:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: workspace:*
-        version: link:../../../packages/preview2-shim
+        specifier: ^0.24.1
+        version: 0.24.1
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: ^1.32.1
+        version: 1.32.1
       puppeteer:
         specifier: 'catalog:'
         version: 25.4.0(yauzl@2.10.0)
@@ -325,11 +325,11 @@ importers:
         specifier: 1.31.0
         version: 1.31.0
       '@bytecodealliance/jco-transpile':
-        specifier: workspace:*
-        version: link:../../../packages/jco-transpile
+        specifier: ^0.13.0
+        version: 0.13.0
       '@bytecodealliance/preview2-shim':
-        specifier: workspace:*
-        version: link:../../../packages/preview2-shim
+        specifier: ^0.24.1
+        version: 0.24.1
     devDependencies:
       '@types/node':
         specifier: ^24.12.4
@@ -796,6 +796,9 @@ packages:
   '@bytecodealliance/jco-transpile@0.11.0':
     resolution: {integrity: sha512-0mTr0qGd3Y55BczPO127NTgfY/lSpRgDMElifTnSzbidsyAo4wa4zrSoqwQpBrSiJvXqTLGm1sRT2zkwGaGelw==}
 
+  '@bytecodealliance/jco-transpile@0.12.1':
+    resolution: {integrity: sha512-8bAYnPAkuHf8OVDeXfpDyEwymPPN6KUwzAk//cO7ixT8dFgYN1pKxBJRX4SXIKlfCjEYepJe4BVLGtL9v4hsOw==}
+
   '@bytecodealliance/jco-transpile@0.13.0':
     resolution: {integrity: sha512-9hZ2GMqOlYP1Bf7qQ8v3sCsmkFoXGbgi0HtjHipzrgyk+9GGDzvvbehTGe0oM54rcbKJacvyjpPDn7wtpgzwYA==}
 
@@ -810,6 +813,10 @@ packages:
     resolution: {integrity: sha512-prA+SuDDLrTYK4+eL34dqMPLoPpjewYcCqxl88by4B04yBQF8g1wyzmekCOWR2/pJ7GGe4akJjnjugKPR16eQg==}
     hasBin: true
 
+  '@bytecodealliance/jco@1.32.1':
+    resolution: {integrity: sha512-9w/AZsF3Kax39KnJso/Y7Xrql4SpBJBs5KnE8m0+N3nrqmq12vvQs2kiNbfeGTMAFsbKo5xgYbO40ldPo933AQ==}
+    hasBin: true
+
   '@bytecodealliance/preview2-shim@0.17.9':
     resolution: {integrity: sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA==}
 
@@ -818,6 +825,9 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.21.0':
     resolution: {integrity: sha512-rl1NnsvBlL6Q912BUkYotiZ6L/LE8SJUnvJOuElp/kjULHnAaz8Zn4qeBiiiRmQcoZGYXXrW5dhEbPeYtcxXXQ==}
+
+  '@bytecodealliance/preview2-shim@0.22.0':
+    resolution: {integrity: sha512-xQclicSPicWpEkCJ7f4JiI1JuxZcktmVExh++fDxerPfP+MknUd7Yx3jjk5R9uYhTD9bdefYHw8J0zehXGQL1A==}
 
   '@bytecodealliance/preview2-shim@0.24.1':
     resolution: {integrity: sha512-QGZsKD5M76xBhwu3BzLWqYDEpaMX90QWrrfhkQPn2pN9t378koumtdAVH4lr25mqGCZt10YNXkWvyWkw/vJbLQ==}
@@ -830,6 +840,9 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.4.0':
     resolution: {integrity: sha512-BSObtycxeNmR+aVJ6QnSR6OxxMBj+Tv4/CZ/VsKtcJsaaUwLe7CEiiu+GrET0mChocTw6mMfQ7DmPxwWoWnMdQ==}
+
+  '@bytecodealliance/preview3-shim@0.5.0':
+    resolution: {integrity: sha512-Tse27SdCca9cNU/GAXyP4cTxjiO681DOCCIrkcPXMu0D0H+VsXk4KtwTMHnbbT4lqmoVsunLZiDUUvyUI0PQBg==}
 
   '@bytecodealliance/preview3-shim@0.6.0':
     resolution: {integrity: sha512-DCAswwLHjOUUIt8P73dftlD+N+sGKEs0CjO2uYZb6oirRO+w9uXMAGQtxqB5EcCUQu0y5uQeQJjr507uIo1Wmg==}
@@ -4888,6 +4901,13 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
+  '@bytecodealliance/jco-transpile@0.12.1':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.22.0
+      '@bytecodealliance/preview3-shim': 0.5.0
+      binaryen: 130.0.0
+      oxc-minify: 0.136.0
+
   '@bytecodealliance/jco-transpile@0.13.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.24.1
@@ -4930,11 +4950,29 @@ snapshots:
       typescript: 7.0.2
       typescript-compiler-api: typescript@6.0.3
 
+  '@bytecodealliance/jco@1.32.1':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.22.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-transpile': 0.12.1
+      '@bytecodealliance/preview2-shim': 0.22.0
+      binaryen: 130.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.4.3
+      mkdirp: 3.0.1
+      rolldown: 1.2.4
+      typescript: 7.0.2
+      typescript-compiler-api: typescript@6.0.3
+
   '@bytecodealliance/preview2-shim@0.17.9': {}
 
   '@bytecodealliance/preview2-shim@0.19.0': {}
 
   '@bytecodealliance/preview2-shim@0.21.0': {}
+
+  '@bytecodealliance/preview2-shim@0.22.0':
+    dependencies:
+      '@bytecodealliance/jco-node-fs': 0.2.0
 
   '@bytecodealliance/preview2-shim@0.24.1':
     dependencies:
@@ -4951,6 +4989,11 @@ snapshots:
   '@bytecodealliance/preview3-shim@0.4.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.21.0
+
+  '@bytecodealliance/preview3-shim@0.5.0':
+    dependencies:
+      '@bytecodealliance/jco-node-fs': 0.2.0
+      '@bytecodealliance/preview2-shim': 0.22.0
 
   '@bytecodealliance/preview3-shim@0.6.0':
     dependencies:
