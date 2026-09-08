@@ -1,6 +1,6 @@
 package jco:node@0.1.0;
 
-/// Guest-owned callbacks used by the direct Node-compatible HTTP implementation.
+/// Guest callback dispatcher used by the direct Node-compatible HTTP implementation.
 interface http-callbacks {
   variant errno {
     number(s64),
@@ -40,15 +40,12 @@ interface http-callbacks {
     body: list<u8>,
   }
 
-  resource request-listener {
-    handle: func(request: incoming-request) -> result<outgoing-response, error>;
-  }
+  /// The registration belongs to the guest instance and remains live until its server closes.
+  handle: func(listener: u32, request: incoming-request) -> result<outgoing-response, error>;
 }
 
 /// Typed host boundary for Node-compatible HTTP clients and servers.
 interface http {
-  use http-callbacks.{request-listener};
-
   variant errno {
     number(s64),
     symbolic(string),
@@ -130,7 +127,7 @@ interface http {
   request: func(options: request-options) -> result<response, error>;
 
   resource server {
-    constructor(options: server-options, listener: own<request-listener>);
+    constructor(options: server-options, listener: u32);
     listen: func(options: listen-options) -> result<server-address, error>;
     close: func() -> result<bool, error>;
     close-all-connections: func() -> result<_, error>;

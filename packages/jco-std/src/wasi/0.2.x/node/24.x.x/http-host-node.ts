@@ -16,7 +16,9 @@ import {
 import type {
   DirectHttpListenOptions,
   DirectHttpRequest,
-  DirectHttpRequestListener,
+  DirectHttpCallbacks,
+  DirectHttpIncomingRequest,
+  DirectHttpOutgoingResponse,
   DirectHttpResponse,
   DirectHttpResult,
   DirectHttpServerAddress,
@@ -134,52 +136,71 @@ function serverAddress(
 }
 
 class NodeHttpServer {
-  readonly #listener: DirectHttpRequestListener;
+  readonly #pending = new Set<Promise<void>>();
   readonly #server: nodeHttp.Server;
 
-  constructor(options: DirectHttpServerOptions, listener: DirectHttpRequestListener) {
-    this.#listener = listener;
-    this.#server = nodeHttp.createServer(nodeServerOptions(options), async (request, response) => {
-      try {
-        const chunks: Uint8Array[] = [];
-        for await (const chunk of request) {
-          chunks.push(typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk);
-        }
-        const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-        const body = new Uint8Array(size);
-        let offset = 0;
-        for (const chunk of chunks) {
-          body.set(chunk, offset);
-          offset += chunk.byteLength;
-        }
-        const result = await listener.handle({
-          method: request.method ?? "GET",
-          url: request.url ?? "/",
-          httpVersion: request.httpVersion,
-          headers: rawHeadersToFields(request.rawHeaders),
-          body,
-          remoteAddress: request.socket.remoteAddress,
-          remotePort: request.socket.remotePort,
-        });
-        if (result.tag === "err") {
-          throw Object.assign(new Error(result.val.message), result.val);
-        }
-        response.writeHead(
-          result.val.statusCode,
-          result.val.statusMessage,
-          fieldsToRawHeaders(result.val.headers),
-        );
-        response.end(result.val.body);
-      } catch (error) {
-        if (!response.headersSent) {
-          response.statusCode = 500;
-          response.setHeader("content-type", "text/plain; charset=utf-8");
-          response.end(error instanceof Error ? error.message : String(error));
-        } else {
-          response.destroy(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
+  constructor(
+    options: DirectHttpServerOptions,
+    handle: (request: DirectHttpIncomingRequest) => Promise<DirectHttpOutgoingResponse>,
+  ) {
+    this.#server = nodeHttp.createServer(nodeServerOptions(options), (request, response) => {
+      const pending = this.#handle(handle, request, response);
+      this.#pending.add(pending);
+      const complete = () => {
+        this.#pending.delete(pending);
+      };
+      void pending.then(complete, complete);
     });
+  }
+
+  async #handle(
+    handle: (request: DirectHttpIncomingRequest) => Promise<DirectHttpOutgoingResponse>,
+    request: nodeHttp.IncomingMessage,
+    response: nodeHttp.ServerResponse,
+  ): Promise<void> {
+    try {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of request) {
+        chunks.push(typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk);
+      }
+      const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+      const body = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        body.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      const result = await handle({
+        method: request.method ?? "GET",
+        url: request.url ?? "/",
+        httpVersion: request.httpVersion,
+        headers: rawHeadersToFields(request.rawHeaders),
+        body,
+        remoteAddress: request.socket.remoteAddress,
+        remotePort: request.socket.remotePort,
+      });
+      response.writeHead(
+        result.statusCode,
+        result.statusMessage,
+        fieldsToRawHeaders(result.headers),
+      );
+      response.end(result.body);
+    } catch (caught) {
+      const value =
+        typeof caught === "object" && caught !== null && "payload" in caught
+          ? caught.payload
+          : caught;
+      const serialized = serializeNodeError(value);
+      const error =
+        value instanceof Error ? value : Object.assign(new Error(serialized.message), serialized);
+      if (!response.headersSent) {
+        response.statusCode = 500;
+        response.setHeader("content-type", "text/plain; charset=utf-8");
+        response.end(error.message);
+      } else {
+        response.destroy(error);
+      }
+    }
   }
 
   async listen(options: DirectHttpListenOptions): AsyncResult<DirectHttpServerAddress> {
@@ -226,14 +247,14 @@ class NodeHttpServer {
 
   async close(): AsyncResult<boolean> {
     const wasListening = this.#server.listening;
-    if (!wasListening) {
-      return { tag: "ok", val: false };
-    }
     try {
-      await new Promise<void>((resolve, reject) => {
-        this.#server.close((error) => (error ? reject(error) : resolve()));
-      });
-      return { tag: "ok", val: true };
+      if (wasListening) {
+        await new Promise<void>((resolve, reject) => {
+          this.#server.close((error) => (error ? reject(error) : resolve()));
+        });
+      }
+      await Promise.all(this.#pending);
+      return { tag: "ok", val: wasListening };
     } catch (error) {
       return { tag: "err", val: serializeNodeError(error) };
     }
@@ -283,10 +304,37 @@ class NodeHttpServer {
 
   [Symbol.dispose](): void {
     this.#server.close();
-    this.#listener[Symbol.dispose]();
+    this.#server.closeAllConnections();
   }
 }
 
-export const Server = NodeHttpServer as unknown as DirectHttpServerConstructor;
+/** Bind one host provider to one component's exported dispatcher after instantiation. */
+export function createHttpHost(callbacks: () => DirectHttpCallbacks) {
+  // ComponentizeJS callbacks share a guest event loop. Serialize entry while
+  // still allowing Node to collect multiple requests and their bodies.
+  let pending = Promise.resolve();
+  const dispatch = (listener: number, incoming: DirectHttpIncomingRequest) => {
+    const result = pending.then(() => callbacks().handle(listener, incoming));
+    pending = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+  class Server extends NodeHttpServer {
+    constructor(options: DirectHttpServerOptions, listener: number) {
+      super(options, (incoming) => dispatch(listener, incoming));
+    }
+  }
+  return { request, Server: Server as unknown as DirectHttpServerConstructor };
+}
 
-export default { request, Server };
+// Client-only mappings may still import this module directly. Servers require
+// an instance-bound provider so callback IDs cannot cross component instances.
+export const Server = class {
+  constructor() {
+    throw new Error("HTTP servers require createHttpHost(() => instance.httpCallbacks)");
+  }
+} as unknown as DirectHttpServerConstructor;
+
+export default { request, Server, createHttpHost };

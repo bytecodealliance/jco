@@ -247,12 +247,12 @@ export type DirectHttpIncomingRequest = HttpIncomingRequestData;
 
 export type DirectHttpOutgoingResponse = HttpOutgoingResponseData;
 
-export interface DirectHttpRequestListener extends Disposable {
+/** JS return/throw convention for the guest's exported callback dispatcher. */
+export interface DirectHttpCallbacks {
   handle(
+    listener: number,
     request: DirectHttpIncomingRequest,
-  ):
-    | DirectHttpResult<DirectHttpOutgoingResponse>
-    | Promise<DirectHttpResult<DirectHttpOutgoingResponse>>;
+  ): DirectHttpOutgoingResponse | Promise<DirectHttpOutgoingResponse>;
 }
 
 export interface DirectHttpServer extends Disposable {
@@ -267,10 +267,7 @@ export interface DirectHttpServer extends Disposable {
 }
 
 export interface DirectHttpServerConstructor {
-  new (
-    options: DirectHttpServerOptions,
-    listener: DirectHttpRequestListener,
-  ): HostImports<DirectHttpServer>;
+  new (options: DirectHttpServerOptions, listener: number): HostImports<DirectHttpServer>;
 }
 
 export interface DirectHttpHost {
