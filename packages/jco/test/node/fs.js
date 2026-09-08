@@ -1,6 +1,5 @@
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { assert, expect, suite, test } from "vitest";
 
@@ -8,9 +7,7 @@ import { FS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js"
 import { componentizeFixture, getTmpDir, transpileComponent } from "../helpers.js";
 
 /** jco-std's Node host adapter, which an application must opt into explicitly. */
-const NODE_HOST = pathToFileURL(
-    fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/fs-host-node.js", import.meta.url)),
-).href;
+const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node");
 
 suite("node:fs in a component", () => {
     test.concurrent("injects one filesystem capability into the selected world", async () => {
@@ -41,7 +38,7 @@ suite("node:fs in a component", () => {
         }
     });
 
-    // TODO(unskip): CI cannot resolve the workspace-built jco-std fs-host-node adapter (PR #2080).
+    // TODO(unskip): needs a jco-std release with unwrapped host results and cross-realm byte handling (PR #2080).
     test.skip("componentizes sync, callback, and promise APIs through the opt-in Node host", async () => {
         const { componentPath, fixtureDir, outputDir, stderr } = await componentizeFixture({
             fixture: "node-fs",
