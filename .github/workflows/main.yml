@@ -194,6 +194,10 @@ jobs:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
 
+      # Temporarily exercise unpublished jco-std fixes through the workspace dependency.
+      - name: Build workspace jco-std
+        run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
+
       - name: Test jco (node@lts)
         if: matrix.node != 'latest'
         working-directory: packages/jco
