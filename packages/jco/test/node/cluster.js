@@ -1,15 +1,13 @@
 import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { assert, suite, test } from "vitest";
 
 import { componentizeFixture, exec, transpileComponent } from "../helpers.js";
 
 /** jco-std's Node host adapter, which an application must opt into explicitly. */
-const NODE_HOST = pathToFileURL(
-    fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/cluster-host-node.js", import.meta.url)),
-).href;
+const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host/node");
 
 /** Build a cluster fixture from a copy, since componentizing rewrites its world in place. */
 async function buildClusterFixture(fixture, name) {
@@ -34,8 +32,7 @@ async function buildClusterFixture(fixture, name) {
 }
 
 suite("node:cluster in a component", () => {
-    // TODO(unskip): CI cannot resolve the workspace-built jco-std cluster-host-node adapter (PR #2080).
-    test.skip("componentizes and calls through the opt-in Node host", async () => {
+    test("componentizes and calls through the opt-in Node host", async () => {
         const { appDir, modulePath, stderr } = await buildClusterFixture("node-cluster", "node-cluster");
 
         assert.include(stderr, "Jco added generated WIT import jco:node/cluster@0.1.0");
@@ -61,8 +58,7 @@ suite("node:cluster in a component", () => {
 
     // Driven from a spawned script rather than in-process: cluster.fork() re-executes the current
     // entry, so forking from inside the test runner would fork the runner itself.
-    // TODO(unskip): the spawned worker cannot resolve the workspace-built cluster-host-node adapter (PR #2080).
-    test.skip("forks a worker that runs the component and reports back", async () => {
+    test("forks a worker that runs the component and reports back", async () => {
         const { outputDir, modulePath } = await buildClusterFixture("node-cluster-roundtrip", "node-cluster-rt");
 
         // The runner is a bare node process outside the workspace, so give the transpiled output a
