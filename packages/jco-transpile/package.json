@@ -73,7 +73,7 @@
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.24.1",
-        "@bytecodealliance/preview3-shim": "^0.5.0",
+        "@bytecodealliance/preview3-shim": "^0.6.0",
         "binaryen": "^130.0.0",
         "oxc-minify": "^0.136.0"
     },
