@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.1] - 2026-09-08
+
+### 🐛 Bug Fixes
+
+- _(std)_ make OS bindings work across component boundaries by @vados-cosmonic
+
+- _(std)_ defer glob matcher initialization until runtime by @vados-cosmonic
+
+- _(std)_ redeem HTTP callbacks as exported resources by @vados-cosmonic
+
+- _(std)_ dispatch HTTP callbacks by component registration by @vados-cosmonic
+
+- _(std)_ translate HTTP headers and wrapped WASI errors by @vados-cosmonic
+
+- _(std)_ accept unwrapped direct HTTP host results by @vados-cosmonic
+
+- _(std)_ accept unwrapped DNS host results by @vados-cosmonic
+
+- _(std)_ accept filesystem bytes from other realms by @vados-cosmonic
+
+- _(std)_ accept unwrapped filesystem host results by @vados-cosmonic
+
 ## [0.3.0] - 2026-09-08
 
 ### 🚀 Features
