@@ -7,6 +7,7 @@ import { expect, suite, test } from "vitest";
 
 import { INSPECTOR_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, transpileComponent } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 /** jco-std's Node host adapter, which an application must opt into explicitly. */
 const NODE_HOST = pathToFileURL(
@@ -40,7 +41,7 @@ suite("node:inspector WIT injection", () => {
     });
 });
 
-suite("node:inspector in a component", () => {
+suite.skipIf(!hasJspi)("node:inspector in a component", () => {
     test("drives the real inspector through the opt-in Node host", async () => {
         // Built from a copy: componentizing rewrites the world in place to add the import/export.
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
