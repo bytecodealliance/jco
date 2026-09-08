@@ -127,8 +127,7 @@ suite("API", () => {
         assert.ok(componentParsed);
     });
 
-    // TODO(unskip): reconcile the component metadata count (expected 5, received 4) after the release (PR #2080).
-    test.concurrent.skip("Wit & New", async () => {
+    test.concurrent("Wit & New", async () => {
         const wit = await readFile(`test/fixtures/wit/flavorful/flavorful.wit`, "utf8");
 
         const generatedComponent = await componentEmbed({
@@ -151,15 +150,16 @@ suite("API", () => {
         }
 
         const meta = await metadataShow(newComponent);
+        // wit-component 0.258 folds the start shim into the fixup module.
         assert.deepStrictEqual(meta[0].metaType, {
             tag: "component",
-            val: 5,
+            val: 4,
         });
         assert.deepStrictEqual(meta[1].producers, [
             [
                 "processed-by",
                 [
-                    ["wit-component", "0.254.0"],
+                    ["wit-component", "0.258.0"],
                     ["dummy-gen", "test"],
                 ],
             ],
@@ -167,8 +167,7 @@ suite("API", () => {
         ]);
     });
 
-    // TODO(unskip): reconcile the component metadata count (expected 5, received 4) after the release (PR #2080).
-    test.concurrent.skip("Multi-file WIT", async () => {
+    test.concurrent("Multi-file WIT", async () => {
         const witPath =
             (isWindows ? "//?/" : "") +
             fileURLToPath(new URL("./fixtures/componentize/simple-resource/source.wit", import.meta.url));
@@ -193,16 +192,17 @@ suite("API", () => {
         }
 
         const meta = await metadataShow(newComponent);
+        // wit-component 0.258 folds the start shim into the fixup module.
         assert.deepStrictEqual(meta[0].metaType, {
             tag: "component",
-            val: 5,
+            val: 4,
         });
         assert.deepStrictEqual(meta[1].producers, [
             [
                 "processed-by",
                 [
                     // NOTE: this is the current version *in the released jco-transpile* jco uses
-                    ["wit-component", "0.254.0"],
+                    ["wit-component", "0.258.0"],
                     ["dummy-gen", "test"],
                 ],
             ],
