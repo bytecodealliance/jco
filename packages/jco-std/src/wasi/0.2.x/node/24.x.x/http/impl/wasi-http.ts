@@ -1,6 +1,6 @@
 import { concatBytes } from "../body.js";
 import { STATUS_CODES } from "../constants.js";
-import { fromImplementationError } from "../errors.js";
+import { fromImplementationError, unsupported, wasiErrorCode } from "../errors.js";
 import type { HttpHeaderField, HttpImplementation } from "../types.js";
 
 export type WasiHttpMethod =
@@ -131,17 +131,6 @@ function error(errorCode: WasiHttpErrorCode, syscall: string): Error {
   });
 }
 
-function streamErrorCode(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "object" && value !== null && "tag" in value) {
-    const tag = (value as { tag?: unknown }).tag;
-    return typeof tag === "string" ? tag : undefined;
-  }
-  return undefined;
-}
-
 function method(value: string): WasiHttpMethod {
   const standard = new Set([
     "get",
@@ -222,7 +211,7 @@ function readBody(stream: WasiHttpInputStream): Uint8Array {
     try {
       chunks.push(stream.blockingRead(65_536n));
     } catch (caught) {
-      if (streamErrorCode(caught) !== "closed") {
+      if (wasiErrorCode(caught) !== "closed") {
         throw caught;
       }
       return concatBytes(chunks);
@@ -241,8 +230,23 @@ export function createWasiHttpImplementation(provider: WasiHttpProvider): HttpIm
 
     request(request) {
       try {
+        const host = request.headers.find(({ name }) => name.toLowerCase() === "host");
+        if (
+          host &&
+          new TextDecoder().decode(host.value).toLowerCase() !== request.authority.toLowerCase()
+        ) {
+          unsupported(
+            "http.request",
+            "wasi:http cannot override the Host header separately from the request authority",
+          );
+        }
         const fields = provider.types.Fields.fromList(
-          request.headers.map(({ name, value }): [string, Uint8Array] => [name, value]),
+          // WASI carries Host in the authority and owns connection management.
+          request.headers
+            .filter(
+              ({ name }) => !["host", "connection", "keep-alive"].includes(name.toLowerCase()),
+            )
+            .map(({ name, value }): [string, Uint8Array] => [name, value]),
         );
         const outgoing = new provider.types.OutgoingRequest(fields);
         outgoing.setMethod(method(request.method));
@@ -300,7 +304,7 @@ export function createWasiHttpImplementation(provider: WasiHttpProvider): HttpIm
         if (caught instanceof Error && "code" in caught) {
           throw caught;
         }
-        throw error({ tag: streamErrorCode(caught) ?? "internal-error" }, "request");
+        throw error({ tag: wasiErrorCode(caught) ?? "internal-error" }, "request");
       }
     },
   };

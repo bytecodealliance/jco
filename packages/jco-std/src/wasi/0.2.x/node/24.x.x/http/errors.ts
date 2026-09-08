@@ -114,3 +114,21 @@ export function fromImplementationError(value: HttpErrorData | DirectHttpError):
   error.port = value.port;
   return error;
 }
+
+/** Read a WASI error code from either a raw payload or a ComponentError wrapper. */
+export function wasiErrorCode(error: unknown): string | undefined {
+  const value =
+    typeof error === "object" && error !== null && "payload" in error ? error.payload : error;
+  if (typeof value === "string") {
+    return value;
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "tag" in value &&
+    typeof value.tag === "string"
+  ) {
+    return value.tag;
+  }
+  return undefined;
+}
