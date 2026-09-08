@@ -608,7 +608,10 @@ When the selected world is missing a required import or callback export, Jco
 edits that world in place, adds generated comments and declarations, installs
 the corresponding WIT packages under `wit/deps`, and prints a warning. Direct
 servers use an imported host-owned `server` resource plus an exported
-guest-owned request-listener resource. Jco re-bundles a small entry wrapper so
+callback dispatcher. Each server passes a guest registration ID to its host;
+the guest retains its handler while listening and releases it after close.
+Node hosts use `createHttpHost(() => instance.httpCallbacks)` from the opt-in
+provider to bind callbacks to one component instance. Jco re-bundles a small entry wrapper so
 the callback implementation is present on the final component export. Existing
 declarations and dependency files are preserved, aliases are recognized, and
 repeated componentization does not add duplicates. Use `--world-name` when the
