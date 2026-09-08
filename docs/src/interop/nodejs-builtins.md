@@ -182,9 +182,8 @@ resolve that specifier. Bundled code can use `Buffer` without importing
 free `Buffer` identifier is referenced. A source graph that never uses it pays no
 bundle-size or initialization cost.
 
-The component engine already supplies the portable Web globals shared with Node,
-so Jco leaves their identities and behavior untouched. With ComponentizeJS 0.22.0's
-pinned StarlingMonkey runtime, this includes:
+The component engine supplies the portable Web globals shared with Node. With
+ComponentizeJS 0.22.0's pinned StarlingMonkey runtime, this includes:
 
 - `AbortController`, `AbortSignal`, `atob`, `btoa`, `Blob`, and `File`;
 - `ByteLengthQueuingStrategy`, `CountQueuingStrategy`, `ReadableStream` and its
@@ -194,8 +193,19 @@ pinned StarlingMonkey runtime, this includes:
   `DOMException`, `Event`, and `EventTarget`;
 - `fetch`, `FormData`, `Headers`, `Request`, and `Response`;
 - `Performance`, `performance`, `queueMicrotask`, timeout/interval functions,
-  `structuredClone`, `TextEncoder`, `TextDecoder`, `URL`, `URLSearchParams`, and
-  `WebAssembly`.
+  `structuredClone`, `TextEncoder`, `TextDecoder`, `URL`, and `URLSearchParams`.
+
+When bundled source references `AbortController` or `AbortSignal`, Jco loads a
+compatibility adapter for the legacy StarlingMonkey abort implementation. It
+preserves the native constructors and signal objects while correcting `any()`'s
+array handling, default reason identity, and `throwIfAborted()`. The adapter
+detects the legacy calling convention and leaves conforming engines untouched.
+
+The current embedded runtime does **not** expose a guest `WebAssembly` API.
+Running the component in a Wasm host does not give its JavaScript code the ability
+to compile or instantiate another Wasm module. Guest-side Wasm execution may be
+supported in the future; the globals test currently asserts that this API is
+absent and should gain execution coverage when the engine provides it.
 
 Some of these retain StarlingMonkey's existing WASI feature requirements, such as
 clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
