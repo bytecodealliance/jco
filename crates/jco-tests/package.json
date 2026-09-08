@@ -4,6 +4,6 @@
     "description": "JavaScript dependencies for the Rust jco test suite",
     "dependencies": {
         "@bytecodealliance/jco-node-fs": "0.2.0",
-        "@bytecodealliance/preview2-shim": "workspace:*"
+        "@bytecodealliance/preview2-shim": "^0.24.1"
     }
 }
