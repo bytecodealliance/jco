@@ -62,9 +62,9 @@ interface os {
   }
 
   record load-average {
-    one: float64,
-    five: float64,
-    fifteen: float64,
+    one: f64,
+    five: f64,
+    fifteen: f64,
   }
 
   enum network-family {
@@ -88,7 +88,7 @@ interface os {
     bytes(list<u8>),
   }
 
-  record user-info {
+  record user-info-record {
     username: user-info-value,
     uid: s64,
     gid: s64,
@@ -113,8 +113,8 @@ interface os {
   set-priority: func(pid: s32, priority: s32) -> result<_, error>;
   tmpdir: func() -> result<string, error>;
   totalmem: func() -> result<u64, error>;
-  type: func() -> result<string, error>;
-  uptime: func() -> result<float64, error>;
-  user-info: func(encoding: option<string>) -> result<user-info, error>;
+  %type: func() -> result<string, error>;
+  uptime: func() -> result<f64, error>;
+  user-info: func(encoding: option<string>) -> result<user-info-record, error>;
   version: func() -> result<string, error>;
 }

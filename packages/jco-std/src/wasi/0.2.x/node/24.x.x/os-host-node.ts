@@ -13,7 +13,10 @@ import {
   serializeOsStaticProperties,
   serializeUserInfo,
 } from "./os/host-utils.js";
-import type { OsHost } from "./os/types.js";
+import type { OsHost as TaggedOsHost } from "./os/types.js";
+import type { HostImports } from "./internal/wit-types.js";
+
+type OsHost = HostImports<TaggedOsHost>;
 
 export const getStaticProperties: OsHost["getStaticProperties"] = () =>
   captureOsCall(() => serializeOsStaticProperties(nodeOs.EOL, nodeOs.devNull, nodeOs.constants));

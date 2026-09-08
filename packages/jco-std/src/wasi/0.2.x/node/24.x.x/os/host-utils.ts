@@ -9,12 +9,10 @@ import type {
   OsHostNetworkInterface,
   OsHostUserInfo,
   OsHostUserInfoValue,
-  OsResult,
   OsStaticProperties,
   UserInfo,
 } from "./types.js";
 import {
-  capture,
   encodeErrno,
   errorRecord,
   serializeHostError,
@@ -40,8 +38,12 @@ export function serializeOsError(error: unknown): OsError {
 }
 
 /** Run a synchronous provider operation and preserve its structured error. */
-export function captureOsCall<T>(operation: () => T): OsResult<T> {
-  return capture(operation, serializeOsError);
+export function captureOsCall<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    throw serializeOsError(error);
+  }
 }
 
 function constantEntries(values: object): OsConstantEntry[] {

@@ -1,5 +1,5 @@
 package jco-fixtures:node-os;
 
 world component {
-    export run: func() -> string;
+    export run: func(denied: bool) -> string;
 }

@@ -5,7 +5,6 @@ import {
   endianness as hostEndianness,
   freemem as hostFreemem,
   getPriority as hostGetPriority,
-  getStaticProperties as hostGetStaticProperties,
   homedir as hostHomedir,
   hostname as hostHostname,
   loadavg as hostLoadavg,
@@ -23,9 +22,12 @@ import {
 } from "jco:node/os@0.1.0";
 
 import { createOs } from "./os/core.js";
+import { POSIX_STATIC_PROPERTIES } from "./os/constants.js";
 
 const os = createOs({
-  getStaticProperties: hostGetStaticProperties,
+  // Module values describe the POSIX/WASI guest. Host imports cannot run during
+  // Wizer initialization; machine information is read by the functions at runtime.
+  getStaticProperties: () => POSIX_STATIC_PROPERTIES,
   arch: hostArch,
   availableParallelism: hostAvailableParallelism,
   cpus: hostCpus,

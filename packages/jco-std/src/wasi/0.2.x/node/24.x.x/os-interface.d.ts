@@ -4,29 +4,28 @@ import type {
   OsHostLoadAverage,
   OsHostNetworkInterface,
   OsHostUserInfo,
-  OsResult,
   OsStaticProperties,
   Platform,
 } from "./os/types.js";
 
-export function getStaticProperties(): OsResult<OsStaticProperties>;
-export function arch(): OsResult<Architecture>;
-export function availableParallelism(): OsResult<number>;
-export function cpus(): OsResult<OsHostCpuInfo[]>;
-export function endianness(): OsResult<"be" | "le">;
-export function freemem(): OsResult<bigint>;
-export function getPriority(pid: number): OsResult<number>;
-export function homedir(): OsResult<string>;
-export function hostname(): OsResult<string>;
-export function loadavg(): OsResult<OsHostLoadAverage>;
-export function machine(): OsResult<string>;
-export function networkInterfaces(): OsResult<OsHostNetworkInterface[]>;
-export function platform(): OsResult<Platform>;
-export function release(): OsResult<string>;
-export function setPriority(pid: number, priority: number): OsResult<void>;
-export function tmpdir(): OsResult<string>;
-export function totalmem(): OsResult<bigint>;
-export function type(): OsResult<string>;
-export function uptime(): OsResult<number>;
-export function userInfo(encoding?: string): OsResult<OsHostUserInfo>;
-export function version(): OsResult<string>;
+export function getStaticProperties(): OsStaticProperties;
+export function arch(): Architecture;
+export function availableParallelism(): number;
+export function cpus(): OsHostCpuInfo[];
+export function endianness(): "be" | "le";
+export function freemem(): bigint;
+export function getPriority(pid: number): number;
+export function homedir(): string;
+export function hostname(): string;
+export function loadavg(): OsHostLoadAverage;
+export function machine(): string;
+export function networkInterfaces(): OsHostNetworkInterface[];
+export function platform(): Platform;
+export function release(): string;
+export function setPriority(pid: number, priority: number): void;
+export function tmpdir(): string;
+export function totalmem(): bigint;
+export function type(): string;
+export function uptime(): number;
+export function userInfo(encoding?: string): OsHostUserInfo;
+export function version(): string;
