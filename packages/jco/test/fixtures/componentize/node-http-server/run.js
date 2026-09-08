@@ -2,11 +2,14 @@ import http from "node:http";
 import { argv, stdout } from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { httpCallbacks } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/direct";
+
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 const { instantiate } = await import(pathToFileURL(argv[2]));
 const imports = new WASIShim().getImportObject();
 imports[argv[3]] = await import(argv[3]);
+imports["jco:node/http-callbacks"] = httpCallbacks;
 const instance = await instantiate(undefined, imports);
 const port = await instance.start();
 
