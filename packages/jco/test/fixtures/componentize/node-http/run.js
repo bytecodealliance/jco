@@ -3,8 +3,6 @@ import { once } from "node:events";
 import { argv, stdout } from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { httpCallbacks } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/impl/direct";
-
 import { withWasiSockets } from "../helpers/wasi-sockets.js";
 
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
@@ -18,7 +16,6 @@ try {
     const imports = withWasiSockets(new WASIShim().getImportObject());
     if (argv[3]) {
         imports[argv[3]] = await import(argv[3]);
-        imports["jco:node/http-callbacks"] = httpCallbacks;
     }
     const instance = await instantiate(undefined, imports);
     stdout.write(`${JSON.stringify(await instance.run(`http://127.0.0.1:${port}/`))}\n`);

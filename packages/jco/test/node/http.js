@@ -65,15 +65,12 @@ describe("node:http builtin adapter", () => {
         expect(plugin.load(id)).toBe('export { httpCallbacks } from "/jco/http.js";');
     });
 
-    test.concurrent("keeps the callback resource as an entry export after bundling", async () => {
+    test.concurrent("keeps the callback dispatcher as an entry export after bundling", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const httpModule = join(root, "http.js");
         await writeFile(entry, 'import { createServer } from "node:http"; export { createServer };\n');
-        await writeFile(
-            httpModule,
-            "export const httpCallbacks = { RequestListener: class RequestListener {} }; export default {};\n",
-        );
+        await writeFile(httpModule, "export const httpCallbacks = { handle() {} }; export default {};\n");
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { httpModule });
         const bundleOptions = { plugins: [plugin] };
         const source = await bundleNodeGuestExportsWrapper(entry, HTTP_WIT_REQUIREMENT.guestExports, bundleOptions);
@@ -135,6 +132,9 @@ describe("node:http WIT installation", () => {
         expect(source).toContain("request: func(options: request-options)");
         expect(source).toContain("resource server");
         const metadata = await worldMetadataFor(root, "component");
+        expect(metadata.imports).not.toContainEqual(
+            expect.objectContaining({ namespace: "jco", package: "node", interface: "http-callbacks" }),
+        );
         expect(metadata.exports).toContainEqual(
             expect.objectContaining({ namespace: "jco", package: "node", interface: "http-callbacks" }),
         );
@@ -193,8 +193,7 @@ describe("node:http WIT installation", () => {
 });
 
 describe("node:http in a component", () => {
-    // TODO(fix): Bridge guest callbacks explicitly; imported and exported listener resources have distinct identities.
-    test.skip("serves a request through guest -> WIT callback resource -> host node:http", async () => {
+    test("serves a request through guest -> WIT callback dispatcher -> host node:http", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http-server",
             bundle: true,
