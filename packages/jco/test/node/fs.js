@@ -38,8 +38,7 @@ suite("node:fs in a component", () => {
         }
     });
 
-    // TODO(unskip): needs a jco-std release with unwrapped host results and cross-realm byte handling (PR #2080).
-    test.skip("componentizes sync, callback, and promise APIs through the opt-in Node host", async () => {
+    test("componentizes sync, callback, and promise APIs through the opt-in Node host", async () => {
         const { componentPath, fixtureDir, outputDir, stderr } = await componentizeFixture({
             fixture: "node-fs",
             bundle: true,
