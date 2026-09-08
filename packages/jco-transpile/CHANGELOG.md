@@ -1,5 +1,107 @@
 # Changelog
 
+## [0.13.0] - 2026-09-08
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ pass Wasmtime component async tests by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ relax async export call overhead limit in CI by @vados-cosmonic in #2043
+
+- _(transpile)_ enable big-interleaving-test WAST by @vados-cosmonic
+
+- _(transpile)_ increase transpiled code limit by @vados-cosmonic in #2038
+
+- _(transpile)_ enable Wasmtime component-async skipped tests by @vados-cosmonic
+
+- _(transpile)_ update WAST fixtures from upstream main by @vados-cosmonic in #2031
+
+- _(transpile)_ enable cross-task-future WAST by @vados-cosmonic in #2032
+
+- _(transpile)_ enable trap-if-transfer-in-waitable-set WAST by @vados-cosmonic in #2030
+
+- _(transpile)_ align trap poisoning expectations by @vados-cosmonic in #2027
+
+- _(transpile)_ enable builtin-trap-poisons-instance WAST by @vados-cosmonic
+
+- _(transpile)_ enable validate-no-async-abi-for-sync-type WAST by @vados-cosmonic in #2026
+
+- _(transpile)_ enable validate-no-stream-char WAST by @vados-cosmonic in #2025
+
+- _(transpile)_ validate typed WAST artifacts by @vados-cosmonic
+
+- _(transpile)_ enable trap-on-reenter WAST by @vados-cosmonic
+
+- _(transpile)_ fix socket stream cancellation fixture by @vados-cosmonic in #2023
+
+- _(transpile)_ enable cross-abi-calls WAST by @vados-cosmonic
+
+- _(transpile)_ enable trap-if-done WAST by @vados-cosmonic
+
+- _(transpile)_ note deferred stackful async WAST by @vados-cosmonic in #2021
+
+- _(transpile)_ enable sync-barges-in WAST by @vados-cosmonic
+
+- _(transpile)_ enable drop-cross-task-borrow WAST by @vados-cosmonic in #2019
+
+- _(transpile)_ enable same-component-stream-future WAST by @vados-cosmonic in #2017
+
+- _(transpile)_ enable drop-stream WAST by @vados-cosmonic in #2016
+
+- _(transpile)_ enable closed-stream WAST by @vados-cosmonic
+
+- _(transpile)_ enable dont-block-start WAST by @vados-cosmonic
+
+- _(transpile)_ stabilize browser JSPI scheduling check by @vados-cosmonic in #2034
+
+- _(transpile)_ enable sync-streams WAST by @vados-cosmonic in #2012
+
+- _(transpile)_ enable deadlock WAST by @vados-cosmonic in #2011
+
+- _(transpile)_ enable cancellable WAST by @vados-cosmonic in #2010
+
+- _(transpile)_ enable async-calls-sync WAST by @vados-cosmonic
+
+- _(transpile)_ organize WAST fixture skips by @vados-cosmonic
+
+- _(transpile)_ enable partial-stream-copies WAST by @vados-cosmonic
+
+- _(transpile)_ enable zero-length WAST by @vados-cosmonic in #2005
+
+- _(transpile)_ enable cancel-stream WAST by @vados-cosmonic in #2004
+
+- _(transpile)_ enable cancel-subtask WAST by @vados-cosmonic in #2002
+
+- _(transpile)_ enable empty-wait WAST by @vados-cosmonic
+
+- _(transpile)_ update borrowing handle trap by @vados-cosmonic in #1996
+
+- _(transpile)_ enable passing-resources WAST by @vados-cosmonic
+
+- _(transpile)_ enable drop-subtask WAST by @vados-cosmonic in #1993
+
+- _(transpile)_ update future drop trap message by @vados-cosmonic
+
+- _(transpile)_ enable futures-must-write WAST by @vados-cosmonic
+
+- _(transpile)_ enable drop-waitable-set WAST test by @vados-cosmonic in #1990
+
+- _(transpile)_ raise CI async call overhead limit by @vados-cosmonic in #1982
+
+- _(transpile)_ instantiate browser transpile output, move cases to fixtures by @vados-cosmonic
+
+- _(transpile)_ consolidate browser harness by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update deps by @vados-cosmonic in #2075
+
+- _(transpile)_ update preview2-shim dep to v0.24.1 by @vados-cosmonic
+
+- _(transpile)_ update preview2-shim to v0.24.0 by @vados-cosmonic
+
 ## [0.12.1] - 2026-08-24
 
 This release contains an update of the underlying transpiled `js-component-bindgen`
