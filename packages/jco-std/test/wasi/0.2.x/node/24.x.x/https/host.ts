@@ -2,10 +2,13 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { Server, request } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
+import {
+  createHttpHost,
+  request,
+} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
 import type {
+  DirectHttpCallbacks,
   DirectHttpRequestListener,
-  DirectHttpServer,
   DirectHttpServerOptions,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
 
@@ -15,7 +18,8 @@ const FIXTURES = new URL("./helpers/tls/", import.meta.url);
 const cert = new Uint8Array(readFileSync(new URL("localhost.crt", FIXTURES)));
 const key = new Uint8Array(readFileSync(new URL("localhost.key", FIXTURES)));
 
-const servers = new Set<DirectHttpServer>();
+type HttpHostServer = InstanceType<ReturnType<typeof createHttpHost>["Server"]>;
+const servers = new Set<HttpHostServer>();
 
 afterEach(async () => {
   await Promise.all([...servers].map((server) => server.close()));
@@ -24,24 +28,28 @@ afterEach(async () => {
 
 const echo: DirectHttpRequestListener = {
   handle: async (incoming) => ({
-    tag: "ok",
-    val: {
-      statusCode: 200,
-      statusMessage: "OK",
-      headers: [{ name: "Content-Type", value: encoder.encode("text/plain") }],
-      body: encoder.encode(`${incoming.method} ${incoming.url} ${decoder.decode(incoming.body)}`),
-    },
+    statusCode: 200,
+    statusMessage: "OK",
+    headers: [{ name: "Content-Type", value: encoder.encode("text/plain") }],
+    body: encoder.encode(`${incoming.method} ${incoming.url} ${decoder.decode(incoming.body)}`),
   }),
   [Symbol.dispose]: () => undefined,
 };
 
 async function listen(
   options: DirectHttpServerOptions,
-): Promise<{ server: DirectHttpServer; port: number }> {
-  const server = new Server(options, echo);
+): Promise<{ server: HttpHostServer; port: number }> {
+  const callbacks: DirectHttpCallbacks = {
+    takeRequestListener(id: number): DirectHttpRequestListener {
+      expect(id).toBe(1);
+      return echo;
+    },
+  };
+  const { Server } = createHttpHost(() => callbacks);
+  const server = new Server(options, 1);
   servers.add(server);
   const started = await server.listen({ port: 0, host: "127.0.0.1" });
-  if (started.tag === "err" || started.val.tag !== "tcp") {
+  if (started.tag !== "ok" || started.val.tag !== "tcp") {
     throw new Error(`expected a TCP listener, got ${JSON.stringify(started)}`);
   }
   return { server, port: started.val.val.port };
