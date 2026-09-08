@@ -16,164 +16,192 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 describe("node:http wasi:http implementation", () => {
-  test.concurrent("translates a buffered exchange and disposes child streams before their bodies", () => {
-    const events: string[] = [];
-    let requestMethod: unknown;
-    let requestAuthority: string | undefined;
-    let requestPath: string | undefined;
-    let requestBody = new Uint8Array();
+  test("refuses a separate Host override instead of silently changing the request", () => {
+    const implementation = createWasiHttpImplementation({} as WasiHttpProvider);
+    expect(() =>
+      implementation.request({
+        method: "GET",
+        scheme: "http",
+        authority: "example.com",
+        pathWithQuery: "/",
+        headers: [{ name: "Host", value: encoder.encode("other.example") }],
+        body: new Uint8Array(),
+      }),
+    ).toThrow(expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }));
+  });
 
-    class Fields implements WasiHttpFields {
-      constructor(readonly values: Array<[string, Uint8Array]>) {}
+  test.concurrent.each(["raw", "wrapped"])(
+    "translates a buffered exchange and disposes child streams with %s errors",
+    (representation) => {
+      const events: string[] = [];
+      let requestMethod: unknown;
+      let requestAuthority: string | undefined;
+      let requestPath: string | undefined;
+      let requestBody = new Uint8Array();
 
-      entries(): Array<[string, Uint8Array]> {
-        return this.values;
+      class Fields implements WasiHttpFields {
+        constructor(readonly values: Array<[string, Uint8Array]>) {}
+
+        entries(): Array<[string, Uint8Array]> {
+          return this.values;
+        }
+
+        [Symbol.dispose](): void {
+          events.push("fields disposed");
+        }
       }
 
-      [Symbol.dispose](): void {
-        events.push("fields disposed");
-      }
-    }
-
-    const outgoingBody: WasiHttpOutgoingBody = {
-      write() {
-        return {
-          blockingWriteAndFlush(contents) {
-            requestBody = contents.slice();
-          },
-          [Symbol.dispose]() {
-            events.push("output disposed");
-          },
-        };
-      },
-      [Symbol.dispose]() {
-        events.push("outgoing body disposed");
-      },
-    };
-
-    class OutgoingRequest implements WasiHttpOutgoingRequest {
-      constructor(readonly fields: WasiHttpFields) {}
-
-      body(): WasiHttpOutgoingBody {
-        return outgoingBody;
-      }
-
-      setMethod(method: unknown): void {
-        requestMethod = method;
-      }
-
-      setScheme(): void {}
-
-      setAuthority(authority: string | undefined): void {
-        requestAuthority = authority;
-      }
-
-      setPathWithQuery(path: string | undefined): void {
-        requestPath = path;
-      }
-
-      [Symbol.dispose](): void {
-        events.push("request disposed");
-      }
-    }
-
-    class RequestOptions implements WasiHttpRequestOptions {
-      setConnectTimeout(): void {}
-
-      setFirstByteTimeout(): void {}
-
-      setBetweenBytesTimeout(): void {}
-    }
-
-    const incomingBody: WasiHttpIncomingBody = {
-      stream() {
-        let complete = false;
-        return {
-          blockingRead() {
-            if (complete) {
-              throw { tag: "closed" };
-            }
-            complete = true;
-            return encoder.encode("world");
-          },
-          [Symbol.dispose]() {
-            events.push("input disposed");
-          },
-        };
-      },
-      [Symbol.dispose]() {
-        events.push("incoming body disposed");
-      },
-    };
-    const incoming: WasiHttpIncomingResponse = {
-      status: () => 201,
-      headers: () => new Fields([["X-Reply", encoder.encode("yes")]]),
-      consume: () => incomingBody,
-      [Symbol.dispose]() {
-        events.push("response disposed");
-      },
-    };
-    let pending = true;
-    const provider: WasiHttpProvider = {
-      outgoingHandler: {
-        handle() {
+      const outgoingBody: WasiHttpOutgoingBody = {
+        write() {
           return {
-            subscribe: () => ({ block: () => events.push("future blocked") }),
-            get() {
-              if (pending) {
-                pending = false;
-                return undefined;
-              }
-              return { tag: "ok", val: { tag: "ok", val: incoming } };
+            blockingWriteAndFlush(contents) {
+              requestBody = contents.slice();
             },
             [Symbol.dispose]() {
-              events.push("future disposed");
+              events.push("output disposed");
             },
           };
         },
-      },
-      types: {
-        Fields: { fromList: (entries) => new Fields(entries) },
-        IncomingBody: {
-          finish() {
-            events.push("incoming body finished");
+        [Symbol.dispose]() {
+          events.push("outgoing body disposed");
+        },
+      };
+
+      class OutgoingRequest implements WasiHttpOutgoingRequest {
+        constructor(readonly fields: WasiHttpFields) {
+          expect(fields.entries().map(([name]) => name)).toEqual(["X-Test"]);
+        }
+
+        body(): WasiHttpOutgoingBody {
+          return outgoingBody;
+        }
+
+        setMethod(method: unknown): void {
+          requestMethod = method;
+        }
+
+        setScheme(): void {}
+
+        setAuthority(authority: string | undefined): void {
+          requestAuthority = authority;
+        }
+
+        setPathWithQuery(path: string | undefined): void {
+          requestPath = path;
+        }
+
+        [Symbol.dispose](): void {
+          events.push("request disposed");
+        }
+      }
+
+      class RequestOptions implements WasiHttpRequestOptions {
+        setConnectTimeout(): void {}
+
+        setFirstByteTimeout(): void {}
+
+        setBetweenBytesTimeout(): void {}
+      }
+
+      const incomingBody: WasiHttpIncomingBody = {
+        stream() {
+          let complete = false;
+          return {
+            blockingRead() {
+              if (complete) {
+                throw representation === "wrapped"
+                  ? Object.assign(new Error("closed"), { payload: { tag: "closed" } })
+                  : { tag: "closed" };
+              }
+              complete = true;
+              return encoder.encode("world");
+            },
+            [Symbol.dispose]() {
+              events.push("input disposed");
+            },
+          };
+        },
+        [Symbol.dispose]() {
+          events.push("incoming body disposed");
+        },
+      };
+      const incoming: WasiHttpIncomingResponse = {
+        status: () => 201,
+        headers: () => new Fields([["X-Reply", encoder.encode("yes")]]),
+        consume: () => incomingBody,
+        [Symbol.dispose]() {
+          events.push("response disposed");
+        },
+      };
+      let pending = true;
+      const provider: WasiHttpProvider = {
+        outgoingHandler: {
+          handle() {
+            return {
+              subscribe: () => ({ block: () => events.push("future blocked") }),
+              get() {
+                if (pending) {
+                  pending = false;
+                  return undefined;
+                }
+                return { tag: "ok", val: { tag: "ok", val: incoming } };
+              },
+              [Symbol.dispose]() {
+                events.push("future disposed");
+              },
+            };
           },
         },
-        OutgoingBody: {
-          finish() {
-            events.push("outgoing body finished");
+        types: {
+          Fields: { fromList: (entries) => new Fields(entries) },
+          IncomingBody: {
+            finish() {
+              events.push("incoming body finished");
+            },
           },
+          OutgoingBody: {
+            finish() {
+              events.push("outgoing body finished");
+            },
+          },
+          OutgoingRequest,
+          RequestOptions,
         },
-        OutgoingRequest,
-        RequestOptions,
-      },
-    };
+      };
 
-    const response = createWasiHttpImplementation(provider).request({
-      method: "POST",
-      scheme: "http",
-      authority: "example.com",
-      pathWithQuery: "/submit",
-      headers: [["X-Test", "yes"]].map(([name, value]) => ({
-        name,
-        value: encoder.encode(value),
-      })),
-      body: encoder.encode("hello"),
-      connectTimeoutMs: 100,
-    });
+      const response = createWasiHttpImplementation(provider).request({
+        method: "POST",
+        scheme: "http",
+        authority: "example.com",
+        pathWithQuery: "/submit",
+        headers: [
+          ["X-Test", "yes"],
+          ["Host", "example.com"],
+          ["Connection", "close"],
+          ["Keep-Alive", "timeout=5"],
+        ].map(([name, value]) => ({
+          name,
+          value: encoder.encode(value),
+        })),
+        body: encoder.encode("hello"),
+        connectTimeoutMs: 100,
+      });
 
-    expect(requestMethod).toEqual({ tag: "post" });
-    expect(requestAuthority).toBe("example.com");
-    expect(requestPath).toBe("/submit");
-    expect(decoder.decode(requestBody)).toBe("hello");
-    expect(response.statusCode).toBe(201);
-    expect(decoder.decode(response.body)).toBe("world");
-    expect(events.indexOf("output disposed")).toBeLessThan(
-      events.indexOf("outgoing body finished"),
-    );
-    expect(events.indexOf("input disposed")).toBeLessThan(events.indexOf("incoming body finished"));
-    expect(events).toContain("future blocked");
-  });
+      expect(requestMethod).toEqual({ tag: "post" });
+      expect(requestAuthority).toBe("example.com");
+      expect(requestPath).toBe("/submit");
+      expect(decoder.decode(requestBody)).toBe("hello");
+      expect(response.statusCode).toBe(201);
+      expect(decoder.decode(response.body)).toBe("world");
+      expect(events.indexOf("output disposed")).toBeLessThan(
+        events.indexOf("outgoing body finished"),
+      );
+      expect(events.indexOf("input disposed")).toBeLessThan(
+        events.indexOf("incoming body finished"),
+      );
+      expect(events).toContain("future blocked");
+    },
+  );
 
   test.concurrent("maps wasi:http failures to Node-style errors", () => {
     const provider = {

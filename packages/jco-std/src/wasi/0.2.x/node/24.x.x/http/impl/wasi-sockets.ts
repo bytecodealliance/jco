@@ -1,5 +1,5 @@
 import { concatBytes } from "../body.js";
-import { fromImplementationError, invalidArgValue, unsupported } from "../errors.js";
+import { fromImplementationError, invalidArgValue, unsupported, wasiErrorCode } from "../errors.js";
 import {
   parseHttp1Request,
   parseHttp1Response,
@@ -98,16 +98,7 @@ export function dispose(resource: { [Symbol.dispose]?(): void } | undefined): vo
   resource?.[Symbol.dispose]?.();
 }
 
-export function errorCode(error: unknown): string | undefined {
-  if (typeof error === "string") {
-    return error;
-  }
-  if (typeof error === "object" && error !== null && "tag" in error) {
-    const tag = (error as { tag?: unknown }).tag;
-    return typeof tag === "string" ? tag : undefined;
-  }
-  return undefined;
-}
+export const errorCode = wasiErrorCode;
 
 export function socketError(error: unknown, syscall: string, hostname?: string): Error {
   const code = errorCode(error) ?? "unknown";
