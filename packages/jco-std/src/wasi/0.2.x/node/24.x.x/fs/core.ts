@@ -156,10 +156,14 @@ function encodingFrom(
 }
 
 function decodeData(value: unknown, encoding: BufferEncoding | "buffer" | null): StringOrBytes {
-  if (!(value instanceof Uint8Array)) {
+  // Component bindings may create the byte array in a different JS realm.
+  if (
+    !ArrayBuffer.isView(value) ||
+    Object.prototype.toString.call(value) !== "[object Uint8Array]"
+  ) {
     throw new TypeError("invalid filesystem byte response");
   }
-  const buffer = Buffer.from(value);
+  const buffer = Buffer.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
   return encoding && encoding !== "buffer" ? buffer.toString(encoding) : buffer;
 }
 

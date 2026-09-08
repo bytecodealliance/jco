@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 
 import { describe, expect, test } from "vitest";
 
@@ -85,4 +86,13 @@ test("node:fs leaves non-WIT exceptions and traps unchanged", () => {
     });
     expect(() => core.mkdirSync("unused")).toThrow(error);
   }
+});
+
+test("node:fs reads byte arrays created in another realm", () => {
+  const data = runInNewContext("new Uint8Array([0, 104, 105, 0]).subarray(1, 3)") as Uint8Array;
+  const core = createFsCore({ ...nodeHost, readFile: () => data });
+  expect(core.readFileSync("unused", "utf8")).toBe("hi");
+  const copy = core.readFileSync("unused") as Uint8Array;
+  data[0] = 0;
+  expect(Array.from(copy)).toEqual([104, 105]);
 });
