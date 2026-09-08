@@ -114,6 +114,11 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/http/core.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/http/core.js"
     },
+    "./wasi/0.2.x/node/24.x.x/http/impl/direct": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/http/impl/direct.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/http/impl/direct.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/http/impl/direct.js"
+    },
     "./wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/http/impl/wasi-sockets.js",

@@ -1,6 +1,6 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { describe, expect, test, vi } from "vitest";
@@ -23,9 +23,7 @@ const modulePaths = {
     httpWasiHttpImplementationModule: "/jco/http/wasi-http.js",
 };
 
-const NODE_HOST = pathToFileURL(
-    fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/http-host-node.js", import.meta.url)),
-).href;
+const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node");
 
 describe("node:http builtin adapter", () => {
     test.each([
