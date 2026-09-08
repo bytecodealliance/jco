@@ -5,7 +5,12 @@ import {
   type WasiTlsConnection,
 } from "./tls.js";
 import { concatBytes } from "../../body.js";
-import { fromImplementationError, invalidArgValue, unsupported, wasiErrorCode } from "../../errors.js";
+import {
+  fromImplementationError,
+  invalidArgValue,
+  unsupported,
+  wasiErrorCode,
+} from "../../errors.js";
 import {
   parseHttp1Request,
   parseHttp1Response,
