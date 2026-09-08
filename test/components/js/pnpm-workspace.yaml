@@ -1,6 +1,6 @@
 minimumReleaseAge: 10080
 blockExoticSubdeps: true
-allowBuilds: []
+allowBuilds: {}
 
 packages:
   - jco-issue-1390/callee
