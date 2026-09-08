@@ -41,11 +41,7 @@ suite("node:inspector WIT injection", () => {
 });
 
 suite("node:inspector in a component", () => {
-    // TODO(unskip): needs a jco-std release carrying the node/24.x.x inspector exports. Until then
-    // packages/jco resolves the published jco-std, which does not define these subpaths, so the
-    // guest cannot componentize. Proven green locally by pointing jco's jco-std dependency at the
-    // workspace build; restore before committing.
-    test.skip("drives the real inspector through the opt-in Node host", async () => {
+    test("drives the real inspector through the opt-in Node host", async () => {
         // Built from a copy: componentizing rewrites the world in place to add the import/export.
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
             fixture: "node-inspector",

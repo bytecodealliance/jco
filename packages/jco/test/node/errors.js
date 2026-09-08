@@ -75,8 +75,7 @@ suite("Node Errors globals", () => {
         expect(source).not.toContain("DefaultError");
     });
 
-    // TODO(unskip): use the published jco-std Errors globals once a release containing them is available.
-    test.skip("provides Node error globals to a StarlingMonkey guest", async () => {
+    test("provides Node error globals to a StarlingMonkey guest", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-errors",
             bundle: true,

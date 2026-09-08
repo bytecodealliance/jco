@@ -155,8 +155,7 @@ suite("Node globals", () => {
         expect(source).not.toContain("__BUFFER_GLOBAL_MARKER__");
     });
 
-    // TODO(unskip): use the published jco-std Errors globals once a release containing them is available.
-    test.skip("provides the supported Node globals to a StarlingMonkey guest", async () => {
+    test("provides the supported Node globals to a StarlingMonkey guest", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-globals",
             bundle: true,

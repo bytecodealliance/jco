@@ -22,8 +22,7 @@ const EXPECTED_REPORT = {
 };
 
 suite("Node stream modules", () => {
-    // TODO(unskip): use the published jco-std stream modules once a release containing them is available.
-    test.skip("bundles both stream APIs and executes them in a StarlingMonkey guest", async () => {
+    test("bundles both stream APIs and executes them in a StarlingMonkey guest", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-stream",
             entry: "source.js",

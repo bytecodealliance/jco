@@ -34,8 +34,7 @@ async function buildClusterFixture(fixture, name) {
 }
 
 suite("node:cluster in a component", () => {
-    // TODO(unskip): use the published jco-std cluster exports once a release containing them is available.
-    test.skip("componentizes and calls through the opt-in Node host", async () => {
+    test("componentizes and calls through the opt-in Node host", async () => {
         const { appDir, modulePath, stderr } = await buildClusterFixture("node-cluster", "node-cluster");
 
         assert.include(stderr, "Jco added generated WIT import jco:node/cluster@0.1.0");
@@ -59,11 +58,9 @@ suite("node:cluster in a component", () => {
         });
     });
 
-    // TODO(unskip): use the published jco-std cluster exports once a release containing them is available.
-    //
     // Driven from a spawned script rather than in-process: cluster.fork() re-executes the current
     // entry, so forking from inside the test runner would fork the runner itself.
-    test.skip("forks a worker that runs the component and reports back", async () => {
+    test("forks a worker that runs the component and reports back", async () => {
         const { outputDir, modulePath } = await buildClusterFixture("node-cluster-roundtrip", "node-cluster-rt");
 
         // The runner is a bare node process outside the workspace, so give the transpiled output a

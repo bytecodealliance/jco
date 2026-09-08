@@ -27,8 +27,7 @@ suite("node:dns in a component", () => {
         expect((await readFile(world, "utf8")).match(/import jco:node\/dns@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    // TODO(unskip): use the published jco-std DNS exports once a release containing them is available.
-    test.skip("componentizes and resolves example.com through the opt-in Node host", async () => {
+    test("componentizes and resolves example.com through the opt-in Node host", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-dns",
             bundle: true,

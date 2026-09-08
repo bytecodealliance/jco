@@ -41,8 +41,7 @@ suite("node:fs in a component", () => {
         }
     });
 
-    // TODO(unskip): use the published jco-std filesystem exports once a release containing them is available.
-    test.skip("componentizes sync, callback, and promise APIs through the opt-in Node host", async () => {
+    test("componentizes sync, callback, and promise APIs through the opt-in Node host", async () => {
         const { componentPath, fixtureDir, outputDir, stderr } = await componentizeFixture({
             fixture: "node-fs",
             bundle: true,
