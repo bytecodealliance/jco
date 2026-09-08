@@ -4,7 +4,7 @@ This [`@bytecodealliance/jco`][jco] sub-project contains shared functionality an
 reusable libraries that can be used for building WebAssembly Components in Javascript.
 
 [WebAssembly Components][cm-book] are a WebAssembly binaries that use the Component Model,
-an evolving architecture for interoperabl WebAssembly libraries, aplications and environments.
+an evolving architecture for interoperable WebAssembly libraries, applications and environments.
 
 WebAssembly components can be used from server side applications _and_ in the browser, and
 `@bytecodealliance/jco-std` contains shared functionality and helpers for both environments.
@@ -12,15 +12,23 @@ WebAssembly components can be used from server side applications _and_ in the br
 [cm-book]: https://component-model.bytecodealliance.org/
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
-# Utilites
+# Adapters
 
-Below is a list of utilties provided by `@bytecodealliance/jco-std`:
+Below is a list of adapters provided by `@bytecodealliance/jco-std`:
 
 ## HTTP
 
+| Export               | Description                                          |
+| -------------------- | ---------------------------------------------------- |
+| `http/adapters/hono` | Enables easier building of [Hono][hono] HTTP servers |
+
+## NodeJS API (experimental)
+
+`jco-std` also makes available an experimental NodeJS API that is used by tools like `jco` to
+build NodeJS programs as components.
+
 | Export                                           | Description                                                                   |
 | ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `http/adapters/hono`                             | Enables easier building of [Hono][hono] HTTP servers                          |
 | `wasi/0.2.x/node/24.x.x/assert`                  | `node:assert` adapter, Node 24 on WASI p2                                     |
 | `wasi/0.2.x/node/24.x.x/console`                 | `node:console` guest adapter over an explicit host capability                 |
 | `wasi/0.2.x/node/24.x.x/errors`                  | Node 24 global error constructors and shared coded-error behavior             |
@@ -73,7 +81,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 `@bytecodealliance/jco-std` can be used in varied ways via it's exports, this section
 contains some examples of how to get started quickly.
 
-## Hono Adapter
+## Http (via the Hono Adapter)
 
 To use `@bytecodealliance/jco-std` to make building [Hono][hono] applications easier with WebAssembly,
 use the `@bytecodealliance/jco-std/http/adapters/hono` export:
