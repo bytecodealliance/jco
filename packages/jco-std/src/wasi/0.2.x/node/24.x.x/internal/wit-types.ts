@@ -10,6 +10,13 @@
 /** A WIT `result<T, E>` as jco lowers it. */
 export type HostResult<T, E> = { tag: "ok"; val: T } | { tag: "err"; val: E };
 
+/** A provider may use tagged results or the JS bindings' return/throw convention. */
+export type HostImports<H> = {
+  [K in keyof H]: H[K] extends (...args: infer A) => infer R
+    ? (...args: A) => R | (Extract<R, { tag: "ok" }> extends { val: infer T } ? T : never)
+    : H[K];
+};
+
 /** A WIT `variant errno { number(s64), symbolic(string) }`. */
 export type HostErrno = { tag: "number"; val: bigint } | { tag: "symbolic"; val: string };
 

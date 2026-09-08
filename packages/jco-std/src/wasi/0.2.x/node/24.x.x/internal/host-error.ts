@@ -51,6 +51,39 @@ export function serializeHostError(error: unknown): HostErrorBase {
   };
 }
 
+/** Read either representation of a synchronous WIT result without losing its error fields. */
+export function callHost<T, E extends HostErrorBase>(
+  operation: () => T | HostResult<T, E>,
+  makeError: (error: E) => Error,
+): T {
+  let result: T | HostResult<T, E>;
+  try {
+    result = operation();
+  } catch (error) {
+    const record = errorRecord(error);
+    const payload = errorRecord(record.payload ?? error);
+    // Bindings throw either the WIT error record or a ComponentError carrying it.
+    // Ordinary JS errors and runtime traps must retain their identity.
+    if (
+      (!(error instanceof Error) || record.payload !== undefined) &&
+      typeof payload.name === "string" &&
+      typeof payload.message === "string"
+    ) {
+      throw makeError(payload as unknown as E);
+    }
+    throw error;
+  }
+  if (result !== null && typeof result === "object" && "tag" in result) {
+    if (result.tag === "err") {
+      throw makeError((result as { tag: "err"; val: E }).val);
+    }
+    if (result.tag === "ok") {
+      return (result as { tag: "ok"; val: T }).val;
+    }
+  }
+  return result as T;
+}
+
 /** Run a synchronous host operation, capturing a thrown error as a serialized `result`. */
 export function capture<T, E>(
   operation: () => T,
