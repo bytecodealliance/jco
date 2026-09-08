@@ -360,7 +360,7 @@
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.22.0",
     "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
-    "@bytecodealliance/jco-transpile": "^0.12.1",
+    "@bytecodealliance/jco-transpile": "^0.13.0",
     "@bytecodealliance/preview2-shim": "^0.24.1",
     "@types/node": "^24.12.4",
     "@types/which": "^3.0.4",
