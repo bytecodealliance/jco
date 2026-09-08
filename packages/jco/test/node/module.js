@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import nodeModule from "node:module";
 
+import { builtinModules as node24Builtins } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module";
+
 import { suite, test } from "vitest";
 
 import { componentizeFixture, transpileComponent } from "../helpers.js";
@@ -26,7 +28,8 @@ suite("node:module in a component", () => {
         // Classification and source-map arithmetic are held to the host's real `node:module`, not
         // to values written down here, so a divergence shows up as a failure rather than as drift.
         assert.equal(result.moduleIsClass, nodeModule === nodeModule.Module);
-        assert.equal(result.builtinCount, nodeModule.builtinModules.length);
+        // The guest targets Node 24, even when the host runs a newer or older Node.
+        assert.deepEqual(result.builtins, node24Builtins);
         assert.equal(result.isBuiltinFs, nodeModule.isBuiltin("node:fs"));
         assert.equal(result.isBuiltinBareTest, nodeModule.isBuiltin("test"));
         assert.equal(result.isBuiltinPrefixedTest, nodeModule.isBuiltin("node:test"));

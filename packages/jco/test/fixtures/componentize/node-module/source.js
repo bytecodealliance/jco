@@ -27,7 +27,7 @@ export function run() {
     return JSON.stringify({
         // Classification: pure data, exact.
         moduleIsClass: nodeModule === nodeModule.Module,
-        builtinCount: builtinModules.length,
+        builtins: builtinModules,
         isBuiltinFs: isBuiltin("node:fs"),
         isBuiltinBareTest: isBuiltin("test"),
         isBuiltinPrefixedTest: isBuiltin("node:test"),
