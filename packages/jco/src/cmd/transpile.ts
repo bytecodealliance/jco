@@ -8,7 +8,25 @@ declare const __vite_ssr_import_meta__: ImportMeta;
 declare const globalCreateRequire: typeof import("node:module").createRequire;
 
 const DNS_CAPABILITY = "jco:node/dns@0.1.0";
-const DNS_ASYNC_IMPORT = `${DNS_CAPABILITY}#*`;
+// Async selectors support exact function names, not interface-scoped wildcards.
+const DNS_ASYNC_IMPORTS = [
+    "lookup",
+    "lookup-service",
+    "resolve4",
+    "resolve6",
+    "resolve-any",
+    "resolve-caa",
+    "resolve-cname",
+    "resolve-mx",
+    "resolve-naptr",
+    "resolve-ns",
+    "resolve-ptr",
+    "resolve-soa",
+    "resolve-srv",
+    "resolve-tlsa",
+    "resolve-txt",
+    "reverse",
+].map((name) => `${DNS_CAPABILITY}#${name}`);
 const HTTP_CAPABILITY = "jco:node/http@0.1.0";
 const HTTP_ASYNC_IMPORTS = [
     `${HTTP_CAPABILITY}#request`,
@@ -57,7 +75,9 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
         // The Node DNS provider returns a promise. JSPI suspends its synchronous
         // Preview 2 WIT import, and every possibly-transitive export is promising.
         opts.asyncMode = "jspi";
-        opts.asyncImports = appendUnique(opts.asyncImports, DNS_ASYNC_IMPORT);
+        for (const asyncImport of DNS_ASYNC_IMPORTS) {
+            opts.asyncImports = appendUnique(opts.asyncImports, asyncImport);
+        }
         opts.asyncExports = appendUnique(opts.asyncExports, "*");
     }
     const hasAsyncHttpProvider =
