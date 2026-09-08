@@ -240,6 +240,7 @@ describe("node:http2 in a fully formed component", () => {
     test("componentizes idiomatic client and server code through the direct boundary", async () => {
         const { stderr } = await componentizeFixture({
             fixture: "node-http2",
+            wit: "wit-starling",
             bundle: true,
             copy: true,
             extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http2-via", "direct"],
