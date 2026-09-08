@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2c51b535.js";
+            window.path_to_searchindex_js = "../searchindex-941692ed.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -338,9 +338,8 @@ resolve that specifier. Bundled code can use <code>Buffer</code> without importi
 <code>node:buffer</code>; Rolldown injects Jco’s existing audited Buffer adapter only when a
 free <code>Buffer</code> identifier is referenced. A source graph that never uses it pays no
 bundle-size or initialization cost.</p>
-<p>The component engine already supplies the portable Web globals shared with Node,
-so Jco leaves their identities and behavior untouched. With ComponentizeJS 0.22.0’s
-pinned StarlingMonkey runtime, this includes:</p>
+<p>The component engine supplies the portable Web globals shared with Node. With
+ComponentizeJS 0.22.0’s pinned StarlingMonkey runtime, this includes:</p>
 <ul>
 <li><code>AbortController</code>, <code>AbortSignal</code>, <code>atob</code>, <code>btoa</code>, <code>Blob</code>, and <code>File</code>;</li>
 <li><code>ByteLengthQueuingStrategy</code>, <code>CountQueuingStrategy</code>, <code>ReadableStream</code> and its
@@ -350,9 +349,18 @@ exposed reader/controller classes, <code>WritableStream</code>, <code>TransformS
 <code>DOMException</code>, <code>Event</code>, and <code>EventTarget</code>;</li>
 <li><code>fetch</code>, <code>FormData</code>, <code>Headers</code>, <code>Request</code>, and <code>Response</code>;</li>
 <li><code>Performance</code>, <code>performance</code>, <code>queueMicrotask</code>, timeout/interval functions,
-<code>structuredClone</code>, <code>TextEncoder</code>, <code>TextDecoder</code>, <code>URL</code>, <code>URLSearchParams</code>, and
-<code>WebAssembly</code>.</li>
+<code>structuredClone</code>, <code>TextEncoder</code>, <code>TextDecoder</code>, <code>URL</code>, and <code>URLSearchParams</code>.</li>
 </ul>
+<p>When bundled source references <code>AbortController</code> or <code>AbortSignal</code>, Jco loads a
+compatibility adapter for the legacy StarlingMonkey abort implementation. It
+preserves the native constructors and signal objects while correcting <code>any()</code>’s
+array handling, default reason identity, and <code>throwIfAborted()</code>. The adapter
+detects the legacy calling convention and leaves conforming engines untouched.</p>
+<p>The current embedded runtime does <strong>not</strong> expose a guest <code>WebAssembly</code> API.
+Running the component in a Wasm host does not give its JavaScript code the ability
+to compile or instantiate another Wasm module. Guest-side Wasm execution may be
+supported in the future; the globals test currently asserts that this API is
+absent and should gain execution coverage when the engine provides it.</p>
 <p>Some of these retain StarlingMonkey’s existing WASI feature requirements, such as
 clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
 fetches. Jco does not add a Node-specific WIT capability for globals.</p>
@@ -845,6 +853,26 @@ to the Preview 2 guest without a worker. Direct and <code>wasi-sockets</code> im
 clients and servers. <code>wasi-http</code> implements clients and rejects server
 construction immediately because outgoing-handler cannot listen for arbitrary
 connections.</p>
+<p>For direct servers, instantiate with a provider bound to that component’s
+callback dispatcher. For example, after transpiling with
+<code>--instantiation async --map jco:node/http@0.1.0=http-host</code>:</p>
+<pre><code class="language-js">import { instantiate } from './component.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { createHttpHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node';
+
+let instance;
+const imports = new WASIShim().getImportObject();
+imports['http-host'] = createHttpHost(() =&gt; instance.httpCallbacks);
+instance = await instantiate(undefined, imports);
+// Await application exports that create or control servers.
+await instance.start();
+</code></pre>
+<p>Create a separate provider for each component instance. The server holds a
+callback registration ID; handlers stay in the guest and run through the
+exported dispatcher. The provider serializes callback entry and drains accepted
+callbacks before close completes. Closing releases the guest registration;
+listening again registers the same server’s handler again. Direct client-only
+applications can continue mapping the Node provider module without this factory.</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>All modes currently buffer complete request and response bodies.</p>
