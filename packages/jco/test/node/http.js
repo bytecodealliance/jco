@@ -239,7 +239,7 @@ describe.skipIf(!hasJspi)("node:http in a component", () => {
             // injects *something*, so the assertion names the interface the mode must add.
             const injected = {
                 direct: "jco:node/http@0.1.0",
-                "wasi-sockets": "wasi:sockets/instance-network@0.2.12",
+                "wasi-sockets": "wasi:sockets/instance-network@0.2.10",
                 "wasi-http": "wasi:http/outgoing-handler@0.2.12",
             }[implementation];
             expect(stderr).toContain("Jco added generated WIT import");
