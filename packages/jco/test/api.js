@@ -28,7 +28,9 @@ const isWindows = platform === "win32";
 // - (2026/06/17) increased due to updated binaryen
 // - (2026/07/06) increased due to updated jco-transpile (terser -> oxc-minify)
 // - (2026/08/11) increased due to transpile fixes
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 190_000;
+// - (2026/09/08) jco-transpile 0.13 adds scheduler/cancellation, borrow tracking,
+//   and trap handling: 181,694 -> 194,146 bytes with the same Binaryen and minifier.
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 200_000;
 
 suite("API", () => {
     let flavorfulWasmBytes;
@@ -236,8 +238,7 @@ suite("API", () => {
         assert.ok(optimizedComponent.byteLength < flavorfulWasmBytes.byteLength);
     });
 
-    // TODO(unskip): investigate minified output growth to 194146 characters against the 190000 limit (PR #2080).
-    test.concurrent.skip("Transpile & Optimize & Minify", async () => {
+    test.concurrent("Transpile & Optimize & Minify", async () => {
         const name = "flavorful";
         const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
             name,
