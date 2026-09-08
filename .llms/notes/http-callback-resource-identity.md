@@ -4,11 +4,32 @@ Recorded 2026-09-08 while investigating Jco PR #2080.
 
 ## Status and correction to the earlier diagnosis
 
-The integration test `serves a request through guest -> WIT callback resource -> host node:http` in `packages/jco/test/node/http.js` is temporarily skipped at the user's request. Its `TODO(fix)` identifies the resource identity mismatch; its original body and assertions remain intact.
+The HTTP server integration test in `packages/jco/test/node/http.js` is now re-enabled as `serves a request through guest -> WIT callback dispatcher -> host node:http`. The globals test for issue (1) remains skipped. The failing snippets below preserve the original investigation; the production HTTP boundary now uses the dispatcher described here.
 
 **The initial conclusion that this necessarily requires an upstream ComponentizeJS registration fix was too strong.** Further inspection shows that the test passes a guest-defined exported resource to an import expecting the separately imported resource type. A control using an actual host-created imported resource succeeds. A separate callback-ID dispatcher proof of concept also succeeds without engine changes.
 
-The immediate HTTP fix should therefore address the WIT/adapter callback design in this repository. ComponentizeJS could additionally provide a clearer error when lowering an object without a valid imported-resource handle, but automatically registering that object as an exported resource would not repair the type mismatch.
+The HTTP fix addresses the WIT/adapter callback design in this repository. ComponentizeJS could additionally provide a clearer error when lowering an object without a valid imported-resource handle, but automatically registering that object as an exported resource would not repair the type mismatch.
+
+## Implemented HTTP fix
+
+- Both copies of HTTP WIT now accept a u32 listener registration in the host server constructor and export an ordinary callback handle function. Importing HTTP no longer implicitly imports a callback resource interface.
+- Each direct implementation owns its own registry. IDs are allocated monotonically, with explicit u32 exhaustion handling. A handler enters the registry before listen, is removed on failed listen or successful close, and is restored if that server listens again. A failed close preserves it. Construction failure never creates an active registration.
+- The exported dispatcher uses the JS return/throw convention for WIT results, returning the response or throwing a serialized error. Calling a released or unknown registration rejects with ERR_JCO_HTTP_CALLBACK_NOT_FOUND.
+- The opt-in Node provider exposes createHttpHost(() => instance.httpCallbacks). Each component gets a separate provider and dispatcher closure. Callback entry is serialized per provider, including recovery after a rejected callback.
+- Host close waits for accepted callback work to finish even if closeAllConnections has already destroyed its socket. The guest can then release the registration without stranding a queued callback. The host resource destructor does not call back into a guest during canonical resource destruction.
+- The HTTP integration runner preserves the original POST response assertion, starts two independent component instances, sends overlapping requests, verifies guest closure counters, checks the released-ID error through the actual WIT export, and closes/relistens the same guest server.
+
+The user-facing setup example is in docs/src/interop/nodejs-builtins.md under HTTP and selectable implementations. Direct client-only host mappings remain supported. The WIT shape changes from the broken listener-resource ABI; consumers of the direct server adapter must rebuild components and instantiate with the provider factory.
+
+The original protocol proof below remains deliberately small. Production regression tests additionally cover WIT callback errors, failed construction/listen/close, callback serialization and error recovery, and close while an accepted callback remains pending.
+
+## Verification of the implemented fix
+
+- Node 24.19.0 HTTP/HTTP2 shim suite: **97 passed across 18 files**.
+- Node 26.8.1 HTTP, HTTP2, module and globals integration files: **39 passed, 1 skipped**.
+- Node 24.19.0 HTTP and globals integration files: **24 passed, 1 skipped**.
+- The sole skip in these integration runs is the existing globals issue (1). These are targeted runs; they do not claim the entire repository suite is green.
+- Jco and jco-std TypeScript builds, changed-source lint, and git diff --check pass. Logs are `.llm/notes/http-dispatch-final-{unit,node26,node24}.log`.
 
 ## User-visible failure
 
@@ -225,12 +246,12 @@ console.assert(instance.dispatch(ids[0]) === undefined);
 
 The executable proof tests two independent registrations, persistent closure state, explicit release, and continued operation of the other registration after releasing the first. All pass with the current ComponentizeJS/transpiler.
 
-This is a protocol proof, not a completed HTTP fix. It does not yet exercise HTTP payload records, async request handlers, simultaneous requests, or server shutdown during an in-flight callback.
+This initial protocol proof does not exercise HTTP payload records, async request handlers, simultaneous requests, or server shutdown during an in-flight callback. Those are covered by the production HTTP tests added with the implemented fix above.
 
-## Proposed HTTP implementation work
+## Implementation plan used for the fix
 
 1. **Change the callback boundary.** Keep the host-owned server resource, but give its constructor a callback registration ID instead of a guest-created `own<request-listener>`. Export an ordinary callback dispatch function accepting that ID and the existing request record. Keep the existing response/error record types. Use an explicit release mechanism with a defined owner.
-2. **Add the guest registry in the direct implementation.** Register the handler before constructing the host server, remove it if construction fails, and retain it while requests can still use it. Define behavior for unknown/released IDs and ID exhaustion; do not reuse a live registration.
+2. **Add the guest registry in the direct implementation.** Allocate the ID with the host server, register its handler before listen, remove it if listen fails, and retain it while requests can still use it. Construction failure must not leave an active registration. Define behavior for unknown/released IDs and ID exhaustion; do not reuse a live registration.
 3. **Bind the host adapter to one component instance.** The adapter must receive that instance's dispatch export after instantiation, before the first `start`/server creation call. The current module-level adapter exports need an instance-specific callback binding to route IDs from multiple components. Do not share an unscoped callback map between instances.
 4. **Respect execution ordering.** Registration stores routing data; it must not synchronously call back into the currently executing guest. Node's later request event can invoke the dispatcher. Verify the existing JSPI configuration for async handlers and concurrent calls explicitly.
 5. **Specify cleanup.** Close should stop new requests, settle or cancel in-flight work according to the existing API behavior, then release the registration exactly once. Cover failed listen/construction and disposal as well as normal close.

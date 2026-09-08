@@ -801,6 +801,30 @@ clients and servers. `wasi-http` implements clients and rejects server
 construction immediately because outgoing-handler cannot listen for arbitrary
 connections.
 
+For direct servers, instantiate with a provider bound to that component's
+callback dispatcher. For example, after transpiling with
+`--instantiation async --map jco:node/http@0.1.0=http-host`:
+
+```js
+import { instantiate } from './component.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { createHttpHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node';
+
+let instance;
+const imports = new WASIShim().getImportObject();
+imports['http-host'] = createHttpHost(() => instance.httpCallbacks);
+instance = await instantiate(undefined, imports);
+// Await application exports that create or control servers.
+await instance.start();
+```
+
+Create a separate provider for each component instance. The server holds a
+callback registration ID; handlers stay in the guest and run through the
+exported dispatcher. The provider serializes callback entry and drains accepted
+callbacks before close completes. Closing releases the guest registration;
+listening again registers the same server's handler again. Direct client-only
+applications can continue mapping the Node provider module without this factory.
+
 > [!WARNING]
 > All modes currently buffer complete request and response bodies.
 
