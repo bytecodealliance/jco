@@ -7,10 +7,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { componentizeFixture, exec, setupAsyncTest } from "../helpers.js";
 
 suite("node:console in a component", () => {
-    // TODO(unskip): use the published jco-std console exports once a release containing them is available.
-    // StarlingMonkey also needs to finish componentizing the bundled console core within the
-    // ten-minute integration budget. The direct host suite covers the opt-in Node passthrough meanwhile.
-    test.skip("componentizes and runs default and custom consoles", async () => {
+    // The bundled console core must componentize within the ten-minute integration budget.
+    test("componentizes and runs default and custom consoles", async () => {
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
             fixture: "node-console",
             bundle: true,

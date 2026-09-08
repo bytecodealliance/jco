@@ -172,8 +172,7 @@ describe("node:http2 in a fully formed component", () => {
         guest: { length: 131072, first: "s", last: "s" },
     };
 
-    // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
-    test.skip("runs a fully formed wasi:sockets component against local HTTP/2 clients and servers", async () => {
+    test("runs a fully formed wasi:sockets component against local HTTP/2 clients and servers", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http2",
             bundle: true,
@@ -194,8 +193,7 @@ describe("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
-    test.skip("runs the same wasi:sockets component under StarlingMonkey", async () => {
+    test("runs the same wasi:sockets component under StarlingMonkey", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http2",
             wit: "wit-starling",
@@ -217,8 +215,7 @@ describe("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
-    test.skip("runs the component against the public nghttp2.org h2c server", async () => {
+    test("runs the component against the public nghttp2.org h2c server", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-http2",
             bundle: true,
@@ -240,8 +237,7 @@ describe("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    // TODO(unskip): enable after a published jco-std release contains the HTTP/2 exports.
-    test.skip("componentizes idiomatic client and server code through the direct boundary", async () => {
+    test("componentizes idiomatic client and server code through the direct boundary", async () => {
         const { stderr } = await componentizeFixture({
             fixture: "node-http2",
             bundle: true,

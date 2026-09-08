@@ -27,8 +27,7 @@ const NODE_RESULT = {
 };
 
 suite("node:events in a component", () => {
-    // TODO(unskip): use the published jco-std events export once a release containing it is available.
-    test.skip("componentizes and matches Node", async () => {
+    test("componentizes and matches Node", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-events",
             entry: "source.js",

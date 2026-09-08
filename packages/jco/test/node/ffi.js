@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -14,11 +15,18 @@ const NODE_HOST = pathToFileURL(
 
 const UNSUPPORTED = "ERR_JCO_UNSUPPORTED_NODE_API";
 
+// The host adapter requires a runtime with node:ffi enabled via --experimental-ffi.
+function hostHasFfi() {
+    try {
+        createRequire(import.meta.url)("node:ffi");
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 suite("node:ffi in a component", () => {
-    // TODO(unskip): needs two things CI does not have yet -- a jco-std release carrying the
-    // node/26.x.x ffi exports, and a Node 26 runtime started with `--experimental-ffi`, since the
-    // host adapter forwards to the runtime's real node:ffi.
-    test.skip("componentizes and calls native code through the opt-in Node host", async () => {
+    test.skipIf(!hostHasFfi())("componentizes and calls native code through the opt-in Node host", async () => {
         // Built from a copy: componentizing rewrites the world in place to add the WIT import.
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
             fixture: "node-ffi",

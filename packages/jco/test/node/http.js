@@ -195,8 +195,7 @@ describe("node:http WIT installation", () => {
 });
 
 describe("node:http in a component", () => {
-    // TODO(unskip): use the published jco-std HTTP server exports once a release containing them is available.
-    test.skip("serves a request through guest -> WIT callback resource -> host node:http", async () => {
+    test("serves a request through guest -> WIT callback resource -> host node:http", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http-server",
             bundle: true,
@@ -225,8 +224,7 @@ describe("node:http in a component", () => {
         }
     }, 600_000);
 
-    // TODO(unskip): use the published jco-std HTTP exports once a release containing them is available.
-    test.skip.each(["direct", "wasi-sockets", "wasi-http"])(
+    test.each(["direct", "wasi-sockets", "wasi-http"])(
         "componentizes and performs a local request via %s",
         async (implementation) => {
             const { componentPath, stderr } = await componentizeFixture({

@@ -13,8 +13,7 @@ const NODE_HOST = pathToFileURL(
 ).href;
 
 suite("node:child_process in a component", () => {
-    // TODO(unskip): use the published jco-std child-process exports once a release containing them is available.
-    test.skip("componentizes and calls through the opt-in Node host", async () => {
+    test("componentizes and calls through the opt-in Node host", async () => {
         // Built from a copy: componentizing rewrites the world in place to add the WIT import.
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
             fixture: "node-child-process",

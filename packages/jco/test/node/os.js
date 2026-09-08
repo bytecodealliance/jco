@@ -24,8 +24,7 @@ suite("node:os in a component", () => {
         expect((await readFile(world, "utf8")).match(/import jco:node\/os@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    // TODO(unskip): enable after a jco-std release includes the node:os package exports.
-    test.skip("componentizes and reads the real host through the opt-in Node adapter", async () => {
+    test("componentizes and reads the real host through the opt-in Node adapter", async () => {
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
             fixture: "node-os",
             bundle: true,

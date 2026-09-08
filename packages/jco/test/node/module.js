@@ -8,8 +8,7 @@ import { componentizeFixture, transpileComponent } from "../helpers.js";
 const UNSUPPORTED = "ERR_JCO_UNSUPPORTED_NODE_API";
 
 suite("node:module in a component", () => {
-    // TODO(unskip): use the published jco-std node/24.x.x module export once a release contains it.
-    test.skip("componentizes, computes what it can, and refuses the loading half", async () => {
+    test("componentizes, computes what it can, and refuses the loading half", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-module",
             entry: "source.js",
