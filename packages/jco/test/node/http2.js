@@ -218,7 +218,7 @@ describe("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    test("runs the component against the public nghttp2.org h2c server", async () => {
+    test("posts to a local Node h2c server with an explicit request authority", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-http2",
             bundle: true,
@@ -226,15 +226,20 @@ describe("node:http2 in a fully formed component", () => {
             extraArgs: ["--backend", "quickjs", "--with-nodejs-http2-via", "wasi-sockets"],
         });
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
-            component: { name: "node-http2-wasi-sockets-external", path: componentPath, skipInstantiation: true },
+            component: { name: "node-http2-wasi-sockets-echo", path: componentPath, skipInstantiation: true },
             jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
         });
         try {
             const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run.js", import.meta.url));
-            const output = await exec(runner, esModuleOutputPath, "external");
+            const output = await exec(runner, esModuleOutputPath, "echo");
             const report = JSON.parse(output.stdout);
-            expect(report.external).toMatchObject({ status: 200, contentType: "application/json" });
-            expect(JSON.parse(report.external.body).data).toBe("client");
+            expect(report.echo).toMatchObject({ status: 200, contentType: "application/json" });
+            expect(JSON.parse(report.echo.body)).toEqual({
+                method: "POST",
+                path: "/echo",
+                authority: "echo.test",
+                data: "client",
+            });
         } finally {
             await cleanup();
         }

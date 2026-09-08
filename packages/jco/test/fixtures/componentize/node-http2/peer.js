@@ -8,8 +8,20 @@ if (argv[2] === "server") {
         stream.setEncoding("utf8");
         stream.on("data", (chunk) => chunks.push(chunk));
         stream.on("end", () => {
-            stream.respond({ ":status": 201, "content-type": "text/plain" });
             const body = chunks.join("");
+            if (headers[":path"] === "/echo") {
+                stream.respond({ ":status": 200, "content-type": "application/json" });
+                stream.end(
+                    JSON.stringify({
+                        method: headers[":method"],
+                        path: headers[":path"],
+                        authority: headers[":authority"],
+                        data: body,
+                    }),
+                );
+                return;
+            }
+            stream.respond({ ":status": 201, "content-type": "text/plain" });
             stream.end(
                 headers[":path"] === "/large"
                     ? `large:${headers[":method"]}:${headers[":path"]}:${body.length}:${body[0]}:${body.at(-1)}`
