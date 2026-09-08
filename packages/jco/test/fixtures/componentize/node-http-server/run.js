@@ -46,16 +46,7 @@ try {
     assert.equal(await first.count(), 3);
     assert.equal(await second.count(), 1);
     await first.stop();
-    await assert.rejects(
-        first.httpCallbacks.handle(1, {
-            method: "GET",
-            url: "/",
-            httpVersion: "1.1",
-            headers: [],
-            body: new Uint8Array(),
-        }),
-        (error) => error.payload?.code === "ERR_JCO_HTTP_CALLBACK_NOT_FOUND",
-    );
+    assert.equal(await first.httpCallbacks.takeRequestListener(1), undefined);
     const restartedPort = await first.start();
     assert.equal(await request(restartedPort), body);
     assert.equal(await first.count(), 4);

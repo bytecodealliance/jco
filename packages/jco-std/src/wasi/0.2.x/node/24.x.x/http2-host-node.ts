@@ -8,9 +8,15 @@
  */
 import { Buffer } from "node:buffer";
 import * as nodeHttp2 from "node:http2";
+import {
+  CallbackResource,
+  createCallbackQueue,
+  retireCallbacks,
+} from "./internal/callback-resource.js";
 
 import { rawHeadersToFields, serializeNodeError } from "./internal/http-host.js";
 import type {
+  DirectHttp2Callbacks,
   DirectHttp2ClientOptions,
   DirectHttp2RequestOptions,
   DirectHttp2Result,
@@ -301,19 +307,16 @@ class NodeHttp2ClientSession {
 }
 
 class NodeHttp2Server {
-  readonly #errorListener: DirectHttp2ServerErrorListener;
-  readonly #listener: DirectHttp2StreamListener;
+  readonly #pending = new Set<Promise<void>>();
   readonly #server: nodeHttp2.Http2Server | nodeHttp2.Http2SecureServer;
   readonly #sessionIds = new WeakMap<nodeHttp2.Http2Session, number>();
   #nextSessionId = 1;
 
   constructor(
     options: DirectHttp2ServerOptions,
-    listener: DirectHttp2StreamListener,
-    errorListener: DirectHttp2ServerErrorListener,
+    handle: DirectHttp2StreamListener["handle"],
+    onError: DirectHttp2ServerErrorListener["handle"],
   ) {
-    this.#errorListener = errorListener;
-    this.#listener = listener;
     const common = {
       settings: nodeSettings(options.settings),
       allowHTTP1: options.allowHttp1,
@@ -329,7 +332,10 @@ class NodeHttp2Server {
     this.#server.on("session", (session) => {
       this.#sessionIds.set(session, this.#nextSessionId++);
     });
-    this.#server.on("error", (error) => errorListener.handle(serializeNodeError(error)));
+    // Listen failures are returned by listen(); session errors arrive independently.
+    this.#server.on("sessionError", (error) => {
+      this.#track(Promise.resolve().then(() => onError(serializeNodeError(error))));
+    });
     const onStream = async (
       stream: nodeHttp2.ServerHttp2Stream,
       _headers: nodeHttp2.IncomingHttpHeaders,
@@ -349,7 +355,7 @@ class NodeHttp2Server {
           offset += chunk.byteLength;
         }
         const session = stream.session;
-        const result = await listener.handle({
+        const result = await handle({
           sessionId: session ? (this.#sessionIds.get(session) ?? 0) : 0,
           id: stream.id ?? 0,
           headers: rawHeadersToFields(rawHeaders),
@@ -357,21 +363,38 @@ class NodeHttp2Server {
           remoteAddress: session?.socket.remoteAddress,
           remotePort: session?.socket.remotePort,
         });
-        if (result.tag === "err") {
-          throw Object.assign(new Error(result.val.message), result.val);
+        stream.respond(headerObject(result.headers));
+        stream.end(result.body);
+      } catch (caught) {
+        const value =
+          typeof caught === "object" && caught !== null && "payload" in caught
+            ? caught.payload
+            : caught;
+        const serialized = serializeNodeError(value);
+        const error =
+          value instanceof Error ? value : Object.assign(new Error(serialized.message), serialized);
+        if (stream.destroyed) {
+          return;
         }
-        stream.respond(headerObject(result.val.headers));
-        stream.end(result.val.body);
-      } catch (error) {
         if (!stream.headersSent) {
           stream.respond({ ":status": 500, "content-type": "text/plain; charset=utf-8" });
-          stream.end(error instanceof Error ? error.message : String(error));
+          stream.end(error.message);
         } else {
-          stream.destroy(error instanceof Error ? error : new Error(String(error)));
+          stream.destroy(error);
         }
       }
     };
-    this.#server.on("stream", onStream);
+    this.#server.on("stream", (...args: Parameters<typeof onStream>) =>
+      this.#track(onStream(...args)),
+    );
+  }
+
+  #track(pending: Promise<void>): void {
+    this.#pending.add(pending);
+    void pending.then(
+      () => this.#pending.delete(pending),
+      () => this.#pending.delete(pending),
+    );
   }
 
   async listen(
@@ -416,14 +439,14 @@ class NodeHttp2Server {
 
   async close(): AsyncResult<boolean> {
     const wasListening = this.#server.listening;
-    if (!wasListening) {
-      return { tag: "ok", val: false };
-    }
     try {
-      await new Promise<void>((resolve, reject) => {
-        this.#server.close((error) => (error ? reject(error) : resolve()));
-      });
-      return { tag: "ok", val: true };
+      if (wasListening) {
+        await new Promise<void>((resolve, reject) => {
+          this.#server.close((error) => (error ? reject(error) : resolve()));
+        });
+      }
+      await Promise.all(this.#pending);
+      return { tag: "ok", val: wasListening };
     } catch (error) {
       return { tag: "err", val: serializeNodeError(error) };
     }
@@ -453,13 +476,58 @@ class NodeHttp2Server {
 
   [Symbol.dispose](): void {
     this.#server.close();
-    this.#errorListener[Symbol.dispose]();
-    this.#listener[Symbol.dispose]();
   }
 }
 
 export const ClientSession =
   NodeHttp2ClientSession as unknown as import("./http2/types.js").DirectHttp2ClientSessionConstructor;
-export const Server = NodeHttp2Server as unknown as DirectHttp2ServerConstructor;
+export const ClientStream = NodeHttp2ClientStream;
 
-export default { ClientSession, Server };
+/** Bind callback resource redemption and invocation to one component instance. */
+export function createHttp2Host(callbacks: () => DirectHttp2Callbacks) {
+  const enqueue = createCallbackQueue();
+  class Server extends NodeHttp2Server {
+    readonly #listener: CallbackResource<DirectHttp2StreamListener>;
+    readonly #errorListener: CallbackResource<DirectHttp2ServerErrorListener>;
+
+    constructor(options: DirectHttp2ServerOptions, listener: number, errorListener: number) {
+      const stream = new CallbackResource(
+        () => callbacks().takeStreamListener(listener),
+        "ERR_JCO_HTTP2_CALLBACK_NOT_FOUND",
+      );
+      const error = new CallbackResource(
+        () => callbacks().takeServerErrorListener(errorListener),
+        "ERR_JCO_HTTP2_CALLBACK_NOT_FOUND",
+      );
+      super(
+        options,
+        (incoming) => enqueue(async () => (await stream.get()).handle(incoming)),
+        (reason) => enqueue(async () => (await error.get()).handle(reason)),
+      );
+      this.#listener = stream;
+      this.#errorListener = error;
+    }
+
+    override async close(): AsyncResult<boolean> {
+      const result = await super.close();
+      if (result.tag === "ok") {
+        retireCallbacks(enqueue, this.#listener, this.#errorListener);
+      }
+      return result;
+    }
+
+    override [Symbol.dispose](): void {
+      super[Symbol.dispose]();
+      void this.close();
+    }
+  }
+  return { ClientSession, ClientStream, Server: Server as unknown as DirectHttp2ServerConstructor };
+}
+
+export const Server = class {
+  constructor() {
+    throw new Error("HTTP/2 servers require createHttp2Host(() => instance.http2Callbacks)");
+  }
+} as unknown as DirectHttp2ServerConstructor;
+
+export default { ClientSession, ClientStream, Server, createHttp2Host };

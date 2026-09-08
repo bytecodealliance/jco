@@ -4,10 +4,12 @@ import { serializeNodeError } from "../../internal/http-host.js";
 import { codedError } from "../../errors/core.js";
 import { fromImplementationError } from "../errors.js";
 import type {
-  DirectHttpCallbacks,
+  DirectHttpRequestListener,
   DirectHttpHost,
   DirectHttpServerAddress,
   HttpImplementation,
+  HttpListenOptions,
+  HttpServerOptions,
   HttpRequestHandler,
   HttpServerAddress,
 } from "../types.js";
@@ -24,36 +26,39 @@ function directAddress(address: DirectHttpServerAddress | undefined): HttpServer
       : address.val;
 }
 
-export function createDirectHttpImplementation(
-  host: HostImports<DirectHttpHost>,
-): HttpImplementation & { httpCallbacks: DirectHttpCallbacks } {
+class RequestListener implements DirectHttpRequestListener {
+  constructor(readonly handler: HttpRequestHandler) {}
+
+  async handle(request: Parameters<HttpRequestHandler>[0]) {
+    try {
+      return await this.handler(request);
+    } catch (error) {
+      throw serializeNodeError(error);
+    }
+  }
+
+  [Symbol.dispose](): void {}
+}
+
+export function createDirectHttpImplementation(host: HostImports<DirectHttpHost>) {
   // Each implementation (and bundled guest instance) owns its registrations.
-  const listeners = new Map<number, HttpRequestHandler>();
+  const listeners = new Map<number, RequestListener>();
   let nextListener = 1;
   return {
     httpCallbacks: {
-      async handle(listener, request) {
-        try {
-          const handler = listeners.get(listener);
-          if (!handler) {
-            throw codedError(
-              new Error("HTTP callback registration is not active"),
-              "ERR_JCO_HTTP_CALLBACK_NOT_FOUND",
-            );
-          }
-          // Exported WIT results use JS return/throw, rather than tagged results.
-          return await handler(request);
-        } catch (error) {
-          throw serializeNodeError(error);
-        }
+      RequestListener,
+      takeRequestListener(id: number) {
+        const listener = listeners.get(id);
+        listeners.delete(id);
+        return listener;
       },
     },
 
-    request(options) {
+    request(options: Parameters<HttpImplementation["request"]>[0]) {
       return callHost(() => host.request(options), fromImplementationError);
     },
 
-    createServer(options, handler) {
+    createServer(options: HttpServerOptions, handler: HttpRequestHandler) {
       if (nextListener > 0xffff_ffff) {
         throw codedError(
           new Error("HTTP callback registrations exhausted"),
@@ -63,8 +68,8 @@ export function createDirectHttpImplementation(
       const listener = nextListener++;
       const server = new host.Server(options, listener);
       return {
-        listen(listenOptions) {
-          listeners.set(listener, handler);
+        listen(listenOptions: HttpListenOptions) {
+          listeners.set(listener, new RequestListener(handler));
           try {
             return directAddress(
               callHost(() => server.listen(listenOptions), fromImplementationError),

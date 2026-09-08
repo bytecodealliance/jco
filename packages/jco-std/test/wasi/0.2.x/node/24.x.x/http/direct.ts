@@ -69,9 +69,7 @@ describe("node:http direct implementation", () => {
     const b = second.createServer!({}, () => response("second"));
     expect(ids).toEqual([1, 1]);
     const inactive = (implementation: typeof first, id = 1) =>
-      expect(implementation.httpCallbacks.handle(id, incoming)).rejects.toMatchObject({
-        code: "ERR_JCO_HTTP_CALLBACK_NOT_FOUND",
-      });
+      expect(implementation.httpCallbacks.takeRequestListener(id)).toBeUndefined();
     await inactive(first);
     failListen = true;
     expect(() => a.listen({})).toThrow("listen failed");
@@ -79,18 +77,24 @@ describe("node:http direct implementation", () => {
     failListen = false;
     a.listen({});
     b.listen({});
-    expect(decoder.decode((await first.httpCallbacks.handle(1, incoming)).body)).toBe("1");
-    expect(decoder.decode((await second.httpCallbacks.handle(1, incoming)).body)).toBe("second");
+    const firstListener = first.httpCallbacks.takeRequestListener(1)!;
+    const secondListener = second.httpCallbacks.takeRequestListener(1)!;
+    await inactive(first);
+    await inactive(second);
+    expect(decoder.decode((await firstListener.handle(incoming)).body)).toBe("1");
+    expect(decoder.decode((await secondListener.handle(incoming)).body)).toBe("second");
     failClose = true;
     expect(() => a.close()).toThrow("close failed");
-    expect(decoder.decode((await first.httpCallbacks.handle(1, incoming)).body)).toBe("2");
+    expect(decoder.decode((await firstListener.handle(incoming)).body)).toBe("2");
     failClose = false;
     a.close();
     a.close();
     await inactive(first);
-    expect(decoder.decode((await second.httpCallbacks.handle(1, incoming)).body)).toBe("second");
+    expect(decoder.decode((await secondListener.handle(incoming)).body)).toBe("second");
     a.listen({});
-    expect(decoder.decode((await first.httpCallbacks.handle(1, incoming)).body)).toBe("3");
+    expect(
+      decoder.decode((await first.httpCallbacks.takeRequestListener(1)!.handle(incoming)).body),
+    ).toBe("3");
     a.close();
     b.close();
     await inactive(second);
@@ -122,7 +126,7 @@ describe("node:http direct implementation", () => {
     });
     server.listen({});
     await expect(
-      implementation.httpCallbacks.handle(id!, {
+      implementation.httpCallbacks.takeRequestListener(id!)!.handle({
         method: "GET",
         url: "/",
         httpVersion: "1.1",
@@ -284,7 +288,7 @@ describe("node:http direct implementation", () => {
     });
     server.listen(8080, "127.0.0.1");
 
-    const result = await implementation.httpCallbacks.handle(listener!, {
+    const result = await implementation.httpCallbacks.takeRequestListener(listener!)!.handle({
       method: "PUT",
       url: "/resource",
       httpVersion: "1.1",

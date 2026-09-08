@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
 import * as nodeHttp2 from "node:http2";
+import { connect } from "node:net";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   ClientSession,
-  Server,
+  createHttp2Host,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2-host-node.js";
 import type {
   DirectHttp2ClientSession,
@@ -37,6 +38,31 @@ async function nativeRequest(authority: string, secure = false): Promise<string>
 }
 
 describe("Node HTTP/2 host provider", () => {
+  test("redeems the error resource for a native server error and drops it after close", async () => {
+    const errorListener = { handle: vi.fn(), [Symbol.dispose]: vi.fn() };
+    const takeStreamListener = vi.fn(() => undefined);
+    const takeServerErrorListener = vi.fn(() => errorListener);
+    const { Server } = createHttp2Host(() => ({ takeStreamListener, takeServerErrorListener }));
+    const server = new Server({ secure: false, settings: emptySettings }, 1, 2);
+    closeables.push(() => server[Symbol.dispose]());
+    const address = await server.listen({ port: 0, host: "127.0.0.1" });
+    if (address.tag !== "ok" || address.val.tag !== "tcp") {
+      throw new Error("missing address");
+    }
+    const socket = connect(address.val.val.port, "127.0.0.1");
+    closeables.push(() => socket.destroy());
+    socket.resume();
+    socket.end("invalid HTTP/2 preface\r\n\r\n");
+    await expect.poll(() => errorListener.handle.mock.calls.length).toBe(1);
+    expect(errorListener.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "ERR_HTTP2_ERROR" }),
+    );
+    expect(takeServerErrorListener).toHaveBeenCalledExactlyOnceWith(2);
+    expect(takeStreamListener).not.toHaveBeenCalled();
+    await server.close();
+    await expect.poll(() => errorListener[Symbol.dispose].mock.calls.length).toBe(1);
+  });
+
   test("uses a real h2c client session and stream", async () => {
     const server = nodeHttp2.createServer();
     closeables.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -142,16 +168,13 @@ describe("Node HTTP/2 host provider", () => {
       : [undefined, undefined];
     const listener: DirectHttp2StreamListener = {
       handle: async (stream) => ({
-        tag: "ok",
-        val: {
-          headers: [
-            { name: ":status", value: encoder.encode("202") },
-            { name: "x-path", value: stream.headers.find(({ name }) => name === ":path")!.value },
-          ],
-          body: encoder.encode(`callback:${decoder.decode(stream.body)}`),
-        },
+        headers: [
+          { name: ":status", value: encoder.encode("202") },
+          { name: "x-path", value: stream.headers.find(({ name }) => name === ":path")!.value },
+        ],
+        body: encoder.encode(`callback:${decoder.decode(stream.body)}`),
       }),
-      [Symbol.dispose](): void {},
+      [Symbol.dispose]: vi.fn(),
     };
     const errorListener: DirectHttp2ServerErrorListener = {
       handle(error): void {
@@ -159,10 +182,19 @@ describe("Node HTTP/2 host provider", () => {
       },
       [Symbol.dispose](): void {},
     };
+    const takeStreamListener = vi.fn((id: number) => {
+      expect(id).toBe(1);
+      return listener;
+    });
+    const takeServerErrorListener = vi.fn((id: number) => {
+      expect(id).toBe(2);
+      return errorListener;
+    });
+    const { Server } = createHttp2Host(() => ({ takeStreamListener, takeServerErrorListener }));
     const server = new Server(
       { secure, key, cert, settings: emptySettings },
-      listener,
-      errorListener,
+      1,
+      2,
     ) as DirectHttp2Server;
     closeables.push(() => server[Symbol.dispose]());
     const listened = await server.listen({ port: 0, host: "127.0.0.1" });
@@ -175,6 +207,9 @@ describe("Node HTTP/2 host provider", () => {
       nativeRequest(`${protocol}://127.0.0.1:${listened.val.val.port}`, secure),
     ).resolves.toBe("callback:request");
     await expect(server.close()).resolves.toEqual({ tag: "ok", val: true });
+    expect(takeStreamListener).toHaveBeenCalledTimes(1);
+    await expect.poll(() => vi.mocked(listener[Symbol.dispose]).mock.calls.length).toBe(1);
+    expect(takeServerErrorListener).not.toHaveBeenCalled();
   });
 
   test("maps connection failures into structured Node errors", async () => {

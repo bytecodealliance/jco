@@ -1,4 +1,5 @@
-import { fromImplementationError } from "../../errors.js";
+import { serializeNodeError } from "../../../internal/http-host.js";
+import { codedError, fromImplementationError } from "../../errors.js";
 import { toDirectSettings } from "../../settings.js";
 import type {
   DirectHttp2Host,
@@ -10,7 +11,7 @@ import type {
 } from "../../types.js";
 import { tlsBytes, unwrap } from "./shared.js";
 
-class StreamListener implements DirectHttp2StreamListener {
+export class StreamListener implements DirectHttp2StreamListener {
   readonly #handler: Http2StreamHandler;
 
   constructor(handler: Http2StreamHandler) {
@@ -19,29 +20,16 @@ class StreamListener implements DirectHttp2StreamListener {
 
   async handle(stream: Parameters<DirectHttp2StreamListener["handle"]>[0]) {
     try {
-      return { tag: "ok" as const, val: await this.#handler(stream) };
+      return await this.#handler(stream);
     } catch (error) {
-      const value =
-        typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
-      return {
-        tag: "err" as const,
-        val: {
-          name: typeof value.name === "string" ? value.name : "Error",
-          message: typeof value.message === "string" ? value.message : String(error),
-          code: typeof value.code === "string" ? value.code : undefined,
-          syscall: typeof value.syscall === "string" ? value.syscall : undefined,
-          hostname: typeof value.hostname === "string" ? value.hostname : undefined,
-          address: typeof value.address === "string" ? value.address : undefined,
-          port: typeof value.port === "number" ? value.port : undefined,
-        },
-      };
+      throw serializeNodeError(error);
     }
   }
 
   [Symbol.dispose](): void {}
 }
 
-class ServerErrorListener implements DirectHttp2ServerErrorListener {
+export class ServerErrorListener implements DirectHttp2ServerErrorListener {
   readonly #handler: (error: Error) => void;
 
   constructor(handler: (error: Error) => void) {
@@ -55,15 +43,60 @@ class ServerErrorListener implements DirectHttp2ServerErrorListener {
   [Symbol.dispose](): void {}
 }
 
-export const http2Callbacks = { ServerErrorListener, StreamListener };
+export function createHttp2CallbackRegistry() {
+  let nextId = 1;
+  const streams = new Map<number, StreamListener>();
+  const errors = new Map<number, ServerErrorListener>();
+  return {
+    allocate() {
+      if (nextId > 0xffff_fffe) {
+        throw codedError(
+          "Error",
+          "ERR_JCO_HTTP2_CALLBACK_LIMIT",
+          "HTTP/2 callback registrations exhausted",
+        );
+      }
+      return [nextId++, nextId++] as const;
+    },
+    register(
+      listener: number,
+      errorListener: number,
+      handler: Http2StreamHandler,
+      onError: (error: Error) => void,
+    ) {
+      streams.set(listener, new StreamListener(handler));
+      errors.set(errorListener, new ServerErrorListener(onError));
+    },
+    release(listener: number, errorListener: number) {
+      streams.delete(listener);
+      errors.delete(errorListener);
+    },
+    exports: {
+      StreamListener,
+      ServerErrorListener,
+      takeStreamListener(id: number) {
+        const listener = streams.get(id);
+        streams.delete(id);
+        return listener;
+      },
+      takeServerErrorListener(id: number) {
+        const listener = errors.get(id);
+        errors.delete(id);
+        return listener;
+      },
+    },
+  };
+}
 
 export function createDirectHttp2Server(
   host: DirectHttp2Host,
+  registry: ReturnType<typeof createHttp2CallbackRegistry>,
   secure: boolean,
   options: Http2ServerOptions,
   handler: Http2StreamHandler,
   onError: (error: Error) => void,
 ): Http2ServerImplementation {
+  const [listener, errorListener] = registry.allocate();
   const server = new host.Server(
     {
       secure,
@@ -73,8 +106,8 @@ export function createDirectHttp2Server(
       allowHttp1: options.allowHTTP1,
       strictFieldWhitespaceValidation: options.strictFieldWhitespaceValidation,
     },
-    new StreamListener(handler),
-    new ServerErrorListener(onError),
+    listener,
+    errorListener,
   );
   const address = (value: ReturnType<typeof server.address>) =>
     value === undefined
@@ -87,10 +120,22 @@ export function createDirectHttp2Server(
           }
         : value.val;
   return {
-    listen: (listenOptions) => address(unwrap(server.listen(listenOptions)))!,
-    close: () => unwrap(server.close()),
+    listen(listenOptions) {
+      registry.register(listener, errorListener, handler, onError);
+      try {
+        return address(unwrap(() => server.listen(listenOptions)))!;
+      } catch (error) {
+        registry.release(listener, errorListener);
+        throw error;
+      }
+    },
+    close() {
+      const result = unwrap(() => server.close());
+      registry.release(listener, errorListener);
+      return result;
+    },
     address: () => address(server.address()),
-    updateSettings: (settings) => unwrap(server.updateSettings(toDirectSettings(settings))),
+    updateSettings: (settings) => unwrap(() => server.updateSettings(toDirectSettings(settings))),
     ref: () => server.ref(),
     unref: () => server.unref(),
   };

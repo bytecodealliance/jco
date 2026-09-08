@@ -65,12 +65,15 @@ describe("node:http builtin adapter", () => {
         expect(plugin.load(id)).toBe('export { httpCallbacks } from "/jco/http.js";');
     });
 
-    test.concurrent("keeps the callback dispatcher as an entry export after bundling", async () => {
+    test.concurrent("keeps the callback resource as an entry export after bundling", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         const httpModule = join(root, "http.js");
         await writeFile(entry, 'import { createServer } from "node:http"; export { createServer };\n');
-        await writeFile(httpModule, "export const httpCallbacks = { handle() {} }; export default {};\n");
+        await writeFile(
+            httpModule,
+            "export const httpCallbacks = { RequestListener: class {}, takeRequestListener() {} }; export default {};\n",
+        );
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { httpModule });
         const bundleOptions = { plugins: [plugin] };
         const source = await bundleNodeGuestExportsWrapper(entry, HTTP_WIT_REQUIREMENT.guestExports, bundleOptions);
@@ -193,7 +196,7 @@ describe("node:http WIT installation", () => {
 });
 
 describe("node:http in a component", () => {
-    test("serves a request through guest -> WIT callback dispatcher -> host node:http", async () => {
+    test("serves a request through guest -> WIT callback resource -> host node:http", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http-server",
             bundle: true,

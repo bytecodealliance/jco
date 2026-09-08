@@ -247,12 +247,17 @@ export type DirectHttpIncomingRequest = HttpIncomingRequestData;
 
 export type DirectHttpOutgoingResponse = HttpOutgoingResponseData;
 
-/** JS return/throw convention for the guest's exported callback dispatcher. */
-export interface DirectHttpCallbacks {
+/** Exported resource methods use the JS return/throw convention. */
+export interface DirectHttpRequestListener extends Disposable {
   handle(
-    listener: number,
     request: DirectHttpIncomingRequest,
   ): DirectHttpOutgoingResponse | Promise<DirectHttpOutgoingResponse>;
+}
+
+export interface DirectHttpCallbacks {
+  takeRequestListener(
+    id: number,
+  ): DirectHttpRequestListener | undefined | Promise<DirectHttpRequestListener | undefined>;
 }
 
 export interface DirectHttpServer extends Disposable {

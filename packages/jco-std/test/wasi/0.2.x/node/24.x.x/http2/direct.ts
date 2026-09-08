@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { createHttp2 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/core.js";
 import { createDirectHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.js";
 import type {
+  DirectHttp2Callbacks,
   DirectHttp2ClientOptions,
   DirectHttp2RequestOptions,
   DirectHttp2ServerErrorListener,
@@ -16,10 +17,16 @@ const encoder = new TextEncoder();
 const emptySettings: DirectHttp2Settings = { customSettings: [] };
 
 function fakeHost() {
+  let callbacks: DirectHttp2Callbacks;
+  let streamId: number;
+  let errorId: number;
   let errorListener: DirectHttp2ServerErrorListener | undefined;
   let listener: DirectHttp2StreamListener | undefined;
   let settings = emptySettings;
   return {
+    attach(value: DirectHttp2Callbacks) {
+      callbacks = value;
+    },
     host: {
       ClientSession: class {
         constructor(_authority: string, options: DirectHttp2ClientOptions) {
@@ -101,11 +108,11 @@ function fakeHost() {
       Server: class {
         constructor(
           _options: DirectHttp2ServerOptions,
-          streamListener: DirectHttp2StreamListener,
-          serverErrorListener: DirectHttp2ServerErrorListener,
+          streamListener: number,
+          serverErrorListener: number,
         ) {
-          errorListener = serverErrorListener;
-          listener = streamListener;
+          errorId = serverErrorListener;
+          streamId = streamListener;
         }
 
         listen() {
@@ -135,18 +142,105 @@ function fakeHost() {
       },
     },
     async dispatch(stream: Http2IncomingStreamData) {
+      listener ??= await callbacks.takeStreamListener(streamId);
       return listener!.handle(stream);
     },
-    emitServerError(message: string) {
-      errorListener!.handle({ name: "Error", message, code: "EHTTP2TEST" });
+    async emitServerError(message: string) {
+      errorListener ??= await callbacks.takeServerErrorListener(errorId);
+      await errorListener!.handle({ name: "Error", message, code: "EHTTP2TEST" });
     },
   };
 }
 
 describe("direct node:http2 implementation", () => {
+  test("redeems resources once and releases pending registrations on failed listen and close", async () => {
+    let failListen = true;
+    let failClose = false;
+    const ids: number[][] = [];
+    const host = {
+      ...fakeHost().host,
+      Server: class {
+        constructor(_options: DirectHttp2ServerOptions, stream: number, error: number) {
+          ids.push([stream, error]);
+        }
+        listen() {
+          if (failListen) {
+            throw new Error("listen failed");
+          }
+          return {
+            tag: "ok" as const,
+            val: { tag: "tcp" as const, val: { address: "127.0.0.1", family: "IPv4", port: 8000 } },
+          };
+        }
+        close() {
+          if (failClose) {
+            throw new Error("close failed");
+          }
+          return { tag: "ok" as const, val: true };
+        }
+        address() {
+          return undefined;
+        }
+        updateSettings() {
+          return { tag: "ok" as const, val: undefined };
+        }
+        ref() {}
+        unref() {}
+        [Symbol.dispose]() {}
+      },
+    };
+    const first = createDirectHttp2Implementation(host);
+    const second = createDirectHttp2Implementation(host);
+    const handler = async () => {
+      throw Object.assign(new Error("callback failed"), { code: "EHTTP2TEST" });
+    };
+    const a = first.createServer!(false, {}, handler, () => {});
+    const b = second.createServer!(true, {}, handler, () => {});
+    expect(ids).toEqual([
+      [1, 2],
+      [1, 2],
+    ]);
+    const empty = (impl: typeof first) => {
+      expect(impl.http2Callbacks.takeStreamListener(1)).toBeUndefined();
+      expect(impl.http2Callbacks.takeServerErrorListener(2)).toBeUndefined();
+    };
+    empty(first);
+    expect(() => a.listen({})).toThrow("listen failed");
+    empty(first);
+    failListen = false;
+    a.listen({});
+    b.listen({});
+    const listener = first.http2Callbacks.takeStreamListener(1)!;
+    expect(first.http2Callbacks.takeStreamListener(1)).toBeUndefined();
+    expect(first.http2Callbacks.takeStreamListener(2)).toBeUndefined();
+    expect(first.http2Callbacks.takeServerErrorListener(1)).toBeUndefined();
+    await expect(
+      listener.handle({ sessionId: 1, id: 1, headers: [], body: new Uint8Array() }),
+    ).rejects.toMatchObject({
+      message: "callback failed",
+      code: "EHTTP2TEST",
+    });
+    failClose = true;
+    expect(() => a.close()).toThrow("close failed");
+    expect(first.http2Callbacks.takeServerErrorListener(2)).toBeDefined();
+    failClose = false;
+    a.close();
+    empty(first);
+    // Closing one implementation cannot remove another component's same-numbered resources.
+    expect(second.http2Callbacks.takeStreamListener(1)).toBeDefined();
+    a.listen({});
+    expect(first.http2Callbacks.takeStreamListener(1)).toBeDefined();
+    a.close();
+    b.close();
+    empty(first);
+    empty(second);
+  });
+
   test("round trips client headers, data, settings, ping, and lifecycle", async () => {
     const harness = fakeHost();
-    const http2 = createHttp2(createDirectHttp2Implementation(harness.host));
+    const implementation = createDirectHttp2Implementation(harness.host);
+    harness.attach(implementation.http2Callbacks);
+    const http2 = createHttp2(implementation);
     const session = http2.connect("http://example.com", { settings: { enablePush: false } });
     await new Promise<void>((resolve) => session.once("connect", resolve));
     expect(session.alpnProtocol).toBe("h2c");
@@ -187,7 +281,9 @@ describe("direct node:http2 implementation", () => {
 
   test("round trips stream and compatibility server callbacks", async () => {
     const harness = fakeHost();
-    const http2 = createHttp2(createDirectHttp2Implementation(harness.host));
+    const implementation = createDirectHttp2Implementation(harness.host);
+    harness.attach(implementation.http2Callbacks);
+    const http2 = createHttp2(implementation);
     const server = http2.createServer();
     server.on("stream", (stream: { respond(headers: object): void; end(body: string): void }) => {
       stream.respond({ ":status": 202, "x-handler": "stream" });
@@ -203,13 +299,10 @@ describe("direct node:http2 implementation", () => {
       ],
       body: encoder.encode("request"),
     });
-    expect(result.tag).toBe("ok");
-    if (result.tag === "ok") {
-      expect(new TextDecoder().decode(result.val.body)).toBe("accepted");
-    }
+    expect(new TextDecoder().decode(result.body)).toBe("accepted");
     expect(server.address()).toEqual({ address: "127.0.0.1", family: "IPv4", port: 8000 });
     const sessionError = new Promise<Error>((resolve) => server.once("sessionError", resolve));
-    harness.emitServerError("provider failure");
+    await harness.emitServerError("provider failure");
     await expect(sessionError).resolves.toMatchObject({
       message: "provider failure",
       code: "EHTTP2TEST",
@@ -221,7 +314,9 @@ describe("direct node:http2 implementation", () => {
 
   test("rejects unsupported options before constructing resources", () => {
     const harness = fakeHost();
-    const http2 = createHttp2(createDirectHttp2Implementation(harness.host));
+    const implementation = createDirectHttp2Implementation(harness.host);
+    harness.attach(implementation.http2Callbacks);
+    const http2 = createHttp2(implementation);
     expect(() => http2.connect("http://example.com", { createConnection() {} })).toThrow(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
     );

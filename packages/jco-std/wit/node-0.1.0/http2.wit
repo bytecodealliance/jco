@@ -42,12 +42,14 @@ interface http2-callbacks {
   resource server-error-listener {
     handle: func(reason: error);
   }
+
+  /// Redeem each registration once; the host owns the resources until the server closes.
+  take-stream-listener: func(id: u32) -> option<stream-listener>;
+  take-server-error-listener: func(id: u32) -> option<server-error-listener>;
 }
 
 /// Typed host boundary for Node-compatible HTTP/2 clients and servers.
 interface http2 {
-  use http2-callbacks.{server-error-listener, stream-listener};
-
   variant errno {
     number(s64),
     symbolic(string),
@@ -176,8 +178,8 @@ interface http2 {
   resource server {
     constructor(
       options: server-options,
-      listener: own<stream-listener>,
-      error-listener: own<server-error-listener>,
+      listener: u32,
+      error-listener: u32,
     );
     listen: func(options: listen-options) -> result<server-address, error>;
     close: func() -> result<bool, error>;

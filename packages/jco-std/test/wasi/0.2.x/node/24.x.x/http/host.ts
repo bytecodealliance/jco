@@ -1,12 +1,14 @@
 import nodeHttp from "node:http";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   createHttpHost,
   request,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
 import type {
+  DirectHttpIncomingRequest,
+  DirectHttpOutgoingResponse,
   DirectHttpResult,
   DirectHttpServerAddress,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
@@ -46,21 +48,31 @@ async function listen(server: nodeHttp.Server): Promise<number> {
   return address.port;
 }
 
+function callbacks(
+  handle: (id: number, incoming: DirectHttpIncomingRequest) => Promise<DirectHttpOutgoingResponse>,
+) {
+  const dispose = vi.fn();
+  const takeRequestListener = vi.fn((id: number) => ({
+    handle: (incoming: DirectHttpIncomingRequest) => handle(id, incoming),
+    [Symbol.dispose]: dispose,
+  }));
+  return { takeRequestListener, dispose };
+}
+
 describe("node:http direct Node host", () => {
-  test("serves requests through an instance-bound guest callback dispatcher", async () => {
-    const { Server } = createHttpHost(() => ({
-      handle: async (listener, incoming) => {
-        expect(listener).toBe(1);
-        return {
-          statusCode: 202,
-          statusMessage: "Accepted",
-          headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
-          body: new TextEncoder().encode(
-            `${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
-          ),
-        };
-      },
-    }));
+  test("serves requests through an instance-bound guest callback resource", async () => {
+    const registry = callbacks(async (listener, incoming) => {
+      expect(listener).toBe(1);
+      return {
+        statusCode: 202,
+        statusMessage: "Accepted",
+        headers: [{ name: "Content-Type", value: new TextEncoder().encode("text/plain") }],
+        body: new TextEncoder().encode(
+          `${incoming.method} ${incoming.url} ${new TextDecoder().decode(incoming.body)}`,
+        ),
+      };
+    });
+    const { Server } = createHttpHost(() => registry);
     const server = new Server({}, 1);
     const started = (await server.listen({
       port: 0,
@@ -90,6 +102,8 @@ describe("node:http direct Node host", () => {
       expect(new TextDecoder().decode(result.val.body)).toBe("POST /resource hello");
     }
     await server.close();
+    expect(registry.takeRequestListener).toHaveBeenCalledTimes(1);
+    await expect.poll(() => registry.dispose.mock.calls.length).toBe(1);
   });
 
   test("serializes callbacks, recovers from WIT errors, and drains callbacks after sockets close", async () => {
@@ -104,34 +118,33 @@ describe("node:http direct Node host", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const { Server } = createHttpHost(() => ({
-      async handle(id, incoming) {
-        expect(id).toBe(7);
-        active++;
-        peak = Math.max(peak, active);
-        calls++;
-        try {
-          if (incoming.url === "/error") {
-            throw Object.assign(new Error("component error"), {
-              payload: { name: "Error", message: "guest failed", code: "EIO" },
-            });
-          }
-          if (incoming.url === "/wait") {
-            enter();
-            await gate;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          return {
-            statusCode: 200,
-            statusMessage: "OK",
-            headers: [],
-            body: new TextEncoder().encode(incoming.url),
-          };
-        } finally {
-          active--;
+    const registry = callbacks(async (id, incoming) => {
+      expect(id).toBe(7);
+      active++;
+      peak = Math.max(peak, active);
+      calls++;
+      try {
+        if (incoming.url === "/error") {
+          throw Object.assign(new Error("component error"), {
+            payload: { name: "Error", message: "guest failed", code: "EIO" },
+          });
         }
-      },
-    }));
+        if (incoming.url === "/wait") {
+          enter();
+          await gate;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return {
+          statusCode: 200,
+          statusMessage: "OK",
+          headers: [],
+          body: new TextEncoder().encode(incoming.url),
+        };
+      } finally {
+        active--;
+      }
+    });
+    const { Server } = createHttpHost(() => registry);
     const server = new Server({}, 7);
     try {
       const address = (await server.listen({

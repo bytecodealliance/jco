@@ -1,4 +1,4 @@
-/// Guest callback dispatcher used by the direct Node-compatible HTTP implementation.
+/// Guest-owned callback resources used by the direct Node-compatible HTTP implementation.
 interface http-callbacks {
   variant errno {
     number(s64),
@@ -38,8 +38,12 @@ interface http-callbacks {
     body: list<u8>,
   }
 
-  /// The registration belongs to the guest instance and remains live until its server closes.
-  handle: func(listener: u32, request: incoming-request) -> result<outgoing-response, error>;
+  resource request-listener {
+    handle: func(request: incoming-request) -> result<outgoing-response, error>;
+  }
+
+  /// Redeem a registration once. The host owns the returned listener until the server closes.
+  take-request-listener: func(id: u32) -> option<request-listener>;
 }
 
 /// Typed host boundary for Node-compatible HTTP clients and servers.

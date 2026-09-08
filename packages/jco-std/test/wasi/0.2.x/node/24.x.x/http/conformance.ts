@@ -90,7 +90,7 @@ function directHarness(): HttpConformanceHarness {
   return {
     implementation,
     async dispatchServerRequest(request) {
-      return implementation.httpCallbacks.handle(listener!, request);
+      return implementation.httpCallbacks.takeRequestListener(listener!)!.handle(request);
     },
   };
 }

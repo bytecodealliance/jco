@@ -74,7 +74,7 @@ describe("node:http2 builtin adapter", () => {
         await writeFile(entry, 'import { createServer } from "node:http2"; export { createServer };\n');
         await writeFile(
             http2Module,
-            "export const http2Callbacks = { StreamListener: class StreamListener {} }; export default {};\n",
+            "export const http2Callbacks = { StreamListener: class StreamListener {}, takeStreamListener() {}, ServerErrorListener: class {}, takeServerErrorListener() {} }; export default {};\n",
         );
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { http2Module });
         const source = await bundleNodeGuestExportsWrapper(entry, HTTP2_WIT_REQUIREMENT.guestExports, {
@@ -132,6 +132,9 @@ describe("node:http2 WIT installation", () => {
         expect(source).toContain("resource client-stream");
         expect(source).toContain("resource stream-listener");
         const metadata = await worldMetadataFor(root, "component");
+        expect(metadata.imports).not.toContainEqual(
+            expect.objectContaining({ namespace: "jco", package: "node", interface: "http2-callbacks" }),
+        );
         expect(metadata.imports).toContainEqual(
             expect.objectContaining({ namespace: "jco", package: "node", interface: "http2" }),
         );
@@ -237,8 +240,8 @@ describe("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    test("componentizes idiomatic client and server code through the direct boundary", async () => {
-        const { stderr } = await componentizeFixture({
+    test("runs client and server callbacks through the direct component boundary", async () => {
+        const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http2",
             wit: "wit-starling",
             bundle: true,
@@ -247,5 +250,17 @@ describe("node:http2 in a fully formed component", () => {
         });
         expect(stderr).toContain("Jco added generated WIT import jco:node/http2@0.1.0");
         expect(stderr).toContain("jco:node/http2-callbacks@0.1.0");
+        const host = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node");
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http2-direct", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["*"], map: { "jco:node/http2@0.1.0": host } } } },
+        });
+        try {
+            const runner = fileURLToPath(new URL("../fixtures/componentize/node-http2/run-direct.js", import.meta.url));
+            const output = await exec(runner, esModuleOutputPath, host);
+            expect(JSON.parse(output.stdout)).toEqual({ plain: true, secure: true, isolated: true });
+        } finally {
+            await cleanup();
+        }
     }, 600_000);
 });

@@ -1,18 +1,48 @@
 import "./encoding-globals.js";
-import http2, { constants, createServer } from "node:http2";
+import http2, { constants, createServer, createSecureServer } from "node:http2";
 
 let server;
 let handled;
 let markHandled;
+let requests = 0;
+let error = "";
 
 export function startServer() {
+    return start(createServer());
+}
+
+export function startSecureServer(key, cert) {
+    return start(createSecureServer({ key, cert }));
+}
+
+function start(value) {
     handled = new Promise((resolve) => (markHandled = resolve));
-    server = createServer();
+    server = value;
+    server.on("sessionError", (reason) => {
+        error = reason.code;
+    });
     server.on("stream", (stream, headers) => {
+        requests++;
+        if (headers[":path"] === "/error") {
+            throw Object.assign(new Error("guest stream failed"), { code: "EHTTP2TEST" });
+        }
         stream.respond({ ":status": 200, "content-type": "text/plain" });
         const body = headers[":path"] === "/large" ? "s".repeat(131_072) : `server:${headers[":path"]}`;
         stream.end(body, () => queueMicrotask(markHandled));
     });
+    server.listen(0, "127.0.0.1");
+    return server.address().port;
+}
+
+export function count() {
+    return requests;
+}
+export function lastError() {
+    return error;
+}
+
+export function restartServer() {
+    server.close();
     server.listen(0, "127.0.0.1");
     return server.address().port;
 }
