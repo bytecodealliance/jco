@@ -90,12 +90,33 @@ describe("Node builtin adapters", () => {
         });
 
         expect(opts.asyncMode).toBe("jspi");
-        expect(opts.asyncImports).toEqual(["application:custom/host#load", "jco:node/dns@0.1.0#*"]);
+        const dnsAsyncFunctions = [
+            "lookup",
+            "lookup-service",
+            "resolve4",
+            "resolve6",
+            "resolve-any",
+            "resolve-caa",
+            "resolve-cname",
+            "resolve-mx",
+            "resolve-naptr",
+            "resolve-ns",
+            "resolve-ptr",
+            "resolve-soa",
+            "resolve-srv",
+            "resolve-tlsa",
+            "resolve-txt",
+            "reverse",
+        ];
+        expect(opts.asyncImports).toEqual([
+            "application:custom/host#load",
+            ...dnsAsyncFunctions.map((name) => `jco:node/dns@0.1.0#${name}`),
+        ]);
         expect(opts.asyncExports).toEqual(["selected-export", "*"]);
         expect(opts.map?.["jco:node/dns@0.1.0"]).toBe("/application/dns-host.js");
 
         withDefaultNodeCapabilities(opts);
-        expect(opts.asyncImports).toHaveLength(2);
+        expect(opts.asyncImports).toHaveLength(dnsAsyncFunctions.length + 1);
         expect(opts.asyncExports).toHaveLength(2);
     });
 
