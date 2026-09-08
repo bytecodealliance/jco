@@ -8,6 +8,8 @@
  * share state between callback and promise facades, and make cancellation explicit.
  */
 import { dnsError, invalidArgType, invalidArgValue, unsupported } from "./errors.js";
+import { callHost } from "../internal/host-error.js";
+import type { HostImports } from "../internal/wit-types.js";
 import type {
   AnyRecord,
   CaaRecord,
@@ -105,11 +107,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function hostResult<T>(response: DnsResult<T>): T {
-  if (response.tag === "err") {
-    throw dnsError(response.val);
-  }
-  return response.val;
+function hostResult<T>(operation: () => T | DnsResult<T>): T {
+  return callHost(operation, dnsError);
 }
 
 function hostFamily(value: DnsFamily): DnsHostFamily {
@@ -332,7 +331,7 @@ function resolveOperation(rrtype: string): ResolveOperation {
 }
 
 function resolveHost(
-  host: DnsHost,
+  host: HostImports<DnsHost>,
   operation: ResolveOperation,
   hostname: string,
   ttl: boolean,
@@ -341,37 +340,37 @@ function resolveHost(
   const configuration = hostResolver(resolver);
   switch (operation) {
     case "resolve4": {
-      const records = hostResult(host.resolve4(hostname, ttl, configuration));
+      const records = hostResult(() => host.resolve4(hostname, ttl, configuration));
       return ttl ? records : records.map((record) => record.address);
     }
     case "resolve6": {
-      const records = hostResult(host.resolve6(hostname, ttl, configuration));
+      const records = hostResult(() => host.resolve6(hostname, ttl, configuration));
       return ttl ? records : records.map((record) => record.address);
     }
     case "resolveAny":
-      return hostResult(host.resolveAny(hostname, configuration)).map(anyRecord);
+      return hostResult(() => host.resolveAny(hostname, configuration)).map(anyRecord);
     case "resolveCaa":
-      return hostResult(host.resolveCaa(hostname, configuration));
+      return hostResult(() => host.resolveCaa(hostname, configuration));
     case "resolveCname":
-      return hostResult(host.resolveCname(hostname, configuration));
+      return hostResult(() => host.resolveCname(hostname, configuration));
     case "resolveMx":
-      return hostResult(host.resolveMx(hostname, configuration));
+      return hostResult(() => host.resolveMx(hostname, configuration));
     case "resolveNaptr":
-      return hostResult(host.resolveNaptr(hostname, configuration));
+      return hostResult(() => host.resolveNaptr(hostname, configuration));
     case "resolveNs":
-      return hostResult(host.resolveNs(hostname, configuration));
+      return hostResult(() => host.resolveNs(hostname, configuration));
     case "resolvePtr":
-      return hostResult(host.resolvePtr(hostname, configuration));
+      return hostResult(() => host.resolvePtr(hostname, configuration));
     case "resolveSoa":
-      return hostResult(host.resolveSoa(hostname, configuration));
+      return hostResult(() => host.resolveSoa(hostname, configuration));
     case "resolveSrv":
-      return hostResult(host.resolveSrv(hostname, configuration));
+      return hostResult(() => host.resolveSrv(hostname, configuration));
     case "resolveTlsa":
-      return hostResult(host.resolveTlsa(hostname, configuration)).map(tlsaRecord);
+      return hostResult(() => host.resolveTlsa(hostname, configuration)).map(tlsaRecord);
     case "resolveTxt":
-      return hostResult(host.resolveTxt(hostname, configuration));
+      return hostResult(() => host.resolveTxt(hostname, configuration));
     case "reverse":
-      return hostResult(host.reverse(hostname, configuration));
+      return hostResult(() => host.reverse(hostname, configuration));
   }
 }
 
@@ -496,19 +495,19 @@ export interface DnsModules {
   };
 }
 
-export function createDns(host: DnsHost): DnsModules {
+export function createDns(host: HostImports<DnsHost>): DnsModules {
   let defaultOrder: DnsResultOrder = "verbatim";
   let defaultServers: string[] | undefined;
 
   function servers(): string[] {
-    return (defaultServers ??= hostResult(host.getServers())).slice();
+    return (defaultServers ??= hostResult(() => host.getServers())).slice();
   }
 
   function setServers(serversValue: string[]): void {
     if (!Array.isArray(serversValue)) {
       throw invalidArgType("servers", "Array");
     }
-    const validated = hostResult(host.validateServers(serversValue));
+    const validated = hostResult(() => host.validateServers(serversValue));
     defaultServers = validated.slice();
   }
 
@@ -526,7 +525,7 @@ export function createDns(host: DnsHost): DnsModules {
     hostname: string,
     options: ParsedLookupOptions,
   ): LookupAddress | LookupAddress[] {
-    const addresses = hostResult(
+    const addresses = hostResult(() =>
       host.lookup(hostname, {
         family: hostFamily(options.family),
         hints: options.hints,
@@ -584,7 +583,7 @@ export function createDns(host: DnsHost): DnsModules {
       if (!Array.isArray(value)) {
         throw invalidArgType("servers", "Array");
       }
-      this.configuration.servers = hostResult(host.validateServers(value));
+      this.configuration.servers = hostResult(() => host.validateServers(value));
     }
 
     setLocalAddress(ipv4 = "0.0.0.0", ipv6 = "::0"): void {
@@ -839,7 +838,7 @@ export function createDns(host: DnsHost): DnsModules {
     let result: { hostname: string; service: string } | undefined;
     let error: DnsError | undefined;
     try {
-      result = hostResult(host.lookupService(address, numericPort));
+      result = hostResult(() => host.lookupService(address, numericPort));
     } catch (caught) {
       error = caught instanceof Error ? (caught as DnsError) : new Error(String(caught));
     }
@@ -909,7 +908,7 @@ export function createDns(host: DnsHost): DnsModules {
       if (!Number.isInteger(numericPort) || numericPort < 0 || numericPort > 65535) {
         throw invalidArgValue("port", port);
       }
-      return promiseCall(() => hostResult(host.lookupService(address, numericPort)));
+      return promiseCall(() => hostResult(() => host.lookupService(address, numericPort)));
     },
     resolve: promiseResolver.resolve.bind(promiseResolver),
     resolve4: promiseResolver.resolve4.bind(promiseResolver),
