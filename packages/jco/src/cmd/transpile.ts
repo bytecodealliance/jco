@@ -49,6 +49,7 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
     "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
+    "jco:node/sqlite@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host",
     "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",
     "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
     "jco:node/process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host",
@@ -104,6 +105,12 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
         for (const asyncImport of HTTP2_ASYNC_IMPORTS) {
             opts.asyncImports = appendUnique(opts.asyncImports, asyncImport);
         }
+        opts.asyncExports = appendUnique(opts.asyncExports, "*");
+    }
+    const sqlite = "jco:node/sqlite@0.1.0";
+    if (opts.map?.[sqlite] !== undefined && opts.map[sqlite] !== DEFAULT_NODE_CAPABILITY_MAP[sqlite]) {
+        opts.asyncMode = "jspi";
+        opts.asyncImports = appendUnique(opts.asyncImports, `${sqlite}#backup`);
         opts.asyncExports = appendUnique(opts.asyncExports, "*");
     }
     opts.map = withDefaultNodeCapabilityMap(opts.map);

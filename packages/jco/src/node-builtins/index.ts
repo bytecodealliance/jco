@@ -12,6 +12,7 @@ import { createAsyncHooksBuiltin } from "./async-hooks.js";
 import { createEventsBuiltin } from "./events.js";
 import { createProcessBuiltin } from "./process.js";
 import { createOsBuiltin } from "./os.js";
+import { createSqliteBuiltin } from "./sqlite.js";
 import { createStringDecoderBuiltin } from "./string-decoder.js";
 import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
@@ -61,6 +62,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createEventsBuiltin,
         createProcessBuiltin,
         createOsBuiltin,
+        createSqliteBuiltin,
         createStringDecoderBuiltin,
         createStreamBuiltin,
         createClusterBuiltin,
