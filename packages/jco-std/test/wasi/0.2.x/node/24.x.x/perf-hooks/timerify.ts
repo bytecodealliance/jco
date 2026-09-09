@@ -51,7 +51,7 @@ test("deprecated node entry fields fail immediately", () => {
   observer.disconnect();
   for (const key of ["kind", "flags"]) {
     expect(() => Reflect.get(entry, key)).toThrow(
-      expect.objectContaining({ code: "ERR_JCO_DEPRECATED_NODE_API" }),
+      expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API" }),
     );
   }
 });

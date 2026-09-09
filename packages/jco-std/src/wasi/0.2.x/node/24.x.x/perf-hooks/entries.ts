@@ -26,7 +26,8 @@
  */
 import { registerBrand, brandPrototype } from "./errors.js";
 
-import { illegal, kSkipThrow, enumerable, coded } from "./errors.js";
+import { illegal, kSkipThrow, enumerable } from "./errors.js";
+import { deprecatedNodeApi } from "../errors/core.js";
 export interface EntryJSON {
   name: string;
   entryType: string;
@@ -89,28 +90,16 @@ export class PerformanceNodeEntry extends PerformanceEntry {
     return this.#detail;
   }
   get kind(): never {
-    throw coded(
-      new Error("PerformanceNodeEntry.kind is deprecated; use detail.kind"),
-      "ERR_JCO_DEPRECATED_NODE_API",
-    );
+    throw deprecatedNodeApi("PerformanceNodeEntry.kind", "detail.kind");
   }
   get flags(): never {
-    throw coded(
-      new Error("PerformanceNodeEntry.flags is deprecated; use detail.flags"),
-      "ERR_JCO_DEPRECATED_NODE_API",
-    );
+    throw deprecatedNodeApi("PerformanceNodeEntry.flags", "detail.flags");
   }
   set kind(_value: unknown) {
-    throw coded(
-      new Error("PerformanceNodeEntry.kind is deprecated; use detail.kind"),
-      "ERR_JCO_DEPRECATED_NODE_API",
-    );
+    throw deprecatedNodeApi("PerformanceNodeEntry.kind", "detail.kind");
   }
   set flags(_value: unknown) {
-    throw coded(
-      new Error("PerformanceNodeEntry.flags is deprecated; use detail.flags"),
-      "ERR_JCO_DEPRECATED_NODE_API",
-    );
+    throw deprecatedNodeApi("PerformanceNodeEntry.flags", "detail.flags");
   }
   override toJSON(): EntryJSON {
     return { ...super.toJSON(), detail: this.detail };

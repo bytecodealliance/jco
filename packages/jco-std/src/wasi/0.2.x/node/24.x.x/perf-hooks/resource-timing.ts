@@ -217,8 +217,10 @@ export function markResourceTiming(
     responseStatus,
     deliveryType,
   );
-  enqueue(entry);
+  // Buffer first: on engines without a scheduler a full buffer throws, and observers must not
+  // see an entry the caller never received.
   bufferEntry(entry);
+  enqueue(entry);
   return entry;
 }
 

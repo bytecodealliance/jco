@@ -1238,7 +1238,7 @@ are not automatically instrumented.
 binding, libuv event-loop counters or process startup milestones. The `histogram`
 option to `timerify` is consequently unavailable. GC, HTTP, HTTP/2, DNS and network
 observer instrumentation is unavailable. Deprecated node-entry `kind` and `flags`
-accessors throw `ERR_JCO_DEPRECATED_NODE_API`, naming the `detail` replacement.
+accessors throw `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`, naming the `detail` replacement.
 
 The public module exports and constants match the pinned Node 24 surface; APIs
 introduced in Node 26's rolling documentation are outside this compatibility target.
