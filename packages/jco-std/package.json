@@ -410,6 +410,25 @@
     "./wasi/0.2.x/node/24.x.x/process/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/process-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/process-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/sqlite": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/sqlite.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/sqlite.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/sqlite.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/sqlite/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/sqlite-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/sqlite-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/sqlite-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/sqlite/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/sqlite-host-node.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/sqlite-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/sqlite/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/sqlite/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/sqlite/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/sqlite/core.js"
     }
   },
   "scripts": {
