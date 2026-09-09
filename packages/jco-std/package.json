@@ -373,7 +373,7 @@
     "@bytecodealliance/preview2-shim": "^0.24.1",
     "@types/node": "^24.12.4",
     "@types/which": "^3.0.4",
-    "hono": "^4.12.34",
+    "hono": "^4.13.5",
     "rolldown": "^1.0.0-beta.46",
     "typescript": "catalog:",
     "vitest": "^4.0.8",
