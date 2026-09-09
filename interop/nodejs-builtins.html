@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a495c26b.js";
+            window.path_to_searchindex_js = "../searchindex-671399d8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -293,11 +293,43 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
+<tr><td><code>node:stream</code>, <code>node:stream/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream</code> and <code>/stream/promises</code></td><td>Classic streams, pipelines, operators, disposal, and Web adapters. No WIT capability.</td></tr>
 <tr><td><code>node:stream/consumers</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers</code></td><td>Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.</td></tr>
 <tr><td><code>node:stream/iter</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter</code></td><td>Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.</td></tr>
 </tbody>
 </table>
 </div>
+<h3 id="classic-streams"><a class="header" href="#classic-streams">Classic streams</a></h3>
+<p><code>node:stream</code> and <code>node:stream/promises</code> provide <code>Readable</code>, <code>Writable</code>, <code>Duplex</code>,
+<code>Transform</code>, <code>PassThrough</code>, callback/promise pipelines, <code>finished</code>, readable
+operators, cancellation, async disposal, and <code>duplexPair</code>. The implementation
+reuses <a href="https://github.com/nodejs/readable-stream/tree/v4.7.0">readable-stream 4.7.0</a>,
+with typed adaptations targeting Node 24.20, including Web Stream conversions
+and support for all typed-array views. Buffer and EventEmitter identities are
+shared with the corresponding <code>node:</code> imports. Scheduling uses guest microtasks;
+no process, filesystem, network, or other host capability is required.</p>
+<pre><code class="language-js">import { Readable, Transform, Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+await pipeline(
+    Readable.from(['hello']),
+    new Transform({ transform(chunk, encoding, done) { done(null, chunk.toString().toUpperCase()); } }),
+    new Writable({ write(chunk, encoding, done) { /* consume chunk */ done(); } }),
+);
+</code></pre>
+<p>For Web Streams, use <code>Readable.fromWeb()</code>, <code>Writable.fromWeb()</code>, or
+<code>Duplex.fromWeb()</code> before calling <code>finished</code>, <code>addAbortSignal</code>, or the
+readable/writable/error/disturbance inspection helpers. Those helpers need private
+engine state when used on Web Streams directly and throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Classic streams and public Web reader/writer
+conversions are supported. The deprecated <code>Duplex.toWeb({ type })</code> alias throws;
+use <code>readableType</code> instead.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Classic streams are tested on QuickJS and StarlingMonkey. The current QuickJS
+backend lacks Web Stream, text-codec, and Abort globals, so Web conversions and
+operations requiring those globals need an engine that supplies them.</p>
+</blockquote>
 <h3 id="stream-consumers-and-iterable-streams"><a class="header" href="#stream-consumers-and-iterable-streams">Stream consumers and iterable streams</a></h3>
 <p><code>node:stream/consumers</code> supports Node 24 applications written before or after the
 24.20 iterable-stream addition. <code>node:stream/iter</code> exposes the experimental 24.20
@@ -323,10 +355,10 @@ own imports and exports:</p>
 </code></pre>
 <p>The implementation uses engine-provided iterable, typed-array, Blob, text-codec,
 and abort globals. <code>fromReadable()</code> and <code>fromWritable()</code> work with duck-typed
-classic streams. <code>toReadable()</code>, <code>toReadableSync()</code>, and <code>toWritable()</code> need real
-classic Node stream constructors, which neither the component engine nor the
-audited unenv release provides. Those functions remain present but immediately
-throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>; they do not inspect their arguments first.</p>
+classic streams. The experimental <code>toReadable()</code>, <code>toReadableSync()</code>, and
+<code>toWritable()</code> adapters are not yet connected to the classic implementation.
+They throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> without inspecting their arguments;
+use the classic constructors directly.</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>Node marks <code>node:stream/iter</code> experimental. Its Jco implementation is likewise
