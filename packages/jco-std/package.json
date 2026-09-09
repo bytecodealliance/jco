@@ -396,6 +396,20 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/perf-hooks.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/perf-hooks.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/perf-hooks.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/process": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/process.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/process.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/process.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/process/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/process-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/process-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/process-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/process/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/process-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/process-host-node.js"
     }
   },
   "scripts": {
