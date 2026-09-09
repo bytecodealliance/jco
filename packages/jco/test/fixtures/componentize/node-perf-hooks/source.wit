@@ -1,0 +1,2 @@
+package test:perf-hooks;
+world test { export run: func() -> string; }
