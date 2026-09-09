@@ -45,80 +45,11 @@ With Jco (and related projects in this repository), you can:
 
 As Jco aims to do many things, it contains many subprojects that are organized in this repository:
 
-The following diagrams show Jco's core dependencies. Arrows point from a dependency to its consumer; dashed arrows show build-time generation or vendoring. Local npm package names omit the `@bytecodealliance/` scope. The `wasm-tools` group covers `wasmparser`, `wasm-encoder`, `wasm-metadata`, `wasmprinter`, `wat`, `wit-component`, and `wit-parser`.
-
-**Mermaid**
-
-```mermaid
-flowchart LR
-    subgraph rust_external["External Rust crates"]
-        wasm_tools["wasm-tools crates<br/>Wasm and WIT parsing / encoding"]
-        wasmtime["wasmtime-environ<br/>Component model translation"]
-        wit_core["wit-bindgen-core"]
-        wit_bindgen["wit-bindgen<br/>Component bindings"]
-    end
-
-    subgraph rust_local["Rust crates in this repository"]
-        bindgen["js-component-bindgen"]
-        bindgen_component["js-component-bindgen-component"]
-        tools_component["wasm-tools-component<br/>(crate: wasm-tools-js)"]
-    end
-
-    subgraph runtime["WASI runtime packages"]
-        node_fs["jco-node-fs<br/>Rust + JavaScript"]
-        preview2["preview2-shim"]
-        preview3["preview3-shim"]
-    end
-
-    subgraph npm_external["External npm packages"]
-        componentize_js["componentize-js<br/>StarlingMonkey backend"]
-        componentize_qjs["componentize-qjs<br/>QuickJS backend"]
-        binaryen["binaryen<br/>Wasm optimization / wasm2js"]
-        minify["oxc-minify<br/>JavaScript minification"]
-        rolldown["rolldown<br/>Source bundling"]
-        unenv["unenv<br/>Node.js compatibility"]
-        typescript["typescript-compiler-api<br/>Component scaffolding"]
-    end
-
-    subgraph jco_packages["Jco JavaScript packages"]
-        transpile["jco-transpile<br/>Transpilation and type generation"]
-        std["jco-std<br/>Standard library and Node.js adapters"]
-        jco["jco<br/>CLI and JavaScript API"]
-    end
-
-    wasm_tools --> bindgen
-    wasm_tools --> bindgen_component
-    wasm_tools --> tools_component
-    wasmtime --> bindgen
-    wasmtime --> bindgen_component
-    wit_core --> bindgen
-    wit_bindgen --> bindgen_component
-    wit_bindgen --> tools_component
-    bindgen --> bindgen_component
-    bindgen_component -.->|"Vendored JS + Wasm"| transpile
-    tools_component -.->|"Vendored JS + Wasm"| transpile
-    node_fs --> preview2
-    node_fs --> preview3
-    preview2 --> preview3
-    preview2 --> transpile
-    preview3 --> transpile
-    preview2 --> jco
-    transpile -.->|"Generate bindings"| std
-    std --> jco
-    transpile --> jco
-    componentize_js --> jco
-    componentize_qjs --> jco
-    binaryen --> transpile
-    binaryen --> jco
-    minify --> transpile
-    rolldown --> jco
-    unenv --> jco
-    typescript --> jco
-```
-
-**SVG**
+The following diagram shows Jco's core dependencies, flowing from top to bottom toward `jco`. Arrows point from a dependency to its consumer; dashed arrows show build-time generation or vendoring. Local npm package names omit the `@bytecodealliance/` scope. The `wasm-tools` group covers `wasmparser`, `wasm-encoder`, `wasm-metadata`, `wasmprinter`, `wat`, `wit-component`, and `wit-parser`.
 
 [![Jco core dependency layout, showing Rust crates, WASI shims, and external libraries feeding into jco-transpile and jco](docs/assets/dependency-layout.svg)](docs/assets/dependency-layout.svg)
+
+The SVG includes editable diagrams.net data. You can also open the [draw.io source](docs/assets/dependency-layout.drawio) in diagrams.net.
 
 | Subproject                       | Language   | Directory                               | Description                                                                                     |
 |----------------------------------|------------|-----------------------------------------|-------------------------------------------------------------------------------------------------|
