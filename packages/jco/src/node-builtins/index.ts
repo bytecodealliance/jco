@@ -13,6 +13,7 @@ import { createEventsBuiltin } from "./events.js";
 import { createProcessBuiltin } from "./process.js";
 import { createOsBuiltin } from "./os.js";
 import { createSqliteBuiltin } from "./sqlite.js";
+import { createReadlineBuiltin } from "./readline.js";
 import { createStringDecoderBuiltin } from "./string-decoder.js";
 import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
@@ -63,6 +64,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createProcessBuiltin,
         createOsBuiltin,
         createSqliteBuiltin,
+        createReadlineBuiltin,
         createStringDecoderBuiltin,
         createStreamBuiltin,
         createClusterBuiltin,

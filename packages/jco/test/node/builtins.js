@@ -214,6 +214,29 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
+    test.concurrent("readline adapters are capability-free and support narrow overrides", () => {
+        const requirements = [];
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            {
+                readlineModule: "test:readline",
+                readlinePromisesModule: "test:readline-promises",
+                onWitRequirement: (requirement) => requirements.push(requirement),
+            },
+        );
+        for (const [specifier, module] of [
+            ["node:readline", "test:readline"],
+            ["node:readline/promises", "test:readline-promises"],
+        ]) {
+            const id = plugin.resolveId(specifier);
+            expect(id).toBe(`\0jco-node-builtin:${specifier}`);
+            expect(plugin.load(id)).toContain(JSON.stringify(module));
+        }
+        expect(requirements).toEqual([]);
+        expect(plugin.resolveId("readline")).toBeNull();
+        expect(plugin.resolveId("readline/promises")).toBeNull();
+    });
+
     test.concurrent("does not intercept the legacy bare string_decoder specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
         expect(plugin.resolveId("string_decoder")).toBeNull();
