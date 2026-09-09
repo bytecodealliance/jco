@@ -3045,11 +3045,23 @@ impl<'a> Instantiator<'a, '_> {
 
                     // If a destructor index is defined for the resource, call it
                     if let Some(dtor) = &resource_def.dtor {
-                        format!(
-                            "
-                            {}(handleEntry.rep);",
-                            self.core_def(dtor)
-                        )
+                        let dtor = self.core_def(dtor);
+                        let component_instance = resource_def.instance;
+                        if self
+                            .context_components
+                            .borrow()
+                            .contains(&component_instance)
+                        {
+                            let call_resource_destructor = self.bindgen.intrinsic(
+                                Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall),
+                            );
+                            let component_idx = component_instance.as_u32();
+                            format!(
+                                "{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }});"
+                            )
+                        } else {
+                            format!("{dtor}(handleEntry.rep);")
+                        }
                     } else {
                         "".into()
                     }

@@ -115,8 +115,6 @@ impl ResourceIntrinsic {
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::ResourceDestructorCall => {
-                let get_current_task_meta =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let create_current_task = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentTask,
                 ));
@@ -129,12 +127,10 @@ impl ResourceIntrinsic {
                       function {name}(args) {{
                           const {{ componentIdx, dtor, rep }} = args;
 
-                          // A resource can be disposed re-entrantly while its component
-                          // already has a current task. In that case the destructor is part
-                          // of that task and must not replace its current-task register.
-                          if ({get_current_task_meta}(componentIdx)) {{
-                              return dtor(rep);
-                          }}
+                          // A destructor enters a separate synchronous call, even when
+                          // invoked from its own component. Its context slots must start
+                          // empty: SDK task hooks allocate and free a stack through them.
+                          // The enclosing task's register is restored after the call.
 
                           const [task] = {create_current_task}({{
                               componentIdx,
