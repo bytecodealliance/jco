@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { p, shim } from "../helpers/perf-hooks.js";
+import { matchesNode, p, shim } from "../helpers/perf-hooks.js";
 
 test.each([
   ["Performance", shim.Performance],
@@ -32,4 +32,26 @@ test("rejects forged entry receivers with Node error fields", () => {
   expect(() => Reflect.apply(shim.PerformanceEntry.prototype.toJSON, {}, [])).toThrow(
     expect.objectContaining({ code: "ERR_INVALID_THIS" }),
   );
+});
+
+test.each([
+  ["Performance", shim.Performance.prototype, "getEntries"],
+  ["PerformanceEntry", shim.PerformanceEntry.prototype, "name"],
+  ["PerformanceMark", shim.PerformanceMark.prototype, "detail"],
+  ["PerformanceResourceTiming", shim.PerformanceResourceTiming.prototype, "transferSize"],
+  ["PerformanceObserver", shim.PerformanceObserver.prototype, "takeRecords"],
+  ["PerformanceObserverEntryList", shim.PerformanceObserverEntryList.prototype, "getEntries"],
+])("%s members reject forged receivers", (name, prototype, member) => {
+  const { get, value } = Object.getOwnPropertyDescriptor(prototype, member)!;
+  expect(() => Reflect.apply(get ?? value, {}, [])).toThrow(
+    expect.objectContaining({
+      code: "ERR_INVALID_THIS",
+      message: `Value of "this" must be of type ${name}`,
+    }),
+  );
+});
+
+test("presents constructor and receiver errors like Node", () => {
+  matchesNode((m) => Reflect.construct(m.PerformanceMeasure, []));
+  matchesNode((m) => Reflect.get(m.PerformanceEntry.prototype, "name", {}));
 });

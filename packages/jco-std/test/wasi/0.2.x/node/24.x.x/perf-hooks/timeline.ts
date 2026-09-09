@@ -10,6 +10,7 @@ type Query = (perf: Timeline) => Array<{ toJSON(): unknown }>;
 test.each<[string, Query]>([
   ["getEntries", (perf) => perf.getEntries()],
   ["getEntriesByName", (perf) => perf.getEntriesByName("a")],
+  ["getEntriesByName with a type", (perf) => perf.getEntriesByName("a", "mark")],
   ["getEntriesByType", (perf) => perf.getEntriesByType("mark")],
 ])("%s returns a sorted independent list", (_, query) => {
   for (const perf of [p, node.performance]) {
@@ -33,7 +34,11 @@ test.each([
   p.measure("", { start: 0, end: 2 });
   resource("");
   p[method]("");
-  expect(p.getEntriesByName("").map((e) => e.entryType)).not.toContain(type);
+  expect(p.getEntriesByName("").map((e) => e.entryType)).toEqual(
+    ["mark", "measure", "resource"].filter((t) => t !== type),
+  );
+  expect(p.getEntriesByName("keep")).toHaveLength(1);
   p[method]();
   expect(p.getEntriesByType(type)).toEqual([]);
+  expect(p.getEntries()).toHaveLength(type === "mark" ? 2 : 3);
 });

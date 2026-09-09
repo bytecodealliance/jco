@@ -4,11 +4,14 @@ import { describe, expect, test } from "vitest";
 import {
   determineSpecificType,
   formatList,
+  illegalConstructor,
   invalidArgType,
   invalidArgValue,
   invalidReturnValue,
+  invalidThis,
   missingArgs,
   outOfRange,
+  validateObject,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/errors.js";
 
 describe("Node validation errors", () => {
@@ -54,5 +57,21 @@ describe("Node validation errors", () => {
       "type string ('abcdefghijklmnopqrstuvwxy...')",
     );
     expect(formatList(["A", "B", "C"], "or")).toBe("A, B, or C");
+  });
+  test.concurrent("rejects arrays as objects and names forged receivers like Node", () => {
+    expect(() => validateObject([], "options")).toThrow(
+      expect.objectContaining({
+        code: "ERR_INVALID_ARG_TYPE",
+        message: 'The "options" argument must be of type object. Received an instance of Array',
+      }),
+    );
+    expect(illegalConstructor()).toMatchObject({
+      code: "ERR_ILLEGAL_CONSTRUCTOR",
+      message: "Illegal constructor",
+    });
+    expect(invalidThis("StringDecoder")).toMatchObject({
+      code: "ERR_INVALID_THIS",
+      message: 'Value of "this" must be of type StringDecoder',
+    });
   });
 });
