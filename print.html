@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c85c3160.js";
+            window.path_to_searchindex_js = "searchindex-a495c26b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -2108,6 +2108,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
 <tr><td><code>node:http</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http</code></td><td>Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation – see below. Servers need <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
 <tr><td><code>node:https</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https</code></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses the <code>direct</code> host or an explicit <code>wasi:tls</code> provider – see below.</td></tr>
+<tr><td><code>node:net</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/net/core</code></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported – see below.</td></tr>
 <tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
 <tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
@@ -2640,6 +2641,40 @@ shares server and default-result-order state with the main module.</p>
 boundary does not expose an outstanding c-ares request that a later guest call
 could cancel. The provider boundary otherwise remains Node-independent, leaving
 room for a future browser implementation.</p>
+<h3 id="tcp-sockets"><a class="header" href="#tcp-sockets">TCP sockets</a></h3>
+<p><code>node:net</code> implements Node 24.19’s 18-export module surface over Preview 2
+<code>wasi:sockets</code>. It includes TCP <code>Socket</code> and <code>Server</code>, <code>BoundSocket</code>,
+<code>SocketAddress</code>, <code>BlockList</code>, IP-family predicates, overload normalization, and
+the auto-family defaults. <code>connect</code> and <code>createConnection</code> are the same function,
+and <code>Socket</code> and <code>Stream</code> are the same constructor, as in Node.</p>
+<pre><code class="language-js">import { connect, createServer } from 'node:net';
+
+createServer((socket) =&gt; socket.end('hello')).listen(8080, '127.0.0.1');
+
+connect(8080, '127.0.0.1').setEncoding('utf8').on('data', console.log);
+</code></pre>
+<p>Jco injects only the selected world’s Preview 2 DNS, TCP, stream, and pollable
+interfaces and their standard WIT packages. QuickJS worlds use 0.2.12;
+StarlingMonkey worlds can use 0.2.10. There is no Jco-specific network host
+interface and no bare <code>net</code> alias.</p>
+<p>Preview 2 has no Unix-domain sockets, Windows named pipes, OS file descriptors,
+libuv handles, TCP reset, IP type-of-service, or custom JavaScript DNS callback.
+Those operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Address attempts are
+sequential rather than reproducing Node’s exact Happy Eyeballs timing. Socket
+objects provide the common readable/writable methods and events but do not yet
+inherit from classic <code>node:stream.Duplex</code>, because Jco does not have a faithful
+classic stream core.</p>
+<p>Reads support Node string encodings, buffered <code>read()</code>, and async iteration.
+Writable operations complete through blocking WASI writes and do not yet provide
+classic stream backpressure. <code>setNoDelay()</code>, <code>ref()</code>, and <code>unref()</code> preserve the
+callable surface but cannot control the host’s TCP_NODELAY or event-loop references.
+Nonzero socket timeouts require an engine with JavaScript timers; engines without
+them reject <code>setTimeout()</code> explicitly. The deprecated <code>bufferSize</code> getter throws
+the Jco deprecated-API error; use <code>writableLength</code> instead.</p>
+<p>Half-close depends on the host honoring WASI’s directional <code>shutdown</code>. The
+Preview 2 Node host shim 0.22.0 currently closes both directions; applications
+using that host should let the peer finish its response before closing the
+socket’s writable side.</p>
 <h3 id="http-and-selectable-implementations"><a class="header" href="#http-and-selectable-implementations">HTTP and selectable implementations</a></h3>
 <p>The <code>node:http</code> adapter implements both client and server NodeJS HTTP APIs,
 with outbound <code>request()</code> and <code>get()</code> calls with Node-style <code>ClientRequest</code>
@@ -2905,7 +2940,7 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>, <code>node:net</code>,
+<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:process</code>, <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
