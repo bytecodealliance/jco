@@ -62,6 +62,8 @@ export interface NodeBuiltinOptions {
     /** Paths to jco-std's capability-free readline modules (overridable for tests). */
     readlineModule?: string;
     readlinePromisesModule?: string;
+    /** Path to jco-std's capability-free `node:repl` module (overridable for tests). */
+    replModule?: string;
     /** Paths to jco-std's versioned stream modules (overridable for tests) */
     streamModule?: string;
     streamPromisesModule?: string;
