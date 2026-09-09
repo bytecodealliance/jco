@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 
-import { p, resetTimelines, shim } from "../helpers/perf-hooks.js";
+import { matchesNode, p, resetTimelines, shim } from "../helpers/perf-hooks.js";
 
 afterEach(resetTimelines);
 
@@ -67,4 +67,10 @@ test("reads a thenable finally without invoking a proxy has trap", () => {
     },
   );
   expect(shim.timerify(() => value)()).toBe(9);
+});
+
+test("matches Node's validation errors, including their presentation", () => {
+  matchesNode((m) => m.timerify(1 as never));
+  matchesNode((m) => m.timerify(() => 1, 5 as never));
+  matchesNode((m) => m.timerify(() => 1, { histogram: 5 as never }));
 });

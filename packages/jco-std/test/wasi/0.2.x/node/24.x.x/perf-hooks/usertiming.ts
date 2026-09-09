@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 
-import { node, p, resetTimelines, shim } from "../helpers/perf-hooks.js";
+import { matchesNode, node, p, resetTimelines, shim } from "../helpers/perf-hooks.js";
 
 afterEach(resetTimelines);
 
@@ -88,5 +88,21 @@ test("validates options and unresolved marks", () => {
   );
   expect(() => p.measure("m", { start: 0 }, "b")).toThrow(
     expect.objectContaining({ code: "ERR_PERFORMANCE_MEASURE_INVALID_OPTIONS" }),
+  );
+});
+
+test("matches Node's mark and measure validation errors, including their presentation", () => {
+  matchesNode((m) => new m.PerformanceMark("a", { startTime: "1" as never }));
+  matchesNode((m) => new m.PerformanceMark("a", [] as never));
+  matchesNode((m) => new m.PerformanceMark("a", { startTime: -1 }));
+  matchesNode((m) => Reflect.apply(m.performance.mark, m.performance, []));
+  matchesNode((m) => m.performance.clearMarks("nodeStart"));
+  matchesNode((m) => m.performance.measure(123 as never, { start: 0, end: 1 }));
+  matchesNode((m) => m.performance.measure("m", "missing"));
+});
+
+test("refuses Node process milestones as measure boundaries", () => {
+  expect(() => p.measure("m", "nodeStart")).toThrow(
+    expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
   );
 });

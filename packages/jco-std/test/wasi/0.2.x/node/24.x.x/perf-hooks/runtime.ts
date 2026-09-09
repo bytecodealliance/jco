@@ -45,3 +45,17 @@ test("missing scheduler is rejected by observe before subscribing", () => {
   p.mark("safe", { startTime: 0 });
   expect(observer.takeRecords()).toEqual([]);
 });
+
+test("event operations fail lazily when the engine has no EventTarget", async () => {
+  vi.stubGlobal("EventTarget", undefined);
+  vi.resetModules();
+  const { performance } =
+    await import("../../../../../../src/wasi/0.2.x/node/24.x.x/perf-hooks.js");
+  expect(performance.mark("works", { startTime: 0 }).name).toBe("works");
+  expect(() => performance.addEventListener("resourcetimingbufferfull", () => {})).toThrow(
+    expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
+  );
+  expect(() => {
+    performance.onresourcetimingbufferfull = () => {};
+  }).toThrow(expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }));
+});
