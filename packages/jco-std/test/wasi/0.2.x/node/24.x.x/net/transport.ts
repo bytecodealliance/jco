@@ -14,6 +14,17 @@ describe("shared WASI TCP transport", () => {
     expect(errorCode({ payload: "would-block" })).toBe("would-block");
     expect(errorCode(new Error("unrelated"))).toBeUndefined();
   });
+  test("maps socket allocation failures and releases the network", () => {
+    const { provider, disposed } = createProvider();
+    provider.tcpCreateSocket.createTcpSocket = (): never => {
+      throw { payload: "access-denied" };
+    };
+    expect(() => connect(provider, "127.0.0.1", 443)).toThrow(
+      expect.objectContaining({ code: "EACCES", syscall: "connect", port: 443 }),
+    );
+    expect(disposed).toEqual(["network"]);
+  });
+
   test("terminates when a literal address is filtered by family", () => {
     const { provider, disposed } = createProvider();
     expect(() => connect(provider, "127.0.0.1", 80, { family: 6 })).toThrow();
