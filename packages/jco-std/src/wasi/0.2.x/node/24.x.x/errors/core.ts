@@ -12,9 +12,11 @@ export type ErrorCode =
   | "ABORT_ERR"
   | "ERR_AMBIGUOUS_ARGUMENT"
   | "ERR_CONSTRUCT_CALL_REQUIRED"
+  | "ERR_ILLEGAL_CONSTRUCTOR"
   | "ERR_INVALID_ARG_TYPE"
   | "ERR_INVALID_ARG_VALUE"
   | "ERR_INVALID_RETURN_VALUE"
+  | "ERR_INVALID_THIS"
   | "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API"
   | "ERR_JCO_UNSUPPORTED_NODE_API"
   | "ERR_MISSING_ARGS"
@@ -332,6 +334,18 @@ export function constructCallRequired(
   );
 }
 
+export function illegalConstructor(): CodedError<TypeError, "ERR_ILLEGAL_CONSTRUCTOR"> {
+  return codedError(new NativeTypeError("Illegal constructor"), "ERR_ILLEGAL_CONSTRUCTOR");
+}
+
+/** Node's receiver check failure, raised when a method runs against a forged `this`. */
+export function invalidThis(name: string): CodedError<TypeError, "ERR_INVALID_THIS"> {
+  return codedError(
+    new NativeTypeError(`Value of "this" must be of type ${name}`),
+    "ERR_INVALID_THIS",
+  );
+}
+
 export function deprecatedNodeApi(
   name: string,
   replacement?: string,
@@ -416,7 +430,8 @@ export function validateObject(
   value: unknown,
   name: string,
 ): asserts value is Record<PropertyKey, unknown> {
-  if (value === null || typeof value !== "object") {
+  // Node's default also rejects arrays.
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw invalidArgType(name, "Object", value);
   }
 }

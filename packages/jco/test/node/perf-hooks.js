@@ -1,17 +1,19 @@
 import { writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { bundleComponentSource } from "../../src/bundle.js";
-import { spawn } from "node:child_process";
-import { getTmpDir, transpileComponent } from "../helpers.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
+import { exec, getTmpDir, jcoPath, transpileComponent } from "../helpers.js";
 
+const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-perf-hooks");
+// The installed jco-std predates perf_hooks, so the fixture is bundled here with the source plugin
+// pointed at the local build rather than with the CLI's `--bundle`.
 const perfHooksModule = fileURLToPath(
     new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/perf-hooks.js", import.meta.url),
 );
-const fixture = fileURLToPath(new URL("../fixtures/componentize/node-perf-hooks/source.js", import.meta.url));
-const wit = fileURLToPath(new URL("../fixtures/componentize/node-perf-hooks/source.wit", import.meta.url));
+
 test("resolves perf_hooks without unrelated capabilities and leaves bare imports alone", () => {
     const onWitRequirement = vi.fn();
     const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { perfHooksModule, onWitRequirement });
@@ -24,46 +26,29 @@ test("resolves perf_hooks without unrelated capabilities and leaves bare imports
 test.each(["starlingmonkey", "quickjs"])(
     "runs ordinary node:perf_hooks imports in %s",
     async (backend) => {
-        const root = await getTmpDir();
-        const source = await bundleComponentSource(fixture, {
+        const outputDir = await getTmpDir();
+        const entry = join(outputDir, "source.js");
+        const componentPath = join(outputDir, "component.wasm");
+        const source = await bundleComponentSource(join(fixtureDir, "source.js"), {
             plugins: [nodeBuiltinPlugin({ imports: [], exports: [] }, { perfHooksModule })],
         });
-        const entry = join(root, "source.js");
-        const componentPath = join(root, "component.wasm");
         await writeFile(entry, source);
-        await new Promise((resolve, reject) => {
-            const cli = fileURLToPath(new URL("../../dist/jco.js", import.meta.url));
-            const child = spawn(
-                process.execPath,
-                [
-                    cli,
-                    "componentize",
-                    entry,
-                    "--wit",
-                    wit,
-                    "--world-name",
-                    "test",
-                    "--out",
-                    componentPath,
-                    "--backend",
-                    backend,
-                ],
-                { stdio: ["ignore", "pipe", "pipe"] },
-            );
-            let output = "";
-            child.stdout.on("data", (chunk) => {
-                output += chunk;
-            });
-            child.stderr.on("data", (chunk) => {
-                output += chunk;
-            });
-            child.on("error", reject);
-            child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(output))));
-        });
+        await exec(
+            jcoPath,
+            "componentize",
+            entry,
+            "--backend",
+            backend,
+            "-w",
+            join(fixtureDir, "source.wit"),
+            "-n",
+            "test",
+            "-o",
+            componentPath,
+        );
         const { modulePath } = await transpileComponent({ componentPath, name: "perf-hooks" });
         const component = await import(modulePath);
-        const report = JSON.parse(component.run());
-        expect(report).toEqual({
+        expect(JSON.parse(component.run())).toEqual({
             observation: backend === "quickjs" ? "ERR_JCO_UNSUPPORTED_NODE_API" : true,
             identity: true,
             markClass: true,

@@ -25,20 +25,15 @@
  * IN THE SOFTWARE.
  */
 import {
-  brand,
-  check,
-  coded,
-  domException,
-  enumerable,
-  illegal,
-  invalid,
-  kSkipThrow,
-  missing,
-  object,
-  unsupported,
-} from "./internal.js";
+  codedError,
+  illegalConstructor,
+  invalidArgType,
+  missingArgs,
+  validateObject,
+} from "../errors/core.js";
+
+import { brand, check, domException, enumerable, kSkipThrow, unsupported } from "./internal.js";
 import { PerformanceEntry } from "./entries.js";
-import { missingArgs } from "../errors/core.js";
 const supported: readonly string[] = Object.freeze(["function", "mark", "measure", "resource"]);
 const noEntryTypes: readonly string[] = Object.freeze([]);
 const observers = new Set<PerformanceObserver>();
@@ -94,7 +89,10 @@ export function bufferEntry(entry: PerformanceEntry): void {
     return;
   }
   if (typeof globalThis.setTimeout !== "function" || typeof globalThis.Event !== "function") {
-    unsupported("resource timing buffer overflow (runtime events and scheduler required)");
+    unsupported(
+      "resource timing buffer overflow",
+      "the engine has no event dispatch or task scheduler",
+    );
   }
   secondary.push(entry);
   if (resourcePending) {
@@ -124,7 +122,7 @@ export class PerformanceObserverEntryList {
   #entries: PerformanceEntry[];
   constructor(token?: symbol, entries: PerformanceEntry[] = []) {
     if (token !== kSkipThrow) {
-      illegal();
+      throw illegalConstructor();
     }
     brand(this, "PerformanceObserverEntryList");
     this.#entries = entries.sort((a, b) => a.startTime - b.startTime);
@@ -136,7 +134,7 @@ export class PerformanceObserverEntryList {
   getEntriesByType(type: string): PerformanceEntry[] {
     check(this, "PerformanceObserverEntryList");
     if (!arguments.length) {
-      missing("type");
+      throw missingArgs("type");
     }
     type = `${type}`;
     return this.#entries.filter((entry) => entry.entryType === type);
@@ -144,7 +142,7 @@ export class PerformanceObserverEntryList {
   getEntriesByName(name: string, type?: string): PerformanceEntry[] {
     check(this, "PerformanceObserverEntryList");
     if (!arguments.length) {
-      missing("name");
+      throw missingArgs("name");
     }
     name = `${name}`;
     return this.#entries.filter(
@@ -175,7 +173,7 @@ export class PerformanceObserver {
   #callback: ObserverCallback;
   constructor(callback: ObserverCallback) {
     if (typeof callback !== "function") {
-      invalid("callback", "function", callback);
+      throw invalidArgType("callback", "function", callback);
     }
     brand(this, "PerformanceObserver");
     this.#callback = callback;
@@ -186,15 +184,15 @@ export class PerformanceObserver {
   observe(options: ObserverOptions = {}): void {
     check(this, "PerformanceObserver");
     if (typeof globalThis.setTimeout !== "function") {
-      unsupported("PerformanceObserver.observe (runtime task scheduler required)");
+      unsupported("PerformanceObserver.observe", "the engine has no task scheduler");
     }
-    object(options, "options");
+    validateObject(options, "options");
     const { entryTypes, type, buffered } = { ...options };
     if (entryTypes === undefined && type === undefined) {
       throw missingArgs("options.entryTypes", "options.type");
     }
     if (entryTypes != null && type != null) {
-      throw coded(
+      throw codedError(
         new TypeError("options.entryTypes can not set with options.type together"),
         "ERR_INVALID_ARG_VALUE",
       );
@@ -214,7 +212,7 @@ export class PerformanceObserver {
     this.#mode ??= entryTypes !== undefined ? "multiple" : "single";
     if (this.#mode === "multiple") {
       if (!Array.isArray(entryTypes)) {
-        invalid("options.entryTypes", "string[]", entryTypes);
+        throw invalidArgType("options.entryTypes", "string[]", entryTypes);
       }
       this.#types.clear();
       for (const entryType of entryTypes) {

@@ -24,7 +24,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { brand, check, coded, enumerable, illegal, kSkipThrow } from "./internal.js";
+import { codedError, illegalConstructor } from "../errors/core.js";
+
+import { brand, check, enumerable, kSkipThrow } from "./internal.js";
 import { PerformanceEntry, type EntryJSON } from "./entries.js";
 import { enqueue, bufferEntry } from "./observe.js";
 export interface ConnectionTimingInfo {
@@ -64,7 +66,7 @@ export class PerformanceResourceTiming extends PerformanceEntry {
     delivery = "",
   ) {
     if (token !== kSkipThrow || !timing) {
-      illegal();
+      throw illegalConstructor();
     }
     super(token, name, "resource");
     brand(this, "PerformanceResourceTiming");
@@ -223,7 +225,10 @@ export function markResourceTiming(
   deliveryType = "",
 ): PerformanceResourceTiming {
   if (cacheMode !== "" && cacheMode !== "local") {
-    throw coded(new Error("cache must be an empty string or 'local'"), "ERR_INTERNAL_ASSERTION");
+    throw codedError(
+      new Error("cache must be an empty string or 'local'"),
+      "ERR_INTERNAL_ASSERTION",
+    );
   }
   const entry = new PerformanceResourceTiming(
     kSkipThrow,

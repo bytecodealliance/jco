@@ -25,18 +25,21 @@
  * IN THE SOFTWARE.
  */
 import {
+  codedError,
+  illegalConstructor,
+  invalidArgType,
+  missingArgs,
+  validateObject,
+} from "../errors/core.js";
+
+import {
   brand,
   check,
   clone,
-  coded,
   domException,
   enumerable,
-  illegal,
-  invalid,
   kSkipThrow,
-  missing,
   now,
-  object,
   timestamp,
   unsupported,
 } from "./internal.js";
@@ -63,7 +66,7 @@ const reserved = new Set([
 ]);
 function checkName(name: string): void {
   if (reserved.has(name)) {
-    throw coded(
+    throw codedError(
       new TypeError(`The argument 'name' is invalid. Received '${name}'`),
       "ERR_INVALID_ARG_VALUE",
     );
@@ -76,7 +79,7 @@ function getMark(value: string | number): number {
   }
   const name = `${value}`;
   if (reserved.has(name)) {
-    unsupported(`performance.nodeTiming.${name}`);
+    unsupported(`performance.nodeTiming.${name}`, "Node process milestones are unavailable");
   }
   const ts = markTimings.get(name);
   if (ts === undefined) {
@@ -88,12 +91,12 @@ export class PerformanceMark extends PerformanceEntry {
   #detail: unknown;
   constructor(name: string, options?: MarkOptions) {
     if (!arguments.length) {
-      missing("name");
+      throw missingArgs("name");
     }
     name = `${name}`;
     checkName(name);
     if (options != null) {
-      object(options, "options");
+      validateObject(options, "options");
     }
     const start = options?.startTime ?? now();
     timestamp(start);
@@ -117,7 +120,7 @@ export class PerformanceMeasure extends PerformanceEntry {
   #detail: unknown;
   constructor(token?: symbol, name = "", start = 0, duration = 0, detail: unknown = null) {
     if (token !== kSkipThrow) {
-      illegal();
+      throw illegalConstructor();
     }
     super(token, name, "measure", start, duration);
     brand(this, "PerformanceMeasure");
@@ -145,7 +148,7 @@ export function measure(
   endMark?: string,
 ): PerformanceMeasure {
   if (typeof name !== "string") {
-    invalid("name", "string", name);
+    throw invalidArgType("name", "string", name);
   }
   let start: string | number | undefined;
   let end: string | number | undefined;
@@ -158,7 +161,7 @@ export function measure(
     valid &&
     (endMark !== undefined || (start !== undefined && end !== undefined && duration !== undefined))
   ) {
-    throw coded(
+    throw codedError(
       new TypeError(
         endMark !== undefined
           ? "endMark must not be specified"
