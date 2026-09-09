@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import type { Plugin } from "rolldown";
@@ -58,6 +59,8 @@ const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
 const OS_SPECIFIER = "node:os";
 const STRING_DECODER_SPECIFIER = "node:string_decoder";
+const STREAM_SPECIFIER = "node:stream";
+const STREAM_PROMISES_SPECIFIER = "node:stream/promises";
 const STREAM_CONSUMERS_SPECIFIER = "node:stream/consumers";
 const STREAM_ITER_SPECIFIER = "node:stream/iter";
 const DNS_SPECIFIERS = new Set(["node:dns", "node:dns/promises"]);
@@ -72,6 +75,7 @@ const VIRTUAL_PREFIX = "\0jco-node-builtin:";
 const INSPECTOR_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}inspector-callbacks`;
 const HTTP_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http-callbacks`;
 const HTTP2_CALLBACKS_MODULE = `${VIRTUAL_PREFIX}http2-callbacks`;
+const STREAM_EVENTS_MODULE = `${VIRTUAL_PREFIX}stream-events`;
 const UNENV_BUFFER_CORE = `${VIRTUAL_PREFIX}unenv-buffer-core`;
 const ABORT_GLOBALS_SPECIFIER = "jco:node-abort-globals";
 const ABORT_GLOBALS_MODULE = `${VIRTUAL_PREFIX}abort-globals`;
@@ -299,6 +303,10 @@ export interface NodeBuiltinOptions {
     /** Path to jco-std's versioned `node:string_decoder` module (overridable for tests) */
     stringDecoderModule?: string;
     /** Paths to jco-std's versioned stream modules (overridable for tests) */
+    streamModule?: string;
+    streamPromisesModule?: string;
+    streamSchedulerModule?: string;
+    streamEmitterModule?: string;
     streamConsumersModule?: string;
     streamIterModule?: string;
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
@@ -1101,6 +1109,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const eventsModule = () => stdModule(options.eventsModule, "events");
     const osModule = () => stdModule(options.osModule, "os");
     const stringDecoderModule = () => stdModule(options.stringDecoderModule, "string-decoder");
+    const classicStreamModule = () => stdModule(options.streamModule, "stream");
+    const streamPromisesModule = () => stdModule(options.streamPromisesModule, "stream/promises");
+    const streamEmitterModule = () => stdModule(options.streamEmitterModule, "stream/emitter");
+    const streamSchedulerModule = () => stdModule(options.streamSchedulerModule, "stream/scheduler");
     const streamConsumersModule = () => stdModule(options.streamConsumersModule, "stream/consumers");
     const streamIterModule = () => stdModule(options.streamIterModule, "stream/iter");
     const clusterModule = () => stdModule(options.clusterModule, "cluster");
@@ -1161,12 +1173,37 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const http2Via = options.nodejsHttp2Via ?? "direct";
     return {
         name: "jco-node-builtins",
-        resolveId(id) {
+        resolveId(id, importer) {
+            // Only the audited portable core's dependencies use legacy bare IDs.
+            // Share Buffer/EventEmitter/StringDecoder with ordinary node: imports.
+            if (importer?.replaceAll("\\", "/").includes("/node_modules/readable-stream/lib/")) {
+                if (id === "events") {
+                    return STREAM_EVENTS_MODULE;
+                }
+                if (id === "process/") {
+                    return streamSchedulerModule();
+                }
+                if (id === "string_decoder/") {
+                    return `${VIRTUAL_PREFIX}${STRING_DECODER_SPECIFIER}`;
+                }
+                if (id === "abort-controller") {
+                    return createRequire(importer).resolve(id);
+                }
+                if (id === "buffer" || id === "events" || id === "string_decoder") {
+                    return `${VIRTUAL_PREFIX}node:${id}`;
+                }
+            }
             if (id.startsWith(VIRTUAL_PREFIX)) {
                 return id;
             }
             if (id === ABORT_GLOBALS_SPECIFIER) {
                 return ABORT_GLOBALS_MODULE;
+            }
+            if (
+                id === "event-target-shim" &&
+                importer?.replaceAll("\\", "/").includes("/node_modules/abort-controller/dist/")
+            ) {
+                return createRequire(importer).resolve(id);
             }
             if (id === ERROR_GLOBALS_SPECIFIER) {
                 return ERROR_GLOBALS_MODULE;
@@ -1225,8 +1262,13 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 // No onWitRequirement: decoding and incomplete-byte state stay in the guest.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
-            if (id === STREAM_CONSUMERS_SPECIFIER || id === STREAM_ITER_SPECIFIER) {
-                // No onWitRequirement: iterable streams are entirely guest-side.
+            if (
+                id === STREAM_SPECIFIER ||
+                id === STREAM_PROMISES_SPECIFIER ||
+                id === STREAM_CONSUMERS_SPECIFIER ||
+                id === STREAM_ITER_SPECIFIER
+            ) {
+                // No onWitRequirement: stream algorithms are entirely guest-side.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === CLUSTER_SPECIFIER) {
@@ -1299,6 +1341,13 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             return null;
         },
         load(id) {
+            if (id === STREAM_EVENTS_MODULE) {
+                return `import * as events from "node:events";
+import { callableEmitter } from ${JSON.stringify(streamEmitterModule())};
+export * from "node:events";
+export const EventEmitter = callableEmitter(events.EventEmitter);
+export default { ...events, EventEmitter };`;
+            }
             if (!id.startsWith(VIRTUAL_PREFIX)) {
                 return null;
             }
@@ -1353,6 +1402,12 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             }
             if (value === STRING_DECODER_SPECIFIER) {
                 return stringDecoderAdapter(stringDecoderModule());
+            }
+            if (value === STREAM_SPECIFIER) {
+                return streamAdapter(classicStreamModule());
+            }
+            if (value === STREAM_PROMISES_SPECIFIER) {
+                return streamAdapter(streamPromisesModule());
             }
             if (value === STREAM_CONSUMERS_SPECIFIER) {
                 return streamAdapter(streamConsumersModule());
