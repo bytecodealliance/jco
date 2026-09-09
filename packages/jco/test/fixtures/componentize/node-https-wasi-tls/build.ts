@@ -5,8 +5,8 @@ import { bundleComponentSource } from "../../../../dist/bundle.js";
 import { componentize } from "../../../../dist/cmd/componentize.js";
 import { nodeBuiltinPlugin } from "../../../../dist/node-builtins.js";
 import { injectNodeWitImports, type NodeWitRequirement } from "../../../../dist/node-wit.js";
-import { transpileBytes, writeFiles } from "../../../../../jco-transpile/dist/index.js";
-import { componentWit } from "../../../../../jco-transpile/dist/wasm-tools.js";
+import { transpileBytes, writeFiles } from "@bytecodealliance/jco-transpile";
+import { componentWit } from "@bytecodealliance/jco-transpile/wasm-tools";
 
 const root = resolve(process.argv[2]);
 const backend = process.argv[3];
