@@ -377,7 +377,7 @@ export function connect(
             "net.Socket localAddress",
           );
           socket.startBind(network, local);
-          finishPending(() => socket.finishBind!(), socket);
+          finishPending(socket.finishBind.bind(socket), socket);
         }
         socket.startConnect(network, remoteAddress(address, port));
         for (;;) {
@@ -456,7 +456,7 @@ export function bind(
       socket.setListenBacklogSize?.(wasiU64(provider, backlog));
     }
     socket.startBind(network, local);
-    finishPending(() => socket.finishBind!(), socket);
+    finishPending(socket.finishBind.bind(socket), socket);
     return { socket, network, address: nodeAddress(socket.localAddress()) };
   } catch (error) {
     dispose(socket);
