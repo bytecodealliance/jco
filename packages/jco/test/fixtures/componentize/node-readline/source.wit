@@ -1,0 +1,4 @@
+package local:node-readline;
+world test {
+  export run: func() -> string;
+}
