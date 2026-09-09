@@ -3,8 +3,10 @@
 // Node.js is distributed under the MIT license. See https://github.com/nodejs/node.
 
 import { unsupportedNodeApi } from "../errors/core.js";
+import { inspect as inspectValue, type InspectOptions } from "../internal/inspect.js";
 
-const customInspect = Symbol.for("nodejs.util.inspect.custom");
+export type { InspectOptions };
+
 const clocks = new WeakMap<object, () => number>();
 const consoleMethods = [
   "log",
@@ -37,21 +39,6 @@ export interface WritableStream {
   getColorDepth?(): number;
 }
 
-export interface InspectOptions {
-  showHidden?: boolean;
-  colors?: boolean;
-  depth?: number | null;
-  maxArrayLength?: number | null;
-  maxStringLength?: number | null;
-  breakLength?: number;
-  compact?: boolean | number;
-  customInspect?: boolean;
-  showProxy?: boolean;
-  sorted?: boolean | ((left: string, right: string) => number);
-  getters?: boolean | "get" | "set";
-  numericSeparator?: boolean;
-}
-
 export interface ConsoleOptions {
   stdout: WritableStream;
   stderr?: WritableStream;
@@ -82,128 +69,6 @@ function validateStream(value: unknown, name: string): asserts value is Writable
   if (!isWritableStream(value)) {
     throw new TypeError(`${name} must have a write() method`);
   }
-}
-
-function quote(value: string): string {
-  return `'${value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("'", "\\'")
-    .replaceAll("\n", "\\n")
-    .replaceAll("\r", "\\r")
-    .replaceAll("\t", "\\t")}'`;
-}
-
-function color(code: number, value: string, enabled: boolean): string {
-  return enabled ? `\u001b[${code}m${value}\u001b[39m` : value;
-}
-
-function primitive(value: unknown, colors: boolean): string | undefined {
-  if (value === undefined) {
-    return color(90, "undefined", colors);
-  }
-  if (value === null) {
-    return colors ? "\u001b[1mnull\u001b[22m" : "null";
-  }
-  if (typeof value === "string") {
-    return color(32, quote(value), colors);
-  }
-  if (typeof value === "number") {
-    return color(33, Object.is(value, -0) ? "-0" : String(value), colors);
-  }
-  if (typeof value === "bigint") {
-    return color(33, `${value}n`, colors);
-  }
-  if (typeof value === "boolean") {
-    return color(33, String(value), colors);
-  }
-  if (typeof value === "symbol") {
-    return color(32, String(value), colors);
-  }
-  if (typeof value === "function") {
-    return color(36, `[Function${value.name ? `: ${value.name}` : ""}]`, colors);
-  }
-  return undefined;
-}
-
-function inspectValue(
-  value: unknown,
-  options: InspectOptions = {},
-  seen = new Set<object>(),
-  level = 0,
-): string {
-  const simple = primitive(value, options.colors === true);
-  if (simple !== undefined) {
-    return simple;
-  }
-
-  const object = value as object;
-  if (seen.has(object)) {
-    return color(36, "[Circular]", options.colors === true);
-  }
-  const depth = options.depth === undefined ? 2 : options.depth;
-  if (depth !== null && level > depth) {
-    const name = object.constructor?.name ?? "Object";
-    return color(36, `[${name}]`, options.colors === true);
-  }
-
-  if (options.customInspect !== false) {
-    const hook = (object as { [customInspect]?: unknown })[customInspect];
-    if (typeof hook === "function") {
-      return String(
-        hook.call(object, depth === null ? null : depth - level, options, inspectValue),
-      );
-    }
-  }
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
-  }
-  if (value instanceof RegExp) {
-    return String(value);
-  }
-  if (value instanceof Error) {
-    return value.stack ?? `${value.name}: ${value.message}`;
-  }
-
-  seen.add(object);
-  let result: string;
-  if (Array.isArray(value)) {
-    const limit = options.maxArrayLength === null ? value.length : (options.maxArrayLength ?? 100);
-    const entries = value
-      .slice(0, limit)
-      .map((item) => inspectValue(item, options, seen, level + 1));
-    if (value.length > limit) {
-      entries.push(`... ${value.length - limit} more item${value.length - limit === 1 ? "" : "s"}`);
-    }
-    result = `[ ${entries.join(", ")} ]`;
-  } else if (value instanceof Map) {
-    const entries = Array.from(
-      value,
-      ([key, item]) =>
-        `${inspectValue(key, options, seen, level + 1)} => ${inspectValue(item, options, seen, level + 1)}`,
-    );
-    result = `Map(${value.size}) { ${entries.join(", ")} }`;
-  } else if (value instanceof Set) {
-    const entries = Array.from(value, (item) => inspectValue(item, options, seen, level + 1));
-    result = `Set(${value.size}) { ${entries.join(", ")} }`;
-  } else if (ArrayBuffer.isView(value)) {
-    const typed = value as unknown as { readonly length?: number; [index: number]: unknown };
-    const length = typed.length ?? 0;
-    const entries = Array.from({ length }, (_, index) =>
-      inspectValue(typed[index], options, seen, level + 1),
-    );
-    result = `${object.constructor?.name ?? "TypedArray"}(${length}) [ ${entries.join(", ")} ]`;
-  } else {
-    const entries = Object.keys(object).map((key) => {
-      const displayKey = /^[A-Za-z_$][\w$]*$/.test(key) ? key : quote(key);
-      const item = (object as Record<string, unknown>)[key];
-      return `${displayKey}: ${inspectValue(item, options, seen, level + 1)}`;
-    });
-    const prefix =
-      object.constructor && object.constructor !== Object ? `${object.constructor.name} ` : "";
-    result = `${prefix}{ ${entries.join(", ")} }`;
-  }
-  seen.delete(object);
-  return result;
 }
 
 function json(value: unknown): string {
