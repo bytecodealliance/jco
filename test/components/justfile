@@ -19,6 +19,7 @@ build:
     {{just}} build-jco-issue-1887
     {{just}} build-jco-issue-1887-list-param
     {{just}} build-jco-issue-1887-resource-drop
+    {{just}} build-posix-pthread-mutex-lock-1-1
 
 # Build the wstd P2 HTTP client required to test jco issue #577
 [group('build')]
@@ -56,6 +57,15 @@ build:
     mkdir -p output/jco-issue-1887-resource-drop
     {{just}} -f c/jco-issue-1887-resource-drop/justfile build
     mv c/jco-issue-1887-resource-drop/component.wasm output/jco-issue-1887-resource-drop/component.wasm
+
+# Build the wasi-sdk experimental coop-threads reactor for the POSIX
+# pthread_mutex_lock conformance test case 1-1
+[group('build')]
+@build-posix-pthread-mutex-lock-1-1:
+    echo "==> building posix-pthread-mutex-lock-1-1 reactor (c)..."
+    mkdir -p output/posix/pthread-mutex-lock/1-1
+    {{just}} -f c/posix/pthread-mutex-lock/1-1/justfile build
+    mv c/posix/pthread-mutex-lock/1-1/component.wasm output/posix/pthread-mutex-lock/1-1/component.wasm
 
 # Build the components required to test jco issue #1380
 [group('build')]
