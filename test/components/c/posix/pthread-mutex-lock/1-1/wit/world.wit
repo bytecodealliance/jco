@@ -1,0 +1,5 @@
+package test:posix-pthread-mutex-lock;
+
+world biz {
+  export run: func() -> u32;
+}
