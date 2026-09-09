@@ -24,10 +24,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { registerBrand, brandPrototype } from "./errors.js";
-
+import { brand, check, coded, enumerable, illegal, kSkipThrow } from "./internal.js";
 import { PerformanceEntry, type EntryJSON } from "./entries.js";
-import { coded, enumerable, illegal, kSkipThrow } from "./errors.js";
 import { enqueue, bufferEntry } from "./observe.js";
 export interface ConnectionTimingInfo {
   domainLookupStartTime?: number;
@@ -65,14 +63,11 @@ export class PerformanceResourceTiming extends PerformanceEntry {
     status = 0,
     delivery = "",
   ) {
-    if (token !== kSkipThrow) {
+    if (token !== kSkipThrow || !timing) {
       illegal();
     }
     super(token, name, "resource");
-    if (!timing) {
-      illegal();
-    }
-    registerBrand(this, "PerformanceResourceTiming");
+    brand(this, "PerformanceResourceTiming");
     this.#timing = timing;
     this.#cache = cache;
     this.#initiator = initiator;
@@ -80,69 +75,91 @@ export class PerformanceResourceTiming extends PerformanceEntry {
     this.#delivery = delivery;
   }
   override get startTime(): number {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.startTime;
   }
   override get duration(): number {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.endTime - this.#timing.startTime;
   }
   get initiatorType(): string {
+    check(this, "PerformanceResourceTiming");
     return this.#initiator;
   }
   get workerStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalServiceWorkerStartTime;
   }
   get redirectStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.redirectStartTime;
   }
   get redirectEnd(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.redirectEndTime;
   }
   get fetchStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.postRedirectStartTime;
   }
   get domainLookupStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalConnectionTimingInfo?.domainLookupStartTime;
   }
   get domainLookupEnd(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalConnectionTimingInfo?.domainLookupEndTime;
   }
   get connectStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalConnectionTimingInfo?.connectionStartTime;
   }
   get connectEnd(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalConnectionTimingInfo?.connectionEndTime;
   }
   get secureConnectionStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalConnectionTimingInfo?.secureConnectionStartTime;
   }
   get nextHopProtocol(): string | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalConnectionTimingInfo?.ALPNNegotiatedProtocol;
   }
   get requestStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalNetworkRequestStartTime;
   }
   get responseStart(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.finalNetworkResponseStartTime;
   }
   get responseEnd(): number {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.endTime;
   }
   get encodedBodySize(): number {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.encodedBodySize;
   }
   get decodedBodySize(): number {
+    check(this, "PerformanceResourceTiming");
     return this.#timing.decodedBodySize;
   }
   get transferSize(): number | undefined {
+    check(this, "PerformanceResourceTiming");
     return this.#cache === "local" ? 0 : this.#timing.encodedBodySize + 300;
   }
   get deliveryType(): string {
+    check(this, "PerformanceResourceTiming");
     return this.#delivery;
   }
   get responseStatus(): number {
+    check(this, "PerformanceResourceTiming");
     return this.#status;
   }
   override toJSON(): EntryJSON & Record<string, unknown> {
+    check(this, "PerformanceResourceTiming");
     return {
       ...super.toJSON(),
       startTime: this.startTime,
@@ -223,5 +240,3 @@ export function markResourceTiming(
   enqueue(entry);
   return entry;
 }
-
-brandPrototype(PerformanceResourceTiming.prototype, "PerformanceResourceTiming");

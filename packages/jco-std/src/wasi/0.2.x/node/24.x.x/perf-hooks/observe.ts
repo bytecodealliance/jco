@@ -24,12 +24,20 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { unsupported } from "./errors.js";
-import { domException } from "./errors.js";
-import { registerBrand, brandPrototype } from "./errors.js";
-
+import {
+  brand,
+  check,
+  coded,
+  domException,
+  enumerable,
+  illegal,
+  invalid,
+  kSkipThrow,
+  missing,
+  object,
+  unsupported,
+} from "./internal.js";
 import { PerformanceEntry } from "./entries.js";
-import { coded, enumerable, illegal, invalid, kSkipThrow, missing, object } from "./errors.js";
 import { missingArgs } from "../errors/core.js";
 const supported: readonly string[] = Object.freeze(["function", "mark", "measure", "resource"]);
 const noEntryTypes: readonly string[] = Object.freeze([]);
@@ -118,13 +126,15 @@ export class PerformanceObserverEntryList {
     if (token !== kSkipThrow) {
       illegal();
     }
-    registerBrand(this, "PerformanceObserverEntryList");
+    brand(this, "PerformanceObserverEntryList");
     this.#entries = entries.sort((a, b) => a.startTime - b.startTime);
   }
   getEntries(): PerformanceEntry[] {
+    check(this, "PerformanceObserverEntryList");
     return this.#entries.slice();
   }
   getEntriesByType(type: string): PerformanceEntry[] {
+    check(this, "PerformanceObserverEntryList");
     if (!arguments.length) {
       missing("type");
     }
@@ -132,6 +142,7 @@ export class PerformanceObserverEntryList {
     return this.#entries.filter((entry) => entry.entryType === type);
   }
   getEntriesByName(name: string, type?: string): PerformanceEntry[] {
+    check(this, "PerformanceObserverEntryList");
     if (!arguments.length) {
       missing("name");
     }
@@ -166,13 +177,14 @@ export class PerformanceObserver {
     if (typeof callback !== "function") {
       invalid("callback", "function", callback);
     }
-    registerBrand(this, "PerformanceObserver");
+    brand(this, "PerformanceObserver");
     this.#callback = callback;
   }
   static get supportedEntryTypes(): readonly string[] {
     return typeof globalThis.setTimeout === "function" ? supported : noEntryTypes;
   }
   observe(options: ObserverOptions = {}): void {
+    check(this, "PerformanceObserver");
     if (typeof globalThis.setTimeout !== "function") {
       unsupported("PerformanceObserver.observe (runtime task scheduler required)");
     }
@@ -228,6 +240,7 @@ export class PerformanceObserver {
     }
   }
   disconnect(): void {
+    check(this, "PerformanceObserver");
     observers.delete(this);
     pending.delete(this);
     this.#buffer = [];
@@ -235,6 +248,7 @@ export class PerformanceObserver {
     this.#mode = undefined;
   }
   takeRecords(): PerformanceEntry[] {
+    check(this, "PerformanceObserver");
     const records = this.#buffer;
     this.#buffer = [];
     return records;
@@ -261,6 +275,3 @@ export function enqueue(entry: PerformanceEntry): void {
     observer[buffer](entry);
   }
 }
-
-brandPrototype(PerformanceObserverEntryList.prototype, "PerformanceObserverEntryList");
-brandPrototype(PerformanceObserver.prototype, "PerformanceObserver");

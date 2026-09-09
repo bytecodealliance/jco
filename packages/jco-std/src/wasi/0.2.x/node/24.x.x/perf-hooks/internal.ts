@@ -85,10 +85,11 @@ export function clone(value: unknown): unknown {
 }
 export const kSkipThrow: unique symbol = Symbol("kSkipThrow");
 
-// Node validates internal fields before inspecting method arguments. A WeakMap
-// retains that ordering without exposing the private fields in public declarations.
+// Node checks the receiver of every method and accessor before reading arguments, so a forged
+// `this` fails with ERR_INVALID_THIS rather than a private-field TypeError. Brands are recorded per
+// instance because `instanceof` can be forged through the prototype chain.
 const brands = new WeakMap<object, Set<string>>();
-export function registerBrand(value: object, name: string): void {
+export function brand(value: object, name: string): void {
   let names = brands.get(value);
   if (!names) {
     names = new Set();
@@ -96,40 +97,9 @@ export function registerBrand(value: object, name: string): void {
   }
   names.add(name);
 }
-export function brandPrototype(prototype: object, name: string): void {
-  for (const key of Object.getOwnPropertyNames(prototype)) {
-    if (key === "constructor" || key === "kind" || key === "flags") {
-      continue;
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
-    if (!descriptor) {
-      continue;
-    }
-    for (const field of ["value", "get", "set"] as const) {
-      const original: unknown = descriptor[field];
-      if (typeof original !== "function") {
-        continue;
-      }
-      descriptor[field] = function (this: unknown, ...args: unknown[]): unknown {
-        if (
-          (typeof this !== "object" && typeof this !== "function") ||
-          this === null ||
-          !brands.get(this)?.has(name)
-        ) {
-          throw coded(new TypeError(`Value of "this" must be of type ${name}`), "ERR_INVALID_THIS");
-        }
-        return Reflect.apply(original, this, args);
-      };
-      Object.defineProperty(descriptor[field], "name", {
-        value: original.name,
-        configurable: true,
-      });
-      Object.defineProperty(descriptor[field], "length", {
-        value: original.length,
-        configurable: true,
-      });
-    }
-    Object.defineProperty(prototype, key, descriptor);
+export function check(value: unknown, name: string): void {
+  if (!brands.get(value as object)?.has(name)) {
+    throw coded(new TypeError(`Value of "this" must be of type ${name}`), "ERR_INVALID_THIS");
   }
 }
 

@@ -24,9 +24,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { registerBrand, brandPrototype } from "./errors.js";
-
-import { illegal, kSkipThrow, enumerable } from "./errors.js";
+import { brand, check, enumerable, illegal, kSkipThrow } from "./internal.js";
 import { deprecatedNodeApi } from "../errors/core.js";
 export interface EntryJSON {
   name: string;
@@ -44,25 +42,30 @@ export class PerformanceEntry {
     if (token !== kSkipThrow) {
       illegal();
     }
-    registerBrand(this, "PerformanceEntry");
+    brand(this, "PerformanceEntry");
     this.#name = name;
     this.#type = type;
     this.#start = start;
     this.#duration = duration;
   }
   get name(): string {
+    check(this, "PerformanceEntry");
     return this.#name;
   }
   get entryType(): string {
+    check(this, "PerformanceEntry");
     return this.#type;
   }
   get startTime(): number {
+    check(this, "PerformanceEntry");
     return this.#start;
   }
   get duration(): number {
+    check(this, "PerformanceEntry");
     return this.#duration;
   }
   toJSON(): EntryJSON {
+    check(this, "PerformanceEntry");
     return {
       name: this.name,
       entryType: this.entryType,
@@ -83,10 +86,11 @@ export class PerformanceNodeEntry extends PerformanceEntry {
     detail: unknown,
   ) {
     super(token, name, type, start, duration);
-    registerBrand(this, "PerformanceNodeEntry");
+    brand(this, "PerformanceNodeEntry");
     this.#detail = detail;
   }
   get detail(): unknown {
+    check(this, "PerformanceNodeEntry");
     return this.#detail;
   }
   get kind(): never {
@@ -102,9 +106,7 @@ export class PerformanceNodeEntry extends PerformanceEntry {
     throw deprecatedNodeApi("PerformanceNodeEntry.flags", "detail.flags");
   }
   override toJSON(): EntryJSON {
+    check(this, "PerformanceNodeEntry");
     return { ...super.toJSON(), detail: this.detail };
   }
 }
-
-brandPrototype(PerformanceEntry.prototype, "PerformanceEntry");
-brandPrototype(PerformanceNodeEntry.prototype, "PerformanceNodeEntry");

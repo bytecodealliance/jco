@@ -24,13 +24,12 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { domException } from "./errors.js";
-import { registerBrand, brandPrototype } from "./errors.js";
-
-import { PerformanceEntry, type EntryJSON } from "./entries.js";
 import {
+  brand,
+  check,
   clone,
   coded,
+  domException,
   enumerable,
   illegal,
   invalid,
@@ -40,7 +39,8 @@ import {
   object,
   timestamp,
   unsupported,
-} from "./errors.js";
+} from "./internal.js";
+import { PerformanceEntry, type EntryJSON } from "./entries.js";
 import { enqueue, bufferEntry } from "./observe.js";
 export interface MarkOptions {
   detail?: unknown;
@@ -100,13 +100,15 @@ export class PerformanceMark extends PerformanceEntry {
     markTimings.set(name, start);
     const detail = clone(options?.detail);
     super(kSkipThrow, name, "mark", start, 0);
-    registerBrand(this, "PerformanceMark");
+    brand(this, "PerformanceMark");
     this.#detail = detail;
   }
   get detail(): unknown {
+    check(this, "PerformanceMark");
     return this.#detail;
   }
   override toJSON(): EntryJSON {
+    check(this, "PerformanceMark");
     return { ...super.toJSON(), detail: this.detail };
   }
 }
@@ -118,13 +120,15 @@ export class PerformanceMeasure extends PerformanceEntry {
       illegal();
     }
     super(token, name, "measure", start, duration);
-    registerBrand(this, "PerformanceMeasure");
+    brand(this, "PerformanceMeasure");
     this.#detail = detail;
   }
   get detail(): unknown {
+    check(this, "PerformanceMeasure");
     return this.#detail;
   }
   override toJSON(): EntryJSON {
+    check(this, "PerformanceMeasure");
     return { ...super.toJSON(), detail: this.detail };
   }
 }
@@ -193,6 +197,3 @@ export function clearMarkTimings(name?: string): void {
     markTimings.clear();
   }
 }
-
-brandPrototype(PerformanceMark.prototype, "PerformanceMark");
-brandPrototype(PerformanceMeasure.prototype, "PerformanceMeasure");
