@@ -391,6 +391,11 @@
     "./wasi/0.2.x/node/24.x.x/tls/host": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/tls-host.d.ts",
       "default": "./dist/wasi/0.2.x/node/24.x.x/tls-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/perf-hooks": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/perf-hooks.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/perf-hooks.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/perf-hooks.js"
     }
   },
   "scripts": {
