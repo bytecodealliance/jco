@@ -24,8 +24,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { registerBrand, brandPrototype } from "./errors.js";
-
+import { brand, check, enumerable, illegal, missing, now, unsupported } from "./internal.js";
 import { PerformanceEntry } from "./entries.js";
 import {
   PerformanceMark,
@@ -46,7 +45,6 @@ import {
 } from "./observe.js";
 import { PerformanceResourceTiming, markResourceTiming } from "./resource-timing.js";
 import { timerify } from "./timerify.js";
-import { coded, enumerable, illegal, missing, now, unsupported } from "./errors.js";
 export {
   PerformanceEntry,
   PerformanceMark,
@@ -109,21 +107,15 @@ class MissingEventTarget implements EventTarget {
 }
 const RuntimeEventTarget = globalThis.EventTarget ?? MissingEventTarget;
 export class Performance extends RuntimeEventTarget {
-  #brand = true;
   constructor(key?: symbol) {
     if (key !== token) {
       illegal();
     }
     super();
-    registerBrand(this, "Performance");
-  }
-  #check(): void {
-    if (!this.#brand) {
-      throw coded(new TypeError('Value of "this" must be of type Performance'), "ERR_INVALID_THIS");
-    }
+    brand(this, "Performance");
   }
   clearMarks(name?: string): void {
-    this.#check();
+    check(this, "Performance");
     if (name !== undefined) {
       name = `${name}`;
     }
@@ -131,58 +123,58 @@ export class Performance extends RuntimeEventTarget {
     clearEntries("mark", name);
   }
   clearMeasures(name?: string): void {
-    this.#check();
+    check(this, "Performance");
     clearEntries("measure", name === undefined ? undefined : `${name}`);
   }
   clearResourceTimings(name?: string): void {
-    this.#check();
+    check(this, "Performance");
     clearEntries("resource", name === undefined ? undefined : `${name}`);
   }
   getEntries(): PerformanceEntry[] {
-    this.#check();
+    check(this, "Performance");
     return filterEntries();
   }
   getEntriesByName(name: string, type?: string): PerformanceEntry[] {
-    this.#check();
+    check(this, "Performance");
     if (!arguments.length) {
       missing("name");
     }
     return filterEntries(`${name}`, type === undefined ? undefined : `${type}`);
   }
   getEntriesByType(type: string): PerformanceEntry[] {
-    this.#check();
+    check(this, "Performance");
     if (!arguments.length) {
       missing("type");
     }
     return filterEntries(undefined, `${type}`);
   }
   mark(name: string, options?: MarkOptions): PerformanceMark {
-    this.#check();
+    check(this, "Performance");
     if (!arguments.length) {
       missing("name");
     }
     return mark(name, options);
   }
   measure(name: string, options?: string | MeasureOptions, endMark?: string): PerformanceMeasure {
-    this.#check();
+    check(this, "Performance");
     if (!arguments.length) {
       missing("name");
     }
     return measure(name, options, endMark);
   }
   now(): number {
-    this.#check();
+    check(this, "Performance");
     return now();
   }
   get timeOrigin(): number {
-    this.#check();
+    check(this, "Performance");
     if (typeof globalThis.performance?.timeOrigin !== "number") {
       unsupported("performance.timeOrigin (runtime clock required)");
     }
     return globalThis.performance.timeOrigin;
   }
   setResourceTimingBufferSize(maxSize: number): void {
-    this.#check();
+    check(this, "Performance");
     if (!arguments.length) {
       missing("maxSize");
     }
@@ -190,16 +182,19 @@ export class Performance extends RuntimeEventTarget {
     setResourceTimingBufferSize(+maxSize >>> 0);
   }
   get nodeTiming(): never {
+    check(this, "Performance");
     return unsupported("performance.nodeTiming (Node process milestones required)");
   }
   toJSON(): never {
-    this.#check();
+    check(this, "Performance");
     return unsupported("performance.toJSON (Node process telemetry required)");
   }
   get onresourcetimingbufferfull(): ((event: Event) => void) | null {
+    check(this, "Performance");
     return this.#onfull;
   }
   set onresourcetimingbufferfull(callback: ((event: Event) => void) | null) {
+    check(this, "Performance");
     if (this.#onfull) {
       this.removeEventListener("resourcetimingbufferfull", this.#onfull);
     }
@@ -214,7 +209,6 @@ export class Performance extends RuntimeEventTarget {
   declare timerify: typeof timerify;
   declare markResourceTiming: typeof markResourceTiming;
 }
-brandPrototype(Performance.prototype, "Performance");
 Object.defineProperties(Performance.prototype, {
   eventLoopUtilization: { configurable: true, writable: true, value: eventLoopUtilization },
   timerify: { configurable: true, writable: true, value: timerify },

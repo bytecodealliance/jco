@@ -24,9 +24,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
+import { invalid, kSkipThrow, now, object } from "./internal.js";
 import { PerformanceNodeEntry } from "./entries.js";
-import { invalid, kSkipThrow, now, object } from "./errors.js";
 import { enqueue } from "./observe.js";
 export interface TimerifyOptions {
   histogram?: never;
@@ -51,14 +50,8 @@ export function timerify<
       now() - start,
       args,
     );
-    for (let i = 0; i < args.length; i++) {
-      Object.defineProperty(entry, i, {
-        value: args[i],
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-    }
+    // Node also exposes the arguments as indexed own properties of the entry.
+    Object.assign(entry, args);
     enqueue(entry);
   }
   function timerified(this: unknown, ...args: unknown[]): unknown {
@@ -66,17 +59,10 @@ export function timerify<
     const result: unknown = new.target
       ? Reflect.construct(fn, args, fn)
       : Reflect.apply(fn, this, args);
-    if (
-      !new.target &&
-      result != null &&
-      (typeof result === "object" || typeof result === "function") &&
-      typeof Reflect.get(result, "finally") === "function"
-    ) {
-      const finish: unknown = Reflect.get(result, "finally");
-      if (typeof finish !== "function") {
-        throw new TypeError("result.finally is not a function");
-      }
-      return Reflect.apply(finish, result, [() => complete(start, args)]);
+    // A thenable result is timed at settlement; construction never is.
+    const finish = new.target ? undefined : (result as { finally?: unknown } | null)?.finally;
+    if (typeof finish === "function") {
+      return Reflect.apply(finish, result as object, [() => complete(start, args)]);
     }
     complete(start, args);
     return result;
