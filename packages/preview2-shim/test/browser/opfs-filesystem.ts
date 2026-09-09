@@ -11,14 +11,17 @@ class FakeFileHandle {
 
     async getFile() {
         const bytes = this.#bytes;
-        return { arrayBuffer: async () => bytes.buffer } as unknown as File;
+        return {
+            arrayBuffer: async () => bytes.buffer,
+            text: async () => new TextDecoder().decode(bytes),
+        } as unknown as File;
     }
 
     async createWritable() {
         const chunks: Uint8Array[] = [];
         return {
-            write: async (chunk: Uint8Array) => {
-                chunks.push(chunk);
+            write: async (chunk: Uint8Array | string) => {
+                chunks.push(typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk);
             },
             close: async () => {
                 this.#bytes = chunks[0] ?? new Uint8Array();
@@ -107,5 +110,73 @@ suite("Browser OPFS filesystem adapter", () => {
         const persistedFile = await persistedDir.getFileHandle("todo.txt");
         const buffer = await (await persistedFile.getFile()).arrayBuffer();
         assert.strictEqual(new TextDecoder().decode(buffer), "buy milk");
+    });
+
+    test("symlinks survive a flush + reload via the sidecar metadata file", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
+            "../../src/browser/opfs-filesystem.js"
+        );
+        const root = new FakeDirectoryHandle();
+        root.entriesMap.set("target.txt", new FakeFileHandle(new TextEncoder().encode("hello")));
+
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const descriptor = adapter.getRoot(capability);
+        descriptor.symlinkAt("target.txt", "link.txt");
+
+        await adapter.flush();
+
+        // The sidecar file isn't surfaced as a regular guest-visible entry.
+        await root.getFileHandle(".__wasi_symlinks__.json");
+        const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const reloadedAdapter = new OpfsFilesystemAdapter();
+        const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
+
+        assert.strictEqual(reloadedDescriptor.readlinkAt("link.txt"), "target.txt");
+        assert.strictEqual(reloadedDescriptor.statAt({}, "link.txt").type, "symbolic-link");
+        assert.strictEqual(reloadedDescriptor.statAt({ symlinkFollow: true }, "link.txt").size, 5n);
+
+        // Removing the last symlink drops the now-empty sidecar file too.
+        reloadedDescriptor.unlinkFileAt("link.txt");
+        await reloadedAdapter.flush();
+        let sidecarStillExists = true;
+        try {
+            await root.getFileHandle(".__wasi_symlinks__.json");
+        } catch {
+            sidecarStillExists = false;
+        }
+        assert.strictEqual(sidecarStillExists, false);
+    });
+
+    test("nested symlinks are recorded in a single root-level sidecar file, not one per directory", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
+            "../../src/browser/opfs-filesystem.js"
+        );
+        const root = new FakeDirectoryHandle();
+        root.entriesMap.set("target.txt", new FakeFileHandle(new TextEncoder().encode("hello")));
+
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const descriptor = adapter.getRoot(capability);
+        descriptor.createDirectoryAt("nested");
+        const nested = descriptor.openAt({}, "nested", { directory: true }, { read: true });
+        nested.symlinkAt("../target.txt", "link.txt");
+
+        await adapter.flush();
+
+        // No sidecar leaked into the nested directory itself.
+        const nestedHandle = await root.getDirectoryHandle("nested");
+        assert.strictEqual(nestedHandle.entriesMap.has(".__wasi_symlinks__.json"), false);
+
+        const sidecar = await root.getFileHandle(".__wasi_symlinks__.json");
+        const recorded = JSON.parse(await (await sidecar.getFile()).text());
+        assert.deepStrictEqual(recorded, { "nested/link.txt": "../target.txt" });
+
+        const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const reloadedAdapter = new OpfsFilesystemAdapter();
+        const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
+        const reloadedNested = reloadedDescriptor.openAt({}, "nested", { directory: true }, { read: true });
+        assert.strictEqual(reloadedNested.readlinkAt("link.txt"), "../target.txt");
+        assert.strictEqual(reloadedDescriptor.statAt({ symlinkFollow: true }, "nested/link.txt").size, 5n);
     });
 });
