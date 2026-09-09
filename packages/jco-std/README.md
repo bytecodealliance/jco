@@ -56,6 +56,7 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/inspector/promises`      | `node:inspector/promises`, sharing one core with `node:inspector`             |
 | `wasi/0.2.x/node/24.x.x/inspector/host`          | Deny-by-default host for `jco:node/inspector`                                 |
 | `wasi/0.2.x/node/24.x.x/inspector/host/node`     | Opt-in host over the runtime's real `node:inspector`                          |
+| `wasi/0.2.x/node/24.x.x/stream` and `/stream/promises` | Classic Node streams over readable-stream 4.7.0, with Node 24 adapters |
 | `wasi/0.2.x/node/24.x.x/stream/consumers`        | Portable `node:stream/consumers`, Node 24                                     |
 | `wasi/0.2.x/node/24.x.x/stream/iter`             | Experimental iterable streams from Node 24.20                                 |
 | `wasi/0.2.x/node/24.x.x/child-process/host`      | Deny-by-default host for `jco:node/child-process`                             |
@@ -179,6 +180,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `jco:node/ffi@0.1.0` host capability. **Node 26 only**, and denied by default:
   granting it lets a component load native libraries and read and write host
   memory;
+- `node:stream` and `node:stream/promises`, with portable classic constructors,
+  pipelines, async iteration, disposal, and Web Stream conversion;
 - `node:stream/consumers`, implemented portably by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`; and
 - the experimental Node 24.20 `node:stream/iter` API, implemented by

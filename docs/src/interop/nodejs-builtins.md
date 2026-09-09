@@ -129,8 +129,44 @@ is planned.
 | `node:buffer`                                     | unenv's portable Buffer core with a Jco public adapter                                               | Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.                                                                          |
 | `node:events`                                     | unenv's EventEmitter with a Jco layer from `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` | Covers the complete Node 24 module surface, including the `on()` async iterator and `EventEmitterAsyncResource`. Requires no WIT capability.                                       |
 | `node:querystring`                                | unenv's Node-derived querystring implementation                                                      | Covers the complete Node 24 module surface and shares the audited Buffer core used by `node:buffer`.                                                                               |
+| `node:stream`, `node:stream/promises` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream` and `/stream/promises` | Classic streams, pipelines, operators, disposal, and Web adapters. No WIT capability. |
 | `node:stream/consumers`                           | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`                                  | Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.                                                                           |
 | `node:stream/iter`                                | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`                                       | Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.                                                          |
+
+### Classic streams
+
+`node:stream` and `node:stream/promises` provide `Readable`, `Writable`, `Duplex`,
+`Transform`, `PassThrough`, callback/promise pipelines, `finished`, readable
+operators, cancellation, async disposal, and `duplexPair`. The implementation
+reuses [readable-stream 4.7.0](https://github.com/nodejs/readable-stream/tree/v4.7.0),
+with typed adaptations targeting Node 24.20, including Web Stream conversions
+and support for all typed-array views. Buffer and EventEmitter identities are
+shared with the corresponding `node:` imports. Scheduling uses guest microtasks;
+no process, filesystem, network, or other host capability is required.
+
+```js
+import { Readable, Transform, Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+await pipeline(
+    Readable.from(['hello']),
+    new Transform({ transform(chunk, encoding, done) { done(null, chunk.toString().toUpperCase()); } }),
+    new Writable({ write(chunk, encoding, done) { /* consume chunk */ done(); } }),
+);
+```
+
+For Web Streams, use `Readable.fromWeb()`, `Writable.fromWeb()`, or
+`Duplex.fromWeb()` before calling `finished`, `addAbortSignal`, or the
+readable/writable/error/disturbance inspection helpers. Those helpers need private
+engine state when used on Web Streams directly and throw
+`ERR_JCO_UNSUPPORTED_NODE_API`. Classic streams and public Web reader/writer
+conversions are supported. The deprecated `Duplex.toWeb({ type })` alias throws;
+use `readableType` instead.
+
+> [!NOTE]
+> Classic streams are tested on QuickJS and StarlingMonkey. The current QuickJS
+> backend lacks Web Stream, text-codec, and Abort globals, so Web conversions and
+> operations requiring those globals need an engine that supplies them.
 
 ### Stream consumers and iterable streams
 
@@ -165,10 +201,10 @@ jco componentize app.js --bundle --backend starlingmonkey -w app.wit -o app.wasm
 
 The implementation uses engine-provided iterable, typed-array, Blob, text-codec,
 and abort globals. `fromReadable()` and `fromWritable()` work with duck-typed
-classic streams. `toReadable()`, `toReadableSync()`, and `toWritable()` need real
-classic Node stream constructors, which neither the component engine nor the
-audited unenv release provides. Those functions remain present but immediately
-throw `ERR_JCO_UNSUPPORTED_NODE_API`; they do not inspect their arguments first.
+classic streams. The experimental `toReadable()`, `toReadableSync()`, and
+`toWritable()` adapters are not yet connected to the classic implementation.
+They throw `ERR_JCO_UNSUPPORTED_NODE_API` without inspecting their arguments;
+use the classic constructors directly.
 
 > [!WARNING]
 > Node marks `node:stream/iter` experimental. Its Jco implementation is likewise
