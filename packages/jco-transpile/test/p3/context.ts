@@ -34,6 +34,33 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
+    test.concurrent.each([false, true])(
+        'resource destructors isolate the caller context (minify=%s)',
+        async (minify: boolean) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: 'context-resource-drop',
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-resource-drop.wat'),
+                },
+                jco: { transpile: { extraArgs: { minify } } },
+            });
+            try {
+                for (let round = 1; round <= 3; round++) {
+                    // The guest asserts that a nested destructor starts with an empty context
+                    // and leaves its caller's context value intact.
+                    instance.run();
+                    expect(instance.drops()).toBe(round * 2 - 1);
+                    const resource: Disposable = instance.api.make();
+                    resource[Symbol.dispose]();
+                    resource[Symbol.dispose]();
+                    expect(instance.drops()).toBe(round * 2);
+                }
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     test.concurrent.each([
         { minify: false, suspend: false },
         { minify: true, suspend: false },
