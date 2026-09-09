@@ -1616,8 +1616,8 @@ mod tests {
             ResourceIntrinsic::ResourceDestructorCall,
         ));
 
-        assert!(source.contains("if (_getGlobalCurrentTaskMeta(componentIdx))"));
-        assert!(source.contains("return dtor(rep);"));
+        assert!(!source.contains("if (_getGlobalCurrentTaskMeta(componentIdx))"));
+        assert!(source.contains("const result = dtor(rep);"));
         assert!(source.contains("const [task] = createNewCurrentTask({"));
         assert!(source.contains("isAsync: false,"));
         assert!(source.contains("callingWasmExport: true,"));
