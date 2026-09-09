@@ -1,14 +1,9 @@
-import { test, expect, afterEach } from "vitest";
-import node from "node:perf_hooks";
-import shim from "../../../../../../src/wasi/0.2.x/node/24.x.x/perf-hooks.js";
-const { performance: p } = shim;
-afterEach(() => {
-  p.clearMarks();
-  p.clearMeasures();
-  p.clearResourceTimings();
-  node.performance.clearMarks();
-  node.performance.clearMeasures();
-});
+import { afterEach, expect, test } from "vitest";
+
+import { p, resetTimelines, shim } from "../helpers/perf-hooks.js";
+
+afterEach(resetTimelines);
+
 test("preserves this, arguments, result, descriptors and function records", () => {
   const observer = new shim.PerformanceObserver(() => {});
   observer.observe({ type: "function" });
@@ -25,6 +20,7 @@ test("preserves this, arguments, result, descriptors and function records", () =
   expect(p.getEntriesByType("function")).toEqual([]);
   observer.disconnect();
 });
+
 test("records async settlement and construction, but not synchronous exceptions", async () => {
   const observer = new shim.PerformanceObserver(() => {});
   observer.observe({ type: "function" });

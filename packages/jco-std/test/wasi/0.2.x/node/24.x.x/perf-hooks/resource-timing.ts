@@ -1,14 +1,9 @@
-import { test, expect, afterEach } from "vitest";
-import node from "node:perf_hooks";
-import shim from "../../../../../../src/wasi/0.2.x/node/24.x.x/perf-hooks.js";
-const { performance: p } = shim;
-afterEach(() => {
-  p.clearMarks();
-  p.clearMeasures();
-  p.clearResourceTimings();
-  node.performance.clearMarks();
-  node.performance.clearMeasures();
-});
+import { afterEach, expect, test } from "vitest";
+
+import { node, p, resetTimelines, resource, shim } from "../helpers/perf-hooks.js";
+
+afterEach(resetTimelines);
+
 test("matches Node resource field formulas and cache semantics", () => {
   const info = {
     startTime: 2,
@@ -44,4 +39,19 @@ test("matches Node resource field formulas and cache semantics", () => {
     expect(actual).toBeInstanceOf(shim.PerformanceResourceTiming);
   }
   node.performance.clearResourceTimings();
+});
+
+test("dispatches overflow and preserves entries when listener clears buffer", async () => {
+  p.setResourceTimingBufferSize(1);
+  resource("first");
+  await new Promise<void>((resolve) => {
+    p.onresourcetimingbufferfull = () => {
+      p.clearResourceTimings();
+      resolve();
+    };
+    resource("second");
+  });
+  expect(p.getEntriesByType("resource").map((e) => e.name)).toEqual(["second"]);
+  p.onresourcetimingbufferfull = null;
+  p.setResourceTimingBufferSize(250);
 });
