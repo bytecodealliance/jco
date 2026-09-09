@@ -925,7 +925,7 @@ jobs:
       - id: wasi-sdk
         uses: bytecodealliance/setup-wasi-sdk-action@77d09f3df1e8da344d8403cf8631af8977938b4c # v1.0.0
         with:
-          version: 34.0-rc.2
+          version: "34.0"
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
