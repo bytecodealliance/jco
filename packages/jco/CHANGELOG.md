@@ -1,5 +1,225 @@
 # Changelog
 
+## [1.33.0] - 2026-09-09
+
+### 🚀 Features
+
+- _(jco)_ bundle node http2 builtin by @vados-cosmonic
+
+- _(jco)_ resolve node:module through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ bundle Node stream modules by @vados-cosmonic
+
+- _(jco)_ export Node callback resources by @vados-cosmonic
+
+- _(jco)_ wire Node HTTP server callbacks by @vados-cosmonic
+
+- _(jco)_ select Node HTTP transport by @vados-cosmonic
+
+- _(jco)_ inject Node HTTP WIT capabilities by @vados-cosmonic
+
+- _(jco)_ bundle Node string decoder by @vados-cosmonic
+
+- _(jco)_ resolve node:inspector through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ expose the complete Node path surface by @vados-cosmonic
+
+- _(jco)_ bundle the Node OS API by @vados-cosmonic
+
+- _(jco)_ inject the Buffer global on demand by @vados-cosmonic
+
+- _(jco)_ resolve node:ffi through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ bundle Node filesystem APIs by @vados-cosmonic
+
+- _(jco)_ configure Node DNS imports for JSPI by @vados-cosmonic
+
+- _(jco)_ deny Node DNS by default by @vados-cosmonic
+
+- _(jco)_ inject Node DNS capabilities by @vados-cosmonic
+
+- _(jco)_ layer jco-std's node:events entry points over unenv's emitter by @vados-cosmonic
+
+- _(jco)_ inject Node error globals on demand by @vados-cosmonic
+
+- _(jco)_ resolve node:diagnostics_channel through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ resolve node:domain through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ deny Node console host access by default by @vados-cosmonic
+
+- _(jco)_ bundle Node console with WIT injection by @vados-cosmonic
+
+- _(jco)_ inject Node API WIT imports by @vados-cosmonic
+
+- _(jco)_ add audited unenv NodeJS builtins by @vados-cosmonic
+
+- _(jco)_ add shimming to componentize for 'node:assert' by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ restore supported globals in StarlingMonkey guests by @vados-cosmonic
+
+- _(jco)_ automatically configure async DNS imports by @vados-cosmonic
+
+- _(jco)_ remove HTTP2 workspace workarounds by @vados-cosmonic
+
+- _(jco)_ deny node:inspector by default and declare the http WIT package by @vados-cosmonic
+
+- _(jco)_ componentize from the entry directory instead of the process cwd by @vados-cosmonic
+
+- _(jco)_ resolve unenv aliases without relying on narrowing by @vados-cosmonic
+
+- _(jco)_ use the node:path adapters during componentization by @vados-cosmonic in #1977
+
+### 🚜 Refactor
+
+- _(jco)_ drop the unused witExports requirement field by @vados-cosmonic
+
+- _(jco)_ table-drive jco-std module resolution and WIT requirement construction by @vados-cosmonic
+
+- _(jco)_ install typed DNS WIT by @vados-cosmonic
+
+- _(jco)_ install typed filesystem WIT by @vados-cosmonic
+
+- _(jco)_ give each Node API WIT interface its own file by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ guard inspector and DNS integrations on JSPI support by @vados-cosmonic in #2080
+
+- _(jco)_ respect host JSPI support in HTTP integration tests by @vados-cosmonic
+
+- _(jco)_ replace public HTTP2 endpoint with a local Node server by @vados-cosmonic
+
+- _(jco)_ restore HTTP server integration with instance isolation by @vados-cosmonic
+
+- _(jco)_ temporarily skip globals and HTTP callback failures by @vados-cosmonic
+
+- _(jco)_ use the globals fixture source and WIT paths by @vados-cosmonic
+
+- _(jco)_ compare guest builtins with the Node 24 target by @vados-cosmonic
+
+- _(jco)_ use the StarlingMonkey HTTP2 fixture world by @vados-cosmonic
+
+- _(jco)_ wire HTTP resources and isolate the socket peer by @vados-cosmonic
+
+- _(jco)_ supply the console host during explicit instantiation by @vados-cosmonic
+
+- _(jco)_ account for transpile runtime growth in size budget by @vados-cosmonic
+
+- _(jco)_ update metadata expectations for merged start shim by @vados-cosmonic
+
+- _(jco)_ resolve cluster and child process host adapters by @vados-cosmonic
+
+- _(jco)_ exercise filesystem and DNS with workspace std by @vados-cosmonic
+
+- _(jco)_ wire the DNS host adapter and async import by @vados-cosmonic
+
+- _(jco)_ resolve the published filesystem host adapter by @vados-cosmonic
+
+- _(jco)_ skip failing release-update cases pending fixes by @vados-cosmonic
+
+- _(jco)_ enable integration tests blocked on jco-std release by @vados-cosmonic
+
+- _(jco)_ use shared HTTP2 callback exports by @vados-cosmonic
+
+- _(jco)_ cover node http2 component integration by @vados-cosmonic
+
+- _(jco)_ execute the generated node:buffer and node:querystring adapters by @vados-cosmonic
+
+- _(jco)_ run node builtin plugin tests concurrently by @vados-cosmonic
+
+- _(jco)_ exercise node:module through a componentized guest by @vados-cosmonic
+
+- _(jco)_ exercise Node stream modules by @vados-cosmonic
+
+- _(jco)_ cover Node callback exports by @vados-cosmonic
+
+- _(jco)_ cover Node HTTP server integration by @vados-cosmonic
+
+- _(jco)_ cover Node HTTP integration by @vados-cosmonic
+
+- _(jco)_ cover Node string decoder bundling by @vados-cosmonic
+
+- _(jco)_ drive node:inspector through a componentized guest by @vados-cosmonic
+
+- _(jco)_ cover the Node path legacy alias by @vados-cosmonic
+
+- _(jco)_ cover Node OS bundling by @vados-cosmonic
+
+- _(jco)_ exercise globals in a component by @vados-cosmonic
+
+- _(jco)_ cover Node global injection by @vados-cosmonic
+
+- _(jco)_ call native code through node:ffi in a component by @vados-cosmonic
+
+- _(jco)_ remove dispatcher implementation checks by @vados-cosmonic
+
+- _(jco)_ verify typed DNS imports by @vados-cosmonic
+
+- _(jco)_ verify typed filesystem imports by @vados-cosmonic
+
+- _(jco)_ cover Node filesystem integration by @vados-cosmonic
+
+- _(jco)_ resolve external DNS from a component by @vados-cosmonic
+
+- _(jco)_ cover Node DNS JSPI bindings by @vados-cosmonic
+
+- _(jco)_ cover Node DNS integration by @vados-cosmonic
+
+- _(jco)_ exercise node:events through a componentized guest by @vados-cosmonic
+
+- _(jco)_ skip unpublished Errors buffer integration by @vados-cosmonic in #1991
+
+- _(jco)_ skip unpublished Errors integration by @vados-cosmonic
+
+- _(jco)_ cover Node Errors injection by @vados-cosmonic
+
+- _(jco)_ cover node:diagnostics_channel plugin resolution by @vados-cosmonic
+
+- _(jco)_ cover node:domain plugin resolution by @vados-cosmonic
+
+- _(jco)_ cover Node console integration by @vados-cosmonic
+
+- _(jco)_ build the node:child_process fixture with the shared helpers by @vados-cosmonic
+
+- _(jco)_ build node:cluster fixtures with the shared componentize helpers by @vados-cosmonic
+
+- _(jco)_ componentize node:cluster fixtures with starlingmonkey by @vados-cosmonic
+
+- _(jco)_ cover node:cluster guest-side through componentization by @vados-cosmonic
+
+- _(jco)_ cover child process host integration by @vados-cosmonic
+
+- _(jco)_ use per-test WIT temp directories by @vados-cosmonic
+
+- _(jco)_ skip guest-side node:assert pending a jco-std release by @vados-cosmonic
+
+- _(jco)_ organize Node builtin coverage by @vados-cosmonic
+
+- _(jco)_ exercise unenv builtins in guest components by @vados-cosmonic
+
+- _(jco)_ cover audited unenv NodeJS builtins by @vados-cosmonic
+
+- _(jco)_ exercise NodeJS assert in a guest component by @vados-cosmonic
+
+- _(jco)_ cover NodeJS assert builtin adapters by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ replace workspace dependencies with published versions by @vados-cosmonic
+
+- _(jco)_ jco-std -> v0.3.0, jco-transpile -> v0.13.0 by @vados-cosmonic
+
+- _(jco)_ update preview2-shim dep to v0.24.1 by @vados-cosmonic
+
+- _(jco)_ update preview2-shim to v0.24.0 by @vados-cosmonic
+
+- _(jco)_ fmt by @vados-cosmonic
+
+- _(jco)_ improve code docs around cwd usage by @vados-cosmonic
+
 ## [1.32.1] - 2026-08-24
 
 ### 🚜 Refactor
