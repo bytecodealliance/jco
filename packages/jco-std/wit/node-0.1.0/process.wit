@@ -1,0 +1,82 @@
+package jco:node@0.1.0;
+
+/// Explicit access to the embedding process. No capability is granted by default.
+/// The Node provider affects the embedding Node process, not a virtual WASI process.
+interface process {
+  variant errno { number(s64), symbolic(string) }
+  record error { name: string, message: string, code: option<string>, errno: option<errno>, syscall: option<string>, path: option<string> }
+  record process-metadata {
+    arch: string, platform: string, pid: u32, ppid: u32,
+    argv: list<string>, argv0: string, exec-argv: list<string>, exec-path: string,
+    version: string, versions: list<tuple<string, string>>,
+    release-json: string, config-json: string, features-json: string,
+    has-permission: bool,
+  }
+  enum flag { no-deprecation, throw-deprecation, trace-deprecation, trace-process-warnings }
+  variant exit-code { number(f64), text(string) }
+  record state {
+    title: string, debug-port: f64, exit-code: option<exit-code>,
+    no-deprecation: option<bool>, throw-deprecation: option<bool>,
+    trace-deprecation: option<bool>, trace-process-warnings: option<bool>,
+    source-maps-enabled: bool, connected: option<bool>,
+  }
+  enum identity { uid, euid, gid, egid }
+  variant id { number(u32), name(string) }
+  variant signal { number(s32), name(string) }
+  variant mask { number(u32), text(string) }
+  variant path { text(string), url(string), bytes(list<u8>) }
+  record warning { name: string, message: string, stack: option<string>, code: option<string>, detail: option<string> }
+  record report-options {
+    compact: bool, directory: string, filename: string, signal: string,
+    report-on-fatal-error: bool, report-on-signal: bool,
+    report-on-uncaught-exception: bool, exclude-env: bool, exclude-network: bool,
+  }
+  enum report-option { compact, directory, filename, signal, report-on-fatal-error, report-on-signal, report-on-uncaught-exception, exclude-env, exclude-network }
+  variant report-value { boolean(bool), text(string) }
+  record cpu-usage-record { user: f64, system: f64 }
+  record memory-usage-record { rss: f64, heap-total: f64, heap-used: f64, external: f64, array-buffers: f64 }
+  record resource-usage-record { user-cpu-time: f64, system-cpu-time: f64, max-rss: f64, shared-memory-size: f64, unshared-data-size: f64, unshared-stack-size: f64, minor-page-fault: f64, major-page-fault: f64, swapped-out: f64, fs-read: f64, fs-write: f64, ipc-sent: f64, ipc-received: f64, signals-count: f64, voluntary-context-switches: f64, involuntary-context-switches: f64 }
+  metadata: func() -> result<process-metadata, error>;
+  get-state: func() -> result<state, error>;
+  set-title: func(value: string) -> result<_, error>;
+  set-debug-port: func(value: f64) -> result<_, error>;
+  set-exit-code: func(value: option<exit-code>) -> result<_, error>;
+  set-flag: func(name: flag, value: bool) -> result<_, error>;
+  env-entries: func() -> result<list<tuple<string, string>>, error>;
+  env-get: func(name: string) -> result<option<string>, error>;
+  env-set: func(name: string, value: option<string>) -> result<_, error>;
+  cwd: func() -> result<string, error>;
+  chdir: func(directory: string) -> result<_, error>;
+  cpu-usage: func(previous: option<cpu-usage-record>) -> result<cpu-usage-record, error>;
+  thread-cpu-usage: func(previous: option<cpu-usage-record>) -> result<cpu-usage-record, error>;
+  memory-usage: func() -> result<memory-usage-record, error>;
+  rss: func() -> result<f64, error>;
+  resource-usage: func() -> result<resource-usage-record, error>;
+  /// Split the clock to avoid engines that lift WIT u64 as an imprecise JS number.
+  record clock-time { seconds: f64, nanoseconds: u32 }
+  hrtime: func() -> result<clock-time, error>;
+  uptime: func() -> result<f64, error>;
+  available-memory: func() -> result<f64, error>;
+  constrained-memory: func() -> result<f64, error>;
+  get-active-resources-info: func() -> result<list<string>, error>;
+  get-id: func(kind: identity) -> result<u32, error>;
+  set-id: func(kind: identity, value: id) -> result<_, error>;
+  getgroups: func() -> result<list<u32>, error>;
+  setgroups: func(groups: list<id>) -> result<_, error>;
+  initgroups: func(user: id, extra-group: id) -> result<_, error>;
+  kill: func(pid: s32, signal: signal) -> result<bool, error>;
+  umask: func(mask: mask) -> result<u32, error>;
+  exit: func(code: option<exit-code>) -> result<_, error>;
+  abort: func() -> result<_, error>;
+  execve: func(file: string, args: list<string>, env: option<list<tuple<string, string>>>) -> result<_, error>;
+  load-env-file: func(path: option<path>) -> result<_, error>;
+  set-source-maps-enabled: func(value: bool) -> result<_, error>;
+  emit-warning: func(warning: warning) -> result<_, error>;
+  permission-has: func(scope: string, reference: option<path>) -> result<bool, error>;
+  get-report: func(error: option<warning>) -> result<string, error>;
+  write-report: func(filename: option<string>, error: option<warning>) -> result<string, error>;
+  get-report-options: func() -> result<report-options, error>;
+  set-report-option: func(name: report-option, value: report-value) -> result<_, error>;
+  allowed-flags: func() -> result<list<string>, error>;
+  allowed-flag: func(value: string) -> result<bool, error>;
+}
