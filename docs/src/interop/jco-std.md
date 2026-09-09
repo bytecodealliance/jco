@@ -134,6 +134,9 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
   `wasi-sockets` implements cleartext prior-knowledge HTTP/2 clients and TCP
   servers in the guest, while `wasi-http` rejects session and server operations
   whose semantics an individual-request interface cannot preserve;
+- `node:readline` and `node:readline/promises`, ported from Node 24.20 for line
+  parsing, questions, async iteration and terminal editing over supplied streams,
+  with no additional WIT capability; and
 - `node:stream/consumers`, implemented as portable iterable collection over the
   engine's Blob, typed-array, and text-codec globals; and
 - the experimental Node 24.20 `node:stream/iter` API, including portable sources,

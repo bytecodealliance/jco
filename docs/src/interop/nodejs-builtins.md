@@ -111,6 +111,7 @@ is planned.
 | `node:assert`, `node:assert/strict`               | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`                                            | Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.                                                                                               |
 | `node:path`, `node:path/posix`, `node:path/win32` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`                                              | Jco's portable path implementation, connected to `wasi:cli/environment` for the guest working directory and environment.                                                           |
 | `node:perf_hooks`                                 | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks`                                        | Portable timing and observers; native telemetry throws. Runtime requirements are described below.                                                                                  |
+| `node:readline`, `node:readline/promises` | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/readline` and `/readline/promises` | Node 24.20 line parsing, questions, terminal editing and cursor actions over supplied streams. No WIT capability. |
 | `node:string_decoder`                             | `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`                                    | Guest-local streaming decoder for Node 24. Requires no WIT capability.                                                                                                             |
 | `node:domain`                                     | _(refused)_                                                                                          | Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.                                          |
 | `node:ffi`                                        | `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi`                                               | **Node 26 only.** Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused -- see below.                 |
@@ -331,6 +332,55 @@ Because the adapter is selected only when bundled code resolves
 `node:string_decoder`, source graphs that do not import it pay no decoder code or
 initialization cost. The legacy bare `string_decoder` specifier is deliberately
 not intercepted.
+
+### Readline
+
+`node:readline` and `node:readline/promises` support callback and promise questions,
+line events, async iteration, streaming UTF-8/CRLF decoding, prompts, terminal
+editing and history, keypress events, and cursor actions. Both share a port of
+[Node v24.20.0's readline implementation](https://github.com/nodejs/node/tree/v24.20.0/lib/internal/readline).
+The pinned unenv readline modules contain no-op implementations and are not used.
+
+Applications keep ordinary Node imports and supply readable and writable streams:
+
+```js
+import * as readline from 'node:readline/promises';
+
+export async function ask(input, output) {
+    const rl = readline.createInterface({ input, output });
+    try {
+        const answer = await rl.question('What do you think of Node.js? ');
+        output.write(`Thank you for your valuable feedback: ${answer}\n`);
+    } finally {
+        rl.close();
+    }
+}
+```
+
+Bundle application code with `jco componentize app.js --bundle --wit wit -o app.wasm`.
+Readline itself requires no WIT imports. The streams determine where input and
+output go. `node:process` is not yet supported, so the documentation's
+literal `process.stdin`/`process.stdout` imports cannot yet be componentized.
+The test fixture runs that literal example against the shim on Node, and runs the
+same question/answer flow with supplied streams in QuickJS and StarlingMonkey.
+
+#### Terminal and scheduling boundaries
+
+Terminal streams may supply `setRawMode`, `columns`, and resize events. Terminal
+mode emits ANSI sequences without inspecting a host `TERM` variable. Ctrl+Z can
+be handled with a `SIGTSTP` listener; otherwise it throws
+`ERR_JCO_UNSUPPORTED_NODE_API`, since a component cannot suspend its host process.
+Host job-control `SIGCONT` events are unavailable.
+
+Cursor widths use Node's non-ICU tables, with normalization where the engine
+provides it; some Unicode widths differ from ICU-enabled Node. Deferred callbacks
+and automatic cursor commits use microtasks rather than Node's separate next-tick
+queue. Completion-error text uses portable string formatting.
+
+Timed Escape-key disambiguation requires engine timers; engines without timers
+throw an explicit `ERR_JCO_UNSUPPORTED_NODE_API` for that operation. Cancellation
+accepts supplied AbortSignals; readline does not install missing Abort globals.
+QuickJS async entry functions must be declared `async func` in WIT.
 
 ### Child processes and host capabilities
 
@@ -1417,7 +1467,6 @@ the module or upstream project.
 
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:readline`, `node:readline/promises` | Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.                                                                                                           |
 | `node:timers/promises`                    | A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.                                                                                                                       |
 | `node:trace_events`, `node:tty`           | The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.                                                                                                |
 | `node:url`                                | There is substantial Node-derived code, but its eager `node:path` dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy. |
