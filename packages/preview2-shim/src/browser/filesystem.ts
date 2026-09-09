@@ -8,6 +8,8 @@ import { _setCwd } from "./config.js";
 export { _setCwd } from "./config.js";
 export { InMemoryFilesystemAdapter } from "./in-memory-filesystem.js";
 export type { FileData, FileDataEntry } from "./in-memory-filesystem.js";
+export { OpfsFilesystemAdapter, loadOpfsCapability } from "./opfs-filesystem.js";
+export type { OpfsCapability } from "./opfs-filesystem.js";
 
 type Filesize = TypesNamespace.Filesize;
 type OpenFlags = TypesNamespace.OpenFlags;
