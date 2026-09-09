@@ -12,6 +12,7 @@ import {
     NET_WASI_SOCKETS_WIT_REQUIREMENTS,
 } from "../../src/node-wit.js";
 import { exec, getTmpDir, jcoPath, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const NET_EXPORTS = [
     "BlockList",
@@ -113,7 +114,8 @@ describe("node:net WIT installation", () => {
     });
 });
 
-describe("node:net in a component", () => {
+// Async component exports require JSPI, which Node 22 lacks even with its experimental flag.
+describe.skipIf(!hasJspi)("node:net in a component", () => {
     test.each(["quickjs", "starlingmonkey"])(
         "runs TCP clients and servers using %s",
         async (backend) => {
