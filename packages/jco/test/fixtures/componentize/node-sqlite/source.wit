@@ -1,0 +1,2 @@
+package test:sqlite;
+world test { export run: func() -> string; export backup-test: func(path: string) -> string; }
