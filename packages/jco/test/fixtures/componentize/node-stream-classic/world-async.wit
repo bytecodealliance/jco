@@ -1,0 +1,6 @@
+package local:node-stream-classic;
+
+world test {
+  export run: async func() -> string;
+  export run-web: async func() -> string;
+}
