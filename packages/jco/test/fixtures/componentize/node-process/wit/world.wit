@@ -1,0 +1,6 @@
+package test:node-process;
+world component {
+ export run: func(mode: string) -> string;
+ export tick: func() -> string;
+ export terminate: func(code: u32);
+}
