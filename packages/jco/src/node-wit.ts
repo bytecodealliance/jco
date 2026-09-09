@@ -86,6 +86,8 @@ export const FS_WIT_REQUIREMENT = nodeRequirement("node:fs", "fs");
 
 export const PROCESS_WIT_REQUIREMENT = nodeRequirement("node:process", "process");
 
+export const SQLITE_WIT_REQUIREMENT = nodeRequirement("node:sqlite", "sqlite");
+
 export const OS_WIT_REQUIREMENT = nodeRequirement("node:os", "os");
 
 export const FFI_WIT_REQUIREMENT = nodeRequirement("node:ffi", "ffi");

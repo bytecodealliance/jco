@@ -1,0 +1,103 @@
+package jco:node@0.1.0;
+
+/// Explicit SQLite capability for Node-compatible synchronous database operations.
+/// The default provider denies access, including :memory:. Mapping a provider grants
+/// its database/file/extension authority; the guest's WASI filesystem is unrelated.
+/// No callbacks may re-enter the guest while a synchronous SQL import is active.
+interface sqlite {
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errcode: option<s32>,
+    errstr: option<string>,
+  }
+  variant path { text(string), bytes(list<u8>), url(string) }
+  /// Numbers and bigints stay distinct; blobs are copied across the boundary.
+  variant value { null, number(f64), bigint(s64), text(string), blob(list<u8>) }
+  variant row { object(list<tuple<string, value>>), array(list<value>) }
+  record bindings { named: option<list<tuple<string, value>>>, positional: list<value> }
+  record changes { changes: value, last-insert-rowid: value }
+  record column {
+    column: option<string>, database: option<string>, name: string,
+    table: option<string>, %type: option<string>,
+  }
+  enum limit-name {
+    length, sql-length, column, expr-depth, compound-select, vdbe-op,
+    function-arg, attach, like-pattern-length, variable-number, trigger-depth,
+  }
+  record statement-options {
+    read-big-ints: option<bool>, return-arrays: option<bool>,
+    allow-bare-named-parameters: option<bool>, allow-unknown-named-parameters: option<bool>,
+  }
+  record database-options {
+    open: option<bool>, read-only: option<bool>,
+    enable-foreign-key-constraints: option<bool>, enable-double-quoted-string-literals: option<bool>,
+    allow-extension: option<bool>, timeout: option<f64>, defensive: option<bool>,
+    statement: statement-options, limits: list<tuple<limit-name, f64>>,
+  }
+  record session-options { table: option<string>, db: option<string> }
+  record backup-options { source: option<string>, target: option<string>, rate: option<f64> }
+
+  /// Creates a connection wrapper, possibly unopened. Native failures preserve error fields.
+  open-database: func(path: path, options: database-options) -> result<database, error>;
+  /// Asynchronous Node backup: map this import with JSPI. Borrow retains the source
+  /// for the whole backup; no callback or implicit access to the guest filesystem.
+  backup: func(source: borrow<database>, path: path, options: backup-options) -> result<f64, error>;
+
+  /// Drop closes the connection. close/open preserve the wrapper for explicit reopening.
+  resource database {
+    open: func() -> result<_, error>;
+    close: func() -> result<_, error>;
+    is-open: func() -> result<bool, error>;
+    is-transaction: func() -> result<bool, error>;
+    exec: func(sql: string) -> result<_, error>;
+    prepare: func(sql: string, options: statement-options) -> result<statement, error>;
+    location: func(db-name: option<string>) -> result<option<string>, error>;
+    get-limit: func(name: limit-name) -> result<f64, error>;
+    set-limit: func(name: limit-name, value: f64) -> result<_, error>;
+    serialize: func(db-name: option<string>) -> result<list<u8>, error>;
+    deserialize: func(bytes: list<u8>, db-name: option<string>) -> result<_, error>;
+    create-session: func(options: session-options) -> result<session, error>;
+    apply-changeset: func(bytes: list<u8>) -> result<bool, error>;
+    create-tag-store: func(capacity: f64) -> result<tag-store, error>;
+    enable-load-extension: func(allow: bool) -> result<_, error>;
+    enable-defensive: func(active: bool) -> result<_, error>;
+    load-extension: func(path: string, entry-point: option<string>) -> result<_, error>;
+  }
+  /// Drop releases the reference to the native statement. Database close/deserialize
+  /// invalidates every statement as in Node. No SQL or row materialization on drop.
+  resource statement {
+    all: func(parameters: bindings) -> result<list<row>, error>;
+    get: func(parameters: bindings) -> result<option<row>, error>;
+    run: func(parameters: bindings) -> result<changes, error>;
+    iterate: func(parameters: bindings) -> result<cursor, error>;
+    columns: func() -> result<list<column>, error>;
+    source-sql: func() -> result<string, error>;
+    expanded-sql: func() -> result<string, error>;
+    set-read-big-ints: func(enabled: bool) -> result<_, error>;
+    set-return-arrays: func(enabled: bool) -> result<_, error>;
+    set-allow-bare-named-parameters: func(enabled: bool) -> result<_, error>;
+    set-allow-unknown-named-parameters: func(enabled: bool) -> result<_, error>;
+  }
+  /// next steps exactly once. close and drop invoke iterator.return to release locks.
+  resource cursor {
+    next: func() -> result<option<row>, error>;
+    close: func() -> result<_, error>;
+  }
+  resource session {
+    changeset: func() -> result<list<u8>, error>;
+    patchset: func() -> result<list<u8>, error>;
+    close: func() -> result<_, error>;
+  }
+  /// Tagged SQL uses separate template strings and bound values, never concatenated values.
+  resource tag-store {
+    all: func(parts: list<string>, parameters: list<value>) -> result<list<row>, error>;
+    get: func(parts: list<string>, parameters: list<value>) -> result<option<row>, error>;
+    run: func(parts: list<string>, parameters: list<value>) -> result<changes, error>;
+    iterate: func(parts: list<string>, parameters: list<value>) -> result<cursor, error>;
+    size: func() -> result<f64, error>;
+    capacity: func() -> result<f64, error>;
+    clear: func() -> result<_, error>;
+  }
+}
