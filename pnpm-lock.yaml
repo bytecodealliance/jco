@@ -427,6 +427,12 @@ importers:
 
   packages/jco-std:
     dependencies:
+      acorn:
+        specifier: 8.17.0
+        version: 8.17.0
+      acorn-walk:
+        specifier: 8.3.5
+        version: 8.3.5
       minimatch:
         specifier: 10.2.6
         version: 10.2.6
@@ -463,7 +469,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
       which:
         specifier: ^5.0.0
         version: 5.0.0
@@ -543,7 +549,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
   packages/preview3-shim:
     dependencies:
@@ -596,7 +602,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
 packages:
 
@@ -3063,6 +3069,15 @@ packages:
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
     engines: {node: '>=6.5'}
+
+  acorn-walk@8.3.5:
+    resolution: {integrity: sha512-HEHNfbars9v4pgpW6SO1KSPkfoS0xVOM/9UzkJltjlsHZmJasxg8aXkuZa7SMf8vKGIBhpUsPluQSqhJFCqebw==}
+    engines: {node: '>=0.4.0'}
+
+  acorn@8.17.0:
+    resolution: {integrity: sha512-xRQbDb9BnwDafYNn6Vwl839DYVjqXYb1XVGtWAZ1kcDc6iwAL4hg3B1dZlRiuENFeO2H53gFG3in621AdERVAg==}
+    engines: {node: '>=0.4.0'}
+    hasBin: true
 
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
@@ -6620,14 +6635,6 @@ snapshots:
     optionalDependencies:
       vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
 
-  '@vitest/mocker@4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))':
-    dependencies:
-      '@vitest/spy': 4.1.11
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
-
   '@vitest/mocker@4.1.11(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))':
     dependencies:
       '@vitest/spy': 4.1.11
@@ -6670,6 +6677,12 @@ snapshots:
   abort-controller@3.0.0:
     dependencies:
       event-target-shim: 5.0.1
+
+  acorn-walk@8.3.5:
+    dependencies:
+      acorn: 8.17.0
+
+  acorn@8.17.0: {}
 
   agent-base@7.1.4: {}
 
@@ -8290,33 +8303,6 @@ snapshots:
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0))
-      '@vitest/pretty-format': 4.1.11
-      '@vitest/runner': 4.1.11
-      '@vitest/snapshot': 4.1.11
-      '@vitest/spy': 4.1.11
-      '@vitest/utils': 4.1.11
-      es-module-lexer: 2.3.1
-      expect-type: 1.4.0
-      magic-string: 0.30.21
-      obug: 2.1.4
-      pathe: 2.0.3
-      picomatch: 4.0.5
-      std-env: 4.2.0
-      tinybench: 2.9.0
-      tinyexec: 1.3.0
-      tinyglobby: 0.2.17
-      tinyrainbow: 3.1.1
-      vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 24.13.3
-    transitivePeerDependencies:
-      - msw
-
-  vitest@4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)):
-    dependencies:
-      '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
