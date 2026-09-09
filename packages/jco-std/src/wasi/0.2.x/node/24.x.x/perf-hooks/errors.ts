@@ -24,10 +24,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { invalidArgType } from "../errors/core.js";
+import { codedError, invalidArgType } from "../errors/core.js";
 
 export function coded<T extends Error>(error: T, code: string): T & { code: string } {
-  return Object.assign(error, { code });
+  return codedError(error, code);
 }
 export function unsupported(api: string): never {
   throw coded(

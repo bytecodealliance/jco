@@ -30,6 +30,7 @@ import { registerBrand, brandPrototype } from "./errors.js";
 
 import { PerformanceEntry } from "./entries.js";
 import { coded, enumerable, illegal, invalid, kSkipThrow, missing, object } from "./errors.js";
+import { missingArgs } from "../errors/core.js";
 const supported: readonly string[] = Object.freeze(["function", "mark", "measure", "resource"]);
 const noEntryTypes: readonly string[] = Object.freeze([]);
 const observers = new Set<PerformanceObserver>();
@@ -178,7 +179,7 @@ export class PerformanceObserver {
     object(options, "options");
     const { entryTypes, type, buffered } = { ...options };
     if (entryTypes === undefined && type === undefined) {
-      missing("options.entryTypes or options.type");
+      throw missingArgs("options.entryTypes", "options.type");
     }
     if (entryTypes != null && type != null) {
       throw coded(
@@ -186,12 +187,15 @@ export class PerformanceObserver {
         "ERR_INVALID_ARG_VALUE",
       );
     }
-    if (
-      (this.#mode === "single" && entryTypes !== undefined) ||
-      (this.#mode === "multiple" && type !== undefined)
-    ) {
+    if (this.#mode === "single" && entryTypes !== undefined) {
       throw domException(
-        "PerformanceObserver can not change observation mode",
+        "PerformanceObserver can not change to multiple observations",
+        "InvalidModificationError",
+      );
+    }
+    if (this.#mode === "multiple" && type !== undefined) {
+      throw domException(
+        "PerformanceObserver can not change to single observation",
         "InvalidModificationError",
       );
     }
