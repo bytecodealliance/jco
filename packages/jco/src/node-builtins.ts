@@ -54,6 +54,7 @@ const INSPECTOR_SPECIFIERS = new Set([INSPECTOR_SPECIFIER, INSPECTOR_PROMISES_SP
  * jco-std inspector module so the wrapper can add it to the component's top-level exports.
  */
 export const INSPECTOR_CALLBACKS_SPECIFIER = "jco:node-inspector-callbacks";
+const PERF_HOOKS_SPECIFIER = "node:perf_hooks";
 const MODULE_SPECIFIER = "node:module";
 const DIAGNOSTICS_CHANNEL_SPECIFIER = "node:diagnostics_channel";
 const EVENTS_SPECIFIER = "node:events";
@@ -286,6 +287,8 @@ export interface NodeBuiltinOptions {
     ffiModule?: string;
     /** Path to jco-std's versioned `node:inspector` module (overridable for tests) */
     inspectorModule?: string;
+    /** Path to the versioned perf_hooks implementation (overridable for tests). */
+    perfHooksModule?: string;
     /** Path to jco-std's versioned `node:inspector/promises` module (overridable for tests) */
     inspectorPromisesModule?: string;
     /** Path to jco-std's versioned `node:module` module (overridable for tests) */
@@ -1242,6 +1245,9 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 // No onWitRequirement: nothing here reaches the host.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (id === PERF_HOOKS_SPECIFIER) {
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             if (id === DIAGNOSTICS_CHANNEL_SPECIFIER) {
                 // No onWitRequirement: this needs no host capability.
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -1347,6 +1353,12 @@ import { callableEmitter } from ${JSON.stringify(streamEmitterModule())};
 export * from "node:events";
 export const EventEmitter = callableEmitter(events.EventEmitter);
 export default { ...events, EventEmitter };`;
+            }
+            if (id === `${VIRTUAL_PREFIX}${PERF_HOOKS_SPECIFIER}`) {
+                const module =
+                    options.perfHooksModule ??
+                    fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks"));
+                return `export { default } from ${JSON.stringify(module)}; export * from ${JSON.stringify(module)};`;
             }
             if (!id.startsWith(VIRTUAL_PREFIX)) {
                 return null;
