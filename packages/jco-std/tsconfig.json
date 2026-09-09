@@ -11,6 +11,7 @@
     "declarationMap": true,
     "skipLibCheck": true,
     "paths": {
+      "readable-stream/lib/stream.js": ["./src/wasi/0.2.x/node/24.x.x/stream/vendor-types.d.ts"],
       "wasi:sockets/instance-network@0.2.12": ["./src/wasi/0.2.x/node/24.x.x/net-interface.d.ts"],
       "wasi:sockets/ip-name-lookup@0.2.12": ["./src/wasi/0.2.x/node/24.x.x/net-interface.d.ts"],
       "wasi:sockets/tcp-create-socket@0.2.12": ["./src/wasi/0.2.x/node/24.x.x/net-interface.d.ts"],

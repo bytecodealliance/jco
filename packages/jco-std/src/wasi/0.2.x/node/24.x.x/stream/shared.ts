@@ -17,7 +17,7 @@ import type {
   TextConsumeSyncOptions,
 } from "./iter/types.js";
 
-const encoder = new TextEncoder();
+let encoder: TextEncoder | undefined;
 
 export function isObject(value: unknown): value is Record<PropertyKey, unknown> {
   return (typeof value === "object" && value !== null) || typeof value === "function";
@@ -54,7 +54,7 @@ export function primitiveToUint8Array(
   value: string | ArrayBufferLike | ArrayBufferView,
 ): Uint8Array {
   if (typeof value === "string") {
-    return encoder.encode(value);
+    return (encoder ??= new TextEncoder()).encode(value);
   }
   if (isArrayBufferLike(value)) {
     return new Uint8Array(value);
