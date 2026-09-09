@@ -45,11 +45,7 @@ With Jco (and related projects in this repository), you can:
 
 As Jco aims to do many things, it contains many subprojects that are organized in this repository:
 
-The following diagram shows Jco's core dependencies, flowing from top to bottom toward `jco`. Arrows point from a dependency to its consumer; dashed arrows show build-time generation or vendoring. Local npm package names omit the `@bytecodealliance/` scope. The `wasm-tools` group covers `wasmparser`, `wasm-encoder`, `wasm-metadata`, `wasmprinter`, `wat`, `wit-component`, and `wit-parser`.
-
 [![Jco core dependency layout, showing Rust crates, WASI shims, and external libraries feeding into jco-transpile and jco](docs/assets/dependency-layout.svg)](docs/assets/dependency-layout.svg)
-
-The SVG includes editable diagrams.net data. You can also open the [draw.io source](docs/assets/dependency-layout.drawio) in diagrams.net.
 
 | Subproject                       | Language   | Directory                               | Description                                                                                     |
 |----------------------------------|------------|-----------------------------------------|-------------------------------------------------------------------------------------------------|
