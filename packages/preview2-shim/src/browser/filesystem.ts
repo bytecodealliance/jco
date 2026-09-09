@@ -38,6 +38,18 @@ export interface BrowserFilesystemDescriptor extends Omit<
     ): BrowserFilesystemDescriptor;
     renameAt(oldPath: string, newDescriptor: BrowserFilesystemDescriptor, newPath: string): void;
     isSameObject(other: BrowserFilesystemDescriptor): boolean;
+
+    /**
+     * Advisory locking, for host application code holding a descriptor directly
+     * (not part of the WASI guest-facing surface). Adapters that support it should
+     * implement all five; `tryLock*` return whether the lock was acquired instead
+     * of throwing.
+     */
+    lockShared?(): void;
+    lockExclusive?(): void;
+    tryLockShared?(): boolean;
+    tryLockExclusive?(): boolean;
+    unlock?(): void;
 }
 
 export interface BrowserFilesystemAdapter<Capability = unknown> {
@@ -219,6 +231,26 @@ class Descriptor implements TypesNamespace.Descriptor {
 
     metadataHashAt(pathFlags: PathFlags, path: string) {
         return this.#implementation.metadataHashAt(pathFlags, path);
+    }
+
+    lockShared() {
+        return this.#implementation.lockShared?.();
+    }
+
+    lockExclusive() {
+        return this.#implementation.lockExclusive?.();
+    }
+
+    tryLockShared() {
+        return this.#implementation.tryLockShared?.() ?? false;
+    }
+
+    tryLockExclusive() {
+        return this.#implementation.tryLockExclusive?.() ?? false;
+    }
+
+    unlock() {
+        return this.#implementation.unlock?.();
     }
 }
 
