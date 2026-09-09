@@ -439,6 +439,11 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/readline-promises.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/readline-promises.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/readline-promises.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/repl": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/repl.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/repl.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/repl.js"
     }
   },
   "scripts": {
@@ -458,6 +463,8 @@
     "build:bindings:wasi:tls": "node scripts/generate-tls-bindings.mjs"
   },
   "dependencies": {
+    "acorn": "8.17.0",
+    "acorn-walk": "8.3.5",
     "minimatch": "10.2.6",
     "readable-stream": "4.7.0"
   },
