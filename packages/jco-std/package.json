@@ -429,6 +429,16 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/sqlite/core.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/sqlite/core.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/sqlite/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/readline": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/readline.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/readline.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/readline.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/readline/promises": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/readline-promises.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/readline-promises.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/readline-promises.js"
     }
   },
   "scripts": {
