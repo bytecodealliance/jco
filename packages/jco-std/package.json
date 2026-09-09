@@ -24,6 +24,7 @@
   },
   "files": [
     "dist",
+    "LICENSE.node-stream",
     "wit/node-0.1.0",
     "wit/tls-0.2.0-draft"
   ],
@@ -293,6 +294,26 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/inspector-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/inspector-host-node.js"
     },
+    "./wasi/0.2.x/node/24.x.x/stream": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/stream/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/stream/index.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/stream/promises": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/stream/promises.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/promises.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/stream/promises.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/stream/emitter": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/stream/emitter.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/emitter.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/stream/emitter.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/stream/scheduler": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/stream/scheduler.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/scheduler.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/stream/scheduler.js"
+    },
     "./wasi/0.2.x/node/24.x.x/stream/consumers": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/stream/consumers.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/stream/consumers.js",
@@ -390,7 +411,8 @@
     "build:bindings:wasi:tls": "node scripts/generate-tls-bindings.mjs"
   },
   "dependencies": {
-    "minimatch": "10.2.6"
+    "minimatch": "10.2.6",
+    "readable-stream": "4.7.0"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.22.0",
