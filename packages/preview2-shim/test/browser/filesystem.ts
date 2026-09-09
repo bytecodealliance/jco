@@ -298,4 +298,39 @@ suite("Browser filesystem", () => {
 
         assert.deepStrictEqual(calls, ["openAt", "advise", "syncData", "sync"]);
     });
+
+    test("advisory locking: shared locks stack, exclusive locks are exclusive", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: { file: { source: new Uint8Array([1, 2, 3]) } } });
+
+        const [[root]] = preopens.getDirectories();
+        const a = root.openAt({}, "file", {}, { read: true }) as any;
+        const b = root.openAt({}, "file", {}, { read: true }) as any;
+
+        assert.strictEqual(a.tryLockShared(), true);
+        assert.strictEqual(b.tryLockShared(), true);
+        assert.strictEqual(a.tryLockExclusive(), false);
+
+        b.unlock();
+        assert.strictEqual(a.tryLockExclusive(), true);
+        assert.strictEqual(b.tryLockShared(), false);
+
+        a.unlock();
+        assert.strictEqual(b.tryLockShared(), true);
+    });
+
+    test("advisory locking: lockShared/lockExclusive throw would-block instead of waiting", async () => {
+        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: { file: { source: new Uint8Array([1, 2, 3]) } } });
+
+        const [[root]] = preopens.getDirectories();
+        const a = root.openAt({}, "file", {}, { read: true }) as any;
+        const b = root.openAt({}, "file", {}, { read: true }) as any;
+
+        a.lockExclusive();
+        assert.throws(() => b.lockShared(), "would-block");
+        assert.throws(() => b.lockExclusive(), "would-block");
+        a.unlock();
+        assert.doesNotThrow(() => b.lockExclusive());
+    });
 });

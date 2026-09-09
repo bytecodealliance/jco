@@ -211,6 +211,22 @@ function metadata(entry: FileDataEntry): EntryMetadata {
     return value;
 }
 
+interface LockState {
+    exclusiveHolder: Descriptor | null;
+    sharedHolders: Set<Descriptor>;
+}
+
+const fileLocks = new WeakMap<FileDataEntry, LockState>();
+
+function lockState(entry: FileDataEntry): LockState {
+    let state = fileLocks.get(entry);
+    if (!state) {
+        state = { exclusiveHolder: null, sharedHolders: new Set() };
+        fileLocks.set(entry, state);
+    }
+    return state;
+}
+
 function touch(entry: FileDataEntry): void {
     metadata(entry).version++;
 }
@@ -646,6 +662,59 @@ class Descriptor implements BrowserFilesystemDescriptor {
     metadataHashAt(pathFlags: PathFlags, path: string) {
         const value = metadata(getChildEntry(this.#entry, path, pathFlags.symlinkFollow));
         return { upper: value.id, lower: value.version };
+    }
+
+    /**
+     * Default advisory-locking implementation: a same-process reader/writer lock
+     * keyed on the underlying entry. There's no real contention to wait out in a
+     * single-threaded environment, so `lockShared`/`lockExclusive` don't block -
+     * they throw `would-block` immediately when the lock isn't free, same as the
+     * `tryLock*` variants report `false`.
+     */
+    tryLockShared(): boolean {
+        const state = lockState(this.#entry);
+        if (state.exclusiveHolder && state.exclusiveHolder !== this) {
+            return false;
+        }
+        state.sharedHolders.add(this);
+        return true;
+    }
+
+    tryLockExclusive(): boolean {
+        const state = lockState(this.#entry);
+        if (state.exclusiveHolder && state.exclusiveHolder !== this) {
+            return false;
+        }
+        const otherReaders = state.sharedHolders.size - (state.sharedHolders.has(this) ? 1 : 0);
+        if (otherReaders > 0) {
+            return false;
+        }
+        state.sharedHolders.delete(this);
+        state.exclusiveHolder = this;
+        return true;
+    }
+
+    lockShared(): void {
+        if (!this.tryLockShared()) {
+            throw "would-block";
+        }
+    }
+
+    lockExclusive(): void {
+        if (!this.tryLockExclusive()) {
+            throw "would-block";
+        }
+    }
+
+    unlock(): void {
+        const state = fileLocks.get(this.#entry);
+        if (!state) {
+            return;
+        }
+        state.sharedHolders.delete(this);
+        if (state.exclusiveHolder === this) {
+            state.exclusiveHolder = null;
+        }
     }
 }
 
