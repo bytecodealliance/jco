@@ -26,7 +26,7 @@
 // the existing Jco node:buffer implementation.
 import { Buffer } from "node:buffer";
 
-import { codedError, invalidArgType } from "./errors.js";
+import { codedError, invalidArgType, invalidThis } from "./errors.js";
 
 export type StringDecoderEncoding =
   | "ascii"
@@ -148,13 +148,6 @@ function normalizeEncoding(encoding: unknown): StringDecoderEncoding | undefined
 
 function unknownEncoding(encoding: unknown): Error {
   return codedError(new TypeError(`Unknown encoding: ${String(encoding)}`), "ERR_UNKNOWN_ENCODING");
-}
-
-function invalidThis(): Error {
-  return codedError(
-    new TypeError('Value of "this" must be of type StringDecoder'),
-    "ERR_INVALID_THIS",
-  );
 }
 
 function inputBytes(input: ArrayBufferView): Buffer {
@@ -334,7 +327,7 @@ export class StringDecoder {
     }
     const state = this?.[kNativeDecoder];
     if (!state) {
-      throw invalidThis();
+      throw invalidThis("StringDecoder");
     }
     const bytes = inputBytes(input);
     if (bytes.length === 0) {
@@ -418,7 +411,7 @@ export class StringDecoder {
   get lastChar(): Buffer {
     const state = this?.[kNativeDecoder];
     if (!state) {
-      throw invalidThis();
+      throw invalidThis("StringDecoder");
     }
     return state.lastChar.subarray(0, 4);
   }
@@ -427,7 +420,7 @@ export class StringDecoder {
   get lastNeed(): number {
     const state = this?.[kNativeDecoder];
     if (!state) {
-      throw invalidThis();
+      throw invalidThis("StringDecoder");
     }
     return state.lastNeed;
   }
@@ -436,7 +429,7 @@ export class StringDecoder {
   get lastTotal(): number {
     const state = this?.[kNativeDecoder];
     if (!state) {
-      throw invalidThis();
+      throw invalidThis("StringDecoder");
     }
     return state.lastTotal;
   }

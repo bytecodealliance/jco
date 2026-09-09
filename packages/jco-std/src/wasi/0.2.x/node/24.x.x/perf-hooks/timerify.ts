@@ -24,7 +24,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { invalid, kSkipThrow, now, object } from "./internal.js";
+import { invalidArgType, validateObject } from "../errors/core.js";
+
+import { kSkipThrow, now } from "./internal.js";
 import { PerformanceNodeEntry } from "./entries.js";
 import { enqueue } from "./observe.js";
 export interface TimerifyOptions {
@@ -35,11 +37,11 @@ export function timerify<
   T extends ((...args: never[]) => unknown) | (new (...args: never[]) => object),
 >(fn: T, options: TimerifyOptions = {}): T {
   if (typeof fn !== "function") {
-    invalid("fn", "function", fn);
+    throw invalidArgType("fn", "function", fn);
   }
-  object(options, "options");
+  validateObject(options, "options");
   if (options.histogram !== undefined) {
-    invalid("options.histogram", "RecordableHistogram", options.histogram);
+    throw invalidArgType("options.histogram", "RecordableHistogram", options.histogram);
   }
   function complete(start: number, args: unknown[]): void {
     const entry = new PerformanceNodeEntry(

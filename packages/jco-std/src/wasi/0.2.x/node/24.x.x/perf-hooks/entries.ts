@@ -24,8 +24,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { brand, check, enumerable, illegal, kSkipThrow } from "./internal.js";
-import { deprecatedNodeApi } from "../errors/core.js";
+import { deprecatedNodeApi, illegalConstructor } from "../errors/core.js";
+
+import { brand, check, enumerable, kSkipThrow } from "./internal.js";
 export interface EntryJSON {
   name: string;
   entryType: string;
@@ -40,7 +41,7 @@ export class PerformanceEntry {
   #duration: number;
   constructor(token?: symbol, name = "", type = "", start = 0, duration = 0) {
     if (token !== kSkipThrow) {
-      illegal();
+      throw illegalConstructor();
     }
     brand(this, "PerformanceEntry");
     this.#name = name;

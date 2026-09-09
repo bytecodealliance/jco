@@ -24,7 +24,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { brand, check, enumerable, illegal, missing, now, unsupported } from "./internal.js";
+import { illegalConstructor, missingArgs } from "../errors/core.js";
+
+import { brand, check, enumerable, now, unsupported } from "./internal.js";
 import { PerformanceEntry } from "./entries.js";
 import {
   PerformanceMark,
@@ -72,16 +74,16 @@ export interface EventLoopUtilization {
   utilization: number;
 }
 export function createHistogram(_options?: CreateHistogramOptions): never {
-  return unsupported("createHistogram (native HDR histogram required)");
+  return unsupported("createHistogram", "a native HDR histogram is required");
 }
 export function monitorEventLoopDelay(_options?: EventLoopMonitorOptions): never {
-  return unsupported("monitorEventLoopDelay (runtime event-loop instrumentation required)");
+  return unsupported("monitorEventLoopDelay", "event-loop instrumentation is required");
 }
 export function eventLoopUtilization(
   _first?: EventLoopUtilization,
   _second?: EventLoopUtilization,
 ): never {
-  return unsupported("eventLoopUtilization (runtime event-loop instrumentation required)");
+  return unsupported("eventLoopUtilization", "event-loop instrumentation is required");
 }
 const token = Symbol("Performance");
 // QuickJS does not supply EventTarget. Importing perf_hooks must still allow
@@ -92,24 +94,24 @@ class MissingEventTarget implements EventTarget {
     _callback: EventListenerOrEventListenerObject | null,
     _options?: boolean | AddEventListenerOptions,
   ): never {
-    return unsupported("performance.addEventListener (runtime EventTarget required)");
+    return unsupported("performance.addEventListener", "the engine has no EventTarget");
   }
   removeEventListener(
     _type: string,
     _callback: EventListenerOrEventListenerObject | null,
     _options?: boolean | EventListenerOptions,
   ): never {
-    return unsupported("performance.removeEventListener (runtime EventTarget required)");
+    return unsupported("performance.removeEventListener", "the engine has no EventTarget");
   }
   dispatchEvent(_event: Event): never {
-    return unsupported("performance.dispatchEvent (runtime EventTarget required)");
+    return unsupported("performance.dispatchEvent", "the engine has no EventTarget");
   }
 }
 const RuntimeEventTarget = globalThis.EventTarget ?? MissingEventTarget;
 export class Performance extends RuntimeEventTarget {
   constructor(key?: symbol) {
     if (key !== token) {
-      illegal();
+      throw illegalConstructor();
     }
     super();
     brand(this, "Performance");
@@ -137,28 +139,28 @@ export class Performance extends RuntimeEventTarget {
   getEntriesByName(name: string, type?: string): PerformanceEntry[] {
     check(this, "Performance");
     if (!arguments.length) {
-      missing("name");
+      throw missingArgs("name");
     }
     return filterEntries(`${name}`, type === undefined ? undefined : `${type}`);
   }
   getEntriesByType(type: string): PerformanceEntry[] {
     check(this, "Performance");
     if (!arguments.length) {
-      missing("type");
+      throw missingArgs("type");
     }
     return filterEntries(undefined, `${type}`);
   }
   mark(name: string, options?: MarkOptions): PerformanceMark {
     check(this, "Performance");
     if (!arguments.length) {
-      missing("name");
+      throw missingArgs("name");
     }
     return mark(name, options);
   }
   measure(name: string, options?: string | MeasureOptions, endMark?: string): PerformanceMeasure {
     check(this, "Performance");
     if (!arguments.length) {
-      missing("name");
+      throw missingArgs("name");
     }
     return measure(name, options, endMark);
   }
@@ -169,25 +171,25 @@ export class Performance extends RuntimeEventTarget {
   get timeOrigin(): number {
     check(this, "Performance");
     if (typeof globalThis.performance?.timeOrigin !== "number") {
-      unsupported("performance.timeOrigin (runtime clock required)");
+      unsupported("performance.timeOrigin", "the engine has no clock");
     }
     return globalThis.performance.timeOrigin;
   }
   setResourceTimingBufferSize(maxSize: number): void {
     check(this, "Performance");
     if (!arguments.length) {
-      missing("maxSize");
+      throw missingArgs("maxSize");
     }
     // WebIDL unsigned long conversion, including truncation and modulo 2^32.
     setResourceTimingBufferSize(+maxSize >>> 0);
   }
   get nodeTiming(): never {
     check(this, "Performance");
-    return unsupported("performance.nodeTiming (Node process milestones required)");
+    return unsupported("performance.nodeTiming", "Node process milestones are unavailable");
   }
   toJSON(): never {
     check(this, "Performance");
-    return unsupported("performance.toJSON (Node process telemetry required)");
+    return unsupported("performance.toJSON", "Node process telemetry is unavailable");
   }
   get onresourcetimingbufferfull(): ((event: Event) => void) | null {
     check(this, "Performance");

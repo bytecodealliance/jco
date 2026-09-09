@@ -24,37 +24,18 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { codedError, invalidArgType } from "../errors/core.js";
+import { codedError, invalidArgType, invalidThis, unsupportedNodeApi } from "../errors/core.js";
 
-export function coded<T extends Error>(error: T, code: string): T & { code: string } {
-  return codedError(error, code);
-}
-export function unsupported(api: string): never {
-  throw coded(
-    new Error(`node:perf_hooks ${api} is not supported in a WebAssembly component`),
-    "ERR_JCO_UNSUPPORTED_NODE_API",
-  );
-}
-export function illegal(): never {
-  throw coded(new TypeError("Illegal constructor"), "ERR_ILLEGAL_CONSTRUCTOR");
-}
-export function missing(name: string): never {
-  throw coded(new TypeError(`The "${name}" argument must be specified`), "ERR_MISSING_ARGS");
-}
-export function object(value: unknown, name: string): asserts value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    invalid(name, "Object", value);
-  }
-}
-export function invalid(name: string, type: string, value: unknown): never {
-  throw invalidArgType(name, type, value);
+/** Refuse a perf_hooks API the engine cannot support, naming why. */
+export function unsupported(api: string, reason: string): never {
+  throw unsupportedNodeApi(`node:perf_hooks ${api}`, reason);
 }
 export function timestamp(value: unknown): asserts value is number {
   if (typeof value !== "number") {
-    invalid("startTime", "number", value);
+    throw invalidArgType("startTime", "number", value);
   }
   if (value < 0) {
-    throw coded(
+    throw codedError(
       new TypeError(`${value} is not a valid timestamp`),
       "ERR_PERFORMANCE_INVALID_TIMESTAMP",
     );
@@ -70,7 +51,7 @@ export function enumerable(prototype: object, names: string[], tag?: string): vo
 }
 export function now(): number {
   if (typeof globalThis.performance?.now !== "function") {
-    unsupported("performance.now (runtime monotonic clock required)");
+    unsupported("performance.now", "the engine has no monotonic clock");
   }
   return globalThis.performance.now();
 }
@@ -79,7 +60,7 @@ export function clone(value: unknown): unknown {
     return null;
   }
   if (typeof globalThis.structuredClone !== "function") {
-    unsupported("detail cloning (runtime structuredClone required)");
+    unsupported("detail cloning", "the engine has no structuredClone");
   }
   return globalThis.structuredClone(value);
 }
@@ -99,7 +80,7 @@ export function brand(value: object, name: string): void {
 }
 export function check(value: unknown, name: string): void {
   if (!brands.get(value as object)?.has(name)) {
-    throw coded(new TypeError(`Value of "this" must be of type ${name}`), "ERR_INVALID_THIS");
+    throw invalidThis(name);
   }
 }
 

@@ -561,6 +561,14 @@ export { StringDecoder } from ${JSON.stringify(stringDecoderModule)};
 `;
 }
 
+/** Source of the capability-free `node:perf_hooks` ESM facade. */
+function perfHooksAdapter(perfHooksModule: string): string {
+    return `
+export { default } from ${JSON.stringify(perfHooksModule)};
+export * from ${JSON.stringify(perfHooksModule)};
+`;
+}
+
 /**
  * Source of the `node:events` adapter.
  *
@@ -1116,6 +1124,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const streamPromisesModule = () => stdModule(options.streamPromisesModule, "stream/promises");
     const streamEmitterModule = () => stdModule(options.streamEmitterModule, "stream/emitter");
     const streamSchedulerModule = () => stdModule(options.streamSchedulerModule, "stream/scheduler");
+    const perfHooksModule = () => stdModule(options.perfHooksModule, "perf-hooks");
     const streamConsumersModule = () => stdModule(options.streamConsumersModule, "stream/consumers");
     const streamIterModule = () => stdModule(options.streamIterModule, "stream/iter");
     const clusterModule = () => stdModule(options.clusterModule, "cluster");
@@ -1246,6 +1255,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === PERF_HOOKS_SPECIFIER) {
+                // No onWitRequirement: timing buffers and observers stay in the guest.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
             if (id === DIAGNOSTICS_CHANNEL_SPECIFIER) {
@@ -1354,12 +1364,6 @@ export * from "node:events";
 export const EventEmitter = callableEmitter(events.EventEmitter);
 export default { ...events, EventEmitter };`;
             }
-            if (id === `${VIRTUAL_PREFIX}${PERF_HOOKS_SPECIFIER}`) {
-                const module =
-                    options.perfHooksModule ??
-                    fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks"));
-                return `export { default } from ${JSON.stringify(module)}; export * from ${JSON.stringify(module)};`;
-            }
             if (!id.startsWith(VIRTUAL_PREFIX)) {
                 return null;
             }
@@ -1420,6 +1424,9 @@ export default { ...events, EventEmitter };`;
             }
             if (value === STREAM_PROMISES_SPECIFIER) {
                 return streamAdapter(streamPromisesModule());
+            }
+            if (value === PERF_HOOKS_SPECIFIER) {
+                return perfHooksAdapter(perfHooksModule());
             }
             if (value === STREAM_CONSUMERS_SPECIFIER) {
                 return streamAdapter(streamConsumersModule());
