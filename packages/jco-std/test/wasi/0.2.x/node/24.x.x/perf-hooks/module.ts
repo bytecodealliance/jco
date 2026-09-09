@@ -1,14 +1,10 @@
-import { test, expect, afterEach } from "vitest";
-import node from "node:perf_hooks";
-import shim, * as named from "../../../../../../src/wasi/0.2.x/node/24.x.x/perf-hooks.js";
-const { performance: p } = shim;
-afterEach(() => {
-  p.clearMarks();
-  p.clearMeasures();
-  p.clearResourceTimings();
-  node.performance.clearMarks();
-  node.performance.clearMeasures();
-});
+import { afterEach, expect, test } from "vitest";
+
+import * as named from "../../../../../../src/wasi/0.2.x/node/24.x.x/perf-hooks.js";
+import { node, p, resetTimelines, shim } from "../helpers/perf-hooks.js";
+
+afterEach(resetTimelines);
+
 test("pins Node 24 oracle and exact exports, aliases and constants", () => {
   expect(process.versions.node.split(".")[0]).toBe("24");
   expect(Object.keys(shim).sort()).toEqual(Object.keys(node).sort());
@@ -21,14 +17,12 @@ test("pins Node 24 oracle and exact exports, aliases and constants", () => {
     expect(Reflect.get(named, key)).toBe(Reflect.get(shim, key));
   }
   expect(shim.constants).toEqual(node.constants);
-  expect(Object.getOwnPropertyDescriptor(shim, "constants")).toEqual(
-    Object.getOwnPropertyDescriptor(node, "constants") && {
-      value: shim.constants,
-      enumerable: true,
-      writable: false,
-      configurable: false,
-    },
-  );
+  expect(Object.getOwnPropertyDescriptor(shim, "constants")).toEqual({
+    value: shim.constants,
+    enumerable: true,
+    writable: false,
+    configurable: false,
+  });
   expect(p.timerify).toBe(shim.timerify);
   expect(p.eventLoopUtilization).toBe(shim.eventLoopUtilization);
   expect(p).toBeInstanceOf(shim.Performance);

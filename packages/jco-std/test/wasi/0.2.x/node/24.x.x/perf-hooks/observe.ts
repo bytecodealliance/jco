@@ -1,14 +1,9 @@
-import { test, expect, afterEach } from "vitest";
-import node from "node:perf_hooks";
-import shim from "../../../../../../src/wasi/0.2.x/node/24.x.x/perf-hooks.js";
-const { performance: p } = shim;
-afterEach(() => {
-  p.clearMarks();
-  p.clearMeasures();
-  p.clearResourceTimings();
-  node.performance.clearMarks();
-  node.performance.clearMeasures();
-});
+import { afterEach, expect, test } from "vitest";
+
+import { p, resetTimelines, shim } from "../helpers/perf-hooks.js";
+
+afterEach(resetTimelines);
+
 test("buffers synchronously, drains and disconnects", () => {
   const observer = new shim.PerformanceObserver(() => {});
   observer.observe({ entryTypes: ["mark", "measure"] });
@@ -20,6 +15,7 @@ test("buffers synchronously, drains and disconnects", () => {
   p.mark("y", { startTime: 4 });
   expect(observer.takeRecords()).toEqual([]);
 });
+
 test("delivers sorted asynchronous entries and buffered records", async () => {
   p.mark("old", { startTime: 1 });
   await new Promise<void>((resolve) => {
@@ -34,6 +30,7 @@ test("delivers sorted asynchronous entries and buffered records", async () => {
     p.mark("new", { startTime: 2 });
   });
 });
+
 test("enforces observation mode until disconnect", () => {
   const observer = new shim.PerformanceObserver(() => {});
   observer.observe({ type: "mark" });
