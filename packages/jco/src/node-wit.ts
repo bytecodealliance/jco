@@ -84,6 +84,8 @@ export const DNS_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
 
 export const FS_WIT_REQUIREMENT = nodeRequirement("node:fs", "fs");
 
+export const PROCESS_WIT_REQUIREMENT = nodeRequirement("node:process", "process");
+
 export const OS_WIT_REQUIREMENT = nodeRequirement("node:os", "os");
 
 export const FFI_WIT_REQUIREMENT = nodeRequirement("node:ffi", "ffi");

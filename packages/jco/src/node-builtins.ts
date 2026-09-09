@@ -26,6 +26,7 @@ import {
     NET_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
     NET_WASI_SOCKETS_WIT_REQUIREMENTS,
     OS_WIT_REQUIREMENT,
+    PROCESS_WIT_REQUIREMENT,
     type NodeWitRequirement,
 } from "./node-wit.js";
 
@@ -303,6 +304,8 @@ export interface NodeBuiltinOptions {
     eventsModule?: string;
     /** Path to jco-std's versioned `node:os` module (overridable for tests) */
     osModule?: string;
+    /** Override the lazy node:process facade for integration tests. */
+    processModule?: string;
     /** Path to jco-std's versioned `node:string_decoder` module (overridable for tests) */
     stringDecoderModule?: string;
     /** Paths to jco-std's versioned stream modules (overridable for tests) */
@@ -1270,6 +1273,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                 // No onWitRequirement: in-process emitters need no host capability.
                 return `${VIRTUAL_PREFIX}${id}`;
             }
+            if (id === "node:process") {
+                options.onWitRequirement?.(PROCESS_WIT_REQUIREMENT);
+                return `${VIRTUAL_PREFIX}${id}`;
+            }
             if (id === OS_SPECIFIER) {
                 options.onWitRequirement?.(OS_WIT_REQUIREMENT);
                 return `${VIRTUAL_PREFIX}${id}`;
@@ -1412,6 +1419,10 @@ export default { ...events, EventEmitter };`;
             }
             if (value === EVENTS_SPECIFIER) {
                 return eventsAdapter(unenvModule(EVENTS_SPECIFIER, options), eventsModule());
+            }
+            if (value === "node:process") {
+                const module = JSON.stringify(stdModule(options.processModule, "process"));
+                return `export { default } from ${module}; export * from ${module};`;
             }
             if (value === OS_SPECIFIER) {
                 return osAdapter(osModule());
