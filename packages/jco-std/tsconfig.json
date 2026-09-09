@@ -41,5 +41,14 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "test", "src/cmd/**", "src/*.d.ts", "src/**/*.d.ts"]
+  "exclude": [
+    "node_modules",
+    "test",
+    "src/cmd/**",
+    "src/*.d.ts",
+    "src/**/*.d.ts",
+    // TODO: restore the Node WASI TLS provider once preview2-shim publishes ./io-worker.
+    "src/wasi/0.2.x/node/24.x.x/tls-host-node.ts",
+    "src/wasi/0.2.x/node/24.x.x/tls-host-node-worker.ts"
+  ]
 }
