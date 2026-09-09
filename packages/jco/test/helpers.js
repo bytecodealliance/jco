@@ -367,6 +367,7 @@ export async function componentizeFixture(args) {
         "-o",
         componentPath,
         ...extraArgs,
+        { closeStdin: true },
     );
 
     return { componentPath, outputDir, fixtureDir, stdout, stderr };
