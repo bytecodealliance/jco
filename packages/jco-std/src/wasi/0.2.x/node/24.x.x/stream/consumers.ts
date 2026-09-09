@@ -17,17 +17,55 @@ import {
   toArrayBuffer,
 } from "./shared.js";
 
-export type ConsumerStream = AsyncIterable<unknown> | Iterable<unknown>;
+export type ConsumerStream = AsyncIterable<unknown> | Iterable<unknown> | ReadableStream<unknown>;
+
+function isWebReadable(stream: unknown): stream is ReadableStream<unknown> {
+  return (
+    typeof stream === "object" &&
+    stream !== null &&
+    "getReader" in stream &&
+    typeof stream.getReader === "function"
+  );
+}
 
 function assertStream(stream: unknown): asserts stream is ConsumerStream {
-  if (!isAsyncIterable(stream) && !isSyncIterable(stream)) {
+  if (!isAsyncIterable(stream) && !isSyncIterable(stream) && !isWebReadable(stream)) {
     throw invalidArgType("stream", ["ReadableStream", "Readable", "AsyncIterator"], stream);
+  }
+}
+
+// Some component engines expose Web readers before implementing async iteration.
+// Match the iterator's cancellation and lock-release behavior using public APIs.
+async function* chunks(stream: ConsumerStream): AsyncGenerator<unknown> {
+  if (!isWebReadable(stream)) {
+    yield* stream;
+    return;
+  }
+  const reader = stream.getReader();
+  let complete = false;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        complete = true;
+        return;
+      }
+      yield result.value;
+    }
+  } finally {
+    try {
+      if (!complete) {
+        await reader.cancel();
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 }
 
 async function collectParts(stream: ConsumerStream): Promise<BlobPart[]> {
   const parts: BlobPart[] = [];
-  for await (const chunk of stream) {
+  for await (const chunk of chunks(stream)) {
     if (typeof chunk === "string" || chunk instanceof Blob) {
       parts.push(chunk);
     } else if (isArrayBufferLike(chunk) || ArrayBuffer.isView(chunk)) {
@@ -60,7 +98,7 @@ export async function text(stream: ConsumerStream): Promise<string> {
   assertStream(stream);
   const decoder = new TextDecoder();
   let result = "";
-  for await (const chunk of stream) {
+  for await (const chunk of chunks(stream)) {
     if (typeof chunk === "string") {
       result += chunk;
     } else if (isArrayBufferLike(chunk) || ArrayBuffer.isView(chunk)) {
