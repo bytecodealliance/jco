@@ -601,7 +601,9 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("events")).toBeNull();
     });
 
-    test.each([
+    test.concurrent.each([
+        ["node:stream", "/jco/node/stream.js", "streamModule"],
+        ["node:stream/promises", "/jco/node/stream-promises.js", "streamPromisesModule"],
         ["node:stream/consumers", "/jco/node/stream-consumers.js", "streamConsumersModule"],
         ["node:stream/iter", "/jco/node/stream-iter.js", "streamIterModule"],
     ])("generates a capability-free adapter for %s", (specifier, module, option) => {
@@ -616,10 +618,13 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.each(["stream/consumers", "stream/iter"])("does not intercept the legacy bare %s specifier", (specifier) => {
-        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
-        expect(plugin.resolveId(specifier)).toBeNull();
-    });
+    test.concurrent.each(["stream", "stream/promises", "stream/consumers", "stream/iter"])(
+        "does not intercept the legacy bare %s specifier",
+        (specifier) => {
+            const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
+            expect(plugin.resolveId(specifier)).toBeNull();
+        },
+    );
 
     test.concurrent("resolves audited unenv modules without unrelated WASI capabilities", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { unenvAliases });
