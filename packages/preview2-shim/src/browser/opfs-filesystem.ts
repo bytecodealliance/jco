@@ -151,7 +151,6 @@ export async function loadOpfsCapability(
     return { handle, data: { dir } };
 }
 
-type LockMode = "shared" | "exclusive";
 const LOCK_METHODS = new Set([
     "lockShared",
     "lockExclusive",
@@ -180,20 +179,16 @@ function joinLockPath(base: string, segment: string): string {
     return path;
 }
 
-/** The slice of `navigator.locks` this adapter needs - narrow enough to fake in tests or other hosts. */
-export interface NavigatorLocks {
-    locks: {
-        request(
-            name: string,
-            options: { mode: "shared" | "exclusive" },
-            callback: () => Promise<void>,
-        ): Promise<void>;
-    };
-}
+/**
+ * The slice of `LockManager` this adapter needs - narrow enough to fake in tests or other hosts.
+ *
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/LockManager
+ */
+export interface BrowserLockManager extends Omit<LockManager, "query"> {}
 
 /**
  * Wrap a descriptor so its advisory locking also makes a best-effort request against
- * `navigator.locks`, in addition to the default same-process reader/writer lock.
+ * `BrowserLockManager`, in addition to the default same-process reader/writer lock.
  * The Web Locks request is fire-and-forget - there's no way to block a synchronous
  * `lockExclusive()` on a cross-tab grant without JSPI, so this only coordinates
  * tabs that are already idle/cooperating.
@@ -201,15 +196,15 @@ export interface NavigatorLocks {
 function withCrossTabLocking(
     descriptor: BrowserFilesystemDescriptor,
     lockName: string,
-    navigator: NavigatorLocks | undefined,
+    lockManager: BrowserLockManager | undefined,
 ): BrowserFilesystemDescriptor {
     let release: (() => void) | null = null;
 
     function requestCrossTabLock(mode: LockMode): void {
-        if (!navigator?.locks) {
+        if (!lockManager) {
             return;
         }
-        navigator.locks
+        lockManager
             .request(lockName, { mode }, () => new Promise<void>((resolve) => (release = resolve)))
             .catch(() => {
                 // best-effort only; local same-process locking already enforced correctness
@@ -234,7 +229,7 @@ function withCrossTabLocking(
                     return withCrossTabLocking(
                         child as BrowserFilesystemDescriptor,
                         joinLockPath(lockName, args[1]),
-                        navigator,
+                        lockManager,
                     );
                 };
             }
@@ -261,17 +256,12 @@ function withCrossTabLocking(
 export interface OpfsFilesystemAdapterOptions {
     /**
      * Also make advisory locks (`lockShared`/`lockExclusive`/`tryLock*`/`unlock`) request a
-     * matching `navigator.locks` lock, so tabs sharing the same OPFS root get best-effort
-     * cross-tab coordination on top of the default same-process reader/writer lock.
-     * Off by default.
+     * matching lock from the given `BrowserLockManager` (usually the global `navigator.locks`,
+     * or a fake in tests), so tabs sharing the same OPFS root get best-effort cross-tab
+     * coordination on top of the default same-process reader/writer lock. Omit to keep locking
+     * same-process only - off by default.
      */
-    crossTabLocking?: boolean;
-    /**
-     * The `navigator` to request cross-tab locks against when `crossTabLocking` is enabled.
-     * Defaults to the global `navigator`. Overriding this is mainly useful for tests, since
-     * a real browser only ever has one.
-     */
-    navigator?: NavigatorLocks;
+    lockManager?: BrowserLockManager;
 }
 
 /**
@@ -283,27 +273,26 @@ export interface OpfsFilesystemAdapterOptions {
  * OPFS happens automatically shortly after any mutation (debounced to a microtask,
  * so a burst of writes only triggers one round-trip); `flush()`/`dispose()` remain
  * available to force it explicitly, e.g. before navigating away.
+ *
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system
  */
 export class OpfsFilesystemAdapter implements BrowserFilesystemAdapter<OpfsCapability> {
     #inMemory = new InMemoryFilesystemAdapter();
     #roots: OpfsCapability[] = [];
-    #crossTabLocking: boolean;
-    #navigator: NavigatorLocks | undefined;
+    #lockManager: BrowserLockManager | undefined;
     #flushScheduled = false;
     #unsubscribeTouch: () => void;
 
     constructor(options: OpfsFilesystemAdapterOptions = {}) {
-        this.#crossTabLocking = options.crossTabLocking ?? false;
-        this.#navigator =
-            options.navigator ?? (typeof navigator === "undefined" ? undefined : navigator);
+        this.#lockManager = options.lockManager;
         this.#unsubscribeTouch = _onTouch(() => this.#scheduleFlush());
     }
 
     getRoot(capability: OpfsCapability): BrowserFilesystemDescriptor {
         this.#roots.push(capability);
         const descriptor = this.#inMemory.getRoot(capability.data);
-        return this.#crossTabLocking
-            ? withCrossTabLocking(descriptor, capability.handle.name, this.#navigator)
+        return this.#lockManager
+            ? withCrossTabLocking(descriptor, capability.handle.name, this.#lockManager)
             : descriptor;
     }
 
