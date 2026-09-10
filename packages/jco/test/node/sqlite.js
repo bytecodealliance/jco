@@ -10,6 +10,7 @@ import { bundleComponentSource } from "../../src/bundle.js";
 import { getTmpDir, transpileComponent } from "../helpers.js";
 const sqliteModule = fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/sqlite.js", import.meta.url));
 const fixture = new URL("../fixtures/componentize/node-sqlite/", import.meta.url);
+
 const host = (name) =>
     new URL(
         `../../../jco-std/dist/wasi/0.2.x/node/24.x.x/sqlite-host${name === "node" ? "-node" : ""}.js`,
