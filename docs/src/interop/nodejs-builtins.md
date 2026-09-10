@@ -139,7 +139,7 @@ These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:
 
-`node:crypto`, `node:dgram`, `node:http2`,
+`node:crypto`, `node:http2`,
 `node:perf_hooks`, `node:repl`, `node:stream`,
 `node:stream/promises`, `node:stream/web`,
 `node:util`, `node:util/types`, `node:v8`, `node:vm`, `node:wasi`,
