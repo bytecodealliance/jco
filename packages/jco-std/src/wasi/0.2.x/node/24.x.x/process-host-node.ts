@@ -16,6 +16,7 @@ function capture<T>(fn: () => T): T {
     throw { ...serializeHostError(error), path } satisfies ProcessError;
   }
 }
+
 function path(value: ProcessPath): string | URL | Buffer {
   return value.tag === "bytes"
     ? Buffer.from(value.val)
@@ -23,17 +24,20 @@ function path(value: ProcessPath): string | URL | Buffer {
       ? new URL(value.val)
       : value.val;
 }
+
 function warning(value: Warning): Error {
   const error = new Error(value.message);
   Object.assign(error, value);
   return error;
 }
+
 const flags = {
   "no-deprecation": "noDeprecation",
   "throw-deprecation": "throwDeprecation",
   "trace-deprecation": "traceDeprecation",
   "trace-process-warnings": "traceProcessWarnings",
 } as const;
+
 const reportOptions = {
   compact: "compact",
   directory: "directory",
@@ -45,6 +49,7 @@ const reportOptions = {
   "exclude-env": "excludeEnv",
   "exclude-network": "excludeNetwork",
 } as const;
+
 function getId(kind: Identity): number {
   const fn = {
     uid: nodeProcess.getuid,
@@ -57,6 +62,7 @@ function getId(kind: Identity): number {
   }
   return fn();
 }
+
 function setId(kind: Identity, value: number | string): void {
   const fn = {
     uid: nodeProcess.setuid,
@@ -69,6 +75,7 @@ function setId(kind: Identity, value: number | string): void {
   }
   fn(value);
 }
+
 export const metadata: ProcessHost["metadata"] = () =>
   capture(() => ({
     arch: nodeProcess.arch,
@@ -95,6 +102,7 @@ export const metadata: ProcessHost["metadata"] = () =>
     ),
     hasPermission: nodeProcess.permission !== undefined,
   }));
+
 export const getState: ProcessHost["getState"] = () =>
   capture(() => ({
     title: nodeProcess.title,
@@ -112,27 +120,34 @@ export const getState: ProcessHost["getState"] = () =>
     sourceMapsEnabled: nodeProcess.sourceMapsEnabled,
     connected: nodeProcess.connected,
   }));
+
 export const setTitle: ProcessHost["setTitle"] = (value) =>
   capture(() => {
     nodeProcess.title = value;
   });
+
 export const setDebugPort: ProcessHost["setDebugPort"] = (value) =>
   capture(() => {
     nodeProcess.debugPort = value;
   });
+
 export const setExitCode: ProcessHost["setExitCode"] = (value) =>
   capture(() => {
     nodeProcess.exitCode = value?.val;
   });
+
 export const setFlag: ProcessHost["setFlag"] = (name, value) =>
   capture(() => {
     nodeProcess[flags[name]] = value;
   });
+
 export const envEntries: ProcessHost["envEntries"] = () =>
   capture(() =>
     Object.entries(nodeProcess.env).filter((e): e is [string, string] => e[1] !== undefined),
   );
+
 export const envGet: ProcessHost["envGet"] = (name) => capture(() => nodeProcess.env[name]);
+
 export const envSet: ProcessHost["envSet"] = (name, value) =>
   capture(() => {
     if (value === undefined) {
@@ -141,38 +156,55 @@ export const envSet: ProcessHost["envSet"] = (name, value) =>
       nodeProcess.env[name] = value;
     }
   });
+
 export const cwd: ProcessHost["cwd"] = () => capture(() => nodeProcess.cwd());
+
 export const chdir: ProcessHost["chdir"] = (directory) =>
   capture(() => nodeProcess.chdir(directory));
+
 export const cpuUsage: ProcessHost["cpuUsage"] = (previous) =>
   capture(() => nodeProcess.cpuUsage(previous));
+
 export const threadCpuUsage: ProcessHost["threadCpuUsage"] = (previous) =>
   capture(() => nodeProcess.threadCpuUsage(previous));
+
 export const memoryUsage: ProcessHost["memoryUsage"] = () =>
   capture(() => nodeProcess.memoryUsage());
+
 export const rss: ProcessHost["rss"] = () => capture(() => nodeProcess.memoryUsage.rss());
+
 export const resourceUsage: ProcessHost["resourceUsage"] = () =>
   capture(() => {
     const { userCPUTime, systemCPUTime, maxRSS, ...rest } = nodeProcess.resourceUsage();
     return { ...rest, userCpuTime: userCPUTime, systemCpuTime: systemCPUTime, maxRss: maxRSS };
   });
+
 export const hrtime: ProcessHost["hrtime"] = () =>
   capture(() => {
     const [seconds, nanoseconds] = nodeProcess.hrtime();
     return { seconds, nanoseconds };
   });
+
 export const uptime: ProcessHost["uptime"] = () => capture(() => nodeProcess.uptime());
+
 export const availableMemory: ProcessHost["availableMemory"] = () =>
   capture(() => nodeProcess.availableMemory());
+
 export const constrainedMemory: ProcessHost["constrainedMemory"] = () =>
   capture(() => nodeProcess.constrainedMemory());
+
 export const getActiveResourcesInfo: ProcessHost["getActiveResourcesInfo"] = () =>
   capture(() => nodeProcess.getActiveResourcesInfo());
+
 export const getIdCapability: ProcessHost["getId"] = (kind) => capture(() => getId(kind));
+
 export { getIdCapability as getId };
+
 export const setIdCapability: ProcessHost["setId"] = (kind, value) =>
   capture(() => setId(kind, value.val));
+
 export { setIdCapability as setId };
+
 export const getgroups: ProcessHost["getgroups"] = () =>
   capture(() => {
     if (!nodeProcess.getgroups) {
@@ -180,6 +212,7 @@ export const getgroups: ProcessHost["getgroups"] = () =>
     }
     return nodeProcess.getgroups();
   });
+
 export const setgroups: ProcessHost["setgroups"] = (groups) =>
   capture(() => {
     if (!nodeProcess.setgroups) {
@@ -187,6 +220,7 @@ export const setgroups: ProcessHost["setgroups"] = (groups) =>
     }
     nodeProcess.setgroups(groups.map((v) => v.val));
   });
+
 export const initgroups: ProcessHost["initgroups"] = (user, extraGroup) =>
   capture(() => {
     const init = Reflect.get(nodeProcess, "initgroups") as
@@ -197,11 +231,16 @@ export const initgroups: ProcessHost["initgroups"] = (user, extraGroup) =>
     }
     init(user.val, extraGroup.val);
   });
+
 export const kill: ProcessHost["kill"] = (pid, signal) =>
   capture(() => nodeProcess.kill(pid, signal.val));
+
 export const umask: ProcessHost["umask"] = (mask) => capture(() => nodeProcess.umask(mask.val));
+
 export const exit: ProcessHost["exit"] = (code) => capture(() => nodeProcess.exit(code?.val));
+
 export const abort: ProcessHost["abort"] = () => capture(() => nodeProcess.abort());
+
 export const execve: ProcessHost["execve"] = (file, args, env) =>
   capture(() => {
     if (!nodeProcess.execve) {
@@ -209,12 +248,16 @@ export const execve: ProcessHost["execve"] = (file, args, env) =>
     }
     nodeProcess.execve(file, args, env === undefined ? nodeProcess.env : Object.fromEntries(env));
   });
+
 export const loadEnvFile: ProcessHost["loadEnvFile"] = (value) =>
   capture(() => nodeProcess.loadEnvFile(value === undefined ? undefined : path(value)));
+
 export const setSourceMapsEnabled: ProcessHost["setSourceMapsEnabled"] = (value) =>
   capture(() => nodeProcess.setSourceMapsEnabled(value));
+
 export const emitWarning: ProcessHost["emitWarning"] = (value) =>
   capture(() => nodeProcess.emitWarning(warning(value)));
+
 export const permissionHas: ProcessHost["permissionHas"] = (scope, reference) =>
   capture(() => {
     if (!nodeProcess.permission) {
@@ -228,14 +271,17 @@ export const permissionHas: ProcessHost["permissionHas"] = (scope, reference) =>
       reference === undefined ? undefined : path(reference),
     ]) as boolean;
   });
+
 export const getReport: ProcessHost["getReport"] = (error) =>
   capture(() =>
     JSON.stringify(nodeProcess.report.getReport(error === undefined ? undefined : warning(error))),
   );
+
 export const writeReport: ProcessHost["writeReport"] = (filename, error) =>
   capture(() =>
     nodeProcess.report.writeReport(filename, error === undefined ? undefined : warning(error)),
   );
+
 export const getReportOptions: ProcessHost["getReportOptions"] = () =>
   capture(() => ({
     compact: nodeProcess.report.compact,
@@ -248,18 +294,22 @@ export const getReportOptions: ProcessHost["getReportOptions"] = () =>
     excludeEnv: nodeProcess.report.excludeEnv,
     excludeNetwork: Reflect.get(nodeProcess.report, "excludeNetwork") as boolean,
   }));
+
 export const setReportOption: ProcessHost["setReportOption"] = (name, value) =>
   capture(() => {
     Reflect.set(nodeProcess.report, reportOptions[name], value.val);
   });
+
 export const allowedFlags: ProcessHost["allowedFlags"] = () =>
   capture(() => {
     const flags: string[] = [];
     nodeProcess.allowedNodeEnvironmentFlags.forEach((flag) => flags.push(flag));
     return flags;
   });
+
 export const allowedFlag: ProcessHost["allowedFlag"] = (value) =>
   capture(() => nodeProcess.allowedNodeEnvironmentFlags.has(value));
+
 const host: ProcessHost = {
   metadata,
   getState,
@@ -303,4 +353,5 @@ const host: ProcessHost = {
   allowedFlags,
   allowedFlag,
 };
+
 export default host;
