@@ -535,6 +535,16 @@
     "./wasi/0.2.x/node/24.x.x/dgram/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/dgram-host-node.d.ts",
       "default": "./dist/wasi/0.2.x/node/24.x.x/dgram-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/util": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/util/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/util/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/util/index.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/util/types": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/util-types.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/util-types.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/util-types.js"
     }
   },
   "scripts": {
