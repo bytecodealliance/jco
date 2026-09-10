@@ -1,5 +1,5 @@
 import type { BrowserFilesystemAdapter, BrowserFilesystemDescriptor } from "./filesystem.js";
-import { InMemoryFilesystemAdapter } from "./in-memory-filesystem.js";
+import { InMemoryFilesystemAdapter, _onTouch } from "./in-memory-filesystem.js";
 import type { FileData, FileDataEntry } from "./in-memory-filesystem.js";
 
 /**
@@ -135,23 +135,134 @@ export async function loadOpfsCapability(handle: FileSystemDirectoryHandle): Pro
     return { handle, data: { dir } };
 }
 
+type LockMode = "shared" | "exclusive";
+const LOCK_METHODS = new Set(["lockShared", "lockExclusive", "tryLockShared", "tryLockExclusive", "unlock"]);
+
+function lockModeOf(prop: string): LockMode {
+    return prop.endsWith("Exclusive") ? "exclusive" : "shared";
+}
+
+/** Join an OPFS-relative path onto an existing one, for naming a cross-tab lock. */
+function joinLockPath(base: string, segment: string): string {
+    let path = base;
+    for (const part of segment.split("/")) {
+        if (part === "" || part === ".") {
+            continue;
+        }
+        if (part === "..") {
+            path = path.slice(0, path.lastIndexOf("/"));
+            continue;
+        }
+        path = path ? `${path}/${part}` : part;
+    }
+    return path;
+}
+
+/**
+ * Wrap a descriptor so its advisory locking also makes a best-effort request against
+ * `navigator.locks`, in addition to the default same-process reader/writer lock.
+ * The Web Locks request is fire-and-forget - there's no way to block a synchronous
+ * `lockExclusive()` on a cross-tab grant without JSPI, so this only coordinates
+ * tabs that are already idle/cooperating.
+ */
+function withCrossTabLocking(descriptor: BrowserFilesystemDescriptor, lockName: string): BrowserFilesystemDescriptor {
+    let release: (() => void) | null = null;
+
+    function requestCrossTabLock(mode: LockMode): void {
+        if (typeof navigator === "undefined" || !navigator.locks) {
+            return;
+        }
+        navigator.locks
+            .request(lockName, { mode }, () => new Promise<void>((resolve) => (release = resolve)))
+            .catch(() => {
+                // best-effort only; local same-process locking already enforced correctness
+            });
+    }
+
+    function releaseCrossTabLock(): void {
+        release?.();
+        release = null;
+    }
+
+    return new Proxy(descriptor, {
+        get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver);
+            if (prop === "openAt") {
+                return (...args: Parameters<BrowserFilesystemDescriptor["openAt"]>) => {
+                    const child = Reflect.apply(value as (...a: unknown[]) => unknown, target, args);
+                    return withCrossTabLocking(
+                        child as BrowserFilesystemDescriptor,
+                        joinLockPath(lockName, args[1]),
+                    );
+                };
+            }
+            if (typeof prop === "string" && LOCK_METHODS.has(prop) && typeof value === "function") {
+                return (...args: unknown[]) => {
+                    const result = Reflect.apply(value, target, args);
+                    if (prop === "unlock") {
+                        releaseCrossTabLock();
+                    } else if (prop.startsWith("tryLock")) {
+                        if (result) {
+                            requestCrossTabLock(lockModeOf(prop));
+                        }
+                    } else {
+                        requestCrossTabLock(lockModeOf(prop));
+                    }
+                    return result;
+                };
+            }
+            return typeof value === "function" ? value.bind(target) : value;
+        },
+    });
+}
+
+export interface OpfsFilesystemAdapterOptions {
+    /**
+     * Also make advisory locks (`lockShared`/`lockExclusive`/`tryLock*`/`unlock`) request a
+     * matching `navigator.locks` lock, so tabs sharing the same OPFS root get best-effort
+     * cross-tab coordination on top of the default same-process reader/writer lock.
+     * Off by default.
+     */
+    crossTabLocking?: boolean;
+}
+
 /**
  * Browser filesystem adapter backed by the Origin Private File System.
  *
  * Every guest-facing `Descriptor` operation - including advisory locking, which
  * comes for free as `InMemoryFilesystemAdapter`'s same-process reader/writer lock -
  * is delegated to `InMemoryFilesystemAdapter` and stays synchronous. Persistence to
- * OPFS only happens at the edges: load the tree once via `loadOpfsCapability`, then
- * call `flush()` (or `dispose()`) to write the accumulated in-memory changes back
- * out, including symlinks via a single hidden sidecar file at each root.
+ * OPFS happens automatically shortly after any mutation (debounced to a microtask,
+ * so a burst of writes only triggers one round-trip); `flush()`/`dispose()` remain
+ * available to force it explicitly, e.g. before navigating away.
  */
 export class OpfsFilesystemAdapter implements BrowserFilesystemAdapter<OpfsCapability> {
     #inMemory = new InMemoryFilesystemAdapter();
     #roots: OpfsCapability[] = [];
+    #crossTabLocking: boolean;
+    #flushScheduled = false;
+    #unsubscribeTouch: () => void;
+
+    constructor(options: OpfsFilesystemAdapterOptions = {}) {
+        this.#crossTabLocking = options.crossTabLocking ?? false;
+        this.#unsubscribeTouch = _onTouch(() => this.#scheduleFlush());
+    }
 
     getRoot(capability: OpfsCapability): BrowserFilesystemDescriptor {
         this.#roots.push(capability);
-        return this.#inMemory.getRoot(capability.data);
+        const descriptor = this.#inMemory.getRoot(capability.data);
+        return this.#crossTabLocking ? withCrossTabLocking(descriptor, capability.handle.name) : descriptor;
+    }
+
+    #scheduleFlush(): void {
+        if (this.#flushScheduled) {
+            return;
+        }
+        this.#flushScheduled = true;
+        queueMicrotask(() => {
+            this.#flushScheduled = false;
+            void this.flush();
+        });
     }
 
     /** Persist every loaded root's current in-memory state back to OPFS. */
@@ -168,6 +279,7 @@ export class OpfsFilesystemAdapter implements BrowserFilesystemAdapter<OpfsCapab
     }
 
     dispose(): void {
+        this.#unsubscribeTouch();
         void this.flush();
     }
 }

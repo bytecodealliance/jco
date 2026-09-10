@@ -33,6 +33,11 @@ class FakeFileHandle {
 class FakeDirectoryHandle {
     kind = "directory" as const;
     entriesMap = new Map<string, FakeFileHandle | FakeDirectoryHandle>();
+    name: string;
+
+    constructor(name = "") {
+        this.name = name;
+    }
 
     async *entries(): AsyncIterableIterator<[string, FakeFileHandle | FakeDirectoryHandle]> {
         yield* this.entriesMap.entries();
@@ -178,5 +183,74 @@ suite("Browser OPFS filesystem adapter", () => {
         const reloadedNested = reloadedDescriptor.openAt({}, "nested", { directory: true }, { read: true });
         assert.strictEqual(reloadedNested.readlinkAt("link.txt"), "../target.txt");
         assert.strictEqual(reloadedDescriptor.statAt({ symlinkFollow: true }, "nested/link.txt").size, 5n);
+    });
+
+    test("mutations persist to OPFS automatically without an explicit flush() call", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
+            "../../src/browser/opfs-filesystem.js"
+        );
+        const root = new FakeDirectoryHandle();
+
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const descriptor = adapter.getRoot(capability);
+
+        const file = descriptor.openAt({}, "note.txt", { create: true }, { write: true });
+        const stream = file.writeViaStream(0n);
+        stream.checkWrite();
+        stream.write(new TextEncoder().encode("auto"));
+
+        // No explicit flush()/dispose() call - persistence is scheduled on a microtask;
+        // yield to a macrotask so the async write chain it kicks off can finish.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const persisted = await root.getFileHandle("note.txt");
+        const buffer = await (await persisted.getFile()).arrayBuffer();
+        assert.strictEqual(new TextDecoder().decode(buffer), "auto");
+    });
+
+    test("cross-tab locking is off by default and opt-in via navigator.locks", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
+            "../../src/browser/opfs-filesystem.js"
+        );
+        const requests: Array<{ name: string; mode: string }> = [];
+        const fakeLocks = {
+            request: (name: string, options: { mode: string }, callback: () => Promise<void>) => {
+                requests.push({ name, mode: options.mode });
+                return Promise.resolve(callback());
+            },
+        };
+        const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+        Object.defineProperty(globalThis, "navigator", {
+            value: { locks: fakeLocks },
+            configurable: true,
+        });
+
+        try {
+            const root = new FakeDirectoryHandle("sandbox");
+            root.entriesMap.set("file.txt", new FakeFileHandle());
+            const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+
+            const defaultAdapter = new OpfsFilesystemAdapter();
+            const defaultDescriptor = defaultAdapter.getRoot(capability) as any;
+            defaultDescriptor.openAt({}, "file.txt", {}, { read: true }).tryLockShared();
+            assert.strictEqual(requests.length, 0);
+
+            const optedIn = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+            const lockingAdapter = new OpfsFilesystemAdapter({ crossTabLocking: true });
+            const lockingDescriptor = lockingAdapter.getRoot(optedIn) as any;
+            const opened = lockingDescriptor.openAt({}, "file.txt", {}, { read: true });
+            assert.strictEqual(opened.tryLockExclusive(), true);
+
+            assert.strictEqual(requests.length, 1);
+            assert.strictEqual(requests[0].mode, "exclusive");
+            assert.strictEqual(requests[0].name, "sandbox/file.txt");
+        } finally {
+            if (originalNavigator) {
+                Object.defineProperty(globalThis, "navigator", originalNavigator);
+            } else {
+                delete (globalThis as any).navigator;
+            }
+        }
     });
 });

@@ -227,8 +227,24 @@ function lockState(entry: FileDataEntry): LockState {
     return state;
 }
 
+const touchListeners = new Set<(entry: FileDataEntry) => void>();
+
+/**
+ * Subscribe to every mutation across every in-memory tree (regardless of which
+ * adapter loaded it). Lets a persistence layer (e.g. `OpfsFilesystemAdapter`)
+ * react to writes without wrapping every mutating method individually. Returns
+ * an unsubscribe function.
+ */
+export function _onTouch(listener: (entry: FileDataEntry) => void): () => void {
+    touchListeners.add(listener);
+    return () => touchListeners.delete(listener);
+}
+
 function touch(entry: FileDataEntry): void {
     metadata(entry).version++;
+    for (const listener of touchListeners) {
+        listener(entry);
+    }
 }
 
 function getFileWriteBuffer(
