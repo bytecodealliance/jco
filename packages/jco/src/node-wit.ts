@@ -258,13 +258,11 @@ function wasiRequirement(witImport: string, dependencies: WitDependencyPackage[]
 }
 
 export const HTTP_WASI_SOCKETS_WIT_REQUIREMENTS = [
-    // `network` and `tcp` define the resources the other three hand back, and the guest
-    // bindings need their types even though nothing imports them by name.
-    wasiRequirement("wasi:sockets/network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/instance-network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/network@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/ip-name-lookup@0.2.12", WASI_SOCKETS_DEPENDENCIES),
-    wasiRequirement("wasi:sockets/tcp@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:sockets/tcp-create-socket@0.2.12", WASI_SOCKETS_DEPENDENCIES),
+    wasiRequirement("wasi:sockets/tcp@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:io/streams@0.2.12", WASI_SOCKETS_DEPENDENCIES),
     wasiRequirement("wasi:io/poll@0.2.12", WASI_SOCKETS_DEPENDENCIES),
 ] as const;

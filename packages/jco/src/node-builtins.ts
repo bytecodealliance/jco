@@ -74,23 +74,15 @@ const HTTP2_SPECIFIER = "node:http2";
 export const HTTP2_CALLBACKS_SPECIFIER = "jco:node-http2-callbacks";
 const CRYPTO_SPECIFIER = "node:crypto";
 const TIMERS_SPECIFIER = "node:timers";
-const STREAM_SPECIFIER = "node:stream";
 const AUDITED_UNENV_SPECIFIERS = new Set(["node:buffer", "node:querystring"]);
 
 /**
- * Builtins served by unenv's portable implementation behind a thin Jco adapter.
- *
- * These carry no host capability and need no WASI-aware behavior, so unenv's implementation
- * is used as it is. They are admitted as a group because a Node dependency graph of any size
- * reaches all of them: `send` wants `node:stream` and `node:util`, `parseurl` wants
- * `node:url`, `body-parser` wants `node:zlib`, and `debug` wants `node:tty`.
+ * Remaining imports reached by Express's dependency graph. These are limited
+ * unenv fallbacks, not complete Node implementations (zlib operations throw).
+ * HTTP, HTTPS, net, streams, string_decoder and os always use jco-std above them.
  */
 const PORTABLE_UNENV_SPECIFIERS = new Set([
-    "node:https",
-    "node:net",
     "node:process",
-    STREAM_SPECIFIER,
-    "node:stream/promises",
     "node:tty",
     "node:url",
     "node:util",
@@ -123,6 +115,10 @@ const BARE_SPECIFIER_BUILTINS = new Set(
         DOMAIN_SPECIFIER,
         EVENTS_SPECIFIER,
         HTTP_SPECIFIER,
+        HTTPS_SPECIFIER,
+        NET_SPECIFIER,
+        STREAM_SPECIFIER,
+        STREAM_PROMISES_SPECIFIER,
         STRING_DECODER_SPECIFIER,
         TIMERS_SPECIFIER,
     ].map((specifier) => specifier.slice("node:".length)),
@@ -263,63 +259,6 @@ function portableUnenvAdapter(specifier: string, options: NodeBuiltinOptions): s
 import implementation from ${module};
 export * from ${module};
 export default implementation;
-`;
-}
-
-/**
- * Source of the `node:stream` adapter.
- *
- * Node's module export for `stream` is the legacy `Stream` constructor with the rest of the
- * module hanging off it, and CommonJS dependencies rely on that: `send` builds its response
- * type with `util.inherits(SendStream, require("stream"))`. Bundling unenv's ES module and
- * requiring it would yield the namespace object instead, whose `prototype` is undefined, so
- * this adapter is CommonJS and exports the constructor.
- *
- * unenv has no legacy `Stream` -- its export by that name throws on construction -- so the
- * class is defined here, as an `EventEmitter` with Node's `pipe()`. Consumers inherit from it
- * and emit on themselves; `send` then overrides `pipe()` with its own.
- */
-function nodeStreamCommonJsAdapter(options: NodeBuiltinOptions): string {
-    const stream = JSON.stringify(unenvModule(STREAM_SPECIFIER, options));
-    const events = JSON.stringify(unenvModule(EVENTS_SPECIFIER, options));
-    return `
-const implementation = require(${stream});
-const { EventEmitter } = require(${events});
-class Stream extends EventEmitter {
-    pipe(destination, options) {
-        const onData = (chunk) => {
-            if (destination.write(chunk) === false && this.pause) {
-                this.pause();
-            }
-        };
-        this.on("data", onData);
-        destination.on("drain", () => {
-            if (this.resume) {
-                this.resume();
-            }
-        });
-        if (!destination._isStdio && (!options || options.end !== false)) {
-            this.on("end", () => destination.end());
-        }
-        destination.emit("pipe", this);
-        return destination;
-    }
-}
-for (const source of [implementation, { Stream, default: Stream }]) {
-    for (const key of Reflect.ownKeys(source)) {
-        if (Object.prototype.hasOwnProperty.call(Stream, key)) {
-            continue;
-        }
-        // Assignment is not enough: some of these are accessors without a setter.
-        Object.defineProperty(Stream, key, {
-            value: source[key],
-            writable: true,
-            enumerable: true,
-            configurable: true,
-        });
-    }
-}
-module.exports = Stream;
 `;
 }
 
@@ -1362,7 +1301,10 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const http2Via = options.nodejsHttp2Via ?? "direct";
     return {
         name: "jco-node-builtins",
-        resolveId(id, importer) {
+        resolveId(id, importer, extraOptions) {
+            if (id === STREAM_SPECIFIER && extraOptions?.kind === "require-call") {
+                return `${VIRTUAL_PREFIX}commonjs-stream`;
+            }
             // Only the audited portable core's dependencies use legacy bare IDs.
             // Share Buffer/EventEmitter/StringDecoder with ordinary node: imports.
             if (importer?.replaceAll("\\", "/").includes("/node_modules/readable-stream/lib/")) {
@@ -1392,7 +1334,11 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
             // why this cannot simply strip the prefix and look the name up.
             if (!id.startsWith("node:") && BARE_SPECIFIER_BUILTINS.has(id)) {
                 return Promise.resolve(this.resolve(id, importer, { skipSelf: true })).then((installed) =>
-                    installed ? null : resolveBuiltinSpecifier(`node:${id}`, importer),
+                    installed
+                        ? null
+                        : id === "stream"
+                          ? `${VIRTUAL_PREFIX}commonjs-stream`
+                          : resolveBuiltinSpecifier(`node:${id}`, importer),
                 );
             }
             return null;
@@ -1403,306 +1349,298 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     };
 
     function resolveBuiltinSpecifier(id: string, importer?: string): string | null {
-        {
-            if (id.startsWith(VIRTUAL_PREFIX)) {
-                return id;
-            }
-            if (id === ABORT_GLOBALS_SPECIFIER) {
-                return ABORT_GLOBALS_MODULE;
-            }
-            if (
-                id === "event-target-shim" &&
-                importer?.replaceAll("\\", "/").includes("/node_modules/abort-controller/dist/")
-            ) {
-                return createRequire(importer).resolve(id);
-            }
-            if (id === ERROR_GLOBALS_SPECIFIER) {
-                return ERROR_GLOBALS_MODULE;
-            }
-            if (id === HTTP_CALLBACKS_SPECIFIER) {
-                return HTTP_CALLBACKS_MODULE;
-            }
-            if (id === HTTP2_CALLBACKS_SPECIFIER) {
-                return HTTP2_CALLBACKS_MODULE;
-            }
-            if (ASSERT_SPECIFIERS.has(id)) {
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === MODULE_SPECIFIER) {
-                // No onWitRequirement: classification and source-map arithmetic need no host, and
-                // the loading half is unimplementable rather than unprovisioned.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === FFI_SPECIFIER) {
-                options.onWitRequirement?.(FFI_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === INSPECTOR_CALLBACKS_SPECIFIER) {
-                // The two-pass wrapper's import of the guest-exported callbacks interface.
-                return INSPECTOR_CALLBACKS_MODULE;
-            }
-            if (INSPECTOR_SPECIFIERS.has(id)) {
-                options.onWitRequirement?.(
-                    id === INSPECTOR_PROMISES_SPECIFIER
-                        ? INSPECTOR_PROMISES_WIT_REQUIREMENT
-                        : INSPECTOR_WIT_REQUIREMENT,
-                );
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === DOMAIN_SPECIFIER) {
-                // No onWitRequirement: nothing here reaches the host.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === PERF_HOOKS_SPECIFIER) {
-                // No onWitRequirement: timing buffers and observers stay in the guest.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === DIAGNOSTICS_CHANNEL_SPECIFIER) {
-                // No onWitRequirement: this needs no host capability.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === ASYNC_HOOKS_SPECIFIER) {
-                // No onWitRequirement: this needs no host capability.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === EVENTS_SPECIFIER) {
-                // No onWitRequirement: in-process emitters need no host capability.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === OS_SPECIFIER) {
-                options.onWitRequirement?.(OS_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === STRING_DECODER_SPECIFIER) {
-                // No onWitRequirement: decoding and incomplete-byte state stay in the guest.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (
-                id === STREAM_SPECIFIER ||
-                id === STREAM_PROMISES_SPECIFIER ||
-                id === STREAM_CONSUMERS_SPECIFIER ||
-                id === STREAM_ITER_SPECIFIER
-            ) {
-                // No onWitRequirement: stream algorithms are entirely guest-side.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === CLUSTER_SPECIFIER) {
-                options.onWitRequirement?.(CLUSTER_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === CHILD_PROCESS_SPECIFIER) {
-                options.onWitRequirement?.(CHILD_PROCESS_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (PATH_SPECIFIERS.has(id)) {
-                const version = environmentVersionOrInject(worldMetadata, options);
-                return `${VIRTUAL_PREFIX}${id}@${version}`;
-            }
-            if (id === CONSOLE_SPECIFIER) {
-                options.onWitRequirement?.(CONSOLE_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (DNS_SPECIFIERS.has(id)) {
-                options.onWitRequirement?.(
-                    id === "node:dns/promises" ? DNS_PROMISES_WIT_REQUIREMENT : DNS_WIT_REQUIREMENT,
-                );
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (FS_SPECIFIERS.has(id)) {
-                options.onWitRequirement?.(FS_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === NET_SPECIFIER) {
-                requireWasiHttpVersion(worldMetadata, id, "wasi-sockets", wasiSocketsVersion);
-                for (const requirement of wasiSocketsVersion === "0.2.12"
-                    ? NET_WASI_SOCKETS_WIT_REQUIREMENTS
-                    : NET_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS) {
-                    options.onWitRequirement?.(requirement);
-                }
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            const protocol = protocolOf(id);
-            if (protocol !== undefined) {
-                if (httpVia !== "direct") {
-                    requireWasiHttpVersion(
-                        worldMetadata,
-                        id,
-                        httpVia,
-                        httpVia === "wasi-sockets" ? wasiSocketsVersion : "0.2.12",
-                    );
-                }
-                for (const requirement of protocolWitRequirements(protocol, httpVia, wasiSocketsVersion)) {
-                    options.onWitRequirement?.(requirement);
-                }
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === HTTP2_SPECIFIER) {
-                if (http2Via === "direct") {
-                    options.onWitRequirement?.(HTTP2_WIT_REQUIREMENT);
-                } else if (http2Via === "wasi-sockets") {
-                    requireWasiHttpVersion(worldMetadata, HTTP2_SPECIFIER, http2Via, wasiSocketsVersion);
-                    for (const requirement of wasiSocketsVersion === "0.2.12"
-                        ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
-                        : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS) {
-                        options.onWitRequirement?.(requirement);
-                    }
-                }
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (AUDITED_UNENV_SPECIFIERS.has(id)) {
-                unenvAdapter(id, options);
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (PORTABLE_UNENV_SPECIFIERS.has(id)) {
-                // No onWitRequirement: none of these reach a host capability.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            if (id === CRYPTO_SPECIFIER || id === TIMERS_SPECIFIER) {
-                // No onWitRequirement: the digests are computed in the guest, the decoder is the
-                // engine's `TextDecoder`, and the timers are the engine's, already backed by
-                // `wasi:clocks`.
-                return `${VIRTUAL_PREFIX}${id}`;
-            }
-            return null;
+        if (id.startsWith(VIRTUAL_PREFIX)) {
+            return id;
         }
+        if (id === ABORT_GLOBALS_SPECIFIER) {
+            return ABORT_GLOBALS_MODULE;
+        }
+        if (
+            id === "event-target-shim" &&
+            importer?.replaceAll("\\", "/").includes("/node_modules/abort-controller/dist/")
+        ) {
+            return createRequire(importer).resolve(id);
+        }
+        if (id === ERROR_GLOBALS_SPECIFIER) {
+            return ERROR_GLOBALS_MODULE;
+        }
+        if (id === HTTP_CALLBACKS_SPECIFIER) {
+            return HTTP_CALLBACKS_MODULE;
+        }
+        if (id === HTTP2_CALLBACKS_SPECIFIER) {
+            return HTTP2_CALLBACKS_MODULE;
+        }
+        if (ASSERT_SPECIFIERS.has(id)) {
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === MODULE_SPECIFIER) {
+            // No onWitRequirement: classification and source-map arithmetic need no host, and
+            // the loading half is unimplementable rather than unprovisioned.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === FFI_SPECIFIER) {
+            options.onWitRequirement?.(FFI_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === INSPECTOR_CALLBACKS_SPECIFIER) {
+            // The two-pass wrapper's import of the guest-exported callbacks interface.
+            return INSPECTOR_CALLBACKS_MODULE;
+        }
+        if (INSPECTOR_SPECIFIERS.has(id)) {
+            options.onWitRequirement?.(
+                id === INSPECTOR_PROMISES_SPECIFIER ? INSPECTOR_PROMISES_WIT_REQUIREMENT : INSPECTOR_WIT_REQUIREMENT,
+            );
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === DOMAIN_SPECIFIER) {
+            // No onWitRequirement: nothing here reaches the host.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === PERF_HOOKS_SPECIFIER) {
+            // No onWitRequirement: timing buffers and observers stay in the guest.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === DIAGNOSTICS_CHANNEL_SPECIFIER) {
+            // No onWitRequirement: this needs no host capability.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === ASYNC_HOOKS_SPECIFIER) {
+            // No onWitRequirement: this needs no host capability.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === EVENTS_SPECIFIER) {
+            // No onWitRequirement: in-process emitters need no host capability.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === OS_SPECIFIER) {
+            options.onWitRequirement?.(OS_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === STRING_DECODER_SPECIFIER) {
+            // No onWitRequirement: decoding and incomplete-byte state stay in the guest.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (
+            id === STREAM_SPECIFIER ||
+            id === STREAM_PROMISES_SPECIFIER ||
+            id === STREAM_CONSUMERS_SPECIFIER ||
+            id === STREAM_ITER_SPECIFIER
+        ) {
+            // No onWitRequirement: stream algorithms are entirely guest-side.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === CLUSTER_SPECIFIER) {
+            options.onWitRequirement?.(CLUSTER_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === CHILD_PROCESS_SPECIFIER) {
+            options.onWitRequirement?.(CHILD_PROCESS_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (PATH_SPECIFIERS.has(id)) {
+            const version = environmentVersionOrInject(worldMetadata, options);
+            return `${VIRTUAL_PREFIX}${id}@${version}`;
+        }
+        if (id === CONSOLE_SPECIFIER) {
+            options.onWitRequirement?.(CONSOLE_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (DNS_SPECIFIERS.has(id)) {
+            options.onWitRequirement?.(id === "node:dns/promises" ? DNS_PROMISES_WIT_REQUIREMENT : DNS_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (FS_SPECIFIERS.has(id)) {
+            options.onWitRequirement?.(FS_WIT_REQUIREMENT);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === NET_SPECIFIER) {
+            requireWasiHttpVersion(worldMetadata, id, "wasi-sockets", wasiSocketsVersion);
+            for (const requirement of wasiSocketsVersion === "0.2.12"
+                ? NET_WASI_SOCKETS_WIT_REQUIREMENTS
+                : NET_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS) {
+                options.onWitRequirement?.(requirement);
+            }
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        const protocol = protocolOf(id);
+        if (protocol !== undefined) {
+            if (httpVia !== "direct") {
+                requireWasiHttpVersion(
+                    worldMetadata,
+                    id,
+                    httpVia,
+                    httpVia === "wasi-sockets" ? wasiSocketsVersion : "0.2.12",
+                );
+            }
+            for (const requirement of protocolWitRequirements(protocol, httpVia, wasiSocketsVersion)) {
+                options.onWitRequirement?.(requirement);
+            }
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === HTTP2_SPECIFIER) {
+            if (http2Via === "direct") {
+                options.onWitRequirement?.(HTTP2_WIT_REQUIREMENT);
+            } else if (http2Via === "wasi-sockets") {
+                requireWasiHttpVersion(worldMetadata, HTTP2_SPECIFIER, http2Via, wasiSocketsVersion);
+                for (const requirement of wasiSocketsVersion === "0.2.12"
+                    ? HTTP_WASI_SOCKETS_WIT_REQUIREMENTS
+                    : HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS) {
+                    options.onWitRequirement?.(requirement);
+                }
+            }
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (AUDITED_UNENV_SPECIFIERS.has(id)) {
+            unenvAdapter(id, options);
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (PORTABLE_UNENV_SPECIFIERS.has(id)) {
+            // No onWitRequirement: none of these reach a host capability.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        if (id === CRYPTO_SPECIFIER || id === TIMERS_SPECIFIER) {
+            // No onWitRequirement: the digests are computed in the guest, the decoder is the
+            // engine's `TextDecoder`, and the timers are the engine's, already backed by
+            // `wasi:clocks`.
+            return `${VIRTUAL_PREFIX}${id}`;
+        }
+        return null;
     }
 
     function loadBuiltinModule(id: string) {
-        {
-            if (id === STREAM_EVENTS_MODULE) {
-                return `import * as events from "node:events";
+        if (id === STREAM_EVENTS_MODULE) {
+            return `import * as events from "node:events";
 import { callableEmitter } from ${JSON.stringify(streamEmitterModule())};
 export * from "node:events";
 export const EventEmitter = callableEmitter(events.EventEmitter);
 export default { ...events, EventEmitter };`;
-            }
-            if (!id.startsWith(VIRTUAL_PREFIX)) {
-                return null;
-            }
-            const value = id.slice(VIRTUAL_PREFIX.length);
-            if (id === UNENV_BUFFER_CORE) {
-                return unenvBufferCore(options);
-            }
-            if (id === ABORT_GLOBALS_MODULE) {
-                return `export * from ${JSON.stringify(abortGlobalsModule())};`;
-            }
-            if (id === ERROR_GLOBALS_MODULE) {
-                return `export * from ${JSON.stringify(errorsModule())};`;
-            }
-            if (id === HTTP_CALLBACKS_MODULE) {
-                return httpCallbacksAdapter(httpModule());
-            }
-            if (id === HTTP2_CALLBACKS_MODULE) {
-                return http2CallbacksAdapter(http2Module());
-            }
-            if (ASSERT_SPECIFIERS.has(value)) {
-                return assertAdapter(value, assertModule());
-            }
-            if (value === MODULE_SPECIFIER) {
-                return moduleAdapter(moduleModule());
-            }
-            if (value === FFI_SPECIFIER) {
-                return ffiAdapter(ffiModule());
-            }
-            if (id === INSPECTOR_CALLBACKS_MODULE) {
-                return inspectorCallbacksAdapter(inspectorModule());
-            }
-            if (value === INSPECTOR_PROMISES_SPECIFIER) {
-                return inspectorPromisesAdapter(inspectorPromisesModule());
-            }
-            if (value === INSPECTOR_SPECIFIER) {
-                return inspectorAdapter(inspectorModule());
-            }
-            if (value === DOMAIN_SPECIFIER) {
-                return domainAdapter(domainModule());
-            }
-            if (value === DIAGNOSTICS_CHANNEL_SPECIFIER) {
-                return diagnosticsChannelAdapter(diagnosticsChannelModule());
-            }
-            if (value === ASYNC_HOOKS_SPECIFIER) {
-                return asyncHooksAdapter(asyncHooksModule());
-            }
-            if (value === EVENTS_SPECIFIER) {
-                return eventsAdapter(unenvModule(EVENTS_SPECIFIER, options), eventsModule());
-            }
-            if (value === OS_SPECIFIER) {
-                return osAdapter(osModule());
-            }
-            if (value === STRING_DECODER_SPECIFIER) {
-                return stringDecoderAdapter(stringDecoderModule());
-            }
-            if (value === STREAM_SPECIFIER) {
-                return streamAdapter(classicStreamModule());
-            }
-            if (value === STREAM_PROMISES_SPECIFIER) {
-                return streamAdapter(streamPromisesModule());
-            }
-            if (value === PERF_HOOKS_SPECIFIER) {
-                return perfHooksAdapter(perfHooksModule());
-            }
-            if (value === STREAM_CONSUMERS_SPECIFIER) {
-                return streamAdapter(streamConsumersModule());
-            }
-            if (value === STREAM_ITER_SPECIFIER) {
-                return streamAdapter(streamIterModule());
-            }
-            if (value === CLUSTER_SPECIFIER) {
-                return clusterAdapter(clusterModule());
-            }
-            if (value === CHILD_PROCESS_SPECIFIER) {
-                return childProcessAdapter(childProcessModule());
-            }
-            if (value === CONSOLE_SPECIFIER) {
-                return consoleAdapter(consoleModule());
-            }
-            if (DNS_SPECIFIERS.has(value)) {
-                return dnsAdapter(dnsModule(value));
-            }
-            if (FS_SPECIFIERS.has(value)) {
-                return fsAdapter(value, fsModule(), fsPromisesModule());
-            }
-            if (value === NET_SPECIFIER) {
-                return netAdapter(netCoreModule(), wasiSocketsVersion);
-            }
-            const protocol = protocolOf(value);
-            if (protocol !== undefined) {
-                return protocolAdapter(protocol);
-            }
-            if (value === HTTP2_SPECIFIER) {
-                if (http2Via === "direct") {
-                    return http2DirectAdapter(http2Module());
-                }
-                return http2PortableAdapter(
-                    http2CoreModule(),
-                    http2Via === "wasi-sockets"
-                        ? http2WasiSocketsImplementationModule()
-                        : http2WasiHttpImplementationModule(),
-                    http2Via,
-                    wasiSocketsVersion,
-                );
-            }
-            if (AUDITED_UNENV_SPECIFIERS.has(value)) {
-                return unenvAdapter(value, options);
-            }
-            if (value === STREAM_SPECIFIER) {
-                return nodeStreamCommonJsAdapter(options);
-            }
-            if (PORTABLE_UNENV_SPECIFIERS.has(value)) {
-                return portableUnenvAdapter(value, options);
-            }
-            if (value === CRYPTO_SPECIFIER) {
-                return jcoStdAdapter(cryptoModule());
-            }
-            if (value === TIMERS_SPECIFIER) {
-                return jcoStdAdapter(timersModule());
-            }
-            const separator = value.lastIndexOf("@");
-            const specifier = value.slice(0, separator);
-            const version = value.slice(separator + 1);
-            if (specifier === "path-core") {
-                return pathCore(version, pathFactory());
-            }
-            return pathAdapter(specifier, version);
         }
+        if (!id.startsWith(VIRTUAL_PREFIX)) {
+            return null;
+        }
+        const value = id.slice(VIRTUAL_PREFIX.length);
+        if (value === "commonjs-stream") {
+            return `module.exports = require(${JSON.stringify(classicStreamModule())}).default;`;
+        }
+        if (id === UNENV_BUFFER_CORE) {
+            return unenvBufferCore(options);
+        }
+        if (id === ABORT_GLOBALS_MODULE) {
+            return `export * from ${JSON.stringify(abortGlobalsModule())};`;
+        }
+        if (id === ERROR_GLOBALS_MODULE) {
+            return `export * from ${JSON.stringify(errorsModule())};`;
+        }
+        if (id === HTTP_CALLBACKS_MODULE) {
+            return httpCallbacksAdapter(httpModule());
+        }
+        if (id === HTTP2_CALLBACKS_MODULE) {
+            return http2CallbacksAdapter(http2Module());
+        }
+        if (ASSERT_SPECIFIERS.has(value)) {
+            return assertAdapter(value, assertModule());
+        }
+        if (value === MODULE_SPECIFIER) {
+            return moduleAdapter(moduleModule());
+        }
+        if (value === FFI_SPECIFIER) {
+            return ffiAdapter(ffiModule());
+        }
+        if (id === INSPECTOR_CALLBACKS_MODULE) {
+            return inspectorCallbacksAdapter(inspectorModule());
+        }
+        if (value === INSPECTOR_PROMISES_SPECIFIER) {
+            return inspectorPromisesAdapter(inspectorPromisesModule());
+        }
+        if (value === INSPECTOR_SPECIFIER) {
+            return inspectorAdapter(inspectorModule());
+        }
+        if (value === DOMAIN_SPECIFIER) {
+            return domainAdapter(domainModule());
+        }
+        if (value === DIAGNOSTICS_CHANNEL_SPECIFIER) {
+            return diagnosticsChannelAdapter(diagnosticsChannelModule());
+        }
+        if (value === ASYNC_HOOKS_SPECIFIER) {
+            return asyncHooksAdapter(asyncHooksModule());
+        }
+        if (value === EVENTS_SPECIFIER) {
+            return eventsAdapter(unenvModule(EVENTS_SPECIFIER, options), eventsModule());
+        }
+        if (value === OS_SPECIFIER) {
+            return osAdapter(osModule());
+        }
+        if (value === STRING_DECODER_SPECIFIER) {
+            return stringDecoderAdapter(stringDecoderModule());
+        }
+        if (value === STREAM_SPECIFIER) {
+            return streamAdapter(classicStreamModule());
+        }
+        if (value === STREAM_PROMISES_SPECIFIER) {
+            return streamAdapter(streamPromisesModule());
+        }
+        if (value === PERF_HOOKS_SPECIFIER) {
+            return perfHooksAdapter(perfHooksModule());
+        }
+        if (value === STREAM_CONSUMERS_SPECIFIER) {
+            return streamAdapter(streamConsumersModule());
+        }
+        if (value === STREAM_ITER_SPECIFIER) {
+            return streamAdapter(streamIterModule());
+        }
+        if (value === CLUSTER_SPECIFIER) {
+            return clusterAdapter(clusterModule());
+        }
+        if (value === CHILD_PROCESS_SPECIFIER) {
+            return childProcessAdapter(childProcessModule());
+        }
+        if (value === CONSOLE_SPECIFIER) {
+            return consoleAdapter(consoleModule());
+        }
+        if (DNS_SPECIFIERS.has(value)) {
+            return dnsAdapter(dnsModule(value));
+        }
+        if (FS_SPECIFIERS.has(value)) {
+            return fsAdapter(value, fsModule(), fsPromisesModule());
+        }
+        if (value === NET_SPECIFIER) {
+            return netAdapter(netCoreModule(), wasiSocketsVersion);
+        }
+        const protocol = protocolOf(value);
+        if (protocol !== undefined) {
+            return protocolAdapter(protocol);
+        }
+        if (value === HTTP2_SPECIFIER) {
+            if (http2Via === "direct") {
+                return http2DirectAdapter(http2Module());
+            }
+            return http2PortableAdapter(
+                http2CoreModule(),
+                http2Via === "wasi-sockets"
+                    ? http2WasiSocketsImplementationModule()
+                    : http2WasiHttpImplementationModule(),
+                http2Via,
+                wasiSocketsVersion,
+            );
+        }
+        if (AUDITED_UNENV_SPECIFIERS.has(value)) {
+            return unenvAdapter(value, options);
+        }
+        if (PORTABLE_UNENV_SPECIFIERS.has(value)) {
+            return portableUnenvAdapter(value, options);
+        }
+        if (value === CRYPTO_SPECIFIER) {
+            return jcoStdAdapter(cryptoModule());
+        }
+        if (value === TIMERS_SPECIFIER) {
+            return jcoStdAdapter(timersModule());
+        }
+        const separator = value.lastIndexOf("@");
+        const specifier = value.slice(0, separator);
+        const version = value.slice(separator + 1);
+        if (specifier === "path-core") {
+            return pathCore(version, pathFactory());
+        }
+        return pathAdapter(specifier, version);
     }
 }
