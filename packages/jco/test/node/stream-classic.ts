@@ -22,18 +22,20 @@ const options: NodeBuiltinOptions = {
 };
 
 describe("node:stream component support", () => {
-    test.concurrent("limits portable-core dependency aliases to the audited package", () => {
+    test.concurrent("keeps portable-core aliases while allowing normal bare builtin resolution", async () => {
         const onWitRequirement = vi.fn();
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ...options, onWitRequirement });
         // The plugin returns concrete hooks; this test exercises those hooks directly.
-        const resolve = plugin.resolveId as (id: string, importer?: string) => unknown;
+        const resolve = (plugin.resolveId as (id: string, importer?: string) => unknown).bind({
+            resolve: async () => ({ id: "/installed/package.js" }),
+        });
         const importer = "/node_modules/readable-stream/lib/internal/streams/readable.js";
         expect(resolve("buffer", importer)).toBe("\0jco-node-builtin:node:buffer");
         expect(resolve("events", importer)).toBe("\0jco-node-builtin:stream-events");
         expect(resolve("string_decoder", importer)).toBe("\0jco-node-builtin:node:string_decoder");
         expect(resolve("process/", importer)).toBe(options.streamSchedulerModule);
         for (const id of ["stream", "events", "buffer", "process/", "string_decoder"]) {
-            expect(resolve(id, "/app.ts")).toBeNull();
+            expect(await resolve(id, "/app.ts")).toBeNull();
         }
         expect(onWitRequirement).not.toHaveBeenCalled();
     });

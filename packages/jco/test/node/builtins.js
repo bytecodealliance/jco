@@ -727,7 +727,7 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent.each(["stream", "stream/promises", "stream/consumers", "stream/iter"])(
+    test.concurrent.each(["stream/consumers", "stream/iter"])(
         "does not intercept the legacy bare %s specifier",
         (specifier) => {
             const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
@@ -839,3 +839,17 @@ describe("Node builtin adapters", () => {
         );
     });
 });
+
+test.concurrent.each(["stream", "stream/promises"])(
+    "resolves bare %s through the current stream implementation",
+    async (specifier) => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { streamModule: "/current/stream.js" });
+        const result = await plugin.resolveId.call({ resolve: async () => null }, specifier);
+        expect(result).toBe(
+            specifier === "stream" ? "\0jco-node-builtin:commonjs-stream" : "\0jco-node-builtin:node:stream/promises",
+        );
+        expect(
+            await plugin.resolveId.call({ resolve: async () => ({ id: "/installed/stream.js" }) }, specifier),
+        ).toBeNull();
+    },
+);

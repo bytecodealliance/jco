@@ -33,19 +33,10 @@ const NODE_FS_HOST = pathToFileURL(
  * wrapping the export itself in `WebAssembly.promising`, so a call that suspends on an async
  * import fails with `SuspendError`.
  */
-const ASYNC_EXPORTS = ["start", "stop", "jco:node/http-callbacks@0.1.0#handle-request"];
+const ASYNC_EXPORTS = ["start", "stop", "jco:node/http-callbacks@0.1.0#*"];
 
 describe("express in a component", () => {
-    // TODO(unskip): Express reaches `node:path`, which cannot be pre-initialized at
-    // present: its implementation imports `minimatch` for `matchesGlob`, `minimatch`
-    // imports `brace-expansion`, and `brace-expansion` builds its sentinel strings with
-    // `Math.random()` at module scope. The engine seeds its RNG from
-    // `wasi:random/random@0.2.10#get-random-u64` on that first call, and no WASI import may
-    // be called during Wizer pre-initialization, so the build traps. No componentize flag
-    // avoids it -- the seeding belongs to the engine rather than the `random` feature, which
-    // stays imported with `--disable random`. Unskip once `matchesGlob` no longer pulls
-    // module-scope randomness into the graph.
-    test.skip("serves an unmodified Express application over a socket", async () => {
+    test.concurrent("serves an unmodified Express application over a socket", async () => {
         // Componentizing rewrites the world in place to add the Node WIT imports, so the
         // fixture is built from a copy. The copy stays inside this package because the
         // fixture imports `express` by name, and a copy outside the workspace would not
@@ -103,7 +94,7 @@ describe("express in a component", () => {
                 // `node:crypto`.
                 expect(results.root).toMatchObject({ status: 200, body: "Hello World!" });
                 expect(results.root.contentType).toMatch(/^text\/html/);
-                expect(results.root.etag).toBe(true);
+                expect(results.root.etag).toMatch(/^W\/"/);
 
                 // Route parameters and the query string.
                 expect(results.params.status).toBe(200);
@@ -111,6 +102,21 @@ describe("express in a component", () => {
 
                 // A status the application set itself.
                 expect(results.posted.status).toBe(201);
+                expect(JSON.parse(results.posted.body)).toEqual({ echoed: { hello: "world" } });
+                expect(results.malformed.status).toBe(400);
+                expect(results.failure.status).toBe(500);
+                expect(JSON.parse(results.failure.body)).toEqual({ error: "application failure" });
+                expect(results.cached.status).toBe(304);
+                expect(results.cached.body).toBe("");
+                const nativeSource = fileURLToPath(
+                    new URL("../fixtures/componentize/node-express/component.js", import.meta.url),
+                );
+                const nativeOutput = await exec(runner, nativeSource, "native");
+                const native = JSON.parse(nativeOutput.stdout);
+                // JSON parse diagnostics differ between V8 and SpiderMonkey; other responses are exact.
+                delete native.malformed;
+                delete results.malformed;
+                expect(results).toEqual(native);
 
                 // Express answers an unrouted request itself, through `finalhandler`.
                 expect(results.missing.status).toBe(404);

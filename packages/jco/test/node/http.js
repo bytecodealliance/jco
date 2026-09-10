@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import nodeHttp from "node:http";
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { describe, expect, test, vi } from "vitest";
@@ -85,8 +85,9 @@ describe("node:http builtin adapter", () => {
         expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
 
-    test.concurrent("does not intercept the bare http specifier", () => {
-        expect(nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths).resolveId("http")).toBeNull();
+    test.concurrent("resolves bare http when no installed package shadows it", async () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths);
+        expect(await plugin.resolveId.call({ resolve: async () => null }, "http")).toBe("\0jco-node-builtin:node:http");
     });
 
     test.each([
@@ -229,7 +230,7 @@ describe.skipIf(!hasJspi)("node:http in a component", () => {
         }
     }, 600_000);
 
-    test("serves a request over wasi:sockets", async () => {
+    test.concurrent("serves a request over wasi:sockets", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-http-sockets-server",
             bundle: true,
@@ -258,8 +259,14 @@ describe.skipIf(!hasJspi)("node:http in a component", () => {
                         resolve(Number(match[1]));
                     }
                 });
-                server.once("error", reject);
-                server.once("exit", (code) => reject(new Error(`exited with ${code}: ${output}`)));
+                server.once("error", (error) => {
+                    clearTimeout(timer);
+                    reject(error);
+                });
+                server.once("exit", (code) => {
+                    clearTimeout(timer);
+                    reject(new Error(`exited with ${code}: ${output}`));
+                });
             });
 
             const body = await new Promise((resolve, reject) => {
@@ -279,8 +286,7 @@ describe.skipIf(!hasJspi)("node:http in a component", () => {
         }
     }, 600_000);
 
-    // TODO(unskip): use the published jco-std HTTP exports once a release containing them is available.
-    test.skip.each(["direct", "wasi-sockets", "wasi-http"])(
+    test.concurrent.each(["direct", "wasi-sockets", "wasi-http"])(
         "componentizes and performs a local request via %s",
         async (implementation) => {
             const { componentPath, stderr } = await componentizeFixture({

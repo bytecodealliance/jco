@@ -19,8 +19,16 @@ export function start() {
         response.status(201).json({ echoed: request.body });
     });
 
-    server = app.listen(0, "127.0.0.1");
-    return server.address().port;
+    app.get("/error", () => {
+        throw new Error("application failure");
+    });
+    app.use((error, request, response, _next) => {
+        response.status(error.status ?? 500).json({ error: error.message });
+    });
+
+    return new Promise((resolve) => {
+        server = app.listen(0, "127.0.0.1", () => resolve(server.address().port));
+    });
 }
 
 export function stop() {
