@@ -63,6 +63,7 @@ export async function run() {
         input: new Input(),
         output: new Output(),
         terminal: true,
+
         completer: (line) => [["hello", "help"], line],
     });
     completing.write("he");
@@ -73,6 +74,7 @@ export async function run() {
         input: new Input(),
         output: new Output(),
         terminal: true,
+
         completer: async (line) => [["world", "work"], line],
     });
     asyncCompleting.write("wo");
