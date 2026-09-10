@@ -1,4 +1,5 @@
 package local:node-readline;
+
 world test {
   export run: async func() -> string;
 }

@@ -221,6 +221,7 @@ describe("Node builtin adapters", () => {
             {
                 readlineModule: "test:readline",
                 readlinePromisesModule: "test:readline-promises",
+
                 onWitRequirement: (requirement) => requirements.push(requirement),
             },
         );
