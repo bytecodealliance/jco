@@ -1,3 +1,5 @@
+import deniedTls from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls/node-host.js";
+const tls = { ...deniedTls, createContext: () => 1 };
 import { describe, expect, test } from "vitest";
 
 import { createHttp2 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/core.js";
@@ -189,8 +191,8 @@ describe("direct node:http2 implementation", () => {
         [Symbol.dispose]() {}
       },
     };
-    const first = createDirectHttp2Implementation(host);
-    const second = createDirectHttp2Implementation(host);
+    const first = createDirectHttp2Implementation(host, tls);
+    const second = createDirectHttp2Implementation(host, tls);
     const handler = async () => {
       throw Object.assign(new Error("callback failed"), { code: "EHTTP2TEST" });
     };
@@ -238,7 +240,7 @@ describe("direct node:http2 implementation", () => {
 
   test("round trips client headers, data, settings, ping, and lifecycle", async () => {
     const harness = fakeHost();
-    const implementation = createDirectHttp2Implementation(harness.host);
+    const implementation = createDirectHttp2Implementation(harness.host, tls);
     harness.attach(implementation.http2Callbacks);
     const http2 = createHttp2(implementation);
     const session = http2.connect("http://example.com", { settings: { enablePush: false } });
@@ -281,7 +283,7 @@ describe("direct node:http2 implementation", () => {
 
   test("round trips stream and compatibility server callbacks", async () => {
     const harness = fakeHost();
-    const implementation = createDirectHttp2Implementation(harness.host);
+    const implementation = createDirectHttp2Implementation(harness.host, tls);
     harness.attach(implementation.http2Callbacks);
     const http2 = createHttp2(implementation);
     const server = http2.createServer();
@@ -314,7 +316,7 @@ describe("direct node:http2 implementation", () => {
 
   test("rejects unsupported options before constructing resources", () => {
     const harness = fakeHost();
-    const implementation = createDirectHttp2Implementation(harness.host);
+    const implementation = createDirectHttp2Implementation(harness.host, tls);
     harness.attach(implementation.http2Callbacks);
     const http2 = createHttp2(implementation);
     expect(() => http2.connect("http://example.com", { createConnection() {} })).toThrow(
@@ -326,7 +328,7 @@ describe("direct node:http2 implementation", () => {
   });
 
   test("uses Node's server class names", () => {
-    const http2 = createHttp2(createDirectHttp2Implementation(fakeHost().host));
+    const http2 = createHttp2(createDirectHttp2Implementation(fakeHost().host, tls));
     expect(http2.createServer().constructor.name).toBe("Http2Server");
     expect(http2.createSecureServer().constructor.name).toBe("Http2SecureServer");
   });

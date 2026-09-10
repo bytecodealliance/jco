@@ -1,3 +1,4 @@
+import { createWasiTlsBridge } from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls/wasi.js";
 import { tlsMaterial } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/tls.js";
 import { expect, test } from "vitest";
 import {
@@ -66,77 +67,89 @@ test.concurrent("accepts servername and explicitly enabled verification", () => 
   ).not.toThrow();
 });
 
-test.concurrent("polls a pending handshake and drops the poll before its future", () => {
-  const events: string[] = [];
-  let ready = false;
-  const input = { blockingRead: (): Uint8Array => new Uint8Array() };
-  const output = { blockingWriteAndFlush: (): void => {} };
-  const connection = { closeOutput: (): void => {} };
-  const provider: WasiTlsProvider = {
-    isAvailable: () => true,
-    ClientHandshake: class {
-      constructor(name: string, incoming: WasiInputStream, outgoing: WasiOutputStream) {
-        expect(name).toBe("localhost");
-        expect(incoming).toBe(input);
-        expect(outgoing).toBe(output);
-      }
-      static finish(): ReturnType<WasiTlsProvider["ClientHandshake"]["finish"]> {
-        return {
-          get: (): WasiTlsResult | undefined =>
-            ready ? { tag: "ok", val: { tag: "ok", val: [connection, input, output] } } : undefined,
-          subscribe: () => ({
-            block: (): void => {
-              ready = true;
-            },
+test.concurrent.each([false, true])(
+  "polls and drops a pending handshake (jco:node/tls bridge: %s)",
+  (bridge) => {
+    const events: string[] = [];
+    let ready = false;
+    const input = { blockingRead: (): Uint8Array => new Uint8Array() };
+    const output = { blockingWriteAndFlush: (): void => {} };
+    const connection = { closeOutput: (): void => {} };
+    const provider: WasiTlsProvider = {
+      isAvailable: () => true,
+      ClientHandshake: class {
+        constructor(name: string, incoming: WasiInputStream, outgoing: WasiOutputStream) {
+          expect(name).toBe("localhost");
+          expect(incoming).toBe(input);
+          expect(outgoing).toBe(output);
+        }
+        static finish(): ReturnType<WasiTlsProvider["ClientHandshake"]["finish"]> {
+          return {
+            get: (): WasiTlsResult | undefined =>
+              ready
+                ? { tag: "ok", val: { tag: "ok", val: [connection, input, output] } }
+                : undefined,
+            subscribe: () => ({
+              block: (): void => {
+                ready = true;
+              },
+              [Symbol.dispose]: (): void => {
+                events.push("poll");
+              },
+            }),
             [Symbol.dispose]: (): void => {
-              events.push("poll");
+              events.push("future");
             },
-          }),
-          [Symbol.dispose]: (): void => {
-            events.push("future");
-          },
-        };
-      }
-    },
-  };
-  expect(handshake(provider, "localhost", input, output)).toEqual([connection, input, output]);
-  expect(events).toEqual(["poll", "future"]);
-});
+          };
+        }
+      },
+    };
+    expect(
+      handshake(bridge ? createWasiTlsBridge(provider) : provider, "localhost", input, output),
+    ).toEqual([connection, input, output]);
+    expect(events).toEqual(["poll", "future"]);
+  },
+);
 
-test.concurrent("drops a failed handshake's IO error and future", () => {
-  const events: string[] = [];
-  const input = { blockingRead: (): Uint8Array => new Uint8Array() };
-  const output = { blockingWriteAndFlush: (): void => {} };
-  const provider: WasiTlsProvider = {
-    isAvailable: () => true,
-    ClientHandshake: class {
-      static finish(): ReturnType<WasiTlsProvider["ClientHandshake"]["finish"]> {
-        return {
-          get: (): WasiTlsResult => ({
-            tag: "ok",
-            val: {
-              tag: "err",
+test.concurrent.each([false, true])(
+  "drops a failed handshake (jco:node/tls bridge: %s)",
+  (bridge) => {
+    const events: string[] = [];
+    const input = { blockingRead: (): Uint8Array => new Uint8Array() };
+    const output = { blockingWriteAndFlush: (): void => {} };
+    const provider: WasiTlsProvider = {
+      isAvailable: () => true,
+      ClientHandshake: class {
+        static finish(): ReturnType<WasiTlsProvider["ClientHandshake"]["finish"]> {
+          return {
+            get: (): WasiTlsResult => ({
+              tag: "ok",
               val: {
-                toDebugString: (): string => "untrusted certificate",
-                [Symbol.dispose]: (): void => {
-                  events.push("error");
+                tag: "err",
+                val: {
+                  toDebugString: (): string => "untrusted certificate",
+                  [Symbol.dispose]: (): void => {
+                    events.push("error");
+                  },
                 },
               },
+            }),
+            subscribe: (): never => {
+              throw new Error("unexpected poll");
             },
-          }),
-          subscribe: (): never => {
-            throw new Error("unexpected poll");
-          },
-          [Symbol.dispose]: (): void => {
-            events.push("future");
-          },
-        };
-      }
-    },
-  };
-  expect(() => handshake(provider, "localhost", input, output)).toThrow(/untrusted certificate/);
-  expect(events).toEqual(["error", "future"]);
-});
+            [Symbol.dispose]: (): void => {
+              events.push("future");
+            },
+          };
+        }
+      },
+    };
+    expect(() =>
+      handshake(bridge ? createWasiTlsBridge(provider) : provider, "localhost", input, output),
+    ).toThrow(/untrusted certificate/);
+    expect(events).toEqual(["error", "future"]);
+  },
+);
 
 test.concurrent("default denial is lazy and refuses before acquiring TCP resources", () => {
   const implementation = createWasiSocketsHttpImplementation({

@@ -1,3 +1,7 @@
+import type { TlsHost } from "../../tls/host-types.js";
+import deniedTls from "../../tls/node-host.js";
+import { encode } from "../../tls/wire.js";
+import { hostCall } from "../../tls/errors.js";
 import type { HostImports } from "../../internal/wit-types.js";
 import { callHost } from "../../internal/host-error.js";
 import { serializeNodeError } from "../../internal/http-host.js";
@@ -13,6 +17,12 @@ import type {
   HttpRequestHandler,
   HttpServerAddress,
 } from "../types.js";
+
+export function createHttpCallbackRegistry() {
+  const listeners = new Map<number, RequestListener>();
+  let next = 1;
+  return { listeners, allocate: () => next++ };
+}
 
 function directAddress(address: DirectHttpServerAddress | undefined): HttpServerAddress | null {
   return address === undefined
@@ -40,10 +50,13 @@ class RequestListener implements DirectHttpRequestListener {
   [Symbol.dispose](): void {}
 }
 
-export function createDirectHttpImplementation(host: HostImports<DirectHttpHost>) {
+export function createDirectHttpImplementation(
+  host: HostImports<DirectHttpHost>,
+  tls: TlsHost = deniedTls,
+  registry = createHttpCallbackRegistry(),
+) {
   // Each implementation (and bundled guest instance) owns its registrations.
-  const listeners = new Map<number, RequestListener>();
-  let nextListener = 1;
+  const { listeners } = registry;
   return {
     httpCallbacks: {
       RequestListener,
@@ -55,18 +68,52 @@ export function createDirectHttpImplementation(host: HostImports<DirectHttpHost>
     },
 
     request(options: Parameters<HttpImplementation["request"]>[0]) {
-      return callHost(() => host.request(options), fromImplementationError);
+      if (options.scheme !== "https") {
+        return callHost(
+          () => host.request({ ...options, tls: undefined }),
+          fromImplementationError,
+        );
+      }
+      const { alpnProtocols, ...material } = options.tls ?? {};
+      const contextId = hostCall(() =>
+        tls.createContext(encode({ ...material, ALPNProtocols: alpnProtocols })),
+      );
+      try {
+        return callHost(
+          () => host.request({ ...options, tls: { contextId } }),
+          fromImplementationError,
+        );
+      } finally {
+        tls.releaseContext(contextId);
+      }
     },
 
     createServer(options: HttpServerOptions, handler: HttpRequestHandler) {
-      if (nextListener > 0xffff_ffff) {
+      const listener = registry.allocate();
+      if (listener > 0x7fff_ffff) {
         throw codedError(
           new Error("HTTP callback registrations exhausted"),
           "ERR_JCO_HTTP_CALLBACK_LIMIT",
         );
       }
-      const listener = nextListener++;
-      const server = new host.Server(options, listener);
+      const { alpnProtocols, ...material } = options.tls ?? {};
+      const contextId =
+        options.tls === undefined
+          ? undefined
+          : hostCall(() =>
+              tls.createContext(encode({ ...material, ALPNProtocols: alpnProtocols })),
+            );
+      let server: InstanceType<typeof host.Server>;
+      try {
+        server = new host.Server(
+          { ...options, tls: contextId === undefined ? undefined : { contextId } },
+          listener,
+        );
+      } finally {
+        if (contextId !== undefined) {
+          tls.releaseContext(contextId);
+        }
+      }
       return {
         listen(listenOptions: HttpListenOptions) {
           listeners.set(listener, new RequestListener(handler));

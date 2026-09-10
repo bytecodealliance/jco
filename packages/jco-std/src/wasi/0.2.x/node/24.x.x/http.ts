@@ -1,9 +1,10 @@
+import { httpGuestCallbacks } from "./http/guest-callbacks.js";
 import * as host from "jco:node/http@0.1.0";
 
 import { createHttp } from "./http/core.js";
 import { createDirectHttpImplementation } from "./http/impl/direct.js";
 
-const implementation = createDirectHttpImplementation(host);
+const implementation = createDirectHttpImplementation(host, undefined, httpGuestCallbacks);
 const http = createHttp(implementation);
 
 export const httpCallbacks = implementation.httpCallbacks;

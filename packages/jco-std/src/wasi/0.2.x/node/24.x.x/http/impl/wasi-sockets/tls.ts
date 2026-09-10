@@ -1,3 +1,4 @@
+import type { TlsStreamHost } from "../../../tls/host-types.js";
 /**
  * Guest contract for WebAssembly/wasi-tls wit/types.wit, revision
  * 6781ae26084100c0628ef72cc44e4517c6c48ae5 (W3C Community CLA).
@@ -67,7 +68,7 @@ export function validateTlsOptions(options: HttpTlsMaterial | undefined): void {
 
 /** Takes ownership of input/output, including on handshake failure. */
 export function handshake(
-  provider: WasiTlsProvider,
+  provider: WasiTlsProvider | TlsStreamHost,
   serverName: string,
   input: WasiInputStream,
   output: WasiOutputStream,
@@ -77,11 +78,18 @@ export function handshake(
   let pending: WasiTlsHandshake | undefined;
   let future: WasiTlsFuture | undefined;
   try {
-    pending = new provider.ClientHandshake(serverName, ownedInput, ownedOutput);
-    ownedInput = undefined;
-    ownedOutput = undefined;
-    future = provider.ClientHandshake.finish(pending);
-    pending = undefined;
+    if ("startTls" in provider) {
+      // WIT transfers ownership at the call, including when the provider throws.
+      ownedInput = undefined;
+      ownedOutput = undefined;
+      future = provider.startTls(serverName, input, output);
+    } else {
+      pending = new provider.ClientHandshake(serverName, ownedInput, ownedOutput);
+      ownedInput = undefined;
+      ownedOutput = undefined;
+      future = provider.ClientHandshake.finish(pending);
+      pending = undefined;
+    }
     for (;;) {
       const result = future.get();
       if (result) {

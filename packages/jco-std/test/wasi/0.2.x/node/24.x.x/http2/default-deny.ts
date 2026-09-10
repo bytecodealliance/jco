@@ -13,12 +13,18 @@ describe("default-deny node:http2 provider", () => {
     );
   });
 
+  test("mixed-case HTTPS cannot bypass the TLS capability", () => {
+    expect(() => http2.connect("HTTPS://localhost:8000")).toThrow(
+      expect.objectContaining({ code: "ERR_JCO_TLS_ADAPTER_REQUIRED" }),
+    );
+  });
+
   test("denies cleartext and secure servers", () => {
     expect(() => http2.createServer()).toThrow(
       expect.objectContaining({ code: "ERR_JCO_HTTP2_ADAPTER_REQUIRED" }),
     );
     expect(() => http2.createSecureServer({ key: "key", cert: "cert" })).toThrow(
-      expect.objectContaining({ code: "ERR_JCO_HTTP2_ADAPTER_REQUIRED" }),
+      expect.objectContaining({ code: "ERR_JCO_TLS_ADAPTER_REQUIRED" }),
     );
   });
 });

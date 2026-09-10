@@ -293,7 +293,9 @@ export interface DirectHttpResponse {
 export type DirectHttpResult<T> = { tag: "ok"; val: T } | { tag: "err"; val: DirectHttpError };
 
 /** The `tls-options` record of `jco:node/http@0.1.0`. */
-export type DirectTlsOptions = HttpTlsMaterial;
+export interface DirectTlsOptions {
+  contextId: number;
+}
 
 export interface DirectHttpServerOptions {
   requestTimeout?: number;

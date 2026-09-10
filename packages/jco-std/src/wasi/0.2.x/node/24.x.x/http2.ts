@@ -1,9 +1,10 @@
+import * as tlsHost from "jco:node/tls@0.1.0";
 import * as host from "jco:node/http2@0.1.0";
 
 import { createHttp2 } from "./http2/core.js";
 import { createDirectHttp2Implementation } from "./http2/impl/direct/index.js";
 
-const implementation = createDirectHttp2Implementation(host);
+const implementation = createDirectHttp2Implementation(host, tlsHost);
 const http2 = createHttp2(implementation);
 
 export const http2Callbacks = implementation.http2Callbacks;

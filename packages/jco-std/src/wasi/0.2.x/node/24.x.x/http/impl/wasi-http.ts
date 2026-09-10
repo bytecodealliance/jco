@@ -240,10 +240,10 @@ export function createWasiHttpImplementation(provider: WasiHttpProvider): HttpIm
       "wasi:http outgoing-handler cannot accept arbitrary inbound HTTP connections",
 
     request(request) {
-      if (request.tls !== undefined) {
+      if (request.scheme === "https" || request.tls !== undefined) {
         unsupported(
-          `${request.scheme}.request TLS options with the wasi-http implementation`,
-          "wasi:http/outgoing-handler owns certificate validation and cannot take per-request TLS configuration",
+          `${request.scheme}.request with the wasi-http implementation`,
+          "wasi:http/outgoing-handler cannot use the jco:node/tls capability; select direct or wasi-sockets for HTTPS",
         );
       }
       try {

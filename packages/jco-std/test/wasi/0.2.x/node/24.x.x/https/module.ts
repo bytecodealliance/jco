@@ -66,12 +66,12 @@ describe("node:https module", () => {
   test.concurrent("denies the direct capability by default", async () => {
     const https = createHttps(createDirectHttpImplementation(denyHost));
     expect(() => https.createServer()).toThrow(
-      expect.objectContaining({ code: "ERR_JCO_HTTP_ADAPTER_REQUIRED" }),
+      expect.objectContaining({ code: "ERR_JCO_TLS_ADAPTER_REQUIRED" }),
     );
     const request = https.request("https://example.com/");
     const error = new Promise<Error>((resolve) => request.once("error", resolve));
     request.end();
-    await expect(error).resolves.toMatchObject({ code: "ERR_JCO_HTTP_ADAPTER_REQUIRED" });
+    await expect(error).resolves.toMatchObject({ code: "ERR_JCO_TLS_ADAPTER_REQUIRED" });
   });
 
   test.concurrent("rejects server construction when an implementation cannot listen", () => {
