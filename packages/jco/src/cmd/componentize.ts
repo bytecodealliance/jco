@@ -12,7 +12,7 @@ import {
     type NodejsHttp2Via,
     type NodejsHttpVia,
     type WorldMetadata,
-} from "../node-builtins.js";
+} from "../node-builtins/index.js";
 import {
     injectNodeWitImports,
     witInjectionWarnings,

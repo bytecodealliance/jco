@@ -8,7 +8,7 @@ import { describe, expect, test, vi } from "vitest";
 import { bundleComponentSource } from "../../src/bundle.js";
 import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
-import { HTTP2_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { HTTP2_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { HTTP2_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
 import { hasJspi } from "../common.js";

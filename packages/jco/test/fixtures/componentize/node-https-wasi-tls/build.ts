@@ -3,7 +3,7 @@ import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleComponentSource } from "../../../../dist/bundle.js";
 import { componentize } from "../../../../dist/cmd/componentize.js";
-import { nodeBuiltinPlugin } from "../../../../dist/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../../../dist/node-builtins/index.js";
 import { injectNodeWitImports, type NodeWitRequirement } from "../../../../dist/node-wit.js";
 import { transpileBytes, writeFiles } from "@bytecodealliance/jco-transpile";
 import { componentWit } from "@bytecodealliance/jco-transpile/wasm-tools";

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
 import { bundleComponentSource } from "../../src/bundle.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
 import { exec, getTmpDir, jcoPath, transpileComponent } from "../helpers.js";
 

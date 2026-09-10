@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import ts from "typescript-compiler-api";
 import { PROCESS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
 
 function runNode(args) {

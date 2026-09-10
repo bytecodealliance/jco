@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test, vi } from "vitest";
 import { bundleComponentSource } from "../../src/bundle.js";
-import { nodeBuiltinPlugin, nodeGlobals, type NodeBuiltinOptions } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin, nodeGlobals, type NodeBuiltinOptions } from "../../src/node-builtins/index.js";
 import { exec, getTmpDir, jcoPath, setupAsyncTest } from "../helpers.js";
 import {
     run as nativeReport,
