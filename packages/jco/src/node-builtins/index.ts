@@ -14,6 +14,7 @@ import { createEventsBuiltin } from "./events.js";
 import { createProcessBuiltin } from "./process.js";
 import { createOsBuiltin } from "./os.js";
 import { createTestBuiltin } from "./test.js";
+import { createUtilBuiltin } from "./util.js";
 import { createSqliteBuiltin } from "./sqlite.js";
 import { createReadlineBuiltin } from "./readline.js";
 import { createReplBuiltin } from "./repl.js";
@@ -75,6 +76,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createReadlineBuiltin,
         createReplBuiltin,
         createTestBuiltin,
+        createUtilBuiltin,
         createStringDecoderBuiltin,
         createTtyBuiltin,
         createStreamBuiltin,
