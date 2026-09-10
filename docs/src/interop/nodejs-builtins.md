@@ -1093,14 +1093,17 @@ malformed-percent fallback and `unescapeBuffer`, which use Buffer internally.
 
 ## Process
 
-`node:process` uses a Jco facade over `jco:node/process@0.1.0`, targeting
-Node.js v24.20.0. WASI has no Node process object. The opt-in Node provider
-therefore describes and controls **the embedding Node process**: its environment,
+As WASI has no concept of processes, `node:process` uses a Jco facade
+over `jco:node/process@0.1.0`, targeting Node.js v24.20.0. This opt-in Node provider
+therefore describes and controls **the embedding Node process** (via an adapter): its environment,
 working directory, PID, resource measurements, diagnostics and credentials.
-`process.exit()` terminates that host; `kill()` sends a real OS signal, and
-`execve()` replaces the host program where Node supports it.
 
-Use normal Node imports inside a component entry function:
+If using the passthrough NodeJS adapter, `process.exit()` terminates that
+host; `kill()` sends a real OS signal, and `execve()` replaces the host
+program where Node supports it.
+
+When writing components against this API, you can Use normal Node imports
+inside a component entry function:
 
 ```js
 import process, { cwd, cpuUsage, hrtime } from 'node:process';
@@ -1116,19 +1119,28 @@ export function inspect() {
 }
 ```
 
-Componentize with `jco componentize app.js --bundle -w wit -o app.wasm`.
-Jco adds the typed process WIT import. Transpilation maps it to a denial provider
-by default; host-dependent calls throw `ERR_JCO_PROCESS_ADAPTER_REQUIRED`.
-Grant host access explicitly:
+Componentize that component with:
 
-```sh
-jco transpile app.wasm -o out \
+```console
+jco componentize app.js --bundle -w wit -o app.wasm
+```
+
+Jco adds the typed `jco:node/process` WIT import, and `jco transpile` will map that
+to a provider that denies all functionality by default; host-dependent calls
+throw `ERR_JCO_PROCESS_ADAPTER_REQUIRED`.
+
+If you want to use the pass-through provider, you must map it in explicitly:
+
+```console
+jco transpile app.wasm \
+  -o out \
   --map 'jco:node/process@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node'
 ```
 
 The public facade contains no native Node process objects in its WIT boundary.
-A different runtime can implement the same typed functions. Direct jco-std
-adapters and native Node imports can coexist in a host application.
+A different runtime can implement the same typed functions.
+
+Direct jco-std adapters and native Node imports can coexist in a host application.
 
 ### Process state and snapshots
 
