@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ccb98a29.js";
+            window.path_to_searchindex_js = "searchindex-86848298.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -2112,6 +2112,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:net</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/net/core</code></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported – see below.</td></tr>
 <tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
 <tr><td><code>node:process</code></td><td>Jco typed facade and explicit Node passthrough</td><td>Host process state and operations over <code>jco:node/process@0.1.0</code>; lazy default properties, named functions and objects. See Process restrictions below.</td></tr>
+<tr><td><code>node:sqlite</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code></td><td>SQLite over an explicit typed host capability; denied by default. Synchronous SQL callbacks are unsupported – see below.</td></tr>
 <tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
@@ -2408,6 +2409,59 @@ vector descriptor I/O, and their callback/promise facades are supported.</p>
 <p>These functions currently throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> because the typed WIT
 interface does not model those resources.</p>
 </blockquote>
+<h3 id="sqlite-databases"><a class="header" href="#sqlite-databases">SQLite databases</a></h3>
+<p>Application code keeps ordinary <code>node:sqlite</code> imports:</p>
+<pre><code class="language-js">import { DatabaseSync } from 'node:sqlite';
+
+const db = new DatabaseSync(':memory:');
+try {
+  db.exec('CREATE TABLE items(id INTEGER PRIMARY KEY, name TEXT)');
+  db.prepare('INSERT INTO items(name) VALUES (?)').run('example');
+  const rows = db.prepare('SELECT * FROM items').all();
+} finally {
+  db.close();
+}
+</code></pre>
+<p>When bundling this module, Jco adds <code>jco:node/sqlite@0.1.0</code> to the selected WIT
+world. WASI supplies no database API. This interface models databases, prepared
+statements, lazy cursors, sessions, and SQL tag stores as resources; SQL values,
+column metadata, and errors use typed records and variants. Providers can use
+other SQLite implementations without depending on Node objects in the guest.</p>
+<p>The default provider denies database creation, including <code>:memory:</code>, with
+<code>ERR_JCO_SQLITE_ADAPTER_REQUIRED</code>. Importing the module and reading constants need
+no database authority. Explicitly select the Node passthrough to execute SQL:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/sqlite@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host/node'
+</code></pre>
+<p>Database, backup, attached-database, and extension paths refer to the <strong>host
+filesystem</strong>, independently of the guest’s WASI preopens. The passthrough grants
+Node’s SQLite authority; use a restricted custom provider when narrower access
+is required. Extension loading still requires the database’s <code>allowExtension</code>
+option and Node’s native checks.</p>
+<p>The compatibility target is Node <strong>24.20.0</strong>, rather than the rolling Node API
+page. Supported operations include database open/close and transactions,
+prepared statement <code>all</code>/<code>get</code>/<code>run</code>/<code>iterate</code>, named and positional parameters,
+blobs, signed 64-bit bigints, array rows, column metadata, SQL tag stores,
+sessions and plain changeset application, serialization/deserialization, limits,
+defensive mode, extension loading, and promise-based <code>backup</code>. Statements and
+sessions retain their owning database; early iterator return releases the active
+cursor. SQL execution and SQLite error fields come from the real host engine.</p>
+<p><code>DatabaseSync.function</code>, <code>aggregate</code>, and <code>setAuthorizer</code>, changeset callback
+options, and backup’s progress callback throw <code>ERR_JCO_SQLITE_CALLBACK_UNSUPPORTED</code>.
+Synchronous callbacks would need to re-enter the guest while its SQL import is
+active, which this component interface cannot support. These APIs are present
+as explicit stubs; no callback is invoked. APIs added after the pinned release
+are outside this compatibility target.</p>
+<p>Mapping a custom SQLite provider enables JSPI for the <code>backup</code> import and makes
+component exports promising; await calls into the transpiled component. The
+synchronous database tests run on both StarlingMonkey and QuickJS. Backup is
+also tested end to end on StarlingMonkey; QuickJS currently cannot lower a
+Promise returned by an exported guest function. Use StarlingMonkey for that
+asynchronous guest flow.</p>
+<p>The implementation is available directly at
+<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code>, with an injectable factory
+at <code>sqlite/core</code>, but Jco’s ordinary <code>node:</code> import handling is the recommended
+application entry point. It can be mixed with other supported Node builtins.</p>
 <h3 id="os-and-host-capabilities"><a class="header" href="#os-and-host-capabilities">OS and host capabilities</a></h3>
 <p>A WebAssembly guest has no view of the machine it runs on. When bundled source
 imports <code>node:os</code>, Jco ensures that the selected world declares the dedicated
@@ -3147,7 +3201,7 @@ the module or upstream project.</p>
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
-<code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>,
+<code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
