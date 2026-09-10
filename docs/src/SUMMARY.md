@@ -47,6 +47,7 @@
             - [`node:sqlite`](./interop/nodejs-builtins/supported-modules/sqlite.md)
             - [`node:stream`](./interop/nodejs-builtins/supported-modules/stream.md)
             - [`node:string_decoder`](./interop/nodejs-builtins/supported-modules/string-decoder.md)
+            - [`node:test`](./interop/nodejs-builtins/supported-modules/test.md)
             - [`node:timers`](./interop/nodejs-builtins/supported-modules/timers.md)
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
 - [Troubleshooting]()

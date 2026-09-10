@@ -161,6 +161,15 @@ example, the current Buffer and querystring cores come from `unenv` and are wrap
 by Jco during bundling -- this allows Jco to use mature upstream work and sprinkle in
 WASI support where necessary.
 
+## Component tests
+
+The versioned `wasi/0.2.x/node/24.x.x/test` and `test/reporters` entry points reuse
+the existing jco-std assertion, error, path and stream implementations. Prefer
+ordinary `node:test` and `node:test/reporters` imports through `jco componentize`;
+direct jco-std imports can coexist with those builtins in the same component.
+See [test runner compatibility](nodejs-builtins/supported-modules/test.md) for serial
+execution, engine requirements, output, and unsupported Node process facilities.
+
 ## Hono and WASI HTTP
 
 The Hono adapter connects a normal [Hono][hono] application to a
