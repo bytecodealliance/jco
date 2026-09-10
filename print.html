@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-257cbbbd.js";
+            window.path_to_searchindex_js = "searchindex-0368a62c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b969895d.js"></script>
@@ -1951,7 +1951,10 @@ parsing, questions, async iteration and terminal editing over supplied streams,
 with no additional WIT capability;</li>
 <li><code>node:repl</code>, ported from Node 24.20 over that readline port for global-scope
 evaluation, keyword commands, completion and top-level <code>await</code>, with no
-additional WIT capability and acorn bundled only when the REPL is imported; and</li>
+additional WIT capability and acorn bundled only when the REPL is imported;</li>
+<li><code>node:tty</code>, ported from Node 24.20 over the explicit <code>jco:node/tty@0.1.0</code>
+capability, which addresses the host process’s terminals by descriptor and is
+denied by default; and</li>
 <li><code>node:stream/consumers</code>, implemented as portable iterable collection over the
 engine’s Blob, typed-array, and text-codec globals; and</li>
 <li>the experimental Node 24.20 <code>node:stream/iter</code> API, including portable sources,
@@ -2122,6 +2125,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:process</code></td><td>Jco typed facade and explicit Node passthrough</td><td>Host process state and operations over <code>jco:node/process@0.1.0</code>; lazy default properties, named functions and objects. See Process restrictions below.</td></tr>
 <tr><td><code>node:sqlite</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code></td><td>SQLite over an explicit typed host capability; denied by default. Synchronous SQL callbacks are unsupported – see below.</td></tr>
 <tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider – see below.</td></tr>
+<tr><td><code>node:tty</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty</code></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
 <tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
@@ -2605,6 +2609,55 @@ Node <code>node:os</code>.</p>
 <code>networkInterfaces</code>, <code>platform</code>, <code>release</code>, <code>setPriority</code>, <code>tmpdir</code>, <code>totalmem</code>,
 <code>type</code>, <code>uptime</code>, <code>userInfo</code>, and <code>version</code>, with Node’s argument validation and
 <code>ERR_SYSTEM_ERROR</code> reconstruction for failing calls.</p>
+<h3 id="terminals-and-host-capabilities"><a class="header" href="#terminals-and-host-capabilities">Terminals and host capabilities</a></h3>
+<p>A component has no terminal of its own, and WASI 0.2 can only say whether its
+standard streams are terminals. <code>node:tty</code> therefore resolves against
+<code>jco:node/tty@0.1.0</code>, which addresses the embedding process’s descriptors as Node
+does: <code>isatty(fd)</code>, a handle per descriptor and direction, raw mode, the window
+size, blocking reads, writes, and the environment used for color detection. When
+bundled source imports <code>node:tty</code>, Jco adds the import to the selected world and
+installs <code>tty.wit</code> and the shared <code>types.wit</code> under <code>deps/jco-node-0.1.0</code>.</p>
+<p>It is <strong>denied by default</strong>: every operation, including <code>isatty()</code> on an in-range
+descriptor, throws <code>ERR_JCO_TTY_ADAPTER_REQUIRED</code> until the application maps a
+provider. jco-std ships one for Node:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/tty@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host/node'
+</code></pre>
+<p>With it, <code>new tty.WriteStream(1)</code> is the embedding process’s standard output when
+that is a terminal, and fails with Node’s own <code>ERR_TTY_INIT_FAILED</code> (with <code>errno</code>,
+<code>syscall</code> and <code>info</code>) when it is not. <code>process.stdin</code> and <code>process.stdout</code> remain
+unsupported on the process facade, so applications construct the streams from
+descriptors explicitly. Because <code>readline</code> and the REPL default <code>terminal</code> to
+<code>output.isTTY</code>, these streams are what makes an interactive session work:</p>
+<pre><code class="language-js">import { ReadStream, WriteStream } from "node:tty";
+import repl from "node:repl";
+
+export function start() {
+  const input = new ReadStream(0);
+  const output = new WriteStream(1);
+  repl.start({ prompt: "app&gt; ", input, output, useGlobal: true });
+  input.resume();
+}
+</code></pre>
+<p>The port follows <a href="https://github.com/nodejs/node/blob/v24.20.0/lib/tty.js">Node v24.20.0’s <code>lib/tty.js</code></a>
+and <code>lib/internal/tty.js</code>. The pinned unenv tty module answers <code>isatty() === false</code>
+and writes through <code>console.log</code>; it is not used.</p>
+<h4 id="boundaries-1"><a class="header" href="#boundaries-1">Boundaries</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td>Prototype chain</td><td><code>WriteStream → Duplex → Readable → Stream → EventEmitter</code> with an internal terminal stream standing in for <code>net.Socket</code>; <code>instanceof net.Socket</code> is false without <code>wasi:sockets</code>.</td></tr>
+<tr><td>Stream sides</td><td>A <code>ReadStream</code> is not writable and a <code>WriteStream</code> is not readable; Node’s sockets open the descriptor read-write.</td></tr>
+<tr><td>Reading</td><td>Blocks the component. A flowing <code>ReadStream</code> pulls one chunk per read and emits <code>'data'</code> synchronously between pulls; <code>pause()</code> stops after the current chunk. Nothing else runs while the terminal is idle.</td></tr>
+<tr><td><code>'resize'</code></td><td>Emitted only by <code>_refreshSize()</code>; a component receives no <code>SIGWINCH</code>.</td></tr>
+<tr><td><code>getColorDepth()</code> / <code>hasColors()</code></td><td>Exact port. The environment defaults to the provider’s; the Windows branch answers the 16-color floor because the build-number probe needs <code>node:os</code>.</td></tr>
+<tr><td>Standard descriptors on the Node host</td><td>Kept open when a stream is destroyed, as Node keeps its own stdio; descriptors above 2 are closed with the stream. Raw mode is restored when the last read handle goes.</td></tr>
+</tbody>
+</table>
+</div>
 <h3 id="async-hooks-and-synchronous-scopes"><a class="header" href="#async-hooks-and-synchronous-scopes">Async hooks and synchronous scopes</a></h3>
 <p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
 nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
@@ -3306,7 +3359,7 @@ the module or upstream project.</p>
 </thead>
 <tbody>
 <tr><td><code>node:timers/promises</code></td><td>A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.</td></tr>
-<tr><td><code>node:trace_events</code>, <code>node:tty</code></td><td>The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.</td></tr>
+<tr><td><code>node:trace_events</code></td><td>The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.</td></tr>
 <tr><td><code>node:url</code></td><td>There is substantial Node-derived code, but its eager <code>node:path</code> dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy.</td></tr>
 </tbody>
 </table>
