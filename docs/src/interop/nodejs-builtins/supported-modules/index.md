@@ -63,6 +63,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:stream/consumers`](./stream.md) | Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability. |
 | [`node:stream/iter`](./stream.md) | Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported. |
 | [`node:string_decoder`](./string-decoder.md) | Guest-local streaming decoder for Node 24. Requires no WIT capability. |
+| [`node:test`](./test.md), [`node:test/reporters`](./test.md) | Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine `AbortController`; see the API page for engine limits. |
 | [`node:timers`](./timers.md), [`node:timers/promises`](./timers.md) | Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits. |
 | [`node:tty`](./tty.md) | Node 24.20 `isatty`, `ReadStream` and `WriteStream` over the host process's descriptors through an explicit host capability; denied by default. |
 
