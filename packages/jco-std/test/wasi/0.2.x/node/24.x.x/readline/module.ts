@@ -29,7 +29,9 @@ describe("readline module contract (Node 24)", () => {
       const rl = readline.Interface({ input: new PassThrough() });
       expect(rl).toBeInstanceOf(readline.Interface);
       expect(rl).toBeInstanceOf(EventEmitter);
+
       class Derived extends readline.Interface {}
+
       const derived = new Derived({ input: new PassThrough() });
       expect(derived).toBeInstanceOf(Derived);
       expect(Object.getOwnPropertyNames(readline.Interface.prototype).sort()).toEqual(
@@ -38,6 +40,7 @@ describe("readline module contract (Node 24)", () => {
       rl.close();
       derived.close();
     });
+
   test.concurrent("disposal closes once", () => {
     const rl = readline.createInterface(new PassThrough());
     let closed = 0;

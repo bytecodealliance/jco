@@ -13,15 +13,18 @@ test
         const writes: string[] = [];
         const stream = new Writable({
           highWaterMark: 1,
+
           write(chunk, _encoding, cb) {
             writes.push(String(chunk));
             cb();
           },
         });
         const callbacks: unknown[] = [];
+
         const callback = (error?: Error | null): void => {
           callbacks.push(error);
         };
+
         const results = [
           api.cursorTo(stream, 2),
           api.cursorTo(stream, 1, 3),
@@ -38,9 +41,11 @@ test
         await new Promise((resolve) => setImmediate(resolve));
         return { writes, callbacks, results };
       }
+
       expect(await report(readline)).toEqual(await report(native));
     },
   );
+
 test
   .skipIf(!process.versions.node.startsWith("24."))
   .concurrent("invalid cursor positions and callbacks preserve Node error shapes", () => {
@@ -66,6 +71,7 @@ test
           return [err.name, err.code, err.message];
         }
       };
+
       expect(capture(readline)).toEqual(capture(native));
     }
   });

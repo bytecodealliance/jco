@@ -15,6 +15,7 @@ test
       Buffer.from("\x1bOP"),
       Buffer.from("\x1bb"),
     ];
+
     function report(emit: typeof emitKeypressEvents | typeof native) {
       const stream = new PassThrough();
       const keys: unknown[] = [];
@@ -26,8 +27,10 @@ test
       }
       return keys;
     }
+
     expect(report(emitKeypressEvents)).toEqual(report(native));
   });
+
 test.concurrent("standalone Escape uses the configured timeout", async () => {
   const stream = new PassThrough();
   emitKeypressEvents(stream, { escapeCodeTimeout: 5 });
