@@ -210,7 +210,7 @@ export const getgroups: ProcessHost["getgroups"] = () =>
     if (!nodeProcess.getgroups) {
       throw unsupportedNodeApi("process.getgroups", "unavailable on this host platform");
     }
-    return nodeProcess.getgroups();
+    return Uint32Array.from(nodeProcess.getgroups());
   });
 
 export const setgroups: ProcessHost["setgroups"] = (groups) =>
