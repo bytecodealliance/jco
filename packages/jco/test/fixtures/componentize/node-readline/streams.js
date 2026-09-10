@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 
-// The application supplies streams; no host or node:process capability is needed.
+// The application supplies streams: node:process cannot provide stdin/stdout inside a component,
+// and readline itself needs no host capability.
 export class Input extends EventEmitter {
     resume() {
         this.paused = false;

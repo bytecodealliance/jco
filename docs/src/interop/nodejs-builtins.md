@@ -359,18 +359,26 @@ export async function ask(input, output) {
 
 Bundle application code with `jco componentize app.js --bundle --wit wit -o app.wasm`.
 Readline itself requires no WIT imports. The streams determine where input and
-output go. `node:process` is not yet supported, so the documentation's
-literal `process.stdin`/`process.stdout` imports cannot yet be componentized.
-The test fixture runs that literal example against the shim on Node, and runs the
-same question/answer flow with supplied streams in QuickJS and StarlingMonkey.
+output go. `node:process` resolves inside a component, but its `stdin`, `stdout`
+and `stderr` are host stream objects that cannot cross the component boundary and
+throw `ERR_JCO_UNSUPPORTED_NODE_API` (see [Process restrictions](#process-restrictions)).
+The Node documentation's literal `import { stdin, stdout } from 'node:process'`
+example therefore runs unchanged on Node but not in a component; supply streams
+from the component's own I/O instead. The test fixture runs that literal example
+against the shim on Node, and runs the same question/answer flow with supplied
+streams in QuickJS and StarlingMonkey.
 
 #### Terminal and scheduling boundaries
 
 Terminal streams may supply `setRawMode`, `columns`, and resize events. Terminal
-mode emits ANSI sequences without inspecting a host `TERM` variable. Ctrl+Z can
-be handled with a `SIGTSTP` listener; otherwise it throws
-`ERR_JCO_UNSUPPORTED_NODE_API`, since a component cannot suspend its host process.
-Host job-control `SIGCONT` events are unavailable.
+mode emits ANSI sequences without inspecting a host `TERM` variable; an application
+that wants Node's `TERM=dumb` behaviour can read `process.env.TERM` through
+`node:process` and pass `terminal: false` itself. Ctrl+Z can be handled with a
+`SIGTSTP` listener; otherwise it throws `ERR_JCO_UNSUPPORTED_NODE_API`. Node
+suspends itself with `process.kill(process.pid, 'SIGTSTP')` and resumes from a
+`SIGCONT` listener; the `node:process` facade refuses signal listeners, and
+readline deliberately does not import it, so using readline never adds the
+process capability to a component.
 
 Cursor widths use Node's non-ICU tables, with normalization where the engine
 provides it; some Unicode widths differ from ICU-enabled Node. Deferred callbacks
