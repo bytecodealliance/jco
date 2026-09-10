@@ -14,6 +14,7 @@
       "whatwg-url": ["./src/wasi/0.2.x/node/24.x.x/url/whatwg-types.d.ts"],
       "punycode/punycode.js": ["./src/wasi/0.2.x/node/24.x.x/url/punycode-types.d.ts"],
       "jco:node/tls@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/tls-interface.d.ts"],
+      "jco:node/dgram@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/dgram-interface.d.ts"],
       "readable-stream/lib/stream.js": ["./src/wasi/0.2.x/node/24.x.x/stream/vendor-types.d.ts"],
       "jco:node/sqlite@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/sqlite-interface.d.ts"],
       "wasi:sockets/instance-network@0.2.12": ["./src/wasi/0.2.x/node/24.x.x/net-interface.d.ts"],

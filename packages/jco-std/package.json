@@ -516,6 +516,25 @@
     "./wasi/0.2.x/node/24.x.x/tls/wasi": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/tls/wasi.d.ts",
       "default": "./dist/wasi/0.2.x/node/24.x.x/tls/wasi.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dgram": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dgram.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/dgram.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dgram.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dgram/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dgram/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/dgram/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dgram/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dgram/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dgram-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/dgram-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dgram-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/dgram/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/dgram-host-node.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/dgram-host-node.js"
     }
   },
   "scripts": {
