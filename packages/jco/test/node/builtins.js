@@ -812,7 +812,7 @@ describe("Node builtin adapters", () => {
             expect(onWitRequirement).toHaveBeenCalledExactlyOnceWith(nodeWit.PROCESS_WIT_REQUIREMENT);
             expect(adapter.load("\0jco-node-builtin:unknown")).toBeNull();
             expect(adapter.resolveId("./unrelated.js")).toBeNull();
-            expect(() => adapter.resolveId("node:path")).toThrow(/import wasi:cli\/environment/);
+            expect(adapter.resolveId("node:path")).toBe("\0jco-node-builtin:node:path@0.2.12");
         }
     });
 

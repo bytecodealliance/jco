@@ -62,6 +62,9 @@ export function createStreamBuiltin({ options }: BuiltinContext): BuiltinAdapter
                 return null;
             },
             load(id) {
+                if (id === `${VIRTUAL_PREFIX}commonjs-stream`) {
+                    return `module.exports = require(${JSON.stringify(stdModule(options.streamModule, "stream"))}).default;`;
+                }
                 if (id !== STREAM_EVENTS_MODULE) {
                     return null;
                 }

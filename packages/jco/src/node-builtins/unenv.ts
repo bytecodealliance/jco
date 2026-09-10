@@ -1,3 +1,4 @@
+import { type BuiltinContext, type BuiltinAdapter, builtin, starReexportAdapter } from "./shared.js";
 import { type NodeBuiltinOptions } from "./types.js";
 import { defineEnv } from "unenv";
 import { fileURLToPath } from "node:url";
@@ -22,4 +23,11 @@ export function unenvModule(specifier: string, options: NodeBuiltinOptions): str
         throw new Error(`unenv did not provide a bundleable implementation for audited builtin ${specifier}`);
     }
     return resolved;
+}
+
+/** Limited dependency fallbacks; zlib operations remain unsupported. */
+export function createPortableUnenvBuiltin({ options }: BuiltinContext): BuiltinAdapter {
+    return builtin(["node:util", "node:util/types", "node:zlib"], (specifier) =>
+        starReexportAdapter(unenvModule(specifier, options), "implementation"),
+    );
 }

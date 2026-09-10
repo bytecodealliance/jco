@@ -1,3 +1,4 @@
+import { PATH_WIT_REQUIREMENT } from "../node-wit.js";
 import { type WorldMetadata } from "./types.js";
 import { VIRTUAL_PREFIX, type BuiltinContext, type BuiltinAdapter, stdModule } from "./shared.js";
 
@@ -13,7 +14,7 @@ const PATH_SPECIFIERS = new Map([
  * `node:path` is backed by WASI, so the world has to import the interface it needs, at exactly
  * one version.
  */
-function environmentVersion(worldMetadata: WorldMetadata): string {
+function environmentVersion(worldMetadata: WorldMetadata): string | undefined {
     const matches = (worldMetadata?.imports ?? []).filter(
         (iface) =>
             iface.namespace === "wasi" &&
@@ -23,9 +24,7 @@ function environmentVersion(worldMetadata: WorldMetadata): string {
             iface.version?.minor === 2n,
     );
     if (matches.length === 0) {
-        throw new Error(
-            "node:path requires the selected WIT world to import wasi:cli/environment@0.2.x; add that interface to the world",
-        );
+        return undefined;
     }
     if (matches.length > 1) {
         throw new Error(
@@ -75,7 +74,15 @@ export const win32 = path.win32;
 export function createPathBuiltin({ options, worldMetadata }: BuiltinContext): BuiltinAdapter {
     return {
         resolveId(id) {
-            return PATH_SPECIFIERS.has(id) ? `${VIRTUAL_PREFIX}${id}@${environmentVersion(worldMetadata)}` : null;
+            if (!PATH_SPECIFIERS.has(id)) {
+                return null;
+            }
+            let version = environmentVersion(worldMetadata);
+            if (!version) {
+                options.onWitRequirement?.(PATH_WIT_REQUIREMENT);
+                version = "0.2.12";
+            }
+            return `${VIRTUAL_PREFIX}${id}@${version}`;
         },
         load(id) {
             if (!id.startsWith(VIRTUAL_PREFIX)) {
