@@ -82,6 +82,8 @@ export interface NodeBuiltinOptions {
     /** Paths to jco-std's versioned DNS modules (overridable for tests) */
     dnsModule?: string;
     dnsPromisesModule?: string;
+    /** Path to the versioned node:dgram guest module. */
+    dgramModule?: string;
     /** Implementation used for `node:http` host operations. */
     nodejsHttpVia?: NodejsHttpVia;
     /** Paths to jco-std's HTTP modules (overridable for tests). */
