@@ -3,10 +3,10 @@
 // Node.js is distributed under the MIT license. See https://github.com/nodejs/node.
 
 import { unsupportedNodeApi } from "../errors/core.js";
+
 import { inspect as inspectValue, type InspectOptions } from "../internal/inspect.js";
-
-export type { InspectOptions };
-
+import { formatArgs as format } from "../util/format-core.js";
+export type { InspectOptions } from "../internal/inspect.js";
 const clocks = new WeakMap<object, () => number>();
 const consoleMethods = [
   "log",
@@ -32,10 +32,15 @@ const consoleMethods = [
 
 export interface WritableStream {
   write(value: string, callback?: (error?: Error | null) => void): unknown;
+
   listenerCount?(event: string): number;
+
   once?(event: string, listener: (error?: Error) => void): unknown;
+
   removeListener?(event: string, listener: (error?: Error) => void): unknown;
+
   isTTY?: boolean;
+
   getColorDepth?(): number;
 }
 
@@ -50,8 +55,11 @@ export interface ConsoleOptions {
 
 export interface ConsoleProviders {
   write(stream: "stdout" | "stderr", value: string): void;
+
   isTerminal?(stream: "stdout" | "stderr"): boolean;
+
   colorDepth?(stream: "stdout" | "stderr"): number;
+
   now?: () => number;
 }
 
@@ -71,76 +79,6 @@ function validateStream(value: unknown, name: string): asserts value is Writable
   }
 }
 
-function json(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? "undefined";
-  } catch (error) {
-    if (error instanceof TypeError && /circular/i.test(error.message)) {
-      return "[Circular]";
-    }
-    throw error;
-  }
-}
-
-function formatNumber(value: unknown, integer: boolean): string {
-  if (typeof value === "bigint") {
-    return `${value}n`;
-  }
-  if (typeof value === "symbol") {
-    return "NaN";
-  }
-  const number = Number(value);
-  return String(integer ? Math.trunc(number) : number);
-}
-
-function format(args: unknown[], options: InspectOptions): string {
-  if (args.length === 0) {
-    return "";
-  }
-  if (typeof args[0] !== "string") {
-    return args.map((value) => inspectValue(value, options)).join(" ");
-  }
-
-  let index = 1;
-  const formatted = args[0].replace(/%[sdifjoOc%]/g, (token) => {
-    if (token === "%%") {
-      return "%";
-    }
-    if (token === "%c") {
-      if (index < args.length) {
-        index++;
-      }
-      return "";
-    }
-    if (index >= args.length) {
-      return token;
-    }
-    const value = args[index++];
-    switch (token) {
-      case "%s":
-        return typeof value === "object" && value !== null
-          ? inspectValue(value, { ...options, colors: false, depth: 0 })
-          : String(value);
-      case "%d":
-      case "%f":
-        return formatNumber(value, false);
-      case "%i":
-        return formatNumber(typeof value === "string" ? Number.parseInt(value, 10) : value, true);
-      case "%j":
-        return json(value);
-      default:
-        return inspectValue(value, token === "%o" ? { ...options, depth: 4 } : options);
-    }
-  });
-  if (index === args.length) {
-    return formatted;
-  }
-  return `${formatted} ${args
-    .slice(index)
-    .map((value) => (typeof value === "string" ? value : inspectValue(value, options)))
-    .join(" ")}`;
-}
-
 function displayWidth(value: string): number {
   return Array.from(value.replace(/\u001b\[[0-9;]*m/g, "")).length;
 }
@@ -154,8 +92,10 @@ function renderTable(headings: string[], columns: string[][]): string {
     }
   }
   const divider = widths.map((width) => "─".repeat(width + 2));
+
   const row = (values: string[]) =>
     `│ ${values.map((value, index) => value + " ".repeat(widths[index] - displayWidth(value))).join(" │ ")} │`;
+
   const lines = [`┌${divider.join("┬")}┐`, row(headings), `├${divider.join("┼")}┤`];
   for (let index = 0; index < rowCount; index++) {
     lines.push(row(columns.map((column) => column[index] ?? "")));
@@ -338,15 +278,19 @@ class ConsoleImplementation {
   log(...args: unknown[]): void {
     this.#stdout(args);
   }
+
   info(...args: unknown[]): void {
     this.#stdout(args);
   }
+
   debug(...args: unknown[]): void {
     this.#stdout(args);
   }
+
   warn(...args: unknown[]): void {
     this.#stderr(args);
   }
+
   error(...args: unknown[]): void {
     this.#stderr(args);
   }
@@ -446,8 +390,10 @@ class ConsoleImplementation {
       this.log(data);
       return;
     }
+
     const inspect = (value: unknown) =>
       inspectValue(value, this.#inspection(this._stdout, { depth: 0, maxArrayLength: 3 }));
+
     let indexHeading = "(index)";
     if (data instanceof Map) {
       const entries = Array.from(data.entries());
@@ -518,6 +464,7 @@ class ConsoleImplementation {
   dirxml(...args: unknown[]): void {
     this.log(...args);
   }
+
   groupCollapsed(...args: unknown[]): void {
     this.group(...args);
   }
@@ -555,8 +502,11 @@ Object.defineProperty(Console, "name", { value: "Console", configurable: true })
 
 export interface ConsoleModule extends ConsoleImplementation {
   Console: typeof Console;
+
   profile(label?: string): void;
+
   profileEnd(label?: string): void;
+
   timeStamp(label?: string): void;
 }
 
@@ -565,7 +515,9 @@ function hostStream(providers: ConsoleProviders, name: "stdout" | "stderr"): Wri
     get isTTY() {
       return providers.isTerminal?.(name) ?? false;
     },
+
     getColorDepth: providers.colorDepth ? () => providers.colorDepth!(name) : undefined,
+
     write(value: string): void {
       providers.write(name, value);
     },
