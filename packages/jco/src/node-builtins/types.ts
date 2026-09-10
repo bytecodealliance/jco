@@ -39,6 +39,9 @@ export interface NodeBuiltinOptions {
     inspectorModule?: string;
     /** Path to the versioned perf_hooks implementation (overridable for tests). */
     perfHooksModule?: string;
+    /** Paths to the versioned timer modules (overridable for tests). */
+    timersModule?: string;
+    timersPromisesModule?: string;
     /** Path to jco-std's versioned `node:inspector/promises` module (overridable for tests) */
     inspectorPromisesModule?: string;
     /** Path to jco-std's versioned `node:module` module (overridable for tests) */
