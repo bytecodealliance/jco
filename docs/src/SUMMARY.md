@@ -49,6 +49,7 @@
             - [`node:string_decoder`](./interop/nodejs-builtins/supported-modules/string-decoder.md)
             - [`node:test`](./interop/nodejs-builtins/supported-modules/test.md)
             - [`node:timers`](./interop/nodejs-builtins/supported-modules/timers.md)
+            - [`node:tls`](./interop/nodejs-builtins/supported-modules/tls.md)
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
             - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
 - [Troubleshooting]()

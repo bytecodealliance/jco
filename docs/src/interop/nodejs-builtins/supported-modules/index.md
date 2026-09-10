@@ -47,7 +47,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:fs`](./fs.md), [`node:fs/promises`](./fs.md) | Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default. |
 | [`node:http`](./http.md) | Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation. Servers need `direct` or `wasi-sockets`. |
 | [`node:http2`](./http2.md) | Client and server sessions over selectable direct or WASI socket implementations. |
-| [`node:https`](./https.md) | The `node:http` core with the `https:` profile and a TLS-aware `Agent`; same implementation selection. TLS uses the `direct` host or an explicit `wasi:tls` provider. |
+| [`node:https`](./https.md) | The `node:http` core with the `https:` profile and a TLS-aware `Agent`; same implementation selection. TLS uses `jco:node/tls`, optionally delegating to `wasi:tls`. |
 | [`node:inspector`](./inspector.md), [`node:inspector/promises`](./inspector.md) | Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface. |
 | [`node:module`](./module.md) | Classification, source maps and `require.resolve` are exact. Everything that **loads** throws `ERR_JCO_UNSUPPORTED_NODE_API`. Requires no WIT capability. |
 | [`node:net`](./net.md) | TCP clients, servers, and address utilities over Preview 2 `wasi:sockets`; native handles and IPC are unsupported. |
@@ -65,6 +65,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:string_decoder`](./string-decoder.md) | Guest-local streaming decoder for Node 24. Requires no WIT capability. |
 | [`node:test`](./test.md), [`node:test/reporters`](./test.md) | Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine `AbortController`; see the API page for engine limits. |
 | [`node:timers`](./timers.md), [`node:timers/promises`](./timers.md) | Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits. |
+| [`node:tls`](./tls.md) | Encrypted sockets, contexts, and inspection over `jco:node/tls`; denied by default. |
 | [`node:tty`](./tty.md) | Node 24.20 `isatty`, `ReadStream` and `WriteStream` over the host process's descriptors through an explicit host capability; denied by default. |
 | [`node:url`](./url.md) | Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports. |
 
