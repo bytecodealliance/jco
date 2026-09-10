@@ -144,58 +144,49 @@ export type ReportOption =
   | "exclude-env"
   | "exclude-network";
 export type ReportValue = { tag: "boolean"; val: boolean } | { tag: "text"; val: string };
+/** JavaScript WIT provider: return plain values and throw ProcessError records on failure. */
 export interface ProcessHost {
-  metadata(): Metadata | HostResult<Metadata, ProcessError>;
-  getState(): ProcessState | HostResult<ProcessState, ProcessError>;
-  setTitle(value: string): void | HostResult<void, ProcessError>;
-  setDebugPort(value: number): void | HostResult<void, ProcessError>;
-  setExitCode(value: ExitCode | undefined): void | HostResult<void, ProcessError>;
-  setFlag(name: ProcessFlag, value: boolean): void | HostResult<void, ProcessError>;
-  envEntries(): [string, string][] | HostResult<[string, string][], ProcessError>;
-  envGet(name: string): string | undefined | HostResult<string | undefined, ProcessError>;
-  envSet(name: string, value: string | undefined): void | HostResult<void, ProcessError>;
-  cwd(): string | HostResult<string, ProcessError>;
-  chdir(directory: string): void | HostResult<void, ProcessError>;
-  cpuUsage(previous: CpuUsage | undefined): CpuUsage | HostResult<CpuUsage, ProcessError>;
-  threadCpuUsage(previous: CpuUsage | undefined): CpuUsage | HostResult<CpuUsage, ProcessError>;
-  memoryUsage(): MemoryUsage | HostResult<MemoryUsage, ProcessError>;
-  rss(): number | HostResult<number, ProcessError>;
-  resourceUsage(): HostResourceUsage | HostResult<HostResourceUsage, ProcessError>;
-  hrtime(): ClockTime | HostResult<ClockTime, ProcessError>;
-  uptime(): number | HostResult<number, ProcessError>;
-  availableMemory(): number | HostResult<number, ProcessError>;
-  constrainedMemory(): number | HostResult<number, ProcessError>;
-  getActiveResourcesInfo(): string[] | HostResult<string[], ProcessError>;
-  getId(kind: Identity): number | HostResult<number, ProcessError>;
-  setId(kind: Identity, value: Id): void | HostResult<void, ProcessError>;
-  getgroups(): number[] | Uint32Array | HostResult<number[] | Uint32Array, ProcessError>;
-  setgroups(groups: Id[]): void | HostResult<void, ProcessError>;
-  initgroups(user: Id, extraGroup: Id): void | HostResult<void, ProcessError>;
-  kill(pid: number, signal: Signal): boolean | HostResult<boolean, ProcessError>;
-  umask(mask: Mask): number | HostResult<number, ProcessError>;
-  exit(code: ExitCode | undefined): void | HostResult<void, ProcessError>;
-  abort(): void | HostResult<void, ProcessError>;
-  execve(
-    file: string,
-    args: string[],
-    env: [string, string][] | undefined,
-  ): void | HostResult<void, ProcessError>;
-  loadEnvFile(path: ProcessPath | undefined): void | HostResult<void, ProcessError>;
-  setSourceMapsEnabled(value: boolean): void | HostResult<void, ProcessError>;
-  emitWarning(warning: Warning): void | HostResult<void, ProcessError>;
-  permissionHas(
-    scope: string,
-    reference: ProcessPath | undefined,
-  ): boolean | HostResult<boolean, ProcessError>;
-  getReport(error: Warning | undefined): string | HostResult<string, ProcessError>;
-  writeReport(
-    filename: string | undefined,
-    error: Warning | undefined,
-  ): string | HostResult<string, ProcessError>;
-  getReportOptions(): ReportOptions | HostResult<ReportOptions, ProcessError>;
-  setReportOption(name: ReportOption, value: ReportValue): void | HostResult<void, ProcessError>;
-  allowedFlags(): string[] | HostResult<string[], ProcessError>;
-  allowedFlag(value: string): boolean | HostResult<boolean, ProcessError>;
+  metadata(): Metadata;
+  getState(): ProcessState;
+  setTitle(value: string): void;
+  setDebugPort(value: number): void;
+  setExitCode(value: ExitCode | undefined): void;
+  setFlag(name: ProcessFlag, value: boolean): void;
+  envEntries(): [string, string][];
+  envGet(name: string): string | undefined;
+  envSet(name: string, value: string | undefined): void;
+  cwd(): string;
+  chdir(directory: string): void;
+  cpuUsage(previous: CpuUsage | undefined): CpuUsage;
+  threadCpuUsage(previous: CpuUsage | undefined): CpuUsage;
+  memoryUsage(): MemoryUsage;
+  rss(): number;
+  resourceUsage(): HostResourceUsage;
+  hrtime(): ClockTime;
+  uptime(): number;
+  availableMemory(): number;
+  constrainedMemory(): number;
+  getActiveResourcesInfo(): string[];
+  getId(kind: Identity): number;
+  setId(kind: Identity, value: Id): void;
+  getgroups(): Uint32Array;
+  setgroups(groups: Id[]): void;
+  initgroups(user: Id, extraGroup: Id): void;
+  kill(pid: number, signal: Signal): boolean;
+  umask(mask: Mask): number;
+  exit(code: ExitCode | undefined): void;
+  abort(): void;
+  execve(file: string, args: string[], env: [string, string][] | undefined): void;
+  loadEnvFile(path: ProcessPath | undefined): void;
+  setSourceMapsEnabled(value: boolean): void;
+  emitWarning(warning: Warning): void;
+  permissionHas(scope: string, reference: ProcessPath | undefined): boolean;
+  getReport(error: Warning | undefined): string;
+  writeReport(filename: string | undefined, error: Warning | undefined): string;
+  getReportOptions(): ReportOptions;
+  setReportOption(name: ReportOption, value: ReportValue): void;
+  allowedFlags(): string[];
+  allowedFlag(value: string): boolean;
 }
 
 export type ProcessListener = (...args: never[]) => void;
