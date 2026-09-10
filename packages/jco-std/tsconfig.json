@@ -17,6 +17,7 @@
       "wasi:sockets/ip-name-lookup@0.2.12": ["./src/wasi/0.2.x/node/24.x.x/net-interface.d.ts"],
       "wasi:sockets/tcp-create-socket@0.2.12": ["./src/wasi/0.2.x/node/24.x.x/net-interface.d.ts"],
       "jco:node/process@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/process-interface.d.ts"],
+      "jco:node/tty@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/tty-interface.d.ts"],
       "jco:node/child-process@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/child-process-interface.d.ts"],
       "jco:node/cluster@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/cluster-interface.d.ts"],
       "jco:node/console@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/console-interface.d.ts"],
