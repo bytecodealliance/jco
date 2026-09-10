@@ -1,0 +1,5 @@
+package jco-fixtures:node-tty;
+
+world component {
+    export run: func(mode: string) -> string;
+}
