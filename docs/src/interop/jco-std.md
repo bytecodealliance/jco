@@ -114,6 +114,8 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
 
 - `node:assert` and `node:assert/strict`, adapted from Node.js 24 for portable
   execution without a host capability; and
+- `node:util` and `node:util/types`, sharing assertion equality, console formatting,
+  scheduling and validation helpers, with portable parsing and MIME utilities; and
 - `node:path`, `node:path/posix`, and `node:path/win32`, implemented with portable
   path algorithms and a `wasi:cli/environment` provider for operations that need
   the guest working directory; and
