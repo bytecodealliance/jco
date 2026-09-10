@@ -132,7 +132,6 @@ the module or upstream project.
 | Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `node:trace_events`                       | The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.                                                                                                                       |
-| `node:url`                                | There is substantial Node-derived code, but its eager `node:path` dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy. |
 
 ### Host-backed or broad subsystems
 
