@@ -98,10 +98,10 @@ Generate bindings for explicit instantiation; no custom mapping is needed:
 jco transpile app.wasm -o out --instantiation async
 ```
 
-Then pass your implementation object directly in the imports. Jco's default
-mapping names the process import after the denial-provider package; that key does
-not force you to use its implementation. The generated binding types list the
-expected import keys:
+Then pass your implementation object directly in the imports, keyed by the WIT
+interface name without its version. Jco's deny-by-default module map applies only
+to ESM output; instantiation output never renames imports. The generated binding
+types list the expected import keys:
 
 ```js
 import { instantiate } from './out/app.js';
@@ -111,7 +111,7 @@ import { createProcessHost } from './my-process-provider.js';
 const { host, exitRequests } = createProcessHost();
 const component = await instantiate(undefined, {
     ...new WASIShim().getImportObject(),
-    '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host': host,
+    'jco:node/process': host,
 });
 ```
 
