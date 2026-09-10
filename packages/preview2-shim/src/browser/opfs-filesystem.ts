@@ -25,7 +25,9 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & {
 // capability.
 const SYMLINKS_FILE = ".__wasi_symlinks__.json";
 
-async function readSymlinksFile(handle: FileSystemDirectoryHandle): Promise<Record<string, string>> {
+async function readSymlinksFile(
+    handle: FileSystemDirectoryHandle,
+): Promise<Record<string, string>> {
     try {
         const fileHandle = await handle.getFileHandle(SYMLINKS_FILE);
         const file = await fileHandle.getFile();
@@ -54,7 +56,11 @@ async function writeSymlinksFile(
 }
 
 /** Collect every symlink under `dir` into a flat path -> target map, relative to `dir` itself. */
-function collectSymlinks(dir: Record<string, FileDataEntry>, prefix: string, out: Record<string, string>): void {
+function collectSymlinks(
+    dir: Record<string, FileDataEntry>,
+    prefix: string,
+    out: Record<string, string>,
+): void {
     for (const [name, entry] of Object.entries(dir)) {
         const path = prefix ? `${prefix}/${name}` : name;
         if (entry.symlink !== undefined) {
@@ -66,7 +72,10 @@ function collectSymlinks(dir: Record<string, FileDataEntry>, prefix: string, out
 }
 
 /** Place each recorded symlink back into the tree at its path, skipping any path whose parent is missing. */
-function injectSymlinks(root: Record<string, FileDataEntry>, symlinks: Record<string, string>): void {
+function injectSymlinks(
+    root: Record<string, FileDataEntry>,
+    symlinks: Record<string, string>,
+): void {
     for (const [path, target] of Object.entries(symlinks)) {
         const parts = path.split("/").filter(Boolean);
         const name = parts.pop();
@@ -86,7 +95,9 @@ function injectSymlinks(root: Record<string, FileDataEntry>, symlinks: Record<st
     }
 }
 
-async function readEntries(handle: FileSystemDirectoryHandle): Promise<Record<string, FileDataEntry>> {
+async function readEntries(
+    handle: FileSystemDirectoryHandle,
+): Promise<Record<string, FileDataEntry>> {
     const dir: Record<string, FileDataEntry> = {};
     for await (const [name, child] of (handle as IterableDirectoryHandle).entries()) {
         if (name === SYMLINKS_FILE) {
@@ -102,7 +113,10 @@ async function readEntries(handle: FileSystemDirectoryHandle): Promise<Record<st
     return dir;
 }
 
-async function writeEntries(handle: FileSystemDirectoryHandle, dir: Record<string, FileDataEntry>): Promise<void> {
+async function writeEntries(
+    handle: FileSystemDirectoryHandle,
+    dir: Record<string, FileDataEntry>,
+): Promise<void> {
     const seen = new Set(Object.keys(dir));
     seen.add(SYMLINKS_FILE);
     for await (const [name] of (handle as IterableDirectoryHandle).entries()) {
@@ -129,14 +143,22 @@ async function writeEntries(handle: FileSystemDirectoryHandle, dir: Record<strin
 }
 
 /** Load an OPFS directory into an in-memory tree, ready to hand to `OpfsFilesystemAdapter.getRoot`. */
-export async function loadOpfsCapability(handle: FileSystemDirectoryHandle): Promise<OpfsCapability> {
+export async function loadOpfsCapability(
+    handle: FileSystemDirectoryHandle,
+): Promise<OpfsCapability> {
     const dir = await readEntries(handle);
     injectSymlinks(dir, await readSymlinksFile(handle));
     return { handle, data: { dir } };
 }
 
 type LockMode = "shared" | "exclusive";
-const LOCK_METHODS = new Set(["lockShared", "lockExclusive", "tryLockShared", "tryLockExclusive", "unlock"]);
+const LOCK_METHODS = new Set([
+    "lockShared",
+    "lockExclusive",
+    "tryLockShared",
+    "tryLockExclusive",
+    "unlock",
+]);
 
 function lockModeOf(prop: string): LockMode {
     return prop.endsWith("Exclusive") ? "exclusive" : "shared";
@@ -158,6 +180,17 @@ function joinLockPath(base: string, segment: string): string {
     return path;
 }
 
+/** The slice of `navigator.locks` this adapter needs - narrow enough to fake in tests or other hosts. */
+export interface NavigatorLocks {
+    locks: {
+        request(
+            name: string,
+            options: { mode: "shared" | "exclusive" },
+            callback: () => Promise<void>,
+        ): Promise<void>;
+    };
+}
+
 /**
  * Wrap a descriptor so its advisory locking also makes a best-effort request against
  * `navigator.locks`, in addition to the default same-process reader/writer lock.
@@ -165,11 +198,15 @@ function joinLockPath(base: string, segment: string): string {
  * `lockExclusive()` on a cross-tab grant without JSPI, so this only coordinates
  * tabs that are already idle/cooperating.
  */
-function withCrossTabLocking(descriptor: BrowserFilesystemDescriptor, lockName: string): BrowserFilesystemDescriptor {
+function withCrossTabLocking(
+    descriptor: BrowserFilesystemDescriptor,
+    lockName: string,
+    navigator: NavigatorLocks | undefined,
+): BrowserFilesystemDescriptor {
     let release: (() => void) | null = null;
 
     function requestCrossTabLock(mode: LockMode): void {
-        if (typeof navigator === "undefined" || !navigator.locks) {
+        if (!navigator?.locks) {
             return;
         }
         navigator.locks
@@ -189,10 +226,15 @@ function withCrossTabLocking(descriptor: BrowserFilesystemDescriptor, lockName: 
             const value = Reflect.get(target, prop, receiver);
             if (prop === "openAt") {
                 return (...args: Parameters<BrowserFilesystemDescriptor["openAt"]>) => {
-                    const child = Reflect.apply(value as (...a: unknown[]) => unknown, target, args);
+                    const child = Reflect.apply(
+                        value as (...a: unknown[]) => unknown,
+                        target,
+                        args,
+                    );
                     return withCrossTabLocking(
                         child as BrowserFilesystemDescriptor,
                         joinLockPath(lockName, args[1]),
+                        navigator,
                     );
                 };
             }
@@ -224,6 +266,12 @@ export interface OpfsFilesystemAdapterOptions {
      * Off by default.
      */
     crossTabLocking?: boolean;
+    /**
+     * The `navigator` to request cross-tab locks against when `crossTabLocking` is enabled.
+     * Defaults to the global `navigator`. Overriding this is mainly useful for tests, since
+     * a real browser only ever has one.
+     */
+    navigator?: NavigatorLocks;
 }
 
 /**
@@ -240,18 +288,23 @@ export class OpfsFilesystemAdapter implements BrowserFilesystemAdapter<OpfsCapab
     #inMemory = new InMemoryFilesystemAdapter();
     #roots: OpfsCapability[] = [];
     #crossTabLocking: boolean;
+    #navigator: NavigatorLocks | undefined;
     #flushScheduled = false;
     #unsubscribeTouch: () => void;
 
     constructor(options: OpfsFilesystemAdapterOptions = {}) {
         this.#crossTabLocking = options.crossTabLocking ?? false;
+        this.#navigator =
+            options.navigator ?? (typeof navigator === "undefined" ? undefined : navigator);
         this.#unsubscribeTouch = _onTouch(() => this.#scheduleFlush());
     }
 
     getRoot(capability: OpfsCapability): BrowserFilesystemDescriptor {
         this.#roots.push(capability);
         const descriptor = this.#inMemory.getRoot(capability.data);
-        return this.#crossTabLocking ? withCrossTabLocking(descriptor, capability.handle.name) : descriptor;
+        return this.#crossTabLocking
+            ? withCrossTabLocking(descriptor, capability.handle.name, this.#navigator)
+            : descriptor;
     }
 
     #scheduleFlush(): void {
