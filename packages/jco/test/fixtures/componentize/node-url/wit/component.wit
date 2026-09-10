@@ -1,0 +1,5 @@
+package jco-fixtures:node-url;
+world cwd {
+  import wasi:cli/environment@0.2.12;
+  export from-cwd: func(path: string) -> string;
+}

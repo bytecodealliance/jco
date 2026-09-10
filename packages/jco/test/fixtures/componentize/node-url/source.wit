@@ -1,0 +1,5 @@
+package jco-fixtures:node-url;
+world test {
+  export run: func() -> string;
+  export policy: func() -> string;
+}
