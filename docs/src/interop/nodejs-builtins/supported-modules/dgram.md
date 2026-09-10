@@ -33,9 +33,10 @@ To grant UDP access, transpile for explicit instantiation:
 ```console
 jco transpile app.wasm -o out --instantiation async \
   --async-mode jspi --async-exports '*' \
-  --map 'jco:node/dgram@0.1.0=udp-host'
+  --map 'jco:node/dgram@0.1.0=jco:node/dgram@0.1.0'
 ```
 
+This mapping preserves the WIT interface name in the instantiation imports.
 Wire a separate Node provider to each instance:
 
 ```js
@@ -45,7 +46,7 @@ import { createDgramHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.
 
 const imports = new WASIShim().getImportObject();
 let instance;
-imports['udp-host'] = createDgramHost(() => instance.dgramCallbacks);
+imports['jco:node/dgram@0.1.0'] = createDgramHost(() => instance.dgramCallbacks);
 instance = await instantiate(undefined, imports);
 const port = await instance.start();
 // Send datagrams to 127.0.0.1:port, then call await instance.stop().
