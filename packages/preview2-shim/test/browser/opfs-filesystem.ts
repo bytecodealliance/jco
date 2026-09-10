@@ -79,10 +79,9 @@ class FakeDirectoryHandle {
 }
 
 suite("Browser OPFS filesystem adapter", () => {
-    test("loads OPFS content into a synchronous in-memory tree", async () => {
-        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
-            "../../src/browser/opfs-filesystem.js"
-        );
+    test.concurrent("loads OPFS content into a synchronous in-memory tree", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
         const root = new FakeDirectoryHandle();
         root.entriesMap.set("greeting.txt", new FakeFileHandle(new TextEncoder().encode("hi")));
 
@@ -93,10 +92,9 @@ suite("Browser OPFS filesystem adapter", () => {
         assert.strictEqual(descriptor.statAt({}, "greeting.txt").size, 2n);
     });
 
-    test("flush persists in-memory writes back to OPFS", async () => {
-        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
-            "../../src/browser/opfs-filesystem.js"
-        );
+    test.concurrent("flush persists in-memory writes back to OPFS", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
         const root = new FakeDirectoryHandle();
 
         const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
@@ -117,10 +115,9 @@ suite("Browser OPFS filesystem adapter", () => {
         assert.strictEqual(new TextDecoder().decode(buffer), "buy milk");
     });
 
-    test("symlinks survive a flush + reload via the sidecar metadata file", async () => {
-        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
-            "../../src/browser/opfs-filesystem.js"
-        );
+    test.concurrent("symlinks survive a flush + reload via the sidecar metadata file", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
         const root = new FakeDirectoryHandle();
         root.entriesMap.set("target.txt", new FakeFileHandle(new TextEncoder().encode("hello")));
 
@@ -153,10 +150,9 @@ suite("Browser OPFS filesystem adapter", () => {
         assert.strictEqual(sidecarStillExists, false);
     });
 
-    test("nested symlinks are recorded in a single root-level sidecar file, not one per directory", async () => {
-        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
-            "../../src/browser/opfs-filesystem.js"
-        );
+    test.concurrent("nested symlinks are recorded in a single root-level sidecar file, not one per directory", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
         const root = new FakeDirectoryHandle();
         root.entriesMap.set("target.txt", new FakeFileHandle(new TextEncoder().encode("hello")));
 
@@ -180,15 +176,22 @@ suite("Browser OPFS filesystem adapter", () => {
         const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
         const reloadedAdapter = new OpfsFilesystemAdapter();
         const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
-        const reloadedNested = reloadedDescriptor.openAt({}, "nested", { directory: true }, { read: true });
+        const reloadedNested = reloadedDescriptor.openAt(
+            {},
+            "nested",
+            { directory: true },
+            { read: true },
+        );
         assert.strictEqual(reloadedNested.readlinkAt("link.txt"), "../target.txt");
-        assert.strictEqual(reloadedDescriptor.statAt({ symlinkFollow: true }, "nested/link.txt").size, 5n);
+        assert.strictEqual(
+            reloadedDescriptor.statAt({ symlinkFollow: true }, "nested/link.txt").size,
+            5n,
+        );
     });
 
-    test("mutations persist to OPFS automatically without an explicit flush() call", async () => {
-        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
-            "../../src/browser/opfs-filesystem.js"
-        );
+    test.concurrent("mutations persist to OPFS automatically without an explicit flush() call", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
         const root = new FakeDirectoryHandle();
 
         const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
@@ -209,48 +212,43 @@ suite("Browser OPFS filesystem adapter", () => {
         assert.strictEqual(new TextDecoder().decode(buffer), "auto");
     });
 
-    test("cross-tab locking is off by default and opt-in via navigator.locks", async () => {
-        const { loadOpfsCapability, OpfsFilesystemAdapter } = await import(
-            "../../src/browser/opfs-filesystem.js"
-        );
+    test.concurrent("cross-tab locking is off by default and opt-in via navigator.locks", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
         const requests: Array<{ name: string; mode: string }> = [];
-        const fakeLocks = {
-            request: (name: string, options: { mode: string }, callback: () => Promise<void>) => {
-                requests.push({ name, mode: options.mode });
-                return Promise.resolve(callback());
+        const fakeNavigator = {
+            locks: {
+                request: (
+                    name: string,
+                    options: { mode: string },
+                    callback: () => Promise<void>,
+                ) => {
+                    requests.push({ name, mode: options.mode });
+                    return Promise.resolve(callback());
+                },
             },
         };
-        const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-        Object.defineProperty(globalThis, "navigator", {
-            value: { locks: fakeLocks },
-            configurable: true,
+
+        const root = new FakeDirectoryHandle("sandbox");
+        root.entriesMap.set("file.txt", new FakeFileHandle());
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+
+        const defaultAdapter = new OpfsFilesystemAdapter({ navigator: fakeNavigator });
+        const defaultDescriptor = defaultAdapter.getRoot(capability) as any;
+        defaultDescriptor.openAt({}, "file.txt", {}, { read: true }).tryLockShared();
+        assert.strictEqual(requests.length, 0);
+
+        const optedIn = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const lockingAdapter = new OpfsFilesystemAdapter({
+            crossTabLocking: true,
+            navigator: fakeNavigator,
         });
+        const lockingDescriptor = lockingAdapter.getRoot(optedIn) as any;
+        const opened = lockingDescriptor.openAt({}, "file.txt", {}, { read: true });
+        assert.strictEqual(opened.tryLockExclusive(), true);
 
-        try {
-            const root = new FakeDirectoryHandle("sandbox");
-            root.entriesMap.set("file.txt", new FakeFileHandle());
-            const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
-
-            const defaultAdapter = new OpfsFilesystemAdapter();
-            const defaultDescriptor = defaultAdapter.getRoot(capability) as any;
-            defaultDescriptor.openAt({}, "file.txt", {}, { read: true }).tryLockShared();
-            assert.strictEqual(requests.length, 0);
-
-            const optedIn = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
-            const lockingAdapter = new OpfsFilesystemAdapter({ crossTabLocking: true });
-            const lockingDescriptor = lockingAdapter.getRoot(optedIn) as any;
-            const opened = lockingDescriptor.openAt({}, "file.txt", {}, { read: true });
-            assert.strictEqual(opened.tryLockExclusive(), true);
-
-            assert.strictEqual(requests.length, 1);
-            assert.strictEqual(requests[0].mode, "exclusive");
-            assert.strictEqual(requests[0].name, "sandbox/file.txt");
-        } finally {
-            if (originalNavigator) {
-                Object.defineProperty(globalThis, "navigator", originalNavigator);
-            } else {
-                delete (globalThis as any).navigator;
-            }
-        }
+        assert.strictEqual(requests.length, 1);
+        assert.strictEqual(requests[0].mode, "exclusive");
+        assert.strictEqual(requests[0].name, "sandbox/file.txt");
     });
 });

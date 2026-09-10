@@ -299,11 +299,14 @@ suite("Browser filesystem", () => {
         assert.deepStrictEqual(calls, ["openAt", "advise", "syncData", "sync"]);
     });
 
-    test("advisory locking: shared locks stack, exclusive locks are exclusive", async () => {
-        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
-        _setFileData({ dir: { file: { source: new Uint8Array([1, 2, 3]) } } });
-
-        const [[root]] = preopens.getDirectories();
+    test.concurrent("advisory locking: shared locks stack, exclusive locks are exclusive", async () => {
+        const { createFilesystem, InMemoryFilesystemAdapter } =
+            await import("../../src/browser/filesystem.js");
+        const filesystem = createFilesystem({
+            adapter: new InMemoryFilesystemAdapter(),
+            preopens: { "/": { dir: { file: { source: new Uint8Array([1, 2, 3]) } } } },
+        });
+        const [[root]] = filesystem.preopens.getDirectories();
         const a = root.openAt({}, "file", {}, { read: true }) as any;
         const b = root.openAt({}, "file", {}, { read: true }) as any;
 
@@ -319,11 +322,14 @@ suite("Browser filesystem", () => {
         assert.strictEqual(b.tryLockShared(), true);
     });
 
-    test("advisory locking: lockShared/lockExclusive throw would-block instead of waiting", async () => {
-        const { _setFileData, preopens } = await import("../../src/browser/filesystem.js");
-        _setFileData({ dir: { file: { source: new Uint8Array([1, 2, 3]) } } });
-
-        const [[root]] = preopens.getDirectories();
+    test.concurrent("advisory locking: lockShared/lockExclusive throw would-block instead of waiting", async () => {
+        const { createFilesystem, InMemoryFilesystemAdapter } =
+            await import("../../src/browser/filesystem.js");
+        const filesystem = createFilesystem({
+            adapter: new InMemoryFilesystemAdapter(),
+            preopens: { "/": { dir: { file: { source: new Uint8Array([1, 2, 3]) } } } },
+        });
+        const [[root]] = filesystem.preopens.getDirectories();
         const a = root.openAt({}, "file", {}, { read: true }) as any;
         const b = root.openAt({}, "file", {}, { read: true }) as any;
 

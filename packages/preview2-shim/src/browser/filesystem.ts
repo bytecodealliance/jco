@@ -342,6 +342,27 @@ export function _addPreopen(virtualPath: string, fileData: FileData): void {
     }
 }
 
+/**
+ * Add a single preopen backed by a custom adapter (e.g. `OpfsFilesystemAdapter`) instead of the
+ * default in-memory one. Lets a host wire an alternative `BrowserFilesystemAdapter` into the
+ * top-level `wasi:filesystem/preopens` singleton that transpiled components import statically.
+ * @param virtualPath - The virtual path visible to the guest
+ * @param adapter - The adapter that will back this preopen
+ * @param capability - The adapter-specific capability to load as the preopen's root
+ */
+export function _addPreopenWithAdapter<Capability>(
+    virtualPath: string,
+    adapter: BrowserFilesystemAdapter<Capability>,
+    capability: Capability,
+): void {
+    const descriptor = descriptorCreate(adapter.getRoot(capability));
+    const entry: [Descriptor, string] = [descriptor, virtualPath];
+    _preopens.push(entry);
+    if (virtualPath === "/") {
+        _rootPreopen = entry;
+    }
+}
+
 /** Clear all preopens, giving the guest no filesystem access. */
 export function _clearPreopens(): void {
     _preopens = [];
