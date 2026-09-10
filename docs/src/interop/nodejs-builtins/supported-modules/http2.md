@@ -35,8 +35,11 @@ jco componentize component.js --wit wit --bundle \
 | `wasi-sockets`     | Cleartext prior-knowledge HTTP/2 (`h2c`) clients and TCP servers, with guest-side framing, HPACK, settings, ping, reset, and stream/connection flow control. |
 | `wasi-http`        | Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.                       |
 
-By default, the provider rejects both `connect()` and server construction with
-`ERR_JCO_HTTP2_ADAPTER_REQUIRED`.
+By default, cleartext operations fail with `ERR_JCO_HTTP2_ADAPTER_REQUIRED`;
+secure operations first require `jco:node/tls` and fail with
+`ERR_JCO_TLS_ADAPTER_REQUIRED` when it is denied. Direct secure sessions and
+servers obtain one-use configuration handles from the TLS provider. Bind it
+with `createHttp2Host(() => instance.http2Callbacks, tls)`.
 
 `direct` mode models sessions, streams, and servers as typed host-owned WIT
 resources, with a passthrough implementation to NodeJS underneath. The WIT
