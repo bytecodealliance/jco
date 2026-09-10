@@ -1,0 +1,4 @@
+package local:node-repl;
+world test {
+  export run: async func() -> string;
+}

@@ -238,6 +238,22 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("readline/promises")).toBeNull();
     });
 
+    test.concurrent("generates a capability-free adapter for node:repl", () => {
+        const requirements = [];
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { replModule: "test:repl", onWitRequirement: (requirement) => requirements.push(requirement) },
+        );
+        const id = plugin.resolveId("node:repl");
+        expect(id).toBe("\0jco-node-builtin:node:repl");
+        const source = plugin.load(id);
+        expect(source).toContain('from "test:repl"');
+        expect(source).toContain("export default repl");
+        expect(source).toContain('export * from "test:repl"');
+        expect(requirements).toEqual([]);
+        expect(plugin.resolveId("repl")).toBeNull();
+    });
+
     test.concurrent("does not intercept the legacy bare string_decoder specifier", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] });
         expect(plugin.resolveId("string_decoder")).toBeNull();
