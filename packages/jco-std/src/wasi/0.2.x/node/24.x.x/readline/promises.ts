@@ -31,6 +31,7 @@ import { InterfaceCore, kQuestion, kQuestionCancel, kQuestionReject } from "./in
 import { Readline } from "./actions.js";
 import type { ReadableInput, WritableOutput, InterfaceOptions, QuestionOptions } from "./types.js";
 export { Readline };
+
 export class Interface extends InterfaceCore {
   question(query: string, options: QuestionOptions = {}): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -42,10 +43,12 @@ export class Interface extends InterfaceCore {
           reject(new AbortError(undefined, { cause: signal.reason }));
           return;
         }
+
         const onAbort = () => {
           this[kQuestionCancel]();
           reject(new AbortError(undefined, { cause: signal.reason }));
         };
+
         const disposable = addAbortListener(signal, onAbort);
         cb = (answer) => {
           disposable[Symbol.dispose]();
@@ -57,13 +60,16 @@ export class Interface extends InterfaceCore {
     });
   }
 }
+
 export function createInterface(options: InterfaceOptions): Interface;
+
 export function createInterface(
   input: ReadableInput,
   output?: WritableOutput | null,
   completer?: InterfaceOptions["completer"],
   terminal?: boolean,
 ): Interface;
+
 export function createInterface(
   input: ReadableInput | InterfaceOptions,
   output?: WritableOutput | null,
@@ -72,5 +78,6 @@ export function createInterface(
 ): Interface {
   return new Interface(input, output, completer, terminal);
 }
+
 const promises = { Interface, Readline, createInterface };
 export default promises;

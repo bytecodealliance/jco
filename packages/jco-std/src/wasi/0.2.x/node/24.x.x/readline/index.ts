@@ -70,8 +70,11 @@ class CallbackInterface extends InterfaceCore {
     }
     super(input, output, completer, terminal);
   }
+
   question(query: string, callback: (answer: string) => void): void;
+
   question(query: string, options: QuestionOptions, callback: (answer: string) => void): void;
+
   question(
     query: string,
     options: QuestionOptions | ((answer: string) => void),
@@ -101,23 +104,29 @@ class CallbackInterface extends InterfaceCore {
 }
 
 export type Interface = CallbackInterface;
+
 export interface InterfaceConstructor {
   new (options: InterfaceOptions): Interface;
+
   new (
     input: ReadableInput,
     output?: WritableOutput | null,
     completer?: InterfaceOptions["completer"],
     terminal?: boolean,
   ): Interface;
+
   (options: InterfaceOptions): Interface;
+
   (
     input: ReadableInput,
     output?: WritableOutput | null,
     completer?: InterfaceOptions["completer"],
     terminal?: boolean,
   ): Interface;
+
   prototype: Interface;
 }
+
 // Node's callback constructor remains callable without new and supports subclassing.
 export const Interface: InterfaceConstructor = function Interface(
   input: ReadableInput | InterfaceOptions,
@@ -131,6 +140,7 @@ export const Interface: InterfaceConstructor = function Interface(
     new.target || Interface,
   );
 } as InterfaceConstructor;
+
 Interface.prototype = CallbackInterface.prototype;
 Object.defineProperty(Interface.prototype, "constructor", {
   value: Interface,
@@ -144,6 +154,7 @@ Object.defineProperty(Interface.prototype.question, Symbol.for("nodejs.util.prom
   configurable: true,
   writable: true,
   enumerable: true,
+
   value: function question(
     this: Interface,
     query: string,
@@ -224,6 +235,7 @@ for (const name of [
     get(this: Interface) {
       return Reflect.get(this, symbol);
     },
+
     set(this: Interface, value: unknown) {
       Reflect.set(this, symbol, value);
     },
@@ -239,6 +251,7 @@ Object.defineProperty(Interface.prototype, "_tabComplete", {
   configurable: true,
   writable: true,
   enumerable: true,
+
   value: function (this: Interface, lastKeypressWasTab: boolean): void {
     this.pause();
     const line = this.line.slice(0, this.cursor);
@@ -257,13 +270,16 @@ Object.defineProperty(Interface.prototype, kTabComplete, {
     return Reflect.get(this, "_tabComplete");
   },
 });
+
 export function createInterface(options: InterfaceOptions): Interface;
+
 export function createInterface(
   input: ReadableInput,
   output?: WritableOutput | null,
   completer?: InterfaceOptions["completer"],
   terminal?: boolean,
 ): Interface;
+
 export function createInterface(
   input: ReadableInput | InterfaceOptions,
   output?: WritableOutput | null,
@@ -272,6 +288,7 @@ export function createInterface(
 ): Interface {
   return Reflect.construct(Interface, [input, output, completer, terminal]);
 }
+
 const readline = {
   Interface,
   clearLine,

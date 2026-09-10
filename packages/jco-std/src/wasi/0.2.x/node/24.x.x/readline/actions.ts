@@ -30,10 +30,12 @@ import { validateBoolean, validateInteger, isWritable } from "./compat.js";
 import { invalidArgType } from "../errors.js";
 import type { WritableOutput } from "./types.js";
 const { kClearToLineBeginning, kClearToLineEnd, kClearLine, kClearScreenDown } = CSI;
+
 export class Readline {
   #autoCommit = false;
   #stream: WritableOutput;
   #todo: string[] = [];
+
   constructor(stream: WritableOutput, options: { autoCommit?: boolean } | undefined = undefined) {
     if (!isWritable(stream)) {
       throw invalidArgType("stream", "Writable", stream);
@@ -44,6 +46,7 @@ export class Readline {
       this.#autoCommit = options.autoCommit;
     }
   }
+
   /**
    * Moves the cursor to the x and y coordinate on the given stream.
    * @param {integer} x
@@ -63,6 +66,7 @@ export class Readline {
     }
     return this;
   }
+
   /**
    * Moves the cursor relative to its current location.
    * @param {integer} dx
@@ -92,6 +96,7 @@ export class Readline {
     }
     return this;
   }
+
   /**
    * Clears the current line the cursor is on.
    * @param {-1|0|1} dir Direction to clear:
@@ -110,6 +115,7 @@ export class Readline {
     }
     return this;
   }
+
   /**
    * Clears the screen from the current position of the cursor down.
    * @returns {Readline} this
@@ -122,6 +128,7 @@ export class Readline {
     }
     return this;
   }
+
   /**
    * Sends all the pending actions to the associated `stream` and clears the
    * internal list of pending actions.
@@ -138,6 +145,7 @@ export class Readline {
       this.#todo = [];
     });
   }
+
   /**
    * Clears the internal list of pending actions without sending it to the
    * associated `stream`.

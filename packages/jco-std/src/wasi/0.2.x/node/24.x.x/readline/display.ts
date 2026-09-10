@@ -37,6 +37,7 @@ function isZeroWidthCodePoint(code: number): boolean {
     (code >= 0xe0100 && code <= 0xe01ef)
   ); // Variation Selectors
 }
+
 export function getStringWidth(str: string, removeControlChars = true): number {
   let width = 0;
   if (removeControlChars) {
@@ -56,6 +57,7 @@ export function getStringWidth(str: string, removeControlChars = true): number {
   }
   return width;
 }
+
 /**
  * Returns true if the character represented by a given
  * Unicode code point is full-width. Otherwise returns false.
@@ -104,6 +106,7 @@ const isFullWidthCodePoint = (code: number): boolean => {
 export function stripVTControlCharacters(str: string): string {
   return str.replace(ansi, "");
 }
+
 const ansi = new RegExp(
   "[\\u001B\\u009B][[\\]()#;?]*" +
     "(?:(?:(?:(?:;[-a-zA-Z\\d\\/\\#&.:=?%@~_]+)*" +

@@ -29,6 +29,7 @@ import { CSI } from "./utils.js";
 import { invalidArgValue, codedError, validateFunction } from "../errors.js";
 import type { WritableOutput, WriteCallback } from "./types.js";
 const { kClearLine, kClearScreenDown, kClearToLineBeginning, kClearToLineEnd } = CSI;
+
 /**
  * moves the cursor to the x and y coordinate on the given stream
  */
@@ -66,6 +67,7 @@ export function cursorTo(
   const data = typeof y !== "number" ? CSI`${x + 1}G` : CSI`${y + 1};${x + 1}H`;
   return stream.write(data, callback);
 }
+
 /**
  * moves the cursor relative to its current location
  */
@@ -97,6 +99,7 @@ export function moveCursor(
   }
   return stream.write(data, callback);
 }
+
 /**
  * clears the current line the cursor is on:
  *   -1 for left of the cursor
@@ -120,6 +123,7 @@ export function clearLine(
   const type = dir < 0 ? kClearToLineBeginning : dir > 0 ? kClearToLineEnd : kClearLine;
   return stream.write(type, callback);
 }
+
 /**
  * clears the screen from the current position of the cursor down
  */

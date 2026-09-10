@@ -130,6 +130,7 @@ export const kPreviousCursorCols = Symbol("_previousCursorCols");
 export const kMultilineMove = Symbol("_multilineMove");
 export const kPreviousPrevRows = Symbol("_previousPrevRows");
 export const kAddNewLineOnTTY = Symbol("_addNewLineOnTTY");
+
 export class InterfaceCore extends EventEmitter {
   input: ReadableInput;
   output: WritableOutput | null | undefined;
@@ -230,7 +231,9 @@ export class InterfaceCore extends EventEmitter {
       Object.defineProperty(this, name, {
         configurable: true,
         enumerable: true,
+
         get: () => this.historyManager[property],
+
         ...(property === "history" || property === "index"
           ? {
               set: (value: unknown) => {
@@ -271,24 +274,29 @@ export class InterfaceCore extends EventEmitter {
     this.completer = completer;
     this.setPrompt(prompt);
     this.terminal = !!terminal;
+
     function onerror(err: Error) {
       self.emit("error", err);
     }
+
     function ondata(data: string | ArrayBufferView) {
       self[kNormalWrite](data);
     }
+
     function onend() {
       if (typeof self[kLine_buffer] === "string" && self[kLine_buffer].length > 0) {
         self.emit("line", self[kLine_buffer]);
       }
       self.close();
     }
+
     function ontermend() {
       if (typeof self.line === "string" && self.line.length > 0) {
         self.emit("line", self.line);
       }
       self.close();
     }
+
     function onkeypress(s: string, key: Key) {
       self[kTtyWrite](s, key);
       if (key?.sequence) {
@@ -301,9 +309,11 @@ export class InterfaceCore extends EventEmitter {
         }
       }
     }
+
     function onresize() {
       self[kRefreshLine]();
     }
+
     this[kLineObjectStream] = undefined;
     input.on("error", onerror);
     if (!this.terminal) {
@@ -312,6 +322,7 @@ export class InterfaceCore extends EventEmitter {
         input.removeListener("error", onerror);
         input.removeListener("end", onend);
       }
+
       input.on("data", ondata);
       input.on("end", onend);
       self.once("close", onSelfCloseWithoutTerminal);
@@ -341,6 +352,7 @@ export class InterfaceCore extends EventEmitter {
     }
     if (signal) {
       const onAborted = () => self.close();
+
       if (signal.aborted) {
         defer(onAborted);
       } else {
@@ -352,12 +364,14 @@ export class InterfaceCore extends EventEmitter {
     this[kSetLine]("");
     input.resume();
   }
+
   get columns() {
     if (this.output?.columns) {
       return this.output.columns;
     }
     return Infinity;
   }
+
   /**
    * Sets the prompt written to the output.
    * @param {string} prompt
@@ -366,6 +380,7 @@ export class InterfaceCore extends EventEmitter {
   setPrompt(prompt: string) {
     this[kPrompt] = prompt;
   }
+
   /**
    * Returns the current prompt used by `rl.prompt()`.
    * @returns {string}
@@ -373,6 +388,7 @@ export class InterfaceCore extends EventEmitter {
   getPrompt() {
     return this[kPrompt];
   }
+
   [kSetRawMode](mode: boolean) {
     const wasInRawMode = this.input.isRaw;
     if (typeof this.input.setRawMode === "function") {
@@ -380,6 +396,7 @@ export class InterfaceCore extends EventEmitter {
     }
     return wasInRawMode;
   }
+
   /**
    * Writes the configured `prompt` to a new line in `output`.
    * @param {boolean} [preserveCursor]
@@ -398,6 +415,7 @@ export class InterfaceCore extends EventEmitter {
       this[kWriteToOutput](this[kPrompt]);
     }
   }
+
   [kQuestion](query: string, cb: (answer: string) => void) {
     if (this.closed) {
       throw codedError(new Error("readline was closed"), "ERR_USE_AFTER_CLOSE");
@@ -411,10 +429,12 @@ export class InterfaceCore extends EventEmitter {
       this.prompt();
     }
   }
+
   [kSetLine](line = "") {
     this.line = line;
     this[kIsMultiline] = line.includes("\n");
   }
+
   [kOnLine](line: string) {
     if (this[kQuestionCallback]) {
       const cb = this[kQuestionCallback];
@@ -425,9 +445,11 @@ export class InterfaceCore extends EventEmitter {
       this.emit("line", line);
     }
   }
+
   [kBeforeEdit](oldText: string, oldCursor: number) {
     this[kPushToUndoStack](oldText, oldCursor);
   }
+
   [kQuestionCancel]() {
     if (this[kQuestionCallback]) {
       this[kQuestionCallback] = null;
@@ -435,15 +457,18 @@ export class InterfaceCore extends EventEmitter {
       this.clearLine();
     }
   }
+
   [kWriteToOutput](stringToWrite: string) {
     validateString(stringToWrite, "stringToWrite");
     if (this.output !== null && this.output !== undefined) {
       this.output.write(stringToWrite);
     }
   }
+
   [kAddHistory]() {
     return this.historyManager.addHistory(this[kIsMultiline], this[kLastCommandErrored]);
   }
+
   [kRefreshLine]() {
     // line length
     const line = this[kPrompt] + this.line;
@@ -485,6 +510,7 @@ export class InterfaceCore extends EventEmitter {
     }
     this.prevRows = cursorPos.rows;
   }
+
   /**
    * Closes the `readline.Interface` instance.
    * @returns {void}
@@ -500,6 +526,7 @@ export class InterfaceCore extends EventEmitter {
     this.closed = true;
     this.emit("close");
   }
+
   /**
    * Pauses the `input` stream.
    * @returns {void | Interface}
@@ -516,6 +543,7 @@ export class InterfaceCore extends EventEmitter {
     this.emit("pause");
     return this;
   }
+
   /**
    * Resumes the `input` stream if paused.
    * @returns {void | Interface}
@@ -532,6 +560,7 @@ export class InterfaceCore extends EventEmitter {
     this.emit("resume");
     return this;
   }
+
   /**
    * Writes either `data` or a `key` sequence identified by
    * `key` to the `output`.
@@ -557,6 +586,7 @@ export class InterfaceCore extends EventEmitter {
       this[kNormalWrite](d);
     }
   }
+
   [kNormalWrite](b: string | ArrayBufferView | null) {
     if (b === undefined) {
       return;
@@ -604,6 +634,7 @@ export class InterfaceCore extends EventEmitter {
       this[kOnLine](lines[i]);
     }
   }
+
   [kInsertString](c: string) {
     this[kBeforeEdit](this.line, this.cursor);
     if (!this.isCompletionEnabled) {
@@ -636,6 +667,7 @@ export class InterfaceCore extends EventEmitter {
       }
     }
   }
+
   async [kTabComplete](lastKeypressWasTab: boolean) {
     this.pause();
     const string = this.line.slice(0, this.cursor);
@@ -650,6 +682,7 @@ export class InterfaceCore extends EventEmitter {
     }
     this[kTabCompleter](lastKeypressWasTab, value);
   }
+
   [kTabCompleter](lastKeypressWasTab: boolean, [completions, completeOn]: CompleterResult) {
     // Result and the text that was completed.
     if (!completions || completions.length === 0) {
@@ -707,6 +740,7 @@ export class InterfaceCore extends EventEmitter {
     this[kWriteToOutput](output);
     this[kRefreshLine]();
   }
+
   [kWordLeft]() {
     if (this.cursor > 0) {
       // Reverse the string and match a word near beginning
@@ -717,6 +751,7 @@ export class InterfaceCore extends EventEmitter {
       this[kMoveCursor](-match![0].length);
     }
   }
+
   [kWordRight]() {
     if (this.cursor < this.line.length) {
       const trailing = this.line.slice(this.cursor);
@@ -724,6 +759,7 @@ export class InterfaceCore extends EventEmitter {
       this[kMoveCursor](match![0].length);
     }
   }
+
   [kDeleteLeft]() {
     if (this.cursor > 0 && this.line.length > 0) {
       this[kBeforeEdit](this.line, this.cursor);
@@ -735,6 +771,7 @@ export class InterfaceCore extends EventEmitter {
       this[kRefreshLine]();
     }
   }
+
   [kDeleteRight]() {
     if (this.cursor < this.line.length) {
       this[kBeforeEdit](this.line, this.cursor);
@@ -745,6 +782,7 @@ export class InterfaceCore extends EventEmitter {
       this[kRefreshLine]();
     }
   }
+
   [kDeleteWordLeft]() {
     if (this.cursor > 0) {
       this[kBeforeEdit](this.line, this.cursor);
@@ -759,6 +797,7 @@ export class InterfaceCore extends EventEmitter {
       this[kRefreshLine]();
     }
   }
+
   [kDeleteWordRight]() {
     if (this.cursor < this.line.length) {
       this[kBeforeEdit](this.line, this.cursor);
@@ -768,6 +807,7 @@ export class InterfaceCore extends EventEmitter {
       this[kRefreshLine]();
     }
   }
+
   [kDeleteLineLeft]() {
     this[kBeforeEdit](this.line, this.cursor);
     const del = this.line.slice(0, this.cursor);
@@ -776,6 +816,7 @@ export class InterfaceCore extends EventEmitter {
     this[kPushToKillRing](del);
     this[kRefreshLine]();
   }
+
   [kDeleteLineRight]() {
     this[kBeforeEdit](this.line, this.cursor);
     const del = this.line.slice(this.cursor);
@@ -783,6 +824,7 @@ export class InterfaceCore extends EventEmitter {
     this[kPushToKillRing](del);
     this[kRefreshLine]();
   }
+
   [kPushToKillRing](del: string) {
     if (!del || del === this[kKillRing][0]) {
       return;
@@ -793,12 +835,14 @@ export class InterfaceCore extends EventEmitter {
       this[kKillRing].pop();
     }
   }
+
   [kYank]() {
     if (this[kKillRing].length > 0) {
       this[kYanking] = true;
       this[kInsertString](this[kKillRing][this[kKillRingCursor]]);
     }
   }
+
   [kYankPop]() {
     if (!this[kYanking]) {
       return;
@@ -817,16 +861,19 @@ export class InterfaceCore extends EventEmitter {
       this[kRefreshLine]();
     }
   }
+
   [kSavePreviousState]() {
     this[kPreviousLine] = this.line;
     this[kPreviousCursor] = this.cursor;
     this[kPreviousPrevRows] = this.prevRows;
   }
+
   [kRestorePreviousState]() {
     this[kSetLine](this[kPreviousLine]);
     this.cursor = this[kPreviousCursor];
     this.prevRows = this[kPreviousPrevRows];
   }
+
   clearLine() {
     this[kMoveCursor](+Infinity);
     this[kWriteToOutput]("\r\n");
@@ -834,6 +881,7 @@ export class InterfaceCore extends EventEmitter {
     this.cursor = 0;
     this.prevRows = 0;
   }
+
   [kLine]() {
     this[kSavePreviousState]();
     const line = this[kAddHistory]();
@@ -842,6 +890,7 @@ export class InterfaceCore extends EventEmitter {
     this.clearLine();
     this[kOnLine](line);
   }
+
   // TODO(puskin94): edit [kTtyWrite] to make call this function on a new key combination
   //                 to make it add a new line in the middle of a "complete" multiline.
   //                 I tried with shift + enter but it is not detected. Find a new one.
@@ -922,11 +971,13 @@ export class InterfaceCore extends EventEmitter {
       this.prevRows = this.line.split("\n").length - 1;
     }
   }
+
   [kPushToUndoStack](text: string, cursor: number) {
     if (this[kUndoStack].push({ text, cursor }) > kMaxUndoRedoStackSize) {
       this[kUndoStack].shift();
     }
   }
+
   [kUndo]() {
     if (this[kUndoStack].length <= 0) {
       return;
@@ -937,6 +988,7 @@ export class InterfaceCore extends EventEmitter {
     this.cursor = entry!.cursor;
     this[kRefreshLine]();
   }
+
   [kRedo]() {
     if (this[kRedoStack].length <= 0) {
       return;
@@ -947,6 +999,7 @@ export class InterfaceCore extends EventEmitter {
     this.cursor = entry!.cursor;
     this[kRefreshLine]();
   }
+
   [kMultilineMove](direction: number, splitLines: string[], { rows, cols }: CursorPosition) {
     const curr = splitLines[rows];
     const down = direction === 1;
@@ -978,6 +1031,7 @@ export class InterfaceCore extends EventEmitter {
     }
     this[kMoveCursor](amountToMove);
   }
+
   [kMoveDownOrHistoryNext]() {
     const cursorPos = this.getCursorPos();
     const splitLines = this.line.split("\n");
@@ -988,6 +1042,7 @@ export class InterfaceCore extends EventEmitter {
     this[kPreviousCursorCols] = -1;
     this[kHistoryNext]();
   }
+
   // TODO(BridgeAR): Add underscores to the search part and a red background in
   // case no match is found. This should only be the visual part and not the
   // actual line content!
@@ -1004,6 +1059,7 @@ export class InterfaceCore extends EventEmitter {
     this.cursor = this.line.length; // Set cursor to end of line.
     this[kRefreshLine]();
   }
+
   [kMoveUpOrHistoryPrev]() {
     const cursorPos = this.getCursorPos();
     if (this[kIsMultiline] && cursorPos.rows > 0) {
@@ -1014,6 +1070,7 @@ export class InterfaceCore extends EventEmitter {
     this[kPreviousCursorCols] = -1;
     this[kHistoryPrev]();
   }
+
   [kHistoryPrev]() {
     if (!this.historyManager.canNavigateToPrevious()) {
       return;
@@ -1023,6 +1080,7 @@ export class InterfaceCore extends EventEmitter {
     this.cursor = this.line.length; // Set cursor to end of line.
     this[kRefreshLine]();
   }
+
   // Returns the last character's display position of the given string
   [kGetDisplayPos](str: string) {
     let offset = 0;
@@ -1057,6 +1115,7 @@ export class InterfaceCore extends EventEmitter {
     rows += (offset - cols) / col;
     return { cols, rows };
   }
+
   /**
    * Returns the real position of the cursor in relation
    * to the input prompt + string.
@@ -1069,6 +1128,7 @@ export class InterfaceCore extends EventEmitter {
     const strBeforeCursor = this[kPrompt] + this.line.slice(0, this.cursor);
     return this[kGetDisplayPos](strBeforeCursor);
   }
+
   // This function moves cursor dx places to the right
   // (-dx for left) and refreshes the line if it is needed.
   [kMoveCursor](dx: number) {
@@ -1092,6 +1152,7 @@ export class InterfaceCore extends EventEmitter {
       this[kRefreshLine]();
     }
   }
+
   // Handle a write from the tty
   [kTtyWrite](s: string | ArrayBufferView | null, key?: Key) {
     const previousKey = this[kPreviousKey];
@@ -1324,6 +1385,7 @@ export class InterfaceCore extends EventEmitter {
       this[kPreviousCursorCols] = -1;
     }
   }
+
   /**
    * Creates an `AsyncIterator` object that iterates through
    * each line in the input stream as a string.
@@ -1332,6 +1394,7 @@ export class InterfaceCore extends EventEmitter {
   [Symbol.asyncIterator](): AsyncIterableIterator<string> {
     return (this[kLineObjectStream] ??= lineIterator(this));
   }
+
   [Symbol.dispose](): void {
     this.close();
   }
