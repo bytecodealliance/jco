@@ -60,6 +60,9 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/stream/consumers`              | Portable `node:stream/consumers`, Node 24                                     |
 | `wasi/0.2.x/node/24.x.x/stream/iter`                   | Experimental iterable streams from Node 24.20                                 |
 | `wasi/0.2.x/node/24.x.x/repl`                          | `node:repl` over the readline port; global-scope evaluation only              |
+| `wasi/0.2.x/node/24.x.x/tty`                           | `node:tty` guest adapter, Node 24 over an explicit host capability            |
+| `wasi/0.2.x/node/24.x.x/tty/host`                      | Deny-by-default host for `jco:node/tty`                                       |
+| `wasi/0.2.x/node/24.x.x/tty/host/node`                 | Opt-in host over the runtime's real `node:tty` and its descriptors            |
 | `wasi/0.2.x/node/24.x.x/child-process/host`            | Deny-by-default host for `jco:node/child-process`                             |
 | `wasi/0.2.x/node/24.x.x/child-process/host/node`       | Opt-in host over the runtime's real `node:child_process`                      |
 | `wasi/0.2.x/node/24.x.x/cluster/host`                  | Deny-by-default host for `jco:node/cluster`                                   |
@@ -176,6 +179,10 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/repl` over the readline port.
   Evaluation is global-scope only (`useGlobal: true`); the module needs no WIT
   capability and is the only jco-std module that bundles `acorn`;
+- `node:tty`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty` and the
+  application-provided `jco:node/tty@0.1.0` capability, giving readline and the
+  REPL real terminal streams;
 - `node:module`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`. Classification,
   source maps and `require.resolve` are exact; everything that loads throws,
@@ -330,6 +337,43 @@ whether input is incomplete or wrong (engine `SyntaxError` messages differ
 between SpiderMonkey and QuickJS), rewriting top-level `await`, and locating the
 expression to tab-complete. A component that does not import `node:repl` does
 not carry acorn.
+
+### Terminals
+
+The versioned tty module ports Node 24.20.0's `node:tty`: `isatty()`, `ReadStream`
+with `setRawMode()`, and `WriteStream` with `columns`/`rows`, `getWindowSize()`,
+`getColorDepth()`, `hasColors()`, the cursor helpers and `'resize'`. A component
+has no terminal of its own, so the module is host-backed: the streams address the
+embedding process's descriptors through `jco:node/tty@0.1.0`, which is denied by
+default and mapped explicitly at transpile time.
+
+```js
+import { ReadStream, WriteStream, isatty } from "node:tty";
+import { createInterface } from "node:readline";
+
+export function ask() {
+  if (!isatty(0) || !isatty(1)) {
+    throw new Error("an interactive terminal is required");
+  }
+  const rl = createInterface({ input: new ReadStream(0), output: new WriteStream(1) });
+  rl.question("Name? ", (name) => {
+    rl.write(`Hello ${name}, your terminal is ${rl.output.columns} columns wide\n`);
+    rl.close();
+  });
+}
+```
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/tty@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host/node'
+```
+
+The streams are `stream.Duplex` instances rather than `net.Socket`s, a `ReadStream`
+is not writable and a `WriteStream` is not readable. Reading blocks the component:
+a flowing `ReadStream` pulls one chunk at a time and emits `'data'` synchronously
+between pulls, so terminal input is read inside the export that asked for it.
+`'resize'` is emitted only by `_refreshSize()`, since a component receives no
+`SIGWINCH`. Color detection reads the provider's environment when none is passed.
 
 ### Errors globals
 
