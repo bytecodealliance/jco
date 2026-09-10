@@ -96,6 +96,16 @@ describe("Node builtin adapters", () => {
         }
     });
 
+    test.concurrent("keeps instantiation imports WIT-spelled instead of remapping them", () => {
+        expect(withDefaultNodeCapabilities({ instantiation: "async" }).map).toBeUndefined();
+        const explicit = withDefaultNodeCapabilities({
+            instantiation: "async",
+            map: { "jco:node/tls@0.1.0": "/application/tls-host.js" },
+        });
+        expect(explicit.map).toEqual({ "jco:node/tls@0.1.0": "/application/tls-host.js" });
+        expect(explicit.asyncMode).toBe("jspi");
+    });
+
     test.concurrent("configures custom DNS providers as JSPI imports", () => {
         const opts = withDefaultNodeCapabilities({
             map: { "jco:node/dns@0.1.0": "/application/dns-host.js" },

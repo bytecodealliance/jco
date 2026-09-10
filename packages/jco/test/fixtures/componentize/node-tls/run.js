@@ -16,11 +16,9 @@ const { createHttpHost } = await import(new URL("../http-host-node.js", pathToFi
 let instance;
 instance = await instantiate(undefined, {
     ...new WASIShim().getImportObject(),
-    "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host": createHttpHost(() => instance.httpCallbacks, host),
-    "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host": await import(
-        new URL("../tls-host.js", pathToFileURL(hostPath))
-    ),
-    "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host": host,
+    "jco:node/http": createHttpHost(() => instance.httpCallbacks, host),
+    "wasi:tls/types": await import(new URL("../tls-host.js", pathToFileURL(hostPath))),
+    "jco:node/tls": host,
 });
 host.attachCallbacks(instance.tlsCallbacks);
 try {

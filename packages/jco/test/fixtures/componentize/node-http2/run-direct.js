@@ -24,8 +24,8 @@ const { createTlsHost } = await import(
 async function createInstance() {
     const imports = new WASIShim().getImportObject();
     const tls = createTlsHost();
-    imports["@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host"] = tls;
-    imports["@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host"] = await import(
+    imports["jco:node/tls"] = tls;
+    imports["wasi:tls/types"] = await import(
         new URL("../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls-host.js", import.meta.url)
     );
     let instance;
