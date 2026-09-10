@@ -1,13 +1,16 @@
+import { createTlsHost } from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls/host-node.js";
+import { encode } from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls/wire.js";
+const tls = createTlsHost();
+const { ClientSession } = createHttp2Host(() => {
+  throw new Error("client-only provider");
+}, tls);
 import { readFile } from "node:fs/promises";
 import * as nodeHttp2 from "node:http2";
 import { connect } from "node:net";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import {
-  ClientSession,
-  createHttp2Host,
-} from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2-host-node.js";
+import { createHttp2Host } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2-host-node.js";
 import type {
   DirectHttp2ClientSession,
   DirectHttp2Server,
@@ -42,7 +45,10 @@ describe("Node HTTP/2 host provider", () => {
     const errorListener = { handle: vi.fn(), [Symbol.dispose]: vi.fn() };
     const takeStreamListener = vi.fn(() => undefined);
     const takeServerErrorListener = vi.fn(() => errorListener);
-    const { Server } = createHttp2Host(() => ({ takeStreamListener, takeServerErrorListener }));
+    const { Server } = createHttp2Host(
+      () => ({ takeStreamListener, takeServerErrorListener }),
+      tls,
+    );
     const server = new Server({ secure: false, settings: emptySettings }, 1, 2);
     closeables.push(() => server[Symbol.dispose]());
     const address = await server.listen({ port: 0, host: "127.0.0.1" });
@@ -122,7 +128,7 @@ describe("Node HTTP/2 host provider", () => {
 
     const session = new ClientSession(`https://127.0.0.1:${address.port}`, {
       settings: emptySettings,
-      rejectUnauthorized: false,
+      tlsContext: tls.createContext(encode({ rejectUnauthorized: false })),
     }) as DirectHttp2ClientSession;
     closeables.push(() => session[Symbol.dispose]());
     await expect(session.ready()).resolves.toMatchObject({
@@ -170,9 +176,16 @@ describe("Node HTTP/2 host provider", () => {
       expect(id).toBe(2);
       return errorListener;
     });
-    const { Server } = createHttp2Host(() => ({ takeStreamListener, takeServerErrorListener }));
+    const { Server } = createHttp2Host(
+      () => ({ takeStreamListener, takeServerErrorListener }),
+      tls,
+    );
     const server = new Server(
-      { secure, key, cert, settings: emptySettings },
+      {
+        secure,
+        tlsContext: secure ? tls.createContext(encode({ key, cert })) : undefined,
+        settings: emptySettings,
+      },
       1,
       2,
     ) as DirectHttp2Server;

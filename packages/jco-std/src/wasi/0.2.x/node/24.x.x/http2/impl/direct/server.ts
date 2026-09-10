@@ -1,3 +1,7 @@
+import type { TlsHost } from "../../../tls/host-types.js";
+import deniedTls from "../../../tls/node-host.js";
+import { encode } from "../../../tls/wire.js";
+import { hostCall } from "../../../tls/errors.js";
 import { serializeNodeError } from "../../../internal/http-host.js";
 import { codedError, fromImplementationError } from "../../errors.js";
 import { toDirectSettings } from "../../settings.js";
@@ -95,20 +99,32 @@ export function createDirectHttp2Server(
   options: Http2ServerOptions,
   handler: Http2StreamHandler,
   onError: (error: Error) => void,
+  tls: TlsHost = deniedTls,
 ): Http2ServerImplementation {
   const [listener, errorListener] = registry.allocate();
-  const server = new host.Server(
-    {
-      secure,
-      key: tlsBytes(options.key),
-      cert: tlsBytes(options.cert),
-      settings: toDirectSettings(options.settings),
-      allowHttp1: options.allowHTTP1,
-      strictFieldWhitespaceValidation: options.strictFieldWhitespaceValidation,
-    },
-    listener,
-    errorListener,
-  );
+  const tlsContext = secure
+    ? hostCall(() =>
+        tls.createContext(encode({ key: tlsBytes(options.key), cert: tlsBytes(options.cert) })),
+      )
+    : undefined;
+  let server: InstanceType<typeof host.Server>;
+  try {
+    server = new host.Server(
+      {
+        secure,
+        tlsContext,
+        settings: toDirectSettings(options.settings),
+        allowHttp1: options.allowHTTP1,
+        strictFieldWhitespaceValidation: options.strictFieldWhitespaceValidation,
+      },
+      listener,
+      errorListener,
+    );
+  } finally {
+    if (tlsContext !== undefined) {
+      tls.releaseContext(tlsContext);
+    }
+  }
   const address = (value: ReturnType<typeof server.address>) =>
     value === undefined
       ? null

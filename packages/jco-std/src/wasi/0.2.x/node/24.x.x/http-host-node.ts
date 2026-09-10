@@ -1,3 +1,4 @@
+import type { TlsConfigurationProvider } from "./tls/host-types.js";
 /**
  * Opt-in Node.js HTTP provider.
  *
@@ -8,7 +9,6 @@
  * scheme and servers carrying a `tls` record go through real `node:https`, so
  * TLS is terminated by the host's own stack.
  */
-import { Buffer } from "node:buffer";
 import * as nodeHttp from "node:http";
 import {
   CallbackResource,
@@ -40,49 +40,21 @@ import type {
 type AsyncResult<T> = Promise<DirectHttpResult<T>>;
 type Timer = ReturnType<typeof setTimeout>;
 
-type NodeTlsOptions = nodeTls.SecureContextOptions &
-  Pick<nodeTls.TlsOptions, "ALPNProtocols" | "requestCert" | "rejectUnauthorized"> &
-  Pick<nodeTls.ConnectionOptions, "servername">;
-
-function buffers(values: Uint8Array[]): Buffer[] {
-  return values.map((value) => Buffer.from(value));
-}
-
-/**
- * Maps the WIT `tls-options` record onto the option names `node:tls` reads.
- *
- * Only present fields are copied, so Node applies its own defaults for the rest exactly as it
- * would for a native caller.
- */
-function nodeTlsOptions(tls: DirectTlsOptions): NodeTlsOptions {
-  const options: NodeTlsOptions = {
-    key: tls.key && buffers(tls.key),
-    cert: tls.cert && buffers(tls.cert),
-    pfx: tls.pfx && buffers(tls.pfx),
-    passphrase: tls.passphrase,
-    ca: tls.ca && buffers(tls.ca),
-    crl: tls.crl && buffers(tls.crl),
-    dhparam: tls.dhparam && Buffer.from(tls.dhparam),
-    ciphers: tls.ciphers,
-    ecdhCurve: tls.ecdhCurve,
-    sigalgs: tls.sigalgs,
-    minVersion: tls.minVersion as nodeTls.SecureVersion | undefined,
-    maxVersion: tls.maxVersion as nodeTls.SecureVersion | undefined,
-    secureProtocol: tls.secureProtocol,
-    secureOptions: tls.secureOptions,
-    sessionIdContext: tls.sessionIdContext,
-    honorCipherOrder: tls.honorCipherOrder,
-    ALPNProtocols: tls.alpnProtocols,
-    servername: tls.servername,
-    rejectUnauthorized: tls.rejectUnauthorized,
-    requestCert: tls.requestCert,
-  };
-  for (const [name, value] of Object.entries(options)) {
-    if (value === undefined) {
-      delete options[name as keyof NodeTlsOptions];
-    }
+/** HTTP receives a one-use configuration handle; TLS policy belongs to jco:node/tls. */
+function nodeTlsOptions(
+  options: DirectTlsOptions | undefined,
+  tls: TlsConfigurationProvider | undefined,
+): nodeTls.ConnectionOptions & nodeTls.TlsOptions {
+  if (!tls || options === undefined) {
+    throw Object.assign(
+      new Error(
+        "HTTPS requires the same jco:node/tls provider passed to createHttpHost(callbacks, tls)",
+      ),
+      { code: "ERR_JCO_TLS_ADAPTER_REQUIRED" },
+    );
   }
-  return options;
+  return tls.takeContextOptions(options.contextId) as nodeTls.ConnectionOptions &
+    nodeTls.TlsOptions;
 }
 
 function timeoutError(syscall: string): Error & { code: string; syscall: string } {
@@ -92,7 +64,10 @@ function timeoutError(syscall: string): Error & { code: string; syscall: string 
   });
 }
 
-export async function request(options: DirectHttpRequest): AsyncResult<DirectHttpResponse> {
+export async function request(
+  options: DirectHttpRequest,
+  tls?: TlsConfigurationProvider,
+): AsyncResult<DirectHttpResponse> {
   return new Promise((resolve) => {
     let connectTimer: Timer | undefined;
     let firstByteTimer: Timer | undefined;
@@ -110,7 +85,7 @@ export async function request(options: DirectHttpRequest): AsyncResult<DirectHtt
         method: options.method,
         headers: fieldsToRawHeaders(options.headers),
         joinDuplicateHeaders: true,
-        ...(options.tls === undefined ? {} : nodeTlsOptions(options.tls)),
+        ...(options.scheme === "https" ? nodeTlsOptions(options.tls, tls) : {}),
       },
       (response) => {
         clearTimeout(connectTimer);
@@ -203,6 +178,7 @@ class NodeHttpServer {
   constructor(
     options: DirectHttpServerOptions,
     handle: (request: DirectHttpIncomingRequest) => Promise<DirectHttpOutgoingResponse>,
+    tls?: TlsConfigurationProvider,
   ) {
     // A TLS record, including an empty one, selects a native HTTPS server.
     const create =
@@ -211,7 +187,7 @@ class NodeHttpServer {
             nodeHttp.createServer(nodeServerOptions(options), handler)
         : (handler: nodeHttp.RequestListener) =>
             nodeHttps.createServer(
-              { ...nodeServerOptions(options), ...nodeTlsOptions(options.tls!) },
+              { ...nodeServerOptions(options), ...nodeTlsOptions(options.tls!, tls) },
               handler,
             );
     this.#server = create((request, response) => {
@@ -380,7 +356,10 @@ class NodeHttpServer {
 }
 
 /** Bind one host provider to one component's exported callback resources. */
-export function createHttpHost(callbacks: () => DirectHttpCallbacks) {
+export function createHttpHost(
+  callbacks: () => DirectHttpCallbacks,
+  tls?: TlsConfigurationProvider,
+) {
   const enqueue = createCallbackQueue();
   class Server extends NodeHttpServer {
     readonly #listener: CallbackResource<DirectHttpRequestListener>;
@@ -390,7 +369,11 @@ export function createHttpHost(callbacks: () => DirectHttpCallbacks) {
         () => callbacks().takeRequestListener(listener),
         "ERR_JCO_HTTP_CALLBACK_NOT_FOUND",
       );
-      super(options, (incoming) => enqueue(async () => (await resource.get()).handle(incoming)));
+      super(
+        options,
+        (incoming) => enqueue(async () => (await resource.get()).handle(incoming)),
+        tls,
+      );
       this.#listener = resource;
     }
 
@@ -408,7 +391,10 @@ export function createHttpHost(callbacks: () => DirectHttpCallbacks) {
       void this.close();
     }
   }
-  return { request, Server: Server as unknown as DirectHttpServerConstructor };
+  return {
+    request: (options: DirectHttpRequest) => request(options, tls),
+    Server: Server as unknown as DirectHttpServerConstructor,
+  };
 }
 
 // Client-only mappings may still import this module directly. Servers require

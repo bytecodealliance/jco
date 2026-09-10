@@ -1,15 +1,20 @@
+import { createTlsHost } from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls/host-node.js";
+import { encode } from "../../../../../../src/wasi/0.2.x/node/24.x.x/tls/wire.js";
+const tls = createTlsHost();
+
 import { readFileSync } from "node:fs";
 
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
   createHttpHost,
-  request,
+  request as nativeRequest,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
 import type {
   DirectHttpCallbacks,
   DirectHttpRequestListener,
-  DirectHttpServerOptions,
+  HttpServerOptions,
+  HttpImplementationRequest,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http/types.js";
 
 const encoder = new TextEncoder();
@@ -37,7 +42,7 @@ const echo: DirectHttpRequestListener = {
 };
 
 async function listen(
-  options: DirectHttpServerOptions,
+  options: HttpServerOptions,
 ): Promise<{ server: HttpHostServer; port: number }> {
   const callbacks: DirectHttpCallbacks = {
     takeRequestListener(id: number): DirectHttpRequestListener {
@@ -45,8 +50,17 @@ async function listen(
       return echo;
     },
   };
-  const { Server } = createHttpHost(() => callbacks);
-  const server = new Server(options, 1);
+  const { Server } = createHttpHost(() => callbacks, tls);
+  const server = new Server(
+    {
+      ...options,
+      tls:
+        options.tls === undefined
+          ? undefined
+          : { contextId: tls.createContext(encode(options.tls)) },
+    },
+    1,
+  );
   servers.add(server);
   const started = await server.listen({ port: 0, host: "127.0.0.1" });
   if (started.tag !== "ok" || started.val.tag !== "tcp") {
@@ -131,3 +145,16 @@ describe("node:https direct Node host", () => {
     }
   });
 });
+
+async function request(options: HttpImplementationRequest) {
+  return nativeRequest(
+    {
+      ...options,
+      tls:
+        options.scheme === "https"
+          ? { contextId: tls.createContext(encode(options.tls ?? {})) }
+          : undefined,
+    },
+    tls,
+  );
+}

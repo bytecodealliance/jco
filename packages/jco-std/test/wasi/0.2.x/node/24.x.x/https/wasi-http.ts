@@ -56,14 +56,14 @@ function refusingProvider(): { provider: WasiHttpProvider; schemes: WasiHttpSche
 }
 
 describe("node:https wasi:http implementation", () => {
-  test.concurrent("sets the HTTPS scheme variant rather than an `other` string", async () => {
+  test.concurrent("refuses HTTPS before outgoing-handler can bypass the TLS capability", async () => {
     const { provider, schemes } = refusingProvider();
     const https = createHttps(createWasiHttpImplementation(provider));
     const request = https.request("https://example.com/");
     const error = new Promise<Error>((resolve) => request.once("error", resolve));
     request.end();
-    await expect(error).resolves.toMatchObject({ code: "ECONNREFUSED" });
-    expect(schemes).toEqual([{ tag: "HTTPS" }]);
+    await expect(error).resolves.toMatchObject({ code: "ERR_JCO_UNSUPPORTED_NODE_API" });
+    expect(schemes).toEqual([]);
   });
 
   test.concurrent("refuses per-request TLS options, which outgoing-handler cannot honour", async () => {
@@ -74,9 +74,7 @@ describe("node:https wasi:http implementation", () => {
     request.end();
     await expect(error).resolves.toMatchObject({
       code: "ERR_JCO_UNSUPPORTED_NODE_API",
-      message: expect.stringContaining(
-        "https.request TLS options with the wasi-http implementation",
-      ),
+      message: expect.stringContaining("https.request with the wasi-http implementation"),
     });
     expect(schemes).toEqual([]);
   });

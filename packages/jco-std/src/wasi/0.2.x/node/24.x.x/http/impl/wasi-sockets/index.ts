@@ -1,3 +1,4 @@
+import type { TlsStreamHost } from "../../../tls/host-types.js";
 import {
   handshake,
   validateTlsOptions,
@@ -64,7 +65,7 @@ export type {
 } from "../../../internal/wasi-sockets.js";
 
 export interface WasiSocketsProvider extends WasiTcpProvider {
-  tls?: WasiTlsProvider;
+  tls?: WasiTlsProvider | TlsStreamHost;
 }
 
 export function authority(value: string, scheme = "http"): { hostname: string; port: number } {
@@ -342,7 +343,7 @@ export function createWasiSocketsHttpImplementation(
             name: "Error",
             code: "ERR_JCO_TLS_ADAPTER_REQUIRED",
             message:
-              "https: requests with the wasi-sockets implementation require the additional wasi:tls/types@0.2.0-draft TLS capability",
+              "https: requests with the wasi-sockets implementation require the jco:node/tls@0.1.0 TLS capability",
           });
         }
       } else if (request.scheme !== "http") {

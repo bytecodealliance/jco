@@ -58,9 +58,7 @@ export interface Http2ClientOptions {
 
 export interface DirectHttp2ClientOptions {
   settings: DirectHttp2Settings;
-  rejectUnauthorized?: boolean;
-  serverName?: string;
-  ca?: Uint8Array;
+  tlsContext?: number;
 }
 
 export interface Http2RequestOptions {
@@ -154,8 +152,7 @@ export interface Http2ServerOptions {
 
 export interface DirectHttp2ServerOptions {
   secure: boolean;
-  key?: Uint8Array;
-  cert?: Uint8Array;
+  tlsContext?: number;
   settings: DirectHttp2Settings;
   allowHttp1?: boolean;
   strictFieldWhitespaceValidation?: boolean;

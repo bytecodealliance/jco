@@ -1,3 +1,4 @@
+import type { TlsConfigurationProvider } from "./tls/host-types.js";
 /**
  * Opt-in Node.js HTTP/2 provider.
  *
@@ -6,7 +7,6 @@
  * lib/internal/http2/core.js (MIT license). Native stream/session events are
  * adapted to typed, buffered WIT resources and guest callback resources.
  */
-import { Buffer } from "node:buffer";
 import * as nodeHttp2 from "node:http2";
 import {
   CallbackResource,
@@ -182,12 +182,14 @@ class NodeHttp2ClientSession {
   readonly #ready: Promise<DirectHttp2Result<undefined>>;
   #lastError: unknown;
 
-  constructor(authority: string, options: DirectHttp2ClientOptions) {
+  constructor(
+    authority: string,
+    options: DirectHttp2ClientOptions,
+    tls?: TlsConfigurationProvider,
+  ) {
     this.#session = nodeHttp2.connect(authority, {
       settings: nodeSettings(options.settings),
-      rejectUnauthorized: options.rejectUnauthorized,
-      servername: options.serverName,
-      ca: options.ca === undefined ? undefined : Buffer.from(options.ca),
+      ...(new URL(authority).protocol === "https:" ? tlsOptions(tls, options.tlsContext) : {}),
     });
     this.#ready = new Promise((resolve) => {
       let settled = false;
@@ -316,6 +318,7 @@ class NodeHttp2Server {
     options: DirectHttp2ServerOptions,
     handle: DirectHttp2StreamListener["handle"],
     onError: DirectHttp2ServerErrorListener["handle"],
+    tls?: TlsConfigurationProvider,
   ) {
     const common = {
       settings: nodeSettings(options.settings),
@@ -325,8 +328,7 @@ class NodeHttp2Server {
     this.#server = options.secure
       ? nodeHttp2.createSecureServer({
           ...common,
-          key: options.key === undefined ? undefined : Buffer.from(options.key),
-          cert: options.cert === undefined ? undefined : Buffer.from(options.cert),
+          ...tlsOptions(tls, options.tlsContext),
         })
       : nodeHttp2.createServer(common);
     this.#server.on("session", (session) => {
@@ -484,7 +486,10 @@ export const ClientSession =
 export const ClientStream = NodeHttp2ClientStream;
 
 /** Bind callback resource redemption and invocation to one component instance. */
-export function createHttp2Host(callbacks: () => DirectHttp2Callbacks) {
+export function createHttp2Host(
+  callbacks: () => DirectHttp2Callbacks,
+  tls?: TlsConfigurationProvider,
+) {
   const enqueue = createCallbackQueue();
   class Server extends NodeHttp2Server {
     readonly #listener: CallbackResource<DirectHttp2StreamListener>;
@@ -503,6 +508,7 @@ export function createHttp2Host(callbacks: () => DirectHttp2Callbacks) {
         options,
         (incoming) => enqueue(async () => (await stream.get()).handle(incoming)),
         (reason) => enqueue(async () => (await error.get()).handle(reason)),
+        tls,
       );
       this.#listener = stream;
       this.#errorListener = error;
@@ -521,7 +527,17 @@ export function createHttp2Host(callbacks: () => DirectHttp2Callbacks) {
       void this.close();
     }
   }
-  return { ClientSession, ClientStream, Server: Server as unknown as DirectHttp2ServerConstructor };
+  class BoundClientSession extends NodeHttp2ClientSession {
+    constructor(authority: string, options: DirectHttp2ClientOptions) {
+      super(authority, options, tls);
+    }
+  }
+  return {
+    ClientSession:
+      BoundClientSession as unknown as import("./http2/types.js").DirectHttp2ClientSessionConstructor,
+    ClientStream,
+    Server: Server as unknown as DirectHttp2ServerConstructor,
+  };
 }
 
 export const Server = class {
@@ -531,3 +547,16 @@ export const Server = class {
 } as unknown as DirectHttp2ServerConstructor;
 
 export default { ClientSession, ClientStream, Server, createHttp2Host };
+
+function tlsOptions(tls: TlsConfigurationProvider | undefined, id: number | undefined) {
+  if (!tls || id === undefined) {
+    throw Object.assign(
+      new Error(
+        "Secure HTTP/2 requires the same jco:node/tls provider passed to createHttp2Host(callbacks, tls)",
+      ),
+      { code: "ERR_JCO_TLS_ADAPTER_REQUIRED" },
+    );
+  }
+  return tls.takeContextOptions(id) as import("node:tls").ConnectionOptions &
+    import("node:tls").TlsOptions;
+}
