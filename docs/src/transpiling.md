@@ -269,7 +269,10 @@ export async function instantiate(
 ): Promise<{ [exportName: string]: any }>;
 ```
 
-`imports` allows customizing the imports provided for instantiation.
+`imports` allows customizing the imports provided for instantiation. Its keys are the component's
+import names as the WIT spells them, without versions (for example `wasi:cli/environment` or
+`jco:node/process`). `--map` rewrites those keys the same way it rewrites ESM import specifiers;
+Jco's default Node capability map is not applied to instantiation output.
 
 `instantiateCore` defaults to `WebAssembly.instantiate`.
 

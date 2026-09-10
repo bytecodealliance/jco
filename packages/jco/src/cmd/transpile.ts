@@ -122,7 +122,12 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
         opts.asyncImports = appendUnique(opts.asyncImports, `${sqlite}#backup`);
         opts.asyncExports = appendUnique(opts.asyncExports, "*");
     }
-    opts.map = withDefaultNodeCapabilityMap(opts.map);
+    // Instantiation output takes an import object keyed by WIT interface name; the
+    // deny-by-default module map exists for ESM output, whose imports must resolve to
+    // a module, and would only rename those keys here.
+    if (!opts.instantiation) {
+        opts.map = withDefaultNodeCapabilityMap(opts.map);
+    }
     return opts;
 }
 

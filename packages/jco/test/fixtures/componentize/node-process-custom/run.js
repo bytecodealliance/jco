@@ -8,11 +8,11 @@ const { host, exitRequests } = createProcessHost();
 const other = createProcessHost();
 const component = await instantiate(undefined, {
     ...new WASIShim().getImportObject(),
-    "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host": host,
+    "jco:node/process": host,
 });
 const otherComponent = await instantiate(undefined, {
     ...new WASIShim().getImportObject(),
-    "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host": other.host,
+    "jco:node/process": other.host,
 });
 assert.equal(await component.denied(), "ERR_JCO_PROCESS_ADAPTER_REQUIRED");
 assert.deepEqual(exitRequests, []);
