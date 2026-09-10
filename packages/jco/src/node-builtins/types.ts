@@ -58,6 +58,9 @@ export interface NodeBuiltinOptions {
     osModule?: string;
     /** Path to the versioned node:sqlite guest module. */
     sqliteModule?: string;
+    /** Paths to the versioned test runner and reporters (overridable for tests). */
+    testModule?: string;
+    testReportersModule?: string;
     /** Override the lazy node:process facade for integration tests. */
     processModule?: string;
     /** Path to jco-std's versioned `node:string_decoder` module (overridable for tests) */
