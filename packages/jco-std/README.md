@@ -59,6 +59,7 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/stream` and `/stream/promises` | Classic Node streams over readable-stream 4.7.0, with Node 24 adapters        |
 | `wasi/0.2.x/node/24.x.x/stream/consumers`              | Portable `node:stream/consumers`, Node 24                                     |
 | `wasi/0.2.x/node/24.x.x/stream/iter`                   | Experimental iterable streams from Node 24.20                                 |
+| `wasi/0.2.x/node/24.x.x/repl`                          | `node:repl` over the readline port; global-scope evaluation only              |
 | `wasi/0.2.x/node/24.x.x/child-process/host`            | Deny-by-default host for `jco:node/child-process`                             |
 | `wasi/0.2.x/node/24.x.x/child-process/host/node`       | Opt-in host over the runtime's real `node:child_process`                      |
 | `wasi/0.2.x/node/24.x.x/cluster/host`                  | Deny-by-default host for `jco:node/cluster`                                   |
@@ -171,6 +172,10 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   module-level functions unenv leaves unimplemented;
 - `node:string_decoder`, implemented guest-locally by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`;
+- `node:repl`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/repl` over the readline port.
+  Evaluation is global-scope only (`useGlobal: true`); the module needs no WIT
+  capability and is the only jco-std module that bundles `acorn`;
 - `node:module`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`. Classification,
   source maps and `require.resolve` are exact; everything that loads throws,
@@ -284,6 +289,47 @@ The implementation follows Node 24.20.0's module surface and portable decoder
 algorithms. It also retains the legacy `text`, `lastChar`, `lastNeed`, and
 `lastTotal` prototype members that remain present in Node 24, although new code
 should use the documented constructor, `write()`, and `end()` API.
+
+### REPL
+
+The versioned repl module ports Node 24.20.0's `node:repl` on top of the readline
+port: `repl.start()`, `REPLServer`, keyword commands, `defineCommand()`, tab
+completion, in-memory history, reverse search, editor mode, top-level `await`,
+recoverable multi-line input and the `_`/`_error` conventions. The application
+supplies the streams; no WIT capability is required.
+
+```js
+import repl from "node:repl";
+
+export function attach(input, output) {
+  const server = repl.start({ prompt: "app> ", input, output, useGlobal: true });
+  server.context.app = { version: "1.0.0" };
+  server.defineCommand("ping", {
+    help: "Answer pong",
+    action() {
+      this.output.write("pong\n");
+      this.displayPrompt();
+    },
+  });
+  return server;
+}
+```
+
+Only `useGlobal: true` is supported. No component engine can create a second
+realm, so Node's default of a separate context is refused at construction with
+`ERR_JCO_UNSUPPORTED_NODE_API`; with the global scope, evaluation is an indirect
+`eval`, which is what `vm.runInThisContext` is. Top-level `let`, `const` and
+`class` are rewritten so they persist between lines as they do in Node, at the
+cost that `const` is not enforced across lines. Strict mode, `breakEvalOnSigint`,
+history files, `.save` and `.load` are refused or report Node's own failure text,
+and core modules are not auto-loaded into the context.
+
+`acorn` 8.17.0 and `acorn-walk` 8.3.5, the versions Node vendors, are bundled by
+this module alone. The REPL needs a parser the engine cannot replace: deciding
+whether input is incomplete or wrong (engine `SyntaxError` messages differ
+between SpiderMonkey and QuickJS), rewriting top-level `await`, and locating the
+expression to tab-complete. A component that does not import `node:repl` does
+not carry acorn.
 
 ### Errors globals
 
