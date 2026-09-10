@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { assert, expect, suite, test } from "vitest";
 
 import { bundleComponentSource } from "../../src/bundle.js";
-import { nodeErrorGlobals } from "../../src/node-builtins.js";
+import { nodeErrorGlobals } from "../../src/node-builtins/index.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
 
 suite("Node Errors globals", () => {

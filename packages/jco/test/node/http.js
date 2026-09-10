@@ -7,7 +7,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
 import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
-import { HTTP_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { HTTP_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import {
     HTTP_WASI_HTTP_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,

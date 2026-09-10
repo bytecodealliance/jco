@@ -1,5 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
+import { composeBuiltins } from "../../src/node-builtins/shared.js";
+import { createPathBuiltin } from "../../src/node-builtins/path.js";
+import { createProcessBuiltin } from "../../src/node-builtins/process.js";
 import { withDefaultNodeCapabilities, withDefaultNodeCapabilityMap } from "../../src/cmd/transpile.js";
 import * as nodeWit from "../../src/node-wit.js";
 
@@ -670,6 +673,26 @@ describe("Node builtin adapters", () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { pathFactory: "/jco/node/path.js" });
         expect(plugin.resolveId("./local.js")).toBeNull();
         expect(() => plugin.resolveId("node:path")).toThrow(/import wasi:cli\/environment@0\.2\.x/);
+    });
+
+    test.concurrent("API adapters compose in either order without claiming each other's modules", () => {
+        for (const factories of [
+            [createPathBuiltin, createProcessBuiltin],
+            [createProcessBuiltin, createPathBuiltin],
+        ]) {
+            const onWitRequirement = vi.fn();
+            const context = {
+                worldMetadata: { imports: [], exports: [] },
+                options: { processModule: "/custom/process.js", onWitRequirement },
+            };
+            const adapter = composeBuiltins(factories.map((create) => create(context)));
+            const id = adapter.resolveId("node:process");
+            expect(adapter.load(id)).toContain('from "/custom/process.js"');
+            expect(onWitRequirement).toHaveBeenCalledExactlyOnceWith(nodeWit.PROCESS_WIT_REQUIREMENT);
+            expect(adapter.load("\0jco-node-builtin:unknown")).toBeNull();
+            expect(adapter.resolveId("./unrelated.js")).toBeNull();
+            expect(() => adapter.resolveId("node:path")).toThrow(/import wasi:cli\/environment/);
+        }
     });
 
     test.concurrent("rejects ambiguous environment versions", () => {

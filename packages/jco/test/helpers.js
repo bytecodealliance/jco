@@ -11,7 +11,7 @@ import mime from "mime";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
-import { nodeBuiltinPlugin } from "../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../src/node-builtins/index.js";
 import { COMPONENT_JS_FIXTURES_DIR, JCO_JS_PATH } from "./common.js";
 import { getRandomPort } from "./bench/server-helpers.js";
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test, vi } from "vitest";
 
 import { bundleComponentSource } from "../../src/bundle.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import {
     injectNodeWitImports,
     NET_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,

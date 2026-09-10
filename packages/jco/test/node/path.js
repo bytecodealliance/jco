@@ -1,6 +1,6 @@
 // End-to-end coverage for `node:path` in a componentized source.
 //
-// The adapter unit tests (`node-builtins.js`) call the plugin's hooks directly, which cannot
+// The adapter unit tests (`builtins.js`) call the plugin's hooks directly, which cannot
 // tell whether `jco componentize` uses it at all. These build a real component and run it.
 import { cwd } from "node:process";
 import { join, posix, win32 } from "node:path";

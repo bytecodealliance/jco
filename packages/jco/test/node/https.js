@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, test, vi } from "vitest";
 
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import {
     HTTP_WIT_REQUIREMENT,
     HTTPS_WASI_HTTP_WIT_REQUIREMENTS,
