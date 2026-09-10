@@ -468,6 +468,16 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/timers-promises.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/timers-promises.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/timers-promises.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/test": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/test/index.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/test/index.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/test/index.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/test/reporters": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/test/reporters.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/test/reporters.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/test/reporters.js"
     }
   },
   "scripts": {
