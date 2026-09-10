@@ -11,7 +11,7 @@ const { createDgramHost } = await import(argv[3]);
 async function createInstance() {
     const imports = new WASIShim().getImportObject();
     let instance;
-    imports[argv[3]] = createDgramHost(() => instance.dgramCallbacks);
+    imports["jco:node/dgram@0.1.0"] = createDgramHost(() => instance.dgramCallbacks);
     instance = await instantiate(undefined, imports);
     return instance;
 }
