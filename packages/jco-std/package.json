@@ -458,6 +458,16 @@
     "./wasi/0.2.x/node/24.x.x/tty/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/tty-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/tty-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/timers": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/timers.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/timers.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/timers.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/timers/promises": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/timers-promises.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/timers-promises.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/timers-promises.js"
     }
   },
   "scripts": {

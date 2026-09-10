@@ -42,6 +42,8 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/os`                            | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                          | `node:path` adapter, Node 24 on WASI p2                                       |
 | `wasi/0.2.x/node/24.x.x/string-decoder`                | Guest-local `node:string_decoder` implementation for Node 24                  |
+| `wasi/0.2.x/node/24.x.x/timers`                        | Node 24 callback timers over engine scheduling                                |
+| `wasi/0.2.x/node/24.x.x/timers/promises`               | Promise timers, abortable interval iterators and scheduler                    |
 | `wasi/0.2.x/node/24.x.x/domain`                        | `node:domain`, deprecated upstream: every use throws                          |
 | `wasi/0.2.x/node/24.x.x/async-hooks`                   | `node:async_hooks` guest adapter, Node 24, synchronous scopes only            |
 | `wasi/0.2.x/node/24.x.x/diagnostics-channel`           | `node:diagnostics_channel` guest adapter, Node 24                             |
@@ -848,6 +850,15 @@ Unix-domain listeners, arbitrary custom transports, and HTTP/1.1 `Upgrade: h2c`.
 `wasi-http` still rejects session and server operations: an outgoing handler
 represents individual requests, not observable Node HTTP/2 sessions or arbitrary
 inbound servers.
+
+### Node timers
+
+Jco bundles `node:timers` and `node:timers/promises` imports using this package's
+Node 24 adaptation. See the [timer compatibility documentation](../../docs/src/interop/nodejs-builtins.md#timers)
+for usage and engine requirements. StarlingMonkey supplies task timers; QuickJS
+currently rejects scheduling. Active `unref()` and `{ ref: false }` require runtime
+handles with liveness control. Direct adapters can coexist with native Node
+builtins, with separate timer handles and cancellation registries.
 
 # License
 
