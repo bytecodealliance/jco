@@ -91,6 +91,8 @@ export interface NodeBuiltinOptions {
     httpWasiHttpImplementationModule?: string;
     /** Paths to jco-std's HTTPS modules (overridable for tests). */
     httpsModule?: string;
+    /** Path to the versioned node:tls facade (overridable for tests). */
+    tlsModule?: string;
     httpsCoreModule?: string;
     /** Path to jco-std's portable `node:net` core module (overridable for tests). */
     netCoreModule?: string;

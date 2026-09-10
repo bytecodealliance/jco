@@ -37,7 +37,9 @@ test.concurrent("TLS WIT injection is idempotent and shares IO 0.2.12 without fe
         expect(
             metadata.imports.filter((iface) => iface.package === "io").every((iface) => iface.version?.patch === 12n),
         ).toBe(true);
-        expect(metadata.imports.some((iface) => iface.namespace === "jco")).toBe(false);
+        expect(metadata.imports).toContainEqual(
+            expect.objectContaining({ namespace: "jco", package: "node", interface: "tls" }),
+        );
         expect(await readFile(tlsPath, "utf8")).toBe(contract);
         expect(await readFile(join(root, "world.wit"), "utf8")).toBe(world);
         expect((await worldMetadataFor(root, "component")).imports).toContainEqual(

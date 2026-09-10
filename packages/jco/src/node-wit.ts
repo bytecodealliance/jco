@@ -41,6 +41,31 @@ export interface WitDependencyPackage {
     dependencySources: string[];
 }
 
+/** A shared capability must retain every user's callbacks and dependency files. */
+export function mergeNodeWitRequirement(
+    previous: NodeWitRequirement | undefined,
+    current: NodeWitRequirement,
+): NodeWitRequirement {
+    if (!previous) {
+        return current;
+    }
+    return {
+        ...previous,
+        ...current,
+        witExport: current.witExport ?? previous.witExport,
+        guestExports: [
+            ...new Map(
+                [...(previous.guestExports ?? []), ...(current.guestExports ?? [])].map((value) => [
+                    value.jsExport,
+                    value,
+                ]),
+            ).values(),
+        ],
+        dependencySources: [...new Set([...previous.dependencySources, ...current.dependencySources])],
+        dependencyPackages: [...(previous.dependencyPackages ?? []), ...(current.dependencyPackages ?? [])],
+    };
+}
+
 /** Types the Node API interfaces share; every interface file depends on it. */
 const SHARED_TYPES_SOURCE = fileURLToPath(new URL("../lib/wit/builtin/jco-node-0.1.0/types.wit", import.meta.url));
 
@@ -87,6 +112,32 @@ export const FS_WIT_REQUIREMENT = nodeRequirement("node:fs", "fs");
 export const PROCESS_WIT_REQUIREMENT = nodeRequirement("node:process", "process");
 
 export const SQLITE_WIT_REQUIREMENT = nodeRequirement("node:sqlite", "sqlite");
+
+export const TLS_WIT_REQUIREMENT: NodeWitRequirement = {
+    ...nodeRequirement("node:tls", "tls", {
+        guestExports: [
+            {
+                witExport: "jco:node/tls-callbacks@0.1.0",
+                jsExport: "tlsCallbacks",
+                moduleSpecifier: "jco:node-tls-callbacks",
+            },
+        ],
+    }),
+    dependencyPackages: [
+        {
+            dependencyDirectory: "wasi-io-0.2.12",
+            dependencySources: [
+                fileURLToPath(new URL("../lib/wit/builtin/0.2.12/wasi-io/package.wit", import.meta.url)),
+            ],
+        },
+        {
+            dependencyDirectory: "wasi-tls-0.2.0-draft",
+            dependencySources: ["world.wit", "types.wit"].map((name) =>
+                fileURLToPath(new URL(`../lib/wit/builtin/wasi-tls-0.2.0-draft/${name}`, import.meta.url)),
+            ),
+        },
+    ],
+};
 
 export const OS_WIT_REQUIREMENT = nodeRequirement("node:os", "os");
 
@@ -218,19 +269,7 @@ function forNodeSpecifier(requirements: readonly NodeWitRequirement[], nodeSpeci
 }
 
 function tlsRequirements(): NodeWitRequirement[] {
-    const tlsRoot = new URL("../lib/wit/builtin/wasi-tls-0.2.0-draft/", import.meta.url);
-    return forNodeSpecifier(
-        [
-            wasiRequirement("wasi:tls/types@0.2.0-draft", [
-                {
-                    dependencyDirectory: "wasi-tls-0.2.0-draft",
-                    dependencySources: ["world.wit", "types.wit"].map((name) => fileURLToPath(new URL(name, tlsRoot))),
-                },
-                WASI_IO_DEPENDENCY,
-            ]),
-        ],
-        "node:https",
-    );
+    return [{ ...TLS_WIT_REQUIREMENT, nodeSpecifier: "node:https", guestExports: [] }];
 }
 
 export const HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
@@ -447,9 +486,11 @@ export async function injectNodeWitImports(
         return undefined;
     }
     const world = await findWorld(witPath, worldName);
-    const uniqueRequirements = [
-        ...new Map(requirements.map((requirement) => [requirement.witImport, requirement])).values(),
-    ];
+    const merged = new Map<string, NodeWitRequirement>();
+    for (const requirement of requirements) {
+        merged.set(requirement.witImport, mergeNodeWitRequirement(merged.get(requirement.witImport), requirement));
+    }
+    const uniqueRequirements = [...merged.values()];
     const missingImports = uniqueRequirements.filter(
         ({ witImport }) => !worldHasDeclaration(world, "import", witImport),
     );
@@ -482,7 +523,13 @@ export async function injectNodeWitImports(
             ...(requirement.dependencyPackages ?? []),
         ];
         for (const dependency of packages) {
-            dependencies.set(dependency.dependencyDirectory, dependency);
+            const previous = dependencies.get(dependency.dependencyDirectory);
+            dependencies.set(dependency.dependencyDirectory, {
+                ...dependency,
+                dependencySources: [
+                    ...new Set([...(previous?.dependencySources ?? []), ...dependency.dependencySources]),
+                ],
+            });
         }
     }
     for (const dependency of dependencies.values()) {

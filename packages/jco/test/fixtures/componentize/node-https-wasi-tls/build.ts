@@ -60,6 +60,7 @@ const { files } = await transpileBytes(bytes, {
             ]),
         ),
         "wasi:tls/types@0.2.0-draft": "tls",
+        "jco:node/tls@0.1.0": "node-tls",
     },
 });
 await writeFiles(Object.fromEntries(Object.entries(files).map(([name, bytes]) => [join(root, name), bytes])));

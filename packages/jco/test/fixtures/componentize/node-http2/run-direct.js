@@ -17,42 +17,53 @@ const timeout = setTimeout(() => {
 }, 30_000);
 const { instantiate } = await import(pathToFileURL(argv[2]));
 const { createHttp2Host } = await import(argv[3]);
+const { createTlsHost } = await import(
+    new URL("../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls/host-node.js", import.meta.url)
+);
 
 async function createInstance() {
     const imports = new WASIShim().getImportObject();
+    const tls = createTlsHost();
+    imports["@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host"] = tls;
+    imports["@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host"] = await import(
+        new URL("../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls-host.js", import.meta.url)
+    );
     let instance;
     const taken = [];
     const disposed = [];
     const errorHandled = Promise.withResolvers();
-    imports[argv[3]] = createHttp2Host(() => ({
-        async takeStreamListener(id) {
-            taken.push(id);
-            const resource = await instance.http2Callbacks.takeStreamListener(id);
-            assert.equal(await instance.http2Callbacks.takeStreamListener(id), undefined);
-            return {
-                handle: (stream) => resource.handle(stream),
-                [Symbol.dispose]() {
-                    disposed.push(id);
-                    return resource[Symbol.dispose]();
-                },
-            };
-        },
-        async takeServerErrorListener(id) {
-            const resource = await instance.http2Callbacks.takeServerErrorListener(id);
-            assert.equal(await instance.http2Callbacks.takeServerErrorListener(id), undefined);
-            assert.equal(id, 2);
-            return {
-                async handle(reason) {
-                    await resource.handle(reason);
-                    errorHandled.resolve(reason);
-                },
-                [Symbol.dispose]() {
-                    disposed.push(id);
-                    return resource[Symbol.dispose]();
-                },
-            };
-        },
-    }));
+    imports[argv[3]] = createHttp2Host(
+        () => ({
+            async takeStreamListener(id) {
+                taken.push(id);
+                const resource = await instance.http2Callbacks.takeStreamListener(id);
+                assert.equal(await instance.http2Callbacks.takeStreamListener(id), undefined);
+                return {
+                    handle: (stream) => resource.handle(stream),
+                    [Symbol.dispose]() {
+                        disposed.push(id);
+                        return resource[Symbol.dispose]();
+                    },
+                };
+            },
+            async takeServerErrorListener(id) {
+                const resource = await instance.http2Callbacks.takeServerErrorListener(id);
+                assert.equal(await instance.http2Callbacks.takeServerErrorListener(id), undefined);
+                assert.equal(id, 2);
+                return {
+                    async handle(reason) {
+                        await resource.handle(reason);
+                        errorHandled.resolve(reason);
+                    },
+                    [Symbol.dispose]() {
+                        disposed.push(id);
+                        return resource[Symbol.dispose]();
+                    },
+                };
+            },
+        }),
+        tls,
+    );
     instance = await instantiate(undefined, imports);
     return { instance, taken, disposed, errorHandled: errorHandled.promise };
 }

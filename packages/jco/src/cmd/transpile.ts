@@ -45,6 +45,7 @@ const HTTP2_ASYNC_IMPORTS = [
     `${HTTP2_CAPABILITY}#[method]server.close`,
 ];
 const DEFAULT_NODE_CAPABILITY_MAP = {
+    "jco:node/tls@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host",
     "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -72,6 +73,13 @@ function appendUnique(values: string[] | undefined, value: string): string[] {
 
 /** Configure host-backed Node capabilities and their required binding mode. */
 export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts {
+    if (
+        opts.map?.["jco:node/tls@0.1.0"] !== undefined &&
+        opts.map["jco:node/tls@0.1.0"] !== DEFAULT_NODE_CAPABILITY_MAP["jco:node/tls@0.1.0"]
+    ) {
+        opts.asyncMode = "jspi";
+        opts.asyncExports = appendUnique(opts.asyncExports, "*");
+    }
     const hasAsyncDnsProvider =
         opts.map?.[DNS_CAPABILITY] !== undefined &&
         opts.map[DNS_CAPABILITY] !== DEFAULT_NODE_CAPABILITY_MAP[DNS_CAPABILITY];

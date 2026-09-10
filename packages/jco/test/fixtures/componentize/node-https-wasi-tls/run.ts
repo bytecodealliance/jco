@@ -1,3 +1,4 @@
+import { createWasiTlsBridge } from "../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls/wasi.js";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -34,6 +35,9 @@ imports.sockets = {
     },
 };
 imports.tls = policy === "denied" ? denied : { ...provider, ClientHandshake: CountedHandshake };
+imports["node-tls"] = createWasiTlsBridge(
+    policy === "denied" ? denied : { ...provider, ClientHandshake: CountedHandshake },
+);
 interface Report {
     status: number;
     body: string;
