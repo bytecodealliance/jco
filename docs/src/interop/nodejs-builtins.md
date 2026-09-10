@@ -339,7 +339,6 @@ not intercepted.
 line events, async iteration, streaming UTF-8/CRLF decoding, prompts, terminal
 editing and history, keypress events, and cursor actions. Both share a port of
 [Node v24.20.0's readline implementation](https://github.com/nodejs/node/tree/v24.20.0/lib/internal/readline).
-The pinned unenv readline modules contain no-op implementations and are not used.
 
 Applications keep ordinary Node imports and supply readable and writable streams:
 
