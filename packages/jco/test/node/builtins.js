@@ -50,6 +50,7 @@ describe("Node builtin adapters", () => {
             "jco:node/http2@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host",
             "jco:node/process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host",
             "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
+            "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
         });
         expect(
             withDefaultNodeCapabilityMap({
@@ -72,6 +73,7 @@ describe("Node builtin adapters", () => {
             "jco:node/http2@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host",
             "jco:node/process@0.1.0": "/application/process-host.js",
             "jco:node/os@0.1.0": "/application/os-host.js",
+            "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
         });
     });
 
@@ -236,6 +238,26 @@ describe("Node builtin adapters", () => {
         expect(requirements).toEqual([]);
         expect(plugin.resolveId("readline")).toBeNull();
         expect(plugin.resolveId("readline/promises")).toBeNull();
+    });
+
+    test.concurrent("generates a host-backed adapter for node:tty and reports its WIT requirement", () => {
+        const requirements = [];
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { ttyModule: "test:tty", onWitRequirement: (requirement) => requirements.push(requirement) },
+        );
+        const id = plugin.resolveId("node:tty");
+        expect(id).toBe("\0jco-node-builtin:node:tty");
+        expect(requirements).toEqual([nodeWit.TTY_WIT_REQUIREMENT]);
+        expect(nodeWit.TTY_WIT_REQUIREMENT.dependencySources.map((source) => source.split(/[\\/]/).at(-1))).toEqual([
+            "types.wit",
+            "tty.wit",
+        ]);
+        const source = plugin.load(id);
+        expect(source).toContain('from "test:tty"');
+        expect(source).toContain("export default tty");
+        expect(source).toContain('export * from "test:tty"');
+        expect(plugin.resolveId("tty")).toBeNull();
     });
 
     test.concurrent("generates a capability-free adapter for node:repl", () => {
