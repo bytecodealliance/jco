@@ -61,6 +61,9 @@ export interface NodeBuiltinOptions {
     /** Paths to the versioned test runner and reporters (overridable for tests). */
     testModule?: string;
     testReportersModule?: string;
+    /** Paths to the versioned portable util and util/types modules. */
+    utilModule?: string;
+    utilTypesModule?: string;
     /** Override the lazy node:process facade for integration tests. */
     processModule?: string;
     /** Path to jco-std's versioned `node:string_decoder` module (overridable for tests) */
