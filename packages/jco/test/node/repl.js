@@ -36,7 +36,8 @@ suite("node:repl", () => {
     });
 
     for (const backend of ["quickjs", "starlingmonkey"]) {
-        // TODO(unskip): same blocker as above.
+        // TODO(unskip): publish the jco-std node:repl export and update jco's dependency range;
+        // componentize resolves the installed package, which does not yet export this module.
         test.skip(`a scripted session evaluates, recovers, errors and exits in ${backend}`, async () => {
             const { componentPath, stderr } = await componentizeFixture({
                 fixture: "node-repl",

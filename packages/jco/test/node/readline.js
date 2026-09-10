@@ -26,8 +26,8 @@ function runSimple(path) {
 }
 
 suite("node:readline", () => {
-    // TODO(unskip): publish and depend on a jco-std release with the readline, events, errors and
-    // abort-globals exports; the builtin plugin resolves them from the installed package.
+    // TODO(unskip): publish and depend on a jco-std release exporting readline, readline/promises,
+    // events, errors and abort-globals. The builtin plugin resolves the installed package in CI.
     test.concurrent.skip("the documentation simple example reads real stdin and writes stdout", async () => {
         const dir = await getTmpDir();
         const bundle = await rolldown({
@@ -48,7 +48,8 @@ suite("node:readline", () => {
     });
 
     for (const backend of ["quickjs", "starlingmonkey"]) {
-        // TODO(unskip): same blocker as above.
+        // TODO(unskip): publish and depend on a jco-std release exporting readline, readline/promises,
+        // events, errors and abort-globals before bundling this fixture with either component engine.
         test.concurrent.skip(
             `questions, line parsing and terminal APIs execute in ${backend}`,
             async () => {
