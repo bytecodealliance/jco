@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a40e4871.js";
+            window.path_to_searchindex_js = "../searchindex-ccb98a29.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -290,6 +290,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:https</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https</code></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses the <code>direct</code> host or an explicit <code>wasi:tls</code> provider – see below.</td></tr>
 <tr><td><code>node:net</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/net/core</code></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported – see below.</td></tr>
 <tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
+<tr><td><code>node:process</code></td><td>Jco typed facade and explicit Node passthrough</td><td>Host process state and operations over <code>jco:node/process@0.1.0</code>; lazy default properties, named functions and objects. See Process restrictions below.</td></tr>
 <tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider – see below.</td></tr>
 <tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
 <tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
@@ -1101,6 +1102,178 @@ namespace and the named <code>decode</code>, <code>encode</code>, <code>escape</
 <code>unescape</code>, and <code>unescapeBuffer</code> exports with Node-compatible alias identities.</p>
 <p>The adapter initializes the same Buffer core as <code>node:buffer</code>. That matters for
 malformed-percent fallback and <code>unescapeBuffer</code>, which use Buffer internally.</p>
+<h2 id="process"><a class="header" href="#process">Process</a></h2>
+<p>As WASI has no concept of processes, <code>node:process</code> uses a Jco facade
+over <code>jco:node/process@0.1.0</code>, targeting Node.js v24.20.0. This opt-in Node provider
+therefore describes and controls <strong>the embedding Node process</strong> (via an adapter): its environment,
+working directory, PID, resource measurements, diagnostics and credentials.</p>
+<p>If using the passthrough NodeJS adapter, <code>process.exit()</code> terminates that
+host; <code>kill()</code> sends a real OS signal, and <code>execve()</code> replaces the host
+program where Node supports it.</p>
+<p>When writing components against this API, you can Use normal Node imports
+inside a component entry function:</p>
+<pre><code class="language-js">import process, { cwd, cpuUsage, hrtime } from 'node:process';
+
+export function inspect() {
+    return JSON.stringify({
+        pid: process.pid,
+        platform: process.platform,
+        cwd: cwd(),
+        cpu: cpuUsage(),
+        nanoseconds: String(hrtime.bigint()),
+    });
+}
+</code></pre>
+<p>Componentize that component with:</p>
+<pre><code class="language-console">jco componentize app.js --bundle -w wit -o app.wasm
+</code></pre>
+<p>Jco adds the typed <code>jco:node/process</code> WIT import, and <code>jco transpile</code> will map that
+to a provider that denies all functionality by default; host-dependent calls
+throw <code>ERR_JCO_PROCESS_ADAPTER_REQUIRED</code>.</p>
+<p>If you want to use the pass-through provider, you must map it in explicitly:</p>
+<pre><code class="language-console">jco transpile app.wasm \
+  -o out \
+  --map 'jco:node/process@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node'
+</code></pre>
+<p>The public facade contains no native Node process objects in its WIT boundary.
+A different runtime can implement the same typed functions.</p>
+<p>Direct jco-std adapters and native Node imports can coexist in a host application.</p>
+<h3 id="supplying-your-own-process-provider"><a class="header" href="#supplying-your-own-process-provider">Supplying your own process provider</a></h3>
+<p>Embedders can construct an object satisfying the public <code>ProcessHost</code> type and
+pass it directly to the generated <code>instantiate</code> function. Start from the denial
+provider and override the operations your application supports. You do not need
+to implement every operation or forward anything to Node’s native process.</p>
+<p>For example, this TypeScript provider records exit requests and fails the current
+guest call without exiting the embedding process:</p>
+<pre><code class="language-ts">import base from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host';
+// To forward unoverridden operations to Node, swap the import above for:
+// import base from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node';
+import type { ProcessHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process';
+
+export function createProcessHost() {
+    const exitRequests: number[] = [];
+    const host = {
+        ...base,
+        exit(code) {
+            const status = Number(code?.val ?? 0);
+            exitRequests.push(status);
+            throw {
+                name: 'Error',
+                code: 'COMPONENT_EXIT',
+                message: `Component requested exit ${status}`,
+            };
+        },
+    } satisfies ProcessHost;
+    return { host, exitRequests };
+}
+</code></pre>
+<p>The active import denies unoverridden operations. Comment it out and uncomment
+the Node provider import to change the base to host passthrough. The custom <code>exit</code>
+above still overrides that base, but other operations, including <code>abort</code>, <code>kill</code>,
+environment writes and <code>chdir</code>, then affect the embedding Node process.</p>
+<p>Generate bindings for explicit instantiation; no custom mapping is needed:</p>
+<pre><code class="language-sh">jco transpile app.wasm -o out --instantiation async
+</code></pre>
+<p>Then pass your implementation object directly in the imports. Jco’s default
+mapping names the process import after the denial-provider package; that key does
+not force you to use its implementation. The generated binding types list the
+expected import keys:</p>
+<pre><code class="language-js">import { instantiate } from './out/app.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { createProcessHost } from './my-process-provider.js';
+
+const { host, exitRequests } = createProcessHost();
+const component = await instantiate(undefined, {
+    ...new WASIShim().getImportObject(),
+    '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host': host,
+});
+</code></pre>
+<p>The provider implements the WIT operations underneath the Node facade:</p>
+<ul>
+<li>Functions are synchronous, even with <code>--instantiation async</code>. Arguments are
+WIT values: <code>exit(23)</code> receives <code>{ tag: 'number', val: 23 }</code>, a string code uses
+the <code>text</code> tag, and an omitted code is <code>undefined</code>.</li>
+<li>With JavaScript component bindings, return the successful value directly, or
+throw a <code>ProcessError</code> record with <code>name</code>, <code>message</code>, and optional <code>code</code>,
+<code>errno</code>, <code>syscall</code>, and <code>path</code>. The guest receives an Error. Do not return
+<code>{ tag: 'ok', val: ... }</code> or <code>{ tag: 'err', val: ... }</code> wrappers. Numeric WIT
+lists may require typed arrays: for example, <code>getgroups</code> returns <code>Uint32Array</code>.</li>
+<li>Implement related operations consistently: environment access uses
+<code>envEntries</code>, <code>envGet</code>, and <code>envSet</code>; <code>process.exitCode</code> uses <code>getState</code> and
+<code>setExitCode</code>. This minimal example supports explicit exit requests only.
+Reading metadata such as <code>pid</code> or <code>argv</code> requires <code>metadata</code>.</li>
+<li>Keep mutable state per component when isolation is desired. Construct a new
+provider for each instance, as in the example. The facade does not isolate
+state that your provider shares with other instances or the host.</li>
+<li><code>exit</code>, <code>abort</code>, and <code>execve</code> must not return successfully. This example throws
+an ordinary guest-visible error, which guest code can catch. Enforcing component
+termination requires the embedder’s own lifecycle policy. Native streams and
+engine hooks listed under Process restrictions remain unsupported regardless
+of the provider.</li>
+</ul>
+<p>The <code>node-process-custom</code> fixture in <code>packages/jco/test/fixtures/componentize</code>
+contains the runnable JavaScript equivalent, checked against <code>ProcessHost</code>.
+Its component calls <code>process.exit(23)</code>. End-to-end tests bind separate provider
+objects in QuickJS and StarlingMonkey, verify the exit requests reach the correct
+object, and confirm the host stays alive and other operations remain denied.</p>
+<h3 id="process-state-and-snapshots"><a class="header" href="#process-state-and-snapshots">Process state and snapshots</a></h3>
+<p>Host imports are unavailable while the component engine initializes its snapshot.
+Read runtime state inside exported guest functions. Metadata, argument arrays,
+versions, configuration and features are obtained lazily at first access. Argument
+arrays are guest-local snapshots; environment variables and mutable state such as
+<code>title</code>, <code>debugPort</code>, <code>exitCode</code> and report settings remain live on the host.
+<code>process.env</code> supports property access, assignment, deletion, enumeration and
+ordinary writable data descriptors. Assign strings, numbers or booleans; deprecated
+implicit conversions of other values throw before coercion.</p>
+<p>Named imports support functions and lazy objects such as <code>env</code>, <code>argv</code>, <code>versions</code>,
+<code>report</code> and <code>allowedNodeEnvironmentFlags</code>. Runtime primitive exports (<code>pid</code>,
+<code>platform</code>, <code>arch</code>, <code>version</code>, <code>exitCode</code>, and similar properties) are deliberately
+absent from the ESM facade: use <code>process.pid</code>, for example. ESM bindings cannot be
+lazy getters, and supplying a build-machine PID or a placeholder would be incorrect.
+Likewise, obtain the optional permission object through <code>process.permission</code>.
+This implementation handles explicit <code>node:process</code> imports; it does not install a
+new ambient <code>globalThis.process</code> object or intercept the bare <code>process</code> specifier.</p>
+<h3 id="process-operations"><a class="header" href="#process-operations">Process operations</a></h3>
+<p>The Node provider implements cwd/chdir, environment access and <code>loadEnvFile</code>, CPU,
+thread CPU, memory and resource usage, monotonic <code>hrtime</code>, uptime and memory limits,
+active resource names, identity and credential operations, <code>kill</code>, the setting
+overload of <code>umask</code>, termination and <code>execve</code>, diagnostic reports, allowed Node
+flags, permission queries and host source-map settings. Errors cross WIT with their
+name, code, errno, syscall and path fields and become guest Error instances.
+Diagnostic reports and resource measurements describe the host runtime, including
+its JavaScript heap. They are not measurements of just one component.</p>
+<p>Ordinary EventEmitter listeners and custom events stay in the guest and use Jco’s
+already-audited <code>node:events</code> implementation. <code>nextTick</code> uses the guest microtask
+queue; it does not reproduce Node’s separate next-tick phase or its ordering ahead
+of promise reactions. <code>ref</code>/<code>unref</code> invoke the guest object’s
+<code>Symbol.for('nodejs.ref')</code>/<code>Symbol.for('nodejs.unref')</code> protocols, falling back to
+ordinary <code>ref</code>/<code>unref</code> methods. Warnings are
+forwarded to Node and scheduled for guest warning listeners. QuickJS currently
+rejects Promise-returning exports for synchronous WIT functions; the async
+<code>nextTick</code> component test runs on StarlingMonkey, while synchronous passthrough
+and denial tests run on both engines.</p>
+<h3 id="process-restrictions"><a class="header" href="#process-restrictions">Process restrictions</a></h3>
+<p>Native stream objects (<code>stdin</code>, <code>stdout</code>, <code>stderr</code>), IPC channels and handle transfer,
+module loading (<code>dlopen</code>, <code>getBuiltinModule</code>), exception-capture hooks and
+finalization callbacks cannot cross this boundary. Their entry points throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Registering automatic host events (signals,
+<code>beforeExit</code>, <code>exit</code>, IPC, rejection/exception and worker events) throws the same
+error; the adapter does not silently register listeners that will never run.
+These restrictions also apply with the Node provider mapped.</p>
+<p>Deprecated <code>binding</code>, <code>assert</code>, <code>mainModule</code>, <code>domain</code>, the no-argument <code>umask()</code>
+overload, the <code>multipleResolves</code> event and deprecated feature flags throw
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> before inspecting arguments or calling
+providers. Legacy <code>hrtime()</code> and <code>nextTick()</code> remain functional; legacy status is
+not deprecation. Platform-specific credential operations are available only when
+the Node host supports them. Node 26 additions are outside the Node 24 contract.</p>
+<h3 id="process-implementation-sources"><a class="header" href="#process-implementation-sources">Process implementation sources</a></h3>
+<p><code>unenv@2.0.0-rc.24</code>’s process module was inspected, including its environment,
+hrtime, next-tick and TTY dependencies. Its placeholder PIDs, zero memory metrics,
+local cwd and unimplemented host operations do not meet this contract. Jco uses
+native Node operations behind WIT instead, with a small TypeScript facade.
+Tuple clock subtraction and warning normalization follow Node’s MIT-licensed
+<code>internal/process/per_thread.js</code> and <code>internal/process/warning.js</code> at commit
+<code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>; the source retains attribution.</p>
 <h2 id="how-jco-evaluates-unenv-modules"><a class="header" href="#how-jco-evaluates-unenv-modules">How Jco evaluates unenv modules</a></h2>
 <h3 id="different-compatibility-goals"><a class="header" href="#different-compatibility-goals">Different compatibility goals</a></h3>
 <p><code>unenv</code> provides a valuable cross-runtime foundation used by browsers, edge
@@ -1153,7 +1326,7 @@ the module or upstream project.</p>
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
-<code>node:perf_hooks</code>, <code>node:process</code>, <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>,
+<code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:sqlite</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
