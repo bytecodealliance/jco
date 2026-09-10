@@ -93,8 +93,10 @@ export interface NodeBuiltinOptions {
     http2CoreModule?: string;
     http2WasiSocketsImplementationModule?: string;
     http2WasiHttpImplementationModule?: string;
+
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
+
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
 }
