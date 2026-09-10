@@ -63,21 +63,32 @@ import { lazy, freeze } from "./objects.js";
 
 export function createProcess(host: ProcessHost): ProcessModule {
   const call = <T>(fn: () => T | HostResult<T, ProcessError>): T => callHost(fn, makeError);
+
   const process = new EventEmitter() as unknown as ProcessModule;
+
   let metadata: Metadata | undefined;
+
   const info = (): Metadata => (metadata ??= call(() => host.metadata()));
+
   const property = (name: string, get: () => unknown, set?: (value: unknown) => void): void => {
     Object.defineProperty(process, name, { get, set, enumerable: true, configurable: true });
   };
+
   for (const name of ["arch", "platform", "pid", "ppid", "argv0", "execPath", "version"] as const) {
     property(name, () => info()[name]);
   }
+
   process.argv = lazy<string[]>([], () => info().argv);
+
   process.execArgv = lazy<string[]>([], () => info().execArgv);
+
   Object.assign(process, {
     versions: lazy<Record<string, string>>({}, () => Object.fromEntries(info().versions)),
+
     release: lazy({}, () => JSON.parse(info().releaseJson)),
+
     config: lazy({}, () => freeze(JSON.parse(info().configJson)) as object),
+
     features: lazy({}, () => {
       const features = JSON.parse(info().featuresJson) as Record<string, Json>;
       for (const name of ["ipv6", "uv", "tls_alpn", "tls_ocsp", "tls_sni"]) {
@@ -94,11 +105,13 @@ export function createProcess(host: ProcessHost): ProcessModule {
       return features;
     }),
   });
+
   property(
     "title",
     () => call(() => host.getState()).title,
     (value) => call(() => host.setTitle(String(value))),
   );
+
   property(
     "debugPort",
     () => call(() => host.getState()).debugPort,
@@ -109,11 +122,13 @@ export function createProcess(host: ProcessHost): ProcessModule {
       call(() => host.setDebugPort(value));
     },
   );
+
   property(
     "exitCode",
     () => call(() => host.getState()).exitCode?.val,
     (value) => call(() => host.setExitCode(exitCode(value))),
   );
+
   for (const [name, flag] of [
     ["noDeprecation", "no-deprecation"],
     ["throwDeprecation", "throw-deprecation"],
@@ -129,24 +144,33 @@ export function createProcess(host: ProcessHost): ProcessModule {
       },
     );
   }
+
   for (const name of ["sourceMapsEnabled", "connected"] as const) {
     property(name, () => call(() => host.getState())[name]);
   }
+
   process.env = createEnvironment(host, call);
+
   process.cwd = () => call(() => host.cwd());
+
   process.chdir = (directory) => {
     string(directory, "directory");
     call(() => host.chdir(directory));
   };
+
   process.cpuUsage = (value) => call(() => host.cpuUsage(previous(value)));
+
   process.threadCpuUsage = (value) => call(() => host.threadCpuUsage(previous(value)));
+
   process.memoryUsage = Object.assign(() => call(() => host.memoryUsage()), {
     rss: () => call(() => host.rss()),
   });
+
   process.resourceUsage = () => {
     const { userCpuTime, systemCpuTime, maxRss, ...rest } = call(() => host.resourceUsage());
     return { ...rest, userCPUTime: userCpuTime, systemCPUTime: systemCpuTime, maxRSS: maxRss };
   };
+
   // Tuple subtraction adapted from Node's MIT-licensed per_thread.js hrtime().
   process.hrtime = Object.assign(
     (time?: [number, number]): [number, number] => {
@@ -171,24 +195,32 @@ export function createProcess(host: ProcessHost): ProcessModule {
       },
     },
   );
+
   for (const name of ["uptime", "availableMemory", "constrainedMemory"] as const) {
     process[name] = () => call(() => host[name]());
   }
+
   process.getActiveResourcesInfo = () => call(() => host.getActiveResourcesInfo());
+
   for (const kind of ["uid", "euid", "gid", "egid"] as const) {
     process[`get${kind}`] = () => call(() => host.getId(kind));
+
     process[`set${kind}`] = (value) => call(() => host.setId(kind, id(value, "id")));
   }
+
   // Numeric WIT lists lift as typed arrays on some engines; Node returns an Array.
   process.getgroups = () => Array.from(call(() => host.getgroups()));
+
   process.setgroups = (groups) => {
     if (!Array.isArray(groups)) {
       throw invalidArgType("groups", "Array", groups);
     }
     call(() => host.setgroups(groups.map((v, i) => id(v, `groups[${i}]`))));
   };
+
   process.initgroups = (user, extraGroup) =>
     call(() => host.initgroups(id(user, "user"), id(extraGroup, "extraGroup")));
+
   process.kill = (pid, signal = "SIGTERM") => {
     // Node deliberately accepts integer-like PID strings. Preserve that legacy coercion.
     if (pid != (pid | 0)) {
@@ -206,6 +238,7 @@ export function createProcess(host: ProcessHost): ProcessModule {
     call(() => host.kill(pid | 0, s as Id));
     return true;
   };
+
   process.umask = ((mask?: number | string): number => {
     if (mask === undefined) {
       deprecated("umask()", "process.umask(mask)");
@@ -216,14 +249,17 @@ export function createProcess(host: ProcessHost): ProcessModule {
     integer(mask, "mask", 0, 4294967295);
     return call(() => host.umask({ tag: "number", val: mask }));
   }) as ProcessModule["umask"];
+
   process.exit = (code) => {
     call(() => host.exit(exitCode(code)));
     throw unsupportedNodeApi("process.exit", "host provider returned instead of terminating");
   };
+
   process.abort = () => {
     call(() => host.abort());
     throw unsupportedNodeApi("process.abort", "host provider returned instead of terminating");
   };
+
   process.execve = (file, args = [], env) => {
     string(file, "execPath");
     if (!Array.isArray(args)) {
@@ -248,17 +284,21 @@ export function createProcess(host: ProcessHost): ProcessModule {
       "host provider returned instead of replacing the process",
     );
   };
+
   process.loadEnvFile = (value) => call(() => host.loadEnvFile(path(value)));
+
   process.setSourceMapsEnabled = (value) => {
     boolean(value, "enabled");
     call(() => host.setSourceMapsEnabled(value));
   };
+
   process.nextTick = (callback, ...args) => {
     if (typeof callback !== "function") {
       throw invalidArgType("callback", "Function", callback);
     }
     queueMicrotask(() => callback(...args));
   };
+
   // Refable protocol from Node per_thread.js; objects stay in the guest realm.
   for (const method of ["ref", "unref"] as const) {
     process[method] = (value) => {
@@ -272,6 +312,7 @@ export function createProcess(host: ProcessHost): ProcessModule {
       }
     };
   }
+
   process.emitWarning = (
     value: string | Error,
     typeOrOptions?: string | WarningOptions,
@@ -337,7 +378,9 @@ export function createProcess(host: ProcessHost): ProcessModule {
     call(() => host.emitWarning(warning(error)));
     queueMicrotask(() => process.emit("warning", error));
   };
+
   const report = {} as ProcessReport;
+
   for (const [name, option] of Object.entries({
     compact: "compact",
     directory: "directory",
@@ -364,8 +407,10 @@ export function createProcess(host: ProcessHost): ProcessModule {
       },
     });
   }
+
   report.getReport = (error) =>
     JSON.parse(call(() => host.getReport(error === undefined ? undefined : warning(error))));
+
   report.writeReport = (filename?: string | Error, error?: Error): string => {
     if (filename instanceof Error) {
       error = filename;
@@ -376,17 +421,23 @@ export function createProcess(host: ProcessHost): ProcessModule {
     }
     return call(() => host.writeReport(filename, error === undefined ? undefined : warning(error)));
   };
+
   Object.defineProperty(process, "report", { value: report, enumerable: true, configurable: true });
+
   const permission = {
     has: (scope: string, reference?: string | URL | Uint8Array): boolean => {
       string(scope, "scope");
       return call(() => host.permissionHas(scope, path(reference)));
     },
   };
+
   property("permission", () => (info().hasPermission ? permission : undefined));
+
   class AllowedFlags extends Set<string> {
     #loaded = false;
+
     #flags: string[] = [];
+
     #load(): void {
       if (!this.#loaded) {
         const flags = (this.#flags = call(() => host.allowedFlags()));
@@ -396,28 +447,35 @@ export function createProcess(host: ProcessHost): ProcessModule {
         this.#loaded = true;
       }
     }
+
     override has(value: string): boolean {
       return typeof value === "string" && call(() => host.allowedFlag(value));
     }
+
     override get size(): number {
       this.#load();
       return this.#flags.length;
     }
+
     override entries(): SetIterator<[string, string]> {
       this.#load();
       return super.entries();
     }
+
     override keys(): SetIterator<string> {
       this.#load();
       return super.keys();
     }
+
     override values(): SetIterator<string> {
       this.#load();
       return super.values();
     }
+
     override [Symbol.iterator](): SetIterator<string> {
       return this.values();
     }
+
     override forEach(
       callback: (value: string, key: string, set: Set<string>) => void,
       thisArg?: unknown,
@@ -425,32 +483,43 @@ export function createProcess(host: ProcessHost): ProcessModule {
       this.#load();
       this.#flags.forEach((value) => callback.call(thisArg, value, value, this));
     }
+
     override add(_value: string): this {
       return this;
     }
+
     override delete(_value: string): boolean {
       return false;
     }
+
     override clear(): void {}
   }
+
   Object.defineProperty(process, "allowedNodeEnvironmentFlags", {
     value: new AllowedFlags(),
     enumerable: true,
     configurable: true,
   });
+
   Object.defineProperty(process, "finalization", {
     value: {
       register: () => unsupported("finalization.register"),
+
       registerBeforeExit: () => unsupported("finalization.registerBeforeExit"),
+
       unregister: () => unsupported("finalization.unregister"),
     },
     enumerable: true,
   });
+
   for (const name of ["stdin", "stdout", "stderr", "channel"] as const) {
     property(name, () => unsupported(name));
   }
+
   property("mainModule", () => deprecated("mainModule", "require.main"));
+
   property("domain", () => deprecated("domain", "AsyncLocalStorage"));
+
   for (const name of [
     "getBuiltinModule",
     "dlopen",
@@ -462,8 +531,11 @@ export function createProcess(host: ProcessHost): ProcessModule {
   ] as const) {
     process[name] = () => unsupported(name);
   }
+
   process.binding = () => deprecated("binding", "public Node APIs");
+
   process.assert = () => deprecated("assert", "node:assert");
+
   for (const method of [
     "on",
     "addListener",
@@ -497,8 +569,12 @@ export function createProcess(host: ProcessHost): ProcessModule {
       return original.call(this, event, listener);
     };
   }
+
   process.on = process.addListener;
+
   process.off = process.removeListener;
+
   Object.defineProperty(process, Symbol.toStringTag, { value: "process", configurable: true });
+
   return process;
 }
