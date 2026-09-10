@@ -38,8 +38,9 @@ WASI sockets remains h2c-only.
 
 ## Binding the native provider
 
-Use one factory per component. With Jco's default import mappings and explicit
-instantiation, the import keys are the default provider module names:
+Use one factory per component. With `--instantiation`, the import keys are the
+WIT interface names without their versions; Jco's deny-by-default module map
+applies only to ESM output:
 
 ```js
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
@@ -53,16 +54,10 @@ const tls = createTlsHost({ onCallbackError: (error) => console.error(error) });
 let instance;
 instance = await instantiate(undefined, {
   ...new WASIShim().getImportObject(),
-  "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host": tls,
-  "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host": wasiTlsTypes,
-  "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host": createHttpHost(
-    () => instance.httpCallbacks,
-    tls,
-  ),
-  "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host": createHttp2Host(
-    () => instance.http2Callbacks,
-    tls,
-  ),
+  "jco:node/tls": tls,
+  "wasi:tls/types": wasiTlsTypes,
+  "jco:node/http": createHttpHost(() => instance.httpCallbacks, tls),
+  "jco:node/http2": createHttp2Host(() => instance.http2Callbacks, tls),
 });
 if (instance.tlsCallbacks) tls.attachCallbacks(instance.tlsCallbacks);
 // Call component exports. When the component is finished:
