@@ -53,6 +53,7 @@
             - [`node:tls`](./interop/nodejs-builtins/supported-modules/tls.md)
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
             - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
+            - [`node:util`](./interop/nodejs-builtins/supported-modules/util.md)
 - [Troubleshooting]()
     - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide]()
