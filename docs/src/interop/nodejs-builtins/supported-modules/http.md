@@ -41,8 +41,18 @@ construction immediately because outgoing-handler cannot listen for arbitrary
 connections.
 
 For direct servers, instantiate with a provider bound to that component's
-callback dispatcher. For example, after transpiling with
-`--instantiation async --map jco:node/http@0.1.0=http-host`:
+callback dispatcher. The provider is asynchronous, so select JSPI and its async
+imports explicitly; instantiation output keeps the WIT import names and nothing
+selects them for you. For example, after transpiling with:
+
+```sh
+jco transpile component.wasm -o out --instantiation async \
+  --async-mode jspi --async-exports '*' \
+  --async-imports 'jco:node/http@0.1.0#request' \
+    'jco:node/http@0.1.0#[method]server.listen' \
+    'jco:node/http@0.1.0#[method]server.close' \
+    'jco:node/http@0.1.0#[method]server.get-connections'
+```
 
 ```js
 import { instantiate } from './component.js';
@@ -51,7 +61,7 @@ import { createHttpHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x
 
 let instance;
 const imports = new WASIShim().getImportObject();
-imports['http-host'] = createHttpHost(() => instance.httpCallbacks);
+imports['jco:node/http'] = createHttpHost(() => instance.httpCallbacks);
 instance = await instantiate(undefined, imports);
 // Await application exports that create or control servers.
 await instance.start();
