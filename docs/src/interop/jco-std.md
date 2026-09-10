@@ -136,7 +136,10 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
   whose semantics an individual-request interface cannot preserve;
 - `node:readline` and `node:readline/promises`, ported from Node 24.20 for line
   parsing, questions, async iteration and terminal editing over supplied streams,
-  with no additional WIT capability; and
+  with no additional WIT capability;
+- `node:repl`, ported from Node 24.20 over that readline port for global-scope
+  evaluation, keyword commands, completion and top-level `await`, with no
+  additional WIT capability and acorn bundled only when the REPL is imported; and
 - `node:stream/consumers`, implemented as portable iterable collection over the
   engine's Blob, typed-array, and text-codec globals; and
 - the experimental Node 24.20 `node:stream/iter` API, including portable sources,
