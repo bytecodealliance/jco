@@ -31,6 +31,7 @@ import { createHttpsBuiltin } from "./https.js";
 import { createHttp2Builtin } from "./http2.js";
 import { createBufferBuiltin } from "./buffer.js";
 import { createQuerystringBuiltin } from "./querystring.js";
+import { createUrlBuiltin } from "./url.js";
 import { createPathBuiltin } from "./path.js";
 import { composeBuiltins, VIRTUAL_PREFIX } from "./shared.js";
 
@@ -87,6 +88,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createBufferBuiltin,
         createQuerystringBuiltin,
         createPathBuiltin,
+        createUrlBuiltin,
     ];
     const composed = composeBuiltins(adapters.map((create) => create(context)));
     return {

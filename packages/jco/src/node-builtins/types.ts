@@ -107,6 +107,10 @@ export interface NodeBuiltinOptions {
     /** Reports WIT imports required by builtins found while bundling. */
     onWitRequirement?: (requirement: NodeWitRequirement) => void;
 
+    /** Paths to the portable URL factory and UTF-8 adapter (overridable for tests). */
+    urlFactory?: string;
+    urlEncodingModule?: string;
+
     /** unenv aliases to resolve audited builtins against (overridable for tests) */
     unenvAliases?: Readonly<Record<string, string>>;
 }
