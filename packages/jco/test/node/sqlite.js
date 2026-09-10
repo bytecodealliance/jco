@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { expect, test, vi } from "vitest";
-import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
+import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { SQLITE_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { bundleComponentSource } from "../../src/bundle.js";
 import { getTmpDir, transpileComponent } from "../helpers.js";
