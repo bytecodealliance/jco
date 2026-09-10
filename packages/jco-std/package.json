@@ -25,7 +25,8 @@
   "files": [
     "dist",
     "wit/node-0.1.0",
-    "wit/tls-0.2.0-draft"
+    "wit/tls-0.2.0-draft",
+    "licenses"
   ],
   "type": "module",
   "exports": {
@@ -478,6 +479,21 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/test/reporters.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/test/reporters.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/test/reporters.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/url": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/url.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/url.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/url.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/url/encoding": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/url/encoding.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/url/encoding.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/url/encoding.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/url/idna": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/url/idna.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/url/idna.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/url/idna.js"
     }
   },
   "scripts": {
@@ -500,7 +516,10 @@
     "acorn": "8.17.0",
     "acorn-walk": "8.3.5",
     "minimatch": "10.2.6",
-    "readable-stream": "4.7.0"
+    "punycode": "2.3.1",
+    "readable-stream": "4.7.0",
+    "urlpattern-polyfill": "10.1.0",
+    "whatwg-url": "14.2.0"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.22.0",
