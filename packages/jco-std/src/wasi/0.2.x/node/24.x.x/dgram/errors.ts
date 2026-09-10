@@ -13,7 +13,9 @@ import {
   stringField,
 } from "../internal/host-error.js";
 import type { DgramError } from "./types.js";
+
 export { invalidArgType, invalidArgValue, outOfRange };
+
 export function socketError(code: string, message: string): Error & { code: string } {
   return codedError(
     code === "ERR_SOCKET_BAD_BUFFER_SIZE" || code === "ERR_SOCKET_BAD_TYPE"
@@ -22,27 +24,34 @@ export function socketError(code: string, message: string): Error & { code: stri
     code,
   );
 }
+
 export function notRunning(): Error {
   return socketError("ERR_SOCKET_DGRAM_NOT_RUNNING", "Not running");
 }
+
 export function alreadyBound(): Error {
   return socketError("ERR_SOCKET_ALREADY_BOUND", "Socket is already bound");
 }
+
 export function connected(): Error {
   return socketError("ERR_SOCKET_DGRAM_IS_CONNECTED", "Already connected");
 }
+
 export function notConnected(): Error {
   return socketError("ERR_SOCKET_DGRAM_NOT_CONNECTED", "Not connected");
 }
+
 export function deprecated(api: string): never {
   throw deprecatedNodeApi(api, "dgram.createSocket() and the public Socket methods");
 }
+
 export function unsupported(api: string): never {
   throw unsupportedNodeApi(
     api,
     "Native file descriptors and shared cluster handles cannot cross a component boundary",
   );
 }
+
 export function serializeError(error: unknown): DgramError {
   const record = errorRecord(error);
   const info = errorRecord(record.info);
@@ -60,6 +69,7 @@ export function serializeError(error: unknown): DgramError {
     port: typeof record.port === "number" ? record.port : undefined,
   };
 }
+
 export function fromHost(error: DgramError): Error {
   const result =
     error.name === "TypeError"
@@ -96,9 +106,11 @@ export function fromHost(error: DgramError): Error {
     for (const key of ["errno", "syscall"] as const) {
       Object.defineProperty(result, key, {
         get: () => info[key],
+
         set: (value: unknown) => {
           info[key] = value;
         },
+
         configurable: true,
         enumerable: true,
       });
@@ -106,6 +118,7 @@ export function fromHost(error: DgramError): Error {
   }
   return result;
 }
+
 export function validatePort(value: unknown, name = "Port", zero = false): number {
   if (
     (typeof value !== "number" && typeof value !== "string") ||
@@ -123,11 +136,13 @@ export function validatePort(value: unknown, name = "Port", zero = false): numbe
   }
   return +value;
 }
+
 export function validateString(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string") {
     throw invalidArgType(name, "string", value);
   }
 }
+
 export function validateNumber(value: unknown, name: string): asserts value is number {
   if (typeof value !== "number") {
     throw invalidArgType(name, "number", value);

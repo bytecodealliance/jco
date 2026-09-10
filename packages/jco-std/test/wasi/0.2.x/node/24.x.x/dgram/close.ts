@@ -20,6 +20,7 @@ test("closing during a custom bind lookup suppresses late listening", async () =
   let complete: (() => void) | undefined;
   const socket = setup().createSocket({
     type: "udp4",
+
     lookup(_name, _family, callback) {
       complete = () => callback(null, "127.0.0.1", 4);
     },

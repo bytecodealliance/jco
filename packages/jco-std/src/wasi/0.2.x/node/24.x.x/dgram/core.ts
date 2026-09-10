@@ -71,24 +71,31 @@ import type {
 export function createDgram(host: DgramHost): import("./types.js").DgramImplementation {
   const listeners = new Map<number, Listener>();
   let nextListener = 1;
+
   class Listener implements SocketListener {
     constructor(readonly deliver: (event: SocketEvent) => void) {}
+
     event(event: SocketEvent): void {
       this.deliver(event);
     }
+
     [Symbol.dispose](): void {}
   }
+
   const dgramCallbacks = {
     SocketListener: Listener,
+
     takeSocketListener(id: number): Listener | undefined {
       const listener = listeners.get(id);
       listeners.delete(id);
       return listener;
     },
   };
+
   // Node types expose listeners() as Function[]. The runtime is the same emitter;
   // give its inherited API the portable, callable listener declarations.
   const Emitter = EventEmitter as unknown as new () => import("./types.js").SocketEvents;
+
   class Socket extends Emitter {
     declare _handle: never;
     declare _receiving: never;
@@ -179,11 +186,13 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         diagnostic.publish({ socket: this });
       }
     }
+
     #health(): void {
       if (this.#closed) {
         throw notRunning();
       }
     }
+
     #ensure(): HostSocket {
       this.#health();
       if (!this.#handle) {
@@ -217,6 +226,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       }
       return this.#handle;
     }
+
     #event(event: SocketEvent): void {
       if (this.#closed && event.tag !== "sent") {
         return;
@@ -270,6 +280,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         }
       }
     }
+
     #lookup(address: string | undefined, callback: LookupCallback): void {
       const name = address || (this.type === "udp4" ? "127.0.0.1" : "::1");
       const family = this.type === "udp4" ? 4 : 6;
@@ -290,12 +301,14 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         throw error;
       }
     }
+
     #allocate(): number {
       if (this.#nextCallback > 0xffff_ffff) {
         throw socketError("ERR_JCO_DGRAM_CALLBACK_LIMIT", "UDP callbacks exhausted");
       }
       return this.#nextCallback++;
     }
+
     #enqueue(operation: () => void): void {
       if (!this.#queue) {
         this.#queue = [];
@@ -316,6 +329,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       }
       this.#queue.push(operation);
     }
+
     #bound(): void {
       this.#bindState = "bound";
       if (this.#options.recvBufferSize) {
@@ -325,6 +339,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         this.setSendBufferSize(this.#options.sendBufferSize);
       }
     }
+
     bind(port?: number, address?: string, callback?: () => void): this;
     bind(port?: number, callback?: () => void): this;
     bind(callback?: () => void): this;
@@ -394,6 +409,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       });
       return this;
     }
+
     bindSync(options: BindOptions = {}): AddressInfo {
       this.#health();
       if (options === null || typeof options !== "object" || Array.isArray(options)) {
@@ -424,6 +440,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       });
       return result;
     }
+
     connect(port: number, address?: string, callback?: ConnectCallback): void;
     connect(port: number, callback?: ConnectCallback): void;
     connect(port: number, address?: string | ConnectCallback, callback?: ConnectCallback): void {
@@ -484,6 +501,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         connect();
       }
     }
+
     connectSync(port: number, address?: string): void {
       this.#health();
       port = validatePort(port);
@@ -513,11 +531,13 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         }
       });
     }
+
     #checkBlocked(address: string): void {
       if (this.#options.sendBlockList?.check(address, isIP(address) === 6 ? "ipv6" : "ipv4")) {
         throw socketError("ERR_IP_BLOCKED", `IP ${address} is blocked`);
       }
     }
+
     disconnect(): void {
       if (this.#connectState !== "connected") {
         throw notConnected();
@@ -525,6 +545,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       callHost(() => this.#ensure().disconnect(), fromHost);
       this.#connectState = "disconnected";
     }
+
     send(message: Message, callback?: SendCallback): void;
     send(message: Message, port: number, callback?: SendCallback): void;
     send(message: Message, port: number, address?: string, callback?: SendCallback): void;
@@ -619,6 +640,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
         send();
       }
     }
+
     sendto(
       buffer: string | ArrayBufferView,
       offset: number,
@@ -633,6 +655,7 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       validateString(address, "address");
       this.send(buffer, offset, length, port, address, callback);
     }
+
     close(callback?: () => void): this {
       if (typeof callback === "function") {
         this.on("close", callback);
@@ -653,22 +676,26 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       }
       return this;
     }
+
     #finishClose(): void {
       if (this.#listener !== undefined) {
         listeners.delete(this.#listener);
       }
       queueMicrotask(() => this.emit("close"));
     }
+
     async [Symbol.asyncDispose](): Promise<void> {
       if (this.#closed) {
         return;
       }
       await new Promise<void>((resolve) => this.close(resolve));
     }
+
     address(): AddressInfo {
       this.#health();
       return callHost(() => this.#ensure().address(false), fromHost);
     }
+
     remoteAddress(): AddressInfo {
       this.#health();
       if (this.#connectState !== "connected") {
@@ -676,34 +703,42 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       }
       return callHost(() => this.#ensure().address(true), fromHost);
     }
+
     #option(option: SocketOption): void {
       callHost(() => this.#ensure().setOption(option), fromHost);
     }
+
     #query(query: SocketQuery): number {
       return callHost(() => this.#ensure().query(query), fromHost);
     }
+
     setBroadcast(flag: boolean): void {
       this.#option({ tag: "broadcast", val: !!flag });
     }
+
     setTTL(ttl: number): number {
       validateNumber(ttl, "ttl");
       this.#option({ tag: "ttl", val: ttl });
       return ttl;
     }
+
     setMulticastTTL(ttl: number): number {
       validateNumber(ttl, "ttl");
       this.#option({ tag: "multicast-ttl", val: ttl });
       return ttl;
     }
+
     setMulticastLoopback(flag: boolean): boolean {
       this.#option({ tag: "multicast-loopback", val: !!flag });
       return flag;
     }
+
     setMulticastInterface(address: string): void {
       this.#health();
       validateString(address, "interfaceAddress");
       this.#option({ tag: "multicast-interface", val: address });
     }
+
     #membership(action: Membership, group: string, source?: string, iface?: string): void {
       this.#health();
       if (source !== undefined) {
@@ -718,61 +753,77 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
       }
       callHost(() => this.#ensure().membership(action, group, source, iface), fromHost);
     }
+
     addMembership(group: string, iface?: string): void {
       this.#membership("add", group, undefined, iface);
     }
+
     dropMembership(group: string, iface?: string): void {
       this.#membership("drop", group, undefined, iface);
     }
+
     addSourceSpecificMembership(source: string, group: string, iface?: string): void {
       validateString(source, "sourceAddress");
       this.#membership("add-source", group, source, iface);
     }
+
     dropSourceSpecificMembership(source: string, group: string, iface?: string): void {
       validateString(source, "sourceAddress");
       this.#membership("drop-source", group, source, iface);
     }
+
     #buffer(size: number, tag: "recv-buffer" | "send-buffer"): void {
       if (size !== size >>> 0) {
         throw socketError("ERR_SOCKET_BAD_BUFFER_SIZE", "Buffer size must be a positive integer");
       }
       this.#option({ tag, val: size });
     }
+
     setRecvBufferSize(size: number): void {
       this.#buffer(size, "recv-buffer");
     }
+
     setSendBufferSize(size: number): void {
       this.#buffer(size, "send-buffer");
     }
+
     getRecvBufferSize(): number {
       return this.#query("recv-buffer");
     }
+
     getSendBufferSize(): number {
       return this.#query("send-buffer");
     }
+
     getSendQueueSize(): number {
       return this.#query("send-queue-size");
     }
+
     getSendQueueCount(): number {
       return this.#query("send-queue-count");
     }
+
     ref(): this {
       this.#ref = true;
       this.#handle?.setRef(true);
       return this;
     }
+
     unref(): this {
       this.#ref = false;
       this.#handle?.setRef(false);
       return this;
     }
+
     _healthCheck(): never {
       return deprecated("dgram.Socket._healthCheck()");
     }
+
     _stopReceiving(): never {
       return deprecated("dgram.Socket._stopReceiving()");
     }
   }
+
   // Node's prototype assignments are enumerable; class syntax defaults otherwise.
   for (const name of Reflect.ownKeys(Socket.prototype)) {
     if (name !== "constructor") {
@@ -782,18 +833,22 @@ export function createDgram(host: DgramHost): import("./types.js").DgramImplemen
   for (const name of ["_handle", "_receiving", "_bindState", "_queue", "_reuseAddr"]) {
     Object.defineProperty(Socket.prototype, name, {
       get: () => deprecated(`dgram.Socket.${name}`),
+
       set: () => deprecated(`dgram.Socket.${name}`),
     });
   }
+
   function createSocket(
     type: SocketType | SocketOptions,
     listener?: import("./types.js").MessageListener,
   ): Socket {
     return new Socket(type, listener);
   }
+
   function _createSocketHandle(): never {
     return deprecated("dgram._createSocketHandle()");
   }
+
   const dgram = { _createSocketHandle, createSocket, Socket };
   return { dgram, dgramCallbacks };
 }

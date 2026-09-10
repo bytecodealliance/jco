@@ -4,8 +4,18 @@ package jco:node@0.1.0;
 /// completions and datagrams between component entry tasks. No Node objects,
 /// descriptors, or implicit networking authority cross this interface.
 interface dgram {
-    variant errno { number(s64), symbolic(string) }
-    record buffer-error-info { errno: f64, code: string, message: string, syscall: string }
+    variant errno {
+        number(s64),
+        symbolic(string),
+    }
+
+    record buffer-error-info {
+        errno: f64,
+        code: string,
+        message: string,
+        syscall: string,
+    }
+
     record error {
         name: string,
         message: string,
@@ -16,9 +26,25 @@ interface dgram {
         port: option<u16>,
         info: option<buffer-error-info>,
     }
-    enum socket-type { udp4, udp6 }
-    record options { %type: socket-type, reuse-addr: bool, reuse-port: bool, ipv6-only: bool }
-    record address-info { address: string, family: string, port: u16 }
+
+    enum socket-type {
+        udp4,
+        udp6,
+    }
+
+    record options {
+        %type: socket-type,
+        reuse-addr: bool,
+        reuse-port: bool,
+        ipv6-only: bool,
+    }
+
+    record address-info {
+        address: string,
+        family: string,
+        port: u16,
+    }
+
     variant socket-option {
         broadcast(bool),
         multicast-loopback(bool),
@@ -28,21 +54,55 @@ interface dgram {
         send-buffer(u32),
         multicast-interface(string),
     }
-    enum socket-query { recv-buffer, send-buffer, send-queue-size, send-queue-count }
-    enum membership-action { add, drop, add-source, drop-source }
+
+    enum socket-query {
+        recv-buffer,
+        send-buffer,
+        send-queue-size,
+        send-queue-count,
+    }
+
+    enum membership-action {
+        add,
+        drop,
+        add-source,
+        drop-source,
+    }
+
     create-socket: func(options: options, listener: u32) -> result<socket, error>;
+
     resource socket {
         /// Bind/connect only accept resolved addresses and complete synchronously.
         bind: func(address: string, port: u16) -> result<address-info, error>;
+
         connect: func(address: string, port: u16) -> result<_, error>;
+
         disconnect: func() -> result<_, error>;
+
         resolve: func(address: string, id: u32);
-        send: func(data: list<u8>, port: option<u16>, address: option<string>, callback: option<u32>) -> result<_, error>;
+
+        send: func(
+            data: list<u8>,
+            port: option<u16>,
+            address: option<string>,
+            callback: option<u32>,
+        ) -> result<_, error>;
+
         address: func(remote: bool) -> result<address-info, error>;
+
         set-option: func(%option: socket-option) -> result<_, error>;
+
         query: func(query: socket-query) -> result<f64, error>;
-        membership: func(action: membership-action, group: string, source: option<string>, iface: option<string>) -> result<_, error>;
+
+        membership: func(
+            action: membership-action,
+            group: string,
+            source: option<string>,
+            iface: option<string>,
+        ) -> result<_, error>;
+
         close: func();
+
         set-ref: func(%ref: bool);
     }
 }
@@ -51,10 +111,32 @@ interface dgram {
 /// callback entry and drops, never re-enter while a guest import is on the stack.
 interface dgram-callbacks {
     use dgram.{error, address-info};
-    record message { data: list<u8>, remote: address-info }
-    record resolved { id: u32, %result: result<string, error> }
-    record sent { id: u32, %result: result<u32, error> }
-    variant socket-event { message(message), error(error), resolved(resolved), sent(sent) }
-    resource socket-listener { event: func(event: socket-event); }
+
+    record message {
+        data: list<u8>,
+        remote: address-info,
+    }
+
+    record resolved {
+        id: u32,
+        %result: result<string, error>,
+    }
+
+    record sent {
+        id: u32,
+        %result: result<u32, error>,
+    }
+
+    variant socket-event {
+        message(message),
+        error(error),
+        resolved(resolved),
+        sent(sent),
+    }
+
+    resource socket-listener {
+        event: func(event: socket-event);
+    }
+
     take-socket-listener: func(id: u32) -> option<socket-listener>;
 }

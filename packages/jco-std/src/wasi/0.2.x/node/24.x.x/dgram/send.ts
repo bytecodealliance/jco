@@ -30,6 +30,7 @@ import { Buffer } from "node:buffer";
 import { codedError } from "../errors/core.js";
 import { connected, invalidArgType, validatePort, validateString } from "./errors.js";
 import type { SendCallback } from "./types.js";
+
 function bytes(value: unknown): Uint8Array {
   if (typeof value === "string") {
     return Buffer.from(value);
@@ -39,6 +40,7 @@ function bytes(value: unknown): Uint8Array {
   }
   return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 }
+
 function slice(value: unknown, offset: unknown, length: unknown): Uint8Array {
   const buffer = bytes(value);
   const start = (offset as number) >>> 0;
@@ -53,6 +55,7 @@ function slice(value: unknown, offset: unknown, length: unknown): Uint8Array {
   }
   return buffer.subarray(start, start + size);
 }
+
 export function normalizeSend(
   isConnected: boolean,
   buffer: unknown,
