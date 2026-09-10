@@ -90,6 +90,8 @@ export const SQLITE_WIT_REQUIREMENT = nodeRequirement("node:sqlite", "sqlite");
 
 export const OS_WIT_REQUIREMENT = nodeRequirement("node:os", "os");
 
+export const TTY_WIT_REQUIREMENT = nodeRequirement("node:tty", "tty", { sharedTypes: true });
+
 export const FFI_WIT_REQUIREMENT = nodeRequirement("node:ffi", "ffi");
 
 export const INSPECTOR_WIT_REQUIREMENT = nodeRequirement("node:inspector", "inspector", {

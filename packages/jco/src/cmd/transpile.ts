@@ -54,6 +54,7 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
     "jco:node/fs@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host",
     "jco:node/process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host",
     "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
+    "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
     "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
     "jco:node/http@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host",
     "jco:node/inspector@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host",
