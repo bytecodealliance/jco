@@ -1,4 +1,5 @@
 import { suite, test, assert } from "vitest";
+import { BrowserLockManager } from "../../src/browser/opfs-filesystem.js";
 
 /** Minimal in-memory stand-in for the OPFS FileSystemDirectoryHandle/FileSystemFileHandle API. */
 class FakeFileHandle {
@@ -217,32 +218,23 @@ suite("Browser OPFS filesystem adapter", () => {
             await import("../../src/browser/opfs-filesystem.js");
         const requests: Array<{ name: string; mode: string }> = [];
         const fakeNavigator = {
-            locks: {
-                request: (
-                    name: string,
-                    options: { mode: string },
-                    callback: () => Promise<void>,
-                ) => {
-                    requests.push({ name, mode: options.mode });
-                    return Promise.resolve(callback());
-                },
+            request: (name: string, options: { mode: string }, callback: () => Promise<void>) => {
+                requests.push({ name, mode: options.mode });
+                return Promise.resolve(callback());
             },
-        };
+        } as BrowserLockManager;
 
         const root = new FakeDirectoryHandle("sandbox");
         root.entriesMap.set("file.txt", new FakeFileHandle());
         const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
 
-        const defaultAdapter = new OpfsFilesystemAdapter({ navigator: fakeNavigator });
+        const defaultAdapter = new OpfsFilesystemAdapter();
         const defaultDescriptor = defaultAdapter.getRoot(capability) as any;
         defaultDescriptor.openAt({}, "file.txt", {}, { read: true }).tryLockShared();
         assert.strictEqual(requests.length, 0);
 
         const optedIn = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
-        const lockingAdapter = new OpfsFilesystemAdapter({
-            crossTabLocking: true,
-            navigator: fakeNavigator,
-        });
+        const lockingAdapter = new OpfsFilesystemAdapter({ lockManager: fakeNavigator });
         const lockingDescriptor = lockingAdapter.getRoot(optedIn) as any;
         const opened = lockingDescriptor.openAt({}, "file.txt", {}, { read: true });
         assert.strictEqual(opened.tryLockExclusive(), true);
