@@ -26,12 +26,14 @@
 
 import { reverseString } from "./utils.js";
 import { invalidArgType, outOfRange } from "../errors.js";
+
 export class History {
   history: string[];
   index = -1;
   size: number;
   isFlushing = false;
   private removeHistoryDuplicates: boolean;
+
   constructor(
     private context: { line: string; emit(event: string, ...args: unknown[]): boolean },
     options: { history?: string[]; size?: number; removeHistoryDuplicates?: boolean } = {},
@@ -51,6 +53,7 @@ export class History {
     this.size = options.size ?? 30;
     this.removeHistoryDuplicates = options.removeHistoryDuplicates || false;
   }
+
   addHistory(isMultiline: boolean, lastCommandErrored: boolean): string {
     const line = this.context.line;
     if (line.length === 0) {
@@ -98,9 +101,11 @@ export class History {
     this.context.emit("history", this.history);
     return finalLine;
   }
+
   canNavigateToNext() {
     return this.index > -1 && this.history.length > 0;
   }
+
   navigateToNext(substringSearch: string | null): string | null {
     if (!this.canNavigateToNext()) {
       return null;
@@ -119,9 +124,11 @@ export class History {
     }
     return reverseString(this.history[index], "\r", "\n");
   }
+
   canNavigateToPrevious() {
     return this.history.length !== this.index && this.history.length > 0;
   }
+
   navigateToPrevious(substringSearch: string | null = "") {
     if (!this.canNavigateToPrevious()) {
       return null;

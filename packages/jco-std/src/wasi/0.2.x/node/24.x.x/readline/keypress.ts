@@ -30,17 +30,20 @@ import { charLengthAt, CSI, emitKeys } from "./utils.js";
 import { kSawKeyPress } from "./interface.js";
 import type { ReadableInput } from "./types.js";
 const { kEscape } = CSI;
+
 interface KeypressInterface {
   escapeCodeTimeout?: number;
   isCompletionEnabled?: boolean;
   [kSawKeyPress]?: boolean;
 }
+
 const states = new WeakMap<
   ReadableInput,
   { decoder: StringDecoder; escape: Generator<void, void, string> }
 >();
 // GNU readline library - keyseq-timeout is 500ms (default)
 const ESCAPE_CODE_TIMEOUT = 500;
+
 /**
  * accepts a readable Stream instance and makes it emit "keypress" events
  */
@@ -52,9 +55,12 @@ export function emitKeypressEvents(stream: ReadableInput, iface: KeypressInterfa
   states.set(stream, state);
   state.escape = emitKeys(stream);
   state.escape.next();
+
   const triggerEscape = () => state.escape.next("");
+
   const { escapeCodeTimeout = ESCAPE_CODE_TIMEOUT } = iface;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
   function onData(input: string | ArrayBufferView) {
     if (stream.listenerCount("keypress") > 0) {
       const string = state.decoder.write(input);
@@ -98,12 +104,14 @@ export function emitKeypressEvents(stream: ReadableInput, iface: KeypressInterfa
       stream.on("newListener", onNewListener);
     }
   }
+
   function onNewListener(event: string) {
     if (event === "keypress") {
       stream.on("data", onData);
       stream.removeListener("newListener", onNewListener);
     }
   }
+
   if (stream.listenerCount("keypress") > 0) {
     stream.on("data", onData);
   } else {

@@ -28,6 +28,7 @@ import type { Key, ReadableInput } from "./types.js";
 const kUTF16SurrogateThreshold = 0x10000; // 2 ** 16
 const kEscape = "\x1b";
 export const kSubstringSearch = Symbol("kSubstringSearch");
+
 export function CSI(strings: TemplateStringsArray, ...args: (string | number)[]): string {
   let ret = `${kEscape}[`;
   for (let n = 0; n < strings.length; n++) {
@@ -38,11 +39,13 @@ export function CSI(strings: TemplateStringsArray, ...args: (string | number)[])
   }
   return ret;
 }
+
 CSI.kEscape = kEscape;
 CSI.kClearToLineBeginning = CSI`1K`;
 CSI.kClearToLineEnd = CSI`0K`;
 CSI.kClearLine = CSI`2K`;
 CSI.kClearScreenDown = CSI`0J`;
+
 // TODO(BridgeAR): Treat combined characters as single character, i.e,
 // 'a\u0301' and '\u0301a' (both have the same visual output).
 // Check Canonical_Combining_Class in
@@ -59,6 +62,7 @@ export function charLengthLeft(str: string, i: number): number {
   }
   return 1;
 }
+
 export function charLengthAt(str: string, i: number): number {
   if (str.length <= i) {
     // Pretend to move to the right. This is necessary to autocomplete while
@@ -67,6 +71,7 @@ export function charLengthAt(str: string, i: number): number {
   }
   return str.codePointAt(i)! >= kUTF16SurrogateThreshold ? 2 : 1;
 }
+
 /*
   Some patterns seen in terminal key escape codes, derived from combos seen
   at http://www.midnight-commander.org/browser/lib/tty/key.c
@@ -522,6 +527,7 @@ export function* emitKeys(stream: ReadableInput): Generator<void, void, string> 
     /* Unrecognized or broken escape sequence, don't emit anything */
   }
 }
+
 // This runs in O(n log n).
 export function commonPrefix(strings: string[]): string {
   if (strings.length === 0) {
@@ -540,6 +546,7 @@ export function commonPrefix(strings: string[]): string {
   }
   return min;
 }
+
 export function reverseString(line: string, from = "\r", to = "\r"): string {
   const parts = line.split(from);
   // This implementation should be faster than

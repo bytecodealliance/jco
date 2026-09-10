@@ -25,16 +25,19 @@
 
 import { invalidArgType, outOfRange } from "../errors.js";
 import type { WritableOutput } from "./types.js";
+
 export function validateString(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string") {
     throw invalidArgType(name, "string", value);
   }
 }
+
 export function validateBoolean(value: unknown, name: string): asserts value is boolean {
   if (typeof value !== "boolean") {
     throw invalidArgType(name, "boolean", value);
   }
 }
+
 export function validateInteger(
   value: unknown,
   name: string,
@@ -51,6 +54,7 @@ export function validateInteger(
     throw outOfRange(name, `>= ${min} && <= ${max}`, value);
   }
 }
+
 export function validateAbortSignal(signal: unknown, name: string): asserts signal is AbortSignal {
   if (
     signal === null ||
@@ -61,6 +65,7 @@ export function validateAbortSignal(signal: unknown, name: string): asserts sign
     throw invalidArgType(name, "AbortSignal", signal);
   }
 }
+
 // Adapted from Node v24.20.0 lib/internal/streams/utils.js, same pin and MIT
 // notice as actions.ts. Only the predicates needed by Readline are included.
 export function isWritable(stream: unknown): stream is WritableOutput {
@@ -102,10 +107,12 @@ export function isWritable(stream: unknown): stream is WritableOutput {
     (!value._writableState?.errored && value._writableState?.ended === true);
   return writable && value.writable && !ended;
 }
+
 /** Diagnostic formatting only; do not import Node's host-specific util implementation. */
 export function inspect(value: unknown): string {
   return String(value);
 }
+
 export function validateUint32(
   value: unknown,
   name: string,
@@ -113,6 +120,7 @@ export function validateUint32(
 ): asserts value is number {
   validateInteger(value, name, positive ? 1 : 0, 0xffff_ffff);
 }
+
 /** QuickJS exposes promise jobs even when queueMicrotask is not installed. */
 export function defer(callback: () => void): void {
   if (typeof queueMicrotask === "function") {
