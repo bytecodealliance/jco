@@ -493,6 +493,21 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/url/idna.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/url/idna.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/url/idna.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/tls.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tls.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/tls/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tls/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls/node-host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls/node-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/tls/node-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tls/node-host.js"
     }
   },
   "scripts": {
