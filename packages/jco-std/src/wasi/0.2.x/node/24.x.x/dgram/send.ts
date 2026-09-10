@@ -23,7 +23,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 /**
  * Adapted from nodejs/node lib/dgram.js (sliceBuffer, fixBufferList, send),
  * v24.20.0, 71b8b174857e25106d39b61a9e6f30d927da8b01, MIT.
- * See LICENSE in this directory. Local changes: typed unknown input and a single
+ * License above. Local changes: typed unknown input and a single
  * copied WIT byte list after Node's overload and byte-offset normalization.
  */
 import { Buffer } from "node:buffer";

@@ -22,7 +22,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 /**
  * Socket lifecycle adapted from nodejs/node lib/dgram.js and lib/internal/dgram.js,
- * v24.20.0, 71b8b174857e25106d39b61a9e6f30d927da8b01 (MIT; see LICENSE).
+ * v24.20.0, 71b8b174857e25106d39b61a9e6f30d927da8b01 (MIT; license above).
  * Local adaptations: typed WIT handles replace udp_wrap, callback resources replace
  * native callbacks, microtasks replace nextTick, and deprecated internals fail fast.
  * Native descriptors/cluster handle adoption are explicitly unsupported.
