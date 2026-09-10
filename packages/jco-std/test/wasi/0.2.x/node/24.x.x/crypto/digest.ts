@@ -33,7 +33,7 @@ const INPUTS = [
 describe("createHash", () => {
   for (const algorithm of ALGORITHMS) {
     for (const input of INPUTS) {
-      test(`${algorithm} matches node for ${JSON.stringify(input.slice(0, 24))} (${input.length} chars)`, () => {
+      test.concurrent(`${algorithm} matches node for ${JSON.stringify(input.slice(0, 24))} (${input.length} chars)`, () => {
         for (const encoding of ["hex", "base64", "base64url"] as const) {
           expect(createHash(algorithm).update(input).digest(encoding)).toBe(
             nodeCreateHash(algorithm).update(input).digest(encoding),
@@ -43,28 +43,28 @@ describe("createHash", () => {
     }
   }
 
-  test("accepts the spellings node accepts", () => {
+  test.concurrent("accepts the spellings node accepts", () => {
     const expected = nodeCreateHash("sha1").update("x").digest("hex");
     for (const spelling of ["sha1", "SHA1", "sha-1", "SHA-1"]) {
       expect(createHash(spelling).update("x").digest("hex")).toBe(expected);
     }
   });
 
-  test("accumulates across update calls", () => {
+  test.concurrent("accumulates across update calls", () => {
     const chunked = createHash("sha256").update("one").update("two").update("three");
     expect(chunked.digest("hex")).toBe(
       nodeCreateHash("sha256").update("onetwothree").digest("hex"),
     );
   });
 
-  test("hashes bytes as well as strings", () => {
+  test.concurrent("hashes bytes as well as strings", () => {
     const bytes = new Uint8Array([0, 1, 2, 250, 255]);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(
       nodeCreateHash("sha256").update(bytes).digest("hex"),
     );
   });
 
-  test("copy() forks the accumulated state", () => {
+  test.concurrent("copy() forks the accumulated state", () => {
     const base = createHash("sha256").update("shared");
     const left = base.copy().update("-left");
     const right = base.copy().update("-right");
@@ -72,7 +72,7 @@ describe("createHash", () => {
     expect(right.digest("hex")).toBe(nodeCreateHash("sha256").update("shared-right").digest("hex"));
   });
 
-  test("refuses to update after digest, as node does", () => {
+  test.concurrent("refuses to update after digest, as node does", () => {
     const digest = createHash("sha1");
     digest.digest("hex");
     expect(() => digest.update("more")).toThrowError(
@@ -80,34 +80,34 @@ describe("createHash", () => {
     );
   });
 
-  test("names an algorithm it does not implement", () => {
+  test.concurrent("names an algorithm it does not implement", () => {
     expect(() => createHash("md5")).toThrowError(
       expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
     );
     expect(() => createHash("md5")).toThrowError(/crypto\.subtle\.digest/);
   });
 
-  test("reports what it implements", () => {
+  test.concurrent("reports what it implements", () => {
     expect(getHashes()).toEqual(["sha1", "sha256"]);
   });
 });
 
 describe("createHmac", () => {
   for (const algorithm of ALGORITHMS) {
-    test(`${algorithm} matches node for a short key`, () => {
+    test.concurrent(`${algorithm} matches node for a short key`, () => {
       expect(createHmac(algorithm, "secret").update("message").digest("base64")).toBe(
         nodeCreateHmac(algorithm, "secret").update("message").digest("base64"),
       );
     });
 
-    test(`${algorithm} matches node for a key longer than the block size`, () => {
+    test.concurrent(`${algorithm} matches node for a key longer than the block size`, () => {
       const key = "k".repeat(200);
       expect(createHmac(algorithm, key).update("message").digest("hex")).toBe(
         nodeCreateHmac(algorithm, key).update("message").digest("hex"),
       );
     });
 
-    test(`${algorithm} matches node for an empty message`, () => {
+    test.concurrent(`${algorithm} matches node for an empty message`, () => {
       expect(createHmac(algorithm, "secret").update("").digest("hex")).toBe(
         nodeCreateHmac(algorithm, "secret").update("").digest("hex"),
       );
@@ -116,7 +116,7 @@ describe("createHmac", () => {
 });
 
 describe("hash", () => {
-  test("hashes in one call, defaulting to hex", () => {
+  test.concurrent("hashes in one call, defaulting to hex", () => {
     expect(hash("sha256", "one call")).toBe(
       nodeCreateHash("sha256").update("one call").digest("hex"),
     );
@@ -124,15 +124,15 @@ describe("hash", () => {
 });
 
 describe("timingSafeEqual", () => {
-  test("compares equal buffers", () => {
+  test.concurrent("compares equal buffers", () => {
     expect(timingSafeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 3]))).toBe(true);
   });
 
-  test("compares differing buffers", () => {
+  test.concurrent("compares differing buffers", () => {
     expect(timingSafeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4]))).toBe(false);
   });
 
-  test("refuses buffers of different lengths, as node does", () => {
+  test.concurrent("refuses buffers of different lengths, as node does", () => {
     expect(() => timingSafeEqual(new Uint8Array([1]), new Uint8Array([1, 2]))).toThrowError(
       expect.objectContaining({ code: "ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH" }),
     );
