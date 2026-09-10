@@ -170,6 +170,8 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
 - the `node:net` TCP client/server and address APIs over `wasi:sockets`;
 - `node:buffer`, with its modern core provided by Jco's audited unenv
   compatibility layer;
+- `node:url`, with portable WHATWG URL/URLSearchParams, URLPattern, domain and
+  file conversions, and lazy WASI cwd access for relative paths;
 - `node:querystring`, provided by Jco's audited unenv compatibility layer;
 - `node:events`, whose `EventEmitter` comes from Jco's audited unenv
   compatibility layer, completed by
