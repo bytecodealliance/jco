@@ -1,0 +1,108 @@
+package jco:node@0.1.0;
+
+/// Events are delivered after the initiating import returns, avoiding component reentrance.
+interface tls-callbacks {
+  record event {
+    target: u32,
+    name: string,
+    value: string,
+    data: list<u8>,
+  }
+
+  dispatch: func(event: event);
+}
+
+/// Primary TLS capability for Node APIs. Providers may delegate to wasi:tls.
+interface tls {
+  use wasi:io/streams@0.2.12.{input-stream, output-stream};
+  use wasi:tls/types@0.2.0-draft.{future-client-streams};
+
+  /// Optional TLS upgrade over existing WASI streams. Ownership passes to the provider.
+  is-available: func() -> bool;
+
+  start-tls: func(server-name: string, input: input-stream, output: output-stream) -> future-client-streams;
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+  }
+
+  enum query-operation {
+    ciphers,
+    compression-algorithms,
+    ca-certificates,
+    check-identity,
+  }
+
+  enum socket-operation-kind {
+    state,
+    address,
+    certificate,
+    peer-certificate,
+    cipher,
+    ephemeral-key-info,
+    finished,
+    peer-finished,
+    protocol,
+    session,
+    shared-sigalgs,
+    tls-ticket,
+    session-reused,
+    export-keying-material,
+    disable-renegotiation,
+    enable-trace,
+    max-send-fragment,
+    key-cert,
+    timeout,
+    no-delay,
+    keep-alive,
+    ref,
+    unref,
+    resume,
+    pause,
+    destroy,
+    renegotiate,
+    set-session,
+    set-servername,
+  }
+
+  enum server-operation-kind {
+    state,
+    address,
+    listen,
+    close,
+    connections,
+    ref,
+    unref,
+    ticket-keys,
+    set-ticket-keys,
+    secure-context,
+    add-context,
+    max-connections,
+    drop-max-connection,
+  }
+
+  /// Options and inspection values use the documented TLS graph-data encoding.
+  query: func(operation: query-operation, args: string) -> result<string, error>;
+
+  set-default-ca: func(certs: string) -> result<_, error>;
+
+  create-context: func(options: string) -> result<u32, error>;
+
+  release-context: func(id: u32);
+
+  connect: func(id: u32, options: string) -> result<_, error>;
+
+  create-server: func(id: u32, options: string) -> result<_, error>;
+
+  socket-operation: func(id: u32, operation: socket-operation-kind, args: string) -> result<string, error>;
+
+  server-operation: func(id: u32, operation: server-operation-kind, args: string) -> result<string, error>;
+
+  write: func(id: u32, token: u32, data: list<u8>) -> result<_, error>;
+
+  end: func(id: u32, token: u32) -> result<_, error>;
+
+  release: func(id: u32);
+}
