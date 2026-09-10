@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-671399d8.js";
+            window.path_to_searchindex_js = "../searchindex-a40e4871.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -274,6 +274,7 @@ available only under a versioned entry point.</p>
 <tbody>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
+<tr><td><code>node:perf_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks</code></td><td>Portable timing and observers; native telemetry throws. Runtime requirements are described below.</td></tr>
 <tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
 <tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
@@ -1178,6 +1179,52 @@ Buffer while keeping unavailable behavior easy to diagnose.</p>
 <p>Jco has a clear path to expand support: add or connect a faithful implementation, test it
 against Node and inside both JavaScript component backends, then add the specifier
 to the audited allowlist.</p>
+<h2 id="performance-measurements"><a class="header" href="#performance-measurements">Performance measurements</a></h2>
+<p><code>node:perf_hooks</code> targets Node.js 24.20.0. Jco bundles a TypeScript adaptation of
+Node’s user timing, resource timing, observer and function timing implementations.
+It does not use unenv’s placeholder observers or histograms.</p>
+<p>Keep ordinary imports in application code:</p>
+<pre><code class="language-js">import { performance, PerformanceObserver } from "node:perf_hooks";
+
+const observer = new PerformanceObserver((entries) =&gt; {
+  for (const entry of entries.getEntries()) console.log(entry.name, entry.duration);
+});
+observer.observe({ type: "measure" });
+performance.mark("start");
+// Application work.
+performance.measure("elapsed", "start");
+</code></pre>
+<p>Bundle JavaScript with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>.
+The adapter adds no WIT imports. Clock-based operations use the component engine’s
+monotonic <code>performance.now()</code> and <code>timeOrigin</code>; they fail explicitly if the engine
+lacks them. Explicit timestamps require no clock. Non-null mark/measure detail
+requires the engine’s <code>structuredClone</code> implementation. The module owns its timing
+buffers; it does not replace the engine’s global <code>performance</code> object.</p>
+<h3 id="supported-timing-operations"><a class="header" href="#supported-timing-operations">Supported timing operations</a></h3>
+<p>Marks, measures (including named marks and start/end/duration options), timeline
+queries and clearing, explicit resource timings, resource buffer notifications,
+observers and <code>timerify</code> are implemented. Observers support <code>mark</code>, <code>measure</code>,
+<code>resource</code> and <code>function</code> entries. Function timing includes promise settlement and
+constructor calls. Observer and resource-buffer callbacks use component timers;
+their ordering relative to other tasks can differ from Node’s <code>setImmediate</code>.
+Resource entries describe timings supplied by the application; network operations
+are not automatically instrumented.</p>
+<h3 id="native-performance-telemetry"><a class="header" href="#native-performance-telemetry">Native performance telemetry</a></h3>
+<p><code>createHistogram</code>, <code>monitorEventLoopDelay</code>, <code>eventLoopUtilization</code>,
+<code>performance.nodeTiming</code> and <code>performance.toJSON()</code> throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Components do not expose Node’s HDR histogram
+binding, libuv event-loop counters or process startup milestones. The <code>histogram</code>
+option to <code>timerify</code> is consequently unavailable. GC, HTTP, HTTP/2, DNS and network
+observer instrumentation is unavailable. Deprecated node-entry <code>kind</code> and <code>flags</code>
+accessors throw <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>, naming the <code>detail</code> replacement.</p>
+<p>The public module exports and constants match the pinned Node 24 surface; APIs
+introduced in Node 26’s rolling documentation are outside this compatibility target.
+The source files retain Node’s MIT license and pinned source provenance.</p>
+<p>QuickJS currently supplies a clock but lacks task timers and Web event targets.
+Marks, measures, resource entries within the buffer limit, and synchronous function
+timing work there. Observer subscription, event listeners and resource buffer
+overflow fail explicitly; <code>PerformanceObserver.supportedEntryTypes</code> is empty.
+StarlingMonkey supports these runtime facilities and the observer APIs.</p>
 
                     </main>
 
