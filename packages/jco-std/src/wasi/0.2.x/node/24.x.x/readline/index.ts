@@ -22,7 +22,7 @@
 // Adapted from nodejs/node v24.20.0, commit
 // 71b8b174857e25106d39b61a9e6f30d927da8b01, lib/readline.js.
 // Local changes: TypeScript types, ES intrinsics, portable errors and scheduling.
-// See ./README.md for runtime boundaries and the upstream dependency audit.
+// See ./README.md for runtime boundaries.
 
 import { addAbortListener } from "node:events";
 import { AbortError } from "../errors.js";
