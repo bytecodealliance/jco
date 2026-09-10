@@ -139,7 +139,10 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.
   with no additional WIT capability;
 - `node:repl`, ported from Node 24.20 over that readline port for global-scope
   evaluation, keyword commands, completion and top-level `await`, with no
-  additional WIT capability and acorn bundled only when the REPL is imported; and
+  additional WIT capability and acorn bundled only when the REPL is imported;
+- `node:tty`, ported from Node 24.20 over the explicit `jco:node/tty@0.1.0`
+  capability, which addresses the host process's terminals by descriptor and is
+  denied by default; and
 - `node:stream/consumers`, implemented as portable iterable collection over the
   engine's Blob, typed-array, and text-codec globals; and
 - the experimental Node 24.20 `node:stream/iter` API, including portable sources,
