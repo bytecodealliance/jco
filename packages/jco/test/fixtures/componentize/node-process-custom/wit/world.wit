@@ -1,0 +1,5 @@
+package test:node-process-custom;
+world component {
+    export run: func() -> string;
+    export denied: func() -> string;
+}
