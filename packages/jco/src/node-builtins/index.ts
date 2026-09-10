@@ -81,9 +81,11 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const composed = composeBuiltins(adapters.map((create) => create(context)));
     return {
         name: "jco-node-builtins",
+
         resolveId(id, importer) {
             return id.startsWith(VIRTUAL_PREFIX) ? id : composed.resolveId(id, importer);
         },
+
         load(id) {
             return id.startsWith(VIRTUAL_PREFIX) ? composed.load(id) : null;
         },

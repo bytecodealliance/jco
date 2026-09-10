@@ -12,6 +12,7 @@ export function fail(
   const Ctor = kind === "TypeError" ? TypeError : kind === "RangeError" ? RangeError : Error;
   throw Object.assign(new Ctor(message), { code });
 }
+
 export function encode(value: unknown): Value {
   if (value === null) {
     return { tag: "null" };
@@ -33,14 +34,17 @@ export function encode(value: unknown): Value {
   }
   return fail("ERR_INVALID_ARG_TYPE", "Provided value cannot be bound to SQLite parameter.");
 }
+
 export function decode(value: Value): SQLOutputValue {
   return value.tag === "null" ? null : value.tag === "blob" ? new Uint8Array(value.val) : value.val;
 }
+
 export function encodeRow(row: ResultRow): Row {
   return Array.isArray(row)
     ? { tag: "array", val: row.map(encode) }
     : { tag: "object", val: Object.entries(row).map(([k, v]) => [k, encode(v)]) };
 }
+
 export function decodeRow(row: Row): ResultRow {
   if (row.tag === "array") {
     return row.val.map(decode);
@@ -51,6 +55,7 @@ export function decodeRow(row: Row): ResultRow {
   }
   return result;
 }
+
 export function bindings(args: unknown[]): Bindings {
   const first = args[0];
   if (first !== null && typeof first === "object" && !ArrayBuffer.isView(first)) {
@@ -61,6 +66,7 @@ export function bindings(args: unknown[]): Bindings {
   }
   return { positional: args.map(encode) };
 }
+
 export function path(value: unknown): Path {
   if (typeof value === "string") {
     return { tag: "text", val: value };
@@ -80,6 +86,7 @@ export function path(value: unknown): Path {
     'The "path" argument must be a string, Uint8Array, or URL without null bytes.',
   );
 }
+
 export function capture<T>(fn: () => T): T {
   try {
     return fn();
@@ -87,6 +94,7 @@ export function capture<T>(fn: () => T): T {
     throw serializeError(error);
   }
 }
+
 export function serializeError(error: unknown): SqliteError {
   const e = error as Partial<SqliteError>;
   return {
@@ -97,6 +105,7 @@ export function serializeError(error: unknown): SqliteError {
     errstr: e?.errstr,
   };
 }
+
 export function restoreError(error: unknown): Error {
   const record = error as { payload?: SqliteError };
   const e = record?.payload ?? (error as SqliteError);
@@ -112,6 +121,7 @@ export function restoreError(error: unknown): Error {
   }
   return result;
 }
+
 export function call<T>(fn: () => T): T {
   try {
     return fn();

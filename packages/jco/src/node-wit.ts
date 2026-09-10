@@ -230,6 +230,7 @@ function tlsRequirements(): NodeWitRequirement[] {
         "node:https",
     );
 }
+
 export const HTTPS_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
     ...forNodeSpecifier(HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS, "node:https"),
     ...tlsRequirements(),
