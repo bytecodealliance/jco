@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import ts from "typescript-compiler-api";
 import { PROCESS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { nodeBuiltinPlugin } from "../../src/node-builtins.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
@@ -25,7 +26,7 @@ function runNode(args) {
 const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node");
 const DENY_HOST = "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host";
 
-test("process installs only its mirrored WIT dependency, idempotently", async () => {
+test.concurrent("process installs only its mirrored WIT dependency, idempotently", async () => {
     const root = await getTmpDir();
     await writeFile(join(root, "world.wit"), "package test:process;\nworld component {}\n");
     expect((await injectNodeWitImports(root, undefined, [PROCESS_WIT_REQUIREMENT])).imports).toEqual([
@@ -36,7 +37,7 @@ test("process installs only its mirrored WIT dependency, idempotently", async ()
     );
     expect(await injectNodeWitImports(root, undefined, [PROCESS_WIT_REQUIREMENT])).toBeUndefined();
 });
-test("process builtin resolves lazily and leaves bare imports alone", () => {
+test.concurrent("process builtin resolves lazily and leaves bare imports alone", () => {
     const requirements = [];
     const plugin = nodeBuiltinPlugin(
         { imports: [], exports: [] },
@@ -48,7 +49,28 @@ test("process builtin resolves lazily and leaves bare imports alone", () => {
     expect(plugin.resolveId("process")).toBeNull();
     expect(plugin.load(id)).toContain('from "/process.js"');
 });
-test.each(["quickjs", "starlingmonkey"])(
+function expectTypeChecks(paths) {
+    const program = ts.createProgram(paths, {
+        allowJs: true,
+        checkJs: true,
+        noEmit: true,
+        strict: true,
+        skipLibCheck: true,
+        target: ts.ScriptTarget.ESNext,
+        module: ts.ModuleKind.NodeNext,
+    });
+    const diagnostics = ts.getPreEmitDiagnostics(program);
+    expect(diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))).toEqual([]);
+}
+
+test.concurrent("custom process provider conforms to the public ProcessHost type", () => {
+    const provider = fileURLToPath(
+        new URL("../fixtures/componentize/node-process-custom/provider.js", import.meta.url),
+    );
+    expectTypeChecks([provider]);
+});
+
+test.concurrent.each(["quickjs", "starlingmonkey"])(
     "process component runs with native and default-denied providers (%s)",
     async (backend) => {
         const { componentPath } = await componentizeFixture({
@@ -115,6 +137,49 @@ test.each(["quickjs", "starlingmonkey"])(
             } finally {
                 await cleanup();
             }
+        }
+    },
+    600000,
+);
+
+test.concurrent.each(["quickjs", "starlingmonkey"])(
+    "custom process provider handles guest exit without exiting the host (%s)",
+    async (backend) => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-process-custom",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", backend],
+        });
+        const { esModuleOutputPath, esModuleOutputDir, cleanup } = await setupAsyncTest({
+            component: { path: componentPath, name: `node-process-custom-${backend}`, skipInstantiation: true },
+        });
+        const runner = fileURLToPath(new URL("../fixtures/componentize/node-process-custom/run.js", import.meta.url));
+        try {
+            const provider = fileURLToPath(
+                new URL("../fixtures/componentize/node-process-custom/provider.js", import.meta.url),
+            );
+            const consumer = join(esModuleOutputDir, "provider-types.ts");
+            await writeFile(
+                consumer,
+                [
+                    'import type * as ProcessBinding from "./interfaces/jco-node-process.js";',
+                    `import type { ProcessHost } from ${JSON.stringify(fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process")))};`,
+                    `import nodeHost from ${JSON.stringify(fileURLToPath(NODE_HOST))};`,
+                    `import { createProcessHost } from ${JSON.stringify(provider)};`,
+                    "const host: ProcessHost = createProcessHost().host;",
+                    "const customBinding: typeof ProcessBinding = host;",
+                    "const nativeBinding: typeof ProcessBinding = nodeHost;",
+                    "void customBinding; void nativeBinding;",
+                ].join("\n"),
+            );
+            expectTypeChecks([consumer]);
+            // A subprocess makes accidental passthrough exit observable without killing Vitest.
+            const output = await runNode([runner, esModuleOutputPath]);
+            expect(output.status, output.stderr).toBe(0);
+            expect(JSON.parse(output.stdout)).toEqual({ exitRequests: [23], hostAlive: true });
+        } finally {
+            await cleanup();
         }
     },
     600000,
