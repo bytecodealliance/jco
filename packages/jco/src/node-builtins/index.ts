@@ -28,6 +28,7 @@ import { createFsBuiltin } from "./fs.js";
 import { createNetBuiltin } from "./net.js";
 import { createHttpBuiltin } from "./http.js";
 import { createHttpsBuiltin } from "./https.js";
+import { createTlsBuiltin } from "./tls.js";
 import { createHttp2Builtin } from "./http2.js";
 import { createBufferBuiltin } from "./buffer.js";
 import { createQuerystringBuiltin } from "./querystring.js";
@@ -84,6 +85,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createNetBuiltin,
         createHttpBuiltin,
         createHttpsBuiltin,
+        createTlsBuiltin,
         createHttp2Builtin,
         createBufferBuiltin,
         createQuerystringBuiltin,

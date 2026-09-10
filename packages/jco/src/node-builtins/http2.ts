@@ -11,6 +11,7 @@ import { type NodejsHttp2Via } from "./types.js";
 import { wasiSocketsProviderSource, requireWasiHttpVersion } from "./wasi-sockets.js";
 import {
     HTTP2_WIT_REQUIREMENT,
+    TLS_WIT_REQUIREMENT,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS,
 } from "../node-wit.js";
@@ -97,6 +98,11 @@ export function createHttp2Builtin({ options, worldMetadata }: BuiltinContext): 
             () => {
                 if (via === "direct") {
                     options.onWitRequirement?.(HTTP2_WIT_REQUIREMENT);
+                    options.onWitRequirement?.({
+                        ...TLS_WIT_REQUIREMENT,
+                        nodeSpecifier: "node:http2",
+                        guestExports: [],
+                    });
                 } else if (via === "wasi-sockets") {
                     requireWasiHttpVersion(worldMetadata, HTTP2_SPECIFIER, via, socketsVersion);
                     for (const requirement of socketsVersion === "0.2.12"

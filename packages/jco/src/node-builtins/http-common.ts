@@ -3,6 +3,7 @@ import { type NodejsHttpVia } from "./types.js";
 import {
     type NodeWitRequirement,
     HTTPS_WIT_REQUIREMENT,
+    TLS_WIT_REQUIREMENT,
     HTTP_WIT_REQUIREMENT,
     HTTPS_WASI_SOCKETS_WIT_REQUIREMENTS,
     HTTP_WASI_SOCKETS_WIT_REQUIREMENTS,
@@ -74,7 +75,7 @@ function protocolWasiSocketsAdapter(
 ): string {
     const factory = PROTOCOL_FACTORY[protocol];
     const provider = wasiSocketsProviderSource(version);
-    const tlsImports = protocol === "https" ? 'import * as tls from "wasi:tls/types@0.2.0-draft";' : "";
+    const tlsImports = protocol === "https" ? 'import * as tls from "jco:node/tls@0.1.0";' : "";
     const providerValue = protocol === "https" ? `{ ...${provider.value}, tls }` : provider.value;
     return `
 ${provider.imports}
@@ -104,7 +105,9 @@ function protocolWitRequirements(
 ): readonly NodeWitRequirement[] {
     const https = protocol === "https";
     if (via === "direct") {
-        return [https ? HTTPS_WIT_REQUIREMENT : HTTP_WIT_REQUIREMENT];
+        return https
+            ? [HTTPS_WIT_REQUIREMENT, { ...TLS_WIT_REQUIREMENT, nodeSpecifier: "node:https", guestExports: [] }]
+            : [HTTP_WIT_REQUIREMENT];
     }
     if (via === "wasi-sockets") {
         if (wasiSocketsVersion === "0.2.12") {

@@ -89,9 +89,8 @@ interface http2 {
 
   record client-options {
     settings: http2-settings,
-    reject-unauthorized: option<bool>,
-    server-name: option<string>,
-    ca: option<list<u8>>,
+    /// One-use configuration issued by the shared jco:node/tls provider.
+    tls-context: option<u32>,
   }
 
   record request-options {
@@ -126,8 +125,7 @@ interface http2 {
 
   record server-options {
     secure: bool,
-    key: option<list<u8>>,
-    cert: option<list<u8>>,
+    tls-context: option<u32>,
     settings: http2-settings,
     allow-http1: option<bool>,
     strict-field-whitespace-validation: option<bool>,

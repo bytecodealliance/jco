@@ -1,3 +1,4 @@
+import { mergeNodeWitRequirement } from "../node-wit.js";
 import { mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, basename, dirname, extname, join } from "node:path";
@@ -206,7 +207,10 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
                     // Match the socket bindings supplied by the selected component engine.
                     wasiSocketsVersion: backend === "starlingmonkey" ? "0.2.10" : "0.2.12",
                     onWitRequirement(requirement: NodeWitRequirement) {
-                        witRequirements.set(requirement.witImport, requirement);
+                        witRequirements.set(
+                            requirement.witImport,
+                            mergeNodeWitRequirement(witRequirements.get(requirement.witImport), requirement),
+                        );
                     },
                 }),
             ],

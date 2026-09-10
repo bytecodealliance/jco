@@ -1,6 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { describe, expect, test, vi } from "vitest";
@@ -10,7 +10,7 @@ import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
 import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
 import { HTTP2_CALLBACKS_SPECIFIER, nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { HTTP2_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
-import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { componentizeFixture, exec, getTmpDir, jcoPath, setupAsyncTest } from "../helpers.js";
 import { hasJspi } from "../common.js";
 
 const modulePaths = {
@@ -265,16 +265,46 @@ describe.skipIf(!hasJspi)("node:http2 in a fully formed component", () => {
     }, 600_000);
 
     test("runs client and server callbacks through the direct component boundary", async () => {
-        const { componentPath, stderr } = await componentizeFixture({
-            fixture: "node-http2",
-            wit: "wit-starling",
-            bundle: true,
-            copy: true,
-            extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http2-via", "direct"],
-        });
-        expect(stderr).toContain("Jco added generated WIT import jco:node/http2@0.1.0");
-        expect(stderr).toContain("jco:node/http2-callbacks@0.1.0");
-        const host = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node");
+        // Exercise the workspace adapters while their new TLS contract is unpublished.
+        const dir = await getTmpDir();
+        const fixture = fileURLToPath(new URL("../fixtures/componentize/node-http2/", import.meta.url));
+        const std = fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/", import.meta.url));
+        await cp(join(fixture, "wit-starling"), join(dir, "wit"), { recursive: true });
+        const requirements = [];
+        const source = await bundleNodeGuestExportsWrapper(
+            join(fixture, "component.js"),
+            HTTP2_WIT_REQUIREMENT.guestExports,
+            {
+                external: [/^jco:node\//],
+                plugins: [
+                    nodeBuiltinPlugin(
+                        { imports: [], exports: [] },
+                        {
+                            http2Module: join(std, "http2.js"),
+                            onWitRequirement: (requirement) => requirements.push(requirement),
+                        },
+                    ),
+                ],
+            },
+        );
+        const injection = await injectNodeWitImports(join(dir, "wit"), undefined, requirements);
+        expect(injection.imports).toEqual(expect.arrayContaining(["jco:node/http2@0.1.0", "jco:node/tls@0.1.0"]));
+        expect(injection.exports).toContain("jco:node/http2-callbacks@0.1.0");
+        await writeFile(join(dir, "source.js"), source);
+        const componentPath = join(dir, "component.wasm");
+        await exec(
+            jcoPath,
+            "componentize",
+            join(dir, "source.js"),
+            "-w",
+            join(dir, "wit"),
+            "-o",
+            componentPath,
+            "--backend",
+            "starlingmonkey",
+            { closeStdin: true },
+        );
+        const host = pathToFileURL(join(std, "http2-host-node.js")).href;
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
             component: { name: "node-http2-direct", path: componentPath, skipInstantiation: true },
             jco: { transpile: { extraArgs: { asyncExports: ["*"], map: { "jco:node/http2@0.1.0": host } } } },

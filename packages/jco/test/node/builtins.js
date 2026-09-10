@@ -37,6 +37,7 @@ const unenvAliases = {
 describe("Node builtin adapters", () => {
     test.concurrent("maps host-backed Node APIs to deny providers unless the application opts in", () => {
         expect(withDefaultNodeCapabilityMap()).toEqual({
+            "jco:node/tls@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host",
             "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
@@ -60,6 +61,7 @@ describe("Node builtin adapters", () => {
                 "jco:node/os@0.1.0": "/application/os-host.js",
             }),
         ).toEqual({
+            "jco:node/tls@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host",
             "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
             "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
             "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",

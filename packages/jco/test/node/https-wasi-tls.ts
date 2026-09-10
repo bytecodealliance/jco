@@ -95,6 +95,7 @@ for (const backend of ["starlingmonkey"]) {
             root = await mkdtemp(join(tmpdir(), "jco-https-tls-"));
             await exec(process.execPath, [build, root, backend], { timeout: 180_000, maxBuffer: 2_000_000 });
             const imports = await readFile(join(root, "imports.wit"), "utf8");
+            expect(imports).toContain("import jco:node/tls@0.1.0");
             expect(imports).toContain("import wasi:tls/types@0.2.0-draft");
             expect(imports).toContain("import wasi:sockets/tcp@");
             expect(imports).toContain("import wasi:io/streams@0.2.12");
@@ -190,7 +191,7 @@ for (const backend of ["starlingmonkey"]) {
                     } else {
                         expect(result.report.status).toBe(0);
                         expect(result.report.error).toMatch(
-                            policy === "denied" ? /wasi:tls.*TLS capability/ : /TLS handshake failed/,
+                            policy === "denied" ? /jco:node\/tls.*TLS capability/ : /TLS handshake failed/,
                         );
                         if (policy === "public") {
                             expect(result.report.error).toMatch(/certificate/i);

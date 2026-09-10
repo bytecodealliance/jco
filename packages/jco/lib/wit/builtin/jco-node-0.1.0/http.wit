@@ -93,33 +93,8 @@ interface http {
     body: list<u8>,
   }
 
-  /// TLS configuration for one side of a connection, mirroring the serializable subset of
-  /// Node's `tls.createServer` / `tls.connect` options. Material fields are lists because Node
-  /// accepts arrays of PEM/DER blobs and OpenSSL reads only the first key of a concatenated PEM.
-  record tls-options {
-    key: option<list<list<u8>>>,
-    cert: option<list<list<u8>>>,
-    pfx: option<list<list<u8>>>,
-    passphrase: option<string>,
-    ca: option<list<list<u8>>>,
-    crl: option<list<list<u8>>>,
-    dhparam: option<list<u8>>,
-    ciphers: option<string>,
-    ecdh-curve: option<string>,
-    sigalgs: option<string>,
-    min-version: option<string>,
-    max-version: option<string>,
-    secure-protocol: option<string>,
-    secure-options: option<u32>,
-    session-id-context: option<string>,
-    honor-cipher-order: option<bool>,
-    alpn-protocols: option<list<string>>,
-    /// Client side only: the SNI name sent to the server.
-    servername: option<string>,
-    reject-unauthorized: option<bool>,
-    /// Server side only: request a client certificate.
-    request-cert: option<bool>,
-  }
+  /// Configuration issued by the same jco:node/tls provider bound to this HTTP host.
+  record tls-options { context-id: u32 }
 
   record server-options {
     request-timeout: option<u32>,
