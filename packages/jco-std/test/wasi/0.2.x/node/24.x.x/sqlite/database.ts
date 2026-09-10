@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { createSqlite } from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlite/core.js";
 import * as host from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlite-host-node.js";
 const { DatabaseSync } = createSqlite(host);
+
 function error(fn: () => unknown): unknown {
   try {
     fn();
@@ -18,6 +19,7 @@ function error(fn: () => unknown): unknown {
     };
   }
 }
+
 test.concurrent("database lifecycle, transactions, defaults, limits and native failures", () => {
   const db = new DatabaseSync(":memory:", { open: false });
   const oracle = new NativeDatabase(":memory:", { open: false });
@@ -64,6 +66,7 @@ test.concurrent("database lifecycle, transactions, defaults, limits and native f
     oracle[Symbol.dispose]();
   }
 });
+
 test.concurrent("serialization replaces the database and invalidates prepared statements", () => {
   const db = new DatabaseSync(":memory:");
   const other = new DatabaseSync(":memory:");
@@ -78,6 +81,7 @@ test.concurrent("serialization replaces the database and invalidates prepared st
     other.close();
   }
 });
+
 test.concurrent("sessions apply changesets, patchsets and conflict defaults", () => {
   const source = new DatabaseSync(":memory:");
   const target = new DatabaseSync(":memory:");

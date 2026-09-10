@@ -1,5 +1,6 @@
 import sqlite, { DatabaseSync, StatementSync, Session, backup, constants } from "node:sqlite";
 import * as namespace from "node:sqlite";
+
 export function run() {
     const report = {
         identity: sqlite.DatabaseSync === DatabaseSync && namespace.default === sqlite,
@@ -79,6 +80,7 @@ export function run() {
         db[Symbol.dispose]();
     }
 }
+
 export async function backupTest(path) {
     const db = new DatabaseSync(":memory:");
     try {

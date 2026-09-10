@@ -4,6 +4,7 @@ import { createSqlite } from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlit
 import * as host from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlite-host-node.js";
 import { encode } from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlite/codec.js";
 const { DatabaseSync } = createSqlite(host);
+
 test.concurrent("binding values, metadata and result modes agree with native SQLite", () => {
   const db = new DatabaseSync(":memory:");
   const oracle = new NativeDatabase(":memory:");
@@ -47,6 +48,7 @@ test.concurrent("binding values, metadata and result modes agree with native SQL
     oracle.close();
   }
 });
+
 test.concurrent("iteration is lazy and early return releases the active statement", () => {
   const db = new DatabaseSync(":memory:");
   try {
@@ -67,6 +69,7 @@ test.concurrent("iteration is lazy and early return releases the active statemen
     db.close();
   }
 });
+
 test.concurrent("tag store binds safely and maintains its LRU capacity", () => {
   const db = new DatabaseSync(":memory:");
   try {

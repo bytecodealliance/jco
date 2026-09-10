@@ -4,6 +4,7 @@ import { createSqlite } from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlit
 import * as host from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlite-host-node.js";
 import * as denied from "../../../../../../src/wasi/0.2.x/node/24.x.x/sqlite-host.js";
 const sqlite = createSqlite(host);
+
 test.concurrent("uses the pinned Node 24 oracle and exposes the native module and prototype contract", () => {
   expect(process.versions.node.split(".")[0]).toBe("24");
   expect(Object.keys(sqlite)).toEqual(Object.keys(native.default));
@@ -33,6 +34,7 @@ test.concurrent("uses the pinned Node 24 oracle and exposes the native module an
     db.close();
   }
 });
+
 test.concurrent("denies database authority lazily and does not call callback arguments", () => {
   const api = createSqlite(denied);
   expect(api.constants.SQLITE_OK).toBe(0);
