@@ -8,6 +8,7 @@ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 const { instantiate } = await import(pathToFileURL(argv[2]));
 const { createDgramHost } = await import(argv[3]);
+
 async function createInstance() {
     const imports = new WASIShim().getImportObject();
     let instance;
@@ -15,6 +16,7 @@ async function createInstance() {
     instance = await instantiate(undefined, imports);
     return instance;
 }
+
 async function until(instance, condition) {
     for (let attempt = 0; attempt < 500; attempt++) {
         const state = JSON.parse(await instance.status());
@@ -26,11 +28,13 @@ async function until(instance, condition) {
     }
     throw Error("UDP component timed out: " + (await instance.status()));
 }
+
 const first = await createInstance();
 const second = await createInstance();
 const native = dgram.createSocket("udp4");
 const echo = dgram.createSocket("udp4");
 const native6 = dgram.createSocket("udp6");
+
 try {
     assert.deepEqual(JSON.parse(await first.shape()), {
         keys: ["Socket", "_createSocketHandle", "createSocket"],

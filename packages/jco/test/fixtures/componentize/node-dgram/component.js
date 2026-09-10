@@ -24,6 +24,7 @@ export function shape() {
     socket.close();
     return JSON.stringify(result);
 }
+
 export function denied() {
     const socket = createSocket("udp4");
     try {
@@ -35,6 +36,7 @@ export function denied() {
         socket.close();
     }
 }
+
 function watch(socket) {
     sockets.push(socket);
     socket.on("error", (error) => errors.push({ code: error.code, message: error.message }));
@@ -43,6 +45,7 @@ function watch(socket) {
     socket.on("connect", () => connected++);
     return socket;
 }
+
 export function start(ipv6) {
     const server = watch(new Socket({ type: ipv6 ? "udp6" : "udp4", ipv6Only: ipv6 }));
     server.on("message", (message, remote) => {
@@ -70,6 +73,7 @@ export function start(ipv6) {
     }
     return address.port;
 }
+
 export function client(port) {
     // Hostname resolution, implicit bind, connect, vector/empty/sliced sends and
     // byte accounting all run inside the component with ordinary Node imports.
@@ -94,9 +98,11 @@ export function client(port) {
         socket.send(Buffer.from("slice"), 1, 3, done);
     });
 }
+
 export function status() {
     return JSON.stringify({ messages, sent, errors, listening, connected, closed });
 }
+
 export function stop() {
     for (const socket of sockets.splice(0)) {
         socket.close();

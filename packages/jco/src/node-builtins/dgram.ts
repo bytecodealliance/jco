@@ -8,7 +8,9 @@ import {
     VIRTUAL_PREFIX,
 } from "./shared.js";
 import { DGRAM_WIT_REQUIREMENT } from "../node-wit.js";
+
 export const DGRAM_CALLBACKS_SPECIFIER = "jco:node-dgram-callbacks";
+
 export function createDgramBuiltin({ options }: BuiltinContext): BuiltinAdapter {
     return composeBuiltins([
         builtin(

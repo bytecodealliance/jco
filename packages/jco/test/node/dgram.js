@@ -11,6 +11,7 @@ import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers
 import { hasJspi } from "../common.js";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import * as deniedHost from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram/host";
+
 const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram/host/node");
 
 test("node:dgram requests only its UDP capability and callback export", async () => {
@@ -43,6 +44,7 @@ test("UDP defaults to denial and preserves explicit host mappings", () => {
 const hasSyncUdp =
     typeof nodeDgram.Socket.prototype.bindSync === "function" &&
     typeof nodeDgram.Socket.prototype.connectSync === "function";
+
 describe.skipIf(!hasJspi)("node:dgram components", () => {
     for (const backend of ["starlingmonkey", "quickjs"]) {
         describe(backend, () => {
