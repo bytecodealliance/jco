@@ -30,14 +30,18 @@ import type {
 // These APIs landed in Node 24.20.0 after the installed @types/node 24 declarations.
 interface NativeSocket extends dgram.Socket {
   bindSync(options: { address: string; port: number }): AddressInfo;
+
   connectSync(port: number, address: string): void;
 }
+
 export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
   const enqueue = createCallbackQueue();
+
   class Socket implements HostSocket {
     #socket: NativeSocket;
     #closed = false;
     #listener: CallbackResource<SocketListener>;
+
     constructor(
       readonly options: HostOptions,
       listener: number,
@@ -66,6 +70,7 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         this.#deliver({ tag: "error", val: serializeError(error) }),
       );
     }
+
     #deliver(event: SocketEvent): void {
       void enqueue(async () => {
         if (!this.#closed || event.tag === "sent") {
@@ -80,15 +85,19 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         });
       });
     }
+
     bind(address: string, port: number): Result<AddressInfo> {
       return capture(() => this.#socket.bindSync({ address, port }), serializeError);
     }
+
     connect(address: string, port: number): Result<void> {
       return capture(() => this.#socket.connectSync(port, address), serializeError);
     }
+
     disconnect(): Result<void> {
       return capture(() => this.#socket.disconnect(), serializeError);
     }
+
     resolve(address: string, id: number): void {
       lookup(address, this.options.type === "udp4" ? 4 : 6, (error, ip) => {
         this.#deliver({
@@ -100,6 +109,7 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         });
       });
     }
+
     send(
       data: Uint8Array,
       port: number | undefined,
@@ -127,12 +137,14 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         }
       }, serializeError);
     }
+
     address(remote: boolean): Result<AddressInfo> {
       return capture(
         () => (remote ? this.#socket.remoteAddress() : this.#socket.address()),
         serializeError,
       );
     }
+
     setOption(option: SocketOption): Result<void> {
       return capture(() => {
         switch (option.tag) {
@@ -160,6 +172,7 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         }
       }, serializeError);
     }
+
     query(query: SocketQuery): Result<number> {
       return capture(() => {
         switch (query) {
@@ -174,6 +187,7 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         }
       }, serializeError);
     }
+
     membership(
       action: Membership,
       group: string,
@@ -197,6 +211,7 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         }
       }, serializeError);
     }
+
     close(): void {
       if (this.#closed) {
         return;
@@ -208,6 +223,7 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         void enqueue(() => retireCallbacks(enqueue, this.#listener));
       });
     }
+
     setRef(ref: boolean): void {
       if (ref) {
         this.#socket.ref();
@@ -215,26 +231,32 @@ export function createDgramHost(getCallbacks: () => DgramCallbacks): DgramHost {
         this.#socket.unref();
       }
     }
+
     [Symbol.dispose](): void {
       this.close();
     }
   }
+
   return {
     Socket,
+
     createSocket: (options, listener) =>
       capture(() => new Socket(options, listener), serializeError),
   };
 }
 
 const callbackRequired = "UDP sockets require createDgramHost(() => instance.dgramCallbacks)";
+
 /** Static mappings retain the WIT module shape but require instance-bound callbacks. */
 export const createSocket: DgramHost["createSocket"] = () => ({
   tag: "err",
   val: { name: "Error", code: "ERR_JCO_DGRAM_CALLBACK_REQUIRED", message: callbackRequired },
 });
+
 export const Socket: DgramHost["Socket"] = class Socket {
   constructor() {
     throw new Error(callbackRequired);
   }
 } as unknown as DgramHost["Socket"];
+
 export default { Socket, createSocket, createDgramHost };

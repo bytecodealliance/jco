@@ -5,6 +5,7 @@ test("connecting state rejects repeated calls; lookup failure is retryable", asy
   let fail = false;
   const socket = setup().createSocket({
     type: "udp4",
+
     lookup(name, _family, callback) {
       queueMicrotask(() =>
         fail && name === "bad"

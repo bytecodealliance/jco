@@ -40,6 +40,7 @@ test("custom lookup and AbortSignal", async () => {
   const socket = setup().createSocket({
     type: "udp4",
     signal: controller.signal,
+
     lookup(name, family, callback) {
       calls.push([name, family]);
       queueMicrotask(() => callback(null, "127.0.0.1", 4));

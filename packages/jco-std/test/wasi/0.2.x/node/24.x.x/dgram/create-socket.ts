@@ -30,6 +30,7 @@ test.skipIf(!process.versions.node.startsWith("24."))(
 test("unknown option getters are not evaluated", () => {
   const socket = setup().createSocket({
     type: "udp4",
+
     get unused() {
       throw Error("unknown option read");
     },
