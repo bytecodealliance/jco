@@ -50,6 +50,7 @@
             - [`node:test`](./interop/nodejs-builtins/supported-modules/test.md)
             - [`node:timers`](./interop/nodejs-builtins/supported-modules/timers.md)
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
+            - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
 - [Troubleshooting]()
     - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide]()

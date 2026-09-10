@@ -66,6 +66,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:test`](./test.md), [`node:test/reporters`](./test.md) | Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine `AbortController`; see the API page for engine limits. |
 | [`node:timers`](./timers.md), [`node:timers/promises`](./timers.md) | Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits. |
 | [`node:tty`](./tty.md) | Node 24.20 `isatty`, `ReadStream` and `WriteStream` over the host process's descriptors through an explicit host capability; denied by default. |
+| [`node:url`](./url.md) | Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports. |
 
 [Globals](./globals.md) and [Errors](./errors.md) document runtime-wide Node.js
 APIs. They are not importable as `node:globals` or `node:errors`.
