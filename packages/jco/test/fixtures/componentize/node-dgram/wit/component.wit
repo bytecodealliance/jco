@@ -1,0 +1,11 @@
+package test:node-dgram;
+world component {
+    export contract: func() -> u32;
+    export shape: func() -> string;
+    export denied: func() -> string;
+    export start: func(ipv6: bool) -> u16;
+    export client: func(port: u16);
+    export finish: func(port: u16);
+    export status: func() -> string;
+    export stop: func();
+}
