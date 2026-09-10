@@ -25,6 +25,7 @@ test.concurrent("async iteration preserves queued lines, flushes EOF and closes 
   expect(other.closed).toBe(true);
   expect(other.listenerCount("line")).toBe(0);
 });
+
 test.concurrent("iterator applies backpressure and resumes after the queue drains", async () => {
   const input = new PassThrough(),
     rl = createInterface(input),

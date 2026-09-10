@@ -19,6 +19,7 @@ test.concurrent("simple promise question, prompt restoration and callback consum
   rl.close();
   await expect(rl.question("again?")).rejects.toMatchObject({ code: "ERR_USE_AFTER_CLOSE" });
 });
+
 test.concurrent("callback custom promisification", async () => {
   const input = new PassThrough();
   const rl = readline.createInterface(input);
@@ -27,6 +28,7 @@ test.concurrent("callback custom promisification", async () => {
   expect(await answer).toBe("yes");
   rl.close();
 });
+
 test.concurrent("aborted questions reject with cause and restore the old prompt", async () => {
   const input = new PassThrough();
   const rl = promises.createInterface(input);
@@ -55,6 +57,7 @@ test.concurrent("aborted questions reject with cause and restore the old prompt"
   expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   rl.close();
 });
+
 test.concurrent("callback abort suppresses the callback and releases the line", () => {
   const input = new PassThrough();
   const rl = readline.createInterface(input);
@@ -69,6 +72,7 @@ test.concurrent("callback abort suppresses the callback and releases the line", 
   expect(lines).toEqual(["line"]);
   rl.close();
 });
+
 test.concurrent("constructor signal closes asynchronously when already aborted", async () => {
   const controller = new AbortController();
   controller.abort();
@@ -77,6 +81,7 @@ test.concurrent("constructor signal closes asynchronously when already aborted",
   await new Promise<void>((resolve) => rl.on("close", resolve));
   expect(rl.closed).toBe(true);
 });
+
 test.concurrent("Ctrl+C and Ctrl+D reject pending terminal questions", async () => {
   for (const name of ["c", "d"]) {
     const rl = promises.createInterface({
@@ -98,6 +103,7 @@ test.concurrent("promise completers resume input and expand the common prefix", 
     input,
     output: new PassThrough(),
     terminal: true,
+
     completer: async (line: string) => [["hello", "help"], line],
   });
   rl.write("he");

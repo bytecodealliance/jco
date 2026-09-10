@@ -27,10 +27,12 @@ test
       await new Promise((resolve) => setImmediate(resolve));
       return { before, writes };
     }
+
     for (const autoCommit of [false, true]) {
       expect(await report(Readline, autoCommit)).toEqual(await report(NativeReadline, autoCommit));
     }
   });
+
 test.concurrent("validates streams and integer actions", () => {
   const rl = new Readline(
     new Writable({
@@ -61,6 +63,7 @@ test
         const result: unknown = await new Constructor(stream).clearLine(0).commit();
         return result instanceof Error ? result.message : result;
       }
+
       expect(await report(Readline)).toBe(await report(NativeReadline));
       const stream = new Writable();
       stream.write = () => {

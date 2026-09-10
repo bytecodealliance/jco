@@ -21,6 +21,7 @@ test.concurrent("streaming UTF-8, CRLF across every byte boundary, Unicode separ
     expect(input.listenerCount("error")).toBe(0);
   }
 });
+
 test
   .skipIf(!process.versions.node.startsWith("24."))
   .concurrent("pause, resume, prompts, question routing and input errors match Node", () => {
@@ -48,8 +49,10 @@ test
       rl.close();
       return { text, events, prompt, line: rl.line };
     }
+
     expect(report(readline)).toEqual(report(native));
   });
+
 test
   .skipIf(!process.versions.node.startsWith("24."))
   .concurrent("terminal editing, history, undo, kill ring and cursor rendering match Node", () => {
@@ -70,8 +73,10 @@ test
       const events: unknown[] = [];
       rl.on("line", (line: string) => events.push(["line", line]));
       rl.on("history", (history: string[]) => events.push(["history", [...history]]));
+
       const key = (name: string, ctrl = false, meta = false) =>
         rl.write(null, { name, ctrl, meta });
+
       rl.write("one");
       key("return");
       rl.write("two");
@@ -96,8 +101,10 @@ test
       rl.close();
       return state;
     }
+
     expect(report(readline)).toEqual(report(native));
   });
+
 test
   .skipIf(!process.versions.node.startsWith("24."))
   .concurrent("options validation agrees with Node", () => {
@@ -119,17 +126,21 @@ test
           return [err.name, err.code, err.message];
         }
       };
+
       expect(error(readline)).toEqual(error(native));
     }
   });
+
 test.concurrent("raw mode, resize and signal ownership are released on close", () => {
   class RawInput extends PassThrough {
     isRaw = false;
+
     setRawMode(mode: boolean): this {
       this.isRaw = mode;
       return this;
     }
   }
+
   const input = new RawInput();
   const output = Object.assign(new PassThrough(), { isTTY: true, columns: 12 });
   const rl = readline.createInterface({ input, output });
@@ -150,6 +161,7 @@ test.concurrent("raw mode, resize and signal ownership are released on close", (
   expect(output.listenerCount("resize")).toBe(0);
   expect(input.listenerCount("keypress")).toBe(0);
 });
+
 test.concurrent("callback and synchronous completers expand common prefix", () => {
   for (const completer of [
     (line: string) => [["hello", "help"], line] as [string[], string],
