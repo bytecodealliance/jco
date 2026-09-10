@@ -23,7 +23,7 @@ function runNode(args) {
         child.on("close", (status) => resolve({ status, stdout, stderr }));
     });
 }
-const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node");
+const NODE_HOST = "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node";
 const DENY_HOST = "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host";
 
 test.concurrent("process installs only its mirrored WIT dependency, idempotently", async () => {
@@ -63,16 +63,19 @@ function expectTypeChecks(paths) {
     expect(diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))).toEqual([]);
 }
 
-test.concurrent("custom process provider conforms to the public ProcessHost type", () => {
+// TODO(unskip): publish and depend on a jco-std release with the process exports and ProcessHost type.
+test.concurrent.skip("custom process provider conforms to the public ProcessHost type", () => {
     const provider = fileURLToPath(
         new URL("../fixtures/componentize/node-process-custom/provider.js", import.meta.url),
     );
     expectTypeChecks([provider]);
 });
 
-test.concurrent.each(["quickjs", "starlingmonkey"])(
+// TODO(unskip): publish and depend on a jco-std release with the process facade and host providers.
+test.concurrent.skip.each(["quickjs", "starlingmonkey"])(
     "process component runs with native and default-denied providers (%s)",
     async (backend) => {
+        const nodeHost = import.meta.resolve(NODE_HOST);
         const { componentPath } = await componentizeFixture({
             fixture: "node-process",
             bundle: true,
@@ -81,7 +84,7 @@ test.concurrent.each(["quickjs", "starlingmonkey"])(
         });
         const runner = fileURLToPath(new URL("../fixtures/componentize/node-process/run.js", import.meta.url));
         for (const mode of ["node", "denied"]) {
-            const specifier = mode === "node" ? NODE_HOST : DENY_HOST;
+            const specifier = mode === "node" ? nodeHost : DENY_HOST;
             const { esModuleOutputPath, cleanup } = await setupAsyncTest({
                 component: { name: `node-process-${backend}-${mode}`, path: componentPath, skipInstantiation: true },
                 jco: {
@@ -142,9 +145,11 @@ test.concurrent.each(["quickjs", "starlingmonkey"])(
     600000,
 );
 
-test.concurrent.each(["quickjs", "starlingmonkey"])(
+// TODO(unskip): publish and depend on a jco-std release with the process exports and ProcessHost type.
+test.concurrent.skip.each(["quickjs", "starlingmonkey"])(
     "custom process provider handles guest exit without exiting the host (%s)",
     async (backend) => {
+        const nodeHost = import.meta.resolve(NODE_HOST);
         const { componentPath } = await componentizeFixture({
             fixture: "node-process-custom",
             bundle: true,
@@ -165,7 +170,7 @@ test.concurrent.each(["quickjs", "starlingmonkey"])(
                 [
                     'import type * as ProcessBinding from "./interfaces/jco-node-process.js";',
                     `import type { ProcessHost } from ${JSON.stringify(fileURLToPath(import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process")))};`,
-                    `import nodeHost from ${JSON.stringify(fileURLToPath(NODE_HOST))};`,
+                    `import nodeHost from ${JSON.stringify(fileURLToPath(nodeHost))};`,
                     `import { createProcessHost } from ${JSON.stringify(provider)};`,
                     "const host: ProcessHost = createProcessHost().host;",
                     "const customBinding: typeof ProcessBinding = host;",
