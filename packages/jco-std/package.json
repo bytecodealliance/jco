@@ -508,6 +508,14 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/tls/node-host.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/tls/node-host.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/tls/node-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls/node-host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls/host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/tls/host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tls/wasi": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tls/wasi.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tls/wasi.js"
     }
   },
   "scripts": {
