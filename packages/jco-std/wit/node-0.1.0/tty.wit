@@ -1,0 +1,59 @@
+package jco:node@0.1.0;
+
+/// Terminal access for `node:tty`. No capability is granted by default; the Node provider exposes
+/// the terminals of the embedding process, addressed by file descriptor as Node does.
+interface tty {
+  use types.{env-vars};
+
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  /// The libuv failure Node attaches to `ERR_TTY_INIT_FAILED` as `info`.
+  record error-info {
+    errno: option<errno>,
+    code: option<string>,
+    message: option<string>,
+    syscall: option<string>,
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+    info: option<error-info>,
+  }
+
+  /// Which side of a terminal a stream uses.
+  enum direction {
+    read,
+    write,
+  }
+
+  record terminal-size {
+    columns: u32,
+    rows: u32,
+  }
+
+  /// Whether `fd` refers to a terminal. The guest range-checks the descriptor first.
+  is-tty: func(fd: u32) -> result<bool, error>;
+  /// Acquire a terminal handle on `fd` for one direction. Fails the way Node's `uv_tty_init`
+  /// does when `fd` is not a terminal; a handle may be acquired more than once.
+  open: func(fd: u32, direction: direction) -> result<_, error>;
+  /// Release one acquisition of a handle. Raw mode is restored when the last read handle goes.
+  close: func(fd: u32, direction: direction) -> result<_, error>;
+  /// The terminal's current size; fails when the terminal does not report one.
+  window-size: func(fd: u32) -> result<terminal-size, error>;
+  /// Switch the terminal's input between cooked and raw mode.
+  set-raw-mode: func(fd: u32, enabled: bool) -> result<_, error>;
+  /// Block until input is available and return up to `max-bytes` of it; an empty list is the
+  /// end of input.
+  read: func(fd: u32, max-bytes: u32) -> result<list<u8>, error>;
+  /// Write all of `data` before returning.
+  write: func(fd: u32, data: list<u8>) -> result<_, error>;
+  /// The environment `getColorDepth()` and `hasColors()` consult when none is passed.
+  environment: func() -> result<env-vars, error>;
+}

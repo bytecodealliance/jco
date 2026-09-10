@@ -15,12 +15,14 @@ export type ErrorCode =
   | "ERR_ILLEGAL_CONSTRUCTOR"
   | "ERR_INVALID_ARG_TYPE"
   | "ERR_INVALID_ARG_VALUE"
+  | "ERR_INVALID_FD"
   | "ERR_INVALID_RETURN_VALUE"
   | "ERR_INVALID_THIS"
   | "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API"
   | "ERR_JCO_UNSUPPORTED_NODE_API"
   | "ERR_MISSING_ARGS"
   | "ERR_OUT_OF_RANGE"
+  | "ERR_TTY_INIT_FAILED"
   // Jco-specific codes. Every `ERR_JCO_*` code a shim raises is declared here so the set is
   // auditable in one place; per-builtin modules import these rather than restating literals.
   | "ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED"
@@ -32,6 +34,7 @@ export type ErrorCode =
   | "ERR_JCO_HTTP_ADAPTER_REQUIRED"
   | "ERR_JCO_INSPECTOR_ADAPTER_REQUIRED"
   | "ERR_JCO_OS_ADAPTER_REQUIRED"
+  | "ERR_JCO_TTY_ADAPTER_REQUIRED"
   | "ERR_JCO_HTTP_IMPLEMENTATION"
   | "ERR_JCO_INSPECTOR_HOST"
   | "ERR_JCO_INSPECTOR_UNAVAILABLE"

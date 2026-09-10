@@ -444,6 +444,20 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/repl.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/repl.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/repl.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tty": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tty.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/tty.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tty.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tty/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tty-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/tty-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/tty-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/tty/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/tty-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/tty-host-node.js"
     }
   },
   "scripts": {
