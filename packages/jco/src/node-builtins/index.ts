@@ -23,6 +23,7 @@ import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
 import { createChildProcessBuiltin } from "./child-process.js";
 import { createConsoleBuiltin } from "./console.js";
+import { createDgramBuiltin } from "./dgram.js";
 import { createDnsBuiltin } from "./dns.js";
 import { createFsBuiltin } from "./fs.js";
 import { createNetBuiltin } from "./net.js";
@@ -80,6 +81,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createClusterBuiltin,
         createChildProcessBuiltin,
         createConsoleBuiltin,
+        createDgramBuiltin,
         createDnsBuiltin,
         createFsBuiltin,
         createNetBuiltin,

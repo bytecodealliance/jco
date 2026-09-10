@@ -100,6 +100,16 @@ export const CLUSTER_WIT_REQUIREMENT = nodeRequirement("node:cluster", "cluster"
 
 export const CONSOLE_WIT_REQUIREMENT = nodeRequirement("node:console", "console");
 
+export const DGRAM_WIT_REQUIREMENT = nodeRequirement("node:dgram", "dgram", {
+    guestExports: [
+        {
+            witExport: "jco:node/dgram-callbacks@0.1.0",
+            jsExport: "dgramCallbacks",
+            moduleSpecifier: "jco:node-dgram-callbacks",
+        },
+    ],
+});
+
 export const DNS_WIT_REQUIREMENT = nodeRequirement("node:dns", "dns");
 
 export const DNS_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
