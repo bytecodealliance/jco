@@ -1142,6 +1142,97 @@ A different runtime can implement the same typed functions.
 
 Direct jco-std adapters and native Node imports can coexist in a host application.
 
+### Supplying your own process provider
+
+Embedders can construct an object satisfying the public `ProcessHost` type and
+pass it directly to the generated `instantiate` function. Start from the denial
+provider and override the operations your application supports. You do not need
+to implement every operation or forward anything to Node's native process.
+
+For example, this TypeScript provider records exit requests and fails the current
+guest call without exiting the embedding process:
+
+```ts
+import base from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host';
+// To forward unoverridden operations to Node, swap the import above for:
+// import base from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host/node';
+import type { ProcessHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process';
+
+export function createProcessHost() {
+    const exitRequests: number[] = [];
+    const host = {
+        ...base,
+        exit(code) {
+            const status = Number(code?.val ?? 0);
+            exitRequests.push(status);
+            throw {
+                name: 'Error',
+                code: 'COMPONENT_EXIT',
+                message: `Component requested exit ${status}`,
+            };
+        },
+    } satisfies ProcessHost;
+    return { host, exitRequests };
+}
+```
+
+The active import denies unoverridden operations. Comment it out and uncomment
+the Node provider import to change the base to host passthrough. The custom `exit`
+above still overrides that base, but other operations, including `abort`, `kill`,
+environment writes and `chdir`, then affect the embedding Node process.
+
+Generate bindings for explicit instantiation; no custom mapping is needed:
+
+```sh
+jco transpile app.wasm -o out --instantiation async
+```
+
+Then pass your implementation object directly in the imports. Jco's default
+mapping names the process import after the denial-provider package; that key does
+not force you to use its implementation. The generated binding types list the
+expected import keys:
+
+```js
+import { instantiate } from './out/app.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { createProcessHost } from './my-process-provider.js';
+
+const { host, exitRequests } = createProcessHost();
+const component = await instantiate(undefined, {
+    ...new WASIShim().getImportObject(),
+    '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host': host,
+});
+```
+
+The provider implements the WIT operations underneath the Node facade:
+
+- Functions are synchronous, even with `--instantiation async`. Arguments are
+  WIT values: `exit(23)` receives `{ tag: 'number', val: 23 }`, a string code uses
+  the `text` tag, and an omitted code is `undefined`.
+- With JavaScript component bindings, return the successful value directly, or
+  throw a `ProcessError` record with `name`, `message`, and optional `code`,
+  `errno`, `syscall`, and `path`. The guest receives an Error. Do not return
+  `{ tag: 'ok', val: ... }` or `{ tag: 'err', val: ... }` wrappers. Numeric WIT
+  lists may require typed arrays: for example, `getgroups` returns `Uint32Array`.
+- Implement related operations consistently: environment access uses
+  `envEntries`, `envGet`, and `envSet`; `process.exitCode` uses `getState` and
+  `setExitCode`. This minimal example supports explicit exit requests only.
+  Reading metadata such as `pid` or `argv` requires `metadata`.
+- Keep mutable state per component when isolation is desired. Construct a new
+  provider for each instance, as in the example. The facade does not isolate
+  state that your provider shares with other instances or the host.
+- `exit`, `abort`, and `execve` must not return successfully. This example throws
+  an ordinary guest-visible error, which guest code can catch. Enforcing component
+  termination requires the embedder's own lifecycle policy. Native streams and
+  engine hooks listed under Process restrictions remain unsupported regardless
+  of the provider.
+
+The `node-process-custom` fixture in `packages/jco/test/fixtures/componentize`
+contains the runnable JavaScript equivalent, checked against `ProcessHost`.
+Its component calls `process.exit(23)`. End-to-end tests bind separate provider
+objects in QuickJS and StarlingMonkey, verify the exit requests reach the correct
+object, and confirm the host stays alive and other operations remain denied.
+
 ### Process state and snapshots
 
 Host imports are unavailable while the component engine initializes its snapshot.
