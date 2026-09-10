@@ -7,6 +7,7 @@ import { expect, test, vi } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { SQLITE_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { bundleComponentSource } from "../../src/bundle.js";
+import { hasJspi } from "../common.js";
 import { getTmpDir, transpileComponent } from "../helpers.js";
 const sqliteModule = fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/sqlite.js", import.meta.url));
 const fixture = new URL("../fixtures/componentize/node-sqlite/", import.meta.url);
@@ -34,7 +35,8 @@ test.concurrent("node:sqlite requests only its typed capability and leaves bare 
     );
 });
 
-test.concurrent.each(["starlingmonkey", "quickjs"])(
+// Explicit SQLite providers enable JSPI for async backup, even for synchronous calls.
+test.skipIf(!hasJspi).concurrent.each(["starlingmonkey", "quickjs"])(
     "runs SQLite resources and denial in %s",
     async (backend) => {
         const root = await getTmpDir();
