@@ -73,6 +73,7 @@
         "commander": "^14",
         "componentize-qjs": "^0.4.2",
         "mkdirp": "^3",
+        "regexpu-core": "6.4.0",
         "rolldown": "^1.2.4",
         "typescript": "7.0.2",
         "typescript-compiler-api": "npm:typescript@6.0.3",
