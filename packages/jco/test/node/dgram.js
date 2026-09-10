@@ -34,8 +34,10 @@ test("node:dgram requests only its UDP capability and callback export", async ()
 test("UDP defaults to denial and preserves explicit host mappings", () => {
     expect(withDefaultNodeCapabilities({}).map["jco:node/dgram@0.1.0"]).toMatch(/dgram\/host$/);
     expect(
-        withDefaultNodeCapabilities({ map: { "jco:node/dgram@0.1.0": NODE_HOST } }).map["jco:node/dgram@0.1.0"],
-    ).toBe(NODE_HOST);
+        withDefaultNodeCapabilities({ map: { "jco:node/dgram@0.1.0": "jco:node/dgram@0.1.0" } }).map[
+            "jco:node/dgram@0.1.0"
+        ],
+    ).toBe("jco:node/dgram@0.1.0");
 });
 
 const hasSyncUdp =
@@ -60,7 +62,14 @@ describe.skipIf(!hasJspi)("node:dgram components", () => {
                         path: componentPath,
                         imports: {
                             ...new WASIShim().getImportObject(),
-                            "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram/host": deniedHost,
+                            "jco:node/dgram@0.1.0": deniedHost,
+                        },
+                    },
+                    jco: {
+                        transpile: {
+                            extraArgs: {
+                                map: { "jco:node/dgram@0.1.0": "jco:node/dgram@0.1.0" },
+                            },
                         },
                     },
                 });
@@ -84,7 +93,7 @@ describe.skipIf(!hasJspi)("node:dgram components", () => {
                                 extraArgs: {
                                     asyncMode: "jspi",
                                     asyncExports: ["*"],
-                                    map: { "jco:node/dgram@0.1.0": NODE_HOST },
+                                    map: { "jco:node/dgram@0.1.0": "jco:node/dgram@0.1.0" },
                                 },
                             },
                         },
