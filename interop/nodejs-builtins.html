@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86848298.js";
+            window.path_to_searchindex_js = "../searchindex-85814d38.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -275,6 +275,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
 <tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
 <tr><td><code>node:perf_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks</code></td><td>Portable timing and observers; native telemetry throws. Runtime requirements are described below.</td></tr>
+<tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/readline</code> and <code>/readline/promises</code></td><td>Node 24.20 line parsing, questions, terminal editing and cursor actions over supplied streams. No WIT capability.</td></tr>
 <tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
 <tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
@@ -462,6 +463,52 @@ WIT import, callback export, host adapter, or JSPI operation.</p>
 <code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
 initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
 not intercepted.</p>
+<h3 id="readline"><a class="header" href="#readline">Readline</a></h3>
+<p><code>node:readline</code> and <code>node:readline/promises</code> support callback and promise questions,
+line events, async iteration, streaming UTF-8/CRLF decoding, prompts, terminal
+editing and history, keypress events, and cursor actions. Both share a port of
+<a href="https://github.com/nodejs/node/tree/v24.20.0/lib/internal/readline">Node v24.20.0’s readline implementation</a>.</p>
+<p>Applications keep ordinary Node imports and supply readable and writable streams:</p>
+<pre><code class="language-js">import * as readline from 'node:readline/promises';
+
+export async function ask(input, output) {
+    const rl = readline.createInterface({ input, output });
+    try {
+        const answer = await rl.question('What do you think of Node.js? ');
+        output.write(`Thank you for your valuable feedback: ${answer}\n`);
+    } finally {
+        rl.close();
+    }
+}
+</code></pre>
+<p>Bundle application code with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>.
+Readline itself requires no WIT imports. The streams determine where input and
+output go. <code>node:process</code> resolves inside a component, but its <code>stdin</code>, <code>stdout</code>
+and <code>stderr</code> are host stream objects that cannot cross the component boundary and
+throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> (see <a href="#process-restrictions">Process restrictions</a>).
+The Node documentation’s literal <code>import { stdin, stdout } from 'node:process'</code>
+example therefore runs unchanged on Node but not in a component; supply streams
+from the component’s own I/O instead. The test fixture runs that literal example
+against the shim on Node, and runs the same question/answer flow with supplied
+streams in QuickJS and StarlingMonkey.</p>
+<h4 id="terminal-and-scheduling-boundaries"><a class="header" href="#terminal-and-scheduling-boundaries">Terminal and scheduling boundaries</a></h4>
+<p>Terminal streams may supply <code>setRawMode</code>, <code>columns</code>, and resize events. Terminal
+mode emits ANSI sequences without inspecting a host <code>TERM</code> variable; an application
+that wants Node’s <code>TERM=dumb</code> behaviour can read <code>process.env.TERM</code> through
+<code>node:process</code> and pass <code>terminal: false</code> itself. Ctrl+Z can be handled with a
+<code>SIGTSTP</code> listener; otherwise it throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Node
+suspends itself with <code>process.kill(process.pid, 'SIGTSTP')</code> and resumes from a
+<code>SIGCONT</code> listener; the <code>node:process</code> facade refuses signal listeners, and
+readline deliberately does not import it, so using readline never adds the
+process capability to a component.</p>
+<p>Cursor widths use Node’s non-ICU tables, with normalization where the engine
+provides it; some Unicode widths differ from ICU-enabled Node. Deferred callbacks
+and automatic cursor commits use microtasks rather than Node’s separate next-tick
+queue. Completion-error text uses portable string formatting.</p>
+<p>Timed Escape-key disambiguation requires engine timers; engines without timers
+throw an explicit <code>ERR_JCO_UNSUPPORTED_NODE_API</code> for that operation. Cancellation
+accepts supplied AbortSignals; readline does not install missing Abort globals.
+QuickJS async entry functions must be declared <code>async func</code> in WIT.</p>
 <h3 id="child-processes-and-host-capabilities"><a class="header" href="#child-processes-and-host-capabilities">Child processes and host capabilities</a></h3>
 <p>A WebAssembly guest cannot spawn a process itself. When bundled source imports
 <code>node:child_process</code>, Jco ensures that the selected world declares the dedicated
@@ -1368,7 +1415,6 @@ the module or upstream project.</p>
 <tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td>Interactive terminal behavior needs real guest streams and input handling; current fallbacks cannot reproduce it.</td></tr>
 <tr><td><code>node:timers/promises</code></td><td>A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.</td></tr>
 <tr><td><code>node:trace_events</code>, <code>node:tty</code></td><td>The fallbacks preserve useful shapes, but tracing and terminal detection are synthetic or no-op without runtime integration.</td></tr>
 <tr><td><code>node:url</code></td><td>There is substantial Node-derived code, but its eager <code>node:path</code> dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy.</td></tr>
