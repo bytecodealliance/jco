@@ -29,7 +29,7 @@ and `crypto`. Jco first checks normal package resolution, so installed packages
 with those names still win. Explicit `node:` imports always select the builtin.
 The stream CommonJS adapter exports jco-std's existing `Stream` constructor;
 it supplies no alternative stream implementation. HTTP, HTTPS, net, classic
-streams, `string_decoder`, and OS APIs all use their current jco-std adapters.
+streams, `string_decoder`, URL, TTY, and OS APIs all use their current jco-std adapters.
 
 The remaining support needed by this dependency graph includes:
 
@@ -38,12 +38,17 @@ The remaining support needed by this dependency graph includes:
 - `setImmediate`/`clearImmediate` globals backed by component timers. Their
   scheduling approximates a later turn, not Node's I/O check phase.
 - A structured `Error.prepareStackTrace` adapter for middleware using `depd`.
-- Limited unenv implementations of `process`, `tty`, `url`, `util`, `util/types`,
+- Limited unenv implementations of `process`, `util`, `util/types`,
   and `zlib`. These retain unsupported entries and are not full Node APIs.
   In particular, compressed request bodies and zlib transforms are unsupported;
   `sendFile` and static files additionally need filesystem authority.
 
-Process globals here come from unenv; they do not expose the host process.
+The injected `process` global comes from unenv so dependency initialization can
+run without host calls. Explicit `node:process` imports use jco-std
+and require the separate `jco:node/process` host capability.
+The URL adapter retains [its deprecated API restrictions](./nodejs-builtins/supported-modules/url.md);
+Express dependencies that reach legacy `url.parse()` will throw. TTY operations
+require the separate [TTY host capability](./nodejs-builtins/supported-modules/tty.md).
 Applications needing additional runtime behavior should test it explicitly.
 
 ## Regex syntax in dependencies

@@ -23,6 +23,7 @@
             - [`node:child_process`](./interop/nodejs-builtins/supported-modules/child-process.md)
             - [`node:cluster`](./interop/nodejs-builtins/supported-modules/cluster.md)
             - [`node:console`](./interop/nodejs-builtins/supported-modules/console.md)
+            - [`node:crypto`](./interop/nodejs-builtins/supported-modules/crypto.md)
             - [`node:dgram`](./interop/nodejs-builtins/supported-modules/dgram.md)
             - [`node:diagnostics_channel`](./interop/nodejs-builtins/supported-modules/diagnostics-channel.md)
             - [`node:dns`](./interop/nodejs-builtins/supported-modules/dns.md)

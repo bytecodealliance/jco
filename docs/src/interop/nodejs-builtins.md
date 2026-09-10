@@ -65,11 +65,9 @@ Resolution follows a deliberate quality order:
 4. Everything else remains unresolved. Jco never enables unenv's entire alias map
    merely because an alias exists.
 
-Bare specifiers participate too, but only as a fallback. A dependency written before the
-`node:` prefix existed says `require("stream")`, and leaving that unresolved fails the build
-for most of npm. So Jco resolves the specifier normally first, and only treats it as a
-builtin when nothing answers to the name -- a package that genuinely installs `buffer`,
-`punycode` or `process` still wins.
+Explicit `node:` imports select builtin adapters. Audited bare names also resolve
+when no installed package shadows them. See [Express](./express.md) for the
+portable globals and dependency compatibility used by ordinary npm libraries.
 
 ## Combining built-ins with `jco-std`
 
@@ -87,30 +85,6 @@ API-specific examples, capabilities, and compatibility limits. Each API has its
 own page, with related submodules grouped together.
 
 For whole-application compatibility, see [Express](./express.md).
-
-### Additional application globals
-
-Three more Node globals are injected the same way, for the same reason -- package code
-reaches them without importing anything:
-
-- `process`, from `node:process`. Because it is defined, code that branches on
-  `typeof process === "undefined"` to detect a browser takes its Node path, which is the
-  same choice Node presents it with.
-- `setImmediate` and `clearImmediate`, from `node:timers`.
-
-### Regular-expression syntax the engine does not implement
-
-StarlingMonkey's SpiderMonkey is built without Unicode property escapes, so a regular
-expression containing `\p{...}` is a *syntax* error: the module carrying one cannot be
-parsed at all, and the failure surfaces during pre-initialization rather than where it was
-written.
-
-While bundling, Jco replaces each escape with the exact set of code points it matches,
-computed from the building runtime's own Unicode tables, so the rewritten expression matches
-what Node matches. An escape is left alone when its expression is not in `u`/`v` mode -- where
-`\p` is a literal `p` and rewriting would change the meaning -- or when the building runtime
-does not know the property.
-
 
 ## How Jco evaluates unenv modules
 
