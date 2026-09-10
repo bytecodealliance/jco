@@ -1,0 +1,14 @@
+import type { TlsHost } from "./tls/host-types.js";
+export const query: TlsHost["query"];
+export const setDefaultCa: TlsHost["setDefaultCa"];
+export const createContext: TlsHost["createContext"];
+export const connect: TlsHost["connect"];
+export const createServer: TlsHost["createServer"];
+export const socketOperation: TlsHost["socketOperation"];
+export const serverOperation: TlsHost["serverOperation"];
+export const write: TlsHost["write"];
+export const end: TlsHost["end"];
+export const release: TlsHost["release"];
+export const isAvailable: TlsHost["isAvailable"];
+export const startTls: TlsHost["startTls"];
+export const releaseContext: TlsHost["releaseContext"];
