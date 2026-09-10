@@ -218,11 +218,13 @@ prospectively choose to deem waived or otherwise exclude such Section(s) of
 the License, but only in their entirety and only with respect to the Combined
 Software.
 
---- Node.js stream and test runner adaptations (MIT License) ---
+--- Node.js adaptations (MIT License) ---
 
 The Node.js adaptations identified by upstream provenance comments in
-src/wasi/0.2.x/node/24.x.x/stream/ and src/wasi/0.2.x/node/24.x.x/test/,
-and their compiled forms, are covered by the following notice:
+src/wasi/0.2.x/node/24.x.x/stream/, src/wasi/0.2.x/node/24.x.x/test/,
+and src/wasi/0.2.x/node/24.x.x/util/, and their compiled forms, are covered
+by the following notice:
+
 
 Copyright Node.js contributors. All rights reserved.
 
