@@ -1,8 +1,16 @@
 package example:mcp-server;
 
 world component {
+    import jco:node/http@0.1.0;
+
+    export jco:node/http-callbacks@0.1.0;
+
     // The SDK imports node:process; the HTTP example uses the denial provider.
     import jco:node/process@0.1.0;
+
     import wasi:cli/environment@0.2.12;
-    export wasi:http/incoming-handler@0.2.12;
+
+    export start: func(port: u16) -> u16;
+
+    export stop: func();
 }
