@@ -7,8 +7,9 @@ package jco:node@0.1.0;
 /// rebuild the observable JS surface guest-side.
 ///
 /// Cluster is push-based and WIT is pull-based, so host events are queued and the guest drains
-/// them with `drain-events`. See `docs/src/interop/nodejs-builtins.md` for the delivery-timing
-/// difference this creates.
+/// them with `drain-events`. See
+/// `docs/src/interop/nodejs-builtins/supported-modules/cluster.md`
+/// for the delivery-timing difference this creates.
 interface cluster {
     use types.{env-vars};
 
