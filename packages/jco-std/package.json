@@ -25,8 +25,7 @@
   "files": [
     "dist",
     "wit/node-0.1.0",
-    "wit/tls-0.2.0-draft",
-    "licenses"
+    "wit/tls-0.2.0-draft"
   ],
   "type": "module",
   "exports": {
