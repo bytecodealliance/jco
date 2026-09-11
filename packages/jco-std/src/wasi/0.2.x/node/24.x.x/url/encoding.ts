@@ -11,7 +11,7 @@ export function utf8Encode(value: string): Uint8Array {
 }
 /**
  * Adapted from holepunchto/text-decoder@1.2.7 lib/utf8-decoder.js, Apache-2.0.
- * Copyright Holepunch. License: licenses/text-decoder-LICENSE in this package.
+ * Copyright Holepunch. See the Apache-2.0 terms in this package's LICENSE.
  * The streaming state machine is made local to a single complete input. Its
  * b4a fast path is removed because Feross Buffer differs on malformed UTF-8.
  */
