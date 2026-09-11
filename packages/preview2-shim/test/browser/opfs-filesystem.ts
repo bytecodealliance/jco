@@ -243,4 +243,55 @@ suite("Browser OPFS filesystem adapter", () => {
         assert.strictEqual(requests[0].mode, "exclusive");
         assert.strictEqual(requests[0].name, "sandbox/file.txt");
     });
+
+    // Regression coverage for a bug found while integrating this adapter into application:
+    // `withCrossTabLocking` wraps every descriptor returned by a cross-tab-locking-enabled
+    // adapter in a `Proxy`. `InMemoryFilesystemAdapter#renameAt`/`#isSameObject` reach into a
+    // *second* descriptor argument with raw private-field access (`descriptor.#entry`), which
+    // bypasses `Proxy` traps and fails its brand check - throwing a `TypeError` instead of
+    // renaming/comparing. In the real component this surfaced as a silently hung `mv` command
+    // (the guest's rename call never returned), not a catchable error.
+    test.concurrent("renameAt works when the destination descriptor is lock-wrapped", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
+        const fakeNavigator = {
+            request: (_name: string, _options: { mode: string }, callback: () => Promise<void>) =>
+                Promise.resolve(callback()),
+        } as BrowserLockManager;
+
+        const root = new FakeDirectoryHandle("sandbox");
+        root.entriesMap.set("old.txt", new FakeFileHandle(new TextEncoder().encode("hi")));
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+
+        const adapter = new OpfsFilesystemAdapter({ lockManager: fakeNavigator });
+        const cwd = adapter.getRoot(capability) as any;
+        // Two separate lock-wrapped handles onto the same directory, as a guest issuing
+        // `mv old.txt new.txt` would produce (one descriptor to resolve each path against).
+        const sourceDir = cwd.openAt({}, ".", { directory: true }, {});
+        const destDir = cwd.openAt({}, ".", { directory: true }, {});
+
+        sourceDir.renameAt("old.txt", destDir, "new.txt");
+
+        assert.strictEqual(cwd.statAt({}, "new.txt").size, 2n);
+    });
+
+    test.concurrent("isSameObject works when comparing lock-wrapped descriptors", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
+        const fakeNavigator = {
+            request: (_name: string, _options: { mode: string }, callback: () => Promise<void>) =>
+                Promise.resolve(callback()),
+        } as BrowserLockManager;
+
+        const root = new FakeDirectoryHandle("sandbox");
+        root.entriesMap.set("file.txt", new FakeFileHandle());
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+
+        const adapter = new OpfsFilesystemAdapter({ lockManager: fakeNavigator });
+        const cwd = adapter.getRoot(capability) as any;
+        const a = cwd.openAt({}, "file.txt", {}, { read: true });
+        const b = cwd.openAt({}, "file.txt", {}, { read: true });
+
+        assert.strictEqual(a.isSameObject(b), true);
+    });
 });

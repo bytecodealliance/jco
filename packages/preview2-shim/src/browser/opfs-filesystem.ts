@@ -1,5 +1,5 @@
 import type { BrowserFilesystemAdapter, BrowserFilesystemDescriptor } from "./filesystem.js";
-import { InMemoryFilesystemAdapter, _onTouch } from "./in-memory-filesystem.js";
+import { InMemoryFilesystemAdapter, UNWRAP_DESCRIPTOR, _onTouch } from "./in-memory-filesystem.js";
 import type { FileData, FileDataEntry } from "./in-memory-filesystem.js";
 
 /**
@@ -218,6 +218,9 @@ function withCrossTabLocking(
 
     return new Proxy(descriptor, {
         get(target, prop, receiver) {
+            if (prop === UNWRAP_DESCRIPTOR) {
+                return target;
+            }
             const value = Reflect.get(target, prop, receiver);
             if (prop === "openAt") {
                 return (...args: Parameters<BrowserFilesystemDescriptor["openAt"]>) => {

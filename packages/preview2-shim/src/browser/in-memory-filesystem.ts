@@ -518,7 +518,7 @@ class Descriptor implements BrowserFilesystemDescriptor {
             throw "not-permitted";
         }
         const [newParent, newName] = getParentEntry(
-            descriptorGetEntry(newDescriptor as Descriptor),
+            descriptorGetEntry(unwrapDescriptor(newDescriptor) as Descriptor),
             newPath,
         );
         if (newParent.dir![newName]) {
@@ -608,7 +608,7 @@ class Descriptor implements BrowserFilesystemDescriptor {
             throw "no-entry";
         }
         const [newParent, newName] = getParentEntry(
-            descriptorGetEntry(newDescriptor as Descriptor),
+            descriptorGetEntry(unwrapDescriptor(newDescriptor) as Descriptor),
             newPath,
         );
         const replaced = newParent.dir![newName];
@@ -667,7 +667,7 @@ class Descriptor implements BrowserFilesystemDescriptor {
     }
 
     isSameObject(other: BrowserFilesystemDescriptor) {
-        return descriptorGetEntry(other as Descriptor) === this.#entry;
+        return descriptorGetEntry(unwrapDescriptor(other) as Descriptor) === this.#entry;
     }
 
     metadataHash() {
@@ -740,6 +740,29 @@ delete Descriptor.prototype._getEntry;
 const descriptorCreate = Descriptor._create;
 // @ts-expect-error - Deleting static method
 delete Descriptor._create;
+
+/**
+ * Well-known symbol a `BrowserFilesystemDescriptor` wrapper (e.g. the cross-tab-locking
+ * `Proxy` from `OpfsFilesystemAdapter`) can implement to hand back the real descriptor it
+ * wraps. `renameAt`/`linkAt`/`isSameObject` reach into a *second* descriptor argument's
+ * private `#entry` field directly - private-field access bypasses `Proxy` traps and fails
+ * its brand check against a wrapper, so a wrapper must be unwrapped via ordinary property
+ * access (which a `Proxy` handles correctly) before that field access happens.
+ */
+export const UNWRAP_DESCRIPTOR: unique symbol = Symbol("browserFilesystemDescriptor.unwrap");
+
+function unwrapDescriptor(descriptor: BrowserFilesystemDescriptor): BrowserFilesystemDescriptor {
+    let current = descriptor;
+    for (;;) {
+        const inner = (current as unknown as Record<symbol, unknown>)[UNWRAP_DESCRIPTOR] as
+            | BrowserFilesystemDescriptor
+            | undefined;
+        if (!inner || inner === current) {
+            return current;
+        }
+        current = inner;
+    }
+}
 
 /** Explicit ephemeral storage adapter for browser applications and tests. */
 export class InMemoryFilesystemAdapter implements BrowserFilesystemAdapter<FileData> {
