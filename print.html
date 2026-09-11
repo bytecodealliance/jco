@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-de63ffef.js";
+            window.path_to_searchindex_js = "searchindex-9a3c7268.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-05bc3f8a.js"></script>
@@ -2866,6 +2866,18 @@ interface used is <code>jco:node/http2-callbacks@0.1.0</code>.</p>
 push, flow-control windows, and operations that cannot cross the boundary
 throw explicit errors.</p>
 </blockquote>
+<p>Servers support response trailers through <code>Http2ServerResponse.addTrailers()</code>
+and <code>setTrailer()</code>, or through <code>stream.respond(headers, { waitForTrailers: true })</code>
+followed by <code>stream.sendTrailers()</code> in the <code>wantTrailers</code> event. Both <code>direct</code>
+and <code>wasi-sockets</code> send the trailers after the buffered body. This supports unary
+gRPC calls, including <code>grpc-status</code> and application metadata.</p>
+<p>Request trailers and incremental response streaming remain unsupported. The
+<a href="https://github.com/bytecodealliance/jco/tree/main/examples/components/node-grpc-server">Node gRPC example</a>
+runs the same server source in native Node and in a transpiled component.</p>
+<p>The <code>http2-callbacks.outgoing-response</code> WIT record now includes <code>trailers</code>.
+Update checked-in <code>wit/deps/jco-node-0.1.0/http2.wit</code> copies when rebuilding:
+Jco adds missing dependency files but does not overwrite existing ones. Custom
+callback providers must return the new list, which may be empty.</p>
 <p>The <code>wasi:sockets</code> implementation also deliberately omits server push, HTTP/1.1 <code>Upgrade: h2c</code>,
 Unix-domain sockets, and Node’s arbitrary <code>createConnection</code>/custom duplex
 transport hooks.</p>
