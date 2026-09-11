@@ -27,7 +27,8 @@
  * Hrtime subtraction and warning normalization below adapt internal/process/
  * per_thread.js and warning.js; process.js itself just reexports the singleton.
  * Local changes: typed WIT calls, lazy host data, guest microtasks, explicit errors
- * for engine hooks and deprecated APIs. See docs/src/interop/nodejs-builtins.md.
+ * for engine hooks and deprecated APIs. See
+ * docs/src/interop/nodejs-builtins/supported-modules/process.md.
  */
 import { EventEmitter } from "node:events";
 import { callHost } from "../internal/host-error.js";
