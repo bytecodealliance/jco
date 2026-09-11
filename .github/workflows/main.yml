@@ -769,6 +769,10 @@ jobs:
             workspace: examples/components/node-mcp-server
             setup-p2-shim: true
             setup-std: true
+          - name: node-grpc-server
+            workspace: examples/components/node-grpc-server
+            setup-p2-shim: true
+            setup-std: true
           - name: fs-write-file
             workspace: examples/components/fs-write-file
           - name: browser-p2-shims
