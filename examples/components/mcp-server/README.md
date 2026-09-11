@@ -20,10 +20,11 @@ the v1 `@modelcontextprotocol/sdk` package for the new specification.
 a filename and text chunks, it returns the normalized basename, UTF-8 byte count,
 and base64-encoded contents. It never opens the named file.
 
-The tool uses ordinary Node.js imports:
+The server uses ordinary Node.js imports:
 
 | API | Use inside the component |
 | --- | --- |
+| `node:http` | Create and listen on the HTTP server in both runtimes. |
 | `node:stream` | Turn the chunks into a classic `Readable` stream. |
 | `node:stream/consumers` | Collect that stream as text. |
 | `node:buffer` | Count UTF-8 bytes and encode them as base64. |
@@ -39,12 +40,20 @@ request; there is no `initialize` handshake or `Mcp-Session-Id`. Clients send th
 protocol version and capabilities with every request. The supplied client pins
 `2026-07-28`, so it cannot silently fall back to the legacy protocol.
 
-[`src/component.js`](./src/component.js) mounts that handler using Hono and
-jco-std's WASI HTTP adapter, following the other Hono component examples.
-[`wit/component.wit`](./wit/component.wit) exports
-`wasi:http/incoming-handler@0.2.12`.
-[`run-transpiled.js`](./run-transpiled.js) supplies WASI through preview2-shim and
-listens on localhost. Its import object preserves WIT interface names.
+The same `src/server.js` also creates the `node:http` server and converts its
+requests and responses to the SDK's Web Request/Response interface. This example
+buffers bodies using `node:stream/consumers` and `node:buffer`; it does not stream
+SSE responses. The SDK's `toNodeHandler` adapter requires Web stream async
+iteration, which the component engine does not yet provide.
+
+Jco compiles this file directly, using `--with-nodejs-http-via direct` for Node
+HTTP passthrough. [`wit/component.wit`](./wit/component.wit) exports `start`,
+`stop`, and `jco:node/http-callbacks@0.1.0`, and imports `jco:node/http@0.1.0`.
+[`run-transpiled.js`](./run-transpiled.js) instantiates the component with jco-std's
+Node HTTP host and preview2-shim's WASI capabilities, then calls `start`.
+Its import object preserves WIT interface names. All request routing, HTTP
+conversion, and MCP handling run inside the component. The runner supplies
+network I/O and uses Node's `--experimental-wasm-jspi` flag for async callbacks.
 
 The SDK's Node entry point also imports `node:process`. Jco declares the typed
 `jco:node/process@0.1.0` capability, and the runner supplies its denial provider:
@@ -109,8 +118,9 @@ and `MCP_URL` for the demo client to use a different port. A compatible MCP host
 can connect to that endpoint using Streamable HTTP and protocol `2026-07-28`.
 
 To compare with native Node, stop the component server and run
-`pnpm run serve:node`, then run the same demo. Only the HTTP hosting code changes;
-both paths import the same server module.
+`pnpm run serve:node`, then run the same demo. The native launcher imports
+`src/server.js` directly and calls its `start` and `stop` functions. Both runtimes
+execute the same server source, including the HTTP listener and request handler.
 
 This is a local tool demo. It accepts requests without an Origin header and
 allows localhost origins. Authentication and long-lived subscription examples
