@@ -203,7 +203,7 @@ export class OutgoingMessage extends EventEmitter {
     return this;
   }
 
-  addTrailers(_headers: HttpHeaders): never {
+  addTrailers(_headers: HttpHeaders): void {
     return unsupported("http.OutgoingMessage.addTrailers");
   }
 

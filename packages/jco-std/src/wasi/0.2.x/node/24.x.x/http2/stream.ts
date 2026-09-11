@@ -2,7 +2,7 @@ import { EventEmitter } from "../internal/event-emitter.js";
 import { bodyBytes } from "../http/body.js";
 import { constants } from "./constants.js";
 import { codedError, deprecated, unsupported } from "./errors.js";
-import { fieldsToHeaders, headersToFields } from "./headers.js";
+import { fieldsToHeaders, headersToFields, trailersToFields } from "./headers.js";
 import type {
   HttpBodyChunk as Http2BodyChunk,
   Http2ClientStreamImplementation,
@@ -17,27 +17,39 @@ export type StreamCallback = (error?: Error | null) => void;
 
 interface ResponseAccumulator {
   headers: Http2Headers | undefined;
+
+  trailers: Http2Headers | undefined;
+
   chunks: Uint8Array[];
+
   ended: boolean;
+
   complete(): Promise<Http2OutgoingResponseData>;
+
   finish(): void;
 }
 
 function createAccumulator(): ResponseAccumulator {
   let resolve!: (response: Http2OutgoingResponseData) => void;
+
   const completed = new Promise<Http2OutgoingResponseData>((done) => {
     resolve = done;
   });
+
   return {
     headers: undefined,
+    trailers: undefined,
     chunks: [],
     ended: false,
     complete() {
       return completed;
     },
+
     finish() {
       const size = this.chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+
       const body = new Uint8Array(size);
+
       let offset = 0;
       for (const chunk of this.chunks) {
         body.set(chunk, offset);
@@ -45,6 +57,7 @@ function createAccumulator(): ResponseAccumulator {
       }
       resolve({
         headers: headersToFields(this.headers ?? { ":status": 200 }),
+        trailers: trailersToFields(this.trailers ?? {}),
         body,
       });
     },
@@ -102,7 +115,7 @@ export class Http2StreamBase extends EventEmitter {
     return this;
   }
 
-  sendTrailers(_headers: Http2Headers): never {
+  sendTrailers(_headers: Http2Headers): void {
     return unsupported(
       "http2.Http2Stream.sendTrailers",
       "the buffered component boundary completes a stream in one response",
@@ -264,6 +277,10 @@ export class ServerHttp2Stream extends Http2StreamBase {
   #paused = false;
   #started = false;
 
+  #waitForTrailers = false;
+
+  #trailersReady = false;
+
   constructor(request: Http2IncomingStreamData, session: unknown, response = createAccumulator()) {
     const { headers } = fieldsToHeaders(request.headers);
     super(request.id, {}, session);
@@ -272,11 +289,15 @@ export class ServerHttp2Stream extends Http2StreamBase {
     this.incomingHeaders = headers;
   }
 
-  respond(headers: Http2Headers = { ":status": 200 }, options: { endStream?: boolean } = {}): void {
+  respond(
+    headers: Http2Headers = { ":status": 200 },
+    options: { endStream?: boolean; waitForTrailers?: boolean } = {},
+  ): void {
     if (this.#response.headers) {
       throw codedError("Error", "ERR_HTTP2_HEADERS_SENT", "Response has already been initiated");
     }
     this.#response.headers = { ...headers };
+    this.#waitForTrailers = Boolean(options.waitForTrailers);
     Object.assign(this, { headersSent: true });
     if (options.endStream) {
       this.end();
@@ -288,6 +309,42 @@ export class ServerHttp2Stream extends Http2StreamBase {
       "http2.ServerHttp2Stream.additionalHeaders",
       "informational headers cannot cross the buffered response boundary",
     );
+  }
+
+  // Node v24.20.0 lib/internal/http2/core.js sendTrailers/onStreamTrailers:
+  // retain the readiness and single-send checks at the buffered boundary.
+  override sendTrailers(headers: Http2Headers): void {
+    if (this.destroyed || this.closed) {
+      throw codedError("Error", "ERR_HTTP2_INVALID_STREAM", "The stream has been destroyed");
+    }
+
+    if (this.sentTrailers) {
+      throw codedError(
+        "Error",
+        "ERR_HTTP2_TRAILERS_ALREADY_SENT",
+        "Trailing headers have already been sent",
+      );
+    }
+
+    if (!this.#trailersReady) {
+      throw codedError(
+        "Error",
+        "ERR_HTTP2_TRAILERS_NOT_READY",
+        "Trailing headers cannot be sent until after the wantTrailers event is emitted",
+      );
+    }
+
+    trailersToFields(headers);
+
+    const trailers = { ...headers };
+
+    this.sentTrailers = trailers;
+    this.#response.trailers = trailers;
+    this.#response.finish();
+    queueMicrotask(() => {
+      this.closed = true;
+      this.emit("close");
+    });
   }
 
   pushStream(
@@ -354,10 +411,22 @@ export class ServerHttp2Stream extends Http2StreamBase {
       this.respond();
     }
     this.#response.ended = true;
-    this.#response.finish();
+    if (!this.#waitForTrailers) {
+      this.#response.finish();
+    }
+
     queueMicrotask(() => {
       this.emit("finish");
       done?.();
+
+      if (this.#waitForTrailers) {
+        this.#trailersReady = true;
+        if (!this.emit("wantTrailers")) {
+          this.sendTrailers({});
+        }
+        return;
+      }
+
       this.closed = true;
       this.emit("close");
     });

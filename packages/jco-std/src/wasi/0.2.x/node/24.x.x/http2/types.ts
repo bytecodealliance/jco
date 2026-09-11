@@ -131,6 +131,7 @@ export interface Http2IncomingStreamData {
 
 export interface Http2OutgoingResponseData {
   headers: HttpHeaderField[];
+  trailers: HttpHeaderField[];
   body: Uint8Array;
 }
 

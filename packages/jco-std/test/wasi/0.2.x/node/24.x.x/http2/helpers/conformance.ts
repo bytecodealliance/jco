@@ -27,6 +27,38 @@ export function http2ImplementationConformance(
   options: Http2ConformanceOptions,
 ): void {
   describe(`${name} node:http2 implementation conformance`, () => {
+    test.runIf(options.server.supported).each(["", "body"])(
+      "preserves response trailers after %j",
+      async (body) => {
+        const harness = options.createHarness();
+
+        const http2 = createHttp2(harness.implementation);
+
+        const server = http2.createServer((_request, response) => {
+          response.addTrailers({ "grpc-status": "0", "x-result": "complete" });
+          response.end(body);
+        });
+
+        server.listen(8080);
+        try {
+          const result = await harness.dispatch!({
+            sessionId: 1,
+            id: 1,
+            headers: [{ name: ":method", value: encoder.encode("POST") }],
+            body: new Uint8Array(),
+          });
+
+          expect(result.body).toEqual(encoder.encode(body));
+          expect(result.trailers).toEqual([
+            { name: "grpc-status", value: encoder.encode("0") },
+            { name: "x-result", value: encoder.encode("complete") },
+          ]);
+        } finally {
+          server.close();
+        }
+      },
+    );
+
     test("implements or explicitly rejects clients", async () => {
       const harness = options.createHarness();
       const http2 = createHttp2(harness.implementation);

@@ -32,6 +32,7 @@ interface http2-callbacks {
 
   record outgoing-response {
     headers: list<header>,
+    trailers: list<header>,
     body: list<u8>,
   }
 
