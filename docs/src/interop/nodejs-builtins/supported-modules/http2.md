@@ -50,6 +50,21 @@ interface used is `jco:node/http2-callbacks@0.1.0`.
 > push, flow-control windows, and operations that cannot cross the boundary
 > throw explicit errors.
 
+Servers support response trailers through `Http2ServerResponse.addTrailers()`
+and `setTrailer()`, or through `stream.respond(headers, { waitForTrailers: true })`
+followed by `stream.sendTrailers()` in the `wantTrailers` event. Both `direct`
+and `wasi-sockets` send the trailers after the buffered body. This supports unary
+gRPC calls, including `grpc-status` and application metadata.
+
+Request trailers and incremental response streaming remain unsupported. The
+[Node gRPC example](https://github.com/bytecodealliance/jco/tree/main/examples/components/node-grpc-server)
+runs the same server source in native Node and in a transpiled component.
+
+The `http2-callbacks.outgoing-response` WIT record now includes `trailers`.
+Update checked-in `wit/deps/jco-node-0.1.0/http2.wit` copies when rebuilding:
+Jco adds missing dependency files but does not overwrite existing ones. Custom
+callback providers must return the new list, which may be empty.
+
 The `wasi:sockets` implementation also deliberately omits server push, HTTP/1.1 `Upgrade: h2c`,
 Unix-domain sockets, and Node's arbitrary `createConnection`/custom duplex
 transport hooks.

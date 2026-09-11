@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import assert from "node:assert/strict";
 import http2 from "node:http2";
 import { argv, execArgv, stdout } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -52,12 +53,18 @@ function request(authority, path, body) {
         const session = http2.connect(authority);
         const stream = session.request({ ":method": "POST", ":path": path });
         const chunks = [];
+        let trailers;
+
+        stream.once("trailers", (value) => {
+            trailers = value;
+        });
         stream.setEncoding("utf8");
         stream.on("data", (chunk) => chunks.push(chunk));
         stream.once("error", reject);
         session.once("error", reject);
         stream.once("end", () => {
             session.close();
+            assert.equal(trailers["x-component-trailer"], "complete");
             resolve(chunks.join(""));
         });
         stream.end(body);
