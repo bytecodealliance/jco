@@ -751,7 +751,7 @@ resources with sockets directly. The default mapping denies TLS before connectin
 certificate chain and hostname, and offers HTTP/1.1 ALPN. The draft accepts only
 `servername` (and `rejectUnauthorized: true`); other per-request TLS settings,
 including `ca`, are rejected. Hosts can configure trust with `createTlsProvider`.
-See the [provider example](../../docs/src/interop/nodejs-builtins.md#https).
+See the [provider example](../../docs/src/interop/nodejs-builtins/supported-modules/https.md).
 
 > [!NOTE]
 > `componentize-qjs` 0.4.3 currently fails to link the TLS interface's shared IO
