@@ -1,8 +1,9 @@
-# MCP server component
+# Node.js MCP server
 
-This example compiles an MCP server to a WebAssembly component and calls it with
-the official TypeScript SDK client over HTTP. The same server and tool code also
-runs directly on Node.js.
+This example runs the same MCP server source directly in Node.js and as a
+WebAssembly component using jco-std's Node.js API support. The HTTP listener,
+request handling, and tools all live in the shared [`src/server.js`](./src/server.js).
+Both runtimes are tested over HTTP with the official TypeScript SDK client.
 
 It targets the [2026-07-28 MCP specification][spec], including its stateless,
 per-request protocol. It uses SDK **2.0.0**, published as
@@ -75,7 +76,7 @@ pnpm --filter @bytecodealliance/preview2-shim run build
 Then run the complete example:
 
 ```console
-cd examples/components/mcp-server
+cd examples/components/node-mcp-server
 pnpm run all
 ```
 

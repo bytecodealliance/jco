@@ -1,8 +1,8 @@
 {
-    "name": "mcp-server",
+    "name": "node-mcp-server",
     "version": "0.0.1",
     "private": true,
-    "description": "An MCP SDK server compiled to a WebAssembly component with Node.js API support",
+    "description": "An MCP server whose same source runs in Node.js and as a WebAssembly component using jco-std",
     "type": "module",
     "scripts": {
         "build": "jco componentize src/server.js --bundle --with-nodejs-http-via direct --wit wit --out component.wasm",

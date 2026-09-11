@@ -25,7 +25,7 @@ packages:
   - examples/components/http-server-hono
   - examples/components/http-server-hono-with-bindings
   - examples/components/native-messaging
-  - examples/components/mcp-server
+  - examples/components/node-mcp-server
   - examples/components/node-compat
   - examples/components/nodejs-platform
   - examples/components/node-fetch
