@@ -1,0 +1,8 @@
+package example:mcp-server;
+
+world component {
+    // The SDK imports node:process; the HTTP example uses the denial provider.
+    import jco:node/process@0.1.0;
+    import wasi:cli/environment@0.2.12;
+    export wasi:http/incoming-handler@0.2.12;
+}
