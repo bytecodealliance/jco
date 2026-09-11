@@ -5,10 +5,14 @@ import { test } from 'node:test';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
 async function startServer(t, script) {
-    const child = spawn(process.execPath, [fileURLToPath(new URL(script, import.meta.url))], {
-        env: { ...process.env, PORT: '0' },
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+        process.execPath,
+        ['--experimental-wasm-jspi', fileURLToPath(new URL(script, import.meta.url))],
+        {
+            env: { ...process.env, PORT: '0' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+        },
+    );
 
     const exited = new Promise((resolve) => child.once('close', resolve));
 
