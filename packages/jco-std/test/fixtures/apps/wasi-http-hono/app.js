@@ -12,6 +12,7 @@ import { fire } from "@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/se
 
 const app = new Hono();
 app.get("/", (c) => {
+  c.header("X-Example", "wasi-http");
   return c.text("Hello World!!!!");
 });
 

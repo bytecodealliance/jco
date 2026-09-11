@@ -41,7 +41,7 @@ export function genWriteWebResponseFn(args: GenWriteWebResponseFnArgs) {
   ): Promise<void> {
     // Build headers
     const fields: [string, FieldValue][] = [];
-    for (const [k, v] of [...Object.entries(resp.headers)]) {
+    for (const [k, v] of resp.headers) {
       fields.push([k.toString(), ENCODER.encode(v)]);
     }
     const headers = Fields.fromList(fields);
