@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0368a62c.js";
+            window.path_to_searchindex_js = "../searchindex-f3f2975a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b969895d.js"></script>
@@ -277,6 +277,7 @@ available only under a versioned entry point.</p>
 <tr><td><code>node:perf_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks</code></td><td>Portable timing and observers; native telemetry throws. Runtime requirements are described below.</td></tr>
 <tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/readline</code> and <code>/readline/promises</code></td><td>Node 24.20 line parsing, questions, terminal editing and cursor actions over supplied streams. No WIT capability.</td></tr>
 <tr><td><code>node:repl</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/repl</code></td><td>Node 24.20 REPL over the readline port and supplied streams; <code>useGlobal: true</code> only, bundles acorn – see below. No WIT capability.</td></tr>
+<tr><td><code>node:timers</code>, <code>node:timers/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers</code> and <code>/timers/promises</code></td><td>Node 24 timer handles and promise timers over engine task scheduling; see runtime limits below.</td></tr>
 <tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
 <tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
@@ -1528,7 +1529,6 @@ the module or upstream project.</p>
 <tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:timers/promises</code></td><td>A component-aware timer/event-loop integration is needed for delays, cancellation, and abort signals.</td></tr>
 <tr><td><code>node:trace_events</code></td><td>The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.</td></tr>
 <tr><td><code>node:url</code></td><td>There is substantial Node-derived code, but its eager <code>node:path</code> dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy.</td></tr>
 </tbody>
@@ -1540,7 +1540,7 @@ also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
-<code>node:stream/promises</code>, <code>node:stream/web</code>, <code>node:timers</code>,
+<code>node:stream/promises</code>, <code>node:stream/web</code>,
 <code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
@@ -1611,6 +1611,58 @@ Marks, measures, resource entries within the buffer limit, and synchronous funct
 timing work there. Observer subscription, event listeners and resource buffer
 overflow fail explicitly; <code>PerformanceObserver.supportedEntryTypes</code> is empty.
 StarlingMonkey supports these runtime facilities and the observer APIs.</p>
+<h2 id="timers"><a class="header" href="#timers">Timers</a></h2>
+<p><code>node:timers</code> and <code>node:timers/promises</code> target Node.js 24.20.0. Keep ordinary
+imports in application code and bundle them with <code>jco componentize --bundle</code>:</p>
+<pre><code class="language-js">import { setTimeout, clearTimeout } from "node:timers";
+import { setTimeout as delay, scheduler } from "node:timers/promises";
+
+const pending = setTimeout(() =&gt; console.log("later"), 100);
+pending.refresh();
+clearTimeout(pending);
+await delay(10, "ready");
+await scheduler.yield();
+</code></pre>
+<h3 id="timer-handles-and-promises"><a class="header" href="#timer-handles-and-promises">Timer handles and promises</a></h3>
+<p>The callback module supplies timeout, interval and immediate scheduling and
+cancellation. Timeouts support <code>refresh()</code>, numeric/string cancellation IDs,
+<code>close()</code> and <code>Symbol.dispose</code>. Immediates support cancellation and disposal.
+<code>close()</code> remains functional because Node 24 marks it legacy, not deprecated.
+Removed exports such as <code>enroll</code> and <code>active</code> are not reintroduced.</p>
+<p>The promise module supplies delays, immediates, interval async iterators and the
+scheduler singleton. It shares identity with <code>timers.promises</code> and the callback
+functions’ custom promisify hooks. Abort rejects with <code>AbortError</code>, <code>ABORT_ERR</code>
+and the signal’s reason as <code>cause</code>; interval iterators retain ticks while the
+consumer is busy and release the timer when the loop breaks.</p>
+<h3 id="engine-requirements"><a class="header" href="#engine-requirements">Engine requirements</a></h3>
+<p>No additional WIT import or host mapping is required by the adapter. The component
+engine supplies the task scheduler and its underlying clocks. StarlingMonkey
+supports scheduling; the current QuickJS backend lacks task timers, so scheduling
+throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> (or rejects for promise APIs). Imports and
+argument validation remain usable without timers.</p>
+<p><code>setImmediate</code> uses the runtime’s native implementation when present, otherwise
+a zero-delay timer task. Nested immediates run in later tasks, but a Web engine
+cannot reproduce libuv’s I/O/check phase ordering. The adapter does not replace Web
+globals: imported functions return Node-style handles while the engine’s global
+timer functions retain their native identities and return types. Cancel imported
+timers with the imported cancellation functions or their handle methods.</p>
+<p><code>ref()</code>, <code>unref()</code> and <code>hasRef()</code> track handle state and forward liveness changes
+when runtime handles support them. Active <code>unref()</code> and <code>{ ref: false }</code> throw or
+reject explicitly on engines with numeric Web timer handles, including
+StarlingMonkey. A failed promise setup cancels its timer. Native Node timer
+handles support these operations when using jco-std directly in Node.</p>
+<p>Node’s private async-hook instrumentation, delay warnings, native inspection and
+private abort-listener protection against <code>stopImmediatePropagation()</code> are not
+ported. Abort handling uses the engine’s public event API. Direct jco-std imports
+can coexist with native Node builtins, but their timer handles and cancellation
+registries are separate.</p>
+<h3 id="implementation-source"><a class="header" href="#implementation-source">Implementation source</a></h3>
+<p>The TypeScript adaptation follows Node’s <code>lib/timers.js</code>, <code>lib/internal/timers.js</code>
+and <code>lib/timers/promises.js</code> at commit
+<code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>, with retained MIT notices. Engine timers
+replace Node’s native queue. The audited unenv 2.0.0-rc.24 implementation was not
+selected: its promise delays resolve immediately, interval promises yield only
+once, and fallback handles lack the required lifecycle semantics.</p>
 
                     </main>
 
