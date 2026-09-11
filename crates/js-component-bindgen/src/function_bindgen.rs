@@ -184,6 +184,9 @@ pub struct FunctionBindgen<'a> {
     /// Realloc function name
     pub realloc: Option<&'a String>,
 
+    /// Synchronous deallocator for owned canonical ABI buffers.
+    pub dealloc: Option<&'a String>,
+
     /// Post return function name
     pub post_return: Option<&'a String>,
 
@@ -364,6 +367,59 @@ impl FunctionBindgen<'_> {
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         intrinsic.name().to_string()
+    }
+
+    fn emit_dealloc(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
+        let Some(dealloc) = self.dealloc else {
+            return;
+        };
+        if size == 0 {
+            return;
+        }
+        let byte_size = if size == 1 {
+            len.to_string()
+        } else {
+            format!("{len} * {size}")
+        };
+        uwriteln!(
+            self.src,
+            "if ({len} !== 0) {dealloc}({ptr}, {byte_size}, {align});"
+        );
+    }
+
+    fn emit_guest_dealloc(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
+        if size == 0 {
+            return;
+        }
+        assert!(
+            self.dealloc.is_some(),
+            "guest deallocation requires a dealloc function"
+        );
+        self.emit_dealloc(ptr, len, size, align);
+    }
+
+    fn emit_dealloc_list_or_map(&mut self, operands: &[String], size: usize, align: usize) {
+        let (body, results) = self.blocks.pop().unwrap();
+        assert!(results.is_empty());
+        if size == 0 {
+            return;
+        }
+
+        let tmp = self.tmp();
+        let ptr = format!("ptr{tmp}");
+        let len = format!("len{tmp}");
+        uwriteln!(self.src, "const {ptr} = ({}) >>> 0;", operands[0]);
+        uwriteln!(self.src, "const {len} = ({}) >>> 0;", operands[1]);
+        if !body.is_empty() {
+            uwriteln!(
+                self.src,
+                "for (let i = 0; i < {len}; i++) {{
+                    const base = {ptr} + i * {size};
+                    {body}
+                }}"
+            );
+        }
+        self.emit_guest_dealloc(&ptr, &len, size, align);
     }
 
     fn lift_callbackless_async_result(&mut self) -> Option<(String, String)> {
@@ -1569,6 +1625,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
+                let size = self.sizes.size(element).size_wasm32();
                 let align = self.sizes.align(element).align_wasm32();
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
@@ -1576,9 +1633,10 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "if (ptr{tmp} % {align} !== 0) throw new TypeError(`list pointer [${{ptr{tmp}}}] is not aligned to {align}`);
                     var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {elem_size}));",
-                    elem_size = self.sizes.size(element).size_wasm32(),
+                    elem_size = size,
                     array_ty = js_array_ty(resolve, element).unwrap(), // TODO: this is the wrong endianness
                 );
+                self.emit_dealloc(&format!("ptr{tmp}"), &format!("len{tmp}"), size, align);
                 results.push(format!("result{tmp}"));
             }
 
@@ -1652,6 +1710,17 @@ impl Bindgen for FunctionBindgen<'_> {
                         "8"
                     }
                 );
+                let code_unit_size = if self.encoding == StringEncoding::UTF16 {
+                    2
+                } else {
+                    1
+                };
+                self.emit_dealloc(
+                    &format!("ptr{tmp}"),
+                    &format!("len{tmp}"),
+                    code_unit_size,
+                    code_unit_size,
+                );
                 results.push(format!("result{tmp}"));
             }
 
@@ -1717,6 +1786,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 assert_eq!(body_results.len(), 1);
                 uwriteln!(self.src, "{result}.push({});", body_results[0]);
                 uwrite!(self.src, "}}\n");
+                self.emit_dealloc(&base, &len, size, align);
             }
 
             Instruction::MapLower { key, value, .. } => {
@@ -1767,7 +1837,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 assert_eq!(body_results.len(), 2);
 
                 let tmp = self.tmp();
-                let entry_size = self.sizes.record([*key, *value]).size.size_wasm32();
+                let entry = self.sizes.record([*key, *value]);
+                let entry_size = entry.size.size_wasm32();
+                let align = entry.align.align_wasm32();
                 let len = format!("len{tmp}");
                 uwriteln!(self.src, "const {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
@@ -1786,6 +1858,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     body_results[1]
                 );
                 uwrite!(self.src, "}}\n");
+                self.emit_dealloc(&base, &len, entry_size, align);
             }
 
             Instruction::FixedLengthListLower { size, .. } => {
@@ -3792,12 +3865,97 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
             }
 
-            Instruction::GuestDeallocate { .. }
-            | Instruction::GuestDeallocateString
-            | Instruction::GuestDeallocateList { .. }
-            | Instruction::GuestDeallocateVariant { .. } => unimplemented!("Guest deallocation"),
+            Instruction::GuestDeallocate { size, align } => {
+                let size = size.size_wasm32();
+                if size != 0 {
+                    let dealloc = self
+                        .dealloc
+                        .expect("guest deallocation requires a dealloc function");
+                    uwriteln!(
+                        self.src,
+                        "{dealloc}(({}) >>> 0, {size}, {});",
+                        operands[0],
+                        align.align_wasm32()
+                    );
+                }
+            }
 
-            Instruction::GuestDeallocateMap { .. } => unimplemented!("map deallocation support"),
+            Instruction::GuestDeallocateString => {
+                let tmp = self.tmp();
+                let ptr = format!("ptr{tmp}");
+                let tagged_code_units = format!("taggedCodeUnits{tmp}");
+                uwriteln!(self.src, "const {ptr} = ({}) >>> 0;", operands[0]);
+                uwriteln!(
+                    self.src,
+                    "const {tagged_code_units} = ({}) >>> 0;",
+                    operands[1]
+                );
+                match self.encoding {
+                    StringEncoding::UTF8 => self.emit_guest_dealloc(&ptr, &tagged_code_units, 1, 1),
+                    StringEncoding::UTF16 => {
+                        self.emit_guest_dealloc(&ptr, &tagged_code_units, 2, 2)
+                    }
+                    StringEncoding::CompactUTF16 => {
+                        // For wasm32, bit 31 tags a UTF-16 code-unit count; without it,
+                        // the length counts Latin-1 bytes. See `load_string_from_range`:
+                        // https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#loading
+                        let tag = format!("tag{tmp}");
+                        let byte_length = format!("byteLength{tmp}");
+                        uwriteln!(self.src, "const {tag} = 2 ** 31;");
+                        uwriteln!(
+                            self.src,
+                            "let {byte_length};
+                            if ({tagged_code_units} & {tag}) {{
+                                {byte_length} = 2 * ({tagged_code_units} ^ {tag});
+                            }} else {{
+                                {byte_length} = {tagged_code_units};
+                            }}"
+                        );
+                        self.emit_guest_dealloc(&ptr, &byte_length, 1, 2);
+                    }
+                }
+            }
+
+            Instruction::GuestDeallocateList { element } => {
+                self.emit_dealloc_list_or_map(
+                    operands,
+                    self.sizes.size(element).size_wasm32(),
+                    self.sizes.align(element).align_wasm32(),
+                );
+            }
+
+            Instruction::GuestDeallocateMap { key, value } => {
+                let entry = self.sizes.record([*key, *value]);
+                self.emit_dealloc_list_or_map(
+                    operands,
+                    entry.size.size_wasm32(),
+                    entry.align.align_wasm32(),
+                );
+            }
+
+            Instruction::GuestDeallocateVariant { blocks } => {
+                let blocks = self.blocks.split_off(self.blocks.len() - blocks);
+                uwriteln!(self.src, "switch ({}) {{", operands[0]);
+                for (i, (body, results)) in blocks.into_iter().enumerate() {
+                    assert!(results.is_empty());
+                    uwriteln!(
+                        self.src,
+                        "case {i}: {{
+                            {body}
+                            break;
+                        }}"
+                    );
+                }
+                if !self.valid_lifting_optimization {
+                    uwriteln!(
+                        self.src,
+                        "default: {{
+                            throw new TypeError('invalid variant discriminant for deallocation');
+                        }}"
+                    );
+                }
+                uwriteln!(self.src, "}}");
+            }
         }
     }
 }
