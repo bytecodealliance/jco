@@ -1,0 +1,31 @@
+{
+    "name": "mcp-server",
+    "version": "0.0.1",
+    "private": true,
+    "description": "An MCP SDK server compiled to a WebAssembly component with Node.js API support",
+    "type": "module",
+    "scripts": {
+        "build": "jco componentize src/component.js --bundle --wit wit --out component.wasm",
+        "transpile": "jco transpile component.wasm --instantiation async --no-wasi-shim --map jco:node/process@0.1.0=jco:node/process@0.1.0 --out-dir dist/transpiled",
+        "serve": "node run-transpiled.js",
+        "serve:node": "node serve-node.js",
+        "run-transpiled": "node run-transpiled.js",
+        "demo": "node demo.js",
+        "test": "node --test test/e2e.js",
+        "all": "pnpm run build && pnpm run transpile && pnpm run test"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco-std": "workspace:*",
+        "@bytecodealliance/preview2-shim": "workspace:*",
+        "@modelcontextprotocol/server": "2.0.0",
+        "hono": "4.13.5",
+        "zod": "4.5.4"
+    },
+    "devDependencies": {
+        "@bytecodealliance/jco": "workspace:*",
+        "@modelcontextprotocol/client": "2.0.0"
+    },
+    "engines": {
+        "node": ">=24"
+    }
+}
