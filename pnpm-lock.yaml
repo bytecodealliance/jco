@@ -185,7 +185,7 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  examples/components/mcp-server:
+  examples/components/node-mcp-server:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: workspace:*

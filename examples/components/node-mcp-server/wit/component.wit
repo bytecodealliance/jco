@@ -1,4 +1,4 @@
-package example:mcp-server;
+package example:node-mcp-server;
 
 world component {
     import jco:node/http@0.1.0;
