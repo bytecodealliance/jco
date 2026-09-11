@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-35c53507.js";
+            window.path_to_searchindex_js = "../searchindex-8b957c64.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-73b398d4.js"></script>
+        <script src="../toc-d676c340.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -313,6 +313,13 @@ audited upstream implementation directly when that is the better fit. For
 example, the current Buffer and querystring cores come from <code>unenv</code> and are wrapped
 by Jco during bundling – this allows Jco to use mature upstream work and sprinkle in
 WASI support where necessary.</p>
+<h2 id="component-tests"><a class="header" href="#component-tests">Component tests</a></h2>
+<p>The versioned <code>wasi/0.2.x/node/24.x.x/test</code> and <code>test/reporters</code> entry points reuse
+the existing jco-std assertion, error, path and stream implementations. Prefer
+ordinary <code>node:test</code> and <code>node:test/reporters</code> imports through <code>jco componentize</code>;
+direct jco-std imports can coexist with those builtins in the same component.
+See <a href="nodejs-builtins/supported-modules/test.html">test runner compatibility</a> for serial
+execution, engine requirements, output, and unsupported Node process facilities.</p>
 <h2 id="hono-and-wasi-http"><a class="header" href="#hono-and-wasi-http">Hono and WASI HTTP</a></h2>
 <p>The Hono adapter connects a normal <a href="https://hono.dev/">Hono</a> application to a
 <code>wasi:http/incoming-handler</code> component export:</p>

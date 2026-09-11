@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-35c53507.js";
+            window.path_to_searchindex_js = "searchindex-8b957c64.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-73b398d4.js"></script>
+        <script src="toc-d676c340.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1971,6 +1971,13 @@ audited upstream implementation directly when that is the better fit. For
 example, the current Buffer and querystring cores come from <code>unenv</code> and are wrapped
 by Jco during bundling – this allows Jco to use mature upstream work and sprinkle in
 WASI support where necessary.</p>
+<h2 id="component-tests"><a class="header" href="#component-tests">Component tests</a></h2>
+<p>The versioned <code>wasi/0.2.x/node/24.x.x/test</code> and <code>test/reporters</code> entry points reuse
+the existing jco-std assertion, error, path and stream implementations. Prefer
+ordinary <code>node:test</code> and <code>node:test/reporters</code> imports through <code>jco componentize</code>;
+direct jco-std imports can coexist with those builtins in the same component.
+See <a href="#nodetest">test runner compatibility</a> for serial
+execution, engine requirements, output, and unsupported Node process facilities.</p>
 <h2 id="hono-and-wasi-http"><a class="header" href="#hono-and-wasi-http">Hono and WASI HTTP</a></h2>
 <p>The Hono adapter connects a normal <a href="https://hono.dev/">Hono</a> application to a
 <code>wasi:http/incoming-handler</code> component export:</p>
@@ -2216,6 +2223,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodestream"><code>node:stream/consumers</code></a></td><td>Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.</td></tr>
 <tr><td><a href="#nodestream"><code>node:stream/iter</code></a></td><td>Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.</td></tr>
 <tr><td><a href="#nodestring_decoder"><code>node:string_decoder</code></a></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
+<tr><td><a href="#nodetest"><code>node:test</code></a>, <a href="#nodetest"><code>node:test/reporters</code></a></td><td>Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine <code>AbortController</code>; see the API page for engine limits.</td></tr>
 <tr><td><a href="#nodetimers"><code>node:timers</code></a>, <a href="#nodetimers"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 </tbody>
@@ -3718,6 +3726,88 @@ WIT import, callback export, host adapter, or JSPI operation.</p>
 <code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
 initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
 not intercepted.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodetest"><a class="header" href="#nodetest"><code>node:test</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:test</code>, <code>node:test/reporters</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/test</code> and <code>/test/reporters</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:test</code> and <code>node:test/reporters</code> target
+<a href="https://nodejs.org/download/release/v24.20.0/docs/api/test.html">Node.js 24.20.0</a>.
+Application code keeps its ordinary imports:</p>
+<pre><code class="language-js">import test from "node:test";
+import assert from "node:assert/strict";
+
+await test("addition", async (t) =&gt; {
+  t.plan(2);
+  t.assert.strictEqual(2 + 3, 5);
+  await t.test("nested", () =&gt; {
+    assert.deepStrictEqual([1, 2], [1, 2]);
+  });
+});
+
+export function run() { return "tests completed"; }
+</code></pre>
+<p>Bundle against a world exporting <code>run: func() -&gt; string</code> with
+<code>jco componentize app.js --bundle --wit wit -o app.wasm</code>. Top-level tests run when
+the engine evaluates the module, which may happen during component initialization
+at build time. Tests return promises that resolve even on failure, as in Node.
+Failures appear in TAP output; <code>t.passed</code> and <code>t.error</code> are available in cleanup
+hooks for applications that need to expose a result through WIT. The runner does
+not set the host process’s exit code. A returned “tests completed” string alone
+is not evidence that assertions passed.</p>
+<p>Tests execute serially. Synchronous, promise and callback test bodies, nested
+tests, synchronous suite declarations, <code>describe</code>/<code>it</code> aliases, hooks,
+skip/TODO/expected-failure directives, assertion plans, tags, and <code>waitFor</code> are
+supported. <code>only</code>/<code>runOnly</code> emit Node’s diagnostic outside test-only mode; Jco has
+no Node test-runner CLI mode. Global teardown runs when the registered queue drains,
+so suites are the preferred scope for setup and teardown across related tests.</p>
+<h2 id="reuse-and-engine-requirements"><a class="header" href="#reuse-and-engine-requirements">Reuse and engine requirements</a></h2>
+<p>The test adapter reuses jco-std’s assertion implementation, error codes, inspection,
+path implementation, stream transforms, promise detection, Abort compatibility,
+and signal validation. Assertion behavior and error identities therefore agree
+with <code>node:assert</code> in the same bundle. Function, method, getter, setter and property
+mocks retain the portable proxy and restoration algorithms from Node. There are
+no new dependencies.
+The port records provenance against Node commit
+<code>71b8b174857e25106d39b61a9e6f30d927da8b01</code> and retains its MIT notice.</p>
+<p>The runner requires engine <code>AbortController</code>; StarlingMonkey provides it.
+The pinned QuickJS backend does not, so starting a test or suite throws
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Importing the module, standalone mocking and
+reporting still work there. Timeouts, delayed plans and <code>waitFor</code> additionally use
+the engine’s timer functions.</p>
+<p><code>getTestContext()</code> tracks synchronous callbacks. Component engines cannot propagate
+implicit test context through <code>await</code>; use the explicit <code>t.test()</code> and <code>t</code> hook
+methods after asynchronous boundaries. A global test/hook registration while an
+async body is pending throws with that guidance. Async suite declarations and
+<code>concurrency: true</code> or numbers greater than one are unsupported. File paths and
+worker IDs are undefined; attempts are zero. The adapter does not intercept
+unhandled rejections, uncaught exceptions, process signals, or test tracing events.</p>
+<h2 id="mocks-snapshots-and-reporters"><a class="header" href="#mocks-snapshots-and-reporters">Mocks, snapshots and reporters</a></h2>
+<p>Each test owns a mock tracker that resets after cleanup hooks. Standalone <code>mock</code>
+has explicit <code>reset</code> and <code>restoreAll</code> methods. Mock calls retain arguments,
+receivers, results, errors and constructor targets. Property mocks retain access
+history and one-use replacements. Symbol methods restore correctly, fixing the
+pinned upstream implementation’s string-only restoration check.</p>
+<p><code>run()</code> (file discovery, watch mode, isolation and coverage), module loader mocks,
+native timer mocking, and snapshot APIs throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>
+without invoking supplied callbacks or reading their options. The deprecated
+array form of <code>mock.timers.enable()</code> throws
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>. These APIs cannot be implemented by
+passing guest closures through a host capability.</p>
+<p><code>dot</code>, <code>tap</code> and <code>junit</code> consume event iterables. <code>spec</code> and <code>lcov</code> are callable
+and constructible jco-std stream transforms. Reports use no ANSI colors or host
+terminal discovery; dot wraps at 20 columns and JUnit leaves hostname empty.
+TAP error details and human-readable coverage tables use portable formatting and
+omit engine stack frames. LCOV can format supplied coverage events even though
+the component runner cannot collect V8 coverage. Importing reporters requires no
+filesystem or process provider.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodetimers"><a class="header" href="#nodetimers"><code>node:timers</code></a></h1>
 <div class="table-wrapper">
