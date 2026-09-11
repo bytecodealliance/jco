@@ -1,6 +1,7 @@
 minimumReleaseAge: 10080
 blockExoticSubdeps: true
 allowBuilds:
+  '@bufbuild/buf': true
   esbuild: true
   puppeteer: true
 
@@ -27,6 +28,7 @@ packages:
   - examples/components/native-messaging
   - examples/components/node-mcp-server
   - examples/components/node-compat
+  - examples/components/node-grpc-server
   - examples/components/nodejs-platform
   - examples/components/node-fetch
   - examples/components/string-reverse

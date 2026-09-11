@@ -1,0 +1,11 @@
+package example:node-grpc-server;
+
+world component {
+    import jco:node/http2@0.1.0;
+
+    export jco:node/http2-callbacks@0.1.0;
+
+    export start: func(port: u16) -> u16;
+
+    export stop: func();
+}

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package example.greeter.v1;
+
+// GreeterService demonstrates a unary gRPC call with a portable Node.js server.
+service GreeterService {
+  // Greet returns a greeting, rejecting an empty name.
+  rpc Greet(GreetRequest) returns (GreetResponse);
+}
+
+message GreetRequest {
+  string name = 1;
+}
+
+message GreetResponse {
+  string message = 1;
+}
