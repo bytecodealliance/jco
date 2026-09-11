@@ -365,7 +365,12 @@ class NodeHttp2Server {
           remoteAddress: session?.socket.remoteAddress,
           remotePort: session?.socket.remotePort,
         });
-        stream.respond(headerObject(result.headers));
+        const trailers = result.trailers ?? [];
+
+        stream.respond(headerObject(result.headers), { waitForTrailers: trailers.length > 0 });
+        if (trailers.length > 0) {
+          stream.once("wantTrailers", () => stream.sendTrailers(headerObject(trailers)));
+        }
         stream.end(result.body);
       } catch (caught) {
         const value =

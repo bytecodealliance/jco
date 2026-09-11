@@ -33,9 +33,17 @@ async function nativeRequest(authority: string, secure = false): Promise<string>
   return new Promise((resolve, reject) => {
     const stream = session.request({ ":method": "POST", ":path": "/host-server" });
     const chunks: Uint8Array[] = [];
+    let trailers: nodeHttp2.IncomingHttpHeaders | undefined;
+
+    stream.once("trailers", (headers) => {
+      trailers = headers;
+    });
     stream.on("data", (chunk: Uint8Array) => chunks.push(chunk));
     stream.once("error", reject);
-    stream.once("end", () => resolve(chunks.map((chunk) => decoder.decode(chunk)).join("")));
+    stream.once("end", () => {
+      expect(trailers?.["grpc-status"]).toBe("0");
+      resolve(chunks.map((chunk) => decoder.decode(chunk)).join(""));
+    });
     stream.end("request");
   });
 }
@@ -158,6 +166,7 @@ describe("Node HTTP/2 host provider", () => {
           { name: ":status", value: encoder.encode("202") },
           { name: "x-path", value: stream.headers.find(({ name }) => name === ":path")!.value },
         ],
+        trailers: [{ name: "grpc-status", value: encoder.encode("0") }],
         body: encoder.encode(`callback:${decoder.decode(stream.body)}`),
       }),
       [Symbol.dispose]: vi.fn(),

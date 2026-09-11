@@ -1,4 +1,4 @@
-import { invalidArgType } from "./errors.js";
+import { codedError, invalidArgType } from "./errors.js";
 import type { Http2Headers, Http2HeaderValue, HttpHeaderField } from "./types.js";
 
 const PSEUDO_HEADERS = new Set([
@@ -81,4 +81,37 @@ export function fieldsToHeaders(fields: readonly HttpHeaderField[]): {
     }
   }
   return { headers, rawHeaders };
+}
+
+/** Validate trailers before they reach a host or are encoded as HTTP/2 frames. */
+export function trailersToFields(headers: Http2Headers): HttpHeaderField[] {
+  if (typeof headers !== "object" || headers === null || Array.isArray(headers)) {
+    throw invalidArgType("headers", "object", headers);
+  }
+
+  const fields = headersToFields(headers);
+
+  for (const { name } of fields) {
+    if (name.startsWith(":")) {
+      throw codedError(
+        "TypeError",
+        "ERR_HTTP2_INVALID_PSEUDOHEADER",
+        `"${name}" is an invalid pseudoheader or is used incorrectly`,
+      );
+    }
+
+    if (
+      ["connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"].includes(
+        name,
+      )
+    ) {
+      throw codedError(
+        "TypeError",
+        "ERR_HTTP2_INVALID_CONNECTION_HEADERS",
+        "HTTP/1 Connection specific headers are forbidden: " + name,
+      );
+    }
+  }
+
+  return fields;
 }

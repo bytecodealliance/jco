@@ -5,12 +5,13 @@ import { OutgoingMessage } from "../http/outgoing-message.js";
 import type { HttpHeaderValue, HttpHeaders } from "../http/types.js";
 import { constants } from "./constants.js";
 import { codedError, deprecated, invalidArgType, unsupported } from "./errors.js";
-import { fieldsToHeaders } from "./headers.js";
+import { fieldsToHeaders, trailersToFields } from "./headers.js";
 import { validateSettings } from "./settings.js";
 import { ServerHttp2Stream } from "./stream.js";
 import type {
   Http2Implementation,
   Http2IncomingStreamData,
+  Http2Headers,
   Http2ServerAddress,
   Http2ServerImplementation,
   Http2ServerOptions,
@@ -183,6 +184,8 @@ export class Http2ServerResponse extends OutgoingMessage {
   statusCode = 200;
   statusMessage = "";
 
+  readonly #trailers: Http2Headers = Object.create(null);
+
   constructor(request: Http2ServerRequest) {
     super();
     this.req = request;
@@ -252,15 +255,45 @@ export class Http2ServerResponse extends OutgoingMessage {
     );
   }
 
-  override addTrailers(_headers: HttpHeaders): never {
-    return unsupported(
-      "http2.Http2ServerResponse.addTrailers",
-      "trailers cannot cross the buffered response boundary",
-    );
+  setTrailer(name: string, value: HttpHeaderValue): void {
+    if (typeof name !== "string") {
+      throw invalidArgType("name", "string", name);
+    }
+
+    const normalized = name.trim().toLowerCase();
+
+    if ([":status", ":method", ":path", ":authority", ":scheme"].includes(normalized)) {
+      throw codedError(
+        "TypeError",
+        "ERR_HTTP2_PSEUDOHEADER_NOT_ALLOWED",
+        "Cannot set HTTP/2 pseudo-headers",
+      );
+    }
+
+    if (value === undefined || value === null) {
+      throw codedError(
+        "TypeError",
+        "ERR_HTTP2_INVALID_HEADER_VALUE",
+        `Invalid value "${value}" for header "${normalized}"`,
+      );
+    }
+
+    trailersToFields({ [normalized]: value });
+    this.#trailers[normalized] = value;
+  }
+
+  override addTrailers(headers: HttpHeaders): void {
+    for (const [name, value] of Object.entries(headers)) {
+      this.setTrailer(name, value as HttpHeaderValue);
+    }
   }
 
   override _finalize(body: Uint8Array): undefined {
-    this.stream.respond({ ...this._headers.object(), ":status": this.statusCode });
+    this.stream.once("wantTrailers", () => this.stream.sendTrailers(this.#trailers));
+    this.stream.respond(
+      { ...this._headers.object(), ":status": this.statusCode },
+      { waitForTrailers: true },
+    );
     this.stream.end(body);
     return undefined;
   }

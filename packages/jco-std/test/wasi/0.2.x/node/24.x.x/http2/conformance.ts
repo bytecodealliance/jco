@@ -1,3 +1,5 @@
+import { expect } from "vitest";
+
 import * as denyHost from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2-host.js";
 import { createDirectHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/direct/index.js";
 import { createWasiHttpHttp2Implementation } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/impl/wasi-http/index.js";
@@ -19,6 +21,7 @@ import type {
   DirectHttp2Settings,
   DirectHttp2StreamListener,
   Http2IncomingStreamData,
+  Http2OutgoingResponseData,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http2/types.js";
 import { http2ImplementationConformance } from "./helpers/conformance.js";
 
@@ -205,21 +208,40 @@ function socketsHarness() {
       });
       const decoder = new HpackDecoder();
       let headers: Http2IncomingStreamData["headers"] = [];
+      let trailers: Http2IncomingStreamData["headers"] = [];
+      let receivedHeaders = false;
+      let ended = false;
       const body: Uint8Array[] = [];
       for (;;) {
+        let frame;
+
         try {
-          const frame = reader.readFrame();
-          if (frame.type === FRAME.headers) {
-            headers = decoder.decode(frame.payload);
-          }
-          if (frame.type === FRAME.data) {
-            body.push(frame.payload);
-          }
+          frame = reader.readFrame();
         } catch {
           break;
         }
+        if (frame.type === FRAME.headers) {
+          expect(ended).toBe(false);
+          if (receivedHeaders) {
+            trailers = decoder.decode(frame.payload);
+          } else {
+            headers = decoder.decode(frame.payload);
+            receivedHeaders = true;
+          }
+        }
+        if (frame.type === FRAME.data) {
+          expect(ended).toBe(false);
+          body.push(frame.payload);
+        }
+        if (
+          (frame.type === FRAME.headers || frame.type === FRAME.data) &&
+          (frame.flags & FLAG.endStream) !== 0
+        ) {
+          ended = true;
+        }
       }
-      return { headers, body: concat(body) };
+      expect(ended).toBe(true);
+      return { headers, trailers, body: concat(body) };
     },
   };
 }

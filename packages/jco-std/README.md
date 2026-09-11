@@ -838,6 +838,17 @@ let a real Node host call back into the component.
 > The direct provider buffers HTTP bodies; socket objects, priority, server push, and
 > low-level flow-control access are explicitly unsupported.
 
+Response trailers are supported by `addTrailers()` / `setTrailer()` on the
+compatibility response and by `sendTrailers()` after a server stream's
+`wantTrailers` event. Both direct and WASI sockets providers send them after
+the body. Request trailers and incremental response streaming remain unsupported.
+The [Node gRPC example](../../examples/components/node-grpc-server) uses this
+support for the same server source in Node.js and in a WebAssembly component.
+
+The callback WIT `outgoing-response` record includes a `trailers` list. Refresh
+checked-in `http2.wit` dependencies and custom callback providers together;
+Jco only installs missing WIT files.
+
 Jco re-bundles a small entry wrapper so the callback implementation is present on
 the final component export.
 

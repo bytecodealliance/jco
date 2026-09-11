@@ -322,11 +322,13 @@ class Http2Server implements Http2ServerImplementation {
     response: Http2OutgoingResponseData,
   ): void {
     const maximumFrameSize = flow.remoteSettings.maxFrameSize ?? DEFAULT_FRAME_SIZE;
+    const trailers = response.trailers ?? [];
+
     writeHeaders(
       connection.output,
       streamId,
       response.headers,
-      response.body.byteLength === 0,
+      response.body.byteLength === 0 && trailers.length === 0,
       maximumFrameSize,
     );
     const state = streams.get(streamId);
@@ -367,13 +369,16 @@ class Http2Server implements Http2ServerImplementation {
       const last = offset + length === response.body.byteLength;
       write(connection.output, {
         type: FRAME.data,
-        flags: last ? FLAG.endStream : 0,
+        flags: last && trailers.length === 0 ? FLAG.endStream : 0,
         streamId,
         payload: response.body.slice(offset, offset + length),
       });
       offset += length;
       flow.connectionWindow -= length;
       state.sendWindow -= length;
+    }
+    if (trailers.length > 0) {
+      writeHeaders(connection.output, streamId, trailers, true, maximumFrameSize);
     }
   }
 
