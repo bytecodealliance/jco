@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8b957c64.js";
+            window.path_to_searchindex_js = "searchindex-f6fe495f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d676c340.js"></script>
+        <script src="toc-a282f97b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2124,7 +2124,6 @@ the module or upstream project.</p>
 </thead>
 <tbody>
 <tr><td><code>node:trace_events</code></td><td>The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.</td></tr>
-<tr><td><code>node:url</code></td><td>There is substantial Node-derived code, but its eager <code>node:path</code> dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy.</td></tr>
 </tbody>
 </table>
 </div>
@@ -2226,6 +2225,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodetest"><code>node:test</code></a>, <a href="#nodetest"><code>node:test/reporters</code></a></td><td>Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine <code>AbortController</code>; see the API page for engine limits.</td></tr>
 <tr><td><a href="#nodetimers"><code>node:timers</code></a>, <a href="#nodetimers"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
+<tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3931,6 +3931,72 @@ and writes through <code>console.log</code>; it is not used.</p>
 </tbody>
 </table>
 </div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeurl"><a class="header" href="#nodeurl"><code>node:url</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:url</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/url</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:url</code> supports URL construction and mutation, live <code>URLSearchParams</code>,
+<code>URLPattern</code>, internationalized domains, file URL conversions, formatting, and
+HTTP request options. The module and global <code>URL</code>/<code>URLSearchParams</code> constructors
+share identity. Ordinary application imports work with <code>jco componentize --bundle</code>
+on QuickJS and StarlingMonkey:</p>
+<pre><code class="language-js">import { URL, URLPattern, pathToFileURL, fileURLToPathBuffer } from 'node:url';
+
+const endpoint = new URL('../items', 'https://example.com/api/');
+endpoint.searchParams.append('tag', 'two words');
+const route = new URLPattern({ pathname: '/items/:id' });
+const file = pathToFileURL('/data/a b.txt');
+const bytes = fileURLToPathBuffer('file:///data/%FF');
+</code></pre>
+<h2 id="file-paths-and-capabilities"><a class="header" href="#file-paths-and-capabilities">File paths and capabilities</a></h2>
+<p>URL parsing, domain conversion, formatting, HTTP options and absolute file paths
+need no WIT imports. Relative <code>pathToFileURL()</code> paths use the selected world’s
+<code>wasi:cli/environment@0.2.x</code> interface lazily. Missing or ambiguous environment
+imports produce an explicit error when cwd resolution is needed; importing the
+module and using its pure operations still works.</p>
+<p>The default path convention is POSIX. <code>{ windows: true }</code> enables drive and UNC
+paths on either backend. <code>fileURLToPathBuffer()</code> returns the same Buffer type as
+<code>node:buffer</code>, preserving raw bytes and malformed percent escapes. Unlike the
+string conversion, Node 24’s Buffer conversion permits encoded slash bytes.</p>
+<h2 id="compatibility-target-and-implementation"><a class="header" href="#compatibility-target-and-implementation">Compatibility target and implementation</a></h2>
+<p>The target is Node <strong>v24.20.0</strong>, commit
+<code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>. The portable helpers are adapted from
+Node’s MIT-licensed <code>lib/url.js</code> and <code>lib/internal/url.js</code>. The WHATWG core is
+<code>whatwg-url@14.2.0</code>, with <code>tr46@5.1.1</code>, <code>webidl-conversions@7.0.0</code>, and
+<code>punycode@2.3.1</code>; pattern matching uses <code>urlpattern-polyfill@10.1.0</code>.</p>
+<p>Jco adds Node’s constructor coercion, error codes, legacy object formatting, and
+lazy path providers. Its UTF-8 adapter handles malformed sequences consistently
+across engines; the decoder is adapted from Apache-2.0-licensed
+<code>text-decoder@1.2.7</code>. StarlingMonkey’s native URL host parser supplies IDNA
+normalization because that engine lacks <code>String.normalize()</code>. At bundle time,
+<code>regexpu-core@6.4.0</code> expands URLPattern’s two Unicode identifier expressions for
+StarlingMonkey. Only the exact audited dependency files receive these adapters.</p>
+<p>The installed <code>unenv@2.0.0-rc.24</code> URL implementation was not admitted: it lacks
+<code>URLPattern</code> and <code>fileURLToPathBuffer</code>, uses Punycode without domain validation,
+and differs in Windows paths, Unicode formatting, and absent HTTP option fields.
+The new implementation continues to share Jco’s audited Buffer and querystring
+cores. Applications can mix ordinary <code>node:</code> imports with direct jco-std adapters;
+the latter expose explicit factories for callers supplying their own providers.</p>
+<h2 id="intentional-differences"><a class="header" href="#intentional-differences">Intentional differences</a></h2>
+<p>Deprecated string parsing is refused immediately with
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>: <code>parse()</code>, <code>resolve()</code>,
+<code>resolveObject()</code>, <code>format(string)</code>, and the corresponding legacy parsing methods.
+These errors occur before argument coercion or callbacks. Use <code>new URL(input, base)</code>
+or <code>URL.parse(input, base)</code>. Legacy <code>Url</code> construction, object formatting,
+<code>parseHost()</code>, and <code>Url.prototype.resolveObject(object)</code> remain functional.</p>
+<p><code>URL.createObjectURL()</code> and <code>URL.revokeObjectURL()</code> throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>; Jco does not provide Node’s thread-local Blob URL
+registry. Invalid Punycode labels can be rejected more strictly by the WHATWG
+fallback than by Node’s Ada parser. Engine-specific inspection and stack formatting
+are not reproduced. Errors mentioning the file host platform use <code>posix</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
