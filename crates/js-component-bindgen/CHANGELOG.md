@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.10.0] - 2026-09-11
+
+### 🚀 Features
+
+- _(bindgen)_ add opt-in dealloc for owned abi buffers by @andreiltd in #2105
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ isolate resource destructor task contexts by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(bindgen)_ require a fresh task for resource destructors by @vados-cosmonic
+
+
+
+
 ## [2.9.0] - 2026-09-06
 
 ### 🚀 Features
