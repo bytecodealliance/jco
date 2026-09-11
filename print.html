@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f3f2975a.js";
+            window.path_to_searchindex_js = "searchindex-35c53507.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b969895d.js"></script>
+        <script src="toc-73b398d4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2072,7 +2072,88 @@ as <code>buffer</code>, <code>path</code>, and <code>querystring</code> are not 
 <p>They are resolved as separate parts of the same bundle, not selected as alternative
 componentization modes. For example, a component can use jco-std’s Hono adapter
 while its application code imports <code>node:assert</code> and <code>node:buffer</code>.</p>
-<h2 id="currently-supported-modules"><a class="header" href="#currently-supported-modules">Currently supported modules</a></h2>
+<h2 id="supported-modules"><a class="header" href="#supported-modules">Supported modules</a></h2>
+<p>Browse the <a href="#supported-modules-1">supported modules</a> for
+API-specific examples, capabilities, and compatibility limits. Each API has its
+own page, with related submodules grouped together.</p>
+<h2 id="how-jco-evaluates-unenv-modules"><a class="header" href="#how-jco-evaluates-unenv-modules">How Jco evaluates unenv modules</a></h2>
+<h3 id="different-compatibility-goals"><a class="header" href="#different-compatibility-goals">Different compatibility goals</a></h3>
+<p><code>unenv</code> provides a valuable cross-runtime foundation used by browsers, edge
+workers, server frameworks, and other non-Node environments. Its scope is broader
+than Jco’s: for many consumers, preserving an import and providing a conservative
+fallback or no-op is preferable to making a bundle impossible.</p>
+<p>A WebAssembly component has a different contract: Jco must know whether an API is
+algorithmic, backed by a declared WASI capability, dependent on missing Node
+internals, or intentionally mocked.</p>
+<p>Consequently, an unenv compatibility marker or alias is a starting point for
+review rather than an automatic promise of full Node behavior.</p>
+<h3 id="audit-criteria"><a class="header" href="#audit-criteria">Audit criteria</a></h3>
+<p>For each candidate, Jco checks:</p>
+<ul>
+<li>Node 24 export names, aliases, descriptors, types, and deprecations;</li>
+<li>transitive imports and assumptions about <code>process</code>, globals, the event loop, or
+the host platform;</li>
+<li>placeholders, mocks, no-ops, and <code>notImplemented</code> paths;</li>
+<li>differential behavior against Node 24; and</li>
+<li>execution through an actual guest component, not only source inspection or
+generated-bundle string checks.</li>
+</ul>
+<h3 id="upstream-improvements"><a class="header" href="#upstream-improvements">Upstream improvements</a></h3>
+<p>General correctness improvements should be contributed upstream when practical.
+Until an improvement is in the pinned unenv release and passes Jco’s guest tests,
+Jco keeps a stronger local implementation or leaves the module disabled.</p>
+<h2 id="reviewed-modules-that-are-not-enabled"><a class="header" href="#reviewed-modules-that-are-not-enabled">Reviewed modules that are not enabled</a></h2>
+<p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco exposes
+a reviewed subset through Jco implementations and audited unenv cores. <code>node:ffi</code>
+is not among them at all – it is a Node 26 module, newer than the release unenv
+targets. The other aliases were reviewed but are not automatically resolved.</p>
+<p>The following grouping describes the main blocker, not a permanent judgment about
+the module or upstream project.</p>
+<h3 id="more-semantic-or-dependency-work-needed"><a class="header" href="#more-semantic-or-dependency-work-needed">More semantic or dependency work needed</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:trace_events</code></td><td>The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.</td></tr>
+<tr><td><code>node:url</code></td><td>There is substantial Node-derived code, but its eager <code>node:path</code> dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="host-backed-or-broad-subsystems"><a class="header" href="#host-backed-or-broad-subsystems">Host-backed or broad subsystems</a></h3>
+<p>These modules contain useful portable pieces, but their complete public surfaces
+also require operating-system access, Node internals, an event loop, or a larger
+set of coordinated shims:</p>
+<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
+<code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
+<code>node:stream/promises</code>, <code>node:stream/web</code>,
+<code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
+<code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
+<h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
+<p>This group is not all-or-nothing. A future implementation can combine portable
+upstream algorithms with explicit host capabilities, just as Jco’s path
+implementation combines portable path logic with a WASI environment provider.</p>
+<h3 id="legacy-or-deprecated-modules"><a class="header" href="#legacy-or-deprecated-modules">Legacy or deprecated modules</a></h3>
+<p><code>node:constants</code>, <code>node:punycode</code>, and <code>node:sys</code> are legacy or deprecated
+surfaces. Jco does not enable their functional fallbacks by default. When a
+deprecated API is added for import compatibility, Jco’s policy is to expose an
+immediate, explicit unsupported stub rather than execute the deprecated API.</p>
+<p><code>node:domain</code> is the worked example of that policy: it resolves, matches Node’s
+module shape, and throws from every entry point. See <a href="#nodedomain"><code>node:domain</code></a>.</p>
+<h2 id="what-happens-for-an-unsupported-import"><a class="header" href="#what-happens-for-an-unsupported-import">What happens for an unsupported import</a></h2>
+<p>An unsupported <code>node:</code> import is left unresolved during bundling. This makes the
+missing compatibility visible instead of silently substituting a mock.</p>
+<p>An explicit unsupported function inside an admitted module can be imported,
+but calling that particular function throws a stable Jco error.</p>
+<h3 id="expanding-support"><a class="header" href="#expanding-support">Expanding support</a></h3>
+<p>This distinction lets applications use well-supported portions of modules such as
+Buffer while keeping unavailable behavior easy to diagnose.</p>
+<p>Jco has a clear path to expand support: add or connect a faithful implementation, test it
+against Node and inside both JavaScript component backends, then add the specifier
+to the audited allowlist.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="supported-modules-1"><a class="header" href="#supported-modules-1">Supported modules</a></h1>
 <p>The current compatibility target is Node.js 24.20.0. Implementations that predate
 that patch retain their pinned Node 24 provenance; <code>node:stream/iter</code> specifically
 targets the release where it was introduced. The unenv-backed modules are
@@ -2096,164 +2177,64 @@ entry points were versioned keep resolving.</p>
 <p>It is the only such alias: modules added after the split, including <code>node:assert</code>, are
 available only under a versioned entry point.</p>
 </blockquote>
+<p>Each API page describes its implementation, host capabilities, examples, and
+compatibility limits. Related submodules share their parent API page. See the
+<a href="#nodejs-built-in-compatibility">compatibility overview</a> for setup and bundling.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Imports</th><th>Implementation</th><th>Notes</th></tr>
+<tr><th>API</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
-<tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
-<tr><td><code>node:perf_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks</code></td><td>Portable timing and observers; native telemetry throws. Runtime requirements are described below.</td></tr>
-<tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/readline</code> and <code>/readline/promises</code></td><td>Node 24.20 line parsing, questions, terminal editing and cursor actions over supplied streams. No WIT capability.</td></tr>
-<tr><td><code>node:repl</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/repl</code></td><td>Node 24.20 REPL over the readline port and supplied streams; <code>useGlobal: true</code> only, bundles acorn – see below. No WIT capability.</td></tr>
-<tr><td><code>node:timers</code>, <code>node:timers/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers</code> and <code>/timers/promises</code></td><td>Node 24 timer handles and promise timers over engine task scheduling; see runtime limits below.</td></tr>
-<tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
-<tr><td><code>node:domain</code></td><td><em>(refused)</em></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
-<tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused – see below.</td></tr>
-<tr><td><code>node:module</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module</code></td><td>Classification, source maps and <code>require.resolve</code> are exact. Everything that <strong>loads</strong> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> – see below. Requires no WIT capability.</td></tr>
-<tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store – see below.</td></tr>
-<tr><td><code>node:diagnostics_channel</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel</code></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
-<tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
-<tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td><td>Primary/worker control over an explicit host capability. Partly unsupported – see below.</td></tr>
-<tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
-<tr><td><code>node:dns</code>, <code>node:dns/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns</code></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
-<tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
-<tr><td><code>node:http</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http</code></td><td>Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation – see below. Servers need <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
-<tr><td><code>node:https</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https</code></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses the <code>direct</code> host or an explicit <code>wasi:tls</code> provider – see below.</td></tr>
-<tr><td><code>node:net</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/net/core</code></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported – see below.</td></tr>
-<tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface – see below.</td></tr>
-<tr><td><code>node:process</code></td><td>Jco typed facade and explicit Node passthrough</td><td>Host process state and operations over <code>jco:node/process@0.1.0</code>; lazy default properties, named functions and objects. See Process restrictions below.</td></tr>
-<tr><td><code>node:sqlite</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code></td><td>SQLite over an explicit typed host capability; denied by default. Synchronous SQL callbacks are unsupported – see below.</td></tr>
-<tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider – see below.</td></tr>
-<tr><td><code>node:tty</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty</code></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default – see below.</td></tr>
-<tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
-<tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
-<tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
-<tr><td><code>node:stream</code>, <code>node:stream/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream</code> and <code>/stream/promises</code></td><td>Classic streams, pipelines, operators, disposal, and Web adapters. No WIT capability.</td></tr>
-<tr><td><code>node:stream/consumers</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers</code></td><td>Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.</td></tr>
-<tr><td><code>node:stream/iter</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter</code></td><td>Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.</td></tr>
+<tr><td><a href="#nodeassert"><code>node:assert</code></a>, <a href="#nodeassert"><code>node:assert/strict</code></a></td><td>Adapted from the MIT-licensed Node.js 24 implementation. Requires no WIT capability.</td></tr>
+<tr><td><a href="#nodeasync_hooks"><code>node:async_hooks</code></a></td><td>Synchronous scopes only. Requires no WIT capability. Asynchronous use is refused rather than silently losing the store.</td></tr>
+<tr><td><a href="#nodebuffer"><code>node:buffer</code></a></td><td>Covers the commonly used modern Buffer operations. Jco controls deprecated and runtime-dependent exports.</td></tr>
+<tr><td><a href="#nodechild_process"><code>node:child_process</code></a></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
+<tr><td><a href="#nodecluster"><code>node:cluster</code></a></td><td>Primary/worker control over an explicit host capability. Partly unsupported.</td></tr>
+<tr><td><a href="#nodeconsole"><code>node:console</code></a></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
+<tr><td><a href="#nodediagnostics_channel"><code>node:diagnostics_channel</code></a></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
+<tr><td><a href="#nodedns"><code>node:dns</code></a>, <a href="#nodedns"><code>node:dns/promises</code></a></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
+<tr><td><a href="#nodedomain"><code>node:domain</code></a></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
+<tr><td><a href="#nodeevents"><code>node:events</code></a></td><td>Covers the complete Node 24 module surface, including the <code>on()</code> async iterator and <code>EventEmitterAsyncResource</code>. Requires no WIT capability.</td></tr>
+<tr><td><a href="#nodeffi-nodejs-v26"><code>node:ffi</code></a></td><td><strong>Node 26 only.</strong> Native calls and host memory over an explicit host capability; denied by default. Callbacks and guest-buffer addresses are refused.</td></tr>
+<tr><td><a href="#nodefs"><code>node:fs</code></a>, <a href="#nodefs"><code>node:fs/promises</code></a></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
+<tr><td><a href="#nodehttp"><code>node:http</code></a></td><td>Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation. Servers need <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
+<tr><td><a href="#nodehttp2"><code>node:http2</code></a></td><td>Client and server sessions over selectable direct or WASI socket implementations.</td></tr>
+<tr><td><a href="#nodehttps"><code>node:https</code></a></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses the <code>direct</code> host or an explicit <code>wasi:tls</code> provider.</td></tr>
+<tr><td><a href="#nodeinspector"><code>node:inspector</code></a>, <a href="#nodeinspector"><code>node:inspector/promises</code></a></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface.</td></tr>
+<tr><td><a href="#nodemodule"><code>node:module</code></a></td><td>Classification, source maps and <code>require.resolve</code> are exact. Everything that <strong>loads</strong> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Requires no WIT capability.</td></tr>
+<tr><td><a href="#nodenet"><code>node:net</code></a></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported.</td></tr>
+<tr><td><a href="#nodeos"><code>node:os</code></a></td><td>Machine and user information over an explicit host capability; denied by default. Static POSIX constants resolve without a provider.</td></tr>
+<tr><td><a href="#nodepath"><code>node:path</code></a>, <a href="#nodepath"><code>node:path/posix</code></a>, <a href="#nodepath"><code>node:path/win32</code></a></td><td>Jco’s portable path implementation, connected to <code>wasi:cli/environment</code> for the guest working directory and environment.</td></tr>
+<tr><td><a href="#nodeperf_hooks"><code>node:perf_hooks</code></a></td><td>Portable timing and observers; native telemetry throws. See the API page for runtime requirements.</td></tr>
+<tr><td><a href="#nodeprocess"><code>node:process</code></a></td><td>Host process state and operations over <code>jco:node/process@0.1.0</code>; lazy default properties, named functions and objects. See the API page for process restrictions.</td></tr>
+<tr><td><a href="#nodequerystring"><code>node:querystring</code></a></td><td>Covers the complete Node 24 module surface and shares the audited Buffer core used by <code>node:buffer</code>.</td></tr>
+<tr><td><a href="#nodereadline"><code>node:readline</code></a>, <a href="#nodereadline"><code>node:readline/promises</code></a></td><td>Node 24.20 line parsing, questions, terminal editing and cursor actions over supplied streams. No WIT capability.</td></tr>
+<tr><td><a href="#noderepl"><code>node:repl</code></a></td><td>Node 24.20 REPL over the readline port and supplied streams; <code>useGlobal: true</code> only, bundles acorn. No WIT capability.</td></tr>
+<tr><td><a href="#nodesqlite"><code>node:sqlite</code></a></td><td>SQLite over an explicit typed host capability; denied by default. Synchronous SQL callbacks are unsupported.</td></tr>
+<tr><td><a href="#nodestream"><code>node:stream</code></a>, <a href="#nodestream"><code>node:stream/promises</code></a></td><td>Classic streams, pipelines, operators, disposal, and Web adapters. No WIT capability.</td></tr>
+<tr><td><a href="#nodestream"><code>node:stream/consumers</code></a></td><td>Portable Node 24 collection helpers over async iterables and engine globals. Requires no WIT capability.</td></tr>
+<tr><td><a href="#nodestream"><code>node:stream/iter</code></a></td><td>Experimental Node 24.20 iterable streams. Requires no WIT capability. Classic output adapters are explicitly unsupported.</td></tr>
+<tr><td><a href="#nodestring_decoder"><code>node:string_decoder</code></a></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
+<tr><td><a href="#nodetimers"><code>node:timers</code></a>, <a href="#nodetimers"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
+<tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="classic-streams"><a class="header" href="#classic-streams">Classic streams</a></h3>
-<p><code>node:stream</code> and <code>node:stream/promises</code> provide <code>Readable</code>, <code>Writable</code>, <code>Duplex</code>,
-<code>Transform</code>, <code>PassThrough</code>, callback/promise pipelines, <code>finished</code>, readable
-operators, cancellation, async disposal, and <code>duplexPair</code>. The implementation
-reuses <a href="https://github.com/nodejs/readable-stream/tree/v4.7.0">readable-stream 4.7.0</a>,
-with typed adaptations targeting Node 24.20, including Web Stream conversions
-and support for all typed-array views. Buffer and EventEmitter identities are
-shared with the corresponding <code>node:</code> imports. Scheduling uses guest microtasks;
-no process, filesystem, network, or other host capability is required.</p>
-<pre><code class="language-js">import { Readable, Transform, Writable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-
-await pipeline(
-    Readable.from(['hello']),
-    new Transform({ transform(chunk, encoding, done) { done(null, chunk.toString().toUpperCase()); } }),
-    new Writable({ write(chunk, encoding, done) { /* consume chunk */ done(); } }),
-);
-</code></pre>
-<p>For Web Streams, use <code>Readable.fromWeb()</code>, <code>Writable.fromWeb()</code>, or
-<code>Duplex.fromWeb()</code> before calling <code>finished</code>, <code>addAbortSignal</code>, or the
-readable/writable/error/disturbance inspection helpers. Those helpers need private
-engine state when used on Web Streams directly and throw
-<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Classic streams and public Web reader/writer
-conversions are supported. The deprecated <code>Duplex.toWeb({ type })</code> alias throws;
-use <code>readableType</code> instead.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>Classic streams are tested on QuickJS and StarlingMonkey. The current QuickJS
-backend lacks Web Stream, text-codec, and Abort globals, so Web conversions and
-operations requiring those globals need an engine that supplies them.</p>
-</blockquote>
-<h3 id="stream-consumers-and-iterable-streams"><a class="header" href="#stream-consumers-and-iterable-streams">Stream consumers and iterable streams</a></h3>
-<p><code>node:stream/consumers</code> supports Node 24 applications written before or after the
-24.20 iterable-stream addition. <code>node:stream/iter</code> exposes the experimental 24.20
-batch-oriented API. Both execute entirely inside the guest and share byte
-normalization, limits, text decoding, and collection behavior. Importing either
-specifier adds no host or WIT capability.</p>
-<p>For example, ordinary Node application source can use both entry points:</p>
-<pre><code class="language-js">import { text as consumeText } from 'node:stream/consumers';
-import { from, pull, text } from 'node:stream/iter';
-
-export async function run() {
-    const upper = (batch) =&gt;
-        batch?.map((chunk) =&gt; chunk.map((byte) =&gt; (byte &gt;= 97 &amp;&amp; byte &lt;= 122 ? byte - 32 : byte))) ?? null;
-    return {
-        consumed: await consumeText(['consumer']),
-        transformed: await text(pull(from('iterable'), upper)),
-    };
-}
-</code></pre>
-<p>Bundle that source normally; the WIT world only needs to describe the component’s
-own imports and exports:</p>
-<pre><code class="language-console">jco componentize app.js --bundle --backend starlingmonkey -w app.wit -o app.wasm
-</code></pre>
-<p>The implementation uses engine-provided iterable, typed-array, Blob, text-codec,
-and abort globals. <code>fromReadable()</code> and <code>fromWritable()</code> work with duck-typed
-classic streams. The experimental <code>toReadable()</code>, <code>toReadableSync()</code>, and
-<code>toWritable()</code> adapters are not yet connected to the classic implementation.
-They throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> without inspecting their arguments;
-use the classic constructors directly.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>Node marks <code>node:stream/iter</code> experimental. Its Jco implementation is likewise
-experimental and may change incompatibly without a semver-major release as the
-upstream Node 24 API evolves.</p>
-</blockquote>
-<h3 id="globals"><a class="header" href="#globals">Globals</a></h3>
-<p>Node’s <a href="https://nodejs.org/docs/latest-v24.x/api/globals.html">Globals API</a> is a
-catalog of runtime bindings, not a <code>node:globals</code> module. Jco therefore does not
-resolve that specifier. Bundled code can use <code>Buffer</code> without importing
-<code>node:buffer</code>; Rolldown injects Jco’s existing audited Buffer adapter only when a
-free <code>Buffer</code> identifier is referenced. A source graph that never uses it pays no
-bundle-size or initialization cost.</p>
-<p>The component engine supplies the portable Web globals shared with Node. With
-ComponentizeJS 0.22.0’s pinned StarlingMonkey runtime, this includes:</p>
-<ul>
-<li><code>AbortController</code>, <code>AbortSignal</code>, <code>atob</code>, <code>btoa</code>, <code>Blob</code>, and <code>File</code>;</li>
-<li><code>ByteLengthQueuingStrategy</code>, <code>CountQueuingStrategy</code>, <code>ReadableStream</code> and its
-exposed reader/controller classes, <code>WritableStream</code>, <code>TransformStream</code>,
-<code>CompressionStream</code>, and <code>DecompressionStream</code>;</li>
-<li><code>console</code>, <code>Crypto</code>, <code>CryptoKey</code>, <code>SubtleCrypto</code>, <code>crypto</code>, <code>CustomEvent</code>,
-<code>DOMException</code>, <code>Event</code>, and <code>EventTarget</code>;</li>
-<li><code>fetch</code>, <code>FormData</code>, <code>Headers</code>, <code>Request</code>, and <code>Response</code>;</li>
-<li><code>Performance</code>, <code>performance</code>, <code>queueMicrotask</code>, timeout/interval functions,
-<code>structuredClone</code>, <code>TextEncoder</code>, <code>TextDecoder</code>, <code>URL</code>, and <code>URLSearchParams</code>.</li>
-</ul>
-<p>When bundled source references <code>AbortController</code> or <code>AbortSignal</code>, Jco loads a
-compatibility adapter for the legacy StarlingMonkey abort implementation. It
-preserves the native constructors and signal objects while correcting <code>any()</code>’s
-array handling, default reason identity, and <code>throwIfAborted()</code>. The adapter
-detects the legacy calling convention and leaves conforming engines untouched.</p>
-<p>The current embedded runtime does <strong>not</strong> expose a guest <code>WebAssembly</code> API.
-Running the component in a Wasm host does not give its JavaScript code the ability
-to compile or instantiate another Wasm module. Guest-side Wasm execution may be
-supported in the future; the globals test currently asserts that this API is
-absent and should gain execution coverage when the engine provides it.</p>
-<p>Some of these retain StarlingMonkey’s existing WASI feature requirements, such as
-clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
-fetches. Jco does not add a Node-specific WIT capability for globals.</p>
-<h3 id="errors-globals"><a class="header" href="#errors-globals">Errors globals</a></h3>
-<p>The Node <a href="https://nodejs.org/docs/latest-v24.x/api/errors.html">Errors API</a> is
-cross-cutting behavior rather than a <code>node:errors</code> module. Standard error
-constructors are globals, while individual Node APIs create coded and system
-errors. Jco therefore does not resolve <code>node:errors</code>; Node 24 rejects that
-specifier as well.</p>
-<p>Bundled code can use <code>Error</code>, <code>AggregateError</code>, <code>DOMException</code>, <code>EvalError</code>,
-<code>RangeError</code>, <code>ReferenceError</code>, <code>SuppressedError</code>, <code>SyntaxError</code>, <code>TypeError</code>, and
-<code>URIError</code> without an import. Rolldown injects
-<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors</code> only for constructors
-actually referenced by the source graph. A graph that uses none of them contains
-none of the adapter after bundling.</p>
-<p>The adapter preserves the guest engine’s constructor identities, supplies
-portable fallbacks for missing newer constructors and V8 Error extensions, and
-provides the common coded/system-error core used by other jco-std Node shims. No
-WIT capability is required. Error classes, codes, and documented system fields
-are compatibility targets; exact stack frames and source positions remain
-engine-specific.</p>
-<h3 id="assert"><a class="header" href="#assert">Assert</a></h3>
+<p><a href="#globals">Globals</a> and <a href="#errors">Errors</a> document runtime-wide Node.js
+APIs. They are not importable as <code>node:globals</code> or <code>node:errors</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeassert"><a class="header" href="#nodeassert"><code>node:assert</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:assert</code>, <code>node:assert/strict</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert</code></td></tr>
+</tbody>
+</table>
+</div>
 <p>Jco keeps its own assert implementation because the assertion namespace is a
 coherent system: comparison semantics, callable/default/strict identities,
 <code>AssertionError</code>, and error matching must work together (and can change across
@@ -2263,148 +2244,76 @@ cycles, Maps, Sets, typed arrays, errors, symbols, and other built-in families.
 The deprecated <code>CallTracker</code> API throws immediately. The deprecated multi-argument
 form of <code>assert.fail()</code> also throws immediately, while its current zero- and
 one-argument forms remain available.</p>
-<h3 id="path-and-wasi-capabilities"><a class="header" href="#path-and-wasi-capabilities">Path and WASI capabilities</a></h3>
-<p>Path manipulation is portable, but <code>path.resolve()</code> and related operations need a
-current working directory.</p>
-<p>Jco obtains that value through <code>wasi:cli/environment@0.2.x</code>, so the selected WIT
-world must import exactly one compatible version when it uses <code>node:path</code>:</p>
-<pre><code class="language-wit">world app {
-  import wasi:cli/environment@0.2.6;
-  // component imports and exports...
-}
-</code></pre>
-<p>Jco selects the adapter matching the version in the world. A component that only
-uses capability-free built-ins such as assert, Buffer, or querystring does not
-need this import.</p>
-<h3 id="string-decoder"><a class="header" href="#string-decoder">String decoder</a></h3>
-<p>Bundled source can use the documented Node 24 streaming decoder directly:</p>
-<pre><code class="language-js">import { Buffer } from 'node:buffer';
-import { StringDecoder } from 'node:string_decoder';
-
-const decoder = new StringDecoder('utf8');
-
-export function decode() {
-    return decoder.write(Buffer.from([0xf0, 0x9f])) + decoder.end(Buffer.from([0x8c, 0x8d]));
-}
-</code></pre>
-<p>Jco maps the import to a guest-local implementation based on Node 24.20.0. It
-retains incomplete UTF-8, UTF-16LE, base64, and base64url groups between calls,
-supports Node’s encoding aliases, and accepts strings or any <code>ArrayBufferView</code>.
-It reuses the audited Buffer core already used by <code>node:buffer</code>; it does not add a
-WIT import, callback export, host adapter, or JSPI operation.</p>
-<p>Because the adapter is selected only when bundled code resolves
-<code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
-initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
-not intercepted.</p>
-<h3 id="readline"><a class="header" href="#readline">Readline</a></h3>
-<p><code>node:readline</code> and <code>node:readline/promises</code> support callback and promise questions,
-line events, async iteration, streaming UTF-8/CRLF decoding, prompts, terminal
-editing and history, keypress events, and cursor actions. Both share a port of
-<a href="https://github.com/nodejs/node/tree/v24.20.0/lib/internal/readline">Node v24.20.0’s readline implementation</a>.</p>
-<p>Applications keep ordinary Node imports and supply readable and writable streams:</p>
-<pre><code class="language-js">import * as readline from 'node:readline/promises';
-
-export async function ask(input, output) {
-    const rl = readline.createInterface({ input, output });
-    try {
-        const answer = await rl.question('What do you think of Node.js? ');
-        output.write(`Thank you for your valuable feedback: ${answer}\n`);
-    } finally {
-        rl.close();
-    }
-}
-</code></pre>
-<p>Bundle application code with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>.
-Readline itself requires no WIT imports. The streams determine where input and
-output go. <code>node:process</code> resolves inside a component, but its <code>stdin</code>, <code>stdout</code>
-and <code>stderr</code> are host stream objects that cannot cross the component boundary and
-throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> (see <a href="#process-restrictions">Process restrictions</a>).
-The Node documentation’s literal <code>import { stdin, stdout } from 'node:process'</code>
-example therefore runs unchanged on Node but not in a component; supply streams
-from the component’s own I/O instead. The test fixture runs that literal example
-against the shim on Node, and runs the same question/answer flow with supplied
-streams in QuickJS and StarlingMonkey.</p>
-<h4 id="terminal-and-scheduling-boundaries"><a class="header" href="#terminal-and-scheduling-boundaries">Terminal and scheduling boundaries</a></h4>
-<p>Terminal streams may supply <code>setRawMode</code>, <code>columns</code>, and resize events. Terminal
-mode emits ANSI sequences without inspecting a host <code>TERM</code> variable; an application
-that wants Node’s <code>TERM=dumb</code> behaviour can read <code>process.env.TERM</code> through
-<code>node:process</code> and pass <code>terminal: false</code> itself. Ctrl+Z can be handled with a
-<code>SIGTSTP</code> listener; otherwise it throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Node
-suspends itself with <code>process.kill(process.pid, 'SIGTSTP')</code> and resumes from a
-<code>SIGCONT</code> listener; the <code>node:process</code> facade refuses signal listeners, and
-readline deliberately does not import it, so using readline never adds the
-process capability to a component.</p>
-<p>Cursor widths use Node’s non-ICU tables, with normalization where the engine
-provides it; some Unicode widths differ from ICU-enabled Node. Deferred callbacks
-and automatic cursor commits use microtasks rather than Node’s separate next-tick
-queue. Completion-error text uses portable string formatting.</p>
-<p>Timed Escape-key disambiguation requires engine timers; engines without timers
-throw an explicit <code>ERR_JCO_UNSUPPORTED_NODE_API</code> for that operation. Cancellation
-accepts supplied AbortSignals; readline does not install missing Abort globals.
-QuickJS async entry functions must be declared <code>async func</code> in WIT.</p>
-<h3 id="repl"><a class="header" href="#repl">REPL</a></h3>
-<p><code>node:repl</code> ports <a href="https://github.com/nodejs/node/blob/v24.20.0/lib/repl.js">Node v24.20.0’s REPL</a>
-on top of the readline port: <code>repl.start()</code>, <code>REPLServer</code>, the <code>.break</code>, <code>.clear</code>,
-<code>.exit</code>, <code>.help</code>, <code>.editor</code> keywords and <code>defineCommand()</code>, tab completion,
-in-memory history and reverse search, top-level <code>await</code>, recoverable multi-line
-input, <code>_</code> and <code>_error</code>, and the <code>'exit'</code> and <code>'reset'</code> events. The pinned unenv
-repl module is stubs and is not used.</p>
-<p>Applications keep the ordinary import and supply the streams:</p>
-<pre><code class="language-js">import repl from "node:repl";
-
-export function attach(input, output) {
-  const server = repl.start({ prompt: "app&gt; ", input, output, useGlobal: true });
-  server.context.app = { version: "1.0.0" };
-  server.on("exit", () =&gt; output.write("bye\n"));
-  return server;
-}
-</code></pre>
-<p>Bundle with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>. The REPL
-requires no WIT imports; <code>input</code> and <code>output</code> decide where the session goes.
-Without a <code>process</code> global they are required, since there is no stdin or stdout
-to fall back to.</p>
-<h4 id="global-scope-only"><a class="header" href="#global-scope-only">Global scope only</a></h4>
-<p>Node’s default <code>useGlobal: false</code> runs each line in a separate <code>vm</code> context, a
-second realm with its own globals. No component engine can create one, so that
-option – given explicitly or omitted – is refused at construction with
-<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. With <code>useGlobal: true</code> evaluation is an indirect
-<code>eval</code>, which is exactly <code>vm.runInThisContext</code>: <code>replServer.context</code> is
-<code>globalThis</code>, <code>.clear</code> is an alias for <code>.break</code>, and assigning to the context
-exposes values as documented. Node’s script scope keeps top-level <code>let</code>, <code>const</code>
-and <code>class</code> bindings across lines; an <code>eval</code> does not, so the REPL rewrites those
-declarations to persist them. The trade is that <code>const</code> is not enforced between
-lines and a later redeclaration is accepted – the same trade Node documents for
-lines containing <code>await</code>. <code>REPL_MODE_STRICT</code> is refused for the same reason: a
-strict-mode eval cannot bind declarations in the global scope at all.</p>
-<h4 id="why-acorn"><a class="header" href="#why-acorn">Why acorn</a></h4>
-<p>Node’s REPL vendors <a href="https://github.com/acornjs/acorn">acorn</a>; this port depends
-on the same versions from npm (<code>acorn@8.17.0</code>, <code>acorn-walk@8.3.5</code>). A parser is
-needed for what the engine cannot answer: whether a line is <em>incomplete</em> (show the
-<code>...</code> prompt) or <em>wrong</em> (print the error) – engine <code>SyntaxError</code> messages differ
-between SpiderMonkey and QuickJS and cannot drive that decision – rewriting
-top-level <code>await</code> into an async wrapper, and locating the expression to
-tab-complete. acorn also serves as the compile step Node performs with
-<code>vm.Script</code>, so syntax errors read the same on every engine. It is bundled only
-when <code>node:repl</code> is imported; a component without the REPL does not carry it.
-Bundle size grows by roughly 1.2 MB (QuickJS) to 1.4 MB (StarlingMonkey).</p>
-<h4 id="boundaries"><a class="header" href="#boundaries">Boundaries</a></h4>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeasync_hooks"><a class="header" href="#nodeasync_hooks"><code>node:async_hooks</code></a></h1>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Surface</th><th>Behavior</th></tr>
+<tr><th>Imports</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td><code>useGlobal: false</code> or omitted, <code>REPL_MODE_STRICT</code>, <code>breakEvalOnSigint</code></td><td>Refused at construction with <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Ctrl+C still arrives as a keypress and emits <code>'SIGINT'</code>.</td></tr>
-<tr><td><code>REPLServer()</code> without <code>new</code> (DEP0185)</td><td>Throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> before reading any argument.</td></tr>
-<tr><td><code>preview</code></td><td>Accepted and ignored, as in a Node built without an inspector.</td></tr>
-<tr><td><code>.save</code>, <code>.load</code>, <code>setupHistory(filePath)</code></td><td>Print Node’s own failure text (<code>Failed to save: …</code>, <code>Could not open history file</code>) and continue; a component has no filesystem unless the application supplies one.</td></tr>
-<tr><td>Core modules in the context</td><td>Not auto-loaded: <code>fs</code> is a <code>ReferenceError</code> unless the application put it on the context. <code>require</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>; <code>require.resolve</code> answers as Node does.</td></tr>
-<tr><td>Errors</td><td>Synchronous errors print as <code>Uncaught …</code> with the evaluated frames only; errors thrown later by asynchronous work are not routed back, since there is no <code>node:domain</code>.</td></tr>
-<tr><td><code>writer</code></td><td>Jco’s portable inspector shared with <code>node:console</code>: the same values as <code>util.inspect</code>, without line breaking, <code>showProxy</code>, <code>showHidden</code>, <code>getters</code> or <code>sorted</code>.</td></tr>
+<tr><td><code>node:async_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks</code></td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="child-processes-and-host-capabilities"><a class="header" href="#child-processes-and-host-capabilities">Child processes and host capabilities</a></h3>
+<p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
+nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
+was constructed in.</p>
+<p>What it cannot do is carry a store across an asynchronous boundary. <code>await</code> resolves through the
+engine’s internal <code>PerformPromiseThen</code>, which JavaScript cannot intercept – patching
+<code>Promise.prototype.then</code> does not see it – and StarlingMonkey exposes no TC39 <code>AsyncContext</code> to
+carry the value instead.</p>
+<p>Rather than return an empty store after an <code>await</code>, Jco refuses at the call site: any callback
+given to <code>run</code>, <code>exit</code>, <code>withScope</code> or a snapshot that returns a promise throws
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>, naming the reason. A failure at the call site is easier to act on
+than a store that silently disappears somewhere else.</p>
+<p><code>createHook</code>, <code>executionAsyncId</code>, <code>triggerAsyncId</code> and <code>executionAsyncResource</code> describe the async
+resource graph and always throw: nothing tracks that graph in a component.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodebuffer"><a class="header" href="#nodebuffer"><code>node:buffer</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:buffer</code></td><td>unenv’s portable Buffer core with a Jco public adapter</td></tr>
+</tbody>
+</table>
+</div>
+<p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
+<a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
+one shared <code>globalThis.Buffer</code>, and policy for exports that cannot be faithfully
+provided in the guest.</p>
+<p>Supported behavior includes common text and binary encodings, allocation and
+filling, concatenation, comparison, integer and floating-point IO, searching,
+slicing, copying, swapping, and JSON conversion. <code>atob()</code> and <code>btoa()</code> use runtime
+globals when available and portable Buffer fallbacks otherwise.</p>
+<h2 id="behavioral-limits"><a class="header" href="#behavioral-limits">Behavioral limits</a></h2>
+<p>There are intentional limits:</p>
+<ul>
+<li><code>Buffer()</code> and <code>new Buffer()</code> are deprecated in Node and throw
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>; use <code>Buffer.from()</code>,
+<code>Buffer.alloc()</code>, or <code>Buffer.allocUnsafe()</code> instead.</li>
+<li><code>SlowBuffer</code> is deprecated and throws the same error.</li>
+<li><code>isAscii</code>, <code>isUtf8</code>, <code>resolveObjectURL</code>, and <code>transcode</code> currently throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>.</li>
+<li><code>Blob</code> and <code>File</code> use engine globals when those globals exist; otherwise their
+fallback constructors throw an unsupported-API error.</li>
+<li>The current portable core does not support the <code>base64url</code> encoding.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodechild_process"><a class="header" href="#nodechild_process"><code>node:child_process</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:child_process</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process</code></td></tr>
+</tbody>
+</table>
+</div>
 <p>A WebAssembly guest cannot spawn a process itself. When bundled source imports
 <code>node:child_process</code>, Jco ensures that the selected world declares the dedicated
 interface:</p>
@@ -2437,7 +2346,18 @@ and <code>execFile</code>, <code>ChildProcess</code>, and <code>fork</code>/IPC 
 carry Node callbacks, lifecycle events, or interactive streams; those APIs stay
 explicitly unavailable until the capability grows an asynchronous resource and
 stream model.</p>
-<h3 id="clusters-and-host-capabilities"><a class="header" href="#clusters-and-host-capabilities">Clusters and host capabilities</a></h3>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodecluster"><a class="header" href="#nodecluster"><code>node:cluster</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:cluster</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster</code></td></tr>
+</tbody>
+</table>
+</div>
 <p>A guest has no process model, so <code>node:cluster</code> follows the same pattern as
 <code>node:child_process</code>. When bundled source imports it, Jco ensures the selected world
 declares the interface, editing the <code>.wit</code> file in place, installing the definition under
@@ -2482,7 +2402,18 @@ silently altered.</li>
 </div>
 <p><code>cluster.isMaster</code> and <code>cluster.setupMaster()</code> are deprecated in Node, so they throw
 <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> and point at <code>isPrimary</code>/<code>setupPrimary</code>.</p>
-<h3 id="console-and-host-capabilities"><a class="header" href="#console-and-host-capabilities">Console and host capabilities</a></h3>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeconsole"><a class="header" href="#nodeconsole"><code>node:console</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:console</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console</code></td></tr>
+</tbody>
+</table>
+</div>
 <p>Writing to a console is a host capability, not a portable one: a component has no
 stdout of its own. <code>node:console</code> therefore resolves against
 <code>jco:node/console@0.1.0</code>, which an application must provide.</p>
@@ -2500,190 +2431,151 @@ status and color depth:</p>
 <p>Formatting is done in the guest – <code>Console</code>, the <code>log</code>/<code>warn</code>/<code>error</code> family,
 <code>group</code> indentation, <code>count</code>, <code>time</code>, <code>table</code> and <code>dir</code> all run guest-side, and only
 the finished string crosses the boundary.</p>
-<h3 id="filesystem-and-host-capabilities"><a class="header" href="#filesystem-and-host-capabilities">Filesystem and host capabilities</a></h3>
-<p><code>node:fs</code> and <code>node:fs/promises</code> use one <code>jco:node/fs@0.1.0</code> host capability.
-When either specifier occurs in bundled source, Jco adds a missing import to the
-selected world, installs <code>fs.wit</code> under <code>deps/jco-node-0.1.0</code>, and prints a CLI
-warning to alert to the fact that a WIT dependency has been added.</p>
-<p>The default filesystem host provider always throws <code>ERR_JCO_FS_ADAPTER_REQUIRED</code>.
-To use the passthrough NodeJS host provider you can map it in:</p>
-<pre><code class="language-console">jco transpile component.wasm \
-  --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
-</code></pre>
-<p>The resulting call path for filesystem function is:</p>
-<ol>
-<li>guest <code>node:fs</code></li>
-<li>WIT capability</li>
-<li>host adapter</li>
-<li>NodeJS builtins</li>
-</ol>
-<p>The Node provider delegates to Node 24’s synchronous operations; guest callback APIs
-queue their callbacks on a microtask, and promise APIs share the same descriptor
-state through promise <code>FileHandle</code>s.</p>
-<p>Common file and directory operations, metadata, directory entries, scalar and
-vector descriptor I/O, and their callback/promise facades are supported.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>APIs whose contract requires long-lived streams or event sources are not yet supported
-– including <code>ReadStream</code>, <code>WriteStream</code>, <code>Utf8Stream</code>, <code>watch</code>, <code>watchFile</code>, and
-<code>openAsBlob</code>.</p>
-<p>These functions currently throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> because the typed WIT
-interface does not model those resources.</p>
-</blockquote>
-<h3 id="sqlite-databases"><a class="header" href="#sqlite-databases">SQLite databases</a></h3>
-<p>Application code keeps ordinary <code>node:sqlite</code> imports:</p>
-<pre><code class="language-js">import { DatabaseSync } from 'node:sqlite';
-
-const db = new DatabaseSync(':memory:');
-try {
-  db.exec('CREATE TABLE items(id INTEGER PRIMARY KEY, name TEXT)');
-  db.prepare('INSERT INTO items(name) VALUES (?)').run('example');
-  const rows = db.prepare('SELECT * FROM items').all();
-} finally {
-  db.close();
-}
-</code></pre>
-<p>When bundling this module, Jco adds <code>jco:node/sqlite@0.1.0</code> to the selected WIT
-world. WASI supplies no database API. This interface models databases, prepared
-statements, lazy cursors, sessions, and SQL tag stores as resources; SQL values,
-column metadata, and errors use typed records and variants. Providers can use
-other SQLite implementations without depending on Node objects in the guest.</p>
-<p>The default provider denies database creation, including <code>:memory:</code>, with
-<code>ERR_JCO_SQLITE_ADAPTER_REQUIRED</code>. Importing the module and reading constants need
-no database authority. Explicitly select the Node passthrough to execute SQL:</p>
-<pre><code class="language-console">jco transpile component.wasm \
-  --map 'jco:node/sqlite@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host/node'
-</code></pre>
-<p>Database, backup, attached-database, and extension paths refer to the <strong>host
-filesystem</strong>, independently of the guest’s WASI preopens. The passthrough grants
-Node’s SQLite authority; use a restricted custom provider when narrower access
-is required. Extension loading still requires the database’s <code>allowExtension</code>
-option and Node’s native checks.</p>
-<p>The compatibility target is Node <strong>24.20.0</strong>, rather than the rolling Node API
-page. Supported operations include database open/close and transactions,
-prepared statement <code>all</code>/<code>get</code>/<code>run</code>/<code>iterate</code>, named and positional parameters,
-blobs, signed 64-bit bigints, array rows, column metadata, SQL tag stores,
-sessions and plain changeset application, serialization/deserialization, limits,
-defensive mode, extension loading, and promise-based <code>backup</code>. Statements and
-sessions retain their owning database; early iterator return releases the active
-cursor. SQL execution and SQLite error fields come from the real host engine.</p>
-<p><code>DatabaseSync.function</code>, <code>aggregate</code>, and <code>setAuthorizer</code>, changeset callback
-options, and backup’s progress callback throw <code>ERR_JCO_SQLITE_CALLBACK_UNSUPPORTED</code>.
-Synchronous callbacks would need to re-enter the guest while its SQL import is
-active, which this component interface cannot support. These APIs are present
-as explicit stubs; no callback is invoked. APIs added after the pinned release
-are outside this compatibility target.</p>
-<p>Mapping a custom SQLite provider enables JSPI for the <code>backup</code> import and makes
-component exports promising; await calls into the transpiled component. The
-synchronous database tests run on both StarlingMonkey and QuickJS. Backup is
-also tested end to end on StarlingMonkey; QuickJS currently cannot lower a
-Promise returned by an exported guest function. Use StarlingMonkey for that
-asynchronous guest flow.</p>
-<p>The implementation is available directly at
-<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code>, with an injectable factory
-at <code>sqlite/core</code>, but Jco’s ordinary <code>node:</code> import handling is the recommended
-application entry point. It can be mixed with other supported Node builtins.</p>
-<h3 id="os-and-host-capabilities"><a class="header" href="#os-and-host-capabilities">OS and host capabilities</a></h3>
-<p>A WebAssembly guest has no view of the machine it runs on. When bundled source
-imports <code>node:os</code>, Jco ensures that the selected world declares the dedicated
-interface, following the same in-place WIT editing described for
-<code>node:child_process</code>:</p>
-<pre><code class="language-wit">world app {
-  import jco:node/os@0.1.0;
-  // component imports and exports...
-}
-</code></pre>
-<p>Declaring or generating the import does not grant host access: Jco’s default
-transpilation map uses a provider that fails every inspecting or mutating call
-with <code>ERR_JCO_OS_ADAPTER_REQUIRED</code>. Static POSIX values that reveal no machine
-state – <code>EOL</code>, <code>devNull</code>, and <code>constants</code> – resolve without a provider, so the
-module can be imported and used for its constants even when access is denied. An
-application must make the security decision explicitly, for example by mapping
-the Node host provider:</p>
-<pre><code class="language-console">jco transpile component.wasm \
-  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
-</code></pre>
-<p>That produces the call path guest <code>node:os</code> → WIT capability → host adapter →
-Node <code>node:os</code>.</p>
-<p>The interface supports <code>arch</code>, <code>availableParallelism</code>, <code>cpus</code>, <code>endianness</code>,
-<code>freemem</code>, <code>getPriority</code>, <code>homedir</code>, <code>hostname</code>, <code>loadavg</code>, <code>machine</code>,
-<code>networkInterfaces</code>, <code>platform</code>, <code>release</code>, <code>setPriority</code>, <code>tmpdir</code>, <code>totalmem</code>,
-<code>type</code>, <code>uptime</code>, <code>userInfo</code>, and <code>version</code>, with Node’s argument validation and
-<code>ERR_SYSTEM_ERROR</code> reconstruction for failing calls.</p>
-<h3 id="terminals-and-host-capabilities"><a class="header" href="#terminals-and-host-capabilities">Terminals and host capabilities</a></h3>
-<p>A component has no terminal of its own, and WASI 0.2 can only say whether its
-standard streams are terminals. <code>node:tty</code> therefore resolves against
-<code>jco:node/tty@0.1.0</code>, which addresses the embedding process’s descriptors as Node
-does: <code>isatty(fd)</code>, a handle per descriptor and direction, raw mode, the window
-size, blocking reads, writes, and the environment used for color detection. When
-bundled source imports <code>node:tty</code>, Jco adds the import to the selected world and
-installs <code>tty.wit</code> and the shared <code>types.wit</code> under <code>deps/jco-node-0.1.0</code>.</p>
-<p>It is <strong>denied by default</strong>: every operation, including <code>isatty()</code> on an in-range
-descriptor, throws <code>ERR_JCO_TTY_ADAPTER_REQUIRED</code> until the application maps a
-provider. jco-std ships one for Node:</p>
-<pre><code class="language-console">jco transpile component.wasm \
-  --map 'jco:node/tty@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host/node'
-</code></pre>
-<p>With it, <code>new tty.WriteStream(1)</code> is the embedding process’s standard output when
-that is a terminal, and fails with Node’s own <code>ERR_TTY_INIT_FAILED</code> (with <code>errno</code>,
-<code>syscall</code> and <code>info</code>) when it is not. <code>process.stdin</code> and <code>process.stdout</code> remain
-unsupported on the process facade, so applications construct the streams from
-descriptors explicitly. Because <code>readline</code> and the REPL default <code>terminal</code> to
-<code>output.isTTY</code>, these streams are what makes an interactive session work:</p>
-<pre><code class="language-js">import { ReadStream, WriteStream } from "node:tty";
-import repl from "node:repl";
-
-export function start() {
-  const input = new ReadStream(0);
-  const output = new WriteStream(1);
-  repl.start({ prompt: "app&gt; ", input, output, useGlobal: true });
-  input.resume();
-}
-</code></pre>
-<p>The port follows <a href="https://github.com/nodejs/node/blob/v24.20.0/lib/tty.js">Node v24.20.0’s <code>lib/tty.js</code></a>
-and <code>lib/internal/tty.js</code>. The pinned unenv tty module answers <code>isatty() === false</code>
-and writes through <code>console.log</code>; it is not used.</p>
-<h4 id="boundaries-1"><a class="header" href="#boundaries-1">Boundaries</a></h4>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodediagnostics_channel"><a class="header" href="#nodediagnostics_channel"><code>node:diagnostics_channel</code></a></h1>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Surface</th><th>Behavior</th></tr>
+<tr><th>Imports</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td>Prototype chain</td><td><code>WriteStream → Duplex → Readable → Stream → EventEmitter</code> with an internal terminal stream standing in for <code>net.Socket</code>; <code>instanceof net.Socket</code> is false without <code>wasi:sockets</code>.</td></tr>
-<tr><td>Stream sides</td><td>A <code>ReadStream</code> is not writable and a <code>WriteStream</code> is not readable; Node’s sockets open the descriptor read-write.</td></tr>
-<tr><td>Reading</td><td>Blocks the component. A flowing <code>ReadStream</code> pulls one chunk per read and emits <code>'data'</code> synchronously between pulls; <code>pause()</code> stops after the current chunk. Nothing else runs while the terminal is idle.</td></tr>
-<tr><td><code>'resize'</code></td><td>Emitted only by <code>_refreshSize()</code>; a component receives no <code>SIGWINCH</code>.</td></tr>
-<tr><td><code>getColorDepth()</code> / <code>hasColors()</code></td><td>Exact port. The environment defaults to the provider’s; the Windows branch answers the 16-color floor because the build-number probe needs <code>node:os</code>.</td></tr>
-<tr><td>Standard descriptors on the Node host</td><td>Kept open when a stream is destroyed, as Node keeps its own stdio; descriptors above 2 are closed with the stream. Raw mode is restored when the last read handle goes.</td></tr>
+<tr><td><code>node:diagnostics_channel</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel</code></td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="async-hooks-and-synchronous-scopes"><a class="header" href="#async-hooks-and-synchronous-scopes">Async hooks and synchronous scopes</a></h3>
-<p><code>AsyncLocalStorage</code> works within a synchronous scope: <code>run</code>, <code>getStore</code>, <code>exit</code>, <code>enterWith</code>,
-nesting, <code>snapshot</code> and <code>bind</code> all behave as Node does, and <code>AsyncResource</code> binds to the context it
-was constructed in.</p>
-<p>What it cannot do is carry a store across an asynchronous boundary. <code>await</code> resolves through the
-engine’s internal <code>PerformPromiseThen</code>, which JavaScript cannot intercept – patching
-<code>Promise.prototype.then</code> does not see it – and StarlingMonkey exposes no TC39 <code>AsyncContext</code> to
-carry the value instead.</p>
-<p>Rather than return an empty store after an <code>await</code>, Jco refuses at the call site: any callback
-given to <code>run</code>, <code>exit</code>, <code>withScope</code> or a snapshot that returns a promise throws
-<code>ERR_JCO_UNSUPPORTED_NODE_API</code>, naming the reason. A failure at the call site is easier to act on
-than a store that silently disappears somewhere else.</p>
-<p><code>createHook</code>, <code>executionAsyncId</code>, <code>triggerAsyncId</code> and <code>executionAsyncResource</code> describe the async
-resource graph and always throw: nothing tracks that graph in a component.</p>
-<h3 id="domains"><a class="header" href="#domains">Domains</a></h3>
+<p>Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
+are interned by name: a publisher and a subscriber that never share a reference still meet on the
+same object.</p>
+<p><code>TracingChannel</code> is implemented in full – <code>traceSync</code>, <code>tracePromise</code> and <code>traceCallback</code>, with
+the <code>start</code>/<code>end</code>/<code>asyncStart</code>/<code>asyncEnd</code>/<code>error</code> sub-channels emitted in Node’s order.</p>
+<p><code>Channel.bindStore</code> accepts anything offering <code>run(value, fn)</code>, which includes jco-std’s
+<code>AsyncLocalStorage</code>. Stores are therefore scoped synchronously: a bound store is visible while
+subscribers run and does not follow an <code>await</code>. See <a href="#nodeasync_hooks"><code>node:async_hooks</code></a> for why.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodedns"><a class="header" href="#nodedns"><code>node:dns</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:dns</code>, <code>node:dns/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:dns</code> and <code>node:dns/promises</code> share one guest implementation and the
+<code>jco:node/dns@0.1.0</code> capability. Jco adds that import and its <code>dns.wit</code>
+dependency when bundled source uses either specifier. The default provider throws
+<code>ERR_JCO_DNS_ADAPTER_REQUIRED</code>; applications opt into Node name resolution with:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
+</code></pre>
+<p>The WIT interface represents each DNS operation as a named, typed function; it
+does not tunnel requests through a serialized dispatcher. The Node provider calls
+the real asynchronous <code>node:dns/promises</code> operations directly. When an application
+supplies a DNS host map, Jco automatically enables JSPI for every function in
+<code>jco:node/dns@0.1.0</code>. The Preview 2 WIT calls therefore remain synchronous from the
+guest’s perspective without blocking Node’s event loop or creating a worker for
+each query. Because any component export may transitively call DNS, mapped
+components expose promise-returning exports that JavaScript hosts must await.
+Callback APIs retain callback delivery in the guest, and the promises subpath
+shares server and default-result-order state with the main module.</p>
+<p><code>Resolver.cancel()</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. The synchronous WIT
+boundary does not expose an outstanding c-ares request that a later guest call
+could cancel. The provider boundary otherwise remains Node-independent, leaving
+room for a future browser implementation.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodedomain"><a class="header" href="#nodedomain"><code>node:domain</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:domain</code></td><td><em>(refused)</em></td></tr>
+</tbody>
+</table>
+</div>
 <p><code>node:domain</code> is Stability 0 – deprecated in its entirety – and Jco implements none of it. Its
 purpose is routing errors across asynchronous boundaries, which a component cannot do in any case
-(see the async hooks section).</p>
+(see <a href="#nodeasync_hooks"><code>node:async_hooks</code></a>).</p>
 <p>It still resolves rather than failing as an unknown import, so the error names the reason and a way
 forward instead of reading <code>Could not resolve 'node:domain'</code>. Importing is fine; every use –
 <code>create()</code>, <code>createDomain()</code>, <code>new Domain()</code>, and reading <code>active</code> or <code>_stack</code> – throws
 <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>, pointing at <code>AsyncLocalStorage</code> for carrying context.</p>
 <p><code>active</code> and <code>_stack</code> are reachable on the default import only. An ES module binding cannot throw
 on read, so <code>import { active } from "node:domain"</code> fails at build time instead.</p>
-<h3 id="foreign-function-interface-nodejs-v26"><a class="header" href="#foreign-function-interface-nodejs-v26">Foreign function interface (NodeJS v26+)</a></h3>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="errors"><a class="header" href="#errors">Errors</a></h1>
+<p>The Node <a href="https://nodejs.org/docs/latest-v24.x/api/errors.html">Errors API</a> is
+cross-cutting behavior rather than a <code>node:errors</code> module. Standard error
+constructors are globals, while individual Node APIs create coded and system
+errors. Jco therefore does not resolve <code>node:errors</code>; Node 24 rejects that
+specifier as well.</p>
+<p>Bundled code can use <code>Error</code>, <code>AggregateError</code>, <code>DOMException</code>, <code>EvalError</code>,
+<code>RangeError</code>, <code>ReferenceError</code>, <code>SuppressedError</code>, <code>SyntaxError</code>, <code>TypeError</code>, and
+<code>URIError</code> without an import. Rolldown injects
+<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors</code> only for constructors
+actually referenced by the source graph. A graph that uses none of them contains
+none of the adapter after bundling.</p>
+<p>The adapter preserves the guest engine’s constructor identities, supplies
+portable fallbacks for missing newer constructors and V8 Error extensions, and
+provides the common coded/system-error core used by other jco-std Node shims. No
+WIT capability is required. Error classes, codes, and documented system fields
+are compatibility targets; exact stack frames and source positions remain
+engine-specific.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeevents"><a class="header" href="#nodeevents"><code>node:events</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:events</code></td><td>unenv’s EventEmitter with a Jco layer from <code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:events</code> is two pieces. The <code>EventEmitter</code> itself comes from unenv, audited against Node 24:
+<code>on</code>/<code>emit</code>, one-shot <code>once</code>, listener ordering under <code>prependListener</code>, <code>eventNames</code>,
+<code>removeAllListeners</code>, the per-emitter max-listener methods, and an unhandled <code>error</code> throwing all
+match Node, as do <code>once()</code>, <code>on()</code>’s async iterator, <code>getEventListeners</code>, <code>addAbortListener</code> and
+<code>EventEmitterAsyncResource</code>.</p>
+<p>Three module-level functions do not, and Jco implements them in jco-std rather than exporting
+something that fails when called:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Entry point</th><th>unenv</th><th>Jco</th></tr>
+</thead>
+<tbody>
+<tr><td><code>events.listenerCount(emitter, eventName)</code></td><td>throws <code>[unenv] node:events.listenerCount is not implemented yet!</code></td><td>delegates to the emitter’s own <code>listenerCount</code>, as Node does, so a subclass that overrides it is honored</td></tr>
+<tr><td><code>events.setMaxListeners(n[, ...targets])</code></td><td>throws <code>[unenv] node:events.setMaxListeners is not implemented yet!</code></td><td>sets the limit on <code>EventEmitter</code>s and <code>EventTarget</code>s, or the process-wide default when given no targets</td></tr>
+<tr><td><code>events.getMaxListeners(target)</code></td><td>throws for an <code>EventTarget</code>; only handles emitters</td><td>reads either, falling back to the current default</td></tr>
+</tbody>
+</table>
+</div>
+<p>Argument validation matches Node’s, <code>ERR_INVALID_ARG_TYPE</code> and <code>ERR_OUT_OF_RANGE</code> messages
+included.</p>
+<p>Node’s module object <em>is</em> the <code>EventEmitter</code> class, so <code>events === events.EventEmitter</code> holds here
+too: the adapter keeps the class as the default export, and installs the three functions above as
+statics on it so both access paths reach the working versions.</p>
+<p>Note for anyone reading jco-std: it carries a separate, deliberately minimal <code>EventEmitter</code> of its
+own for shims such as <code>node:cluster</code>. jco-std does not depend on unenv, and shim code importing a
+<code>node:*</code> builtin would rely on a bundler rewriting it, which is not true of every way jco-std is
+consumed. The two are independent by design.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeffi-nodejs-v26"><a class="header" href="#nodeffi-nodejs-v26"><code>node:ffi</code> (Node.js v26+)</a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:ffi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi</code></td></tr>
+</tbody>
+</table>
+</div>
 <p><code>node:ffi</code> lets a component call native code on the host.</p>
 <p>As WASI has no dynamic loader and a component has no host address space, this is host-backed, like
 <code>node:child_process</code>, and is <strong>denied by default</strong>.</p>
@@ -2715,7 +2607,7 @@ toString(pointer); // "hello ffi"
 </code></pre>
 <p>Pointers cross as <code>bigint</code>, matching NodeJS.</p>
 <p>Errors keep NodeJS’s own codes, so <code>ERR_FFI_LIBRARY_CLOSED</code> and friends behave as they would on Node.</p>
-<h4 id="nodeffi-incompatibilities"><a class="header" href="#nodeffi-incompatibilities"><code>node:ffi</code> incompatibilities</a></h4>
+<h2 id="nodeffi-incompatibilities"><a class="header" href="#nodeffi-incompatibilities"><code>node:ffi</code> incompatibilities</a></h2>
 <p>These are refused guest-side, before the host is reached, because a WebAssembly component
 cannot express them:</p>
 <div class="table-wrapper">
@@ -2731,7 +2623,7 @@ cannot express them:</p>
 </tbody>
 </table>
 </div>
-<h4 id="nodeffis-use-of-suffix"><a class="header" href="#nodeffis-use-of-suffix"><code>node:ffi</code>’s use of <code>suffix</code></a></h4>
+<h2 id="nodeffis-use-of-suffix"><a class="header" href="#nodeffis-use-of-suffix"><code>node:ffi</code>’s use of <code>suffix</code></a></h2>
 <p><code>suffix</code> comes from the host, but not at module load: a component’s top-level code runs under
 Wizer, which refuses imported calls outright (“You cannot call arbitrary imported functions during
 Wizer initialization”).</p>
@@ -2747,196 +2639,96 @@ setSuffix('dylib'); // before instantiating the component
 </code></pre>
 <p>Note that you may not need to change the suffix if the runtime already has it set properly, as
 <code>suffix</code> defaults to the runtime’s own <code>ffi.suffix</code>.</p>
-<h3 id="inspector"><a class="header" href="#inspector">Inspector</a></h3>
-<p><code>node:inspector</code> (and <code>node:inspector/promises</code>) exposes the V8 inspector: a <code>Session</code> speaking the
-Chrome DevTools Protocol, the inspector <code>console</code>, and the experimental <code>Network</code>/<code>DOMStorage</code>
-broadcast namespaces. The inspector is host machinery – a WebSocket server and a protocol
-dispatcher wired into the running isolate – so WASI cannot express it. Like <code>node:child_process</code>,
-it is host-backed and <strong>denied by default</strong>.</p>
-<p>Map it to the Node passthrough to grant it:</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodefs"><a class="header" href="#nodefs"><code>node:fs</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:fs</code>, <code>node:fs/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:fs</code> and <code>node:fs/promises</code> use one <code>jco:node/fs@0.1.0</code> host capability.
+When either specifier occurs in bundled source, Jco adds a missing import to the
+selected world, installs <code>fs.wit</code> under <code>deps/jco-node-0.1.0</code>, and prints a CLI
+warning to alert to the fact that a WIT dependency has been added.</p>
+<p>The default filesystem host provider always throws <code>ERR_JCO_FS_ADAPTER_REQUIRED</code>.
+To use the passthrough NodeJS host provider you can map it in:</p>
 <pre><code class="language-console">jco transpile component.wasm \
-  --map 'jco:node/inspector@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host/node'
+  --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
 </code></pre>
-<p>The guest code is ordinary Node:</p>
-<pre><code class="language-js">import { Session } from 'node:inspector/promises';
-
-const session = new Session();
-session.connect();
-const { result } = await session.post('Runtime.evaluate', { expression: '6 * 7' });
-result.value; // 42, evaluated in the host isolate
-</code></pre>
-<p>Argument validation, session state, the <code>EventEmitter</code> surface, and error reconstruction all run
-guest-side, so <code>ERR_INSPECTOR_NOT_CONNECTED</code>, <code>ERR_INSPECTOR_ALREADY_CONNECTED</code>,
-<code>ERR_INVALID_ARG_TYPE</code>, and the protocol’s <code>ERR_INSPECTOR_COMMAND</code> all match Node exactly. CDP
-payloads cross the boundary as JSON; the inspector <code>console</code> forwards its arguments as JSON too,
-which is best-effort for functions, symbols, and cycles.</p>
-<h4 id="the-host-calls-back-into-the-component"><a class="header" href="#the-host-calls-back-into-the-component">The host calls back into the component</a></h4>
-<p>The inspector’s two callbacks – a <code>post</code> response and a session notification – run the other way,
-from host to guest. A component cannot implement a resource declared on an <em>imported</em> interface (its
-methods would run host-side), so the callbacks are a guest-<strong>exported</strong> interface,
-<code>jco:node/inspector-callbacks@0.1.0</code>, holding one resource per callback kind: a one-shot
-<code>post-callback</code> and a long-lived <code>notification-listener</code>. When bundled source imports
-<code>node:inspector</code>, Jco adds both the <code>import jco:node/inspector@0.1.0;</code> and the matching
-<code>export jco:node/inspector-callbacks@0.1.0;</code> to the selected world, and bundles the JS export
-alongside the entry – neither is written by hand.</p>
-<p>The embedder wires the exported interface to the host adapter after instantiation:</p>
-<pre><code class="language-js">import * as inspectorHost from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host/node';
-import * as component from './transpiled/component.js';
-
-inspectorHost.attachCallbacks(component.inspectorCallbacks);
-</code></pre>
-<p>Two timing rules follow from the component model, which forbids calling into a component while a
-task is already active in it:</p>
+<p>The resulting call path for filesystem function is:</p>
+<ol>
+<li>guest <code>node:fs</code></li>
+<li>WIT capability</li>
+<li>host adapter</li>
+<li>NodeJS builtins</li>
+</ol>
+<p>The Node provider delegates to Node 24’s synchronous operations; guest callback APIs
+queue their callbacks on a microtask, and promise APIs share the same descriptor
+state through promise <code>FileHandle</code>s.</p>
+<p>Common file and directory operations, metadata, directory entries, scalar and
+vector descriptor I/O, and their callback/promise facades are supported.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>APIs whose contract requires long-lived streams or event sources are not yet supported
+– including <code>ReadStream</code>, <code>WriteStream</code>, <code>Utf8Stream</code>, <code>watch</code>, <code>watchFile</code>, and
+<code>openAsBlob</code>.</p>
+<p>These functions currently throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> because the typed WIT
+interface does not model those resources.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="globals"><a class="header" href="#globals">Globals</a></h1>
+<p>Node’s <a href="https://nodejs.org/docs/latest-v24.x/api/globals.html">Globals API</a> is a
+catalog of runtime bindings, not a <code>node:globals</code> module. Jco therefore does not
+resolve that specifier. Bundled code can use <code>Buffer</code> without importing
+<code>node:buffer</code>; Rolldown injects Jco’s existing audited Buffer adapter only when a
+free <code>Buffer</code> identifier is referenced. A source graph that never uses it pays no
+bundle-size or initialization cost.</p>
+<p>The component engine supplies the portable Web globals shared with Node. With
+ComponentizeJS 0.22.0’s pinned StarlingMonkey runtime, this includes:</p>
 <ul>
-<li><strong>In-isolate <code>post</code> responses are synchronous.</strong> <code>Runtime.evaluate</code>, <code>Debugger.*</code>, and the other
-in-isolate methods resolve during the post call, so the host returns the response directly and an
-awaited <code>Session.post</code> never needs a re-entrant callback. This is the same behavior as Node, which
-also fires those callbacks synchronously.</li>
-<li><strong>Notifications arrive between guest tasks</strong>, like <code>node:cluster</code>’s events: the host queues each
-notification and delivers it once no exported call is in flight, never into a suspended <code>await</code>.</li>
+<li><code>AbortController</code>, <code>AbortSignal</code>, <code>atob</code>, <code>btoa</code>, <code>Blob</code>, and <code>File</code>;</li>
+<li><code>ByteLengthQueuingStrategy</code>, <code>CountQueuingStrategy</code>, <code>ReadableStream</code> and its
+exposed reader/controller classes, <code>WritableStream</code>, <code>TransformStream</code>,
+<code>CompressionStream</code>, and <code>DecompressionStream</code>;</li>
+<li><code>console</code>, <code>Crypto</code>, <code>CryptoKey</code>, <code>SubtleCrypto</code>, <code>crypto</code>, <code>CustomEvent</code>,
+<code>DOMException</code>, <code>Event</code>, and <code>EventTarget</code>;</li>
+<li><code>fetch</code>, <code>FormData</code>, <code>Headers</code>, <code>Request</code>, and <code>Response</code>;</li>
+<li><code>Performance</code>, <code>performance</code>, <code>queueMicrotask</code>, timeout/interval functions,
+<code>structuredClone</code>, <code>TextEncoder</code>, <code>TextDecoder</code>, <code>URL</code>, and <code>URLSearchParams</code>.</li>
 </ul>
-<h3 id="modules"><a class="header" href="#modules">Modules</a></h3>
-<p><code>node:module</code> splits cleanly in two, and the split is not about effort.</p>
-<p><strong>There is no module loader in a component.</strong> <code>jco componentize</code> bundles the whole graph ahead of
-time, and StarlingMonkey cannot compile or link a module that was not present at build time – no
-<code>dlopen</code>, no filesystem, no loader to hook. No host capability would fix this: the missing piece is
-the guest engine’s ability to instantiate new code. So every entry point whose job is to load
-something throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> and says why:</p>
-<p><code>register</code> · <code>registerHooks</code> · <code>runMain</code> · <code>findPackageJSON</code> · <code>stripTypeScriptTypes</code> ·
-<code>setSourceMapsSupport</code> · <code>Module.prototype.require</code> / <code>load</code> / <code>_compile</code> · and the <code>_*</code> loader
-internals (<code>_load</code>, <code>_resolveFilename</code>, <code>_findPath</code>, <code>_nodeModulePaths</code>, and the rest).</p>
-<p><strong>Everything else is real</strong>, because it is classification or arithmetic:</p>
+<p>When bundled source references <code>AbortController</code> or <code>AbortSignal</code>, Jco loads a
+compatibility adapter for the legacy StarlingMonkey abort implementation. It
+preserves the native constructors and signal objects while correcting <code>any()</code>’s
+array handling, default reason identity, and <code>throwIfAborted()</code>. The adapter
+detects the legacy calling convention and leaves conforming engines untouched.</p>
+<p>The current embedded runtime does <strong>not</strong> expose a guest <code>WebAssembly</code> API.
+Running the component in a Wasm host does not give its JavaScript code the ability
+to compile or instantiate another Wasm module. Guest-side Wasm execution may be
+supported in the future; the globals test currently asserts that this API is
+absent and should gain execution coverage when the engine provides it.</p>
+<p>Some of these retain StarlingMonkey’s existing WASI feature requirements, such as
+clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
+fetches. Jco does not add a Node-specific WIT capability for globals.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodehttp"><a class="header" href="#nodehttp"><code>node:http</code></a></h1>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Surface</th><th>Behavior</th></tr>
+<tr><th>Imports</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td><code>builtinModules</code>, <code>isBuiltin</code></td><td>Node 24’s list, verbatim. <code>isBuiltin</code> agrees with Node on every builtin in every spelling, including prefix-only ones – <code>isBuiltin("node:test")</code> is true and <code>isBuiltin("test")</code> is false</td></tr>
-<tr><td><code>SourceMap</code></td><td>Implemented in full: VLQ decoding, <code>findEntry</code>, <code>findOrigin</code>, <code>payload</code>, <code>lineLengths</code></td></tr>
-<tr><td><code>wrap</code>, <code>wrapper</code></td><td>Deprecated upstream but pure string work, so they behave as Node’s do, including <code>wrap</code> reading a mutated <code>wrapper</code> live</td></tr>
-<tr><td><code>constants</code>, <code>findSourceMap</code>, <code>getSourceMapsSupport</code>, <code>getCompileCacheDir</code>, <code>flushCompileCache</code>, <code>syncBuiltinESMExports</code></td><td>Exact, down to Node’s null-prototype return objects</td></tr>
-<tr><td><code>globalPaths</code></td><td><code>[]</code> – a true statement, not a refusal: there is no <code>$HOME/.node_modules</code> to search</td></tr>
-<tr><td><code>enableCompileCache</code></td><td>Reports <code>{ status: FAILED, message }</code>. Node’s own protocol for “could not”, so callers that branch on <code>status</code> keep working instead of catching</td></tr>
-<tr><td><code>new Module(id)</code></td><td>Constructs, with Node’s own-property shape. Its <em>methods</em> are what need a loader</td></tr>
+<tr><td><code>node:http</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http</code></td></tr>
 </tbody>
 </table>
 </div>
-<h4 id="createrequire"><a class="header" href="#createrequire"><code>createRequire</code></a></h4>
-<p><code>createRequire()</code> <strong>succeeds</strong>. Code routinely writes <code>const require = createRequire(import.meta.url)</code>
-at module top level and only calls it on some paths; refusing at creation would break modules that
-require nothing.</p>
-<p>Calling the returned <code>require()</code> refuses and points at static <code>import</code>. But <code>require.resolve</code> is not
-a refusal – it answers truthfully:</p>
-<pre><code class="language-js">const require = createRequire(import.meta.url);
-require.resolve('node:path'); // "node:path", exactly as Node answers
-require.resolve('lodash'); // throws MODULE_NOT_FOUND -- which is the truth here
-require.cache; // genuinely empty
-require.main; // genuinely undefined
-</code></pre>
-<h4 id="a-caveat-on-builtinmodules"><a class="header" href="#a-caveat-on-builtinmodules">A caveat on <code>builtinModules</code></a></h4>
-<p>It reports Node’s list, not the modules Jco resolves. <code>isBuiltin</code> asks “is this a Node builtin?”,
-which is a classification question, so answering for Node is the faithful thing. A guest that writes
-<code>if (isBuiltin(x)) require(x)</code> therefore gets a true answer followed by a refusal. The table at the
-top of this page is what says which builtins a component can actually import.</p>
-<h3 id="diagnostics-channels"><a class="header" href="#diagnostics-channels">Diagnostics channels</a></h3>
-<p>Publish/subscribe for instrumentation, entirely in-process, so it needs no WIT capability. Channels
-are interned by name: a publisher and a subscriber that never share a reference still meet on the
-same object.</p>
-<p><code>TracingChannel</code> is implemented in full – <code>traceSync</code>, <code>tracePromise</code> and <code>traceCallback</code>, with
-the <code>start</code>/<code>end</code>/<code>asyncStart</code>/<code>asyncEnd</code>/<code>error</code> sub-channels emitted in Node’s order.</p>
-<p><code>Channel.bindStore</code> accepts anything offering <code>run(value, fn)</code>, which includes jco-std’s
-<code>AsyncLocalStorage</code>. Stores are therefore scoped synchronously: a bound store is visible while
-subscribers run and does not follow an <code>await</code>. See the async hooks section above for why.</p>
-<h3 id="events"><a class="header" href="#events">Events</a></h3>
-<p><code>node:events</code> is two pieces. The <code>EventEmitter</code> itself comes from unenv, audited against Node 24:
-<code>on</code>/<code>emit</code>, one-shot <code>once</code>, listener ordering under <code>prependListener</code>, <code>eventNames</code>,
-<code>removeAllListeners</code>, the per-emitter max-listener methods, and an unhandled <code>error</code> throwing all
-match Node, as do <code>once()</code>, <code>on()</code>’s async iterator, <code>getEventListeners</code>, <code>addAbortListener</code> and
-<code>EventEmitterAsyncResource</code>.</p>
-<p>Three module-level functions do not, and Jco implements them in jco-std rather than exporting
-something that fails when called:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Entry point</th><th>unenv</th><th>Jco</th></tr>
-</thead>
-<tbody>
-<tr><td><code>events.listenerCount(emitter, eventName)</code></td><td>throws <code>[unenv] node:events.listenerCount is not implemented yet!</code></td><td>delegates to the emitter’s own <code>listenerCount</code>, as Node does, so a subclass that overrides it is honored</td></tr>
-<tr><td><code>events.setMaxListeners(n[, ...targets])</code></td><td>throws <code>[unenv] node:events.setMaxListeners is not implemented yet!</code></td><td>sets the limit on <code>EventEmitter</code>s and <code>EventTarget</code>s, or the process-wide default when given no targets</td></tr>
-<tr><td><code>events.getMaxListeners(target)</code></td><td>throws for an <code>EventTarget</code>; only handles emitters</td><td>reads either, falling back to the current default</td></tr>
-</tbody>
-</table>
-</div>
-<p>Argument validation matches Node’s, <code>ERR_INVALID_ARG_TYPE</code> and <code>ERR_OUT_OF_RANGE</code> messages
-included.</p>
-<p>Node’s module object <em>is</em> the <code>EventEmitter</code> class, so <code>events === events.EventEmitter</code> holds here
-too: the adapter keeps the class as the default export, and installs the three functions above as
-statics on it so both access paths reach the working versions.</p>
-<p>Note for anyone reading jco-std: it carries a separate, deliberately minimal <code>EventEmitter</code> of its
-own for shims such as <code>node:cluster</code>. jco-std does not depend on unenv, and shim code importing a
-<code>node:*</code> builtin would rely on a bundler rewriting it, which is not true of every way jco-std is
-consumed. The two are independent by design.</p>
-<h3 id="dns-and-host-capabilities"><a class="header" href="#dns-and-host-capabilities">DNS and host capabilities</a></h3>
-<p><code>node:dns</code> and <code>node:dns/promises</code> share one guest implementation and the
-<code>jco:node/dns@0.1.0</code> capability. Jco adds that import and its <code>dns.wit</code>
-dependency when bundled source uses either specifier. The default provider throws
-<code>ERR_JCO_DNS_ADAPTER_REQUIRED</code>; applications opt into Node name resolution with:</p>
-<pre><code class="language-console">jco transpile component.wasm \
-  --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
-</code></pre>
-<p>The WIT interface represents each DNS operation as a named, typed function; it
-does not tunnel requests through a serialized dispatcher. The Node provider calls
-the real asynchronous <code>node:dns/promises</code> operations directly. When an application
-supplies a DNS host map, Jco automatically enables JSPI for every function in
-<code>jco:node/dns@0.1.0</code>. The Preview 2 WIT calls therefore remain synchronous from the
-guest’s perspective without blocking Node’s event loop or creating a worker for
-each query. Because any component export may transitively call DNS, mapped
-components expose promise-returning exports that JavaScript hosts must await.
-Callback APIs retain callback delivery in the guest, and the promises subpath
-shares server and default-result-order state with the main module.</p>
-<p><code>Resolver.cancel()</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. The synchronous WIT
-boundary does not expose an outstanding c-ares request that a later guest call
-could cancel. The provider boundary otherwise remains Node-independent, leaving
-room for a future browser implementation.</p>
-<h3 id="tcp-sockets"><a class="header" href="#tcp-sockets">TCP sockets</a></h3>
-<p><code>node:net</code> implements Node 24.19’s 18-export module surface over Preview 2
-<code>wasi:sockets</code>. It includes TCP <code>Socket</code> and <code>Server</code>, <code>BoundSocket</code>,
-<code>SocketAddress</code>, <code>BlockList</code>, IP-family predicates, overload normalization, and
-the auto-family defaults. <code>connect</code> and <code>createConnection</code> are the same function,
-and <code>Socket</code> and <code>Stream</code> are the same constructor, as in Node.</p>
-<pre><code class="language-js">import { connect, createServer } from 'node:net';
-
-createServer((socket) =&gt; socket.end('hello')).listen(8080, '127.0.0.1');
-
-connect(8080, '127.0.0.1').setEncoding('utf8').on('data', console.log);
-</code></pre>
-<p>Jco injects only the selected world’s Preview 2 DNS, TCP, stream, and pollable
-interfaces and their standard WIT packages. QuickJS worlds use 0.2.12;
-StarlingMonkey worlds can use 0.2.10. There is no Jco-specific network host
-interface and no bare <code>net</code> alias.</p>
-<p>Preview 2 has no Unix-domain sockets, Windows named pipes, OS file descriptors,
-libuv handles, TCP reset, IP type-of-service, or custom JavaScript DNS callback.
-Those operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Address attempts are
-sequential rather than reproducing Node’s exact Happy Eyeballs timing. Socket
-objects provide the common readable/writable methods and events but do not yet
-inherit from classic <code>node:stream.Duplex</code>, because Jco does not have a faithful
-classic stream core.</p>
-<p>Reads support Node string encodings, buffered <code>read()</code>, and async iteration.
-Writable operations complete through blocking WASI writes and do not yet provide
-classic stream backpressure. <code>setNoDelay()</code>, <code>ref()</code>, and <code>unref()</code> preserve the
-callable surface but cannot control the host’s TCP_NODELAY or event-loop references.
-Nonzero socket timeouts require an engine with JavaScript timers; engines without
-them reject <code>setTimeout()</code> explicitly. The deprecated <code>bufferSize</code> getter throws
-the Jco deprecated-API error; use <code>writableLength</code> instead.</p>
-<p>Half-close depends on the host honoring WASI’s directional <code>shutdown</code>. The
-Preview 2 Node host shim 0.22.0 currently closes both directions; applications
-using that host should let the peer finish its response before closing the
-socket’s writable side.</p>
-<h3 id="http-and-selectable-implementations"><a class="header" href="#http-and-selectable-implementations">HTTP and selectable implementations</a></h3>
 <p>The <code>node:http</code> adapter implements both client and server NodeJS HTTP APIs,
 with outbound <code>request()</code> and <code>get()</code> calls with Node-style <code>ClientRequest</code>
-and buffered <code>IncomingMessage</code> objects along with <code>http.Server</code>. <code>node:https</code>
+and buffered <code>IncomingMessage</code> objects along with <code>http.Server</code>. <a href="#nodehttps"><code>node:https</code></a>
 is the same core driven with the <code>https:</code> protocol, port 443, and a TLS-aware
 <code>Agent</code>, exactly as <code>lib/https.js</code> reuses <code>_http_client</code> and <code>_http_server</code>
 upstream; it shares the implementation selection below.</p>
@@ -2997,7 +2789,77 @@ applications can continue mapping the Node provider module without this factory.
 <p>Connection pooling, upgrades, and CONNECT proxy tunnels are explicit gaps.
 Unavailable operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> rather than silently
 doing nothing.</p>
-<h4 id="https"><a class="header" href="#https">HTTPS</a></h4>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodehttp2"><a class="header" href="#nodehttp2"><code>node:http2</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:http2</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Client and server code uses Node’s normal session and stream APIs:</p>
+<pre><code class="language-js">import { connect, createServer } from 'node:http2';
+
+export function requestStatus(authority) {
+    const session = connect(authority);
+    const stream = session.request({ ':path': '/status' });
+    stream.end();
+    return session;
+}
+
+export const server = createServer((request, response) =&gt; {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end(`received ${request.url}`);
+});
+</code></pre>
+<p>Select its implementation independently:</p>
+<pre><code class="language-console">jco componentize component.js --wit wit --bundle \
+  --with-nodejs-http2-via direct -o component.wasm
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Value</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td><code>direct</code> (default)</td><td>Typed <code>jco:node/http2@0.1.0</code>, denied by default; an opt-in Node host uses real h2c and TLS/ALPN clients and servers.</td></tr>
+<tr><td><code>wasi-sockets</code></td><td>Cleartext prior-knowledge HTTP/2 (<code>h2c</code>) clients and TCP servers, with guest-side framing, HPACK, settings, ping, reset, and stream/connection flow control.</td></tr>
+<tr><td><code>wasi-http</code></td><td>Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.</td></tr>
+</tbody>
+</table>
+</div>
+<p>By default, the provider rejects both <code>connect()</code> and server construction with
+<code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>.</p>
+<p><code>direct</code> mode models sessions, streams, and servers as typed host-owned WIT
+resources, with a passthrough implementation to NodeJS underneath. The WIT
+interface used is <code>jco:node/http2-callbacks@0.1.0</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Under WASI p2, Bodies are currently buffered; low-level sockets, priority,
+push, flow-control windows, and operations that cannot cross the boundary
+throw explicit errors.</p>
+</blockquote>
+<p>The <code>wasi:sockets</code> implementation also deliberately omits server push, HTTP/1.1 <code>Upgrade: h2c</code>,
+Unix-domain sockets, and Node’s arbitrary <code>createConnection</code>/custom duplex
+transport hooks.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodehttps"><a class="header" href="#nodehttps"><code>node:https</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:https</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/https</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>HTTPS shares the <a href="#nodehttp">HTTP implementation selection</a>, including the
+<code>--with-nodejs-http-via</code> option.</p>
 <p><code>node:https</code> exposes Node 24’s six exports: <code>Agent</code>, <code>globalAgent</code>, <code>Server</code>,
 <code>createServer</code>, <code>get</code>, and <code>request</code>. <code>https.Agent</code> subclasses <code>http.Agent</code> on
 both prototype chains, keeps Node’s <code>defaultPort</code>/<code>protocol</code>/<code>maxCachedSessions</code>
@@ -3071,83 +2933,296 @@ handshake. Because <code>jco:node/http@0.1.0</code> gained the record in place, 
 whose <code>wit/deps/jco-node-0.1.0/http.wit</code> predates it must delete that file so
 the next <code>jco componentize</code> reinstalls the current interface: injection never
 overwrites an existing dependency file.</p>
-<h3 id="http2"><a class="header" href="#http2">HTTP/2</a></h3>
-<p>Client and server code uses Node’s normal session and stream APIs:</p>
-<pre><code class="language-js">import { connect, createServer } from 'node:http2';
-
-export function requestStatus(authority) {
-    const session = connect(authority);
-    const stream = session.request({ ':path': '/status' });
-    stream.end();
-    return session;
-}
-
-export const server = createServer((request, response) =&gt; {
-    response.writeHead(200, { 'content-type': 'text/plain' });
-    response.end(`received ${request.url}`);
-});
-</code></pre>
-<p>Select its implementation independently:</p>
-<pre><code class="language-console">jco componentize component.js --wit wit --bundle \
-  --with-nodejs-http2-via direct -o component.wasm
-</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeinspector"><a class="header" href="#nodeinspector"><code>node:inspector</code></a></h1>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Value</th><th>Behavior</th></tr>
+<tr><th>Imports</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td><code>direct</code> (default)</td><td>Typed <code>jco:node/http2@0.1.0</code>, denied by default; an opt-in Node host uses real h2c and TLS/ALPN clients and servers.</td></tr>
-<tr><td><code>wasi-sockets</code></td><td>Cleartext prior-knowledge HTTP/2 (<code>h2c</code>) clients and TCP servers, with guest-side framing, HPACK, settings, ping, reset, and stream/connection flow control.</td></tr>
-<tr><td><code>wasi-http</code></td><td>Rejects sessions and servers: outgoing-handler cannot expose observable Node sessions, stream control, or arbitrary inbound listeners.</td></tr>
+<tr><td><code>node:inspector</code>, <code>node:inspector/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>By default, the provider rejects both <code>connect()</code> and server construction with
-<code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>.</p>
-<p><code>direct</code> mode models sessions, streams, and servers as typed host-owned WIT
-resources, with a passthrough implementation to NodeJS underneath. The WIT
-interface used is <code>jco:node/http2-callbacks@0.1.0</code>.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>Under WASI p2, Bodies are currently buffered; low-level sockets, priority,
-push, flow-control windows, and operations that cannot cross the boundary
-throw explicit errors.</p>
-</blockquote>
-<p>The <code>wasi:sockets</code> implementation also deliberately omits server push, HTTP/1.1 <code>Upgrade: h2c</code>,
-Unix-domain sockets, and Node’s arbitrary <code>createConnection</code>/custom duplex
-transport hooks.</p>
-<h3 id="buffer"><a class="header" href="#buffer">Buffer</a></h3>
-<p>The Buffer core comes from <code>unenv</code>’s wrapper around the MIT-licensed Feross
-<a href="https://github.com/feross/buffer"><code>buffer</code></a> implementation. Jco adds the Node-facing module shape,
-one shared <code>globalThis.Buffer</code>, and policy for exports that cannot be faithfully
-provided in the guest.</p>
-<p>Supported behavior includes common text and binary encodings, allocation and
-filling, concatenation, comparison, integer and floating-point IO, searching,
-slicing, copying, swapping, and JSON conversion. <code>atob()</code> and <code>btoa()</code> use runtime
-globals when available and portable Buffer fallbacks otherwise.</p>
-<h4 id="behavioral-limits"><a class="header" href="#behavioral-limits">Behavioral limits</a></h4>
-<p>There are intentional limits:</p>
+<p><code>node:inspector</code> (and <code>node:inspector/promises</code>) exposes the V8 inspector: a <code>Session</code> speaking the
+Chrome DevTools Protocol, the inspector <code>console</code>, and the experimental <code>Network</code>/<code>DOMStorage</code>
+broadcast namespaces. The inspector is host machinery – a WebSocket server and a protocol
+dispatcher wired into the running isolate – so WASI cannot express it. Like <code>node:child_process</code>,
+it is host-backed and <strong>denied by default</strong>.</p>
+<p>Map it to the Node passthrough to grant it:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/inspector@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host/node'
+</code></pre>
+<p>The guest code is ordinary Node:</p>
+<pre><code class="language-js">import { Session } from 'node:inspector/promises';
+
+const session = new Session();
+session.connect();
+const { result } = await session.post('Runtime.evaluate', { expression: '6 * 7' });
+result.value; // 42, evaluated in the host isolate
+</code></pre>
+<p>Argument validation, session state, the <code>EventEmitter</code> surface, and error reconstruction all run
+guest-side, so <code>ERR_INSPECTOR_NOT_CONNECTED</code>, <code>ERR_INSPECTOR_ALREADY_CONNECTED</code>,
+<code>ERR_INVALID_ARG_TYPE</code>, and the protocol’s <code>ERR_INSPECTOR_COMMAND</code> all match Node exactly. CDP
+payloads cross the boundary as JSON; the inspector <code>console</code> forwards its arguments as JSON too,
+which is best-effort for functions, symbols, and cycles.</p>
+<h2 id="the-host-calls-back-into-the-component"><a class="header" href="#the-host-calls-back-into-the-component">The host calls back into the component</a></h2>
+<p>The inspector’s two callbacks – a <code>post</code> response and a session notification – run the other way,
+from host to guest. A component cannot implement a resource declared on an <em>imported</em> interface (its
+methods would run host-side), so the callbacks are a guest-<strong>exported</strong> interface,
+<code>jco:node/inspector-callbacks@0.1.0</code>, holding one resource per callback kind: a one-shot
+<code>post-callback</code> and a long-lived <code>notification-listener</code>. When bundled source imports
+<code>node:inspector</code>, Jco adds both the <code>import jco:node/inspector@0.1.0;</code> and the matching
+<code>export jco:node/inspector-callbacks@0.1.0;</code> to the selected world, and bundles the JS export
+alongside the entry – neither is written by hand.</p>
+<p>The embedder wires the exported interface to the host adapter after instantiation:</p>
+<pre><code class="language-js">import * as inspectorHost from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector/host/node';
+import * as component from './transpiled/component.js';
+
+inspectorHost.attachCallbacks(component.inspectorCallbacks);
+</code></pre>
+<p>Two timing rules follow from the component model, which forbids calling into a component while a
+task is already active in it:</p>
 <ul>
-<li><code>Buffer()</code> and <code>new Buffer()</code> are deprecated in Node and throw
-<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>; use <code>Buffer.from()</code>,
-<code>Buffer.alloc()</code>, or <code>Buffer.allocUnsafe()</code> instead.</li>
-<li><code>SlowBuffer</code> is deprecated and throws the same error.</li>
-<li><code>isAscii</code>, <code>isUtf8</code>, <code>resolveObjectURL</code>, and <code>transcode</code> currently throw
-<code>ERR_JCO_UNSUPPORTED_NODE_API</code>.</li>
-<li><code>Blob</code> and <code>File</code> use engine globals when those globals exist; otherwise their
-fallback constructors throw an unsupported-API error.</li>
-<li>The current portable core does not support the <code>base64url</code> encoding.</li>
+<li><strong>In-isolate <code>post</code> responses are synchronous.</strong> <code>Runtime.evaluate</code>, <code>Debugger.*</code>, and the other
+in-isolate methods resolve during the post call, so the host returns the response directly and an
+awaited <code>Session.post</code> never needs a re-entrant callback. This is the same behavior as Node, which
+also fires those callbacks synchronously.</li>
+<li><strong>Notifications arrive between guest tasks</strong>, like <code>node:cluster</code>’s events: the host queues each
+notification and delivers it once no exported call is in flight, never into a suspended <code>await</code>.</li>
 </ul>
-<h3 id="querystring"><a class="header" href="#querystring">Querystring</a></h3>
-<p><code>unenv</code>’s querystring implementation is adapted from Node’s MIT-licensed
-implementation and is a strong fit for a component: it is deterministic, mostly
-algorithmic, and needs no operating-system capability. Jco exposes its default
-namespace and the named <code>decode</code>, <code>encode</code>, <code>escape</code>, <code>parse</code>, <code>stringify</code>,
-<code>unescape</code>, and <code>unescapeBuffer</code> exports with Node-compatible alias identities.</p>
-<p>The adapter initializes the same Buffer core as <code>node:buffer</code>. That matters for
-malformed-percent fallback and <code>unescapeBuffer</code>, which use Buffer internally.</p>
-<h2 id="process"><a class="header" href="#process">Process</a></h2>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodemodule"><a class="header" href="#nodemodule"><code>node:module</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:module</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:module</code> splits cleanly in two, and the split is not about effort.</p>
+<p><strong>There is no module loader in a component.</strong> <code>jco componentize</code> bundles the whole graph ahead of
+time, and StarlingMonkey cannot compile or link a module that was not present at build time – no
+<code>dlopen</code>, no filesystem, no loader to hook. No host capability would fix this: the missing piece is
+the guest engine’s ability to instantiate new code. So every entry point whose job is to load
+something throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> and says why:</p>
+<p><code>register</code> · <code>registerHooks</code> · <code>runMain</code> · <code>findPackageJSON</code> · <code>stripTypeScriptTypes</code> ·
+<code>setSourceMapsSupport</code> · <code>Module.prototype.require</code> / <code>load</code> / <code>_compile</code> · and the <code>_*</code> loader
+internals (<code>_load</code>, <code>_resolveFilename</code>, <code>_findPath</code>, <code>_nodeModulePaths</code>, and the rest).</p>
+<p><strong>Everything else is real</strong>, because it is classification or arithmetic:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td><code>builtinModules</code>, <code>isBuiltin</code></td><td>Node 24’s list, verbatim. <code>isBuiltin</code> agrees with Node on every builtin in every spelling, including prefix-only ones – <code>isBuiltin("node:test")</code> is true and <code>isBuiltin("test")</code> is false</td></tr>
+<tr><td><code>SourceMap</code></td><td>Implemented in full: VLQ decoding, <code>findEntry</code>, <code>findOrigin</code>, <code>payload</code>, <code>lineLengths</code></td></tr>
+<tr><td><code>wrap</code>, <code>wrapper</code></td><td>Deprecated upstream but pure string work, so they behave as Node’s do, including <code>wrap</code> reading a mutated <code>wrapper</code> live</td></tr>
+<tr><td><code>constants</code>, <code>findSourceMap</code>, <code>getSourceMapsSupport</code>, <code>getCompileCacheDir</code>, <code>flushCompileCache</code>, <code>syncBuiltinESMExports</code></td><td>Exact, down to Node’s null-prototype return objects</td></tr>
+<tr><td><code>globalPaths</code></td><td><code>[]</code> – a true statement, not a refusal: there is no <code>$HOME/.node_modules</code> to search</td></tr>
+<tr><td><code>enableCompileCache</code></td><td>Reports <code>{ status: FAILED, message }</code>. Node’s own protocol for “could not”, so callers that branch on <code>status</code> keep working instead of catching</td></tr>
+<tr><td><code>new Module(id)</code></td><td>Constructs, with Node’s own-property shape. Its <em>methods</em> are what need a loader</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="createrequire"><a class="header" href="#createrequire"><code>createRequire</code></a></h2>
+<p><code>createRequire()</code> <strong>succeeds</strong>. Code routinely writes <code>const require = createRequire(import.meta.url)</code>
+at module top level and only calls it on some paths; refusing at creation would break modules that
+require nothing.</p>
+<p>Calling the returned <code>require()</code> refuses and points at static <code>import</code>. But <code>require.resolve</code> is not
+a refusal – it answers truthfully:</p>
+<pre><code class="language-js">const require = createRequire(import.meta.url);
+require.resolve('node:path'); // "node:path", exactly as Node answers
+require.resolve('lodash'); // throws MODULE_NOT_FOUND -- which is the truth here
+require.cache; // genuinely empty
+require.main; // genuinely undefined
+</code></pre>
+<h2 id="a-caveat-on-builtinmodules"><a class="header" href="#a-caveat-on-builtinmodules">A caveat on <code>builtinModules</code></a></h2>
+<p>It reports Node’s list, not the modules Jco resolves. <code>isBuiltin</code> asks “is this a Node builtin?”,
+which is a classification question, so answering for Node is the faithful thing. A guest that writes
+<code>if (isBuiltin(x)) require(x)</code> therefore gets a true answer followed by a refusal. The
+<a href="#supported-modules-1">supported modules index</a> lists which builtins a component can actually import.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodenet"><a class="header" href="#nodenet"><code>node:net</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:net</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/net/core</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:net</code> implements Node 24.19’s 18-export module surface over Preview 2
+<code>wasi:sockets</code>. It includes TCP <code>Socket</code> and <code>Server</code>, <code>BoundSocket</code>,
+<code>SocketAddress</code>, <code>BlockList</code>, IP-family predicates, overload normalization, and
+the auto-family defaults. <code>connect</code> and <code>createConnection</code> are the same function,
+and <code>Socket</code> and <code>Stream</code> are the same constructor, as in Node.</p>
+<pre><code class="language-js">import { connect, createServer } from 'node:net';
+
+createServer((socket) =&gt; socket.end('hello')).listen(8080, '127.0.0.1');
+
+connect(8080, '127.0.0.1').setEncoding('utf8').on('data', console.log);
+</code></pre>
+<p>Jco injects only the selected world’s Preview 2 DNS, TCP, stream, and pollable
+interfaces and their standard WIT packages. QuickJS worlds use 0.2.12;
+StarlingMonkey worlds can use 0.2.10. There is no Jco-specific network host
+interface and no bare <code>net</code> alias.</p>
+<p>Preview 2 has no Unix-domain sockets, Windows named pipes, OS file descriptors,
+libuv handles, TCP reset, IP type-of-service, or custom JavaScript DNS callback.
+Those operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Address attempts are
+sequential rather than reproducing Node’s exact Happy Eyeballs timing. Socket
+objects provide the common readable/writable methods and events but do not yet
+inherit from classic <code>node:stream.Duplex</code>, because Jco does not have a faithful
+classic stream core.</p>
+<p>Reads support Node string encodings, buffered <code>read()</code>, and async iteration.
+Writable operations complete through blocking WASI writes and do not yet provide
+classic stream backpressure. <code>setNoDelay()</code>, <code>ref()</code>, and <code>unref()</code> preserve the
+callable surface but cannot control the host’s TCP_NODELAY or event-loop references.
+Nonzero socket timeouts require an engine with JavaScript timers; engines without
+them reject <code>setTimeout()</code> explicitly. The deprecated <code>bufferSize</code> getter throws
+the Jco deprecated-API error; use <code>writableLength</code> instead.</p>
+<p>Half-close depends on the host honoring WASI’s directional <code>shutdown</code>. The
+Preview 2 Node host shim 0.22.0 currently closes both directions; applications
+using that host should let the peer finish its response before closing the
+socket’s writable side.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeos"><a class="header" href="#nodeos"><code>node:os</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:os</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A WebAssembly guest has no view of the machine it runs on. When bundled source
+imports <code>node:os</code>, Jco ensures that the selected world declares the dedicated
+interface, following the same in-place WIT editing described for
+<code>node:child_process</code>:</p>
+<pre><code class="language-wit">world app {
+  import jco:node/os@0.1.0;
+  // component imports and exports...
+}
+</code></pre>
+<p>Declaring or generating the import does not grant host access: Jco’s default
+transpilation map uses a provider that fails every inspecting or mutating call
+with <code>ERR_JCO_OS_ADAPTER_REQUIRED</code>. Static POSIX values that reveal no machine
+state – <code>EOL</code>, <code>devNull</code>, and <code>constants</code> – resolve without a provider, so the
+module can be imported and used for its constants even when access is denied. An
+application must make the security decision explicitly, for example by mapping
+the Node host provider:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
+</code></pre>
+<p>That produces the call path guest <code>node:os</code> → WIT capability → host adapter →
+Node <code>node:os</code>.</p>
+<p>The interface supports <code>arch</code>, <code>availableParallelism</code>, <code>cpus</code>, <code>endianness</code>,
+<code>freemem</code>, <code>getPriority</code>, <code>homedir</code>, <code>hostname</code>, <code>loadavg</code>, <code>machine</code>,
+<code>networkInterfaces</code>, <code>platform</code>, <code>release</code>, <code>setPriority</code>, <code>tmpdir</code>, <code>totalmem</code>,
+<code>type</code>, <code>uptime</code>, <code>userInfo</code>, and <code>version</code>, with Node’s argument validation and
+<code>ERR_SYSTEM_ERROR</code> reconstruction for failing calls.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodepath"><a class="header" href="#nodepath"><code>node:path</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Path manipulation is portable, but <code>path.resolve()</code> and related operations need a
+current working directory.</p>
+<p>Jco obtains that value through <code>wasi:cli/environment@0.2.x</code>, so the selected WIT
+world must import exactly one compatible version when it uses <code>node:path</code>:</p>
+<pre><code class="language-wit">world app {
+  import wasi:cli/environment@0.2.6;
+  // component imports and exports...
+}
+</code></pre>
+<p>Jco selects the adapter matching the version in the world. A component that only
+uses capability-free built-ins such as assert, Buffer, or querystring does not
+need this import.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeperf_hooks"><a class="header" href="#nodeperf_hooks"><code>node:perf_hooks</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:perf_hooks</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/perf-hooks</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:perf_hooks</code> targets Node.js 24.20.0. Jco bundles a TypeScript adaptation of
+Node’s user timing, resource timing, observer and function timing implementations.
+It does not use unenv’s placeholder observers or histograms.</p>
+<p>Keep ordinary imports in application code:</p>
+<pre><code class="language-js">import { performance, PerformanceObserver } from "node:perf_hooks";
+
+const observer = new PerformanceObserver((entries) =&gt; {
+  for (const entry of entries.getEntries()) console.log(entry.name, entry.duration);
+});
+observer.observe({ type: "measure" });
+performance.mark("start");
+// Application work.
+performance.measure("elapsed", "start");
+</code></pre>
+<p>Bundle JavaScript with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>.
+The adapter adds no WIT imports. Clock-based operations use the component engine’s
+monotonic <code>performance.now()</code> and <code>timeOrigin</code>; they fail explicitly if the engine
+lacks them. Explicit timestamps require no clock. Non-null mark/measure detail
+requires the engine’s <code>structuredClone</code> implementation. The module owns its timing
+buffers; it does not replace the engine’s global <code>performance</code> object.</p>
+<h2 id="supported-timing-operations"><a class="header" href="#supported-timing-operations">Supported timing operations</a></h2>
+<p>Marks, measures (including named marks and start/end/duration options), timeline
+queries and clearing, explicit resource timings, resource buffer notifications,
+observers and <code>timerify</code> are implemented. Observers support <code>mark</code>, <code>measure</code>,
+<code>resource</code> and <code>function</code> entries. Function timing includes promise settlement and
+constructor calls. Observer and resource-buffer callbacks use component timers;
+their ordering relative to other tasks can differ from Node’s <code>setImmediate</code>.
+Resource entries describe timings supplied by the application; network operations
+are not automatically instrumented.</p>
+<h2 id="native-performance-telemetry"><a class="header" href="#native-performance-telemetry">Native performance telemetry</a></h2>
+<p><code>createHistogram</code>, <code>monitorEventLoopDelay</code>, <code>eventLoopUtilization</code>,
+<code>performance.nodeTiming</code> and <code>performance.toJSON()</code> throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Components do not expose Node’s HDR histogram
+binding, libuv event-loop counters or process startup milestones. The <code>histogram</code>
+option to <code>timerify</code> is consequently unavailable. GC, HTTP, HTTP/2, DNS and network
+observer instrumentation is unavailable. Deprecated node-entry <code>kind</code> and <code>flags</code>
+accessors throw <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>, naming the <code>detail</code> replacement.</p>
+<p>The public module exports and constants match the pinned Node 24 surface; APIs
+introduced in Node 26’s rolling documentation are outside this compatibility target.
+The source files retain Node’s MIT license and pinned source provenance.</p>
+<p>QuickJS currently supplies a clock but lacks task timers and Web event targets.
+Marks, measures, resource entries within the buffer limit, and synchronous function
+timing work there. Observer subscription, event listeners and resource buffer
+overflow fail explicitly; <code>PerformanceObserver.supportedEntryTypes</code> is empty.
+StarlingMonkey supports these runtime facilities and the observer APIs.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeprocess"><a class="header" href="#nodeprocess"><code>node:process</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:process</code></td><td>Jco typed facade and explicit Node passthrough</td></tr>
+</tbody>
+</table>
+</div>
 <p>As WASI has no concept of processes, <code>node:process</code> uses a Jco facade
 over <code>jco:node/process@0.1.0</code>, targeting Node.js v24.20.0. This opt-in Node provider
 therefore describes and controls <strong>the embedding Node process</strong> (via an adapter): its environment,
@@ -3183,7 +3258,7 @@ throw <code>ERR_JCO_PROCESS_ADAPTER_REQUIRED</code>.</p>
 <p>The public facade contains no native Node process objects in its WIT boundary.
 A different runtime can implement the same typed functions.</p>
 <p>Direct jco-std adapters and native Node imports can coexist in a host application.</p>
-<h3 id="supplying-your-own-process-provider"><a class="header" href="#supplying-your-own-process-provider">Supplying your own process provider</a></h3>
+<h2 id="supplying-your-own-process-provider"><a class="header" href="#supplying-your-own-process-provider">Supplying your own process provider</a></h2>
 <p>Embedders can construct an object satisfying the public <code>ProcessHost</code> type and
 pass it directly to the generated <code>instantiate</code> function. Start from the denial
 provider and override the operations your application supports. You do not need
@@ -3261,7 +3336,7 @@ contains the runnable JavaScript equivalent, checked against <code>ProcessHost</
 Its component calls <code>process.exit(23)</code>. End-to-end tests bind separate provider
 objects in QuickJS and StarlingMonkey, verify the exit requests reach the correct
 object, and confirm the host stays alive and other operations remain denied.</p>
-<h3 id="process-state-and-snapshots"><a class="header" href="#process-state-and-snapshots">Process state and snapshots</a></h3>
+<h2 id="process-state-and-snapshots"><a class="header" href="#process-state-and-snapshots">Process state and snapshots</a></h2>
 <p>Host imports are unavailable while the component engine initializes its snapshot.
 Read runtime state inside exported guest functions. Metadata, argument arrays,
 versions, configuration and features are obtained lazily at first access. Argument
@@ -3278,7 +3353,7 @@ lazy getters, and supplying a build-machine PID or a placeholder would be incorr
 Likewise, obtain the optional permission object through <code>process.permission</code>.
 This implementation handles explicit <code>node:process</code> imports; it does not install a
 new ambient <code>globalThis.process</code> object or intercept the bare <code>process</code> specifier.</p>
-<h3 id="process-operations"><a class="header" href="#process-operations">Process operations</a></h3>
+<h2 id="process-operations"><a class="header" href="#process-operations">Process operations</a></h2>
 <p>The Node provider implements cwd/chdir, environment access and <code>loadEnvFile</code>, CPU,
 thread CPU, memory and resource usage, monotonic <code>hrtime</code>, uptime and memory limits,
 active resource names, identity and credential operations, <code>kill</code>, the setting
@@ -3297,7 +3372,7 @@ forwarded to Node and scheduled for guest warning listeners. QuickJS currently
 rejects Promise-returning exports for synchronous WIT functions; the async
 <code>nextTick</code> component test runs on StarlingMonkey, while synchronous passthrough
 and denial tests run on both engines.</p>
-<h3 id="process-restrictions"><a class="header" href="#process-restrictions">Process restrictions</a></h3>
+<h2 id="process-restrictions"><a class="header" href="#process-restrictions">Process restrictions</a></h2>
 <p>Native stream objects (<code>stdin</code>, <code>stdout</code>, <code>stderr</code>), IPC channels and handle transfer,
 module loading (<code>dlopen</code>, <code>getBuiltinModule</code>), exception-capture hooks and
 finalization callbacks cannot cross this boundary. Their entry points throw
@@ -3311,7 +3386,7 @@ overload, the <code>multipleResolves</code> event and deprecated feature flags t
 providers. Legacy <code>hrtime()</code> and <code>nextTick()</code> remain functional; legacy status is
 not deprecation. Platform-specific credential operations are available only when
 the Node host supports them. Node 26 additions are outside the Node 24 contract.</p>
-<h3 id="process-implementation-sources"><a class="header" href="#process-implementation-sources">Process implementation sources</a></h3>
+<h2 id="process-implementation-sources"><a class="header" href="#process-implementation-sources">Process implementation sources</a></h2>
 <p><code>unenv@2.0.0-rc.24</code>’s process module was inspected, including its environment,
 hrtime, next-tick and TTY dependencies. Its placeholder PIDs, zero memory metrics,
 local cwd and unimplemented host operations do not meet this contract. Jco uses
@@ -3319,129 +3394,342 @@ native Node operations behind WIT instead, with a small TypeScript facade.
 Tuple clock subtraction and warning normalization follow Node’s MIT-licensed
 <code>internal/process/per_thread.js</code> and <code>internal/process/warning.js</code> at commit
 <code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>; the source retains attribution.</p>
-<h2 id="how-jco-evaluates-unenv-modules"><a class="header" href="#how-jco-evaluates-unenv-modules">How Jco evaluates unenv modules</a></h2>
-<h3 id="different-compatibility-goals"><a class="header" href="#different-compatibility-goals">Different compatibility goals</a></h3>
-<p><code>unenv</code> provides a valuable cross-runtime foundation used by browsers, edge
-workers, server frameworks, and other non-Node environments. Its scope is broader
-than Jco’s: for many consumers, preserving an import and providing a conservative
-fallback or no-op is preferable to making a bundle impossible.</p>
-<p>A WebAssembly component has a different contract: Jco must know whether an API is
-algorithmic, backed by a declared WASI capability, dependent on missing Node
-internals, or intentionally mocked.</p>
-<p>Consequently, an unenv compatibility marker or alias is a starting point for
-review rather than an automatic promise of full Node behavior.</p>
-<h3 id="audit-criteria"><a class="header" href="#audit-criteria">Audit criteria</a></h3>
-<p>For each candidate, Jco checks:</p>
-<ul>
-<li>Node 24 export names, aliases, descriptors, types, and deprecations;</li>
-<li>transitive imports and assumptions about <code>process</code>, globals, the event loop, or
-the host platform;</li>
-<li>placeholders, mocks, no-ops, and <code>notImplemented</code> paths;</li>
-<li>differential behavior against Node 24; and</li>
-<li>execution through an actual guest component, not only source inspection or
-generated-bundle string checks.</li>
-</ul>
-<h3 id="upstream-improvements"><a class="header" href="#upstream-improvements">Upstream improvements</a></h3>
-<p>General correctness improvements should be contributed upstream when practical.
-Until an improvement is in the pinned unenv release and passes Jco’s guest tests,
-Jco keeps a stronger local implementation or leaves the module disabled.</p>
-<h2 id="reviewed-modules-that-are-not-enabled"><a class="header" href="#reviewed-modules-that-are-not-enabled">Reviewed modules that are not enabled</a></h2>
-<p>The pinned unenv release currently supplies 55 public <code>node:</code> aliases. Jco exposes
-a reviewed subset through Jco implementations and audited unenv cores. <code>node:ffi</code>
-is not among them at all – it is a Node 26 module, newer than the release unenv
-targets. The other aliases were reviewed but are not automatically resolved.</p>
-<p>The following grouping describes the main blocker, not a permanent judgment about
-the module or upstream project.</p>
-<h3 id="more-semantic-or-dependency-work-needed"><a class="header" href="#more-semantic-or-dependency-work-needed">More semantic or dependency work needed</a></h3>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodequerystring"><a class="header" href="#nodequerystring"><code>node:querystring</code></a></h1>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
+<tr><th>Imports</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:trace_events</code></td><td>The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.</td></tr>
-<tr><td><code>node:url</code></td><td>There is substantial Node-derived code, but its eager <code>node:path</code> dependency adds a WASI environment requirement even for global-only URL use, and its namespace combines modern and legacy APIs that need separate policy.</td></tr>
+<tr><td><code>node:querystring</code></td><td>unenv’s Node-derived querystring implementation</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="host-backed-or-broad-subsystems"><a class="header" href="#host-backed-or-broad-subsystems">Host-backed or broad subsystems</a></h3>
-<p>These modules contain useful portable pieces, but their complete public surfaces
-also require operating-system access, Node internals, an event loop, or a larger
-set of coordinated shims:</p>
-<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
-<code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
-<code>node:stream/promises</code>, <code>node:stream/web</code>,
-<code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
-<code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
-<h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
-<p>This group is not all-or-nothing. A future implementation can combine portable
-upstream algorithms with explicit host capabilities, just as Jco’s path
-implementation combines portable path logic with a WASI environment provider.</p>
-<h3 id="legacy-or-deprecated-modules"><a class="header" href="#legacy-or-deprecated-modules">Legacy or deprecated modules</a></h3>
-<p><code>node:constants</code>, <code>node:punycode</code>, and <code>node:sys</code> are legacy or deprecated
-surfaces. Jco does not enable their functional fallbacks by default. When a
-deprecated API is added for import compatibility, Jco’s policy is to expose an
-immediate, explicit unsupported stub rather than execute the deprecated API.</p>
-<p><code>node:domain</code> is the worked example of that policy: it resolves, matches Node’s
-module shape, and throws from every entry point. See the domain section above.</p>
-<h2 id="what-happens-for-an-unsupported-import"><a class="header" href="#what-happens-for-an-unsupported-import">What happens for an unsupported import</a></h2>
-<p>An unsupported <code>node:</code> import is left unresolved during bundling. This makes the
-missing compatibility visible instead of silently substituting a mock.</p>
-<p>An explicit unsupported function inside an admitted module can be imported,
-but calling that particular function throws a stable Jco error.</p>
-<h3 id="expanding-support"><a class="header" href="#expanding-support">Expanding support</a></h3>
-<p>This distinction lets applications use well-supported portions of modules such as
-Buffer while keeping unavailable behavior easy to diagnose.</p>
-<p>Jco has a clear path to expand support: add or connect a faithful implementation, test it
-against Node and inside both JavaScript component backends, then add the specifier
-to the audited allowlist.</p>
-<h2 id="performance-measurements"><a class="header" href="#performance-measurements">Performance measurements</a></h2>
-<p><code>node:perf_hooks</code> targets Node.js 24.20.0. Jco bundles a TypeScript adaptation of
-Node’s user timing, resource timing, observer and function timing implementations.
-It does not use unenv’s placeholder observers or histograms.</p>
-<p>Keep ordinary imports in application code:</p>
-<pre><code class="language-js">import { performance, PerformanceObserver } from "node:perf_hooks";
+<p><code>unenv</code>’s querystring implementation is adapted from Node’s MIT-licensed
+implementation and is a strong fit for a component: it is deterministic, mostly
+algorithmic, and needs no operating-system capability. Jco exposes its default
+namespace and the named <code>decode</code>, <code>encode</code>, <code>escape</code>, <code>parse</code>, <code>stringify</code>,
+<code>unescape</code>, and <code>unescapeBuffer</code> exports with Node-compatible alias identities.</p>
+<p>The adapter initializes the same Buffer core as <code>node:buffer</code>. That matters for
+malformed-percent fallback and <code>unescapeBuffer</code>, which use Buffer internally.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodereadline"><a class="header" href="#nodereadline"><code>node:readline</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:readline</code>, <code>node:readline/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/readline</code> and <code>/readline/promises</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:readline</code> and <code>node:readline/promises</code> support callback and promise questions,
+line events, async iteration, streaming UTF-8/CRLF decoding, prompts, terminal
+editing and history, keypress events, and cursor actions. Both share a port of
+<a href="https://github.com/nodejs/node/tree/v24.20.0/lib/internal/readline">Node v24.20.0’s readline implementation</a>.</p>
+<p>Applications keep ordinary Node imports and supply readable and writable streams:</p>
+<pre><code class="language-js">import * as readline from 'node:readline/promises';
 
-const observer = new PerformanceObserver((entries) =&gt; {
-  for (const entry of entries.getEntries()) console.log(entry.name, entry.duration);
-});
-observer.observe({ type: "measure" });
-performance.mark("start");
-// Application work.
-performance.measure("elapsed", "start");
+export async function ask(input, output) {
+    const rl = readline.createInterface({ input, output });
+    try {
+        const answer = await rl.question('What do you think of Node.js? ');
+        output.write(`Thank you for your valuable feedback: ${answer}\n`);
+    } finally {
+        rl.close();
+    }
+}
 </code></pre>
-<p>Bundle JavaScript with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>.
-The adapter adds no WIT imports. Clock-based operations use the component engine’s
-monotonic <code>performance.now()</code> and <code>timeOrigin</code>; they fail explicitly if the engine
-lacks them. Explicit timestamps require no clock. Non-null mark/measure detail
-requires the engine’s <code>structuredClone</code> implementation. The module owns its timing
-buffers; it does not replace the engine’s global <code>performance</code> object.</p>
-<h3 id="supported-timing-operations"><a class="header" href="#supported-timing-operations">Supported timing operations</a></h3>
-<p>Marks, measures (including named marks and start/end/duration options), timeline
-queries and clearing, explicit resource timings, resource buffer notifications,
-observers and <code>timerify</code> are implemented. Observers support <code>mark</code>, <code>measure</code>,
-<code>resource</code> and <code>function</code> entries. Function timing includes promise settlement and
-constructor calls. Observer and resource-buffer callbacks use component timers;
-their ordering relative to other tasks can differ from Node’s <code>setImmediate</code>.
-Resource entries describe timings supplied by the application; network operations
-are not automatically instrumented.</p>
-<h3 id="native-performance-telemetry"><a class="header" href="#native-performance-telemetry">Native performance telemetry</a></h3>
-<p><code>createHistogram</code>, <code>monitorEventLoopDelay</code>, <code>eventLoopUtilization</code>,
-<code>performance.nodeTiming</code> and <code>performance.toJSON()</code> throw
-<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Components do not expose Node’s HDR histogram
-binding, libuv event-loop counters or process startup milestones. The <code>histogram</code>
-option to <code>timerify</code> is consequently unavailable. GC, HTTP, HTTP/2, DNS and network
-observer instrumentation is unavailable. Deprecated node-entry <code>kind</code> and <code>flags</code>
-accessors throw <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>, naming the <code>detail</code> replacement.</p>
-<p>The public module exports and constants match the pinned Node 24 surface; APIs
-introduced in Node 26’s rolling documentation are outside this compatibility target.
-The source files retain Node’s MIT license and pinned source provenance.</p>
-<p>QuickJS currently supplies a clock but lacks task timers and Web event targets.
-Marks, measures, resource entries within the buffer limit, and synchronous function
-timing work there. Observer subscription, event listeners and resource buffer
-overflow fail explicitly; <code>PerformanceObserver.supportedEntryTypes</code> is empty.
-StarlingMonkey supports these runtime facilities and the observer APIs.</p>
-<h2 id="timers"><a class="header" href="#timers">Timers</a></h2>
+<p>Bundle application code with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>.
+Readline itself requires no WIT imports. The streams determine where input and
+output go. <code>node:process</code> resolves inside a component, but its <code>stdin</code>, <code>stdout</code>
+and <code>stderr</code> are host stream objects that cannot cross the component boundary and
+throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> (see <a href="#process-restrictions">process restrictions</a>).
+The Node documentation’s literal <code>import { stdin, stdout } from 'node:process'</code>
+example therefore runs unchanged on Node but not in a component; supply streams
+from the component’s own I/O instead. The test fixture runs that literal example
+against the shim on Node, and runs the same question/answer flow with supplied
+streams in QuickJS and StarlingMonkey.</p>
+<h2 id="terminal-and-scheduling-boundaries"><a class="header" href="#terminal-and-scheduling-boundaries">Terminal and scheduling boundaries</a></h2>
+<p>Terminal streams may supply <code>setRawMode</code>, <code>columns</code>, and resize events. Terminal
+mode emits ANSI sequences without inspecting a host <code>TERM</code> variable; an application
+that wants Node’s <code>TERM=dumb</code> behaviour can read <code>process.env.TERM</code> through
+<code>node:process</code> and pass <code>terminal: false</code> itself. Ctrl+Z can be handled with a
+<code>SIGTSTP</code> listener; otherwise it throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Node
+suspends itself with <code>process.kill(process.pid, 'SIGTSTP')</code> and resumes from a
+<code>SIGCONT</code> listener; the <code>node:process</code> facade refuses signal listeners, and
+readline deliberately does not import it, so using readline never adds the
+process capability to a component.</p>
+<p>Cursor widths use Node’s non-ICU tables, with normalization where the engine
+provides it; some Unicode widths differ from ICU-enabled Node. Deferred callbacks
+and automatic cursor commits use microtasks rather than Node’s separate next-tick
+queue. Completion-error text uses portable string formatting.</p>
+<p>Timed Escape-key disambiguation requires engine timers; engines without timers
+throw an explicit <code>ERR_JCO_UNSUPPORTED_NODE_API</code> for that operation. Cancellation
+accepts supplied AbortSignals; readline does not install missing Abort globals.
+QuickJS async entry functions must be declared <code>async func</code> in WIT.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="noderepl"><a class="header" href="#noderepl"><code>node:repl</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:repl</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/repl</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:repl</code> ports <a href="https://github.com/nodejs/node/blob/v24.20.0/lib/repl.js">Node v24.20.0’s REPL</a>
+on top of the readline port: <code>repl.start()</code>, <code>REPLServer</code>, the <code>.break</code>, <code>.clear</code>,
+<code>.exit</code>, <code>.help</code>, <code>.editor</code> keywords and <code>defineCommand()</code>, tab completion,
+in-memory history and reverse search, top-level <code>await</code>, recoverable multi-line
+input, <code>_</code> and <code>_error</code>, and the <code>'exit'</code> and <code>'reset'</code> events. The pinned unenv
+repl module is stubs and is not used.</p>
+<p>Applications keep the ordinary import and supply the streams:</p>
+<pre><code class="language-js">import repl from "node:repl";
+
+export function attach(input, output) {
+  const server = repl.start({ prompt: "app&gt; ", input, output, useGlobal: true });
+  server.context.app = { version: "1.0.0" };
+  server.on("exit", () =&gt; output.write("bye\n"));
+  return server;
+}
+</code></pre>
+<p>Bundle with <code>jco componentize app.js --bundle --wit wit -o app.wasm</code>. The REPL
+requires no WIT imports; <code>input</code> and <code>output</code> decide where the session goes.
+Without a <code>process</code> global they are required, since there is no stdin or stdout
+to fall back to.</p>
+<h2 id="global-scope-only"><a class="header" href="#global-scope-only">Global scope only</a></h2>
+<p>Node’s default <code>useGlobal: false</code> runs each line in a separate <code>vm</code> context, a
+second realm with its own globals. No component engine can create one, so that
+option – given explicitly or omitted – is refused at construction with
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. With <code>useGlobal: true</code> evaluation is an indirect
+<code>eval</code>, which is exactly <code>vm.runInThisContext</code>: <code>replServer.context</code> is
+<code>globalThis</code>, <code>.clear</code> is an alias for <code>.break</code>, and assigning to the context
+exposes values as documented. Node’s script scope keeps top-level <code>let</code>, <code>const</code>
+and <code>class</code> bindings across lines; an <code>eval</code> does not, so the REPL rewrites those
+declarations to persist them. The trade is that <code>const</code> is not enforced between
+lines and a later redeclaration is accepted – the same trade Node documents for
+lines containing <code>await</code>. <code>REPL_MODE_STRICT</code> is refused for the same reason: a
+strict-mode eval cannot bind declarations in the global scope at all.</p>
+<h2 id="why-acorn"><a class="header" href="#why-acorn">Why acorn</a></h2>
+<p>Node’s REPL vendors <a href="https://github.com/acornjs/acorn">acorn</a>; this port depends
+on the same versions from npm (<code>acorn@8.17.0</code>, <code>acorn-walk@8.3.5</code>). A parser is
+needed for what the engine cannot answer: whether a line is <em>incomplete</em> (show the
+<code>...</code> prompt) or <em>wrong</em> (print the error) – engine <code>SyntaxError</code> messages differ
+between SpiderMonkey and QuickJS and cannot drive that decision – rewriting
+top-level <code>await</code> into an async wrapper, and locating the expression to
+tab-complete. acorn also serves as the compile step Node performs with
+<code>vm.Script</code>, so syntax errors read the same on every engine. It is bundled only
+when <code>node:repl</code> is imported; a component without the REPL does not carry it.
+Bundle size grows by roughly 1.2 MB (QuickJS) to 1.4 MB (StarlingMonkey).</p>
+<h2 id="boundaries"><a class="header" href="#boundaries">Boundaries</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td><code>useGlobal: false</code> or omitted, <code>REPL_MODE_STRICT</code>, <code>breakEvalOnSigint</code></td><td>Refused at construction with <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Ctrl+C still arrives as a keypress and emits <code>'SIGINT'</code>.</td></tr>
+<tr><td><code>REPLServer()</code> without <code>new</code> (DEP0185)</td><td>Throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> before reading any argument.</td></tr>
+<tr><td><code>preview</code></td><td>Accepted and ignored, as in a Node built without an inspector.</td></tr>
+<tr><td><code>.save</code>, <code>.load</code>, <code>setupHistory(filePath)</code></td><td>Print Node’s own failure text (<code>Failed to save: …</code>, <code>Could not open history file</code>) and continue; a component has no filesystem unless the application supplies one.</td></tr>
+<tr><td>Core modules in the context</td><td>Not auto-loaded: <code>fs</code> is a <code>ReferenceError</code> unless the application put it on the context. <code>require</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>; <code>require.resolve</code> answers as Node does.</td></tr>
+<tr><td>Errors</td><td>Synchronous errors print as <code>Uncaught …</code> with the evaluated frames only; errors thrown later by asynchronous work are not routed back, since there is no <code>node:domain</code>.</td></tr>
+<tr><td><code>writer</code></td><td>Jco’s portable inspector shared with <code>node:console</code>: the same values as <code>util.inspect</code>, without line breaking, <code>showProxy</code>, <code>showHidden</code>, <code>getters</code> or <code>sorted</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodesqlite"><a class="header" href="#nodesqlite"><code>node:sqlite</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:sqlite</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Application code keeps ordinary <code>node:sqlite</code> imports:</p>
+<pre><code class="language-js">import { DatabaseSync } from 'node:sqlite';
+
+const db = new DatabaseSync(':memory:');
+try {
+  db.exec('CREATE TABLE items(id INTEGER PRIMARY KEY, name TEXT)');
+  db.prepare('INSERT INTO items(name) VALUES (?)').run('example');
+  const rows = db.prepare('SELECT * FROM items').all();
+} finally {
+  db.close();
+}
+</code></pre>
+<p>When bundling this module, Jco adds <code>jco:node/sqlite@0.1.0</code> to the selected WIT
+world. WASI supplies no database API. This interface models databases, prepared
+statements, lazy cursors, sessions, and SQL tag stores as resources; SQL values,
+column metadata, and errors use typed records and variants. Providers can use
+other SQLite implementations without depending on Node objects in the guest.</p>
+<p>The default provider denies database creation, including <code>:memory:</code>, with
+<code>ERR_JCO_SQLITE_ADAPTER_REQUIRED</code>. Importing the module and reading constants need
+no database authority. Explicitly select the Node passthrough to execute SQL:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/sqlite@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host/node'
+</code></pre>
+<p>Database, backup, attached-database, and extension paths refer to the <strong>host
+filesystem</strong>, independently of the guest’s WASI preopens. The passthrough grants
+Node’s SQLite authority; use a restricted custom provider when narrower access
+is required. Extension loading still requires the database’s <code>allowExtension</code>
+option and Node’s native checks.</p>
+<p>The compatibility target is Node <strong>24.20.0</strong>, rather than the rolling Node API
+page. Supported operations include database open/close and transactions,
+prepared statement <code>all</code>/<code>get</code>/<code>run</code>/<code>iterate</code>, named and positional parameters,
+blobs, signed 64-bit bigints, array rows, column metadata, SQL tag stores,
+sessions and plain changeset application, serialization/deserialization, limits,
+defensive mode, extension loading, and promise-based <code>backup</code>. Statements and
+sessions retain their owning database; early iterator return releases the active
+cursor. SQL execution and SQLite error fields come from the real host engine.</p>
+<p><code>DatabaseSync.function</code>, <code>aggregate</code>, and <code>setAuthorizer</code>, changeset callback
+options, and backup’s progress callback throw <code>ERR_JCO_SQLITE_CALLBACK_UNSUPPORTED</code>.
+Synchronous callbacks would need to re-enter the guest while its SQL import is
+active, which this component interface cannot support. These APIs are present
+as explicit stubs; no callback is invoked. APIs added after the pinned release
+are outside this compatibility target.</p>
+<p>Mapping a custom SQLite provider enables JSPI for the <code>backup</code> import and makes
+component exports promising; await calls into the transpiled component. The
+synchronous database tests run on both StarlingMonkey and QuickJS. Backup is
+also tested end to end on StarlingMonkey; QuickJS currently cannot lower a
+Promise returned by an exported guest function. Use StarlingMonkey for that
+asynchronous guest flow.</p>
+<p>The implementation is available directly at
+<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite</code>, with an injectable factory
+at <code>sqlite/core</code>, but Jco’s ordinary <code>node:</code> import handling is the recommended
+application entry point. It can be mixed with other supported Node builtins.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodestream"><a class="header" href="#nodestream"><code>node:stream</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:stream</code>, <code>node:stream/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream</code> and <code>/stream/promises</code></td></tr>
+<tr><td><code>node:stream/consumers</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers</code></td></tr>
+<tr><td><code>node:stream/iter</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="classic-streams"><a class="header" href="#classic-streams">Classic streams</a></h2>
+<p><code>node:stream</code> and <code>node:stream/promises</code> provide <code>Readable</code>, <code>Writable</code>, <code>Duplex</code>,
+<code>Transform</code>, <code>PassThrough</code>, callback/promise pipelines, <code>finished</code>, readable
+operators, cancellation, async disposal, and <code>duplexPair</code>. The implementation
+reuses <a href="https://github.com/nodejs/readable-stream/tree/v4.7.0">readable-stream 4.7.0</a>,
+with typed adaptations targeting Node 24.20, including Web Stream conversions
+and support for all typed-array views. Buffer and EventEmitter identities are
+shared with the corresponding <code>node:</code> imports. Scheduling uses guest microtasks;
+no process, filesystem, network, or other host capability is required.</p>
+<pre><code class="language-js">import { Readable, Transform, Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+await pipeline(
+    Readable.from(['hello']),
+    new Transform({ transform(chunk, encoding, done) { done(null, chunk.toString().toUpperCase()); } }),
+    new Writable({ write(chunk, encoding, done) { /* consume chunk */ done(); } }),
+);
+</code></pre>
+<p>For Web Streams, use <code>Readable.fromWeb()</code>, <code>Writable.fromWeb()</code>, or
+<code>Duplex.fromWeb()</code> before calling <code>finished</code>, <code>addAbortSignal</code>, or the
+readable/writable/error/disturbance inspection helpers. Those helpers need private
+engine state when used on Web Streams directly and throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Classic streams and public Web reader/writer
+conversions are supported. The deprecated <code>Duplex.toWeb({ type })</code> alias throws;
+use <code>readableType</code> instead.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Classic streams are tested on QuickJS and StarlingMonkey. The current QuickJS
+backend lacks Web Stream, text-codec, and Abort globals, so Web conversions and
+operations requiring those globals need an engine that supplies them.</p>
+</blockquote>
+<h2 id="stream-consumers-and-iterable-streams"><a class="header" href="#stream-consumers-and-iterable-streams">Stream consumers and iterable streams</a></h2>
+<p><code>node:stream/consumers</code> supports Node 24 applications written before or after the
+24.20 iterable-stream addition. <code>node:stream/iter</code> exposes the experimental 24.20
+batch-oriented API. Both execute entirely inside the guest and share byte
+normalization, limits, text decoding, and collection behavior. Importing either
+specifier adds no host or WIT capability.</p>
+<p>For example, ordinary Node application source can use both entry points:</p>
+<pre><code class="language-js">import { text as consumeText } from 'node:stream/consumers';
+import { from, pull, text } from 'node:stream/iter';
+
+export async function run() {
+    const upper = (batch) =&gt;
+        batch?.map((chunk) =&gt; chunk.map((byte) =&gt; (byte &gt;= 97 &amp;&amp; byte &lt;= 122 ? byte - 32 : byte))) ?? null;
+    return {
+        consumed: await consumeText(['consumer']),
+        transformed: await text(pull(from('iterable'), upper)),
+    };
+}
+</code></pre>
+<p>Bundle that source normally; the WIT world only needs to describe the component’s
+own imports and exports:</p>
+<pre><code class="language-console">jco componentize app.js --bundle --backend starlingmonkey -w app.wit -o app.wasm
+</code></pre>
+<p>The implementation uses engine-provided iterable, typed-array, Blob, text-codec,
+and abort globals. <code>fromReadable()</code> and <code>fromWritable()</code> work with duck-typed
+classic streams. The experimental <code>toReadable()</code>, <code>toReadableSync()</code>, and
+<code>toWritable()</code> adapters are not yet connected to the classic implementation.
+They throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> without inspecting their arguments;
+use the classic constructors directly.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Node marks <code>node:stream/iter</code> experimental. Its Jco implementation is likewise
+experimental and may change incompatibly without a semver-major release as the
+upstream Node 24 API evolves.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodestring_decoder"><a class="header" href="#nodestring_decoder"><code>node:string_decoder</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:string_decoder</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Bundled source can use the documented Node 24 streaming decoder directly:</p>
+<pre><code class="language-js">import { Buffer } from 'node:buffer';
+import { StringDecoder } from 'node:string_decoder';
+
+const decoder = new StringDecoder('utf8');
+
+export function decode() {
+    return decoder.write(Buffer.from([0xf0, 0x9f])) + decoder.end(Buffer.from([0x8c, 0x8d]));
+}
+</code></pre>
+<p>Jco maps the import to a guest-local implementation based on Node 24.20.0. It
+retains incomplete UTF-8, UTF-16LE, base64, and base64url groups between calls,
+supports Node’s encoding aliases, and accepts strings or any <code>ArrayBufferView</code>.
+It reuses the audited Buffer core already used by <code>node:buffer</code>; it does not add a
+WIT import, callback export, host adapter, or JSPI operation.</p>
+<p>Because the adapter is selected only when bundled code resolves
+<code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
+initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
+not intercepted.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodetimers"><a class="header" href="#nodetimers"><code>node:timers</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:timers</code>, <code>node:timers/promises</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers</code> and <code>/timers/promises</code></td></tr>
+</tbody>
+</table>
+</div>
 <p><code>node:timers</code> and <code>node:timers/promises</code> target Node.js 24.20.0. Keep ordinary
 imports in application code and bundle them with <code>jco componentize --bundle</code>:</p>
 <pre><code class="language-js">import { setTimeout, clearTimeout } from "node:timers";
@@ -3453,7 +3741,7 @@ clearTimeout(pending);
 await delay(10, "ready");
 await scheduler.yield();
 </code></pre>
-<h3 id="timer-handles-and-promises"><a class="header" href="#timer-handles-and-promises">Timer handles and promises</a></h3>
+<h2 id="timer-handles-and-promises"><a class="header" href="#timer-handles-and-promises">Timer handles and promises</a></h2>
 <p>The callback module supplies timeout, interval and immediate scheduling and
 cancellation. Timeouts support <code>refresh()</code>, numeric/string cancellation IDs,
 <code>close()</code> and <code>Symbol.dispose</code>. Immediates support cancellation and disposal.
@@ -3464,7 +3752,7 @@ scheduler singleton. It shares identity with <code>timers.promises</code> and th
 functions’ custom promisify hooks. Abort rejects with <code>AbortError</code>, <code>ABORT_ERR</code>
 and the signal’s reason as <code>cause</code>; interval iterators retain ticks while the
 consumer is busy and release the timer when the loop breaks.</p>
-<h3 id="engine-requirements"><a class="header" href="#engine-requirements">Engine requirements</a></h3>
+<h2 id="engine-requirements"><a class="header" href="#engine-requirements">Engine requirements</a></h2>
 <p>No additional WIT import or host mapping is required by the adapter. The component
 engine supplies the task scheduler and its underlying clocks. StarlingMonkey
 supports scheduling; the current QuickJS backend lacks task timers, so scheduling
@@ -3486,13 +3774,73 @@ private abort-listener protection against <code>stopImmediatePropagation()</code
 ported. Abort handling uses the engine’s public event API. Direct jco-std imports
 can coexist with native Node builtins, but their timer handles and cancellation
 registries are separate.</p>
-<h3 id="implementation-source"><a class="header" href="#implementation-source">Implementation source</a></h3>
+<h2 id="implementation-source"><a class="header" href="#implementation-source">Implementation source</a></h2>
 <p>The TypeScript adaptation follows Node’s <code>lib/timers.js</code>, <code>lib/internal/timers.js</code>
 and <code>lib/timers/promises.js</code> at commit
 <code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>, with retained MIT notices. Engine timers
 replace Node’s native queue. The audited unenv 2.0.0-rc.24 implementation was not
 selected: its promise delays resolve immediately, interval promises yield only
 once, and fallback handles lack the required lifecycle semantics.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodetty"><a class="header" href="#nodetty"><code>node:tty</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:tty</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A component has no terminal of its own, and WASI 0.2 can only say whether its
+standard streams are terminals. <code>node:tty</code> therefore resolves against
+<code>jco:node/tty@0.1.0</code>, which addresses the embedding process’s descriptors as Node
+does: <code>isatty(fd)</code>, a handle per descriptor and direction, raw mode, the window
+size, blocking reads, writes, and the environment used for color detection. When
+bundled source imports <code>node:tty</code>, Jco adds the import to the selected world and
+installs <code>tty.wit</code> and the shared <code>types.wit</code> under <code>deps/jco-node-0.1.0</code>.</p>
+<p>It is <strong>denied by default</strong>: every operation, including <code>isatty()</code> on an in-range
+descriptor, throws <code>ERR_JCO_TTY_ADAPTER_REQUIRED</code> until the application maps a
+provider. jco-std ships one for Node:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/tty@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host/node'
+</code></pre>
+<p>With it, <code>new tty.WriteStream(1)</code> is the embedding process’s standard output when
+that is a terminal, and fails with Node’s own <code>ERR_TTY_INIT_FAILED</code> (with <code>errno</code>,
+<code>syscall</code> and <code>info</code>) when it is not. <code>process.stdin</code> and <code>process.stdout</code> remain
+unsupported on the process facade, so applications construct the streams from
+descriptors explicitly. Because <code>readline</code> and the REPL default <code>terminal</code> to
+<code>output.isTTY</code>, these streams are what makes an interactive session work:</p>
+<pre><code class="language-js">import { ReadStream, WriteStream } from "node:tty";
+import repl from "node:repl";
+
+export function start() {
+  const input = new ReadStream(0);
+  const output = new WriteStream(1);
+  repl.start({ prompt: "app&gt; ", input, output, useGlobal: true });
+  input.resume();
+}
+</code></pre>
+<p>The port follows <a href="https://github.com/nodejs/node/blob/v24.20.0/lib/tty.js">Node v24.20.0’s <code>lib/tty.js</code></a>
+and <code>lib/internal/tty.js</code>. The pinned unenv tty module answers <code>isatty() === false</code>
+and writes through <code>console.log</code>; it is not used.</p>
+<h2 id="boundaries-1"><a class="header" href="#boundaries-1">Boundaries</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td>Prototype chain</td><td><code>WriteStream → Duplex → Readable → Stream → EventEmitter</code> with an internal terminal stream standing in for <code>net.Socket</code>; <code>instanceof net.Socket</code> is false without <code>wasi:sockets</code>.</td></tr>
+<tr><td>Stream sides</td><td>A <code>ReadStream</code> is not writable and a <code>WriteStream</code> is not readable; Node’s sockets open the descriptor read-write.</td></tr>
+<tr><td>Reading</td><td>Blocks the component. A flowing <code>ReadStream</code> pulls one chunk per read and emits <code>'data'</code> synchronously between pulls; <code>pause()</code> stops after the current chunk. Nothing else runs while the terminal is idle.</td></tr>
+<tr><td><code>'resize'</code></td><td>Emitted only by <code>_refreshSize()</code>; a component receives no <code>SIGWINCH</code>.</td></tr>
+<tr><td><code>getColorDepth()</code> / <code>hasColors()</code></td><td>Exact port. The environment defaults to the provider’s; the Windows branch answers the 16-color floor because the build-number probe needs <code>node:os</code>.</td></tr>
+<tr><td>Standard descriptors on the Node host</td><td>Kept open when a stream is destroyed, as Node keeps its own stdio; descriptors above 2 are closed with the stream. Raw mode is restored when the last read handle goes.</td></tr>
+</tbody>
+</table>
+</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
