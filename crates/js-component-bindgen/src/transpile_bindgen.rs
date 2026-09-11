@@ -4927,6 +4927,7 @@ impl<'a> Instantiator<'a, '_> {
             ),
             memory: memory.as_ref(),
             realloc: realloc.as_ref(),
+            dealloc: None,
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
