@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-f6fe495f.js";
+            window.path_to_searchindex_js = "../../../searchindex-de63ffef.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-a282f97b.js"></script>
+        <script src="../../../toc-05bc3f8a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -262,10 +262,10 @@ environment writes and <code>chdir</code>, then affect the embedding Node proces
 <p>Generate bindings for explicit instantiation; no custom mapping is needed:</p>
 <pre><code class="language-sh">jco transpile app.wasm -o out --instantiation async
 </code></pre>
-<p>Then pass your implementation object directly in the imports. Jco’s default
-mapping names the process import after the denial-provider package; that key does
-not force you to use its implementation. The generated binding types list the
-expected import keys:</p>
+<p>Then pass your implementation object directly in the imports, keyed by the WIT
+interface name without its version. Jco’s deny-by-default module map applies only
+to ESM output; instantiation output never renames imports. The generated binding
+types list the expected import keys:</p>
 <pre><code class="language-js">import { instantiate } from './out/app.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { createProcessHost } from './my-process-provider.js';
@@ -273,7 +273,7 @@ import { createProcessHost } from './my-process-provider.js';
 const { host, exitRequests } = createProcessHost();
 const component = await instantiate(undefined, {
     ...new WASIShim().getImportObject(),
-    '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host': host,
+    'jco:node/process': host,
 });
 </code></pre>
 <p>The provider implements the WIT operations underneath the Node facade:</p>

@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-f6fe495f.js";
+            window.path_to_searchindex_js = "../../../searchindex-de63ffef.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-a282f97b.js"></script>
+        <script src="../../../toc-05bc3f8a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,72 +200,37 @@ defaults and its TLS session cache, and produces the same 23-field <code>getName
 key as Node, so option bags pool the way they would natively. Requests reject
 non-<code>https:</code> protocols with <code>ERR_INVALID_PROTOCOL</code> and elide <code>:443</code> from the
 authority, and <code>https.get()</code> ends the request itself.</p>
-<p>TLS crosses the component boundary as a typed <code>tls-options</code> record on the
-<code>jco:node/http@0.1.0</code> request and server options. It carries the serializable
-subset of Node’s <code>tls.connect</code> / <code>tls.createServer</code> options: <code>key</code>, <code>cert</code>,
-<code>pfx</code>, <code>passphrase</code>, <code>ca</code>, <code>crl</code>, <code>dhparam</code>, <code>ciphers</code>, <code>ecdhCurve</code>, <code>sigalgs</code>,
-<code>minVersion</code>, <code>maxVersion</code>, <code>secureProtocol</code>, <code>secureOptions</code>,
-<code>sessionIdContext</code>, <code>honorCipherOrder</code>, <code>ALPNProtocols</code>, <code>servername</code>,
-<code>rejectUnauthorized</code>, and <code>requestCert</code>. Material fields stay lists, so a
-<code>key: [rsa, ecdsa]</code> bundle reaches the host intact. Options with no typed
-representation – <code>checkServerIdentity</code>, <code>SNICallback</code>, <code>ALPNCallback</code>,
-<code>pskCallback</code>, <code>secureContext</code>, <code>session</code>, <code>ticketKeys</code>, and the OpenSSL engine
-options – throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> naming the option rather than
-being dropped.</p>
+<p>TLS options are configured through <code>jco:node/tls@0.1.0</code>. Direct HTTP requests
+and servers carry a one-use configuration handle, which the HTTP host consumes
+from the same TLS provider. Certificate, cipher, ALPN, trust, and SNI settings
+have one capability boundary instead of separate HTTP and TLS WIT records.
+The existing serializable HTTPS option subset remains supported; native objects
+and callback options such as <code>checkServerIdentity</code> and <code>SNICallback</code> remain
+explicitly unsupported by the buffered HTTP adapter.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Value</th><th><code>node:https</code> behaviour</th></tr>
+<tr><th>Value</th><th><code>node:https</code> behavior</th></tr>
 </thead>
 <tbody>
-<tr><td><code>direct</code></td><td>Clients and servers. The opt-in Node provider routes <code>https</code> requests to <code>node:https.request</code> with the carried TLS options, and a server carrying a <code>tls</code> record to <code>node:https.createServer</code>, so the host’s own TLS stack terminates the connection.</td></tr>
-<tr><td><code>wasi-sockets</code></td><td>Verified clients over the existing TCP streams. TLS connections implicitly require <code>wasi:tls</code>, imported automatically for <code>node:https</code>. HTTPS servers are unsupported by the pinned client-only draft.</td></tr>
-<tr><td><code>wasi-http</code></td><td>Clients only, with the <code>HTTPS</code> scheme. <code>wasi:http/outgoing-handler</code> owns certificate validation, so any per-request TLS option is refused; servers are rejected as for <code>node:http</code>.</td></tr>
+<tr><td><code>direct</code></td><td>Clients and servers using <code>jco:node/http</code> and <code>jco:node/tls</code>. Bind <code>createHttpHost(callbacks, tls)</code> to the same TLS provider imported by the component.</td></tr>
+<tr><td><code>wasi-sockets</code></td><td>Verified clients call <code>jco:node/tls.start-tls</code> over the existing TCP streams. A provider can delegate to <code>wasi:tls</code>. The pinned draft does not support HTTPS servers.</td></tr>
+<tr><td><code>wasi-http</code></td><td>HTTPS is rejected because outgoing-handler cannot use the TLS capability. Select <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
 </tbody>
 </table>
 </div>
-<p>TLS support is part of the <code>wasi-sockets</code> implementation, which uses the
-<code>wasi:tls</code> host capability for TLS connections. Explicitly grant it when transpiling:</p>
-<pre><code class="language-sh">jco transpile component.wasm -o out \
-  --map 'wasi:tls/types@0.2.0-draft=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node'
-</code></pre>
-<p>Sockets and TLS share <code>wasi:io@0.2.12</code> stream resources directly. Without this
-opt-in, HTTPS fails before connecting, with no plaintext fallback. Plain HTTP
-needs no TLS capability.
-The Node provider uses <code>node:tls</code> over the supplied TCP streams, system trust,
-hostname verification, and HTTP/1.1 ALPN. Hosts needing private trust can map the
-TLS interface to a module exporting:</p>
-<pre><code class="language-js">import { createTlsProvider } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node';
-export const { ClientHandshake, ClientConnection, FutureClientStreams, isAvailable } = createTlsProvider({
-    ca: [trustedCaPem],
-    handshakeTimeoutMs: 10_000,
-});
-</code></pre>
-<p>Based on upstream <a href="https://github.com/WebAssembly/wasi-tls/tree/6781ae26084100c0628ef72cc44e4517c6c48ae5/wit"><code>WebAssembly/wasi-tls</code> at <code>6781ae26084100c0628ef72cc44e4517c6c48ae5</code></a>,
-Jco’s <a href="https://github.com/bytecodealliance/jco/tree/main/packages/jco/lib/wit/builtin/wasi-tls-0.2.0-draft">local contract</a>
-retains <code>wasi:tls@0.2.0-draft</code> but uses <code>wasi:io@0.2.12</code>, adds <code>is-available</code>, and
-omits unstable-feature annotations. It is a provisional interface for Node.js,
-web, and other host implementations. It exposes client handshake,
-future polling, streams, and output shutdown. It has no server handshake,
-certificate configuration, or ALPN controls. Only guest <code>servername</code> and
-<code>rejectUnauthorized: true</code> are supported; other TLS options, including <code>ca</code>, are
-rejected. TLS support is independent of the componentization backend.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p><code>componentize-qjs</code> 0.4.3 currently fails during snapshot initialization when linking
-the TLS interface’s shared IO resources, even for an otherwise empty component.
-StarlingMonkey is a workaround for this build-time issue.</p>
-</blockquote>
-<p>The temporarily skipped component tests in <code>https-wasi-tls.ts</code> include deterministic
-local TLS tests and a separately named public test requiring DNS and TCP/443 to
-<code>example.com</code> (20-second execution deadline).</p>
-<p>An <code>https.Server</code> always carries its <code>tls</code> record, even when no material was
-supplied, so an implementation without a TLS stack refuses it; the <code>direct</code>
-host then behaves like Node, which constructs the server and fails each
-handshake. Because <code>jco:node/http@0.1.0</code> gained the record in place, a project
-whose <code>wit/deps/jco-node-0.1.0/http.wit</code> predates it must delete that file so
-the next <code>jco componentize</code> reinstalls the current interface: injection never
-overwrites an existing dependency file.</p>
+<p>For WASI stream upgrades, bind <code>createWasiTlsBridge(yourWasiTlsProvider)</code> from
+<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/wasi</code> as the primary
+<code>jco:node/tls</code> import. The bridge reuses the WASI TLS future, connection, and IO
+resources. Only <code>servername</code> and <code>rejectUnauthorized: true</code> are supported by
+that draft; trust and ALPN are provider policy. The optional native TLS factory
+also accepts <code>{ wasiTls: yourWasiTlsProvider }</code> to serve both transports.
+The existing native WASI TLS provider still awaits publication of the
+preview2-shim <code>io-worker</code> export; the new native Node TLS provider does not
+have that dependency.</p>
+<p>Projects with checked-in <code>http.wit</code> or <code>http2.wit</code> dependencies must update them
+together with <code>tls.wit</code>. Injection adds missing files but never overwrites
+existing dependency files. Plain HTTP continues to work without granting TLS.</p>
 
                     </main>
 

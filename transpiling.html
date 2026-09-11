@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f6fe495f.js";
+            window.path_to_searchindex_js = "searchindex-de63ffef.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a282f97b.js"></script>
+        <script src="toc-05bc3f8a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -405,7 +405,10 @@ export { test }
   instantiateCore?: (module: WebAssembly.Module, imports: Record&lt;string, any&gt;) =&gt; Promise&lt;WebAssembly.Instance&gt;
 ): Promise&lt;{ [exportName: string]: any }&gt;;
 </code></pre>
-<p><code>imports</code> allows customizing the imports provided for instantiation.</p>
+<p><code>imports</code> allows customizing the imports provided for instantiation. Its keys are the component’s
+import names as the WIT spells them, without versions (for example <code>wasi:cli/environment</code> or
+<code>jco:node/process</code>). <code>--map</code> rewrites those keys the same way it rewrites ESM import specifiers;
+Jco’s default Node capability map is not applied to instantiation output.</p>
 <p><code>instantiateCore</code> defaults to <code>WebAssembly.instantiate</code>.</p>
 <p><code>getCoreModule</code> can typically be implemented as:</p>
 <pre><code class="language-ts">export async function getCoreModule(path: string) {

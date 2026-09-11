@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f6fe495f.js";
+            window.path_to_searchindex_js = "searchindex-de63ffef.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a282f97b.js"></script>
+        <script src="toc-05bc3f8a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -555,7 +555,10 @@ export { test }
   instantiateCore?: (module: WebAssembly.Module, imports: Record&lt;string, any&gt;) =&gt; Promise&lt;WebAssembly.Instance&gt;
 ): Promise&lt;{ [exportName: string]: any }&gt;;
 </code></pre>
-<p><code>imports</code> allows customizing the imports provided for instantiation.</p>
+<p><code>imports</code> allows customizing the imports provided for instantiation. Its keys are the component’s
+import names as the WIT spells them, without versions (for example <code>wasi:cli/environment</code> or
+<code>jco:node/process</code>). <code>--map</code> rewrites those keys the same way it rewrites ESM import specifiers;
+Jco’s default Node capability map is not applied to instantiation output.</p>
 <p><code>instantiateCore</code> defaults to <code>WebAssembly.instantiate</code>.</p>
 <p><code>getCoreModule</code> can typically be implemented as:</p>
 <pre><code class="language-ts">export async function getCoreModule(path: string) {
@@ -2134,7 +2137,7 @@ set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>,
-<code>node:tls</code>, <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
+<code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
 <p>This group is not all-or-nothing. A future implementation can combine portable
@@ -2206,7 +2209,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodefs"><code>node:fs</code></a>, <a href="#nodefs"><code>node:fs/promises</code></a></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
 <tr><td><a href="#nodehttp"><code>node:http</code></a></td><td>Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation. Servers need <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
 <tr><td><a href="#nodehttp2"><code>node:http2</code></a></td><td>Client and server sessions over selectable direct or WASI socket implementations.</td></tr>
-<tr><td><a href="#nodehttps"><code>node:https</code></a></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses the <code>direct</code> host or an explicit <code>wasi:tls</code> provider.</td></tr>
+<tr><td><a href="#nodehttps"><code>node:https</code></a></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses <code>jco:node/tls</code>, optionally delegating to <code>wasi:tls</code>.</td></tr>
 <tr><td><a href="#nodeinspector"><code>node:inspector</code></a>, <a href="#nodeinspector"><code>node:inspector/promises</code></a></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface.</td></tr>
 <tr><td><a href="#nodemodule"><code>node:module</code></a></td><td>Classification, source maps and <code>require.resolve</code> are exact. Everything that <strong>loads</strong> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Requires no WIT capability.</td></tr>
 <tr><td><a href="#nodenet"><code>node:net</code></a></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported.</td></tr>
@@ -2224,6 +2227,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodestring_decoder"><code>node:string_decoder</code></a></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><a href="#nodetest"><code>node:test</code></a>, <a href="#nodetest"><code>node:test/reporters</code></a></td><td>Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine <code>AbortController</code>; see the API page for engine limits.</td></tr>
 <tr><td><a href="#nodetimers"><code>node:timers</code></a>, <a href="#nodetimers"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
+<tr><td><a href="#nodetls"><code>node:tls</code></a></td><td>Encrypted sockets, contexts, and inspection over <code>jco:node/tls</code>; denied by default.</td></tr>
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 </tbody>
@@ -2771,15 +2775,23 @@ clients and servers. <code>wasi-http</code> implements clients and rejects serve
 construction immediately because outgoing-handler cannot listen for arbitrary
 connections.</p>
 <p>For direct servers, instantiate with a provider bound to that component’s
-callback dispatcher. For example, after transpiling with
-<code>--instantiation async --map jco:node/http@0.1.0=http-host</code>:</p>
+callback dispatcher. The provider is asynchronous, so select JSPI and its async
+imports explicitly; instantiation output keeps the WIT import names and nothing
+selects them for you. For example, after transpiling with:</p>
+<pre><code class="language-sh">jco transpile component.wasm -o out --instantiation async \
+  --async-mode jspi --async-exports '*' \
+  --async-imports 'jco:node/http@0.1.0#request' \
+    'jco:node/http@0.1.0#[method]server.listen' \
+    'jco:node/http@0.1.0#[method]server.close' \
+    'jco:node/http@0.1.0#[method]server.get-connections'
+</code></pre>
 <pre><code class="language-js">import { instantiate } from './component.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { createHttpHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node';
 
 let instance;
 const imports = new WASIShim().getImportObject();
-imports['http-host'] = createHttpHost(() =&gt; instance.httpCallbacks);
+imports['jco:node/http'] = createHttpHost(() =&gt; instance.httpCallbacks);
 instance = await instantiate(undefined, imports);
 // Await application exports that create or control servers.
 await instance.start();
@@ -2840,8 +2852,11 @@ export const server = createServer((request, response) =&gt; {
 </tbody>
 </table>
 </div>
-<p>By default, the provider rejects both <code>connect()</code> and server construction with
-<code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>.</p>
+<p>By default, cleartext operations fail with <code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>;
+secure operations first require <code>jco:node/tls</code> and fail with
+<code>ERR_JCO_TLS_ADAPTER_REQUIRED</code> when it is denied. Direct secure sessions and
+servers obtain one-use configuration handles from the TLS provider. Bind it
+with <code>createHttp2Host(() =&gt; instance.http2Callbacks, tls)</code>.</p>
 <p><code>direct</code> mode models sessions, streams, and servers as typed host-owned WIT
 resources, with a passthrough implementation to NodeJS underneath. The WIT
 interface used is <code>jco:node/http2-callbacks@0.1.0</code>.</p>
@@ -2875,72 +2890,37 @@ defaults and its TLS session cache, and produces the same 23-field <code>getName
 key as Node, so option bags pool the way they would natively. Requests reject
 non-<code>https:</code> protocols with <code>ERR_INVALID_PROTOCOL</code> and elide <code>:443</code> from the
 authority, and <code>https.get()</code> ends the request itself.</p>
-<p>TLS crosses the component boundary as a typed <code>tls-options</code> record on the
-<code>jco:node/http@0.1.0</code> request and server options. It carries the serializable
-subset of Node’s <code>tls.connect</code> / <code>tls.createServer</code> options: <code>key</code>, <code>cert</code>,
-<code>pfx</code>, <code>passphrase</code>, <code>ca</code>, <code>crl</code>, <code>dhparam</code>, <code>ciphers</code>, <code>ecdhCurve</code>, <code>sigalgs</code>,
-<code>minVersion</code>, <code>maxVersion</code>, <code>secureProtocol</code>, <code>secureOptions</code>,
-<code>sessionIdContext</code>, <code>honorCipherOrder</code>, <code>ALPNProtocols</code>, <code>servername</code>,
-<code>rejectUnauthorized</code>, and <code>requestCert</code>. Material fields stay lists, so a
-<code>key: [rsa, ecdsa]</code> bundle reaches the host intact. Options with no typed
-representation – <code>checkServerIdentity</code>, <code>SNICallback</code>, <code>ALPNCallback</code>,
-<code>pskCallback</code>, <code>secureContext</code>, <code>session</code>, <code>ticketKeys</code>, and the OpenSSL engine
-options – throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> naming the option rather than
-being dropped.</p>
+<p>TLS options are configured through <code>jco:node/tls@0.1.0</code>. Direct HTTP requests
+and servers carry a one-use configuration handle, which the HTTP host consumes
+from the same TLS provider. Certificate, cipher, ALPN, trust, and SNI settings
+have one capability boundary instead of separate HTTP and TLS WIT records.
+The existing serializable HTTPS option subset remains supported; native objects
+and callback options such as <code>checkServerIdentity</code> and <code>SNICallback</code> remain
+explicitly unsupported by the buffered HTTP adapter.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Value</th><th><code>node:https</code> behaviour</th></tr>
+<tr><th>Value</th><th><code>node:https</code> behavior</th></tr>
 </thead>
 <tbody>
-<tr><td><code>direct</code></td><td>Clients and servers. The opt-in Node provider routes <code>https</code> requests to <code>node:https.request</code> with the carried TLS options, and a server carrying a <code>tls</code> record to <code>node:https.createServer</code>, so the host’s own TLS stack terminates the connection.</td></tr>
-<tr><td><code>wasi-sockets</code></td><td>Verified clients over the existing TCP streams. TLS connections implicitly require <code>wasi:tls</code>, imported automatically for <code>node:https</code>. HTTPS servers are unsupported by the pinned client-only draft.</td></tr>
-<tr><td><code>wasi-http</code></td><td>Clients only, with the <code>HTTPS</code> scheme. <code>wasi:http/outgoing-handler</code> owns certificate validation, so any per-request TLS option is refused; servers are rejected as for <code>node:http</code>.</td></tr>
+<tr><td><code>direct</code></td><td>Clients and servers using <code>jco:node/http</code> and <code>jco:node/tls</code>. Bind <code>createHttpHost(callbacks, tls)</code> to the same TLS provider imported by the component.</td></tr>
+<tr><td><code>wasi-sockets</code></td><td>Verified clients call <code>jco:node/tls.start-tls</code> over the existing TCP streams. A provider can delegate to <code>wasi:tls</code>. The pinned draft does not support HTTPS servers.</td></tr>
+<tr><td><code>wasi-http</code></td><td>HTTPS is rejected because outgoing-handler cannot use the TLS capability. Select <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
 </tbody>
 </table>
 </div>
-<p>TLS support is part of the <code>wasi-sockets</code> implementation, which uses the
-<code>wasi:tls</code> host capability for TLS connections. Explicitly grant it when transpiling:</p>
-<pre><code class="language-sh">jco transpile component.wasm -o out \
-  --map 'wasi:tls/types@0.2.0-draft=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node'
-</code></pre>
-<p>Sockets and TLS share <code>wasi:io@0.2.12</code> stream resources directly. Without this
-opt-in, HTTPS fails before connecting, with no plaintext fallback. Plain HTTP
-needs no TLS capability.
-The Node provider uses <code>node:tls</code> over the supplied TCP streams, system trust,
-hostname verification, and HTTP/1.1 ALPN. Hosts needing private trust can map the
-TLS interface to a module exporting:</p>
-<pre><code class="language-js">import { createTlsProvider } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node';
-export const { ClientHandshake, ClientConnection, FutureClientStreams, isAvailable } = createTlsProvider({
-    ca: [trustedCaPem],
-    handshakeTimeoutMs: 10_000,
-});
-</code></pre>
-<p>Based on upstream <a href="https://github.com/WebAssembly/wasi-tls/tree/6781ae26084100c0628ef72cc44e4517c6c48ae5/wit"><code>WebAssembly/wasi-tls</code> at <code>6781ae26084100c0628ef72cc44e4517c6c48ae5</code></a>,
-Jco’s <a href="https://github.com/bytecodealliance/jco/tree/main/packages/jco/lib/wit/builtin/wasi-tls-0.2.0-draft">local contract</a>
-retains <code>wasi:tls@0.2.0-draft</code> but uses <code>wasi:io@0.2.12</code>, adds <code>is-available</code>, and
-omits unstable-feature annotations. It is a provisional interface for Node.js,
-web, and other host implementations. It exposes client handshake,
-future polling, streams, and output shutdown. It has no server handshake,
-certificate configuration, or ALPN controls. Only guest <code>servername</code> and
-<code>rejectUnauthorized: true</code> are supported; other TLS options, including <code>ca</code>, are
-rejected. TLS support is independent of the componentization backend.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p><code>componentize-qjs</code> 0.4.3 currently fails during snapshot initialization when linking
-the TLS interface’s shared IO resources, even for an otherwise empty component.
-StarlingMonkey is a workaround for this build-time issue.</p>
-</blockquote>
-<p>The temporarily skipped component tests in <code>https-wasi-tls.ts</code> include deterministic
-local TLS tests and a separately named public test requiring DNS and TCP/443 to
-<code>example.com</code> (20-second execution deadline).</p>
-<p>An <code>https.Server</code> always carries its <code>tls</code> record, even when no material was
-supplied, so an implementation without a TLS stack refuses it; the <code>direct</code>
-host then behaves like Node, which constructs the server and fails each
-handshake. Because <code>jco:node/http@0.1.0</code> gained the record in place, a project
-whose <code>wit/deps/jco-node-0.1.0/http.wit</code> predates it must delete that file so
-the next <code>jco componentize</code> reinstalls the current interface: injection never
-overwrites an existing dependency file.</p>
+<p>For WASI stream upgrades, bind <code>createWasiTlsBridge(yourWasiTlsProvider)</code> from
+<code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/wasi</code> as the primary
+<code>jco:node/tls</code> import. The bridge reuses the WASI TLS future, connection, and IO
+resources. Only <code>servername</code> and <code>rejectUnauthorized: true</code> are supported by
+that draft; trust and ALPN are provider policy. The optional native TLS factory
+also accepts <code>{ wasiTls: yourWasiTlsProvider }</code> to serve both transports.
+The existing native WASI TLS provider still awaits publication of the
+preview2-shim <code>io-worker</code> export; the new native Node TLS provider does not
+have that dependency.</p>
+<p>Projects with checked-in <code>http.wit</code> or <code>http2.wit</code> dependencies must update them
+together with <code>tls.wit</code>. Injection adds missing files but never overwrites
+existing dependency files. Plain HTTP continues to work without granting TLS.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodeinspector"><a class="header" href="#nodeinspector"><code>node:inspector</code></a></h1>
 <div class="table-wrapper">
@@ -3302,10 +3282,10 @@ environment writes and <code>chdir</code>, then affect the embedding Node proces
 <p>Generate bindings for explicit instantiation; no custom mapping is needed:</p>
 <pre><code class="language-sh">jco transpile app.wasm -o out --instantiation async
 </code></pre>
-<p>Then pass your implementation object directly in the imports. Jco’s default
-mapping names the process import after the denial-provider package; that key does
-not force you to use its implementation. The generated binding types list the
-expected import keys:</p>
+<p>Then pass your implementation object directly in the imports, keyed by the WIT
+interface name without its version. Jco’s deny-by-default module map applies only
+to ESM output; instantiation output never renames imports. The generated binding
+types list the expected import keys:</p>
 <pre><code class="language-js">import { instantiate } from './out/app.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { createProcessHost } from './my-process-provider.js';
@@ -3313,7 +3293,7 @@ import { createProcessHost } from './my-process-provider.js';
 const { host, exitRequests } = createProcessHost();
 const component = await instantiate(undefined, {
     ...new WASIShim().getImportObject(),
-    '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host': host,
+    'jco:node/process': host,
 });
 </code></pre>
 <p>The provider implements the WIT operations underneath the Node facade:</p>
@@ -3871,6 +3851,154 @@ and <code>lib/timers/promises.js</code> at commit
 replace Node’s native queue. The audited unenv 2.0.0-rc.24 implementation was not
 selected: its promise delays resolve immediately, interval promises yield only
 once, and fallback handles lack the required lifecycle semantics.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodetls"><a class="header" href="#nodetls"><code>node:tls</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:tls</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:tls</code> targets Node 24.20.0 and exposes its complete module export list.
+An injected <code>jco:node/tls@0.1.0</code> provider supplies encrypted sockets, listeners,
+secure contexts, certificate inspection, cipher/CA queries, and TLS controls.
+The guest socket uses the portable classic <code>Duplex</code> implementation for pipes
+and backpressure. Importing the module grants no capabilities; the default
+provider throws <code>ERR_JCO_TLS_ADAPTER_REQUIRED</code> when used.</p>
+<p>Jco replaces ordinary <code>node:tls</code> imports and adds the <code>jco:node/tls@0.1.0</code>
+capability plus the <code>tls-callbacks</code> guest export. Cryptography, certificate parsing,
+and the TLS protocol run in the injected provider. Importing the module does not
+open sockets or read the host’s trust store.</p>
+<h2 id="shared-tls-provider"><a class="header" href="#shared-tls-provider">Shared TLS provider</a></h2>
+<p><code>node:tls</code>, direct HTTPS, and secure direct HTTP/2 use <code>jco:node/tls</code>.
+HTTP protocols pass one-use TLS configuration handles to their transport host,
+so their WIT interfaces no longer duplicate certificate and cipher options.
+Bind those HTTP hosts to the <strong>same TLS provider instance</strong>. The native provider
+consumes the handle before starting the HTTP operation; handles from another
+provider, or already consumed handles, are rejected.</p>
+<p>HTTPS over WASI sockets calls <code>jco:node/tls.start-tls</code>. <code>createWasiTlsBridge</code>
+delegates that operation to a supplied <code>wasi:tls/types@0.2.0-draft</code> provider and
+reuses its future, connection, and WASI IO resources. The draft only supports
+verified client stream upgrades. It cannot supply Node servers, per-connection
+trust options, certificate inspection, or cipher controls; the bridge denies
+those operations. A native provider can also accept <code>{ wasiTls }</code> to provide
+both paths. The older <code>/tls/host</code> exports remain WASI providers for existing
+embedders; they are not the primary Node capability.</p>
+<p>HTTPS via <code>wasi-http</code> is unsupported: outgoing-handler cannot accept the TLS
+provider or its configuration. Select <code>direct</code> or <code>wasi-sockets</code>. HTTP/2 over
+WASI sockets remains h2c-only.</p>
+<h2 id="binding-the-native-provider"><a class="header" href="#binding-the-native-provider">Binding the native provider</a></h2>
+<p>Use one factory per component. With <code>--instantiation</code>, the import keys are the
+WIT interface names without their versions; Jco’s deny-by-default module map
+applies only to ESM output:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+import { createTlsHost } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host/node";
+import * as wasiTlsTypes from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host";
+import { createHttpHost } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http/host/node";
+import { createHttp2Host } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node";
+import { instantiate } from "./component.js";
+
+const tls = createTlsHost({ onCallbackError: (error) =&gt; console.error(error) });
+let instance;
+instance = await instantiate(undefined, {
+  ...new WASIShim().getImportObject(),
+  "jco:node/tls": tls,
+  "wasi:tls/types": wasiTlsTypes,
+  "jco:node/http": createHttpHost(() =&gt; instance.httpCallbacks, tls),
+  "jco:node/http2": createHttp2Host(() =&gt; instance.http2Callbacks, tls),
+});
+if (instance.tlsCallbacks) tls.attachCallbacks(instance.tlsCallbacks);
+// Call component exports. When the component is finished:
+// tls.dispose();
+</code></pre>
+<p>Transpile with JSPI and promising exports. For direct HTTP, also select async
+imports <code>jco:node/http@0.1.0#request</code>, <code>#[method]server.listen</code>,
+<code>#[method]server.close</code>, and <code>#[method]server.get-connections</code>. Direct HTTP/2 has
+the existing async session/stream selectors. Explicit <code>--map</code> selections for
+the HTTP providers add those selectors automatically. Supplying import objects
+at instantiation does not retroactively change the generated binding mode.</p>
+<p>The native provider grants native network listeners/connections and trust-store
+queries. <code>setDefaultCACertificates</code> changes only that provider’s trust policy,
+including its subsequent HTTPS and HTTP/2 configurations. It does not change
+the embedding process’s default CA store. Explicit <code>SecureContext</code> objects
+retain their original trust settings.</p>
+<p><code>dispose()</code> destroys sockets, including incomplete handshakes, closes listeners,
+and releases contexts. Guest callback traps dispose the provider and are passed
+to <code>onCallbackError</code>. Standalone contexts and closed server objects remain
+provider-owned until disposal, allowing normal inspection and server reuse.</p>
+<h2 id="supplying-your-own-implementation"><a class="header" href="#supplying-your-own-implementation">Supplying your own implementation</a></h2>
+<p>Import <code>TlsHost</code> and <code>TlsCallbacks</code> from <code>/tls/core</code>. Start with the deny provider
+and replace only the operations your component needs:</p>
+<pre><code class="language-ts">import denied from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/node-host";
+import type { TlsHost } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/core";
+
+const host: TlsHost = {
+  ...denied,
+  // Implement permitted operations; every other operation still fails explicitly.
+};
+</code></pre>
+<p>For a WASI provider, <code>createWasiTlsBridge(provider)</code> already supplies such an
+object. No alias mapping is necessary when supplying the object directly under
+the binding’s existing import key. A custom HTTP transport must understand its
+TLS provider’s configuration handles.
+<code>TlsConfigurationProvider.takeContextOptions</code> is the native HTTP adapters’ local
+integration contract, not an additional WIT import. It is exported as a type from
+<code>/tls/core</code>; HTTP hosts only require this method from their TLS provider.</p>
+<p>The interface groups operations as follows:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operations</th><th>Responsibility</th></tr>
+</thead>
+<tbody>
+<tr><td><code>query</code>, <code>set-default-ca</code></td><td>Cipher/CA/identity queries and provider-local trust changes.</td></tr>
+<tr><td><code>create-context</code>, <code>release-context</code></td><td>Validate TLS options and manage opaque configuration handles.</td></tr>
+<tr><td><code>connect</code>, <code>create-server</code></td><td>Create a transport for the supplied guest identifier.</td></tr>
+<tr><td><code>socket-operation</code>, <code>server-operation</code></td><td>Closed enums of inspection and control operations.</td></tr>
+<tr><td><code>write</code>, <code>end</code>, <code>release</code></td><td>Stream writes, completion acknowledgements, and socket cleanup.</td></tr>
+<tr><td><code>is-available</code>, <code>start-tls</code></td><td>Optional upgrades of owned WASI streams using the WASI TLS contract.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Dispatch events after the initiating import returns. <code>target</code> is the guest
+socket/server ID. Accepted sockets use a separate positive 31-bit identifier
+range. The guest installs an accepted socket when it receives <code>secureConnection</code>.
+<code>write</code> events carry <code>{ token, error? }</code> and complete exactly one pending write or
+end callback. Pause native reads after delivering a data chunk; the guest’s
+<code>resume</code> operation signals available buffer capacity. <code>core.ts</code> and <code>host-node.ts</code>
+define the event payloads and closed operation argument lists together.</p>
+<p>Options and inspection values use <code>wire.ts</code>’s graph JSON format, <code>{ root, nodes }</code>.
+Primitive values are inline; <code>{ ref: index }</code> references <code>bytes</code>, <code>array</code>, or
+<code>object</code> nodes. Undefined and non-finite numbers have explicit tagged values.
+Object nodes contain key/value pairs and may carry an error name. This preserves
+binary fields, error codes, and self-signed certificate issuer cycles. Stream
+data itself is <code>list&lt;u8&gt;</code>, not JSON. Functions and native handles never cross this
+boundary. WIT result errors carry <code>name</code>, <code>message</code>, and optional <code>code</code>.</p>
+<h2 id="compatibility-and-engine-limits"><a class="header" href="#compatibility-and-engine-limits">Compatibility and engine limits</a></h2>
+<p>The full Node 24.20 module export list is present. Local tests cover mutual TLS,
+hostname/trust rejection, custom identity checks, ALPN, certificate graphs,
+keying material, early <code>end()</code>, and backpressure. The component fixture adapts
+the documentation’s echo client/server to use PEM arguments and finite input
+instead of filesystem reads and <code>process.stdin</code>. It also exercises HTTPS in
+both directions, and the HTTP/2 component fixture exercises the shared provider.</p>
+<p>Explicit unsupported operations include wrapping an arbitrary guest socket with
+<code>new TLSSocket</code>, native <code>X509Certificate</code> return values, PSK/SNI/ALPN/lookup
+callbacks, OpenSSL engine options, and server <code>newSession</code>, <code>resumeSession</code>,
+<code>OCSPRequest</code>, <code>keylog</code>, and raw TCP <code>connection</code> events. Use <code>connect</code>, <code>getPeerCertificate</code>,
+<code>getCertificate</code>, and <code>Server.addContext</code> where applicable. Socket <code>session</code>,
+<code>keylog</code>, and <code>OCSPResponse</code> events are delivered. Renegotiation limits are host
+policy; changing <code>CLIENT_RENEG_LIMIT</code> or <code>CLIENT_RENEG_WINDOW</code> throws. The socket
+is a portable <code>Duplex</code>; it is not an instance of the separate <code>node:net</code> shim’s
+Socket class.</p>
+<p>StarlingMonkey runs the component fixture. QuickJS is explicitly skipped with
+<code>TODO(unskip)</code> because componentize-qjs cannot link the shared WASI TLS resource
+types. Export a synchronous starter for long-lived event-driven work: a guest
+export cannot await a promise resolved solely by a future independent host
+callback. The fixture’s starter/status exports demonstrate this engine boundary.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodetty"><a class="header" href="#nodetty"><code>node:tty</code></a></h1>
 <div class="table-wrapper">

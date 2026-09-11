@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-f6fe495f.js";
+            window.path_to_searchindex_js = "../../../searchindex-de63ffef.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-a282f97b.js"></script>
+        <script src="../../../toc-05bc3f8a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,8 +222,11 @@ export const server = createServer((request, response) =&gt; {
 </tbody>
 </table>
 </div>
-<p>By default, the provider rejects both <code>connect()</code> and server construction with
-<code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>.</p>
+<p>By default, cleartext operations fail with <code>ERR_JCO_HTTP2_ADAPTER_REQUIRED</code>;
+secure operations first require <code>jco:node/tls</code> and fail with
+<code>ERR_JCO_TLS_ADAPTER_REQUIRED</code> when it is denied. Direct secure sessions and
+servers obtain one-use configuration handles from the TLS provider. Bind it
+with <code>createHttp2Host(() =&gt; instance.http2Callbacks, tls)</code>.</p>
 <p><code>direct</code> mode models sessions, streams, and servers as typed host-owned WIT
 resources, with a passthrough implementation to NodeJS underneath. The WIT
 interface used is <code>jco:node/http2-callbacks@0.1.0</code>.</p>

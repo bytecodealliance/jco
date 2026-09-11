@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-f6fe495f.js";
+            window.path_to_searchindex_js = "../../../searchindex-de63ffef.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-a282f97b.js"></script>
+        <script src="../../../toc-05bc3f8a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -227,7 +227,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="./fs.html"><code>node:fs</code></a>, <a href="./fs.html"><code>node:fs/promises</code></a></td><td>Synchronous, callback, and promise facades over an explicit filesystem capability; denied by default.</td></tr>
 <tr><td><a href="./http.html"><code>node:http</code></a></td><td>Client and server APIs over a selectable direct, Preview 2 sockets, or Preview 2 WASI HTTP implementation. Servers need <code>direct</code> or <code>wasi-sockets</code>.</td></tr>
 <tr><td><a href="./http2.html"><code>node:http2</code></a></td><td>Client and server sessions over selectable direct or WASI socket implementations.</td></tr>
-<tr><td><a href="./https.html"><code>node:https</code></a></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses the <code>direct</code> host or an explicit <code>wasi:tls</code> provider.</td></tr>
+<tr><td><a href="./https.html"><code>node:https</code></a></td><td>The <code>node:http</code> core with the <code>https:</code> profile and a TLS-aware <code>Agent</code>; same implementation selection. TLS uses <code>jco:node/tls</code>, optionally delegating to <code>wasi:tls</code>.</td></tr>
 <tr><td><a href="./inspector.html"><code>node:inspector</code></a>, <a href="./inspector.html"><code>node:inspector/promises</code></a></td><td>Session, console, and broadcast surface over an explicit host capability; denied by default. The host calls back through a guest-exported interface.</td></tr>
 <tr><td><a href="./module.html"><code>node:module</code></a></td><td>Classification, source maps and <code>require.resolve</code> are exact. Everything that <strong>loads</strong> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>. Requires no WIT capability.</td></tr>
 <tr><td><a href="./net.html"><code>node:net</code></a></td><td>TCP clients, servers, and address utilities over Preview 2 <code>wasi:sockets</code>; native handles and IPC are unsupported.</td></tr>
@@ -245,6 +245,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="./string-decoder.html"><code>node:string_decoder</code></a></td><td>Guest-local streaming decoder for Node 24. Requires no WIT capability.</td></tr>
 <tr><td><a href="./test.html"><code>node:test</code></a>, <a href="./test.html"><code>node:test/reporters</code></a></td><td>Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine <code>AbortController</code>; see the API page for engine limits.</td></tr>
 <tr><td><a href="./timers.html"><code>node:timers</code></a>, <a href="./timers.html"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
+<tr><td><a href="./tls.html"><code>node:tls</code></a></td><td>Encrypted sockets, contexts, and inspection over <code>jco:node/tls</code>; denied by default.</td></tr>
 <tr><td><a href="./tty.html"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="./url.html"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 </tbody>
