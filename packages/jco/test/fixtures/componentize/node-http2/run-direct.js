@@ -65,13 +65,23 @@ async function request(port, path, secure = false) {
             const stream = session.request({ ":path": path });
             const chunks = [];
             let status;
+            let trailers;
+
+            stream.once("trailers", (value) => {
+                trailers = value;
+            });
             stream.setEncoding("utf8");
             stream.once("response", (headers) => {
                 status = headers[":status"];
             });
             stream.on("data", (chunk) => chunks.push(chunk));
             stream.once("error", reject);
-            stream.once("end", () => resolve({ status, body: chunks.join("") }));
+            stream.once("end", () => {
+                if (status === 200) {
+                    assert.equal(trailers["x-component-trailer"], "complete");
+                }
+                resolve({ status, body: chunks.join("") });
+            });
             stream.end();
         });
     } finally {

@@ -26,7 +26,10 @@ function start(value) {
         if (headers[":path"] === "/error") {
             throw Object.assign(new Error("guest stream failed"), { code: "EHTTP2TEST" });
         }
-        stream.respond({ ":status": 200, "content-type": "text/plain" });
+        stream.respond({ ":status": 200, "content-type": "text/plain" }, { waitForTrailers: true });
+
+        stream.once("wantTrailers", () => stream.sendTrailers({ "x-component-trailer": "complete" }));
+
         const body = headers[":path"] === "/large" ? "s".repeat(131_072) : `server:${headers[":path"]}`;
         stream.end(body, () => queueMicrotask(markHandled));
     });
