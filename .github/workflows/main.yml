@@ -765,8 +765,8 @@ jobs:
             workspace: examples/components/typegen-async-export
           - name: node-compat
             workspace: examples/components/node-compat
-          - name: mcp-server
-            workspace: examples/components/mcp-server
+          - name: node-mcp-server
+            workspace: examples/components/node-mcp-server
             setup-p2-shim: true
             setup-std: true
           - name: fs-write-file
