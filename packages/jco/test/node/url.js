@@ -1,19 +1,29 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { createRequire } from "node:module";
 import { suite, test } from "vitest";
-import { run as runInNode } from "../fixtures/componentize/node-url/source.js";
 import { componentizeFixture, transpileComponent } from "../helpers.js";
 
+const isNode24 = process.versions.node.split(".")[0] === "24";
+let hasUrlExport = true;
+try {
+    createRequire(import.meta.url).resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/url");
+} catch (error) {
+    if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") {
+        throw error;
+    }
+    hasUrlExport = false;
+}
+
 suite("node:url in components", () => {
-    test.each(["qjs", "starlingmonkey"])(
+    // TODO(unskip): publish and depend on jco-std's URL exports. This differential
+    // fixture also requires the Node 24 oracle; Node 22/26 CI jobs must skip it.
+    test.skipIf(!hasUrlExport || !isNode24).each(["qjs", "starlingmonkey"])(
         "matches Node 24 extensively through %s",
         async (backend) => {
-            assert.strictEqual(
-                process.versions.node.split(".")[0],
-                "24",
-                "The URL differential oracle must be Node 24",
-            );
+            // Avoid importing Node 24-only named exports during collection on other hosts.
+            const { run: runInNode } = await import("../fixtures/componentize/node-url/source.js");
             const expected = JSON.parse(runInNode());
             assert.strictEqual(expected.stableSort, "a=2&a=1&z=1&z=0");
             assert.deepEqual(expected.identity, Array(10).fill(true));
@@ -51,7 +61,9 @@ suite("node:url in components", () => {
         },
         180_000,
     );
-    test.each(["qjs", "starlingmonkey"])(
+    // TODO(unskip): publish and depend on jco-std's URL exports; the builtin
+    // plugin resolves the installed package, not the workspace source directory.
+    test.skipIf(!hasUrlExport).each(["qjs", "starlingmonkey"])(
         "uses the WIT world's WASI cwd through %s",
         async (backend) => {
             const { componentPath } = await componentizeFixture({
