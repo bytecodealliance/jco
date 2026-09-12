@@ -602,6 +602,30 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/vm.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/vm.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/vm.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/vfs": {
+      "types": "./dist/wasi/0.2.x/node/26.x.x/vfs.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/26.x.x/vfs.js",
+      "default": "./dist/wasi/0.2.x/node/26.x.x/vfs.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/vfs/core": {
+      "types": "./dist/wasi/0.2.x/node/26.x.x/vfs/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/26.x.x/vfs/core.js",
+      "default": "./dist/wasi/0.2.x/node/26.x.x/vfs/core.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/vfs/impl/wasi-filesystem": {
+      "types": "./dist/wasi/0.2.x/node/26.x.x/vfs/wasi-filesystem.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/26.x.x/vfs/wasi-filesystem.js",
+      "default": "./dist/wasi/0.2.x/node/26.x.x/vfs/wasi-filesystem.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/vfs/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/fs-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/fs-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/fs-host.js"
+    },
+    "./wasi/0.2.x/node/26.x.x/vfs/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/fs-host-node.js"
     }
   },
   "scripts": {

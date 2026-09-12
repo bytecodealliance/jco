@@ -1,14 +1,19 @@
-import type { FsHost } from "./fs/types.js";
-import { denyThrow } from "./internal/deny-host.js";
+import type { FsHost, FsResult } from "./fs/types.js";
 
 /**
  * The default adapter intentionally grants no filesystem capability. Applications must map
  * `jco:node/fs@0.1.0` to a host implementation, such as the separately exported Node adapter.
  */
-const deny = denyThrow(
-  "ERR_JCO_FS_ADAPTER_REQUIRED",
-  "node:fs requires an explicitly configured filesystem host provider",
-);
+// This interface returns WIT results. Returning its error record keeps denial
+// catchable inside a component instead of throwing out of the host trampoline.
+const deny = (): FsResult<never> => ({
+  tag: "err",
+  val: {
+    name: "Error",
+    code: "ERR_JCO_FS_ADAPTER_REQUIRED",
+    message: "node:fs requires an explicitly configured filesystem host provider",
+  },
+});
 
 export const access: FsHost["access"] = deny;
 

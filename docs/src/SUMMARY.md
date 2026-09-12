@@ -55,6 +55,7 @@
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
             - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
             - [`node:util`](./interop/nodejs-builtins/supported-modules/util.md)
+            - [`node:vfs`](./interop/nodejs-builtins/supported-modules/vfs.md)
             - [`node:vm`](./interop/nodejs-builtins/supported-modules/vm.md)
             - [`node:worker_threads`](./interop/nodejs-builtins/supported-modules/worker-threads.md)
             - [`node:zlib`](./interop/nodejs-builtins/supported-modules/zlib.md)
