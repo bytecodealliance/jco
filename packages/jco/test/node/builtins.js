@@ -68,6 +68,7 @@ describe("Node builtin adapters", () => {
             "jco:node/process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/process/host",
             "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
             "jco:node/zlib@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host",
+            "jco:node/v8@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/v8/host",
             "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
             "jco:node/wasi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host",
         });
@@ -97,6 +98,7 @@ describe("Node builtin adapters", () => {
             "jco:node/process@0.1.0": "/application/process-host.js",
             "jco:node/os@0.1.0": "/application/os-host.js",
             "jco:node/zlib@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host",
+            "jco:node/v8@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/v8/host",
             "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
             "jco:node/wasi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host",
         });
