@@ -578,6 +578,25 @@
     "./wasi/0.2.x/node/24.x.x/worker-threads/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/worker-threads/host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/worker-threads/host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/v8": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/v8.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/v8.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/v8.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/v8/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/v8/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/v8/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/v8/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/v8/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/v8-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/v8-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/v8-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/v8/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/v8-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/v8-host-node.js"
     }
   },
   "scripts": {
