@@ -15,14 +15,23 @@ import {
 
 const WASI_CLI_RUN_EXPORT = 'wasi:cli/run@0.3.0';
 
-function reportUnhandled(error) {
+// Task IDs in the deadlock detail are BigInts, which JSON.stringify rejects.
+function stringifyDetail(detail) {
+    return JSON.stringify(detail, (_key, value) => (typeof value === 'bigint' ? value.toString() : value), 2);
+}
+
+function reportError(error) {
     console.error(error?.stack ?? error);
     // A detected deadlock says only that the event loop stopped. What was waiting is
     // attached to the error, and this is the last chance to print it: the run ends here,
     // and on CI the captured output is all anyone gets.
     if (error?.deadlockDetail) {
-        console.error(`deadlock detail: ${JSON.stringify(error.deadlockDetail, null, 2)}`);
+        console.error(`deadlock detail: ${stringifyDetail(error.deadlockDetail)}`);
     }
+}
+
+function reportUnhandled(error) {
+    reportError(error);
     process.exit(1);
 }
 
@@ -62,6 +71,6 @@ try {
         throw new Error(`unexpected run result: ${JSON.stringify(result)}`);
     }
 } catch (error) {
-    console.error(error?.stack ?? error);
+    reportError(error);
     process.exitCode = 1;
 }
