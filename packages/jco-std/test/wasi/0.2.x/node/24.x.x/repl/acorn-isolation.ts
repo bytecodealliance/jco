@@ -1,5 +1,5 @@
-// acorn is a dependency of `node:repl` alone. Nothing else in jco-std may import it, or every
-// component would carry a parser it never uses.
+// Keep acorn confined to the REPL and VM adapters, so unrelated builtins do not
+// cause a component to carry a parser it never uses.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,7 @@ function* sources(dir: string): Generator<string> {
   }
 }
 
-test.concurrent("only the repl directory imports acorn", () => {
+test.concurrent("only the repl and vm directories import acorn", () => {
   const importers: string[] = [];
   for (const file of sources(root)) {
     const text = readFileSync(file, "utf8");
@@ -29,5 +29,6 @@ test.concurrent("only the repl directory imports acorn", () => {
     }
   }
   expect(importers.length).toBeGreaterThan(0);
-  expect(importers.every((file) => file.startsWith(join("24.x.x", "repl") + "/"))).toBe(true);
+  const allowed = ["repl", "vm"].map((directory) => join("24.x.x", directory) + "/");
+  expect(importers.every((file) => allowed.some((prefix) => file.startsWith(prefix)))).toBe(true);
 });
