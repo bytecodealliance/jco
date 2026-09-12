@@ -8,9 +8,10 @@ import { fs, promises } from "../helpers/fs.js";
 
 describe("node:fs denied and unsupported behavior", () => {
   test.concurrent("denies host access by default", () => {
-    expect(() => denyHost.access({ tag: "text", val: "ignored" }, 0)).toThrow(
-      expect.objectContaining({ code: "ERR_JCO_FS_ADAPTER_REQUIRED" }),
-    );
+    expect(denyHost.access({ tag: "text", val: "ignored" }, 0)).toMatchObject({
+      tag: "err",
+      val: { code: "ERR_JCO_FS_ADAPTER_REQUIRED" },
+    });
 
     const core = createFsCore(denyHost);
     const deniedFs = createFs(core, createFsPromises(core));

@@ -8,7 +8,8 @@
  *
  * - `denyThrow` -- for interfaces whose functions do not return `result`. The provider throws a
  *   coded `Error`, which jco surfaces to the guest as an exception carrying
- *   `ERR_JCO_<MOD>_ADAPTER_REQUIRED` (child-process, cluster, console, dns, fs, http).
+ *   `ERR_JCO_<MOD>_ADAPTER_REQUIRED` (child-process, cluster, console, dns, http).
+ * - fs returns a tagged error result so its denial stays catchable across WIT.
  * - Interfaces returning `result<T, record error>` throw serialized error records, which the
  *   bindings lower into the `err` case; the guest reconstructs the Node error (os).
  * - `denyVariant` -- for interfaces whose functions return `result<T, variant error>` with an
