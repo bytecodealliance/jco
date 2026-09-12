@@ -6,7 +6,9 @@ import type {
   ZlibBuffer,
   ZlibCallback,
 } from "../../../../../src/wasi/0.2.x/node/24.x.x/zlib/types.js";
+
 export const zlib = createZlib(host);
+
 export function collect(stream: Zlib, chunks: Uint8Array[]): Promise<Buffer> {
   return new Promise((resolve, reject): void => {
     const output: Uint8Array[] = [];
@@ -20,9 +22,11 @@ export function collect(stream: Zlib, chunks: Uint8Array[]): Promise<Buffer> {
     for (const chunk of chunks) {
       stream.write(chunk);
     }
+
     stream.end();
   });
 }
+
 export function callbackResult(
   run: (callback: ZlibCallback<ZlibBuffer>) => void,
 ): Promise<ZlibBuffer> {

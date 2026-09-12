@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import native from "node:zlib";
 import { zlib } from "../helpers/zlib.js";
+
 test("CRC32 known vector, incremental update, Unicode and validation", () => {
   expect(zlib.crc32("123456789")).toBe(0xcbf43926);
   expect(zlib.crc32("456789", zlib.crc32("123"))).toBe(0xcbf43926);
