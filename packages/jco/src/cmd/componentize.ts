@@ -13,6 +13,7 @@ import {
     nodeGlobals,
     type NodejsHttp2Via,
     type NodejsHttpVia,
+    type NodejsVfsVia,
     type WorldMetadata,
 } from "../node-builtins/index.js";
 import {
@@ -44,6 +45,9 @@ export interface ComponentizeOptions {
     bundle?: boolean;
     bundleConfig?: string;
     nodejsHttpVia?: NodejsHttpVia;
+    nodejsVfsVia?: NodejsVfsVia;
+    withNodejsVfsVia?: NodejsVfsVia;
+    withNodejsVfsWasiConfig?: string;
     nodejsHttp2Via?: NodejsHttp2Via;
     /**
      * The CLI spelling of {@link nodejsHttpVia}.
@@ -210,6 +214,10 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
                     nodejsHttpVia: opts.nodejsHttpVia ?? opts.withNodejsHttpVia,
+                    nodejsVfsVia: opts.nodejsVfsVia ?? opts.withNodejsVfsVia,
+                    vfsWasiConfigModule: opts.withNodejsVfsWasiConfig
+                        ? resolve(opts.withNodejsVfsWasiConfig)
+                        : undefined,
                     nodejsHttp2Via: opts.nodejsHttp2Via ?? opts.withNodejsHttp2Via,
                     // Match the socket bindings supplied by the selected component engine.
                     wasiSocketsVersion: backend === "starlingmonkey" ? "0.2.10" : "0.2.12",
