@@ -11,6 +11,7 @@ export const constants: Readonly<Record<string, number>> = Object.create(
       Z_FULL_FLUSH: 3,
       Z_FINISH: 4,
       Z_BLOCK: 5,
+
       Z_OK: 0,
       Z_STREAM_END: 1,
       Z_NEED_DICT: 2,
@@ -20,16 +21,20 @@ export const constants: Readonly<Record<string, number>> = Object.create(
       Z_MEM_ERROR: -4,
       Z_BUF_ERROR: -5,
       Z_VERSION_ERROR: -6,
+
       Z_NO_COMPRESSION: 0,
       Z_BEST_SPEED: 1,
       Z_BEST_COMPRESSION: 9,
       Z_DEFAULT_COMPRESSION: -1,
+
       Z_FILTERED: 1,
       Z_HUFFMAN_ONLY: 2,
       Z_RLE: 3,
       Z_FIXED: 4,
       Z_DEFAULT_STRATEGY: 0,
+
       ZLIB_VERNUM: 4897,
+
       DEFLATE: 1,
       INFLATE: 2,
       GZIP: 3,
@@ -41,54 +46,68 @@ export const constants: Readonly<Record<string, number>> = Object.create(
       BROTLI_ENCODE: 9,
       ZSTD_DECOMPRESS: 11,
       ZSTD_COMPRESS: 10,
+
       Z_MIN_WINDOWBITS: 8,
       Z_MAX_WINDOWBITS: 15,
       Z_DEFAULT_WINDOWBITS: 15,
+
       Z_MIN_CHUNK: 64,
       Z_MAX_CHUNK: Infinity,
       Z_DEFAULT_CHUNK: 16384,
+
       Z_MIN_MEMLEVEL: 1,
       Z_MAX_MEMLEVEL: 9,
       Z_DEFAULT_MEMLEVEL: 8,
+
       Z_MIN_LEVEL: -1,
       Z_MAX_LEVEL: 9,
       Z_DEFAULT_LEVEL: -1,
+
       BROTLI_OPERATION_PROCESS: 0,
       BROTLI_OPERATION_FLUSH: 1,
       BROTLI_OPERATION_FINISH: 2,
       BROTLI_OPERATION_EMIT_METADATA: 3,
+
       BROTLI_PARAM_MODE: 0,
       BROTLI_MODE_GENERIC: 0,
       BROTLI_MODE_TEXT: 1,
       BROTLI_MODE_FONT: 2,
       BROTLI_DEFAULT_MODE: 0,
+
       BROTLI_PARAM_QUALITY: 1,
       BROTLI_MIN_QUALITY: 0,
       BROTLI_MAX_QUALITY: 11,
       BROTLI_DEFAULT_QUALITY: 11,
+
       BROTLI_PARAM_LGWIN: 2,
       BROTLI_MIN_WINDOW_BITS: 10,
       BROTLI_MAX_WINDOW_BITS: 24,
       BROTLI_LARGE_MAX_WINDOW_BITS: 30,
       BROTLI_DEFAULT_WINDOW: 22,
+
       BROTLI_PARAM_LGBLOCK: 3,
       BROTLI_MIN_INPUT_BLOCK_BITS: 16,
       BROTLI_MAX_INPUT_BLOCK_BITS: 24,
+
       BROTLI_PARAM_DISABLE_LITERAL_CONTEXT_MODELING: 4,
       BROTLI_PARAM_SIZE_HINT: 5,
       BROTLI_PARAM_LARGE_WINDOW: 6,
       BROTLI_PARAM_NPOSTFIX: 7,
       BROTLI_PARAM_NDIRECT: 8,
+
       BROTLI_DECODER_RESULT_ERROR: 0,
       BROTLI_DECODER_RESULT_SUCCESS: 1,
       BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT: 2,
       BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT: 3,
+
       BROTLI_DECODER_PARAM_DISABLE_RING_BUFFER_REALLOCATION: 0,
       BROTLI_DECODER_PARAM_LARGE_WINDOW: 1,
+
       BROTLI_DECODER_NO_ERROR: 0,
       BROTLI_DECODER_SUCCESS: 1,
       BROTLI_DECODER_NEEDS_MORE_INPUT: 2,
       BROTLI_DECODER_NEEDS_MORE_OUTPUT: 3,
+
       BROTLI_DECODER_ERROR_FORMAT_EXUBERANT_NIBBLE: -1,
       BROTLI_DECODER_ERROR_FORMAT_RESERVED: -2,
       BROTLI_DECODER_ERROR_FORMAT_EXUBERANT_META_NIBBLE: -3,
@@ -114,9 +133,11 @@ export const constants: Readonly<Record<string, number>> = Object.create(
       BROTLI_DECODER_ERROR_ALLOC_RING_BUFFER_2: -27,
       BROTLI_DECODER_ERROR_ALLOC_BLOCK_TYPE_TREES: -30,
       BROTLI_DECODER_ERROR_UNREACHABLE: -31,
+
       ZSTD_e_continue: 0,
       ZSTD_e_flush: 1,
       ZSTD_e_end: 2,
+
       ZSTD_fast: 1,
       ZSTD_dfast: 2,
       ZSTD_greedy: 3,
@@ -126,6 +147,7 @@ export const constants: Readonly<Record<string, number>> = Object.create(
       ZSTD_btopt: 7,
       ZSTD_btultra: 8,
       ZSTD_btultra2: 9,
+
       ZSTD_c_compressionLevel: 100,
       ZSTD_c_windowLog: 101,
       ZSTD_c_hashLog: 102,
@@ -134,19 +156,25 @@ export const constants: Readonly<Record<string, number>> = Object.create(
       ZSTD_c_minMatch: 105,
       ZSTD_c_targetLength: 106,
       ZSTD_c_strategy: 107,
+
       ZSTD_c_enableLongDistanceMatching: 160,
       ZSTD_c_ldmHashLog: 161,
       ZSTD_c_ldmMinMatch: 162,
       ZSTD_c_ldmBucketSizeLog: 163,
       ZSTD_c_ldmHashRateLog: 164,
+
       ZSTD_c_contentSizeFlag: 200,
       ZSTD_c_checksumFlag: 201,
       ZSTD_c_dictIDFlag: 202,
+
       ZSTD_c_nbWorkers: 400,
       ZSTD_c_jobSize: 401,
       ZSTD_c_overlapLog: 402,
+
       ZSTD_d_windowLogMax: 100,
+
       ZSTD_CLEVEL_DEFAULT: 3,
+
       ZSTD_error_no_error: 0,
       ZSTD_error_GENERIC: 1,
       ZSTD_error_prefix_unknown: 10,
@@ -178,6 +206,7 @@ export const constants: Readonly<Record<string, number>> = Object.create(
     }).map(([key, value]) => [key, { value, enumerable: true }]),
   ),
 );
+
 export const codes: Readonly<Record<string, string | number>> = Object.freeze({
   "0": "Z_OK",
   "1": "Z_STREAM_END",
