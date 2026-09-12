@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9a3c7268.js";
+            window.path_to_searchindex_js = "searchindex-f9279cd1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-05bc3f8a.js"></script>
+        <script src="toc-745fb9e9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2134,7 +2134,7 @@ the module or upstream project.</p>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
 set of coordinated shims:</p>
-<p><code>node:crypto</code>, <code>node:dgram</code>, <code>node:http2</code>,
+<p><code>node:crypto</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>,
 <code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
@@ -2201,6 +2201,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodechild_process"><code>node:child_process</code></a></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><a href="#nodecluster"><code>node:cluster</code></a></td><td>Primary/worker control over an explicit host capability. Partly unsupported.</td></tr>
 <tr><td><a href="#nodeconsole"><code>node:console</code></a></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
+<tr><td><a href="#nodedgram"><code>node:dgram</code></a></td><td>UDP sockets over an explicit host capability; denied by default. StarlingMonkey supports the Node passthrough.</td></tr>
 <tr><td><a href="#nodediagnostics_channel"><code>node:diagnostics_channel</code></a></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><a href="#nodedns"><code>node:dns</code></a>, <a href="#nodedns"><code>node:dns/promises</code></a></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="#nodedomain"><code>node:domain</code></a></td><td>Deprecated upstream in its entirety. Resolves so the failure explains itself; every use throws <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</td></tr>
@@ -2443,6 +2444,83 @@ status and color depth:</p>
 <p>Formatting is done in the guest – <code>Console</code>, the <code>log</code>/<code>warn</code>/<code>error</code> family,
 <code>group</code> indentation, <code>count</code>, <code>time</code>, <code>table</code> and <code>dir</code> all run guest-side, and only
 the finished string crosses the boundary.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodedgram"><a class="header" href="#nodedgram"><code>node:dgram</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:dgram</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Application code keeps ordinary Node imports:</p>
+<pre><code class="language-js">import { createSocket } from 'node:dgram';
+
+let socket;
+export function start() {
+    socket = createSocket('udp4');
+    socket.on('message', (message, remote) =&gt; {
+        socket.send(message, remote.port, remote.address);
+    });
+    return socket.bindSync({ address: '127.0.0.1', port: 0 }).port;
+}
+export function stop() { socket.close(); }
+</code></pre>
+<p>Use a world exporting <code>start: func() -&gt; u16</code> and <code>stop: func()</code>, then build
+with <code>jco componentize source.js --bundle --backend starlingmonkey -w wit -o app.wasm</code>.
+Jco installs <code>jco:node/dgram@0.1.0</code> and the guest-exported
+<code>jco:node/dgram-callbacks@0.1.0</code> interface. UDP adds no unrelated WASI imports.
+The default provider returns a catchable <code>ERR_JCO_DGRAM_ADAPTER_REQUIRED</code> error
+on capability use; importing, constructing, ref/unref, and closing an unused
+socket need no host access.</p>
+<p>To grant UDP access, transpile for explicit instantiation:</p>
+<pre><code class="language-console">jco transpile app.wasm -o out --instantiation async \
+  --async-mode jspi --async-exports '*' \
+  --map 'jco:node/dgram@0.1.0=jco:node/dgram@0.1.0'
+</code></pre>
+<p>This mapping preserves the WIT interface name in the instantiation imports.
+Wire a separate Node provider to each instance:</p>
+<pre><code class="language-js">import { instantiate } from './out/app.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { createDgramHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram/host/node';
+
+const imports = new WASIShim().getImportObject();
+let instance;
+imports['jco:node/dgram@0.1.0'] = createDgramHost(() =&gt; instance.dgramCallbacks);
+instance = await instantiate(undefined, imports);
+const port = await instance.start();
+// Send datagrams to 127.0.0.1:port, then call await instance.stop().
+</code></pre>
+<p>The guest implements Node v24.20.0’s socket state, overloads, Buffer messages,
+lookup customization, block lists, AbortSignal, events, and disposal. IPv4/IPv6,
+bind/connect (including their synchronous forms), sends, address queries,
+broadcast, multicast memberships, buffer options, and ref/unref use the typed UDP
+provider. Host errors preserve codes, errno, address/port, syscall, and buffer
+SystemError details. Native descriptors and shared cluster-handle adoption throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code>. The deprecated <code>_createSocketHandle</code>,
+<code>_handle</code>, <code>_receiving</code>, <code>_bindState</code>, <code>_queue</code>, <code>_reuseAddr</code>,
+<code>_healthCheck</code>, and <code>_stopReceiving</code> entries immediately throw
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>; legacy <code>sendto</code> remains functional.</p>
+<p>The Node provider requires native <code>bindSync</code> and <code>connectSync</code> (available in
+Node 24.20.0). It queues datagrams, DNS results, and send completions through the
+component’s callback exports. Return from exported guest tasks before waiting for
+these events on the host; awaiting a future UDP event inside an active guest task
+would require component re-entry. Guest-local microtasks replace Node’s nextTick
+scheduling, and native async-hooks IDs do not cross the boundary. QuickJS currently
+traps on host-invoked exported resource methods, so its tests cover the module,
+validation, and denial; full UDP component tests use StarlingMonkey. Multicast and
+reuse-port availability depend on the host OS.</p>
+<p>The implementation adapts MIT-licensed Node
+<a href="https://github.com/nodejs/node/blob/71b8b174857e25106d39b61a9e6f30d927da8b01/lib/dgram.js">lib/dgram.js</a>
+and its internal handle/lookup flow at v24.20.0. Provenance and the license remain
+in the source and emitted JavaScript. Audited unenv 2.0.0-rc.24 dgram is a mock
+with no-op network methods and fixed addresses/buffer sizes, so Jco uses its own
+adapter and reuses the already-supported Buffer/EventEmitter cores. Only
+<code>node:dgram</code> is intercepted; bare <code>dgram</code> is unchanged. Direct jco-std
+adapters can coexist with bundled Node builtins.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodediagnostics_channel"><a class="header" href="#nodediagnostics_channel"><code>node:diagnostics_channel</code></a></h1>
 <div class="table-wrapper">
