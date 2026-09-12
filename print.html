@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fc270c21.js";
+            window.path_to_searchindex_js = "searchindex-a3b7ad50.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d02a0845.js"></script>
+        <script src="toc-c2d762fc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2224,6 +2224,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="#nodeutil"><code>node:util</code></a>, <a href="#nodeutil"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
 <tr><td><a href="#worker-threads"><code>node:worker_threads</code></a></td><td>Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported.</td></tr>
+<tr><td><a href="#nodezlib"><code>node:zlib</code></a></td><td>Native zlib, Brotli and Zstandard through an explicit compression capability; denied by default.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4462,6 +4463,60 @@ workers and ports discard messages and its broadcasts are no-ops. This adapter
 reuses Jco’s callback, error and event infrastructure and Node’s native Worker;
 the environment Map operations are adapted from Node’s MIT-licensed
 <code>lib/internal/worker.js</code> at commit <code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodezlib"><a class="header" href="#nodezlib"><code>node:zlib</code></a></h1>
+<p>Jco supports the Node.js 24.20 <code>node:zlib</code> module through an explicit compression
+host capability. Application code keeps ordinary Node imports:</p>
+<pre><code class="language-js">import { gzipSync, gunzipSync } from "node:zlib";
+
+export function roundTrip(text) {
+  return gunzipSync(gzipSync(text)).toString();
+}
+</code></pre>
+<pre><code class="language-sh">jco componentize app.js --bundle --wit wit -o app.wasm
+jco transpile app.wasm -o out \
+  --map 'jco:node/zlib@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host/node'
+</code></pre>
+<p>Bundling adds <code>jco:node/zlib@0.1.0</code> to the selected WIT world. Without an explicit
+provider mapping, compression, decompression, stream construction and CRC32 fail
+with <code>ERR_JCO_ZLIB_ADAPTER_REQUIRED</code>. Importing the module and reading <code>constants</code>
+or <code>codes</code> require no capability.</p>
+<h2 id="supported-operations"><a class="header" href="#supported-operations">Supported operations</a></h2>
+<p>The adapter exposes the Gzip/Gunzip, Deflate/Inflate, DeflateRaw/InflateRaw, Unzip,
+BrotliCompress/BrotliDecompress and ZstdCompress/ZstdDecompress constructors,
+corresponding <code>create*</code> factories, callback and synchronous convenience methods,
+<code>crc32</code>, <code>constants</code> and <code>codes</code>. Constructors are callable with or without <code>new</code>.
+Streams share Jco’s portable <code>node:stream.Transform</code>, including piping,
+backpressure, errors and close events. Flush, reset and zlib parameter changes
+operate on persistent native compression state. Dictionaries, parameter maps,
+<code>info: true</code>, output limits and byte counts cross the typed WIT boundary.</p>
+<p>The Node provider delegates compression to the embedding Node runtime. Jco does
+not include a compression algorithm. The guest can run in QuickJS or
+StarlingMonkey; the Node provider itself requires Node, including native Zstandard
+support for Zstd operations. A browser host can supply the same WIT interface.</p>
+<h2 id="scheduling-and-lifetime"><a class="header" href="#scheduling-and-lifetime">Scheduling and lifetime</a></h2>
+<p>WIT operations are synchronous and block the importing thread. Guest callbacks
+are scheduled after the initiating call returns. QuickJS requires synchronous
+WIT exports; returning a Promise from such an export is a backend restriction.
+Each live streaming engine uses a Node worker to execute public Node stream operations and collect output; close,
+destroy or WIT resource drop releases it. One-shot synchronous methods call Node
+directly. Worker requests have a 60-second deadline and fail with
+<code>ERR_JCO_ZLIB_HOST_TIMEOUT</code> if the worker cannot respond. This scheduling differs
+from Node’s application-thread/libuv scheduling, and many simultaneous streams
+have worker overhead.</p>
+<h2 id="compatibility-target"><a class="header" href="#compatibility-target">Compatibility target</a></h2>
+<p>The contract is pinned to Node v24.20.0, commit
+<code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>, using <code>lib/zlib.js</code>, its API documentation
+and matching-major TypeScript declarations. The installed unenv 2.0.0-rc.24
+zlib entries are unimplemented and omit Zstandard, so they are not used.</p>
+<p>Deprecated <code>bytesRead</code> and direct properties such as <code>zlib.Z_FINISH</code> throw explicit
+deprecation errors; use <code>bytesWritten</code> and <code>zlib.constants.Z_FINISH</code>. Deprecated
+constant aliases are available only as default-object error accessors, not named
+ESM exports. The separate, flag-gated <code>node:zlib/iter</code> module and ZIP archive APIs from newer Node releases
+are outside this adapter. Bare <code>zlib</code> imports are not intercepted.</p>
+<p>Direct jco-std consumers can use <code>zlib/core</code> with an explicit typed provider and
+mix the resulting module with native Node builtins. Normal component applications
+should use <code>node:zlib</code> and the builtin integration shown above.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
