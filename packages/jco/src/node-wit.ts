@@ -161,6 +161,8 @@ export const TLS_WIT_REQUIREMENT: NodeWitRequirement = {
     ],
 };
 
+export const V8_WIT_REQUIREMENT = nodeRequirement("node:v8", "v8");
+
 export const OS_WIT_REQUIREMENT = nodeRequirement("node:os", "os");
 
 export const TTY_WIT_REQUIREMENT = nodeRequirement("node:tty", "tty", { sharedTypes: true });

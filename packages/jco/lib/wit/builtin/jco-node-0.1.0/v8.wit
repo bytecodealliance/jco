@@ -1,0 +1,102 @@
+package jco:node@0.1.0;
+
+/// Explicit access to a host V8 isolate. Diagnostics describe the host engine.
+/// Structured graphs are private transport; returned serialization bytes use native V8 format.
+interface v8 {
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+  }
+
+  enum statistics-kind {
+    heap,
+    spaces,
+    code,
+    cpp-brief,
+    cpp-detailed,
+  }
+
+  record snapshot-options {
+    expose-internals: option<bool>,
+    expose-numeric-values: option<bool>,
+  }
+
+  cached-data-version-tag: func() -> result<u32, error>;
+
+  /// JSON retains the version-specific native diagnostic schema.
+  statistics: func(kind: statistics-kind) -> result<string, error>;
+
+  get-heap-snapshot: func(options: snapshot-options) -> result<list<u8>, error>;
+
+  write-heap-snapshot: func(
+    filename: option<string>,
+    options: snapshot-options,
+  ) -> result<string, error>;
+
+  set-flags-from-string: func(%flags: string) -> result<_, error>;
+
+  take-coverage: func() -> result<_, error>;
+
+  stop-coverage: func() -> result<_, error>;
+
+  set-heap-snapshot-near-heap-limit: func(limit: u32) -> result<_, error>;
+
+  open-writer: func(defaults: bool) -> result<writer, error>;
+
+  open-reader: func(data: list<u8>, defaults: bool) -> result<reader, error>;
+
+  start-profile: func(cpu: bool) -> result<profile, error>;
+
+  /// Consuming a handle releases the corresponding native state.
+  release-writer: func(handle: writer);
+
+  release-reader: func(handle: reader);
+
+  release-profile: func(handle: profile);
+
+  resource writer {
+    write-header: func() -> result<_, error>;
+
+    write-value: func(graph: string) -> result<bool, error>;
+
+    release-buffer: func() -> result<list<u8>, error>;
+
+    write-uint32: func(value: f64) -> result<_, error>;
+
+    write-uint64: func(hi: f64, lo: f64) -> result<_, error>;
+
+    write-double: func(value: f64) -> result<_, error>;
+
+    write-raw-bytes: func(data: list<u8>) -> result<_, error>;
+
+    set-treat-views-as-host-objects: func(flag: bool) -> result<_, error>;
+  }
+
+  resource reader {
+    read-header: func() -> result<bool, error>;
+
+    read-value: func() -> result<string, error>;
+
+    get-wire-format-version: func() -> result<u32, error>;
+
+    read-uint32: func() -> result<u32, error>;
+
+    read-uint64: func() -> result<tuple<u32, u32>, error>;
+
+    read-double: func() -> result<f64, error>;
+
+    read-raw-bytes: func(length: f64) -> result<list<u8>, error>;
+  }
+
+  resource profile {
+    stop: func() -> result<option<string>, error>;
+  }
+}

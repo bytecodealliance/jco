@@ -74,6 +74,8 @@ export interface NodeBuiltinOptions {
     stringDecoderModule?: string;
     /** Path to jco-std's versioned `node:tty` module (overridable for tests) */
     ttyModule?: string;
+    /** Path to the versioned node:v8 module (overridable for tests). */
+    v8Module?: string;
     /** Paths to jco-std's capability-free readline modules (overridable for tests). */
     readlineModule?: string;
     readlinePromisesModule?: string;

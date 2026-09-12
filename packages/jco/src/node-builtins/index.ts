@@ -21,6 +21,7 @@ import { createReadlineBuiltin } from "./readline.js";
 import { createReplBuiltin } from "./repl.js";
 import { createStringDecoderBuiltin } from "./string-decoder.js";
 import { createTtyBuiltin } from "./tty.js";
+import { createV8Builtin } from "./v8.js";
 import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
 import { createWorkerThreadsBuiltin } from "./worker-threads.js";
@@ -82,6 +83,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createUtilBuiltin,
         createStringDecoderBuiltin,
         createTtyBuiltin,
+        createV8Builtin,
         createStreamBuiltin,
         createClusterBuiltin,
         createWorkerThreadsBuiltin,
