@@ -545,6 +545,25 @@
       "types": "./dist/wasi/0.2.x/node/24.x.x/util-types.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/util-types.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/util-types.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/trace-events": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/trace-events.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/trace-events.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/trace-events.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/trace-events/core": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/trace-events/core.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/trace-events/core.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/trace-events/core.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/trace-events/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/trace-events/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host-node.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host-node.js"
     }
   },
   "scripts": {
