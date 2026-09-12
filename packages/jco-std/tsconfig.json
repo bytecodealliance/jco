@@ -12,6 +12,9 @@
     "skipLibCheck": true,
     "paths": {
       "jco:node/trace-events@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/trace-events-interface.d.ts"],
+      "jco:node/worker-threads@0.1.0": [
+        "./src/wasi/0.2.x/node/24.x.x/worker-threads-interface.d.ts"
+      ],
       "whatwg-url": ["./src/wasi/0.2.x/node/24.x.x/url/whatwg-types.d.ts"],
       "punycode/punycode.js": ["./src/wasi/0.2.x/node/24.x.x/url/punycode-types.d.ts"],
       "jco:node/tls@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/tls-interface.d.ts"],

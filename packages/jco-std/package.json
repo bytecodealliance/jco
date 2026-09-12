@@ -564,6 +564,20 @@
     "./wasi/0.2.x/node/24.x.x/trace-events/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host-node.d.ts",
       "default": "./dist/wasi/0.2.x/node/24.x.x/trace-events-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/worker-threads": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/worker-threads.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/worker-threads.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/worker-threads.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/worker-threads/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/worker-threads-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/worker-threads-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/worker-threads-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/worker-threads/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/worker-threads/host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/worker-threads/host-node.js"
     }
   },
   "scripts": {
