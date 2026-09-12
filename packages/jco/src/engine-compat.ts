@@ -32,7 +32,7 @@ export function rewriteUnicodePropertyEscapes(code: string, filename = "module.j
             const replacement = rewritePattern(pattern, flags, {
                 unicodePropertyEscapes: "transform",
                 unicodeSetsFlag: "transform",
-                onNewFlags(value) {
+                onNewFlags(value: string) {
                     newFlags = value;
                 },
             });

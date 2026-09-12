@@ -27,7 +27,5 @@ export function unenvModule(specifier: string, options: NodeBuiltinOptions): str
 
 /** Limited dependency fallbacks; zlib operations remain unsupported. */
 export function createPortableUnenvBuiltin({ options }: BuiltinContext): BuiltinAdapter {
-    return builtin(["node:util", "node:util/types", "node:zlib"], (specifier) =>
-        starReexportAdapter(unenvModule(specifier, options), "implementation"),
-    );
+    return builtin("node:zlib", (specifier) => starReexportAdapter(unenvModule(specifier, options), "implementation"));
 }

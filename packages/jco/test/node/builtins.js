@@ -273,7 +273,7 @@ describe("Node builtin adapters", () => {
         expect(plugin.resolveId("readline/promises")).toBeNull();
     });
 
-    test.concurrent("generates a host-backed adapter for node:tty and reports its WIT requirement", () => {
+    test.concurrent("generates a host-backed adapter for node:tty and reports its WIT requirement", async () => {
         const requirements = [];
         const plugin = nodeBuiltinPlugin(
             { imports: [], exports: [] },
@@ -290,7 +290,8 @@ describe("Node builtin adapters", () => {
         expect(source).toContain('from "test:tty"');
         expect(source).toContain("export default tty");
         expect(source).toContain('export * from "test:tty"');
-        expect(plugin.resolveId("tty")).toBeNull();
+        expect(await resolveBare(plugin, "tty")).toBe(id);
+        expect(await resolveBare(plugin, "tty", INSTALLED)).toBeNull();
     });
 
     test.concurrent("generates a capability-free adapter for node:repl", () => {
