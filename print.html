@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f9279cd1.js";
+            window.path_to_searchindex_js = "searchindex-ccbc7d23.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-745fb9e9.js"></script>
+        <script src="toc-c8aed68f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1929,6 +1929,8 @@ used by the Hono adapter; assert and Buffer do not add further capabilities.</p>
 <ul>
 <li><code>node:assert</code> and <code>node:assert/strict</code>, adapted from Node.js 24 for portable
 execution without a host capability; and</li>
+<li><code>node:util</code> and <code>node:util/types</code>, sharing assertion equality, console formatting,
+scheduling and validation helpers, with portable parsing and MIME utilities; and</li>
 <li><code>node:path</code>, <code>node:path/posix</code>, and <code>node:path/win32</code>, implemented with portable
 path algorithms and a <code>wasi:cli/environment</code> provider for operations that need
 the guest working directory; and</li>
@@ -2137,7 +2139,7 @@ set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>,
-<code>node:util</code>, <code>node:util/types</code>, <code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
+<code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
 <code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
 <p>This group is not all-or-nothing. A future implementation can combine portable
@@ -2231,6 +2233,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodetls"><code>node:tls</code></a></td><td>Encrypted sockets, contexts, and inspection over <code>jco:node/tls</code>; denied by default.</td></tr>
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
+<tr><td><a href="#nodeutil"><code>node:util</code></a>, <a href="#nodeutil"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4215,6 +4218,85 @@ or <code>URL.parse(input, base)</code>. Legacy <code>Url</code> construction, ob
 registry. Invalid Punycode labels can be rejected more strictly by the WHATWG
 fallback than by Node’s Ada parser. Engine-specific inspection and stack formatting
 are not reproduced. Errors mentioning the file host platform use <code>posix</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodeutil"><a class="header" href="#nodeutil"><code>node:util</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:util</code>, <code>node:util/types</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/util</code> and <code>/util/types</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:util</code> provides MIME parsing, argument and environment-file parsing, text
+styling, string/array diffs, callback/promise conversion, inspection and formatting,
+inheritance, deep equality, and type predicates. Default and named imports are
+available; <code>node:util/types</code> shares the same predicate object as <code>util.types</code>.</p>
+<pre><code class="language-js">import { MIMEType, parseArgs, promisify, styleText } from 'node:util';
+import { isUint8Array } from 'node:util/types';
+
+const mime = new MIMEType('text/plain; charset=utf-8');
+const { values } = parseArgs({
+  args: ['--verbose'],
+  options: { verbose: { type: 'boolean' } },
+});
+const increment = promisify((value, callback) =&gt; callback(null, value + 1));
+const answer = await increment(41);
+const heading = styleText('bold', mime.essence, { validateStream: false });
+const bytes = isUint8Array(new Uint8Array([answer]));
+</code></pre>
+<p>The contract targets Node 24.20.0. Portable algorithms run in both QuickJS and
+StarlingMonkey. The implementation shares deep equality with <code>node:assert</code>, the
+formatting core with <code>node:console</code>, and scheduling and validation with the
+existing stream and error helpers.</p>
+<ul>
+<li><code>parseArgs</code> requires an explicit <code>args</code> array. It never reads host <code>process.argv</code>.
+<code>parseEnv</code> returns parsed values without modifying an environment.</li>
+<li><code>styleText</code> requires <code>{ validateStream: false }</code> for unconditional ANSI output,
+or an explicit stream. Stream validation uses its <code>isTTY</code> flag; host color
+environment variables and terminal capabilities are not consulted.</li>
+<li><code>TextEncoder</code> and <code>TextDecoder</code> use the engine constructors. StarlingMonkey
+provides them; QuickJS currently throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code> on
+construction.</li>
+<li><code>promisify</code> preserves custom hooks, receivers and callback results. Passing a
+declared async function without a custom hook throws a deprecated-API error.
+The shim cannot identify an ordinary function that returns a promise without
+calling it; use promise-returning functions directly. <code>callbackify</code> schedules
+callbacks through the shared guest microtask queue, without a separate Node
+<code>nextTick</code> phase.</li>
+<li><code>inspect</code>, <code>format</code> and <code>formatWithOptions</code> support ordinary values, collections,
+descriptors, custom hooks, circular references and inspection options. Native
+engine details and Node’s full pretty-print layout are not reproduced. Promises
+display <code>&lt;state unavailable&gt;</code> and weak collections display <code>&lt;items unknown&gt;</code>.
+<code>showProxy</code> and hidden promise/weak-collection state throw; <code>%o</code> inspects hidden
+properties without unwrapping proxies. Inspection can trigger proxy traps.</li>
+<li>Buffer, typed-array, boxed-value and collection predicates use intrinsic brand
+checks. Promise checks require the same realm. Arguments, generator, iterator,
+module-namespace and function checks use observable tags and can be spoofed;
+error checks have the same limitation when the engine lacks <code>Error.isError</code>.
+<code>isCryptoKey</code> requires the engine’s <code>CryptoKey</code> implementation.</li>
+<li><code>aborted</code> requires the engine’s <code>WeakRef</code> and <code>FinalizationRegistry</code> for an active
+signal. It uses public abort listeners; an earlier listener calling
+<code>stopImmediatePropagation()</code> can prevent notification.</li>
+</ul>
+<p>Host process and native engine operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>:</p>
+<ul>
+<li><code>debug</code>/<code>debuglog</code></li>
+<li><code>deprecate</code></li>
+<li><code>getCallSites</code></li>
+<li><code>getSystemErrorName</code></li>
+<li><code>getSystemErrorMessage</code></li>
+<li><code>getSystemErrorMap</code></li>
+<li><code>setTraceSigInt</code></li>
+<li><code>convertProcessSignalToExitCode</code></li>
+<li><code>transferableAbortController</code></li>
+<li><code>transferableAbortSignal</code></li>
+<li><code>isProxy</code>, <code>isExternal</code>, and <code>isKeyObject</code> predicates</li>
+</ul>
+<p>Deprecated <code>isArray</code>, <code>_extend</code>, <code>_errnoException</code>, and
+<code>_exceptionWithHostPort</code> throw <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
