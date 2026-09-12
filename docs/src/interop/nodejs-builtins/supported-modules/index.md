@@ -71,6 +71,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:tty`](./tty.md) | Node 24.20 `isatty`, `ReadStream` and `WriteStream` over the host process's descriptors through an explicit host capability; denied by default. |
 | [`node:url`](./url.md) | Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports. |
 | [`node:util`](./util.md), [`node:util/types`](./util.md) | Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions. |
+| [`node:worker_threads`](./worker-threads.md) | Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported. |
 
 [Globals](./globals.md) and [Errors](./errors.md) document runtime-wide Node.js
 APIs. They are not importable as `node:globals` or `node:errors`.
