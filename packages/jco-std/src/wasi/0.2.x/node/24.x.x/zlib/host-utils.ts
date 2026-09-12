@@ -10,6 +10,7 @@ export function nativeOptions(
     params: options.params === undefined ? undefined : Object.fromEntries(options.params),
   };
 }
+
 export function hostCall<T>(operation: () => T): T {
   try {
     return operation();

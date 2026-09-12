@@ -23,6 +23,7 @@ export class Engine implements EngineType {
   #port: MessagePort;
   #signal = new Int32Array(new SharedArrayBuffer(4));
   #closed = false;
+
   constructor(algorithm: Algorithm, options: HostOptions) {
     const { port1, port2 } = new MessageChannel();
     this.#port = port1;
@@ -44,6 +45,7 @@ export class Engine implements EngineType {
       throw error;
     }
   }
+
   #receive(): Output {
     // A broken worker must not permanently strand a component in a synchronous import.
     if (Atomics.wait(this.#signal, 0, 0, 60_000) === "timed-out") {
@@ -54,6 +56,7 @@ export class Engine implements EngineType {
         code: "ERR_JCO_ZLIB_HOST_TIMEOUT",
       };
     }
+
     const packet = receiveMessageOnPort(this.#port);
     if (!packet) {
       throw {
@@ -62,47 +65,60 @@ export class Engine implements EngineType {
         code: "ERR_JCO_ZLIB_HOST",
       };
     }
+
     const reply = packet.message as Reply; // Private worker protocol, not guest-controlled data.
     if (!reply.ok) {
       throw reply.error;
     }
+
     return reply.output;
   }
+
   #call(command: Command): Output {
     if (this.#closed) {
       throw { name: "Error", message: "zlib binding closed", code: "ERR_ASSERTION" };
     }
+
     Atomics.store(this.#signal, 0, 0);
     this.#port.postMessage(command);
     return this.#receive();
   }
+
   write(data: Uint8Array): Output {
     return this.#call({ op: "write", data });
   }
+
   finish(): Output {
     return this.#call({ op: "finish" });
   }
+
   flush(kind: number): Output {
     return this.#call({ op: "flush", kind });
   }
+
   params(level: number, strategy: number): Output {
     return this.#call({ op: "params", level, strategy });
   }
+
   reset(): void {
     this.#call({ op: "reset" });
   }
+
   close(): void {
     if (this.#closed) {
       return;
     }
+
     this.#closed = true;
     this.#port.close();
     void this.#worker.terminate();
   }
+
   [Symbol.dispose](): void {
     this.close();
   }
 }
+
 const methods = {
   deflate: zlib.deflateSync,
   inflate: zlib.inflateSync,
@@ -116,8 +132,10 @@ const methods = {
   zstdcompress: zlib.zstdCompressSync,
   zstddecompress: zlib.zstdDecompressSync,
 };
+
 export const open: ZlibProvider["open"] = (algorithm, options) =>
   hostCall(() => new Engine(algorithm, options));
+
 export const compress: ZlibProvider["compress"] = (algorithm, data, options) =>
   hostCall(() => {
     // @types/node 24 omits the documented info:true result; Node returns this record.
@@ -130,7 +148,10 @@ export const compress: ZlibProvider["compress"] = (algorithm, data, options) =>
     };
     return { data: result.buffer, bytesWritten: result.engine.bytesWritten };
   });
+
 export const crc32: ZlibProvider["crc32"] = (data, value) =>
   hostCall(() => zlib.crc32(data, value));
+
 const host: ZlibProvider = { open, compress, crc32 };
+
 export default host;
