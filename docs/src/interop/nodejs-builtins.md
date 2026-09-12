@@ -127,12 +127,6 @@ targets. The other aliases were reviewed but are not automatically resolved.
 The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.
 
-### More semantic or dependency work needed
-
-| Modules                                   | Why they are not enabled yet                                                                                                                                                                                                |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:trace_events`                       | The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.                                                                                                                       |
-
 ### Host-backed or broad subsystems
 
 These modules contain useful portable pieces, but their complete public surfaces
