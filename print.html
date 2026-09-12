@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a3b7ad50.js";
+            window.path_to_searchindex_js = "searchindex-1d8f0cf2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c2d762fc.js"></script>
+        <script src="toc-4866e883.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2223,6 +2223,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="#nodeutil"><code>node:util</code></a>, <a href="#nodeutil"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
+<tr><td><a href="#nodevm"><code>node:vm</code></a></td><td>Same-context script evaluation and function compilation in the guest. No WIT capability; separate realms, native caches and VM modules are unsupported.</td></tr>
 <tr><td><a href="#worker-threads"><code>node:worker_threads</code></a></td><td>Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported.</td></tr>
 <tr><td><a href="#nodezlib"><code>node:zlib</code></a></td><td>Native zlib, Brotli and Zstandard through an explicit compression capability; denied by default.</td></tr>
 </tbody>
@@ -4372,6 +4373,98 @@ signal. It uses public abort listeners; an earlier listener calling
 </ul>
 <p>Deprecated <code>isArray</code>, <code>_extend</code>, <code>_errnoException</code>, and
 <code>_exceptionWithHostPort</code> throw <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodevm"><a class="header" href="#nodevm"><code>node:vm</code></a></h1>
+<p>Jco supports a portable subset of <a href="https://nodejs.org/download/release/v24.20.0/docs/api/vm.html">Node v24.20.0’s VM API</a>:
+script evaluation and function compilation inside the component. It requires no
+additional WIT imports or host provider. Use the <code>node:vm</code> import specifier;
+bare <code>vm</code> imports remain unresolved.</p>
+<h2 id="execution-model-and-security"><a class="header" href="#execution-model-and-security">Execution model and security</a></h2>
+<p>Evaluated code shares the component’s global scope and capabilities. It can read
+and modify <code>globalThis</code>, but cannot access the calling function’s lexical variables.
+Objects and functions returned by evaluated code retain their identity, and
+functions can close over local variables created during evaluation.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><code>node:vm</code> is not a security sandbox. Only evaluate code you trust with the
+capabilities available to your application. With passthrough Node adapters,
+those capabilities can include host filesystem access, process execution, or
+even running JavaScript on the host (for example, through the
+<a href="#nodeinspector">inspector adapter</a>). Insecure VM code can use any such APIs you
+expose to it with the host process’s authority; guest WASI restrictions do not
+constrain those host-side operations. Native Node VM contexts also do not
+provide a security boundary for untrusted code.</p>
+</blockquote>
+<h2 id="scripts-and-functions"><a class="header" href="#scripts-and-functions">Scripts and functions</a></h2>
+<pre><code class="language-js">import { Script, compileFunction } from "node:vm";
+
+export function run() {
+  const expression = new Script("6 * 7", "answer.js");
+
+  const add = compileFunction("return left + right", ["left", "right"]);
+
+  return expression.runInThisContext() + add(2, 3);
+}
+</code></pre>
+<p>For an application world exporting <code>run: func() -&gt; u32</code>, build this source with:</p>
+<pre><code class="language-console">jco componentize app.js --bundle --wit wit -o app.wasm
+</code></pre>
+<p><code>new Script()</code> and <code>createScript()</code> check syntax without executing the source.
+Scripts can run repeatedly through <code>script.runInThisContext()</code>; the top-level
+<code>runInThisContext()</code> combines creation and execution. Creating a Script does not
+precompile native bytecode: its source is parsed again when it runs.</p>
+<p>Scripts support expressions, control flow, block-local lexical declarations, and
+explicit <code>globalThis</code> mutations. Use <code>globalThis</code> properties for state shared
+between runs:</p>
+<pre><code class="language-js">const increment = new Script("globalThis.counter += 1");
+
+globalThis.counter = 0;
+
+increment.runInThisContext(); // 1
+increment.runInThisContext(); // 2
+</code></pre>
+<p><code>compileFunction()</code> supports ordinary function bodies, including local
+declarations, <code>this</code>, <code>arguments</code>, and returned closures. Parameter names must be
+individual identifiers; default parameters, rest parameters, and destructuring
+patterns are unsupported.</p>
+<h2 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h2>
+<p>The following operations throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code>:</p>
+<ul>
+<li>Separate contexts: <code>createContext()</code>, <code>runInContext()</code>, <code>runInNewContext()</code> and
+the corresponding Script methods, including <code>constants.DONT_CONTEXTIFY</code> usage.</li>
+<li>Global <code>var</code>, <code>let</code>, <code>const</code>, class, or function declarations in scripts. These
+are rejected before execution, including <code>var</code> declarations inside blocks and
+block functions that could introduce global bindings. Use <code>globalThis</code>
+properties for shared state, or <code>compileFunction()</code> for local declarations.</li>
+<li>Execution limits: <code>timeout</code> and <code>breakOnSigint: true</code>. There is no VM execution
+watchdog; these options fail before the code runs.</li>
+<li>Nonzero <code>lineOffset</code> or <code>columnOffset</code>, cached data, <code>parsingContext</code>, and
+nonempty <code>contextExtensions</code>.</li>
+<li>Dynamic <code>import()</code> syntax and <code>importModuleDynamically</code> options. Evaluated code
+has no built-in Node module loader, including through
+<code>constants.USE_MAIN_CONTEXT_DEFAULT_LOADER</code>.</li>
+<li><code>Script.createCachedData()</code> and <code>measureMemory()</code>. Memory measurement throws
+synchronously, rather than returning a promise.</li>
+<li>All <code>Module</code>, <code>SourceTextModule</code>, and <code>SyntheticModule</code> operations. These
+experimental classes are exported, but their constructors, methods, and
+getters throw immediately without inspecting arguments or invoking callbacks.</li>
+</ul>
+<p><code>isContext()</code> validates its input and returns <code>false</code>; separate contexts cannot
+be created. The <code>constants</code> namespace is frozen, and its symbols do not enable
+otherwise unsupported operations.</p>
+<p>Script’s deprecated <code>produceCachedData</code> option throws
+<code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code> whenever present, including explicit
+<code>false</code> or <code>undefined</code>, before converting the source or reading option getters.
+For <code>compileFunction()</code>, <code>produceCachedData</code> is not deprecated: <code>false</code> is accepted
+and <code>true</code> throws <code>ERR_JCO_UNSUPPORTED_NODE_API</code>.</p>
+<h2 id="source-metadata-and-diagnostics"><a class="header" href="#source-metadata-and-diagnostics">Source metadata and diagnostics</a></h2>
+<p><code>Script.sourceURL</code> and <code>Script.sourceMapURL</code> expose metadata from source line
+comments. The <code>filename</code> option labels the source in diagnostics; line terminators
+are removed from that label.</p>
+<p>Syntax-error messages and stack traces may differ from Node’s, and
+engine-specific syntax extensions are unsupported. <code>displayErrors</code> is validated
+but does not control V8-style source excerpts. Function stringification may also
+differ from Node’s output.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="worker-threads"><a class="header" href="#worker-threads">Worker threads</a></h1>
 <p><code>node:worker_threads</code> targets Node 24.20.0. Jco provides a guest adapter and an

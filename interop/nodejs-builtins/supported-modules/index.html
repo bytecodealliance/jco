@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-a3b7ad50.js";
+            window.path_to_searchindex_js = "../../../searchindex-1d8f0cf2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-c2d762fc.js"></script>
+        <script src="../../../toc-4866e883.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -251,6 +251,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="./tty.html"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="./url.html"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="./util.html"><code>node:util</code></a>, <a href="./util.html"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
+<tr><td><a href="./vm.html"><code>node:vm</code></a></td><td>Same-context script evaluation and function compilation in the guest. No WIT capability; separate realms, native caches and VM modules are unsupported.</td></tr>
 <tr><td><a href="./worker-threads.html"><code>node:worker_threads</code></a></td><td>Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported.</td></tr>
 <tr><td><a href="./zlib.html"><code>node:zlib</code></a></td><td>Native zlib, Brotli and Zstandard through an explicit compression capability; denied by default.</td></tr>
 </tbody>
