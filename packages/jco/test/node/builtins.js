@@ -56,6 +56,7 @@ describe("Node builtin adapters", () => {
             "jco:node/os@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host",
             "jco:node/zlib@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host",
             "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
+            "jco:node/wasi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host",
         });
         expect(
             withDefaultNodeCapabilityMap({
@@ -84,6 +85,7 @@ describe("Node builtin adapters", () => {
             "jco:node/os@0.1.0": "/application/os-host.js",
             "jco:node/zlib@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host",
             "jco:node/tty@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host",
+            "jco:node/wasi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host",
         });
     });
 
@@ -278,6 +280,27 @@ describe("Node builtin adapters", () => {
         expect(source).toContain("export default tty");
         expect(source).toContain('export * from "test:tty"');
         expect(plugin.resolveId("tty")).toBeNull();
+    });
+
+    test.concurrent("generates a host-backed adapter for node:wasi and reports its WIT requirement", () => {
+        const requirements = [];
+        const plugin = nodeBuiltinPlugin(
+            { imports: [], exports: [] },
+            { wasiModule: "test:wasi", onWitRequirement: (requirement) => requirements.push(requirement) },
+        );
+        const id = plugin.resolveId("node:wasi");
+        expect(id).toBe("\0jco-node-builtin:node:wasi");
+        expect(requirements).toEqual([nodeWit.WASI_WIT_REQUIREMENT]);
+        expect(nodeWit.WASI_WIT_REQUIREMENT.witImport).toBe("jco:node/wasi@0.1.0");
+        expect(nodeWit.WASI_WIT_REQUIREMENT.dependencySources.map((source) => source.split(/[\\/]/).at(-1))).toEqual([
+            "types.wit",
+            "wasi.wit",
+        ]);
+        const source = plugin.load(id);
+        expect(source).toContain('from "test:wasi"');
+        expect(source).toContain("export default wasi");
+        expect(source).toContain('export * from "test:wasi"');
+        expect(plugin.resolveId("wasi")).toBeNull();
     });
 
     test.concurrent("generates a capability-free adapter for node:repl", () => {
