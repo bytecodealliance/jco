@@ -56,6 +56,7 @@
             - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
             - [`node:util`](./interop/nodejs-builtins/supported-modules/util.md)
             - [`node:worker_threads`](./interop/nodejs-builtins/supported-modules/worker-threads.md)
+            - [`node:zlib`](./interop/nodejs-builtins/supported-modules/zlib.md)
 - [Troubleshooting]()
     - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide]()
