@@ -30,8 +30,8 @@ hoisting declarations; and finding the expression to tab-complete. acorn also se
 as the compile step: Node compiles a `vm.Script` to surface syntax errors before
 running, and acorn's parse plays that role identically on every engine.
 
-Only files under `repl/` import acorn. A component that does not import `node:repl`
-does not carry it; the jco-std tests assert both.
+The REPL and VM adapters share the acorn dependencies. A component that imports
+neither `node:repl` nor `node:vm` does not include their parsers.
 
 ## Runtime differences
 
