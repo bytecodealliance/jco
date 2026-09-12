@@ -25,6 +25,7 @@
  * previous() follows Node v24.20.0 internal/process/per_thread.js (MIT),
  * commit 71b8b174857e25106d39b61a9e6f30d927da8b01.
  */
+import { validateNumber } from "../internal/validation.js";
 import { decodeErrno } from "../internal/host-error.js";
 import {
   deprecatedNodeApi,
@@ -39,32 +40,23 @@ export function unsupported(api: string): never {
     "requires Node runtime hooks or native objects that cannot cross the component boundary",
   );
 }
+
 export function deprecated(api: string, replacement?: string): never {
   throw deprecatedNodeApi(`process.${api}`, replacement);
 }
-export function string(value: unknown, name: string): asserts value is string {
-  if (typeof value !== "string") {
-    throw invalidArgType(name, "string", value);
-  }
-}
-export function boolean(value: unknown, name: string): asserts value is boolean {
-  if (typeof value !== "boolean") {
-    throw invalidArgType(name, "boolean", value);
-  }
-}
+
 export function integer(
   value: unknown,
   name: string,
   min: number,
   max: number,
 ): asserts value is number {
-  if (typeof value !== "number") {
-    throw invalidArgType(name, "number", value);
-  }
+  validateNumber(value, name);
   if (!Number.isInteger(value) || value < min || value > max) {
     throw outOfRange(name, `>= ${min} && <= ${max}`, value);
   }
 }
+
 export function id(value: unknown, name: string): Id {
   if (typeof value === "string") {
     return { tag: "name", val: value };
@@ -75,6 +67,7 @@ export function id(value: unknown, name: string): Id {
   integer(value, name, 0, 4294967295);
   return { tag: "number", val: value };
 }
+
 export function exitCode(value: unknown): ExitCode | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -87,6 +80,7 @@ export function exitCode(value: unknown): ExitCode | undefined {
   }
   return { tag: "number", val: value };
 }
+
 export function path(value: unknown): ProcessPath | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -102,6 +96,7 @@ export function path(value: unknown): ProcessPath | undefined {
   }
   throw invalidArgType("path", ["string", "Buffer", "URL"], value);
 }
+
 export function previous(value: CpuUsage | undefined): CpuUsage | undefined {
   // Adapted from Node per_thread.js: falsy values request a fresh measurement.
   if (!value) {
@@ -121,6 +116,7 @@ export function previous(value: CpuUsage | undefined): CpuUsage | undefined {
   }
   return { user: value.user, system: value.system };
 }
+
 export function warning(error: Error): Warning {
   if (!(error instanceof Error)) {
     throw invalidArgType("err", "Error", error);
@@ -133,6 +129,7 @@ export function warning(error: Error): Warning {
     detail: "detail" in error && typeof error.detail === "string" ? error.detail : undefined,
   };
 }
+
 export function makeError(data: ProcessError): Error {
   const error =
     data.name === "TypeError"
@@ -158,3 +155,5 @@ export function makeError(data: ProcessError): Error {
   }
   return error;
 }
+
+export { validateString as string, validateBoolean as boolean } from "../internal/validation.js";

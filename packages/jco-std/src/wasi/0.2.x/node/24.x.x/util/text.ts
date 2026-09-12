@@ -23,12 +23,8 @@
 // 71b8b174857e25106d39b61a9e6f30d927da8b01, lib/util.js and lib/internal/util/inspect.js.
 // Local changes: explicit TypeScript contracts, shared Jco errors, ECMAScript intrinsics.
 
-import {
-  invalidArgType,
-  invalidArgValue,
-  unsupportedNodeApi,
-  validateObject,
-} from "../errors/core.js";
+import { invalidArgType, invalidArgValue, unsupportedNodeApi } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 import { inspect } from "./inspect.js";
 
 export const colors: Record<string, [number, number]> = {

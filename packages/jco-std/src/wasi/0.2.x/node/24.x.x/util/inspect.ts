@@ -9,7 +9,8 @@ import {
   isStringObject,
   isBigIntObject,
 } from "./types.js";
-import { invalidArgType, unsupportedNodeApi, validateObject } from "../errors/core.js";
+import { invalidArgType, unsupportedNodeApi } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 export type { InspectOptions } from "./format-core.js";
 
 export interface InspectFunction {

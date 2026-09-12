@@ -34,7 +34,8 @@ import {
   invalidArgValue,
   unsupportedNodeApi,
 } from "../errors.js";
-import { validateString, validateAbortSignal, validateUint32, inspect } from "./compat.js";
+import { validateUint32, inspect } from "./compat.js";
+import { validateString, validateAbortSignal } from "../internal/validation.js";
 import { charLengthAt, charLengthLeft, commonPrefix, kSubstringSearch } from "./utils.js";
 import { clearScreenDown, cursorTo, moveCursor } from "./callbacks.js";
 import { emitKeypressEvents } from "./keypress.js";

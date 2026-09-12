@@ -23,7 +23,8 @@
 // 71b8b174857e25106d39b61a9e6f30d927da8b01, lib/util.js.
 // Local changes: explicit TypeScript contracts, shared Jco errors, ECMAScript intrinsics.
 
-import { codedError, deprecatedNodeApi, invalidArgType, validateFunction } from "../errors/core.js";
+import { codedError, deprecatedNodeApi, invalidArgType } from "../errors/core.js";
+import { validateFunction } from "../internal/validation.js";
 import { nextTick } from "../stream/scheduler.js";
 
 type Callback<T> = (error: unknown, value?: T) => void;

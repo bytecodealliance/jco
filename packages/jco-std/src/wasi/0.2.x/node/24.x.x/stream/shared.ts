@@ -8,6 +8,7 @@
  * portable Node error helpers instead of primordials and internal bindings.
  */
 
+import { validateObject } from "../internal/validation.js";
 import { invalidArgType, invalidArgValue, outOfRange, unsupportedNodeApi } from "../errors/core.js";
 
 import type {
@@ -157,14 +158,8 @@ export function validateEncoding(encoding: unknown): asserts encoding is string 
   }
 }
 
-function validateOptionsObject(value: unknown): asserts value is Record<PropertyKey, unknown> {
-  if (value === null || typeof value !== "object") {
-    throw invalidArgType("options", "Object", value);
-  }
-}
-
 export function validateConsumeOptions(options: ConsumeOptions | TextConsumeOptions): void {
-  validateOptionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   validateLimit(options.limit);
   validateAbortSignal(options.signal);
   if ("encoding" in options) {
@@ -175,7 +170,7 @@ export function validateConsumeOptions(options: ConsumeOptions | TextConsumeOpti
 export function validateSyncConsumeOptions(
   options: ConsumeSyncOptions | TextConsumeSyncOptions,
 ): void {
-  validateOptionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   validateLimit(options.limit);
   if ("encoding" in options) {
     validateEncoding(options.encoding);
