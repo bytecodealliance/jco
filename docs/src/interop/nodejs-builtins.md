@@ -136,8 +136,7 @@ set of coordinated shims:
 `node:crypto`, `node:http2`,
 `node:perf_hooks`, `node:repl`, `node:stream`,
 `node:stream/promises`, `node:stream/web`,
-`node:v8`, `node:vm`, `node:wasi`,
-`node:worker_threads`, and `node:zlib`.
+`node:v8`, `node:vm`, `node:wasi`, and `node:zlib`.
 
 #### Future composition
 
