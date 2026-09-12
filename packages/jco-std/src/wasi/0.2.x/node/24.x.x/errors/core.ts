@@ -23,6 +23,8 @@ export type ErrorCode =
   | "ERR_MISSING_ARGS"
   | "ERR_OUT_OF_RANGE"
   | "ERR_TTY_INIT_FAILED"
+  | "ERR_WASI_ALREADY_STARTED"
+  | "ERR_WASI_NOT_STARTED"
   // Jco-specific codes. Every `ERR_JCO_*` code a shim raises is declared here so the set is
   // auditable in one place; per-builtin modules import these rather than restating literals.
   | "ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED"
@@ -42,9 +44,11 @@ export type ErrorCode =
   | "ERR_JCO_INSPECTOR_ADAPTER_REQUIRED"
   | "ERR_JCO_OS_ADAPTER_REQUIRED"
   | "ERR_JCO_TTY_ADAPTER_REQUIRED"
+  | "ERR_JCO_WASI_ADAPTER_REQUIRED"
   | "ERR_JCO_HTTP_IMPLEMENTATION"
   | "ERR_JCO_INSPECTOR_HOST"
   | "ERR_JCO_INSPECTOR_UNAVAILABLE"
+  | "ERR_JCO_WASI_HOST"
   | "ERR_JCO_WASI_HTTP"
   | "ERR_JCO_WASI_HTTP_STATE"
   | "ERR_JCO_WASI_SOCKET";
