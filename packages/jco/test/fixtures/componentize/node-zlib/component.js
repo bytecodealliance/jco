@@ -13,8 +13,10 @@ export function run(denied) {
                 errors.push({ name: error.name, code: error.code });
             }
         }
+
         return JSON.stringify({ errors, constant: zlib.constants.Z_FINISH });
     }
+
     const input = Buffer.from("component zlib 💚".repeat(20));
     const codecs = [
         ["gzipSync", "gunzipSync"],
@@ -39,6 +41,7 @@ export function run(denied) {
     } catch (error) {
         corrupt = { name: error.name, code: error.code };
     }
+
     return JSON.stringify({
         identity: zlib.gzipSync === gzipSync && namespace.default === zlib,
         roundTrips,
