@@ -1,0 +1,57 @@
+package jco:node@0.1.0;
+
+/// Host initialisation for `node:wasi`.
+///
+/// Node's `new WASI(options)` validates its options in JavaScript and then initialises a uvwasi
+/// context, which opens every preopen and checks the standard descriptors. That initialisation is
+/// the only part of `node:wasi` a component can hand to a host: everything after it (`start`,
+/// `initialize`, the `wasiImport` syscalls) reads and writes the linear memory of a core
+/// WebAssembly instance the guest created itself, and a component can neither instantiate a
+/// nested module nor share a memory across the component boundary. The interface therefore
+/// exposes initialisation alone and returns no handle, since nothing could be done with one.
+///
+/// No capability is granted by default; the Node provider runs the real `node:wasi` constructor.
+interface wasi {
+  use types.{env-vars};
+
+  variant errno {
+    number(s64),
+    symbolic(string),
+  }
+
+  /// The failure Node raises when `uvwasi_init` rejects the options: a plain `Error` whose
+  /// `code` is a `UVWASI_*` name (`UVWASI_ENOENT` for a missing preopen, `UVWASI_ENOTDIR` for
+  /// a preopen that is not a directory, `UVWASI_EBADF` for a closed descriptor), with the
+  /// numeric uvwasi `errno` and `syscall` set to `uvwasi_init`.
+  record error {
+    name: string,
+    message: string,
+    code: option<string>,
+    errno: option<errno>,
+    syscall: option<string>,
+  }
+
+  /// The WASI snapshot the module targets; selects the import namespace Node binds.
+  enum version {
+    unstable,
+    preview1,
+  }
+
+  /// `new WASI(options)` after Node's validation and normalisation of every field.
+  record options {
+    version: version,
+    /// Command-line arguments, already coerced to strings.
+    args: list<string>,
+    /// Environment entries with `undefined` values already dropped and values coerced.
+    env: env-vars,
+    /// Guest path to host path, in the order `Object.entries` yields them.
+    preopens: list<tuple<string, string>>,
+    stdin: u32,
+    stdout: u32,
+    stderr: u32,
+  }
+
+  /// Initialise a WASI context for `options` exactly as Node's constructor does, failing the way
+  /// `uvwasi_init` fails. The context is discarded: it cannot be linked to a module from a guest.
+  init: func(options: options) -> result<_, error>;
+}

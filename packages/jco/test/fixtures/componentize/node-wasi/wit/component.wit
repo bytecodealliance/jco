@@ -1,0 +1,5 @@
+package jco-fixtures:node-wasi;
+
+world component {
+    export run: func(mode: string, sandbox: string) -> string;
+}

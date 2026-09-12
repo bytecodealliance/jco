@@ -597,6 +597,20 @@
     "./wasi/0.2.x/node/24.x.x/zlib/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/zlib-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/zlib-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/wasi": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/wasi.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/wasi.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/wasi.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/wasi/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/wasi-host.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/wasi-host.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/wasi-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/wasi/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/wasi-host-node.d.ts",
+      "node": "./dist/wasi/0.2.x/node/24.x.x/wasi-host-node.js"
     }
   },
   "scripts": {

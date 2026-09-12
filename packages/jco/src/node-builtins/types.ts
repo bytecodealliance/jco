@@ -76,6 +76,8 @@ export interface NodeBuiltinOptions {
     ttyModule?: string;
     /** Path to jco-std's versioned `node:zlib` module (overridable for tests) */
     zlibModule?: string;
+    /** Path to jco-std's versioned `node:wasi` module (overridable for tests) */
+    wasiModule?: string;
     /** Paths to jco-std's capability-free readline modules (overridable for tests). */
     readlineModule?: string;
     readlinePromisesModule?: string;
