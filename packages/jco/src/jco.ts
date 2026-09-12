@@ -90,6 +90,15 @@ program
             .choices(["direct", "wasi-sockets", "wasi-http"])
             .default("direct"),
     )
+    .addOption(
+        new Option("--with-nodejs-vfs-via <implementation>", "implementation used by bundled node:vfs code")
+            .choices(["direct", "wasi-filesystem"])
+            .default("direct"),
+    )
+    .option(
+        "--with-nodejs-vfs-wasi-config <module>",
+        "guest module exporting the WASI VFS storage resolveRoot function",
+    )
     .requiredOption("-o, --out <out>", "output component file")
     .option("--debug-bindings", "Output debug bindings and metadata during componentization (by default to stderr)")
     .option("--debug-bindings-dir <dir>", "Directory to which to output generated bindings and metadata")

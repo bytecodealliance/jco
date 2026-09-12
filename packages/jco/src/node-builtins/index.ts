@@ -33,6 +33,7 @@ import { createChildProcessBuiltin } from "./child-process.js";
 import { createConsoleBuiltin } from "./console.js";
 import { createDgramBuiltin } from "./dgram.js";
 import { createDnsBuiltin } from "./dns.js";
+import { createVfsBuiltin } from "./vfs.js";
 import { createFsBuiltin } from "./fs.js";
 import { createNetBuiltin } from "./net.js";
 import { createHttpBuiltin } from "./http.js";
@@ -48,6 +49,7 @@ import { composeBuiltins, VIRTUAL_PREFIX } from "./shared.js";
 export type {
     NodeBuiltinOptions,
     NodejsHttpVia,
+    NodejsVfsVia,
     NodejsHttp2Via,
     WorldMetadata,
     NodeErrorGlobalsOptions,
@@ -98,6 +100,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createDgramBuiltin,
         createDnsBuiltin,
         createFsBuiltin,
+        createVfsBuiltin,
         createNetBuiltin,
         createHttpBuiltin,
         createHttpsBuiltin,
