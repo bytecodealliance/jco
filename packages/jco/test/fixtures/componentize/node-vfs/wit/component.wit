@@ -1,0 +1,10 @@
+package test:vfs;
+
+world component {
+  export start-memory: func();
+  export take-report: func() -> string;
+  export start-filesystem: func(root: string);
+  export sync-memory: func() -> string;
+  export sync-filesystem: func(root: string) -> string;
+  export denied: func() -> string;
+}
