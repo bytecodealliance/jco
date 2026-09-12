@@ -131,6 +131,9 @@ export const DNS_PROMISES_WIT_REQUIREMENT: NodeWitRequirement = {
 
 export const FS_WIT_REQUIREMENT = nodeRequirement("node:fs", "fs");
 
+/** VFS reuses the filesystem host protocol and its deny-by-default mapping. */
+export const VFS_WIT_REQUIREMENT: NodeWitRequirement = { ...FS_WIT_REQUIREMENT, nodeSpecifier: "node:vfs" };
+
 export const PROCESS_WIT_REQUIREMENT = nodeRequirement("node:process", "process");
 
 export const SQLITE_WIT_REQUIREMENT = nodeRequirement("node:sqlite", "sqlite");
@@ -256,6 +259,14 @@ function wasiRequirement(witImport: string, dependencies: WitDependencyPackage[]
         dependencyPackages: additional,
     };
 }
+
+export const VFS_WASI_FILESYSTEM_WIT_REQUIREMENTS: readonly NodeWitRequirement[] = [
+    "wasi:filesystem/preopens@0.2.12",
+    "wasi:filesystem/types@0.2.12",
+].map((witImport) => ({
+    ...wasiRequirement(witImport, [wasiDependency("wasi-filesystem"), WASI_IO_DEPENDENCY, WASI_CLOCKS_DEPENDENCY]),
+    nodeSpecifier: "node:vfs",
+}));
 
 export const HTTP_WASI_SOCKETS_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:sockets/instance-network@0.2.12", WASI_SOCKETS_DEPENDENCIES),

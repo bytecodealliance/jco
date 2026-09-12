@@ -18,6 +18,14 @@ export interface NodeBuiltinOptions {
     /** Override the portable vm module when bundling or testing. */
     vmModule?: string;
 
+    /** Select the VFS host boundary. Direct retains the default-deny filesystem mapping. */
+    nodejsVfsVia?: NodejsVfsVia;
+    /** Guest module exporting a WASI VFS resolveRoot callback. */
+    vfsWasiConfigModule?: string;
+    vfsModule?: string;
+    /** Override the WASI factory, e.g. to configure its storage-root resolver. */
+    vfsWasiFilesystemImplementationModule?: string;
+
     /** Override the worker_threads guest module for bundling/tests. */
     workerThreadsModule?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/path` module (overridable for tests) */
@@ -146,3 +154,5 @@ export interface NodeGlobalsOptions extends NodeErrorGlobalsOptions {
     /** Path to Jco's audited `node:buffer` adapter (overridable for tests). */
     bufferModule?: string;
 }
+
+export type NodejsVfsVia = "direct" | "wasi-filesystem";
