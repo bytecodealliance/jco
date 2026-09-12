@@ -22,6 +22,7 @@ export default defineConfig({
     // unconditionally would abort on Node 24, which does not know the flag.
     execArgv: [
       "--expose-gc",
+      ...(process.execArgv.includes("--experimental-vfs") ? ["--experimental-vfs"] : []),
       ...(process.execArgv.includes("--experimental-ffi") ? ["--experimental-ffi"] : []),
     ],
   },
