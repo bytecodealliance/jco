@@ -15,15 +15,21 @@ const std = (path) => fileURLToPath(new URL(`../../../jco-std/dist/wasi/0.2.x/no
 
 const overrides = { utilModule: std("util/index.js"), utilTypesModule: std("util-types.js") };
 
-test("util adapters resolve lazily without WIT capabilities", () => {
+test("util adapters resolve lazily without WIT capabilities", async () => {
     const onWitRequirement = vi.fn();
     const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { ...overrides, onWitRequirement });
     for (const name of ["node:util", "node:util/types"]) {
         expect(plugin.resolveId(name)).toBe(`\0jco-node-builtin:${name}`);
     }
-    for (const name of ["util", "util/types", "node:util/unknown"]) {
-        expect(plugin.resolveId(name)).toBeNull();
+    for (const name of ["util", "util/types"]) {
+        expect(await plugin.resolveId.call({ resolve: async () => null }, name)).toBe(
+            `\0jco-node-builtin:node:${name}`,
+        );
+        expect(
+            await plugin.resolveId.call({ resolve: async () => ({ id: `/installed/${name}.js` }) }, name),
+        ).toBeNull();
     }
+    expect(plugin.resolveId("node:util/unknown")).toBeNull();
     expect(onWitRequirement).not.toHaveBeenCalled();
 });
 

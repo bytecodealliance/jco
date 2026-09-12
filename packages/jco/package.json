@@ -84,6 +84,7 @@
         "@types/node": "^24.3.0",
         "commitlint": "^19.8.1",
         "conventional-changelog-conventionalcommits": "^9.1.0",
+        "express": "^5.2.1",
         "mime": "^4.0.7",
         "oxfmt": "^0.28.0",
         "puppeteer": "catalog:",

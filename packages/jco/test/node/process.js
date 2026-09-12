@@ -37,7 +37,7 @@ test.concurrent("process installs only its mirrored WIT dependency, idempotently
     );
     expect(await injectNodeWitImports(root, undefined, [PROCESS_WIT_REQUIREMENT])).toBeUndefined();
 });
-test.concurrent("process builtin resolves lazily and leaves bare imports alone", () => {
+test.concurrent("process builtin resolves lazily and preserves installed bare packages", async () => {
     const requirements = [];
     const plugin = nodeBuiltinPlugin(
         { imports: [], exports: [] },
@@ -46,7 +46,9 @@ test.concurrent("process builtin resolves lazily and leaves bare imports alone",
     const id = plugin.resolveId("node:process");
     expect(id).toBe("\0jco-node-builtin:node:process");
     expect(requirements).toEqual([PROCESS_WIT_REQUIREMENT]);
-    expect(plugin.resolveId("process")).toBeNull();
+    expect(
+        await plugin.resolveId.call({ resolve: async () => ({ id: "/installed/process.js" }) }, "process"),
+    ).toBeNull();
     expect(plugin.load(id)).toContain('from "/process.js"');
 });
 function expectTypeChecks(paths) {

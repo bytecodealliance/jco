@@ -65,8 +65,9 @@ Resolution follows a deliberate quality order:
 4. Everything else remains unresolved. Jco never enables unenv's entire alias map
    merely because an alias exists.
 
-Only `node:` specifiers participate in this mechanism. Legacy bare specifiers such
-as `buffer`, `path`, and `querystring` are not rewritten.
+Explicit `node:` imports select builtin adapters. Audited bare names also resolve
+when no installed package shadows them. See [Express](./express.md) for the
+portable globals and dependency compatibility used by ordinary npm libraries.
 
 ## Combining built-ins with `jco-std`
 
@@ -82,6 +83,8 @@ while its application code imports `node:assert` and `node:buffer`.
 Browse the [supported modules](./nodejs-builtins/supported-modules/index.md) for
 API-specific examples, capabilities, and compatibility limits. Each API has its
 own page, with related submodules grouped together.
+
+For whole-application compatibility, see [Express](./express.md).
 
 ## How Jco evaluates unenv modules
 

@@ -17,6 +17,8 @@ export interface WorldMetadata {
 export interface NodeBuiltinOptions {
     /** Override the worker_threads guest module for bundling/tests. */
     workerThreadsModule?: string;
+
+    cryptoModule?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/path` module (overridable for tests) */
     pathFactory?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/assert` module (overridable for tests) */
@@ -138,6 +140,8 @@ export interface NodeErrorGlobalsOptions {
 }
 
 export interface NodeGlobalsOptions extends NodeErrorGlobalsOptions {
+    timersModule?: string;
+    processModule?: string;
     /** Path to the native Abort globals compatibility adapter (overridable for tests). */
     abortGlobalsModule?: string;
     /** Path to Jco's audited `node:buffer` adapter (overridable for tests). */

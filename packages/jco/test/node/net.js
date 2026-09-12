@@ -66,9 +66,9 @@ describe("node:net builtin adapter", () => {
         }
     });
 
-    test("does not intercept bare net and tree-shakes an unused builtin", async () => {
+    test("resolves bare net and tree-shakes an unused builtin", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { netCoreModule: "/jco/net/core.js" });
-        expect(plugin.resolveId("net")).toBeNull();
+        expect(await plugin.resolveId.call({ resolve: async () => null }, "net")).toBe("\0jco-node-builtin:node:net");
         const root = await getTmpDir();
         const entry = join(root, "entry.js");
         await writeFile(entry, "export const answer = 42;\n");

@@ -35,3 +35,8 @@ absent and should gain execution coverage when the engine provides it.
 Some of these retain StarlingMonkey's existing WASI feature requirements, such as
 clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
 fetches. Jco does not add a Node-specific WIT capability for globals.
+
+Bundled dependencies also receive `setImmediate` and `clearImmediate` from
+[the timers adapter](./timers.md). A free `process` identifier uses the limited
+unenv implementation so dependency initialization can run without host calls.
+Explicit `node:process` imports use [the host-backed process adapter](./process.md).

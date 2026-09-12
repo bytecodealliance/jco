@@ -1,3 +1,5 @@
+import { createCryptoBuiltin } from "./crypto.js";
+import { createPortableUnenvBuiltin } from "./unenv.js";
 import { type WorldMetadata, type NodeBuiltinOptions } from "./types.js";
 import { type Plugin } from "rolldown";
 import { createGlobalsBuiltin } from "./globals.js";
@@ -101,13 +103,33 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createQuerystringBuiltin,
         createPathBuiltin,
         createUrlBuiltin,
+        createCryptoBuiltin,
+        createPortableUnenvBuiltin,
     ];
     const composed = composeBuiltins(adapters.map((create) => create(context)));
     return {
         name: "jco-node-builtins",
-
-        resolveId(id, importer) {
-            return id.startsWith(VIRTUAL_PREFIX) ? id : composed.resolveId(id, importer);
+        resolveId(id, importer, extraOptions) {
+            if (id === "node:stream" && extraOptions?.kind === "require-call") {
+                return `${VIRTUAL_PREFIX}commonjs-stream`;
+            }
+            if (id.startsWith(VIRTUAL_PREFIX)) {
+                return id;
+            }
+            const resolved = composed.resolveId(id, importer);
+            if (resolved !== null) {
+                return resolved;
+            }
+            if (BARE_SPECIFIER_BUILTINS.has(id)) {
+                return Promise.resolve(this.resolve(id, importer, { skipSelf: true })).then((installed) =>
+                    installed
+                        ? null
+                        : id === "stream"
+                          ? `${VIRTUAL_PREFIX}commonjs-stream`
+                          : composed.resolveId(`node:${id}`, importer),
+                );
+            }
+            return null;
         },
 
         load(id) {
@@ -115,3 +137,39 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         },
     };
 }
+
+// Preserve normal package resolution before falling back to an audited bare builtin.
+const BARE_SPECIFIER_BUILTINS = new Set([
+    "path",
+    "path/posix",
+    "path/win32",
+    "assert",
+    "assert/strict",
+    "fs",
+    "fs/promises",
+    "dns",
+    "dns/promises",
+    "buffer",
+    "querystring",
+    "process",
+    "tty",
+    "url",
+    "util",
+    "util/types",
+    "zlib",
+    "async_hooks",
+    "child_process",
+    "cluster",
+    "console",
+    "crypto",
+    "diagnostics_channel",
+    "domain",
+    "events",
+    "http",
+    "https",
+    "net",
+    "stream",
+    "stream/promises",
+    "string_decoder",
+    "timers",
+]);

@@ -10,18 +10,27 @@ import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
 const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host/node");
 const DENY_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host");
 
-test("zlib builtin reports only its compression capability and preserves explicit mappings", () => {
+test("zlib builtin reports only its compression capability and preserves explicit mappings", async () => {
     const requirements = [];
     const plugin = nodeBuiltinPlugin(
         { imports: [], exports: [] },
         { zlibModule: "/zlib.js", onWitRequirement: (value) => requirements.push(value) },
     );
-    expect(plugin.resolveId("zlib")).toBeNull();
+    // Bare imports prefer an installed package before falling back to the builtin.
+    const installedPackage = { id: "/app/node_modules/zlib/index.js" };
+    const installedResolution = { resolve: async () => installedPackage };
+
+    expect(await plugin.resolveId.call(installedResolution, "zlib")).toBeNull();
     expect(plugin.resolveId("node:zlib/iter")).toBeNull();
     const id = plugin.resolveId("node:zlib");
     expect(id).toBe("\0jco-node-builtin:node:zlib");
     expect(requirements).toEqual([ZLIB_WIT_REQUIREMENT]);
     expect(plugin.load(id)).toContain('from "/zlib.js"');
+
+    const missingResolution = { resolve: async () => null };
+
+    expect(await plugin.resolveId.call(missingResolution, "zlib")).toBe(id);
+
     const defaults = withDefaultNodeCapabilityMap({});
     expect(defaults["jco:node/zlib@0.1.0"]).toBe("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host");
     expect(withDefaultNodeCapabilityMap({ "jco:node/zlib@0.1.0": NODE_HOST })["jco:node/zlib@0.1.0"]).toBe(NODE_HOST);

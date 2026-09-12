@@ -26,7 +26,13 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
   readonly method: string | undefined;
   readonly url: string | undefined;
   readonly socket:
-    | { remoteAddress?: string; remotePort?: number; remoteFamily?: "IPv4" | "IPv6" }
+    | {
+        readable: boolean;
+        writable: boolean;
+        remoteAddress?: string;
+        remotePort?: number;
+        remoteFamily?: "IPv4" | "IPv6";
+      }
     | undefined;
   readonly signal: AbortSignal | undefined = undefined;
   closed = false;
@@ -66,6 +72,10 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
       this.method = message.method;
       this.url = message.url;
       this.socket = {
+        // The buffered request is complete at the transport, but its body has not
+        // been consumed. Middleware uses the socket state to distinguish those cases.
+        readable: true,
+        writable: true,
         remoteAddress: message.remoteAddress,
         remotePort: message.remotePort,
         remoteFamily:

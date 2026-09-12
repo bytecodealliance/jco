@@ -39,6 +39,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:child_process`](./child-process.md) | Synchronous APIs over an explicit application-provided host capability; denied by default. |
 | [`node:cluster`](./cluster.md) | Primary/worker control over an explicit host capability. Partly unsupported. |
 | [`node:console`](./console.md) | Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider. |
+| [`node:crypto`](./crypto.md) | Synchronous SHA-1/SHA-256 hash and HMAC helpers; randomness delegates to engine WebCrypto. Other operations have explicit limits. |
 | [`node:dgram`](./dgram.md) | UDP sockets over an explicit host capability; denied by default. StarlingMonkey supports the Node passthrough. |
 | [`node:diagnostics_channel`](./diagnostics-channel.md) | Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously. |
 | [`node:dns`](./dns.md), [`node:dns/promises`](./dns.md) | Name resolution over an explicit host capability; denied by default. |

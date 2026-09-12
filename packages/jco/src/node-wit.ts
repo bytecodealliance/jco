@@ -283,6 +283,27 @@ export const HTTP_WASI_SOCKETS_0_2_10_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:io/poll@0.2.10", WASI_SOCKETS_0_2_10_DEPENDENCIES),
 ] as const;
 
+/**
+ * The environment `node:path` reads the working directory from.
+ *
+ * Unlike the host-backed builtins this is a plain WASI interface, but it is injected the same
+ * way: an application that reaches `node:path` -- usually through a dependency rather than
+ * directly -- should not have to hand-write the import and vendor its WIT to build.
+ */
+export const PATH_WIT_REQUIREMENT: NodeWitRequirement = {
+    nodeSpecifier: "node:path",
+    witImport: "wasi:cli/environment@0.2.12",
+    dependencyDirectory: WASI_IO_DEPENDENCY.dependencyDirectory,
+    dependencySources: WASI_IO_DEPENDENCY.dependencySources,
+    dependencyPackages: [
+        WASI_CLOCKS_DEPENDENCY,
+        wasiDependency("wasi-random"),
+        wasiDependency("wasi-filesystem"),
+        wasiDependency("wasi-sockets"),
+        wasiDependency("wasi-cli"),
+    ],
+};
+
 export const HTTP_WASI_HTTP_WIT_REQUIREMENTS = [
     wasiRequirement("wasi:http/outgoing-handler@0.2.12", WASI_HTTP_DEPENDENCIES),
     wasiRequirement("wasi:http/types@0.2.12", WASI_HTTP_DEPENDENCIES),

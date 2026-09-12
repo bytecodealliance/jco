@@ -1,3 +1,4 @@
+import { unenvModule } from "./unenv.js";
 import {
     VIRTUAL_PREFIX,
     type BuiltinContext,
@@ -5,6 +6,7 @@ import {
     composeBuiltins,
     virtualBuiltin,
     stdModule,
+    starReexportAdapter,
 } from "./shared.js";
 import { type NodeErrorGlobalsOptions, type NodeGlobalsOptions } from "./types.js";
 
@@ -55,11 +57,19 @@ export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [m
         AbortController: [options.abortGlobalsModule ?? ABORT_GLOBALS_SPECIFIER, "AbortController"],
         AbortSignal: [options.abortGlobalsModule ?? ABORT_GLOBALS_SPECIFIER, "AbortSignal"],
         Buffer: [options.bufferModule ?? "node:buffer", "Buffer"],
+        process: [options.processModule ?? "jco:node-process-globals", "default"],
+        setImmediate: [options.timersModule ?? "node:timers", "setImmediate"],
+        clearImmediate: [options.timersModule ?? "node:timers", "clearImmediate"],
     };
 }
 
 export function createGlobalsBuiltin({ options }: BuiltinContext): BuiltinAdapter {
     return composeBuiltins([
+        // Dependency initialization cannot call host-backed node:process during Wizer.
+        // Keep this portable global distinct from explicit imports of that API.
+        virtualBuiltin("jco:node-process-globals", `${VIRTUAL_PREFIX}process-globals`, () =>
+            starReexportAdapter(unenvModule("node:process", options), "process"),
+        ),
         virtualBuiltin(
             ABORT_GLOBALS_SPECIFIER,
             ABORT_GLOBALS_MODULE,

@@ -80,8 +80,11 @@ describe("node:https builtin adapter", () => {
         expect(plugin.load(id)).toContain('from "/jco/https.js"');
     });
 
-    test.concurrent("does not intercept the bare https specifier", () => {
-        expect(nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths).resolveId("https")).toBeNull();
+    test.concurrent("resolves bare https when no installed package shadows it", async () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths);
+        expect(await plugin.resolveId.call({ resolve: async () => null }, "https")).toBe(
+            "\0jco-node-builtin:node:https",
+        );
     });
 
     test.each([

@@ -1,5 +1,8 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import nodeHttp from "node:http";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
@@ -82,8 +85,9 @@ describe("node:http builtin adapter", () => {
         expect(source).toMatch(/export\s*\{[^}]*httpCallbacks/);
     });
 
-    test.concurrent("does not intercept the bare http specifier", () => {
-        expect(nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths).resolveId("http")).toBeNull();
+    test.concurrent("resolves bare http when no installed package shadows it", async () => {
+        const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, modulePaths);
+        expect(await plugin.resolveId.call({ resolve: async () => null }, "http")).toBe("\0jco-node-builtin:node:http");
     });
 
     test.each([
@@ -226,7 +230,63 @@ describe.skipIf(!hasJspi)("node:http in a component", () => {
         }
     }, 600_000);
 
-    test.each(["direct", "wasi-sockets", "wasi-http"])(
+    test.concurrent("serves a request over wasi:sockets", async () => {
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-http-sockets-server",
+            bundle: true,
+            copy: true,
+            extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "wasi-sockets"],
+        });
+        const { esModuleOutputPath, cleanup } = await setupAsyncTest({
+            component: { name: "node-http-sockets-server", path: componentPath, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { asyncExports: ["start", "stop"] } } },
+        });
+        const runner = fileURLToPath(
+            new URL("../fixtures/componentize/node-http-sockets-server/run.js", import.meta.url),
+        );
+        // The guest blocks inside `start()` to accept connections, so it runs as its own
+        // process and reports the port it chose on stderr.
+        const server = spawn(process.execPath, [runner, esModuleOutputPath]);
+        try {
+            const port = await new Promise((resolve, reject) => {
+                let output = "";
+                const timer = setTimeout(() => reject(new Error(`no port in: ${output}`)), 120_000);
+                server.stderr.on("data", (chunk) => {
+                    output += chunk;
+                    const match = /listening on (\d+)/.exec(output);
+                    if (match) {
+                        clearTimeout(timer);
+                        resolve(Number(match[1]));
+                    }
+                });
+                server.once("error", (error) => {
+                    clearTimeout(timer);
+                    reject(error);
+                });
+                server.once("exit", (code) => {
+                    clearTimeout(timer);
+                    reject(new Error(`exited with ${code}: ${output}`));
+                });
+            });
+
+            const body = await new Promise((resolve, reject) => {
+                const request = nodeHttp.request(`http://127.0.0.1:${port}/items`, { method: "POST" }, (response) => {
+                    response.setEncoding("utf8");
+                    const chunks = [];
+                    response.on("data", (chunk) => chunks.push(chunk));
+                    response.once("end", () => resolve(chunks.join("")));
+                });
+                request.once("error", reject);
+                request.end("hello");
+            });
+            expect(body).toBe("POST /items: hello");
+        } finally {
+            server.kill();
+            await cleanup();
+        }
+    }, 600_000);
+
+    test.concurrent.each(["direct", "wasi-sockets", "wasi-http"])(
         "componentizes and performs a local request via %s",
         async (implementation) => {
             const { componentPath, stderr } = await componentizeFixture({
