@@ -55,6 +55,7 @@
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
             - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
             - [`node:util`](./interop/nodejs-builtins/supported-modules/util.md)
+            - [`node:v8`](./interop/nodejs-builtins/supported-modules/v8.md)
             - [`node:worker_threads`](./interop/nodejs-builtins/supported-modules/worker-threads.md)
 - [Troubleshooting]()
     - [Common issues](./troubleshooting/common-issues.md)
