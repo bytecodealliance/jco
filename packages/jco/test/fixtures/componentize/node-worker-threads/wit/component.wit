@@ -1,0 +1,9 @@
+package test:node-worker-threads;
+
+world component {
+    export contract: func() -> string;
+    export denied: func() -> string;
+    export start: func(token: u32) -> u32;
+    export status: func() -> string;
+    export stop: func();
+}
