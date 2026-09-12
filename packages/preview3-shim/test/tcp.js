@@ -265,6 +265,35 @@ describe("Integration: bound TCP Socket Connect", () => {
       await new Promise((resolve) => server.close(resolve));
     }
   });
+
+  test("keeps the port of an IPv6 wildcard bind across connect", async () => {
+    const server = net.createServer();
+    const accepted = new Promise((resolve) => {
+      server.once("connection", resolve);
+    });
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen({ host: "::1", port: 0, ipv6Only: true }, resolve);
+    });
+
+    const client = createIpv6Socket();
+    client.bind(makeIpAddress("ipv6", "::", 0));
+    const boundAddress = client.getLocalAddress();
+    expect(boundAddress.val.port).not.toBe(0);
+
+    try {
+      await client.connect(makeIpAddress("ipv6", "::1", server.address().port));
+      const peer = await accepted;
+      const connectedAddress = client.getLocalAddress();
+      expect(connectedAddress.val.port).toBe(boundAddress.val.port);
+      expect(connectedAddress.val.address).toStrictEqual([0, 0, 0, 0, 0, 0, 0, 1]);
+      expect(peer.remotePort).toBe(boundAddress.val.port);
+      peer.destroy();
+    } finally {
+      client[Symbol.dispose]();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
 });
 
 describe("Integration: TCP Socket Errors", () => {
