@@ -91,6 +91,8 @@ export interface NodeBuiltinOptions {
     zlibModule?: string;
     /** Path to jco-std's versioned `node:wasi` module (overridable for tests) */
     wasiModule?: string;
+    /** Path to the versioned node:v8 module (overridable for tests). */
+    v8Module?: string;
     /** Paths to jco-std's capability-free readline modules (overridable for tests). */
     readlineModule?: string;
     readlinePromisesModule?: string;
