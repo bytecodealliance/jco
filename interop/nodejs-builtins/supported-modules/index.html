@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-ccbc7d23.js";
+            window.path_to_searchindex_js = "../../../searchindex-420c61d4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-c8aed68f.js"></script>
+        <script src="../../../toc-5aa2e47d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -247,6 +247,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="./test.html"><code>node:test</code></a>, <a href="./test.html"><code>node:test/reporters</code></a></td><td>Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine <code>AbortController</code>; see the API page for engine limits.</td></tr>
 <tr><td><a href="./timers.html"><code>node:timers</code></a>, <a href="./timers.html"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
 <tr><td><a href="./tls.html"><code>node:tls</code></a></td><td>Encrypted sockets, contexts, and inspection over <code>jco:node/tls</code>; denied by default.</td></tr>
+<tr><td><a href="./trace-events.html"><code>node:trace_events</code></a></td><td>Category control and real host trace capture through an explicitly mapped provider. Denied by default.</td></tr>
 <tr><td><a href="./tty.html"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="./url.html"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="./util.html"><code>node:util</code></a>, <a href="./util.html"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>

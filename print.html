@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ccbc7d23.js";
+            window.path_to_searchindex_js = "searchindex-420c61d4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c8aed68f.js"></script>
+        <script src="toc-5aa2e47d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2121,17 +2121,6 @@ is not among them at all – it is a Node 26 module, newer than the release unen
 targets. The other aliases were reviewed but are not automatically resolved.</p>
 <p>The following grouping describes the main blocker, not a permanent judgment about
 the module or upstream project.</p>
-<h3 id="more-semantic-or-dependency-work-needed"><a class="header" href="#more-semantic-or-dependency-work-needed">More semantic or dependency work needed</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Modules</th><th>Why they are not enabled yet</th></tr>
-</thead>
-<tbody>
-<tr><td><code>node:trace_events</code></td><td>The fallbacks preserve useful shapes, but tracing is synthetic or no-op without runtime integration.</td></tr>
-</tbody>
-</table>
-</div>
 <h3 id="host-backed-or-broad-subsystems"><a class="header" href="#host-backed-or-broad-subsystems">Host-backed or broad subsystems</a></h3>
 <p>These modules contain useful portable pieces, but their complete public surfaces
 also require operating-system access, Node internals, an event loop, or a larger
@@ -2231,6 +2220,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodetest"><code>node:test</code></a>, <a href="#nodetest"><code>node:test/reporters</code></a></td><td>Serial component tests, hooks, assertions, mocks, and reporters. No additional WIT imports. Runner requires engine <code>AbortController</code>; see the API page for engine limits.</td></tr>
 <tr><td><a href="#nodetimers"><code>node:timers</code></a>, <a href="#nodetimers"><code>node:timers/promises</code></a></td><td>Node 24 timer handles and promise timers over engine task scheduling; see the API page for runtime limits.</td></tr>
 <tr><td><a href="#nodetls"><code>node:tls</code></a></td><td>Encrypted sockets, contexts, and inspection over <code>jco:node/tls</code>; denied by default.</td></tr>
+<tr><td><a href="#nodetrace_events"><code>node:trace_events</code></a></td><td>Category control and real host trace capture through an explicitly mapped provider. Denied by default.</td></tr>
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="#nodeutil"><code>node:util</code></a>, <a href="#nodeutil"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
@@ -4092,6 +4082,90 @@ Socket class.</p>
 types. Export a synchronous starter for long-lived event-driven work: a guest
 export cannot await a promise resolved solely by a future independent host
 callback. The fixture’s starter/status exports demonstrate this engine boundary.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodetrace_events"><a class="header" href="#nodetrace_events"><code>node:trace_events</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:trace_events</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/trace-events</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Jco supports <code>createTracing()</code>, <code>getEnabledCategories()</code>, and the returned
+<code>Tracing</code> object’s <code>categories</code>, <code>enabled</code>, <code>enable()</code>, and <code>disable()</code> members.
+The default export shares the named exports. As in Node, <code>Tracing</code> is not an
+exported constructor.</p>
+<h2 id="component-usage"><a class="header" href="#component-usage">Component usage</a></h2>
+<p>Use ordinary Node imports in application code:</p>
+<pre><code class="language-js">import { createTracing, getEnabledCategories } from "node:trace_events";
+
+const tracing = createTracing({ categories: ["node.fs.sync"] });
+tracing.enable();
+try {
+  // Host filesystem operations performed while enabled can appear in the trace.
+  console.log(getEnabledCategories());
+} finally {
+  tracing.disable();
+}
+</code></pre>
+<p>Bundle the application with <code>jco componentize</code>:</p>
+<pre><code class="language-console">jco componentize source.js --bundle --wit wit --out component.wasm
+</code></pre>
+<p>Jco adds <code>jco:node/trace-events@0.1.0</code> and its WIT dependency to the selected
+world. Tracing requires no additional WASI interfaces of its own.</p>
+<h2 id="granting-host-tracing"><a class="header" href="#granting-host-tracing">Granting host tracing</a></h2>
+<p>Tracing uses a host provider. The default provider rejects <code>enable()</code> and
+<code>getEnabledCategories()</code> with <code>ERR_JCO_TRACE_EVENTS_ADAPTER_REQUIRED</code>.
+Importing the module, creating a disabled object, reading its properties, and
+disabling an already-disabled object do not call the provider. A failed enable
+leaves the object disabled; host errors retain their name, code, and message.</p>
+<p>To enable actual Node tracing, select the supplied Node provider explicitly:</p>
+<pre><code class="language-console">jco transpile component.wasm --out-dir out \
+  --map 'jco:node/trace-events@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/trace-events/host/node'
+</code></pre>
+<p>The provider uses Node’s real tracing agent. Categories are shared with other
+components, native <code>node:trace_events</code> objects, and the host’s
+<code>--trace-event-categories</code> flags. Disabling one object releases only its own
+categories. Repeated enable/disable calls are idempotent, and active objects stay
+alive until disabled. Native Node emits the warning for more than ten active
+tracing objects.</p>
+<h2 id="capture-boundary"><a class="header" href="#capture-boundary">Capture boundary</a></h2>
+<p>Trace data describes the <strong>Node host runtime</strong>. It does not instrument the
+component’s QuickJS or StarlingMonkey engine, guest garbage collection, or guest
+performance marks. A host operation performed on behalf of a component can emit
+Node trace events while the corresponding category is enabled.</p>
+<p>Node controls trace-file creation, flushing, rotation, timestamps, and the host’s
+<code>--trace-event-file-pattern</code> setting. The provider follows Node’s tracing
+availability and main-thread restrictions. Guest command-line flags are not
+forwarded to the host. The separate <code>node:inspector</code> provider handles the
+<code>NodeTracing</code> inspector protocol.</p>
+<p>Direct jco-std users can inject a provider with the <code>trace-events/core</code> factory;
+that instance can coexist with native Node imports. Application components
+should use <code>node:trace_events</code> so Jco supplies the WIT adapter.</p>
+<h2 id="compatibility-and-implementation-source"><a class="header" href="#compatibility-and-implementation-source">Compatibility and implementation source</a></h2>
+<p>The compatibility target is Node.js <strong>24.20.0</strong>, commit
+<code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>. The guest core adapts
+<a href="https://github.com/nodejs/node/blob/71b8b174857e25106d39b61a9e6f30d927da8b01/lib/trace_events.js"><code>lib/trace_events.js</code></a>
+under Node’s MIT license, with the license retained in the source. Shared Jco
+helpers supply argument errors, inspection, and WIT error transport; an owned
+host resource replaces Node’s native <code>CategorySet</code> handle.</p>
+<p>Node 24 requires an array of strings and rejects an empty array. This follows the
+pinned runtime even though the <a href="https://nodejs.org/api/tracing.html">Node documentation</a>
+describes coercion of array members. An empty string category is accepted.
+The <code>categories</code> getter preserves input order and duplicates and reflects later
+array mutations; actual capture uses the categories copied at construction.
+<code>getEnabledCategories()</code> returns the sorted host-wide union, or <code>undefined</code> when
+there are none.</p>
+<p>Inspection uses Jco’s existing portable formatter; its quoting and line wrapping
+can differ from Node for unusual or long category names. Guest state is updated
+only after successful host operations, including when access is denied.</p>
+<p>The audited unenv <strong>2.0.0-rc.24</strong> implementation ignores the supplied categories,
+returns an empty category query, and only toggles an object’s boolean state.
+Jco therefore uses the Node adaptation and real host provider instead of enabling
+that alias. Neither public API is deprecated in the pinned Node release.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodetty"><a class="header" href="#nodetty"><code>node:tty</code></a></h1>
 <div class="table-wrapper">
