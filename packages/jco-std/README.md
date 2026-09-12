@@ -65,6 +65,9 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/tty`                           | `node:tty` guest adapter, Node 24 over an explicit host capability            |
 | `wasi/0.2.x/node/24.x.x/tty/host`                      | Deny-by-default host for `jco:node/tty`                                       |
 | `wasi/0.2.x/node/24.x.x/tty/host/node`                 | Opt-in host over the runtime's real `node:tty` and its descriptors            |
+| `wasi/0.2.x/node/24.x.x/wasi`                          | `node:wasi` guest adapter, Node 24; construction only, running refuses        |
+| `wasi/0.2.x/node/24.x.x/wasi/host`                     | Deny-by-default host for `jco:node/wasi`                                      |
+| `wasi/0.2.x/node/24.x.x/wasi/host/node`                | Opt-in host running the real `node:wasi` constructor for its `uvwasi` checks  |
 | `wasi/0.2.x/node/24.x.x/child-process/host`            | Deny-by-default host for `jco:node/child-process`                             |
 | `wasi/0.2.x/node/24.x.x/child-process/host/node`       | Opt-in host over the runtime's real `node:child_process`                      |
 | `wasi/0.2.x/node/24.x.x/cluster/host`                  | Deny-by-default host for `jco:node/cluster`                                   |
@@ -188,6 +191,11 @@ Jco can bundle the following Node.js APIs into JavaScript WebAssembly components
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty` and the
   application-provided `jco:node/tty@0.1.0` capability, giving readline and the
   REPL real terminal streams;
+- `node:wasi`, implemented by
+  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi` and the
+  application-provided `jco:node/wasi@0.1.0` capability. Construction is exact;
+  `start()` and `initialize()` refuse, because a component cannot instantiate the
+  nested module they would run;
 - `node:module`, implemented by
   `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`. Classification,
   source maps and `require.resolve` are exact; everything that loads throws,
@@ -379,6 +387,39 @@ a flowing `ReadStream` pulls one chunk at a time and emits `'data'` synchronousl
 between pulls, so terminal input is read inside the export that asked for it.
 `'resize'` is emitted only by `_refreshSize()`, since a component receives no
 `SIGWINCH`. Color detection reads the provider's environment when none is passed.
+
+### WASI
+
+The versioned wasi module ports Node 24.19.0's `node:wasi`: the `WASI` class with
+its option validation, `wasiImport`, `getImportObject()`, `start()`,
+`initialize()` and `finalizeBindings()`. It exists so that source importing
+`node:wasi` bundles, constructs, and fails with an explanation rather than an
+unresolved import, because the API cannot do its job inside a component:
+`start()` and `initialize()` drive a core `WebAssembly.Instance` the caller
+created, and a Jco component cannot instantiate a nested module (neither guest
+engine has a `WebAssembly` global) nor hand a linear memory to a host.
+
+What does work is Node's constructor. Its option validation is host-free and
+exact, and its `uvwasi_init` step -- opening every preopen and checking the
+standard descriptors -- is the one host operation `jco:node/wasi@0.1.0` carries.
+It is denied by default; the Node provider runs the real `node:wasi` constructor
+and reports its `UVWASI_ENOENT`, `UVWASI_ENOTDIR` and `UVWASI_EBADF` failures with
+Node's `errno`, `code` and `syscall`:
+
+```console
+jco transpile component.wasm \
+  --map 'jco:node/wasi@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host/node'
+```
+
+Past construction, `wasiImport` answers as Node's binding does before `start()`:
+`UVWASI_EINVAL` for a call with the wrong argument count or types, otherwise
+`ERR_WASI_NOT_STARTED`; `proc_exit` records the code and throws Node's exit
+symbol when `returnOnExit` is set. `start()`, `initialize()` and
+`finalizeBindings()` validate the instance as Node does and then throw
+`ERR_JCO_UNSUPPORTED_NODE_API`, naming composition (`wac`, `wasm-tools compose`)
+or running the module on the host as the alternatives. The deny provider's
+`ERR_JCO_WASI_ADAPTER_REQUIRED` says the same, so the limitation is visible from
+the first `new WASI()`. Node's `ExperimentalWarning` is not emitted.
 
 ### Errors globals
 
