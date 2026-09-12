@@ -50,6 +50,7 @@ const DEFAULT_NODE_CAPABILITY_MAP = {
     "wasi:tls/types@0.2.0-draft": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host",
     "jco:node/child-process@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host",
     "jco:node/cluster@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host",
+    "jco:node/trace-events@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/trace-events/host",
     "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
     "jco:node/sqlite@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host",
     "jco:node/dns@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host",

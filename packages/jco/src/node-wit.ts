@@ -98,6 +98,8 @@ export const CHILD_PROCESS_WIT_REQUIREMENT = nodeRequirement("node:child_process
 
 export const CLUSTER_WIT_REQUIREMENT = nodeRequirement("node:cluster", "cluster", { sharedTypes: true });
 
+export const TRACE_EVENTS_WIT_REQUIREMENT = nodeRequirement("node:trace_events", "trace-events");
+
 export const CONSOLE_WIT_REQUIREMENT = nodeRequirement("node:console", "console");
 
 export const DGRAM_WIT_REQUIREMENT = nodeRequirement("node:dgram", "dgram", {

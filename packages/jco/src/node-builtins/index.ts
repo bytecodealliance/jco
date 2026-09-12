@@ -7,6 +7,7 @@ import { createFfiBuiltin } from "./ffi.js";
 import { createInspectorBuiltin } from "./inspector.js";
 import { createDomainBuiltin } from "./domain.js";
 import { createTimersBuiltin } from "./timers.js";
+import { createTraceEventsBuiltin } from "./trace-events.js";
 import { createPerfHooksBuiltin } from "./perf-hooks.js";
 import { createDiagnosticsChannelBuiltin } from "./diagnostics-channel.js";
 import { createAsyncHooksBuiltin } from "./async-hooks.js";
@@ -66,6 +67,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createInspectorBuiltin,
         createDomainBuiltin,
         createPerfHooksBuiltin,
+        createTraceEventsBuiltin,
         createTimersBuiltin,
         createDiagnosticsChannelBuiltin,
         createAsyncHooksBuiltin,

@@ -1,0 +1,27 @@
+package jco:node@0.1.0;
+
+/// Host trace capture. Importing this interface does not grant the capability;
+/// applications must map it to a provider. The Node provider traces its host
+/// runtime and uses that process's trace categories, flags, and output files.
+interface trace-events {
+  record error {
+    name: string,
+    code: option<string>,
+    message: string,
+  }
+
+  /// Owns one enabled category set. Stop or drop releases only this owner's
+  /// categories; other sessions and host CLI categories remain enabled.
+  resource trace-session {
+    start: static func(categories: list<string>) -> result<trace-session, error>;
+
+    stop: func() -> result<_, error>;
+  }
+
+  /// Consume a stopped session. Explicit ownership transfer releases the guest
+  /// handle even on engines without a JavaScript resource disposal hook.
+  release: func(session: trace-session);
+
+  /// Sorted union of all enabled host categories, or none when empty.
+  get-enabled-categories: func() -> result<option<string>, error>;
+}
