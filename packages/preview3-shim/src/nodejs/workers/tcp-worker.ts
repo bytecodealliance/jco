@@ -1,9 +1,15 @@
-import { Socket, Server } from "node:net";
+import net, { Socket, Server } from "node:net";
 import { once } from "node:events";
 
 import { Router } from "../workers/resource-worker.js";
 import { serializeIpAddress, makeIpAddress, ipAddressConflict } from "../sockets/address.js";
 import { SocketError } from "../sockets/error.js";
+
+// node:net gained a standalone bind API in v26.4 (also on v24.x). It holds the
+// endpoint with a real bind(2) until a Socket or Server adopts it, so connect and
+// listen never have to release the port and reacquire it. Older releases fall
+// back to reserving the endpoint with a listening server.
+const BoundSocket: (new (options: object) => any) | undefined = (net as any).BoundSocket;
 
 // Socket instances stored by ID
 const sockets = new Map<any, any>();
@@ -39,6 +45,7 @@ function handleTcpCreate({ family }) {
     family,
     tcp: null,
     server: null,
+    bound: null,
     acceptWriter: null,
     backlog: 128,
     localAddress: null,
@@ -70,8 +77,20 @@ async function handleTcpBind({ socketId, localAddress }) {
     throw err;
   }
 
-  // node:net has no public standalone TCP bind API. Keep a server open
-  // to reserve the endpoint, then reuse it for listen or close it for connect.
+  if (BoundSocket) {
+    const bound = new BoundSocket({ host: address, port, ipv6Only: family === "ipv6" });
+    const boundAddress = bound.address();
+    socket.bound = bound;
+    socket.localAddress = makeIpAddress(
+      boundAddress.family.toLowerCase(),
+      boundAddress.address,
+      boundAddress.port,
+    );
+    return;
+  }
+
+  // Without a standalone bind API, keep a server open to reserve the endpoint,
+  // then reuse it for listen or close it for connect.
   const server = (socket.server = createTcpServer(socket));
   const onListening = once(server, "listening");
   server.listen({
@@ -98,12 +117,17 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
   const host = serializeIpAddress(remoteAddress);
   const port = remoteAddress.val.port;
 
-  const localAddress = socket.localAddress;
+  const { bound, localAddress } = socket;
+  socket.bound = null;
   await closeTcpServer(socket);
 
-  const tcp = (socket.tcp = new Socket({
-    allowHalfOpen: true,
-  }));
+  // An adopted bound handle already owns the local endpoint, so the connect
+  // must not name it again. Without one, the reservation server released the
+  // endpoint just above and the client re-binds it here.
+  // @types/node does not yet declare the `handle` option, so it is passed via a
+  // variable to skip the object literal excess property check.
+  const socketOptions = { handle: bound ?? undefined, allowHalfOpen: true };
+  const tcp = (socket.tcp = new Socket(socketOptions));
   tcp.setKeepAlive(socket.keepAliveEnabled, socket.keepAliveIdleTime);
 
   // TODO(tandr): Add lookup
@@ -111,8 +135,8 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
   tcp.connect({
     port,
     host,
-    localAddress: localAddress ? serializeIpAddress(localAddress) : undefined,
-    localPort: localAddress?.val.port,
+    localAddress: !bound && localAddress ? serializeIpAddress(localAddress) : undefined,
+    localPort: !bound ? localAddress?.val.port : undefined,
   });
   // events.once rejects when the emitter produces an error while waiting and
   // removes its temporary listeners after settling. A separate error promise
@@ -131,12 +155,18 @@ async function handleTcpListen({ socketId, stream }) {
   if (!server) {
     server = socket.server = createTcpServer(socket);
     const onListening = once(server, "listening");
-    server.listen({
-      host: family === "ipv6" ? "::" : "0.0.0.0",
-      port: 0,
-      backlog,
-      ipv6Only: family === "ipv6",
-    });
+    const bound = socket.bound;
+    socket.bound = null;
+    if (bound) {
+      server.listen({ handle: bound, backlog });
+    } else {
+      server.listen({
+        host: family === "ipv6" ? "::" : "0.0.0.0",
+        port: 0,
+        backlog,
+        ipv6Only: family === "ipv6",
+      });
+    }
     await onListening;
   }
 
@@ -167,6 +197,7 @@ function createTcpServer(socket) {
       backlog: socket.backlog,
       tcp: conn,
       server: null,
+      bound: null,
       acceptWriter: null,
       localAddress: makeIpAddress(socket.family, conn.localAddress, conn.localPort),
       keepAliveEnabled: socket.keepAliveEnabled,
@@ -317,6 +348,11 @@ async function handleTcpReceive({ socketId, stream }) {
 function cleanupDisposedSocket(socketId, socket) {
   if (!socket.disposed || socket.activeStreams > 0) {
     return;
+  }
+
+  if (socket.bound) {
+    socket.bound.close();
+    socket.bound = null;
   }
 
   if (socket.server) {
