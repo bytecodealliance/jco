@@ -28,7 +28,7 @@
 // the Windows release probe (which needs `node:os`) resolves to Windows' 16-color
 // floor. See ./README.md for runtime boundaries.
 
-import { validateInteger } from "../readline/compat.js";
+import { validateInteger } from "../internal/validation.js";
 import type { ColorEnvironment } from "./types.js";
 
 const COLORS_2 = 1;

@@ -9,6 +9,12 @@
  */
 
 export * from "./errors/core.js";
+export {
+  validateFunction,
+  validateObject,
+  validateOneOf,
+  validateUint32,
+} from "./internal/validation.js";
 
 import {
   AbortError,

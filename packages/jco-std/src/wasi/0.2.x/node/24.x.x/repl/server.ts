@@ -28,13 +28,8 @@
 // See ./README.md for runtime boundaries and the upstream dependency audit.
 
 import { EventEmitter as NodeEventEmitter } from "node:events";
-import {
-  codedError,
-  deprecatedNodeApi,
-  missingArgs,
-  unsupportedNodeApi,
-  validateFunction,
-} from "../errors/core.js";
+import { codedError, deprecatedNodeApi, missingArgs, unsupportedNodeApi } from "../errors/core.js";
+import { validateFunction } from "../internal/validation.js";
 import { inspect, inspectDefaultOptions, type InspectOptions } from "../internal/inspect.js";
 import { Module } from "../module/module-class.js";
 import { createRequire } from "../module/require.js";

@@ -21,7 +21,7 @@
 // Adapted from nodejs/node v24.20.0, commit
 // 71b8b174857e25106d39b61a9e6f30d927da8b01, lib/internal/util/parse_args/{parse_args,utils}.js.
 // Local changes: explicit TypeScript contracts, shared Jco errors, ECMAScript intrinsics.
-import { validateObject } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 import type { ParseArgsOption, OptionValue } from "./parse-args-types.js";
 
 type Options = Record<string, ParseArgsOption>;

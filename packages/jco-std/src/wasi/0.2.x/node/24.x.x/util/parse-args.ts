@@ -21,13 +21,8 @@
 // Adapted from nodejs/node v24.20.0, commit
 // 71b8b174857e25106d39b61a9e6f30d927da8b01, lib/internal/util/parse_args/{parse_args,utils}.js.
 // Local changes: explicit TypeScript contracts, shared Jco errors, ECMAScript intrinsics.
-import {
-  codedError,
-  invalidArgType,
-  invalidArgValue,
-  validateObject,
-  unsupportedNodeApi,
-} from "../errors/core.js";
+import { codedError, invalidArgType, invalidArgValue, unsupportedNodeApi } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 import {
   findLongOptionForShort,
   isLoneLongOption,
@@ -51,6 +46,14 @@ import type {
 } from "./parse-args-types.js";
 export type * from "./parse-args-types.js";
 
+import {
+  validateString,
+  validateBoolean,
+  validateArray,
+  validateStringArray,
+  validateBooleanArray,
+} from "../internal/validation.js";
+
 type Options = Record<string, ParseArgsOption>;
 
 type Values = Record<string, OptionValue | undefined>;
@@ -59,34 +62,6 @@ interface Result {
   values: Values;
   positionals: string[];
   tokens?: ParseArgsToken[];
-}
-
-function validateString(value: unknown, name: string): asserts value is string {
-  if (typeof value !== "string") {
-    throw invalidArgType(name, "string", value);
-  }
-}
-
-function validateBoolean(value: unknown, name: string): asserts value is boolean {
-  if (typeof value !== "boolean") {
-    throw invalidArgType(name, "boolean", value);
-  }
-}
-
-function validateArray(value: unknown, name: string): asserts value is unknown[] {
-  if (!Array.isArray(value)) {
-    throw invalidArgType(name, "Array", value);
-  }
-}
-
-function validateStringArray(value: unknown, name: string): asserts value is string[] {
-  validateArray(value, name);
-  value.forEach((v, i) => validateString(v, `${name}[${i}]`));
-}
-
-function validateBooleanArray(value: unknown, name: string): asserts value is boolean[] {
-  validateArray(value, name);
-  value.forEach((v, i) => validateBoolean(v, `${name}[${i}]`));
 }
 
 function validateUnion(value: unknown, name: string, allowed: string[]): void {

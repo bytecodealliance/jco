@@ -5,6 +5,7 @@
  * Local changes use public Web Stream readers/controllers, typed promises,
  * portable errors, and readable-stream instead of Node's internal bindings.
  */
+import { validateObject, validateBoolean } from "../internal/validation.js";
 import {
   invalidArgType,
   invalidArgValue,
@@ -24,15 +25,9 @@ import type {
   WritableOptions,
 } from "./types.js";
 
-function optionsObject(value: unknown): asserts value is object {
-  if (value === null || typeof value !== "object") {
-    throw invalidArgType("options", "Object", value);
-  }
-}
-
 function booleanOption(value: unknown, name: string): void {
-  if (value !== undefined && typeof value !== "boolean") {
-    throw invalidArgType(name, "boolean", value);
+  if (value !== undefined) {
+    validateBoolean(value, name);
   }
 }
 
@@ -74,7 +69,7 @@ export function fromReadableWeb<T>(
   if (!source || typeof source.getReader !== "function") {
     throw invalidArgType("readableStream", "ReadableStream", source);
   }
-  optionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   booleanOption(options.objectMode, "options.objectMode");
   validateSignal(options.signal);
   // Construct before locking: invalid stream options must not consume a reader.
@@ -125,7 +120,7 @@ export function fromWritableWeb(source: WritableStream, options: WritableOptions
   if (!source || typeof source.getWriter !== "function") {
     throw invalidArgType("writableStream", "WritableStream", source);
   }
-  optionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   booleanOption(options.objectMode, "options.objectMode");
   booleanOption(options.decodeStrings, "options.decodeStrings");
   validateSignal(options.signal);
@@ -198,7 +193,7 @@ export function toReadableWeb<T>(
   if (!source || typeof source.read !== "function" || typeof source.on !== "function") {
     throw invalidArgType("streamReadable", "stream.Readable", source);
   }
-  optionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   if (options.type !== undefined && options.type !== "bytes") {
     throw invalidArgValue("options.type", options.type);
   }
@@ -355,7 +350,7 @@ export function fromDuplexWeb(pair: ReadableWritablePair, options: DuplexOptions
   if (!pair.writable || typeof pair.writable.getWriter !== "function") {
     throw invalidArgType("pair.writable", "WritableStream", pair.writable);
   }
-  optionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   // Validate lock ownership before acquiring either side.
   if (pair.readable.locked || pair.writable.locked) {
     throw invalidArgValue("pair", pair, "must contain unlocked streams");
@@ -462,7 +457,7 @@ export function toDuplexWeb(
   if (options && Object.prototype.hasOwnProperty.call(options, "type")) {
     throw deprecatedNodeApi("Duplex.toWeb({ type })", "options.readableType");
   }
-  optionsObject(options);
+  validateObject(options, "options", { allowArray: true });
   return {
     readable: toReadableWeb(source, { type: options.readableType }),
     writable: toWritableWeb(source),

@@ -23,48 +23,8 @@
 // 71b8b174857e25106d39b61a9e6f30d927da8b01, lib/internal/validators.js and
 // lib/internal/streams/utils.js. Local changes: narrow types and shared Jco errors.
 
-import { invalidArgType, outOfRange } from "../errors.js";
+import { validateInteger } from "../internal/validation.js";
 import type { WritableOutput } from "./types.js";
-
-export function validateString(value: unknown, name: string): asserts value is string {
-  if (typeof value !== "string") {
-    throw invalidArgType(name, "string", value);
-  }
-}
-
-export function validateBoolean(value: unknown, name: string): asserts value is boolean {
-  if (typeof value !== "boolean") {
-    throw invalidArgType(name, "boolean", value);
-  }
-}
-
-export function validateInteger(
-  value: unknown,
-  name: string,
-  min = Number.MIN_SAFE_INTEGER,
-  max = Number.MAX_SAFE_INTEGER,
-): asserts value is number {
-  if (typeof value !== "number") {
-    throw invalidArgType(name, "number", value);
-  }
-  if (!Number.isInteger(value)) {
-    throw outOfRange(name, "an integer", value);
-  }
-  if (value < min || value > max) {
-    throw outOfRange(name, `>= ${min} && <= ${max}`, value);
-  }
-}
-
-export function validateAbortSignal(signal: unknown, name: string): asserts signal is AbortSignal {
-  if (
-    signal === null ||
-    typeof signal !== "object" ||
-    !("aborted" in signal) ||
-    typeof signal.aborted !== "boolean"
-  ) {
-    throw invalidArgType(name, "AbortSignal", signal);
-  }
-}
 
 // Adapted from Node v24.20.0 lib/internal/streams/utils.js, same pin and MIT
 // notice as actions.ts. Only the predicates needed by Readline are included.

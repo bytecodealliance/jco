@@ -26,7 +26,7 @@
 
 import { addAbortListener } from "node:events";
 import { AbortError } from "../errors.js";
-import { validateAbortSignal } from "./compat.js";
+import { validateAbortSignal } from "../internal/validation.js";
 import { InterfaceCore, kQuestion, kQuestionCancel, kQuestionReject } from "./interface.js";
 import { Readline } from "./actions.js";
 import type { ReadableInput, WritableOutput, InterfaceOptions, QuestionOptions } from "./types.js";

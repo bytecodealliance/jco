@@ -8,7 +8,8 @@
  */
 import { Buffer } from "node:buffer";
 
-import { invalidArgType, outOfRange, systemError } from "../errors.js";
+import { systemError } from "../errors.js";
+import { validateInteger } from "../internal/validation.js";
 import { callHost, decodeErrno } from "../internal/host-error.js";
 import type { HostImports } from "../internal/wit-types.js";
 import type {
@@ -103,15 +104,7 @@ function validateInt32(
   minimum = -2147483648,
   maximum = 2147483647,
 ): number {
-  if (typeof value !== "number") {
-    throw invalidArgType(name, "number", value);
-  }
-  if (!Number.isInteger(value)) {
-    throw outOfRange(name, "an integer", value);
-  }
-  if (value < minimum || value > maximum) {
-    throw outOfRange(name, `>= ${minimum} && <= ${maximum}`, value);
-  }
+  validateInteger(value, name, minimum, maximum);
   return value;
 }
 

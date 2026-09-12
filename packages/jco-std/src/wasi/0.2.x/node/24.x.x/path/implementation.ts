@@ -26,7 +26,7 @@
 // TypeScript while keeping the upstream algorithms and control flow intact.
 import { createMatcher } from "./matcher.cjs";
 
-import { invalidArgType } from "../errors.js";
+import { validateString, validateObject } from "../internal/validation.js";
 import type { FormatInputPathObject, PathModule, PathProviders } from "../path.js";
 
 type PathCore = Omit<PathModule, "posix" | "win32" | "_makeLong">;
@@ -70,18 +70,6 @@ const CHAR_BACKWARD_SLASH = 92;
 const CHAR_COLON = 58;
 const CHAR_QUESTION_MARK = 63;
 const isWindows = false;
-
-function validateString(value: unknown, name: string): asserts value is string {
-  if (typeof value !== "string") {
-    throw invalidArgType(name, "string", value);
-  }
-}
-
-function validateObject(value: unknown, name: string): asserts value is FormatInputPathObject {
-  if (value === null || Array.isArray(value) || typeof value !== "object") {
-    throw invalidArgType(name, "Object", value);
-  }
-}
 
 const patternCache = new Map<string, ReturnType<typeof createMatcher>>();
 

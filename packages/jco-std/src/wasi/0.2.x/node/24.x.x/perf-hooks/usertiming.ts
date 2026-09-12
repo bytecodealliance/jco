@@ -24,13 +24,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import {
-  codedError,
-  illegalConstructor,
-  invalidArgType,
-  missingArgs,
-  validateObject,
-} from "../errors/core.js";
+import { codedError, illegalConstructor, invalidArgType, missingArgs } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 
 import {
   brand,

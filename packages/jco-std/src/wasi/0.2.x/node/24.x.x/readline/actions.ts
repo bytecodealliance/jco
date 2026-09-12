@@ -26,7 +26,8 @@
 
 import { defer } from "./compat.js";
 import { CSI } from "./utils.js";
-import { validateBoolean, validateInteger, isWritable } from "./compat.js";
+import { isWritable } from "./compat.js";
+import { validateBoolean, validateInteger } from "../internal/validation.js";
 import { invalidArgType } from "../errors.js";
 import type { WritableOutput } from "./types.js";
 const { kClearToLineBeginning, kClearToLineEnd, kClearLine, kClearScreenDown } = CSI;

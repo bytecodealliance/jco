@@ -26,7 +26,8 @@
 
 import { addAbortListener } from "node:events";
 import { AbortError } from "../errors.js";
-import { validateAbortSignal, inspect } from "./compat.js";
+import { inspect } from "./compat.js";
+import { validateAbortSignal } from "../internal/validation.js";
 import {
   InterfaceCore,
   kQuestion,

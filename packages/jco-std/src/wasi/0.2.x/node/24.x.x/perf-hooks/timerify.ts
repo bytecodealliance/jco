@@ -24,7 +24,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-import { invalidArgType, validateObject } from "../errors/core.js";
+import { invalidArgType } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 
 import { kSkipThrow, now } from "./internal.js";
 import { PerformanceNodeEntry } from "./entries.js";

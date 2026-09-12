@@ -10,10 +10,12 @@ export {
   invalidReturnValue,
   missingArgs,
   outOfRange,
+} from "../errors/core.js";
+export {
   validateFunction,
   validateObject,
   validateOneOf,
   validateUint32,
-} from "../errors/core.js";
+} from "../internal/validation.js";
 
 export type { ErrorCode } from "../errors/core.js";

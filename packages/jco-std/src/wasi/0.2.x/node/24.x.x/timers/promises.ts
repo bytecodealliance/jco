@@ -25,13 +25,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import {
-  AbortError,
-  illegalConstructor,
-  invalidArgType,
-  invalidThis,
-  validateObject,
-} from "../errors/core.js";
+import { AbortError, illegalConstructor, invalidArgType, invalidThis } from "../errors/core.js";
+import { validateObject } from "../internal/validation.js";
 import * as timers from "./callbacks.js";
 import type { Timeout, Immediate } from "./handles.js";
 

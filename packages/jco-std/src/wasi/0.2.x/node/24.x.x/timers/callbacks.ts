@@ -25,7 +25,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { validateFunction } from "../errors/core.js";
+import { validateFunction } from "../internal/validation.js";
 import { Timeout, Immediate, cancelTimeout } from "./handles.js";
 
 export function setTimeout<T extends unknown[]>(

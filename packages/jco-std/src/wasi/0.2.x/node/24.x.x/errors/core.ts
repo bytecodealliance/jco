@@ -423,39 +423,3 @@ export function systemError(data: SystemErrorData): NodeSystemError {
   }
   return error;
 }
-
-export function validateFunction(
-  value: unknown,
-  name: string,
-): asserts value is (...args: unknown[]) => unknown {
-  if (typeof value !== "function") {
-    throw invalidArgType(name, "Function", value);
-  }
-}
-
-export function validateObject(
-  value: unknown,
-  name: string,
-): asserts value is Record<PropertyKey, unknown> {
-  // Node's default also rejects arrays.
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw invalidArgType(name, "Object", value);
-  }
-}
-
-export function validateOneOf<T>(value: T, name: string, allowed: readonly T[]): void {
-  if (!allowed.includes(value)) {
-    throw invalidArgValue(name, value, `must be one of: ${allowed.map(String).join(", ")}`);
-  }
-}
-
-export function validateUint32(
-  value: unknown,
-  name: string,
-  positive = false,
-): asserts value is number {
-  const minimum = positive ? 1 : 0;
-  if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > 0xffff_ffff) {
-    throw outOfRange(name, `>= ${minimum} and <= 4294967295`, value);
-  }
-}

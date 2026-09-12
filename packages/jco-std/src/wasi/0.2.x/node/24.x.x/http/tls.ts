@@ -15,6 +15,7 @@
  * bundle into one blob would silently drop every key after the first.
  */
 
+import { validateNumber, validateString, validateBoolean } from "../internal/validation.js";
 import { invalidArgType, outOfRange, unsupported } from "./errors.js";
 import type { HttpTlsMaterial, HttpTlsOptions, TlsMaterial } from "./types.js";
 
@@ -85,23 +86,17 @@ function materialList(api: string, name: string, value: unknown): Uint8Array[] {
 }
 
 function string(name: string, value: unknown): string {
-  if (typeof value !== "string") {
-    throw invalidArgType(name, "string", value);
-  }
+  validateString(value, name);
   return value;
 }
 
 function boolean(name: string, value: unknown): boolean {
-  if (typeof value !== "boolean") {
-    throw invalidArgType(name, "boolean", value);
-  }
+  validateBoolean(value, name);
   return value;
 }
 
 function uint32(name: string, value: unknown): number {
-  if (typeof value !== "number") {
-    throw invalidArgType(name, "number", value);
-  }
+  validateNumber(value, name);
   if (!Number.isInteger(value) || value < 0 || value > 0xff_ff_ff_ff) {
     throw outOfRange(name, ">= 0 && <= 4294967295", value);
   }
