@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-420c61d4.js";
+            window.path_to_searchindex_js = "searchindex-fc270c21.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5aa2e47d.js"></script>
+        <script src="toc-d02a0845.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2128,8 +2128,7 @@ set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>,
-<code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>,
-<code>node:worker_threads</code>, and <code>node:zlib</code>.</p>
+<code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
 <p>This group is not all-or-nothing. A future implementation can combine portable
 upstream algorithms with explicit host capabilities, just as Jco’s path
@@ -2224,6 +2223,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodetty"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="#nodeutil"><code>node:util</code></a>, <a href="#nodeutil"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
+<tr><td><a href="#worker-threads"><code>node:worker_threads</code></a></td><td>Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4371,6 +4371,97 @@ signal. It uses public abort listeners; an earlier listener calling
 </ul>
 <p>Deprecated <code>isArray</code>, <code>_extend</code>, <code>_errnoException</code>, and
 <code>_exceptionWithHostPort</code> throw <code>ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="worker-threads"><a class="header" href="#worker-threads">Worker threads</a></h1>
+<p><code>node:worker_threads</code> targets Node 24.20.0. Jco provides a guest adapter and an
+opt-in Node host provider for real worker execution. A worker script runs on the
+Node host; it is not another JavaScript isolate inside the Wasm component.
+File paths and file URLs therefore refer to the host filesystem. <code>eval: true</code>
+runs CommonJS source; file and data URLs can load ES modules.</p>
+<h2 id="granting-worker-execution"><a class="header" href="#granting-worker-execution">Granting worker execution</a></h2>
+<p>Bundle ordinary Node imports:</p>
+<pre><code class="language-js">import { Worker } from 'node:worker_threads';
+
+export function start() {
+    const worker = new Worker(`
+        const { parentPort, workerData } = require('node:worker_threads');
+        parentPort.postMessage(workerData * 2);
+    `, { eval: true, workerData: 21 });
+    worker.on('message', value =&gt; console.log(value));
+    worker.on('error', error =&gt; console.error(error));
+}
+</code></pre>
+<pre><code class="language-sh">jco componentize app.js --wit wit --bundle -o app.wasm
+</code></pre>
+<p>Jco adds <code>jco:node/worker-threads@0.1.0</code> and its callback export to the world.
+The default provider denies worker creation with
+<code>ERR_JCO_WORKER_THREADS_ADAPTER_REQUIRED</code>. An import alone grants no execution
+capability. To allow workers, instantiate with a separate provider for each
+component:</p>
+<pre><code class="language-sh">jco transpile app.wasm -o out --instantiation async \
+  --async-mode jspi --async-exports '*' \
+  --map jco:node/worker-threads@0.1.0=jco:node/worker-threads@0.1.0
+</code></pre>
+<pre><code class="language-js">import { instantiate } from './out/app.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { createWorkerThreadsHost } from '@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/worker-threads/host/node';
+
+let instance;
+const imports = new WASIShim().getImportObject();
+imports['jco:node/worker-threads@0.1.0'] = createWorkerThreadsHost(
+    () =&gt; instance.workerThreadsCallbacks,
+);
+instance = await instantiate(undefined, imports);
+await instance.start();
+</code></pre>
+<p>Create workers inside exported functions, after instantiation. The provider
+serializes callback entry and resource disposal. It delivers <code>online</code>, <code>message</code>,
+<code>messageerror</code>, <code>error</code>, and <code>exit</code> events. Exports that start workers should return
+so the host can deliver events between component calls. <code>terminate()</code> resolves
+when the exit callback arrives; <code>ref()</code>, <code>unref()</code>, and asynchronous disposal are
+supported. Workers use the same EventEmitter adapter as <code>node:events</code>.</p>
+<p>StarlingMonkey supports these callbacks. QuickJS can use the module’s local APIs
+and observe capability denial, but its exported-resource callback limitation
+currently prevents the real-worker component test from running.</p>
+<h2 id="messages-and-environment-data"><a class="header" href="#messages-and-environment-data">Messages and environment data</a></h2>
+<p>Messages and <code>workerData</code> cross WIT using a structured-value graph. It preserves
+plain records, sparse arrays, cycles, shared references, <code>undefined</code>, bigints,
+special numbers, Map, Set, Date, RegExp, ArrayBuffer and typed-array/DataView
+slices. Buffer arrives as Uint8Array, as in native worker messaging.</p>
+<p>Functions and symbols cannot be cloned. Accessor properties, custom prototypes,
+Error objects, SharedArrayBuffer, native handles and transfer lists are explicitly
+unsupported. Rejected values never silently become lossy JSON. An unsupported
+message from the host produces <code>messageerror</code>. Transferable ownership and shared
+memory are not emulated.</p>
+<p><code>setEnvironmentData()</code> and <code>getEnvironmentData()</code> use a separate Map per component.
+Values retain their identity locally; setting <code>undefined</code> deletes a key. Each
+worker receives a snapshot when constructed. <code>markAsUncloneable()</code> is enforced
+by this adapter’s outgoing message and worker-data serializer, including nested
+values. <code>markAsUntransferable()</code> and <code>isMarkedAsUntransferable()</code> track object
+identity. These marks do not change the engine’s global <code>structuredClone()</code> or
+other APIs outside this adapter.</p>
+<p>The guest reports its own main-thread context: <code>isMainThread: true</code>,
+<code>isInternalThread: false</code>, <code>threadId: 0</code>, empty <code>threadName</code> and <code>resourceLimits</code>,
+and null <code>parentPort</code>/<code>workerData</code>. Code executed in a native worker observes
+Node’s actual worker-thread fields instead.</p>
+<h2 id="explicit-limits"><a class="header" href="#explicit-limits">Explicit limits</a></h2>
+<p>The public export names match Node 24.20.0. The following operations throw
+<code>ERR_JCO_UNSUPPORTED_NODE_API</code> immediately:</p>
+<ul>
+<li>MessageChannel, MessagePort and BroadcastChannel construction and operations;</li>
+<li><code>receiveMessageOnPort()</code>, <code>moveMessagePortToContext()</code> and <code>postMessageToThread()</code>;</li>
+<li><code>locks.request()</code> and <code>locks.query()</code>;</li>
+<li><code>SHARE_ENV</code>, transfer lists and worker stdio redirection;</li>
+<li>Worker stdio accessors, performance telemetry, heap snapshots/statistics and
+CPU/heap profiling.</li>
+</ul>
+<p>The provider executes trusted host-side Node code with the host’s authority. It
+does not automatically bundle worker entry files or reinterpret them as guest
+components. The limited unenv worker implementation was rejected because its
+workers and ports discard messages and its broadcasts are no-ops. This adapter
+reuses Jco’s callback, error and event infrastructure and Node’s native Worker;
+the environment Map operations are adapted from Node’s MIT-licensed
+<code>lib/internal/worker.js</code> at commit <code>71b8b174857e25106d39b61a9e6f30d927da8b01</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
