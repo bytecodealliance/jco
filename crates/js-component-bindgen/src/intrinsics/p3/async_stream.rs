@@ -732,6 +732,8 @@ impl AsyncStreamIntrinsic {
                 );
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let track_host_operation =
+                    render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
 
                 // Internal helper fn that sets up for a `copy()` call
                 let copy_setup_impl = format!(
@@ -1674,7 +1676,15 @@ impl AsyncStreamIntrinsic {
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.CANCELLED);
                             }};
                             if (this.#hostInjectFn) {{
-                                setTimeout(completeCancel, 0);
+                                // The deferral is runtime work the guest is waiting on: a task
+                                // suspended in a synchronous cancel resumes only when it runs.
+                                // Count it like a host operation so a deadlock check scheduled
+                                // before this timer does not report the wait as a deadlock.
+                                {track_host_operation}(() => new Promise((resolve) => {{
+                                    setTimeout(() => {{
+                                        try {{ completeCancel(); }} finally {{ resolve(); }}
+                                    }}, 0);
+                                }}));
                             }} else {{
                                 completeCancel();
                             }}
@@ -2616,6 +2626,12 @@ impl AsyncStreamIntrinsic {
                               }};
 
                               const writeValues = async (writeValues, dropAfterCopy = false) => {{
+                                  // The previous injected write's completion event is consumed lazily,
+                                  // and consuming it is what returns the write end to idle. A guest
+                                  // that issues reads back to back within one slice can start the next
+                                  // injected write before that happens, which would fail as a
+                                  // concurrent operation and leave the read with no completion.
+                                  resetWriteEndToIdleFn();
                                   const writePromise = hostWriteEnd.writeMany(writeValues, {{ dropAfterCopy }});
                                   if (hostWriteEnd.hasPendingEvent()) {{
                                       void writePromise.catch(() => {{}});
@@ -2636,6 +2652,7 @@ impl AsyncStreamIntrinsic {
                                   const cancelValues = [];
                                   pendingValues.drainInto(cancelValues, buffer.remaining());
                                   if (cancelValues.length === 0) {{ return false; }}
+                                  resetWriteEndToIdleFn();
                                   const writePromise = hostWriteEnd.writeMany(cancelValues);
                                   if (!hostWriteEnd.hasPendingEvent()) {{
                                       pendingValues.prepend(cancelValues);
