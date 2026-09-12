@@ -222,7 +222,8 @@ Software.
 
 The Node.js adaptations identified by upstream provenance comments in
 src/wasi/0.2.x/node/24.x.x/stream/, src/wasi/0.2.x/node/24.x.x/test/,
-src/wasi/0.2.x/node/24.x.x/util/, and src/wasi/0.2.x/node/24.x.x/worker-threads/,
+src/wasi/0.2.x/node/24.x.x/util/, src/wasi/0.2.x/node/24.x.x/vm/,
+and src/wasi/0.2.x/node/24.x.x/worker-threads/,
 and their compiled forms, are covered by the following notice:
 
 
