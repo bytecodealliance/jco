@@ -26,6 +26,7 @@ test("zlib builtin reports only its compression capability and preserves explici
     expect(defaults["jco:node/zlib@0.1.0"]).toBe("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/zlib/host");
     expect(withDefaultNodeCapabilityMap({ "jco:node/zlib@0.1.0": NODE_HOST })["jco:node/zlib@0.1.0"]).toBe(NODE_HOST);
 });
+
 test("installs the zlib WIT resource once", async () => {
     const root = await getTmpDir();
     const world = join(root, "component.wit");
@@ -62,6 +63,7 @@ test.each(["quickjs", "starlingmonkey"])(
                 if (mode === "node" && backend === "starlingmonkey") {
                     report.callback = await instance.runAsync();
                 }
+
                 if (mode === "denied") {
                     expect(report).toEqual({
                         errors: Array(3).fill({ name: "Error", code: "ERR_JCO_ZLIB_ADAPTER_REQUIRED" }),
