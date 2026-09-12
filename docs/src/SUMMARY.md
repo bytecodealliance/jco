@@ -56,6 +56,7 @@
             - [`node:tty`](./interop/nodejs-builtins/supported-modules/tty.md)
             - [`node:url`](./interop/nodejs-builtins/supported-modules/url.md)
             - [`node:util`](./interop/nodejs-builtins/supported-modules/util.md)
+            - [`node:v8`](./interop/nodejs-builtins/supported-modules/v8.md)
             - [`node:vfs`](./interop/nodejs-builtins/supported-modules/vfs.md)
             - [`node:vm`](./interop/nodejs-builtins/supported-modules/vm.md)
             - [`node:wasi`](./interop/nodejs-builtins/supported-modules/wasi.md)
