@@ -59,9 +59,18 @@ existing stream and error helpers.
   `stopImmediatePropagation()` can prevent notification.
 
 Host process and native engine operations throw `ERR_JCO_UNSUPPORTED_NODE_API`:
-`debug`/`debuglog`, `deprecate`, `getCallSites`, `getSystemErrorName`,
-`getSystemErrorMessage`, `getSystemErrorMap`, `setTraceSigInt`,
-`convertProcessSignalToExitCode`, `transferableAbortController`,
-`transferableAbortSignal`, and the `isProxy`, `isExternal`, and `isKeyObject`
-predicates. Deprecated `isArray`, `_extend`, `_errnoException`, and
+
+- `debug`/`debuglog`
+- `deprecate`
+- `getCallSites`
+- `getSystemErrorName`
+- `getSystemErrorMessage`
+- `getSystemErrorMap`
+- `setTraceSigInt`
+- `convertProcessSignalToExitCode`
+- `transferableAbortController`
+- `transferableAbortSignal`
+- `isProxy`, `isExternal`, and `isKeyObject` predicates
+
+Deprecated `isArray`, `_extend`, `_errnoException`, and
 `_exceptionWithHostPort` throw `ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API`.
