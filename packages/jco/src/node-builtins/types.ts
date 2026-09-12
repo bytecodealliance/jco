@@ -15,6 +15,8 @@ export interface WorldMetadata {
 }
 
 export interface NodeBuiltinOptions {
+    /** Override the worker_threads guest module for bundling/tests. */
+    workerThreadsModule?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/path` module (overridable for tests) */
     pathFactory?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/assert` module (overridable for tests) */

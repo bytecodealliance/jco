@@ -96,6 +96,16 @@ export const CHILD_PROCESS_WIT_REQUIREMENT = nodeRequirement("node:child_process
     sharedTypes: true,
 });
 
+export const WORKER_THREADS_WIT_REQUIREMENT = nodeRequirement("node:worker_threads", "worker-threads", {
+    guestExports: [
+        {
+            witExport: "jco:node/worker-threads-callbacks@0.1.0",
+            jsExport: "workerThreadsCallbacks",
+            moduleSpecifier: "jco:node-worker-threads-callbacks",
+        },
+    ],
+});
+
 export const CLUSTER_WIT_REQUIREMENT = nodeRequirement("node:cluster", "cluster", { sharedTypes: true });
 
 export const TRACE_EVENTS_WIT_REQUIREMENT = nodeRequirement("node:trace_events", "trace-events");

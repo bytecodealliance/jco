@@ -1,0 +1,67 @@
+package jco:node@0.1.0;
+
+/// Explicit authority to execute worker scripts on the host. Data uses a private
+/// structured-value graph encoding; native handles and shared memory are refused.
+interface worker-threads {
+    variant errno {
+        number(s64),
+        symbolic(string),
+    }
+
+    record error {
+        name: string,
+        message: string,
+        code: option<string>,
+        errno: option<errno>,
+        syscall: option<string>,
+    }
+
+    record resource-limits {
+        max-young-generation-size-mb: option<f64>,
+        max-old-generation-size-mb: option<f64>,
+        code-range-size-mb: option<f64>,
+        stack-size-mb: option<f64>,
+    }
+
+    record worker-info {
+        thread-id: s32,
+        thread-name: string,
+        resource-limits: resource-limits,
+    }
+
+    create-worker: func(
+        filename: string,
+        options: string,
+        environment: string,
+        listener: u32,
+    ) -> result<worker, error>;
+
+    resource worker {
+        post-message: func(value: string) -> result<_, error>;
+
+        terminate: func();
+
+        set-ref: func(value: bool);
+
+        info: func() -> worker-info;
+    }
+}
+
+/// A provider serializes callback entry and resource drops per component.
+interface worker-threads-callbacks {
+    use worker-threads.{error};
+
+    variant worker-event {
+        online,
+        message(string),
+        messageerror(error),
+        error(error),
+        exit(s32),
+    }
+
+    resource worker-listener {
+        event: func(event: worker-event);
+    }
+
+    take-worker-listener: func(id: u32) -> option<worker-listener>;
+}
