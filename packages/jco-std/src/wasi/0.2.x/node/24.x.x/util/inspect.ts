@@ -253,209 +253,309 @@ function render(
   }
   ancestors.push(object);
   try {
-    const entries: string[] = [];
-    let open = "{",
-      close = "}",
-      prefix = "";
-    const limit = opts.maxArrayLength == null ? Infinity : Math.max(0, opts.maxArrayLength);
-
-    const child = (item: unknown, width = 0): string =>
+    const child: RenderChild = (item, width = 0) =>
       render(item, opts, ancestors, circular, level + 1, width);
-
-    const boxed = isBoxedPrimitive(value);
-    const keys = opts.showHidden
-      ? Reflect.ownKeys(object)
-      : Reflect.ownKeys(object).filter((key) =>
-          Object.prototype.propertyIsEnumerable.call(object, key),
-        );
-
-    const addProperty = (key: PropertyKey): void => {
-      const descriptor = Object.getOwnPropertyDescriptor(object, key)!;
-      const label =
-        typeof key === "symbol"
-          ? `[${stylize(String(key), "symbol", opts)}]`
-          : !descriptor.enumerable
-            ? `[${key}]`
-            : /^[A-Za-z_$][\w$]*$/.test(String(key))
-              ? String(key)
-              : quote(String(key));
-      let rendered: string;
-      if ("value" in descriptor) {
-        rendered = child(descriptor.value, label.length + 2);
-      } else if (
-        descriptor.get &&
-        (opts.getters === true ||
-          (opts.getters === "get" && !descriptor.set) ||
-          (opts.getters === "set" && descriptor.set))
-      ) {
-        try {
-          rendered = `[Getter${descriptor.set ? "/Setter" : ""}: ${child(Reflect.apply(descriptor.get, object, []))}]`;
-        } catch (error) {
-          rendered = `[Getter: <Inspection threw (${error instanceof Error ? error.message : String(error)})>]`;
-        }
-      } else {
-        rendered = stylize(
-          descriptor.get ? `[Getter${descriptor.set ? "/Setter" : ""}]` : "[Setter]",
-          "special",
-          opts,
-        );
-      }
-      entries.push(`${label}: ${rendered}`);
-    };
-
-    if (boxed) {
-      const intrinsic = isBooleanObject(value)
-        ? Boolean.prototype.valueOf
-        : isNumberObject(value)
-          ? Number.prototype.valueOf
-          : isStringObject(value)
-            ? String.prototype.valueOf
-            : isBigIntObject(value)
-              ? BigInt.prototype.valueOf
-              : Symbol.prototype.valueOf;
-      const primitive: unknown = Reflect.apply(intrinsic, value, []);
-      prefix = `[${value.constructor.name}: ${render(primitive, { ...opts, colors: false }, [], new Map(), 0)}]`;
-      const own = keys.filter(
-        (key) =>
-          !(
-            typeof primitive === "string" &&
-            typeof key === "string" &&
-            (/^(0|[1-9]\d*)$/.test(key) || key === "length")
-          ),
-      );
-      if (!own.length) {
-        return stylize(prefix, typeof primitive, opts);
-      }
-      prefix += " ";
-      for (const key of own) {
-        addProperty(key);
-      }
-    } else if (
-      Array.isArray(value) ||
-      (ArrayBuffer.isView(value) && !(value instanceof DataView))
-    ) {
-      const array = value as unknown as ArrayLike<unknown>;
-      open = "[";
-      close = "]";
-      if (!Array.isArray(value)) {
-        prefix = `${value.constructor.name}(${array.length}) `;
-      }
-      for (let i = 0; i < Math.min(array.length, limit); i++) {
-        if (!Object.hasOwn(value, i)) {
-          let count = 1;
-          while (i + count < Math.min(array.length, limit) && !Object.hasOwn(value, i + count)) {
-            count++;
-          }
-          entries.push(
-            stylize(`<${count} empty item${count === 1 ? "" : "s"}>`, "undefined", opts),
-          );
-          i += count - 1;
-        } else {
-          entries.push(child(array[i]));
-        }
-      }
-      if (array.length > limit) {
-        entries.push(
-          `... ${array.length - limit} more item${array.length - limit === 1 ? "" : "s"}`,
-        );
-      }
-      for (const key of keys) {
-        if (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key)) {
-          addProperty(key);
-        }
-      }
-    } else if (value instanceof Map || value instanceof Set) {
-      prefix = `${value.constructor.name}(${value.size}) `;
-      let i = 0;
-      for (const entry of value) {
-        if (i++ >= limit) {
-          break;
-        }
-        entries.push(
-          value instanceof Map ? `${child(entry[0])} => ${child(entry[1])}` : child(entry),
-        );
-      }
-      if (value.size > limit) {
-        entries.push(`... ${value.size - limit} more item${value.size - limit === 1 ? "" : "s"}`);
-      }
-      if (opts.sorted) {
-        entries.sort(typeof opts.sorted === "function" ? opts.sorted : undefined);
-      }
-      for (const key of keys) {
-        addProperty(key);
-      }
-    } else if (
-      value instanceof ArrayBuffer ||
-      (typeof SharedArrayBuffer === "function" && value instanceof SharedArrayBuffer)
-    ) {
-      prefix = `${value.constructor.name} `;
-      // Node formatArrayBuffer, adapted to Uint8Array instead of native Buffer.hexSlice.
-      try {
-        const bytes = new Uint8Array(value);
-        let hex = Array.from(bytes.subarray(0, limit), (byte) =>
-          byte.toString(16).padStart(2, "0"),
-        ).join(" ");
-        if (bytes.length > limit) {
-          hex += ` ... ${bytes.length - limit} more byte${bytes.length - limit === 1 ? "" : "s"}`;
-        }
-        entries.push(`${stylize("[Uint8Contents]", "special", opts)}: <${hex}>`);
-      } catch {
-        entries.push(stylize("(detached)", "special", opts));
-      }
-      entries.push(`${stylize("[byteLength]", "string", opts)}: ${child(value.byteLength)}`);
-      for (const key of keys) {
-        addProperty(key);
-      }
-    } else if (value instanceof DataView) {
-      prefix = "DataView ";
-      entries.push(
-        `${stylize("[byteLength]", "string", opts)}: ${child(value.byteLength)}`,
-        `${stylize("[byteOffset]", "string", opts)}: ${child(value.byteOffset)}`,
-        `${stylize("[buffer]", "string", opts)}: ${child(value.buffer, 10)}`,
-      );
-      for (const key of keys) {
-        addProperty(key);
-      }
-    } else {
-      if (typeof value === "function") {
-        prefix = inspectValue(value, opts) + (keys.length ? " " : "");
-      } else if (Object.getPrototypeOf(value) === null) {
-        prefix = "[Object: null prototype] ";
-      } else if (value.constructor?.name && value.constructor.name !== "Object") {
-        prefix = `${value.constructor.name} `;
-      }
-      if (opts.sorted) {
-        keys.sort(
-          typeof opts.sorted === "function"
-            ? (a, b) => (opts.sorted as (a: string, b: string) => number)(String(a), String(b))
-            : (a, b) => String(a).localeCompare(String(b)),
-        );
-      }
-      for (const key of keys) {
-        addProperty(key);
-      }
-      if (typeof value === "function" && !entries.length) {
-        return prefix;
-      }
-    }
-    const single = entries.length
-      ? `${prefix}${open} ${entries.join(", ")} ${close}`
-      : `${prefix}${open}${close}`;
-    const id = circular.get(object);
-    const reference = id ? `<ref *${id}> ` : "";
-    if (
-      entries.length &&
-      (opts.compact === false ||
-        single.replace(/\x1b\[[0-9;]*m/g, "").length + level * 2 + propertyWidth >
-          (opts.breakLength ?? 80))
-    ) {
-      const indent = "  ".repeat(level + 1);
-      return `${reference}${prefix}${open}\n${indent}${entries.join(`,\n${indent}`)}\n${"  ".repeat(level)}${close}`;
-    }
-    return reference + single;
+    const parts = renderObject(object, opts, child);
+    return typeof parts === "string"
+      ? parts
+      : layout(parts, opts, level, propertyWidth, circular.get(object));
   } finally {
     ancestors.pop();
   }
+}
+
+type RenderChild = (value: unknown, propertyWidth?: number) => string;
+
+type RenderProperty = (key: PropertyKey) => string;
+
+interface RenderParts {
+  prefix: string;
+  entries: string[];
+  array?: boolean;
+}
+
+function renderProperty(
+  object: object,
+  key: PropertyKey,
+  opts: InspectOptions,
+  child: RenderChild,
+): string {
+  const descriptor = Object.getOwnPropertyDescriptor(object, key)!;
+  const label =
+    typeof key === "symbol"
+      ? `[${stylize(String(key), "symbol", opts)}]`
+      : !descriptor.enumerable
+        ? `[${key}]`
+        : /^[A-Za-z_$][\w$]*$/.test(String(key))
+          ? String(key)
+          : quote(String(key));
+  let rendered: string;
+  if ("value" in descriptor) {
+    rendered = child(descriptor.value, label.length + 2);
+  } else if (
+    descriptor.get &&
+    (opts.getters === true ||
+      (opts.getters === "get" && !descriptor.set) ||
+      (opts.getters === "set" && descriptor.set))
+  ) {
+    try {
+      rendered = `[Getter${descriptor.set ? "/Setter" : ""}: ${child(Reflect.apply(descriptor.get, object, []))}]`;
+    } catch (error) {
+      rendered = `[Getter: <Inspection threw (${error instanceof Error ? error.message : String(error)})>]`;
+    }
+  } else {
+    rendered = stylize(
+      descriptor.get ? `[Getter${descriptor.set ? "/Setter" : ""}]` : "[Setter]",
+      "special",
+      opts,
+    );
+  }
+  return `${label}: ${rendered}`;
+}
+
+function renderBoxed(
+  value: object,
+  keys: (string | symbol)[],
+  opts: InspectOptions,
+  property: RenderProperty,
+): RenderParts | string {
+  const intrinsic = isBooleanObject(value)
+    ? Boolean.prototype.valueOf
+    : isNumberObject(value)
+      ? Number.prototype.valueOf
+      : isStringObject(value)
+        ? String.prototype.valueOf
+        : isBigIntObject(value)
+          ? BigInt.prototype.valueOf
+          : Symbol.prototype.valueOf;
+  const primitive: unknown = Reflect.apply(intrinsic, value, []);
+  let prefix = `[${value.constructor.name}: ${render(primitive, { ...opts, colors: false }, [], new Map(), 0)}]`;
+  const own = keys.filter(
+    (key) =>
+      !(
+        typeof primitive === "string" &&
+        typeof key === "string" &&
+        (/^(0|[1-9]\d*)$/.test(key) || key === "length")
+      ),
+  );
+  if (!own.length) {
+    return stylize(prefix, typeof primitive, opts);
+  }
+  prefix += " ";
+  return { prefix, entries: own.map(property) };
+}
+
+function renderArray(
+  value: ArrayLike<unknown>,
+  keys: (string | symbol)[],
+  opts: InspectOptions,
+  limit: number,
+  child: RenderChild,
+  property: RenderProperty,
+): RenderParts {
+  const array = value;
+  const entries: string[] = [];
+  let prefix = "";
+  if (!Array.isArray(value)) {
+    prefix = `${value.constructor.name}(${array.length}) `;
+  }
+  for (let i = 0; i < Math.min(array.length, limit); i++) {
+    if (!Object.hasOwn(value, i)) {
+      let count = 1;
+      while (i + count < Math.min(array.length, limit) && !Object.hasOwn(value, i + count)) {
+        count++;
+      }
+      entries.push(stylize(`<${count} empty item${count === 1 ? "" : "s"}>`, "undefined", opts));
+      i += count - 1;
+    } else {
+      entries.push(child(array[i]));
+    }
+  }
+  if (array.length > limit) {
+    entries.push(`... ${array.length - limit} more item${array.length - limit === 1 ? "" : "s"}`);
+  }
+  for (const key of keys) {
+    if (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key)) {
+      entries.push(property(key));
+    }
+  }
+  return { prefix, entries, array: true };
+}
+
+function renderCollection(
+  value: Map<unknown, unknown> | Set<unknown>,
+  keys: (string | symbol)[],
+  opts: InspectOptions,
+  limit: number,
+  child: RenderChild,
+  property: RenderProperty,
+): RenderParts {
+  const entries: string[] = [];
+  const prefix = `${value.constructor.name}(${value.size}) `;
+  let i = 0;
+  for (const entry of value) {
+    if (i++ >= limit) {
+      break;
+    }
+    if (value instanceof Map) {
+      const pair = entry as [unknown, unknown];
+      entries.push(`${child(pair[0])} => ${child(pair[1])}`);
+    } else {
+      entries.push(child(entry));
+    }
+  }
+  if (value.size > limit) {
+    entries.push(`... ${value.size - limit} more item${value.size - limit === 1 ? "" : "s"}`);
+  }
+  if (opts.sorted) {
+    entries.sort(typeof opts.sorted === "function" ? opts.sorted : undefined);
+  }
+  for (const key of keys) {
+    entries.push(property(key));
+  }
+  return { prefix, entries };
+}
+
+// Adapted from Node v24.20.0 lib/internal/util/inspect.js formatArrayBuffer (MIT),
+// commit 71b8b174857e25106d39b61a9e6f30d927da8b01. Uses Uint8Array instead of Buffer.hexSlice.
+function renderBuffer(
+  value: ArrayBuffer | SharedArrayBuffer,
+  keys: (string | symbol)[],
+  opts: InspectOptions,
+  limit: number,
+  child: RenderChild,
+  property: RenderProperty,
+): RenderParts {
+  const entries: string[] = [];
+  const prefix = `${value.constructor.name} `;
+  try {
+    const bytes = new Uint8Array(value);
+    let hex = Array.from(bytes.subarray(0, limit), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join(" ");
+    if (bytes.length > limit) {
+      hex += ` ... ${bytes.length - limit} more byte${bytes.length - limit === 1 ? "" : "s"}`;
+    }
+    entries.push(`${stylize("[Uint8Contents]", "special", opts)}: <${hex}>`);
+  } catch {
+    entries.push(stylize("(detached)", "special", opts));
+  }
+  entries.push(`${stylize("[byteLength]", "string", opts)}: ${child(value.byteLength)}`);
+  for (const key of keys) {
+    entries.push(property(key));
+  }
+  return { prefix, entries };
+}
+
+function renderView(
+  value: DataView,
+  keys: (string | symbol)[],
+  opts: InspectOptions,
+  child: RenderChild,
+  property: RenderProperty,
+): RenderParts {
+  const entries: string[] = [];
+  const prefix = "DataView ";
+  entries.push(
+    `${stylize("[byteLength]", "string", opts)}: ${child(value.byteLength)}`,
+    `${stylize("[byteOffset]", "string", opts)}: ${child(value.byteOffset)}`,
+    `${stylize("[buffer]", "string", opts)}: ${child(value.buffer, 10)}`,
+  );
+  for (const key of keys) {
+    entries.push(property(key));
+  }
+  return { prefix, entries };
+}
+
+function renderPlain(
+  value: object,
+  keys: (string | symbol)[],
+  opts: InspectOptions,
+  property: RenderProperty,
+): RenderParts | string {
+  const entries: string[] = [];
+  let prefix = "";
+  if (typeof value === "function") {
+    prefix = inspectValue(value, opts) + (keys.length ? " " : "");
+  } else if (Object.getPrototypeOf(value) === null) {
+    prefix = "[Object: null prototype] ";
+  } else if (value.constructor?.name && value.constructor.name !== "Object") {
+    prefix = `${value.constructor.name} `;
+  }
+  if (opts.sorted) {
+    keys.sort(
+      typeof opts.sorted === "function"
+        ? (a, b) => (opts.sorted as (a: string, b: string) => number)(String(a), String(b))
+        : (a, b) => String(a).localeCompare(String(b)),
+    );
+  }
+  for (const key of keys) {
+    entries.push(property(key));
+  }
+  if (typeof value === "function" && !entries.length) {
+    return prefix;
+  }
+  return { prefix, entries };
+}
+
+function renderObject(
+  value: object,
+  opts: InspectOptions,
+  child: RenderChild,
+): RenderParts | string {
+  const limit = opts.maxArrayLength == null ? Infinity : Math.max(0, opts.maxArrayLength);
+  const boxed = isBoxedPrimitive(value);
+  const keys = opts.showHidden
+    ? Reflect.ownKeys(value)
+    : Reflect.ownKeys(value).filter((key) =>
+        Object.prototype.propertyIsEnumerable.call(value, key),
+      );
+  const property: RenderProperty = (key) => renderProperty(value, key, opts, child);
+
+  if (boxed) {
+    return renderBoxed(value, keys, opts, property);
+  }
+  if (Array.isArray(value) || (ArrayBuffer.isView(value) && !(value instanceof DataView))) {
+    return renderArray(value as unknown as ArrayLike<unknown>, keys, opts, limit, child, property);
+  }
+  if (value instanceof Map || value instanceof Set) {
+    return renderCollection(value, keys, opts, limit, child, property);
+  }
+  if (
+    value instanceof ArrayBuffer ||
+    (typeof SharedArrayBuffer === "function" && value instanceof SharedArrayBuffer)
+  ) {
+    return renderBuffer(value, keys, opts, limit, child, property);
+  }
+  if (value instanceof DataView) {
+    return renderView(value, keys, opts, child, property);
+  }
+  return renderPlain(value, keys, opts, property);
+}
+
+function layout(
+  { prefix, entries, array }: RenderParts,
+  opts: InspectOptions,
+  level: number,
+  propertyWidth: number,
+  id: number | undefined,
+): string {
+  const open = array ? "[" : "{";
+  const close = array ? "]" : "}";
+  const single = entries.length
+    ? `${prefix}${open} ${entries.join(", ")} ${close}`
+    : `${prefix}${open}${close}`;
+  const reference = id ? `<ref *${id}> ` : "";
+  if (
+    entries.length &&
+    (opts.compact === false ||
+      single.replace(/\x1b\[[0-9;]*m/g, "").length + level * 2 + propertyWidth >
+        (opts.breakLength ?? 80))
+  ) {
+    const indent = "  ".repeat(level + 1);
+    return `${reference}${prefix}${open}\n${indent}${entries.join(`,\n${indent}`)}\n${"  ".repeat(level)}${close}`;
+  }
+  return reference + single;
 }
 
 export function format(...args: unknown[]): string {
@@ -484,56 +584,65 @@ export function formatWithOptions(options: InspectOptions, ...args: unknown[]): 
       return token;
     }
     const value = args[index++];
-    switch (token) {
-      case "%c":
-        return "";
-      case "%s":
-        return typeof value === "object" && value !== null && hasBuiltInToString(value)
-          ? inspect(value, { ...options, colors: false, depth: 0, compact: 3 })
-          : typeof value === "bigint" || typeof value === "number"
-            ? inspect(value, { colors: false, numericSeparator: options.numericSeparator })
-            : String(value);
-      case "%d":
-        return typeof value === "bigint"
-          ? inspect(value, { colors: false, numericSeparator: options.numericSeparator })
-          : typeof value === "symbol"
-            ? "NaN"
-            : inspect(Number(value), { colors: false, numericSeparator: options.numericSeparator });
-      case "%i":
-        return typeof value === "bigint"
-          ? inspect(value, { colors: false, numericSeparator: options.numericSeparator })
-          : typeof value === "symbol"
-            ? "NaN"
-            : inspect(parseInt(String(value)), {
-                colors: false,
-                numericSeparator: options.numericSeparator,
-              });
-      case "%f":
-        return typeof value === "symbol"
-          ? "NaN"
-          : inspect(parseFloat(String(value)), {
-              colors: false,
-              numericSeparator: options.numericSeparator,
-            });
-      case "%j":
-        try {
-          return JSON.stringify(value) ?? "undefined";
-        } catch (error) {
-          if (error instanceof TypeError && /circular|cyclic/i.test(error.message)) {
-            return "[Circular]";
-          }
-          throw error;
-        }
-      default:
-        return inspect(
-          value,
-          token === "%o" ? { ...options, showHidden: true, depth: 4 } : options,
-        );
-    }
+    return formatSpecifier(token, value, options);
   });
   while (index < args.length) {
     const value = args[index++];
     text += ` ${typeof value === "string" ? value : inspect(value, options)}`;
   }
   return text;
+}
+
+function formatString(value: unknown, options: InspectOptions): string {
+  if (typeof value === "object" && value !== null && hasBuiltInToString(value)) {
+    return inspect(value, { ...options, colors: false, depth: 0, compact: 3 });
+  }
+  if (typeof value === "bigint" || typeof value === "number") {
+    return inspect(value, { colors: false, numericSeparator: options.numericSeparator });
+  }
+  return String(value);
+}
+
+function formatNumber(token: string, value: unknown, options: InspectOptions): string {
+  if (token !== "%f" && typeof value === "bigint") {
+    return inspect(value, { colors: false, numericSeparator: options.numericSeparator });
+  }
+  if (typeof value === "symbol") {
+    return "NaN";
+  }
+  const number =
+    token === "%d"
+      ? Number(value)
+      : token === "%i"
+        ? parseInt(String(value))
+        : parseFloat(String(value));
+  return inspect(number, { colors: false, numericSeparator: options.numericSeparator });
+}
+
+function formatJson(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "undefined";
+  } catch (error) {
+    if (error instanceof TypeError && /circular|cyclic/i.test(error.message)) {
+      return "[Circular]";
+    }
+    throw error;
+  }
+}
+
+function formatSpecifier(token: string, value: unknown, options: InspectOptions): string {
+  switch (token) {
+    case "%c":
+      return "";
+    case "%s":
+      return formatString(value, options);
+    case "%d":
+    case "%i":
+    case "%f":
+      return formatNumber(token, value, options);
+    case "%j":
+      return formatJson(value);
+    default:
+      return inspect(value, token === "%o" ? { ...options, showHidden: true, depth: 4 } : options);
+  }
 }
