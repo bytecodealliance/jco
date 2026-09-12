@@ -1,0 +1,5 @@
+package test:v8;
+
+world component {
+  export run: func(denied: bool) -> string;
+}
