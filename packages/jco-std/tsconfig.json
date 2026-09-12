@@ -11,6 +11,7 @@
     "declarationMap": true,
     "skipLibCheck": true,
     "paths": {
+      "jco:node/v8@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/v8-interface.d.ts"],
       "jco:node/trace-events@0.1.0": ["./src/wasi/0.2.x/node/24.x.x/trace-events-interface.d.ts"],
       "jco:node/worker-threads@0.1.0": [
         "./src/wasi/0.2.x/node/24.x.x/worker-threads-interface.d.ts"
