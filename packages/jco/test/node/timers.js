@@ -16,14 +16,15 @@ const timersPromisesModule = fileURLToPath(
     new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/timers-promises.js", import.meta.url),
 );
 
-test("resolves timers without unrelated capabilities and leaves bare imports alone", () => {
+test("resolves timers without unrelated capabilities and preserves installed bare packages", async () => {
     const onWitRequirement = vi.fn();
     const plugin = nodeBuiltinPlugin(
         { imports: [], exports: [] },
         { timersModule, timersPromisesModule, onWitRequirement },
     );
     expect(plugin.resolveId("node:timers")).toBe("\0jco-node-builtin:node:timers");
-    expect(plugin.resolveId("timers")).toBeNull();
+    expect(await plugin.resolveId.call({ resolve: async () => null }, "timers")).toBe("\0jco-node-builtin:node:timers");
+    expect(await plugin.resolveId.call({ resolve: async () => ({ id: "/installed/timers.js" }) }, "timers")).toBeNull();
     expect(plugin.resolveId("timers/promises")).toBeNull();
     expect(plugin.resolveId("node:timers/promises")).toBe("\0jco-node-builtin:node:timers/promises");
     expect(plugin.load(plugin.resolveId("node:timers"))).toContain(timersModule);
