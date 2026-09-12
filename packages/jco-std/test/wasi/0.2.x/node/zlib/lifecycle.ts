@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import native from "node:zlib";
 import { Buffer } from "node:buffer";
 import { zlib } from "../helpers/zlib.js";
+
 test("flush and params preserve ordered data and close is idempotent", async () => {
   const stream = zlib.createDeflate();
   const chunks: Uint8Array[] = [];
@@ -26,6 +27,7 @@ test("flush and params preserve ordered data and close is idempotent", async () 
   stream.close();
   stream.close();
 });
+
 test("reset and dictionaries use the native codec", async () => {
   const stream = zlib.createDeflate();
   stream.reset();
@@ -43,6 +45,7 @@ test("flush rejects invalid kinds synchronously and stream errors close native s
   } finally {
     stream.close();
   }
+
   const bad = zlib.createGunzip();
   const error = new Promise<Error>((resolve): void => {
     bad.once("error", resolve);

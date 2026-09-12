@@ -34,6 +34,7 @@ test("complete modern export shape, descriptors and no implicit capability", () 
   ).toThrow(expect.objectContaining({ code: "ERR_JCO_ZLIB_ADAPTER_REQUIRED" }));
   expect(() => new Engine()).toThrow();
 });
+
 test("deprecated accessors fail before consulting the receiver", () => {
   expect(() => Reflect.get(zlib, "Z_OK")).toThrow(/deprecated/);
   const stream = zlib.Gzip();
