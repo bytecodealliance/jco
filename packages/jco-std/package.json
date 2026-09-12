@@ -597,6 +597,11 @@
     "./wasi/0.2.x/node/24.x.x/zlib/host/node": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/zlib-host-node.d.ts",
       "node": "./dist/wasi/0.2.x/node/24.x.x/zlib-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/vm": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/vm.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/vm.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/vm.js"
     }
   },
   "scripts": {
