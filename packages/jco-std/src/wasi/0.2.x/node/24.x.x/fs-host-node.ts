@@ -328,7 +328,6 @@ export const rmdir: FsHost["rmdir"] = (value, options: FsRemoveOptions) =>
   capture(() =>
     nodeFs.rmdirSync(path(value), {
       maxRetries: options.maxRetries,
-      recursive: false,
       retryDelay: options.retryDelay,
     }),
   );
