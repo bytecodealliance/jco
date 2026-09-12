@@ -1823,6 +1823,55 @@ mod tests {
     }
 
     #[test]
+    fn deferred_stream_cancel_is_tracked_as_host_work() {
+        // A guest cancelling a read on a host-lowered stream is suspended until the
+        // deferred cancel completion runs. Counting that deferral like a host operation
+        // keeps an already-scheduled deadlock check from reporting the wait.
+        for intrinsic in [
+            AsyncStreamIntrinsic::StreamReadableEndClass,
+            AsyncStreamIntrinsic::StreamWritableEndClass,
+        ] {
+            let end = render_intrinsic_body(Intrinsic::AsyncStream(intrinsic));
+            assert!(end.contains("_trackHostOperation(() => new Promise((resolve) => {"));
+            assert!(end.contains("try { completeCancel(); } finally { resolve(); }"));
+            assert!(!end.contains("setTimeout(completeCancel, 0);"));
+        }
+    }
+
+    #[test]
+    fn injected_stream_writes_reset_the_write_end_before_writing() {
+        // Back-to-back guest reads can outrun the lazy consumption of the previous
+        // injected write's completion event; the next write must not start while
+        // that stale event still marks the write end as copying.
+        let inject = render_intrinsic_body(Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::GenStreamHostInjectFn,
+        ));
+        let write_values = inject
+            .find("const writeValues = async (writeValues, dropAfterCopy = false) => {")
+            .expect("writeValues helper");
+        let write_values_body = &inject[write_values..];
+        let reset = write_values_body
+            .find("resetWriteEndToIdleFn();")
+            .expect("reset before injected write");
+        let write = write_values_body
+            .find("hostWriteEnd.writeMany(writeValues, { dropAfterCopy });")
+            .expect("injected write");
+        assert!(reset < write);
+
+        let cancel = inject
+            .find("readEnd.setHostCancelFn?.(() => {")
+            .expect("host cancel fn");
+        let cancel_body = &inject[cancel..];
+        let reset = cancel_body
+            .find("resetWriteEndToIdleFn();")
+            .expect("reset before cancel write");
+        let write = cancel_body
+            .find("hostWriteEnd.writeMany(cancelValues);")
+            .expect("cancel write");
+        assert!(reset < write);
+    }
+
+    #[test]
     fn host_async_operations_suppress_deadlock_detection() {
         let tracker =
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
