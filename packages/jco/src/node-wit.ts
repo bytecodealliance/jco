@@ -167,6 +167,9 @@ export const ZLIB_WIT_REQUIREMENT = nodeRequirement("node:zlib", "zlib");
 
 export const TTY_WIT_REQUIREMENT = nodeRequirement("node:tty", "tty", { sharedTypes: true });
 
+/** The `node:wasi` builtin's host interface (initialisation only), not a `wasi:` package. */
+export const WASI_WIT_REQUIREMENT = nodeRequirement("node:wasi", "wasi", { sharedTypes: true });
+
 export const FFI_WIT_REQUIREMENT = nodeRequirement("node:ffi", "ffi");
 
 export const INSPECTOR_WIT_REQUIREMENT = nodeRequirement("node:inspector", "inspector", {

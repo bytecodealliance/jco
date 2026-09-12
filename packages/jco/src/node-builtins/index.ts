@@ -24,6 +24,7 @@ import { createReplBuiltin } from "./repl.js";
 import { createStringDecoderBuiltin } from "./string-decoder.js";
 import { createZlibBuiltin } from "./zlib.js";
 import { createTtyBuiltin } from "./tty.js";
+import { createWasiBuiltin } from "./wasi.js";
 import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
 import { createWorkerThreadsBuiltin } from "./worker-threads.js";
@@ -87,6 +88,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createStringDecoderBuiltin,
         createTtyBuiltin,
         createZlibBuiltin,
+        createWasiBuiltin,
         createStreamBuiltin,
         createClusterBuiltin,
         createWorkerThreadsBuiltin,
