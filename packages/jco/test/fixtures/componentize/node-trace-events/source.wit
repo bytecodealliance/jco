@@ -1,0 +1,9 @@
+package test:trace-events;
+
+world test {
+  export contract: func() -> u32;
+  export denied: func() -> string;
+  export lifecycle: func() -> u32;
+  export start-tracing: func();
+  export stop-tracing: func();
+}

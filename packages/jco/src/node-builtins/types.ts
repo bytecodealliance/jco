@@ -39,6 +39,8 @@ export interface NodeBuiltinOptions {
     inspectorModule?: string;
     /** Path to the versioned perf_hooks implementation (overridable for tests). */
     perfHooksModule?: string;
+    /** Path to the versioned node:trace_events module (overridable for tests). */
+    traceEventsModule?: string;
     /** Paths to the versioned timer modules (overridable for tests). */
     timersModule?: string;
     timersPromisesModule?: string;
