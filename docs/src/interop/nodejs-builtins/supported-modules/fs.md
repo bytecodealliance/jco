@@ -9,7 +9,8 @@ When either specifier occurs in bundled source, Jco adds a missing import to the
 selected world, installs `fs.wit` under `deps/jco-node-0.1.0`, and prints a CLI
 warning to alert to the fact that a WIT dependency has been added.
 
-The default filesystem host provider always throws `ERR_JCO_FS_ADAPTER_REQUIRED`.
+The default filesystem host provider returns a typed denial result, which the
+guest reconstructs as `ERR_JCO_FS_ADAPTER_REQUIRED`.
 To use the passthrough NodeJS host provider you can map it in:
 
 ```console

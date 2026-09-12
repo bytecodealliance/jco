@@ -71,6 +71,7 @@ compatibility limits. Related submodules share their parent API page. See the
 | [`node:tty`](./tty.md) | Node 24.20 `isatty`, `ReadStream` and `WriteStream` over the host process's descriptors through an explicit host capability; denied by default. |
 | [`node:url`](./url.md) | Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports. |
 | [`node:util`](./util.md), [`node:util/types`](./util.md) | Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions. |
+| [`node:vfs`](./vfs.md) | Node 26 memory VFS, default-denied Node passthrough, and WASI filesystem storage with configurable preopen placement. |
 | [`node:vm`](./vm.md) | Same-context script evaluation and function compilation in the guest. No WIT capability; separate realms, native caches and VM modules are unsupported. |
 | [`node:worker_threads`](./worker-threads.md) | Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported. |
 | [`node:zlib`](./zlib.md) | Native zlib, Brotli and Zstandard through an explicit compression capability; denied by default. |
