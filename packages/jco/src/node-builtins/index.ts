@@ -23,6 +23,7 @@ import { createStringDecoderBuiltin } from "./string-decoder.js";
 import { createTtyBuiltin } from "./tty.js";
 import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
+import { createWorkerThreadsBuiltin } from "./worker-threads.js";
 import { createChildProcessBuiltin } from "./child-process.js";
 import { createConsoleBuiltin } from "./console.js";
 import { createDgramBuiltin } from "./dgram.js";
@@ -83,6 +84,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createTtyBuiltin,
         createStreamBuiltin,
         createClusterBuiltin,
+        createWorkerThreadsBuiltin,
         createChildProcessBuiltin,
         createConsoleBuiltin,
         createDgramBuiltin,
