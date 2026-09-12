@@ -20,6 +20,7 @@ import { createSqliteBuiltin } from "./sqlite.js";
 import { createReadlineBuiltin } from "./readline.js";
 import { createReplBuiltin } from "./repl.js";
 import { createStringDecoderBuiltin } from "./string-decoder.js";
+import { createZlibBuiltin } from "./zlib.js";
 import { createTtyBuiltin } from "./tty.js";
 import { createStreamBuiltin } from "./stream.js";
 import { createClusterBuiltin } from "./cluster.js";
@@ -82,6 +83,7 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
         createUtilBuiltin,
         createStringDecoderBuiltin,
         createTtyBuiltin,
+        createZlibBuiltin,
         createStreamBuiltin,
         createClusterBuiltin,
         createWorkerThreadsBuiltin,

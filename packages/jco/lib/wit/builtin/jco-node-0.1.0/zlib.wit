@@ -1,0 +1,27 @@
+package jco:node@0.1.0;
+/// Compression capability. Denied by default; explicitly map a host provider to enable it.
+/// Byte arrays and native compression settings cross this boundary, never Node stream objects.
+interface zlib {
+  variant errno { number(s64), symbolic(string) }
+  record error { name: string, message: string, code: option<string>, errno: option<errno>, syscall: option<string> }
+  enum algorithm { deflate, inflate, gzip, gunzip, deflateraw, inflateraw, unzip, brotlicompress, brotlidecompress, zstdcompress, zstddecompress }
+  record options {
+    flush: option<f64>, finish-flush: option<f64>, chunk-size: option<f64>, window-bits: option<f64>,
+    level: option<f64>, mem-level: option<f64>, strategy: option<f64>, max-output-length: option<f64>,
+    pledged-src-size: option<f64>, reject-garbage-after-end: option<bool>,
+    dictionary: option<list<u8>>, params: option<list<tuple<string, f64>>>,
+  }
+  record output { data: list<u8>, bytes-written: f64 }
+  compress: func(algorithm: algorithm, data: list<u8>, options: options) -> result<output, error>;
+  crc32: func(data: list<u8>, value: u32) -> result<u32, error>;
+  open: func(algorithm: algorithm, options: options) -> result<engine, error>;
+  /// Owns native state. Explicit close or resource drop releases it.
+  resource engine {
+    write: func(data: list<u8>) -> result<output, error>;
+    finish: func() -> result<output, error>;
+    flush: func(kind: f64) -> result<output, error>;
+    params: func(level: f64, strategy: f64) -> result<output, error>;
+    reset: func() -> result<_, error>;
+    close: func() -> result<_, error>;
+  }
+}
