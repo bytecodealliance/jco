@@ -1,0 +1,5 @@
+package test:zlib;
+world component {
+  export run-async: func() -> bool;
+  export run: func(denied: bool) -> string;
+}
