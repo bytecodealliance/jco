@@ -22,7 +22,6 @@
 // Adapted from Node.js v24.20.0, commit 71b8b174857e25106d39b61a9e6f30d927da8b01,
 // lib/vm.js and lib/internal/vm/module.js (MIT). Local changes: typed ESM, shared
 // validators, guest evaluation, and explicit refusals of native-only features.
-// See README.md for the source audit and supported execution contract.
 
 import { validateObject } from "../internal/validation.js";
 import { unsupported, unsupportedContext } from "./unsupported.js";
