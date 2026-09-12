@@ -1,0 +1,5 @@
+package test:vm;
+
+world test {
+  export run: func() -> string;
+}
