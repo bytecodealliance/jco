@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -160,12 +160,14 @@ describe.skipIf(!hasJspi)("node:vfs components", () => {
                     async () => {
                         const root = await getTmpDir();
                         await mkdir(join(root, "storage"));
+                        // Exercise host aliases such as macOS /var -> /private/var on every platform.
+                        await symlink("storage", join(root, "storage-alias"), "dir");
                         const result = await instantiate(nodeHost, root);
                         try {
                             expect(
                                 JSON.parse(
                                     await result.instance.syncFilesystem(
-                                        via === "direct" ? join(root, "storage") : guestRoot,
+                                        via === "direct" ? join(root, "storage-alias") : guestRoot,
                                     ),
                                 ),
                             ).toEqual(syncExpected);
@@ -201,13 +203,15 @@ describe.skipIf(!hasJspi)("node:vfs components", () => {
                     async () => {
                         const root = await getTmpDir();
                         await mkdir(join(root, "storage"));
+                        // Exercise host aliases such as macOS /var -> /private/var on every platform.
+                        await symlink("storage", join(root, "storage-alias"), "dir");
                         const result = await instantiate(nodeHost, root);
                         try {
                             expect(
                                 await runReport(
                                     result.instance,
                                     "startFilesystem",
-                                    via === "direct" ? join(root, "storage") : guestRoot,
+                                    via === "direct" ? join(root, "storage-alias") : guestRoot,
                                 ),
                             ).toEqual(expected);
                             expect(await readFile(join(root, "storage", "placement.txt"), "utf8")).toBe("vfs contents");
