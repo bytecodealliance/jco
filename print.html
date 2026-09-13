@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1d8f0cf2.js";
+            window.path_to_searchindex_js = "searchindex-a0862cd1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4866e883.js"></script>
+        <script src="toc-d322ca69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2076,8 +2076,9 @@ implementation.</li>
 <li>Everything else remains unresolved. Jco never enables unenv’s entire alias map
 merely because an alias exists.</li>
 </ol>
-<p>Only <code>node:</code> specifiers participate in this mechanism. Legacy bare specifiers such
-as <code>buffer</code>, <code>path</code>, and <code>querystring</code> are not rewritten.</p>
+<p>Explicit <code>node:</code> imports select builtin adapters. Audited bare names also resolve
+when no installed package shadows them. See <a href="#express">Express</a> for the
+portable globals and dependency compatibility used by ordinary npm libraries.</p>
 <h2 id="combining-built-ins-with-jco-std"><a class="header" href="#combining-built-ins-with-jco-std">Combining built-ins with <code>jco-std</code></a></h2>
 <p>Node built-in compatibility can be mixed freely with direct imports from
 <a href="#jco-std"><code>@bytecodealliance/jco-std</code></a> and other portable packages.</p>
@@ -2088,6 +2089,7 @@ while its application code imports <code>node:assert</code> and <code>node:buffe
 <p>Browse the <a href="#supported-modules-1">supported modules</a> for
 API-specific examples, capabilities, and compatibility limits. Each API has its
 own page, with related submodules grouped together.</p>
+<p>For whole-application compatibility, see <a href="#express">Express</a>.</p>
 <h2 id="how-jco-evaluates-unenv-modules"><a class="header" href="#how-jco-evaluates-unenv-modules">How Jco evaluates unenv modules</a></h2>
 <h3 id="different-compatibility-goals"><a class="header" href="#different-compatibility-goals">Different compatibility goals</a></h3>
 <p><code>unenv</code> provides a valuable cross-runtime foundation used by browsers, edge
@@ -2191,6 +2193,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodechild_process"><code>node:child_process</code></a></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><a href="#nodecluster"><code>node:cluster</code></a></td><td>Primary/worker control over an explicit host capability. Partly unsupported.</td></tr>
 <tr><td><a href="#nodeconsole"><code>node:console</code></a></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
+<tr><td><a href="#crypto"><code>node:crypto</code></a></td><td>Synchronous SHA-1/SHA-256 hash and HMAC helpers; randomness delegates to engine WebCrypto. Other operations have explicit limits.</td></tr>
 <tr><td><a href="#nodedgram"><code>node:dgram</code></a></td><td>UDP sockets over an explicit host capability; denied by default. StarlingMonkey supports the Node passthrough.</td></tr>
 <tr><td><a href="#nodediagnostics_channel"><code>node:diagnostics_channel</code></a></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><a href="#nodedns"><code>node:dns</code></a>, <a href="#nodedns"><code>node:dns/promises</code></a></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>
@@ -2439,6 +2442,19 @@ status and color depth:</p>
 <p>Formatting is done in the guest – <code>Console</code>, the <code>log</code>/<code>warn</code>/<code>error</code> family,
 <code>group</code> indentation, <code>count</code>, <code>time</code>, <code>table</code> and <code>dir</code> all run guest-side, and only
 the finished string crosses the boundary.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="crypto"><a class="header" href="#crypto">Crypto</a></h1>
+<p><code>node:crypto</code> provides synchronous SHA-1 and SHA-256 hashing through <code>createHash</code>,
+<code>createHmac</code>, and <code>hash</code>, including the digest operations used by Express ETags
+and cookie signatures. Other digest algorithms are unsupported.</p>
+<p>Random helpers use the component engine’s WebCrypto implementation, backed by
+<code>wasi:random</code>. The <code>webcrypto</code> and <code>subtle</code> exports delegate to that implementation.
+Node-shaped cipher, signing, key-object, certificate, and key-derivation operations
+throw explicit unsupported errors; this is not full Node crypto compatibility.</p>
+<pre><code class="language-js">import { createHash } from 'node:crypto';
+
+const digest = createHash('sha256').update('hello').digest('hex');
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodedgram"><a class="header" href="#nodedgram"><code>node:dgram</code></a></h1>
 <div class="table-wrapper">
@@ -2799,6 +2815,10 @@ absent and should gain execution coverage when the engine provides it.</p>
 <p>Some of these retain StarlingMonkey’s existing WASI feature requirements, such as
 clocks for timers, random for WebCrypto, stdio for console, and HTTP for network
 fetches. Jco does not add a Node-specific WIT capability for globals.</p>
+<p>Bundled dependencies also receive <code>setImmediate</code> and <code>clearImmediate</code> from
+<a href="#nodetimers">the timers adapter</a>. A free <code>process</code> identifier uses the limited
+unenv implementation so dependency initialization can run without host calls.
+Explicit <code>node:process</code> imports use <a href="#nodeprocess">the host-backed process adapter</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodehttp"><a class="header" href="#nodehttp"><code>node:http</code></a></h1>
 <div class="table-wrapper">
@@ -3789,8 +3809,8 @@ It reuses the audited Buffer core already used by <code>node:buffer</code>; it d
 WIT import, callback export, host adapter, or JSPI operation.</p>
 <p>Because the adapter is selected only when bundled code resolves
 <code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
-initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
-not intercepted.</p>
+initialization cost. The bare <code>string_decoder</code> name follows normal package
+resolution before falling back to this builtin.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodetest"><a class="header" href="#nodetest"><code>node:test</code></a></h1>
 <div class="table-wrapper">
@@ -4610,6 +4630,60 @@ are outside this adapter. Bare <code>zlib</code> imports are not intercepted.</p
 <p>Direct jco-std consumers can use <code>zlib/core</code> with an explicit typed provider and
 mix the resulting module with native Node builtins. Normal component applications
 should use <code>node:zlib</code> and the builtin integration shown above.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="express"><a class="header" href="#express">Express</a></h1>
+<p>Express 5.2.1 runs as an ordinary npm dependency. Jco does not replace Express,
+its router, or its middleware. The component fixture imports <code>express</code>, registers
+routes, installs <code>express.json()</code>, and calls <code>app.listen()</code> unchanged.</p>
+<p>Use <code>jco componentize --bundle</code> with <code>--with-nodejs-http-via direct</code>. Keep the
+fixture’s WIT world limited to application exports; Jco discovers and adds the
+required Node interfaces and <code>wasi:cli/environment</code> while bundling. On the host,
+use the per-component <code>createHttpHost(() =&gt; instance.httpCallbacks)</code> registration
+described in <a href="#nodehttp">HTTP implementation selection</a>.
+An imported capability does not grant access: map the HTTP provider explicitly,
+and leave filesystem access denied unless the application needs it.
+Create the Express app inside an exported function, as the fixture does:
+<code>express()</code> reads the working directory through WASI, which is unavailable
+during module pre-initialization.</p>
+<p>The end-to-end test compares the same Express app running in Node and in a
+StarlingMonkey component over real HTTP sockets. It covers concurrent requests,
+route parameters, query strings, JSON request bodies, malformed JSON, application
+error middleware, generated ETags, conditional 304 responses, and default 404s.
+The direct transport buffers request and response bodies; this is not a claim
+that every Express extension or streaming workload is supported.</p>
+<h2 id="dependency-compatibility"><a class="header" href="#dependency-compatibility">Dependency compatibility</a></h2>
+<p>CommonJS packages may use audited bare builtin names such as <code>http</code>, <code>stream</code>,
+and <code>crypto</code>. Jco first checks normal package resolution, so installed packages
+with those names still win. Explicit <code>node:</code> imports always select the builtin.
+The stream CommonJS adapter exports jco-std’s existing <code>Stream</code> constructor;
+it supplies no alternative stream implementation. HTTP, HTTPS, net, classic
+streams, <code>string_decoder</code>, URL, TTY, OS, <code>util</code>, and <code>util/types</code> APIs all use their current jco-std adapters.</p>
+<p>The remaining support needed by this dependency graph includes:</p>
+<ul>
+<li>Synchronous SHA-1/SHA-256 hash and HMAC helpers for ETags and cookie signatures.
+Other crypto operations have explicit limits; this is not full <code>node:crypto</code>.</li>
+<li><code>setImmediate</code>/<code>clearImmediate</code> globals backed by component timers. Their
+scheduling approximates a later turn, not Node’s I/O check phase.</li>
+<li>A structured <code>Error.prepareStackTrace</code> adapter for middleware using <code>depd</code>.</li>
+<li>Limited unenv implementations of <code>process</code> and <code>zlib</code>.
+These retain unsupported entries and are not full Node APIs.
+In particular, compressed request bodies and zlib transforms are unsupported;
+<code>sendFile</code> and static files additionally need filesystem authority.</li>
+</ul>
+<p>The injected <code>process</code> global comes from unenv so dependency initialization can
+run without host calls. Explicit <code>node:process</code> imports use jco-std
+and require the separate <code>jco:node/process</code> host capability.
+The URL adapter retains <a href="#nodeurl">its deprecated API restrictions</a>;
+Express dependencies that reach legacy <code>url.parse()</code> will throw. TTY operations
+require the separate <a href="#nodetty">TTY host capability</a>.
+Applications needing additional runtime behavior should test it explicitly.</p>
+<h2 id="regex-syntax-in-dependencies"><a class="header" href="#regex-syntax-in-dependencies">Regex syntax in dependencies</a></h2>
+<p>StarlingMonkey’s pinned runtime cannot parse the Unicode property escapes used
+by Express 5’s <code>path-to-regexp</code>. During bundling, Jco uses Rolldown’s parser to
+find regex literals and <a href="https://github.com/mathiasbynens/regexpu-core">regexpu-core</a>
+to lower their property escapes and Unicode set syntax. Strings, comments, and
+template text stay untouched. Dynamic <code>RegExp</code> constructor strings are not
+rewritten. Unicode tables come from the pinned compiler dependency.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>

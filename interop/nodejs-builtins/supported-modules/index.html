@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-1d8f0cf2.js";
+            window.path_to_searchindex_js = "../../../searchindex-a0862cd1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-4866e883.js"></script>
+        <script src="../../../toc-d322ca69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -219,6 +219,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="./child-process.html"><code>node:child_process</code></a></td><td>Synchronous APIs over an explicit application-provided host capability; denied by default.</td></tr>
 <tr><td><a href="./cluster.html"><code>node:cluster</code></a></td><td>Primary/worker control over an explicit host capability. Partly unsupported.</td></tr>
 <tr><td><a href="./console.html"><code>node:console</code></a></td><td>Guest console over an explicit application-provided host capability; denied by default, so every call throws until the application maps a provider.</td></tr>
+<tr><td><a href="./crypto.html"><code>node:crypto</code></a></td><td>Synchronous SHA-1/SHA-256 hash and HMAC helpers; randomness delegates to engine WebCrypto. Other operations have explicit limits.</td></tr>
 <tr><td><a href="./dgram.html"><code>node:dgram</code></a></td><td>UDP sockets over an explicit host capability; denied by default. StarlingMonkey supports the Node passthrough.</td></tr>
 <tr><td><a href="./diagnostics-channel.html"><code>node:diagnostics_channel</code></a></td><td>Channels and tracing channels. Requires no WIT capability. Bound stores are scoped synchronously.</td></tr>
 <tr><td><a href="./dns.html"><code>node:dns</code></a>, <a href="./dns.html"><code>node:dns/promises</code></a></td><td>Name resolution over an explicit host capability; denied by default.</td></tr>

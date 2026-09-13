@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-1d8f0cf2.js";
+            window.path_to_searchindex_js = "../../../searchindex-a0862cd1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-4866e883.js"></script>
+        <script src="../../../toc-d322ca69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -208,8 +208,8 @@ It reuses the audited Buffer core already used by <code>node:buffer</code>; it d
 WIT import, callback export, host adapter, or JSPI operation.</p>
 <p>Because the adapter is selected only when bundled code resolves
 <code>node:string_decoder</code>, source graphs that do not import it pay no decoder code or
-initialization cost. The legacy bare <code>string_decoder</code> specifier is deliberately
-not intercepted.</p>
+initialization cost. The bare <code>string_decoder</code> name follows normal package
+resolution before falling back to this builtin.</p>
 
                     </main>
 
