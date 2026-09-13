@@ -142,6 +142,8 @@ export function createRealFSProvider(
 
     #coreValue: FsCore | undefined;
 
+    #canonicalRootValue: string | undefined;
+
     constructor(rootPath: string) {
       super();
       if (typeof rootPath !== "string" || !rootPath.startsWith("/")) {
@@ -162,9 +164,15 @@ export function createRealFSProvider(
       return (this.#coreValue ??= createCore(this.#rootPath));
     }
 
-    #inside(candidate: string): boolean {
-      const prefix = this.#rootPath.endsWith("/") ? this.#rootPath : this.#rootPath + "/";
-      return candidate === this.#rootPath || candidate.startsWith(prefix);
+    get #canonicalRoot(): string {
+      // Resolve lazily so construction does not require a filesystem capability.
+      // Host aliases such as macOS /var must be compared in the same form as realpath results.
+      return (this.#canonicalRootValue ??= String(this.#core.realpathSync(this.#rootPath)));
+    }
+
+    #inside(candidate: string, root = this.#rootPath): boolean {
+      const prefix = root.endsWith("/") ? root : root + "/";
+      return candidate === root || candidate.startsWith(prefix);
     }
 
     #resolve(vfsPath: string, followFinal = true): string {
@@ -193,7 +201,7 @@ export function createRealFSProvider(
           current = parent;
           continue;
         }
-        if (!this.#inside(resolved)) {
+        if (!this.#inside(resolved, this.#canonicalRoot)) {
           throw createENOENT("open", vfsPath);
         }
         return candidate;
@@ -202,10 +210,12 @@ export function createRealFSProvider(
     }
 
     #virtual(realPath: string): string {
-      if (!this.#inside(realPath)) {
+      // readlink may retain the supplied root spelling; realpath returns its canonical spelling.
+      const root = this.#inside(realPath) ? this.#rootPath : this.#canonicalRoot;
+      if (!this.#inside(realPath, root)) {
         throw createENOENT("realpath", realPath);
       }
-      return "/" + path.relative(this.#rootPath, realPath);
+      return "/" + path.relative(root, realPath);
     }
 
     openSync(vfsPath: string, flags: string | number = "r", mode?: number): VirtualFileHandle {

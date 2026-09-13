@@ -23,3 +23,31 @@ test("Node passthrough reads, writes and rejects escaping symbolic links", async
     expect(() => fs.readFileSync("/link")).toThrow(expect.objectContaining({ code: "ENOENT" }));
   });
 });
+
+for (const suffix of ["", "nested"]) {
+  test(`Node passthrough accepts a symlink in the root ${suffix ? "ancestor" : "directory"}`, async () => {
+    await withDirectory(async (root) => {
+      await mkdir(join(root, "storage", "nested"), { recursive: true });
+      await symlink("storage", join(root, "alias"), "dir");
+      await writeFile(join(root, "outside"), "secret");
+
+      const provider = new realVfs.RealFSProvider(join(root, "alias", suffix));
+      const fs = realVfs.create(provider);
+      expect(provider.rootPath).toBe(join(root, "alias", suffix));
+
+      fs.mkdirSync("/dir/sub", { recursive: true });
+      await fs.promises.writeFile("/dir/sub/file", "stored");
+      expect(await readFile(join(root, "storage", suffix, "dir/sub/file"), "utf8")).toBe("stored");
+      expect(fs.realpathSync("/dir/sub/file")).toBe("/dir/sub/file");
+
+      fs.symlinkSync("/dir/sub/file", "/link");
+      expect(fs.readlinkSync("/link")).toBe("/dir/sub/file");
+      expect(fs.readFileSync("/link", "utf8")).toBe("stored");
+
+      await symlink(join(root, "outside"), join(root, "storage", suffix, "escape"));
+      expect(() => fs.readFileSync("/escape")).toThrow(expect.objectContaining({ code: "ENOENT" }));
+      await fs.promises.rm("/dir", { recursive: true });
+      expect(fs.existsSync("/dir")).toBe(false);
+    });
+  });
+}
