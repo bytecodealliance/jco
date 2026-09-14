@@ -11,7 +11,8 @@ import { path as pathPosix } from "./path.js";
 import { Dirent } from "../../24.x.x/fs/classes.js";
 import { O_APPEND, O_CREAT, O_EXCL, O_RDWR, O_TRUNC, O_WRONLY } from "../../24.x.x/fs/constants.js";
 import { VirtualProvider } from "./provider.js";
-import { VirtualFileHandle, MemoryFileHandle } from "./file-handle.js";
+import type { VirtualFileHandle } from "./file-handle.js";
+import { MemoryFileHandle } from "./memory-file-handle.js";
 import { createFileStats, createDirectoryStats, createSymlinkStats } from "./stats.js";
 import {
   createENOENT,
@@ -922,8 +923,6 @@ export class MemoryProvider extends VirtualProvider {
     return this.realpathSync(path, options);
   }
 
-  // === METADATA OPERATIONS ===
-
   chmodSync(path: string, mode: number): void {
     const entry = this.#getEntry(path, "chmod", true);
     // Preserve file type bits, update permission bits
@@ -973,8 +972,6 @@ export class MemoryProvider extends VirtualProvider {
     entry.mtime = toMs(mtime);
     entry.ctime = DateNow();
   }
-
-  // === WATCH OPERATIONS ===
 
   watch(..._args: unknown[]): never {
     return unsupported("MemoryProvider.watch");

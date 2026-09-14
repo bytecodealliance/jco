@@ -27,8 +27,6 @@ import type {
 } from "./types.js";
 
 export class VirtualProvider {
-  // === CAPABILITY FLAGS ===
-
   get readonly(): boolean {
     return false;
   }
@@ -40,8 +38,6 @@ export class VirtualProvider {
   get supportsWatch(): boolean {
     return false;
   }
-
-  // === ESSENTIAL PRIMITIVES (must be implemented by subclasses) ===
 
   async open(
     _path: string,
@@ -140,8 +136,6 @@ export class VirtualProvider {
   lchownSync(path: string, uid: number, gid: number): void {
     return this.chownSync(path, uid, gid);
   }
-
-  // === DEFAULT IMPLEMENTATIONS (built on primitives) ===
 
   async readFile(path: string, options?: ReadFileOptions): Promise<Buffer | string> {
     const flag = typeof options === "object" && options !== null ? (options.flag ?? "r") : "r";
@@ -307,8 +301,6 @@ export class VirtualProvider {
     }
   }
 
-  // === HARD LINK OPERATIONS (optional) ===
-
   async link(existingPath: string, newPath: string): Promise<void> {
     if (this.readonly) {
       throw createEROFS("link", newPath);
@@ -322,8 +314,6 @@ export class VirtualProvider {
     }
     throw new ERR_METHOD_NOT_IMPLEMENTED("linkSync");
   }
-
-  // === SYMLINK OPERATIONS (optional, throw ENOENT by default) ===
 
   async readlink(_path: string, _options?: DirectoryOptions): Promise<string | Buffer> {
     throw new ERR_METHOD_NOT_IMPLEMENTED("readlink");
@@ -346,8 +336,6 @@ export class VirtualProvider {
     }
     throw new ERR_METHOD_NOT_IMPLEMENTED("symlinkSync");
   }
-
-  // === WATCH OPERATIONS (optional, polling-based) ===
 
   watch(..._args: unknown[]): never {
     return unsupported("VirtualProvider.watch");
