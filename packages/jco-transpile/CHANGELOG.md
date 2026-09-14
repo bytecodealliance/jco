@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.14.0] - 2026-09-14
+
+### 🧪 Testing
+
+- _(transpile)_ print deadlock detail from the p3 CLI runner's catch path by @vados-cosmonic
+
+- _(transpile)_ cover resource destructor context isolation by @vados-cosmonic
+
+- _(transpile)_ remove Web IDL fixture filename suffixes by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ preview2-shim -> v0.25.0, preview3-shim -> v0.6.1 by @vados-cosmonic
+
 ## [0.13.0] - 2026-09-08
 
 ### 🐛 Bug Fixes
