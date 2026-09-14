@@ -5,6 +5,13 @@ ordinary `node:vfs` imports. `create()` uses an isolated `MemoryProvider` by
 default; `RealFSProvider` accesses an explicitly supplied filesystem capability.
 Only the `node:` specifier is intercepted.
 
+This provider selection mirrors [Node.js's `node:vfs` API](https://nodejs.org/api/vfs.html#vfscreateprovider-options).
+`MemoryProvider` and `RealFSProvider` are upstream Node.js classes: application
+code calls `create()` for memory storage, or explicitly passes
+`new RealFSProvider(root)` for filesystem storage. Jco's `--with-nodejs-vfs-via`
+option selects the backend used by `RealFSProvider`; it does not change the
+in-memory default of `create()`.
+
 ```js
 import { create, RealFSProvider } from 'node:vfs';
 
@@ -139,12 +146,6 @@ interface use zero for device, inode, ownership and birth time, and conventional
 file/directory mode bits. Actual size, link count and available timestamps come
 from WASI. Directory listing order is host-dependent. Resource operations use
 WASI's synchronous descriptor methods and preserve 64-bit offsets.
-
-StarlingMonkey component tests cover memory, default denial, Node passthrough,
-WASI default placement, and custom placement, including callbacks and promises.
-QuickJS runs the synchronous memory suite and default-denial check. Its current
-Promise-job and BigInt-to-WIT-`u64` limitations block asynchronous and full
-host-backed component tests; those tests have `TODO(unskip)` markers.
 
 ## Provenance
 
