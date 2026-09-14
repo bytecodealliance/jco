@@ -91,8 +91,6 @@ export class VirtualFileSystem {
     return this.#providerValue.readonly;
   }
 
-  // ==================== Mount ====================
-
   mount(..._args: unknown[]): never {
     return unsupported("VirtualFileSystem.mount");
   }
@@ -115,8 +113,6 @@ export class VirtualFileSystem {
     return isUnderMountPoint(normalized, this.#mountPointValue);
   }
 
-  // ==================== Path Resolution ====================
-
   #toProviderPath(inputPath: string): string {
     if (this.#mountedValue && this.#mountPointValue) {
       const resolved = isAbsolute(inputPath) ? inputPath : resolvePath(inputPath);
@@ -134,8 +130,6 @@ export class VirtualFileSystem {
     }
     return providerPath;
   }
-
-  // ==================== FS Operations (Sync) ====================
 
   existsSync(filePath: string): boolean {
     try {
@@ -298,8 +292,6 @@ export class VirtualFileSystem {
     }
   }
 
-  // ==================== Additional Sync Operations ====================
-
   truncateSync(filePath: string, len: number = 0): void {
     if (len < 0) {
       len = 0;
@@ -385,8 +377,6 @@ export class VirtualFileSystem {
     return new Blob([typeof content === "string" ? content : new Uint8Array(content)], { type });
   }
 
-  // ==================== File Descriptor Operations ====================
-
   openSync(filePath: string, flags: string | number = "r", mode?: number): number {
     const providerPath = this.#toProviderPath(filePath);
 
@@ -438,8 +428,6 @@ export class VirtualFileSystem {
     }
     return vfd.entry.statSync(options);
   }
-
-  // ==================== FS Operations (Async with Callbacks) ====================
 
   readFile(
     filePath: string,
@@ -751,8 +739,6 @@ export class VirtualFileSystem {
     }
   }
 
-  // ==================== Stream Operations ====================
-
   createReadStream(..._args: unknown[]): never {
     return unsupported("VirtualFileSystem.createReadStream");
   }
@@ -760,8 +746,6 @@ export class VirtualFileSystem {
   createWriteStream(..._args: unknown[]): never {
     return unsupported("VirtualFileSystem.createWriteStream");
   }
-
-  // ==================== Watch Operations ====================
 
   watch(..._args: unknown[]): never {
     return unsupported("VirtualFileSystem.watch");
@@ -774,8 +758,6 @@ export class VirtualFileSystem {
   unwatchFile(..._args: unknown[]): never {
     return unsupported("VirtualFileSystem.unwatchFile");
   }
-
-  // ==================== Promise API ====================
 
   get promises(): VfsPromises {
     if (this.#promisesValue === null) {
