@@ -2,9 +2,12 @@ import { expect, test } from "vitest";
 import native from "node:v8";
 import { v8 } from "../helpers/v8.js";
 
-test("matches Node 24.20.0 exports and class inheritance", () => {
-  expect(process.version).toBe("v24.20.0");
+// Exact export comparisons require the pinned oracle; other hosts still run behavioral tests.
+test.runIf(process.version === "v24.20.0")("matches the pinned Node 24.20.0 exports", () => {
   expect(Object.keys(v8).sort()).toEqual(Object.keys(native).sort());
+});
+
+test("matches native namespaces and class inheritance", () => {
   expect(Object.keys(v8.promiseHooks)).toEqual(Object.keys(native.promiseHooks));
   expect(Object.keys(v8.startupSnapshot)).toEqual(Object.keys(native.startupSnapshot));
   expect(Object.getPrototypeOf(v8.DefaultSerializer)).toBe(v8.Serializer);
