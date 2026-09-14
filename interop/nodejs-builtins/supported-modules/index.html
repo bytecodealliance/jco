@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-63fe091b.js";
+            window.path_to_searchindex_js = "../../../searchindex-901e1de1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-9011f031.js"></script>
+        <script src="../../../toc-6d739654.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -252,6 +252,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="./tty.html"><code>node:tty</code></a></td><td>Node 24.20 <code>isatty</code>, <code>ReadStream</code> and <code>WriteStream</code> over the host process’s descriptors through an explicit host capability; denied by default.</td></tr>
 <tr><td><a href="./url.html"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="./util.html"><code>node:util</code></a>, <a href="./util.html"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
+<tr><td><a href="./v8.html"><code>node:v8</code></a></td><td>Native V8 serialization, host heap diagnostics and profiling through an explicit provider; guest engine hooks are unsupported.</td></tr>
 <tr><td><a href="./vfs.html"><code>node:vfs</code></a></td><td>Node 26 memory VFS, default-denied Node passthrough, and WASI filesystem storage with configurable preopen placement.</td></tr>
 <tr><td><a href="./vm.html"><code>node:vm</code></a></td><td>Same-context script evaluation and function compilation in the guest. No WIT capability; separate realms, native caches and VM modules are unsupported.</td></tr>
 <tr><td><a href="./wasi.html"><code>node:wasi</code></a></td><td>Node 24.19 <code>WASI</code> construction over an explicit host capability, denied by default; <code>start()</code> and <code>initialize()</code> refuse because a component cannot instantiate a nested module.</td></tr>
