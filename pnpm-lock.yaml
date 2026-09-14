@@ -396,8 +396,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: workspace:^
-        version: link:../jco-std
+        specifier: ^0.4.0
+        version: 0.4.0(@bytecodealliance/preview2-shim@0.25.0)
       '@bytecodealliance/jco-transpile':
         specifier: ^0.13.0
         version: 0.13.0
@@ -923,6 +923,14 @@ packages:
 
   '@bytecodealliance/jco-std@0.2.0':
     resolution: {integrity: sha512-/GJoiSS6jVerxqAZOlm0CqbU64tokRLVdLtJeF9gnC9YVlYZA8PC/RUIW6pEtx9Np2hwHzPUTwb4RSzobaRIBw==}
+
+  '@bytecodealliance/jco-std@0.4.0':
+    resolution: {integrity: sha512-Pn4g5cpJ4fjsvpEXdCMhtNOMPMlI8Om7UklulO0lJymJZGLQecsqS2Ahwpr5ZbNl/6qBOZ5CrvtKHLQ7dLtU3g==}
+    peerDependencies:
+      '@bytecodealliance/preview2-shim': ^0.25.0
+    peerDependenciesMeta:
+      '@bytecodealliance/preview2-shim':
+        optional: true
 
   '@bytecodealliance/jco-transpile@0.11.0':
     resolution: {integrity: sha512-0mTr0qGd3Y55BczPO127NTgfY/lSpRgDMElifTnSzbidsyAo4wa4zrSoqwQpBrSiJvXqTLGm1sRT2zkwGaGelw==}
@@ -5388,6 +5396,18 @@ snapshots:
       '@bytecodealliance/jco-node-fs-win32-x64-msvc': 0.3.2
 
   '@bytecodealliance/jco-std@0.2.0': {}
+
+  '@bytecodealliance/jco-std@0.4.0(@bytecodealliance/preview2-shim@0.25.0)':
+    dependencies:
+      acorn: 8.17.0
+      acorn-walk: 8.3.5
+      minimatch: 10.2.6
+      punycode: 2.3.1
+      readable-stream: 4.7.0
+      urlpattern-polyfill: 10.1.0
+      whatwg-url: 14.2.0
+    optionalDependencies:
+      '@bytecodealliance/preview2-shim': 0.25.0
 
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
