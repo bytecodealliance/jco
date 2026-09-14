@@ -402,8 +402,8 @@ importers:
         specifier: ^0.13.0
         version: 0.13.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.24.1
-        version: 0.24.1
+        specifier: ^0.25.0
+        version: 0.25.0
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
