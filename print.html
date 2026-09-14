@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a0862cd1.js";
+            window.path_to_searchindex_js = "searchindex-a1c2568a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d322ca69.js"></script>
+        <script src="toc-8c817b9d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2130,7 +2130,7 @@ set of coordinated shims:</p>
 <p><code>node:crypto</code>, <code>node:http2</code>,
 <code>node:perf_hooks</code>, <code>node:repl</code>, <code>node:stream</code>,
 <code>node:stream/promises</code>, <code>node:stream/web</code>,
-<code>node:v8</code>, <code>node:vm</code>, <code>node:wasi</code>, and <code>node:zlib</code>.</p>
+<code>node:v8</code>, <code>node:vm</code>, and <code>node:zlib</code>.</p>
 <h4 id="future-composition"><a class="header" href="#future-composition">Future composition</a></h4>
 <p>This group is not all-or-nothing. A future implementation can combine portable
 upstream algorithms with explicit host capabilities, just as Jco’s path
@@ -2227,6 +2227,7 @@ compatibility limits. Related submodules share their parent API page. See the
 <tr><td><a href="#nodeurl"><code>node:url</code></a></td><td>Node 24 URL, URLSearchParams, URLPattern, domain and file conversions; relative file paths use optional WASI environment imports.</td></tr>
 <tr><td><a href="#nodeutil"><code>node:util</code></a>, <a href="#nodeutil"><code>node:util/types</code></a></td><td>Portable Node 24 utilities, sharing assertion equality and console formatting. No WIT capability; see the API page for engine and process restrictions.</td></tr>
 <tr><td><a href="#nodevm"><code>node:vm</code></a></td><td>Same-context script evaluation and function compilation in the guest. No WIT capability; separate realms, native caches and VM modules are unsupported.</td></tr>
+<tr><td><a href="#nodewasi"><code>node:wasi</code></a></td><td>Node 24.19 <code>WASI</code> construction over an explicit host capability, denied by default; <code>start()</code> and <code>initialize()</code> refuse because a component cannot instantiate a nested module.</td></tr>
 <tr><td><a href="#worker-threads"><code>node:worker_threads</code></a></td><td>Real Node host workers over an explicit capability, with guest-local environment data. Native ports, shared memory and profiling are unsupported.</td></tr>
 <tr><td><a href="#nodezlib"><code>node:zlib</code></a></td><td>Native zlib, Brotli and Zstandard through an explicit compression capability; denied by default.</td></tr>
 </tbody>
@@ -4485,6 +4486,73 @@ are removed from that label.</p>
 engine-specific syntax extensions are unsupported. <code>displayErrors</code> is validated
 but does not control V8-style source excerpts. Function stringification may also
 differ from Node’s output.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="nodewasi"><a class="header" href="#nodewasi"><code>node:wasi</code></a></h1>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Imports</th><th>Implementation</th></tr>
+</thead>
+<tbody>
+<tr><td><code>node:wasi</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>node:wasi</code> runs a WASI preview1 module: the caller compiles it with the
+<code>WebAssembly</code> API, instantiates it against <code>wasi.getImportObject()</code>, and hands
+the instance to <code>wasi.start()</code> or <code>wasi.initialize()</code>, whose syscalls then read
+and write the instance’s linear memory. None of that is possible from inside a
+Jco component. Neither guest engine exposes a <code>WebAssembly</code> global, so a
+component cannot instantiate a nested module, and a linear memory cannot cross
+the component boundary, so no host adapter can run the module either. This is
+a property of the component model, not a missing shim, and it is why a Node
+passthrough for <code>node:wasi</code> does not exist.</p>
+<p><code>node:wasi</code> therefore resolves so that such source bundles and fails clearly
+rather than leaving an unresolved import. The module ports
+<a href="https://github.com/nodejs/node/blob/v24.19.0/lib/wasi.js">Node v24.19.0’s <code>lib/wasi.js</code></a>:
+the <code>WASI</code> class, its exact option validation, the 46-entry <code>wasiImport</code> table
+with Node’s names and arities, <code>getImportObject()</code>, and the instance checks of
+<code>start()</code>, <code>initialize()</code> and <code>finalizeBindings()</code>. When bundled source imports
+<code>node:wasi</code>, Jco adds <code>jco:node/wasi@0.1.0</code> to the selected world and installs
+<code>wasi.wit</code> and the shared <code>types.wit</code> under <code>deps/jco-node-0.1.0</code>.</p>
+<p>That capability carries the one part of the API a host can honour: the
+constructor’s <code>uvwasi_init</code> step, which opens every preopen and checks the
+standard descriptors. It is <strong>denied by default</strong>, so <code>new WASI()</code> throws
+<code>ERR_JCO_WASI_ADAPTER_REQUIRED</code> after validating its options; the message also
+explains that running a module is unsupported, so the limitation is visible from
+the first call. jco-std ships a provider for Node that runs the real <code>node:wasi</code>
+constructor and discards the result:</p>
+<pre><code class="language-console">jco transpile component.wasm \
+  --map 'jco:node/wasi@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host/node'
+</code></pre>
+<p>With it, a missing preopen fails with Node’s own <code>UVWASI_ENOENT</code> (<code>errno</code>,
+<code>code</code> and <code>syscall: 'uvwasi_init'</code>), a preopen that is a file with
+<code>UVWASI_ENOTDIR</code>, and a closed descriptor with <code>UVWASI_EBADF</code>, in Node’s order
+relative to the JavaScript validation (<code>returnOnExit</code> is checked after
+initialisation, as in Node). Importing the provider emits Node’s
+<code>ExperimentalWarning</code> once in the host process.</p>
+<pre><code class="language-js">import { WASI } from "node:wasi";
+
+export function prepare(sandbox) {
+  const wasi = new WASI({ version: "preview1", args: ["app"], preopens: { "/sandbox": sandbox } });
+  return Object.keys(wasi.getImportObject()); // ["wasi_snapshot_preview1"]
+}
+</code></pre>
+<h2 id="boundaries-2"><a class="header" href="#boundaries-2">Boundaries</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td><code>start()</code>, <code>initialize()</code>, <code>finalizeBindings()</code></td><td>Validate <code>instance</code> and <code>instance.exports</code> as Node does, then throw <code>ERR_JCO_UNSUPPORTED_NODE_API</code> explaining that a component cannot instantiate a nested module and pointing at composition (<code>wac</code>, <code>wasm-tools compose</code>) or the host.</td></tr>
+<tr><td><code>instance.exports.memory</code></td><td>Where a <code>WebAssembly</code> global exists, a value that is not a <code>WebAssembly.Memory</code> still gets Node’s <code>ERR_INVALID_ARG_TYPE</code>; in a guest there is no such global, so every value is refused with the explanation above.</td></tr>
+<tr><td><code>wasiImport</code></td><td>Node’s 46 syscalls with Node’s bound names and arities. Before <code>start()</code>, which never completes, each answers <code>UVWASI_EINVAL</code> to a call with the wrong argument count or types and throws <code>ERR_WASI_NOT_STARTED</code> otherwise.</td></tr>
+<tr><td><code>proc_exit</code></td><td>With <code>returnOnExit</code> (the default) records the exit code and throws Node’s <code>kExitCode</code> symbol, as in Node; otherwise behaves like the other syscalls.</td></tr>
+<tr><td>Experimental warning</td><td>Node warns once on <code>require('node:wasi')</code>; the guest module does not, since a component has no warning channel to promise.</td></tr>
+</tbody>
+</table>
+</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="worker-threads"><a class="header" href="#worker-threads">Worker threads</a></h1>
 <p><code>node:worker_threads</code> targets Node 24.20.0. Jco provides a guest adapter and an
