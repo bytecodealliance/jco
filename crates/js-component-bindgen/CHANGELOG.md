@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.10.1] - 2026-09-14
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ stop false deadlock traps around cancelled host stream reads by @vados-cosmonic in #2109
+
+
+
+
 ## [2.10.0] - 2026-09-11
 
 ### 🚀 Features
