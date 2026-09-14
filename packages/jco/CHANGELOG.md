@@ -1,5 +1,215 @@
 # Changelog
 
+## [1.34.0] - 2026-09-14
+
+### 🚀 Features
+
+- _(jco)_ support node:v8 component imports by @vados-cosmonic
+
+- _(jco)_ componentize node:vfs with selectable filesystem storage by @vados-cosmonic
+
+- _(jco)_ resolve node:wasi through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ rewrite regex syntax the component engines reject by @vados-cosmonic
+
+- _(jco)_ supply the Node built-ins an unmodified app reaches by @vados-cosmonic
+
+- _(jco)_ support node:vm in guest components by @vados-cosmonic
+
+- _(jco)_ wire the zlib compression capability by @vados-cosmonic
+
+- _(jco)_ wire worker_threads capability and callbacks by @vados-cosmonic
+
+- _(jco)_ support node:trace_events in components by @vados-cosmonic
+
+- _(jco)_ resolve node util and util types imports by @vados-cosmonic
+
+- _(jco)_ wire node:dgram imports and UDP capabilities by @vados-cosmonic
+
+- _(jco)_ carry server trailers through HTTP/2 components by @vados-cosmonic
+
+- _(jco)_ route Node TLS and HTTP through shared capability by @vados-cosmonic
+
+- _(jco)_ add the Node TLS capability WIT by @vados-cosmonic
+
+- _(jco)_ bundle node:url with portable runtime adapters by @vados-cosmonic
+
+- _(jco)_ wire node:test and reporter imports by @vados-cosmonic
+
+- _(jco)_ implement Node timer APIs by @vados-cosmonic in #2098
+
+- _(jco)_ resolve node:tty through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ resolve node:repl through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ resolve readline through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ wire node:sqlite imports and explicit host providers by @vados-cosmonic
+
+- _(jco)_ resolve node:process through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ resolve node:perf_hooks during bundling by @vados-cosmonic
+
+- _(jco)_ resolve classic Node stream builtins by @vados-cosmonic
+
+- _(jco)_ resolve node:net through the builtin plugin by @vados-cosmonic
+
+- _(jco)_ wire wasi:tls into HTTPS componentization by @vados-cosmonic
+
+- _(jco)_ resolve node:https through the builtin plugin by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ reconcile Express support with current builtin adapters by @vados-cosmonic
+
+- _(jco)_ lower parsed Unicode regex literals with regexpu by @vados-cosmonic
+
+- _(jco)_ let a component reach wasi:sockets at all by @vados-cosmonic
+
+- _(jco)_ correct Node WIT injection and the HTTP transport flag by @vados-cosmonic
+
+- _(jco)_ keep instantiation imports WIT-spelled instead of remapping them by @vados-cosmonic
+
+- _(jco)_ identify TLS failures in the QuickJS snapshot linker by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(jco)_ port Express support to modular builtin adapters by @vados-cosmonic
+
+- _(jco)_ reuse current std adapters for Express dependencies by @vados-cosmonic
+
+- _(jco)_ defer to jco-std's node:string_decoder and node:os by @vados-cosmonic
+
+- _(jco)_ compose Node builtin adapters by API by @vados-cosmonic
+
+- _(jco)_ remove TLS-specific componentization handling by @vados-cosmonic
+
+- _(jco)_ vendor the local TLS contract without IO bridges by @vados-cosmonic
+
+- _(jco)_ generate tests without filename suffixes by @vados-cosmonic
+
+### 🎨 Styling
+
+- _(jco)_ separate zlib component test sections by @vados-cosmonic in #2110
+
+- _(jco)_ expand the bundled zlib WIT contract by @vados-cosmonic
+
+- _(jco)_ space UDP interfaces and fixture declarations by @vados-cosmonic in #2102
+
+- _(jco)_ space readline fixture declarations by @vados-cosmonic
+
+- _(jco)_ separate builtin callback declaration by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ handle unavailable V8 profiling in Node 22 by @vados-cosmonic
+
+- _(jco)_ exercise V8 components with native and denied hosts by @vados-cosmonic
+
+- _(jco)_ supply denied TTY imports to VFS components by @vados-cosmonic
+
+- _(jco)_ exercise VFS components through aliased host roots by @vados-cosmonic
+
+- _(jco)_ exercise VFS storage and async APIs in components by @vados-cosmonic
+
+- _(jco)_ add node:wasi plugin and guest tests by @vados-cosmonic
+
+- _(jco)_ align zlib checks with bare builtin resolution by @vados-cosmonic in #2036
+
+- _(jco)_ defer blocked component cases until the next std release by @vados-cosmonic
+
+- _(jco)_ compare unmodified Express with native Node by @vados-cosmonic
+
+- _(jco)_ skip the two tests a trapping node:path blocks by @vados-cosmonic
+
+- _(jco)_ keep the wasi:sockets guest alive explicitly by @vados-cosmonic
+
+- _(jco)_ serve over wasi:sockets from a component by @vados-cosmonic
+
+- _(jco)_ serve real HTTP from an Express component by @vados-cosmonic
+
+- _(jco)_ run an Express application in a component by @vados-cosmonic
+
+- _(jco)_ cover the widened Node builtin resolution by @vados-cosmonic
+
+- _(jco)_ exercise zlib in both component backends by @vados-cosmonic
+
+- _(jco)_ exercise worker_threads in components by @vados-cosmonic
+
+- _(jco)_ exercise util in both component engines by @vados-cosmonic
+
+- _(jco)_ instantiate UDP under its WIT interface name by @vados-cosmonic
+
+- _(jco)_ exercise UDP components with Node passthrough by @vados-cosmonic
+
+- _(jco)_ guard URL E2E prerequisites in CI by @vados-cosmonic
+
+- _(jco)_ exercise node:url in both component backends by @vados-cosmonic
+
+- _(jco)_ exercise Node test APIs in components by @vados-cosmonic
+
+- _(jco)_ add node:tty plugin and guest tests by @vados-cosmonic
+
+- _(jco)_ clarify readline and repl release blockers by @vados-cosmonic in #2096
+
+- _(jco)_ add node:repl plugin and guest tests by @vados-cosmonic
+
+- _(jco)_ skip readline component tests until jco-std exports are published by @vados-cosmonic
+
+- _(jco)_ exercise readline examples in Node and components by @vados-cosmonic
+
+- _(jco)_ guard SQLite component tests on JSPI support by @vados-cosmonic in #2092
+
+- _(jco)_ follow reorganized builtin adapter entry point by @vados-cosmonic
+
+- _(jco)_ exercise SQLite passthrough on both component backends by @vados-cosmonic
+
+- _(jco)_ skip process integration until exports are published by @vados-cosmonic in #2091
+
+- _(jco)_ bind custom process provider objects in components by @vados-cosmonic
+
+- _(jco)_ exercise process passthrough in both component backends by @vados-cosmonic
+
+- _(jco)_ exercise perf_hooks in component backends by @vados-cosmonic
+
+- _(jco)_ exercise classic streams on both component backends by @vados-cosmonic
+
+- _(jco)_ cover classic stream builtin adapters by @vados-cosmonic
+
+- _(jco)_ guard net component tests on JSPI support by @vados-cosmonic in #2046
+
+- _(jco)_ exercise node:net in QuickJS and StarlingMonkey by @vados-cosmonic
+
+- _(jco)_ cover node:net adapters and WIT imports by @vados-cosmonic
+
+- _(jco)_ use installed transpiler in HTTPS TLS fixture by @vados-cosmonic in #2040
+
+- _(jco)_ reconcile HTTP fixtures after HTTPS rebase by @vados-cosmonic
+
+- _(jco)_ run HTTPS components with the jco-std TLS host by @vados-cosmonic
+
+- _(jco)_ verify TLS WIT without feature preprocessing by @vados-cosmonic
+
+- _(jco)_ remove redundant test filename suffixes by @vados-cosmonic
+
+- _(jco)_ update HTTPS fixture imports and linker diagnostic by @vados-cosmonic
+
+- _(jco)_ execute HTTPS components over WASI TLS by @vados-cosmonic
+
+- _(jco)_ cover TLS mappings and WIT feature resolution by @vados-cosmonic
+
+- _(jco)_ add node:https plugin and guest tests by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.14.0 by @vados-cosmonic in #2127
+
+- _(jco)_ update jco-std to 0.4.0 by @vados-cosmonic
+
+- _(jco)_ update preview2-shim to 0.25.0 by @vados-cosmonic
+
+- _(jco)_ omit unused wit-deps metadata from TLS WIT by @vados-cosmonic
+
 ## [1.33.0] - 2026-09-09
 
 ### 🚀 Features
