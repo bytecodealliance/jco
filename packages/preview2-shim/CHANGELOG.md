@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.25.0] - 2026-09-14
+
+### 🚀 Features
+
+- _(p2-shim)_ add preopen with adapter for filesystem by @eduardomourar
+
+- _(p2-shim)_ allow opt-in cross-tab locking by @eduardomourar
+
+- _(p2-shim)_ support symlink in opfs filesystem by @eduardomourar
+
+- _(p2-shim)_ add browser advisory file-locking by @eduardomourar
+
+- _(p2-shim)_ add core opfs filesystem adapter by @eduardomourar
+
+- _(p2-shim)_ add opt-in TLS over owned IO streams by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ error thrown in lock-wrapped descriptor by @eduardomourar in #2095
+
+- _(p2-shim)_ correct DNS records and network exports by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(p2-shim)_ expose generic IO integration for host providers by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ include e2e for opfs filesystem by @eduardomourar
+
+- _(p2-shim)_ cover host IO extension failure and ownership by @vados-cosmonic
+
+- _(p2-shim)_ remove the filesystem test filename suffix by @vados-cosmonic
+
+- _(p2-shim)_ cover TLS ownership and DNS address records by @vados-cosmonic
+
 ## [0.24.1] - 2026-09-07
 
 ### ⚙️ Miscellaneous Tasks
