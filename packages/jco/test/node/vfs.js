@@ -10,6 +10,7 @@ import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
 import { exec, getTmpDir, jcoPath, setupAsyncTest } from "../helpers.js";
 import { hasJspi } from "../common.js";
 import * as denied from "../../../jco-std/src/wasi/0.2.x/node/24.x.x/fs-host.js";
+import * as deniedTty from "../../../jco-std/src/wasi/0.2.x/node/24.x.x/tty-host.js";
 import * as nodeHost from "../../../jco-std/src/wasi/0.2.x/node/24.x.x/fs-host-node.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/componentize/node-vfs/", import.meta.url));
@@ -126,6 +127,8 @@ describe.skipIf(!hasJspi)("node:vfs components", () => {
                             path: componentPath,
                             imports: {
                                 ...wasi.getImportObject(),
+                                // The injected process global may import TTY without using a terminal.
+                                "jco:node/tty@0.1.0": deniedTty,
                                 ...(via === "direct" ? { "jco:node/fs@0.1.0": host } : {}),
                             },
                         },
@@ -134,7 +137,10 @@ describe.skipIf(!hasJspi)("node:vfs components", () => {
                                 extraArgs: {
                                     asyncMode: "jspi",
                                     asyncExports: ["*"],
-                                    map: via === "direct" ? { "jco:node/fs@0.1.0": "jco:node/fs@0.1.0" } : {},
+                                    map: {
+                                        "jco:node/tty@0.1.0": "jco:node/tty@0.1.0",
+                                        ...(via === "direct" ? { "jco:node/fs@0.1.0": "jco:node/fs@0.1.0" } : {}),
+                                    },
                                 },
                             },
                         },
