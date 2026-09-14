@@ -17,7 +17,7 @@
     },
     "dependencies": {
         "@bufbuild/protobuf": "2.14.1",
-        "@bytecodealliance/jco-std": "workspace:*",
+        "@bytecodealliance/jco-std": "^0.4.0",
         "@bytecodealliance/preview2-shim": "0.25.0",
         "@connectrpc/connect": "2.1.2"
     },

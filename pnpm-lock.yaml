@@ -144,8 +144,8 @@ importers:
   examples/components/http-server-hono:
     dependencies:
       '@bytecodealliance/jco-std':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.4.0
+        version: 0.4.0(@bytecodealliance/preview2-shim@0.25.0)
       hono:
         specifier: ^4.13.5
         version: 4.13.5
@@ -166,8 +166,8 @@ importers:
   examples/components/http-server-hono-with-bindings:
     dependencies:
       '@bytecodealliance/jco-std':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.4.0
+        version: 0.4.0(@bytecodealliance/preview2-shim@0.25.0)
       hono:
         specifier: ^4.13.5
         version: 4.13.5
@@ -222,8 +222,8 @@ importers:
         specifier: 2.14.1
         version: 2.14.1
       '@bytecodealliance/jco-std':
-        specifier: workspace:*
-        version: link:../../../packages/jco-std
+        specifier: ^0.4.0
+        version: 0.4.0(@bytecodealliance/preview2-shim@0.25.0)
       '@bytecodealliance/preview2-shim':
         specifier: 0.25.0
         version: 0.25.0
@@ -244,8 +244,8 @@ importers:
   examples/components/node-mcp-server:
     dependencies:
       '@bytecodealliance/jco-std':
-        specifier: workspace:*
-        version: link:../../../packages/jco-std
+        specifier: ^0.4.0
+        version: 0.4.0(@bytecodealliance/preview2-shim@0.25.0)
       '@bytecodealliance/preview2-shim':
         specifier: 0.25.0
         version: 0.25.0
@@ -531,7 +531,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
       which:
         specifier: ^5.0.0
         version: 5.0.0
@@ -611,7 +611,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
   packages/preview3-shim:
     dependencies:
@@ -664,7 +664,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
 packages:
 
@@ -920,9 +920,6 @@ packages:
   '@bytecodealliance/jco-node-fs@0.3.2':
     resolution: {integrity: sha512-yxvqQreNcOQdMsEKZomkSqThtkxrAz3f1Cmy8BsV0UHi9saa2/D1KDB14IAXPYwDq/maS6lCzS+MuMQx6QkUgA==}
     engines: {node: '>=20'}
-
-  '@bytecodealliance/jco-std@0.2.0':
-    resolution: {integrity: sha512-/GJoiSS6jVerxqAZOlm0CqbU64tokRLVdLtJeF9gnC9YVlYZA8PC/RUIW6pEtx9Np2hwHzPUTwb4RSzobaRIBw==}
 
   '@bytecodealliance/jco-std@0.4.0':
     resolution: {integrity: sha512-Pn4g5cpJ4fjsvpEXdCMhtNOMPMlI8Om7UklulO0lJymJZGLQecsqS2Ahwpr5ZbNl/6qBOZ5CrvtKHLQ7dLtU3g==}
@@ -5395,8 +5392,6 @@ snapshots:
       '@bytecodealliance/jco-node-fs-win32-arm64-msvc': 0.3.2
       '@bytecodealliance/jco-node-fs-win32-x64-msvc': 0.3.2
 
-  '@bytecodealliance/jco-std@0.2.0': {}
-
   '@bytecodealliance/jco-std@0.4.0(@bytecodealliance/preview2-shim@0.25.0)':
     dependencies:
       acorn: 8.17.0
@@ -7138,14 +7133,6 @@ snapshots:
       tinyrainbow: 3.1.1
 
   '@vitest/mocker@4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0))':
-    dependencies:
-      '@vitest/spy': 4.1.11
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
-
-  '@vitest/mocker@4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
@@ -9096,33 +9083,6 @@ snapshots:
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0))
-      '@vitest/pretty-format': 4.1.11
-      '@vitest/runner': 4.1.11
-      '@vitest/snapshot': 4.1.11
-      '@vitest/spy': 4.1.11
-      '@vitest/utils': 4.1.11
-      es-module-lexer: 2.3.1
-      expect-type: 1.4.0
-      magic-string: 0.30.21
-      obug: 2.1.4
-      pathe: 2.0.3
-      picomatch: 4.0.5
-      std-env: 4.2.0
-      tinybench: 2.9.0
-      tinyexec: 1.3.0
-      tinyglobby: 0.2.17
-      tinyrainbow: 3.1.1
-      vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 24.13.3
-    transitivePeerDependencies:
-      - msw
-
-  vitest@4.1.11(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1)):
-    dependencies:
-      '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.6.1))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
