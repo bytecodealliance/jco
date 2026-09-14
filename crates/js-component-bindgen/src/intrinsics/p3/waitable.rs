@@ -423,9 +423,6 @@ impl WaitableIntrinsic {
                                 componentIdx: this.#componentIdx,
                                 waitable: this,
                             }});
-                            if (this.hasPendingEvent()) {{
-                                throw new Error('waitables with pending events cannot be dropped');
-                            }}
                             this.join(null);
                         }}
 
