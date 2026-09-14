@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.1] - 2026-09-14
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ keep bound TCP endpoints held via net.BoundSocket by @vados-cosmonic in #2117
+
+### 🧪 Testing
+
+- _(p3-shim)_ discover tests by folder instead of suffix by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.25.0 by @vados-cosmonic
+
 ## [0.6.0] - 2026-09-08
 
 ### ⚙️ Miscellaneous Tasks
