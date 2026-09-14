@@ -550,6 +550,8 @@ impl AsyncStreamIntrinsic {
             Self::StreamEndClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 output.push_str(&format!(
                     r#"
                     class {stream_end_class} {{
@@ -576,9 +578,9 @@ impl AsyncStreamIntrinsic {
 
                         #copyState = {stream_end_class}.CopyState.IDLE;
 
-                        #dropped;
-                        #setDroppedFn;
-                        #isDroppedFn;
+                        #dropped = false;
+                        #isPeerDroppedFn;
+                        #notifyPeerDroppedFn;
 
                         target;
 
@@ -595,15 +597,14 @@ impl AsyncStreamIntrinsic {
                             this.#tableIdx = args.tableIdx;
                             this.#waitable = args.waitable;
 
-                            if (args.setDroppedFn && args.isDroppedFn) {{
-                                this.#setDroppedFn = args.setDroppedFn;
-                                this.#isDroppedFn = args.isDroppedFn;
-                            }} else if (args.setDroppedFn === undefined && args.isDroppedFn === undefined) {{
-                                this.#setDroppedFn = (v) => {{ this.#dropped = v; }};
-                                this.#isDroppedFn = () => {{ return this.#dropped; }};
-                            }} else {{
-                                throw new TypeError('setDroppedFn and isDroppedFn must both be specified or neither');
+                            if (args.isPeerDroppedFn !== undefined && typeof args.isPeerDroppedFn !== 'function') {{
+                                throw new TypeError('isPeerDroppedFn must be a function');
                             }}
+                            if (args.notifyPeerDroppedFn !== undefined && typeof args.notifyPeerDroppedFn !== 'function') {{
+                                throw new TypeError('notifyPeerDroppedFn must be a function');
+                            }}
+                            this.#isPeerDroppedFn = args.isPeerDroppedFn ?? (() => false);
+                            this.#notifyPeerDroppedFn = args.notifyPeerDroppedFn ?? (() => {{}});
 
                             this.target = args.target;
                         }}
@@ -668,8 +669,23 @@ impl AsyncStreamIntrinsic {
                             return event;
                         }}
 
-                        isDropped() {{ return this.#isDroppedFn(); }}
-                        setDropped() {{ return this.#setDroppedFn(); }}
+                        isDropped() {{ return this.#dropped; }}
+                        isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
+
+                        notifyDropped() {{
+                            if (this.isDropped() || this.isDoneState() || this.hasPendingEvent()) {{ return; }}
+                            const eventCode = this.isReadable()
+                                ? {async_event_code_enum}.STREAM_READ
+                                : {async_event_code_enum}.STREAM_WRITE;
+                            this.setPendingEvent(() => {{
+                                this.setCopyState({stream_end_class}.CopyState.DONE);
+                                return {{
+                                    code: eventCode,
+                                    payload0: this.waitableIdx(),
+                                    payload1: {stream_end_class}.CopyResult.DROPPED,
+                                }};
+                            }});
+                        }}
 
                         drop(opts = {{}}) {{
                             {debug_log_fn}('[{stream_end_class}#drop()]', {{
@@ -687,7 +703,8 @@ impl AsyncStreamIntrinsic {
                                 return;
                             }}
 
-                            this.setDropped();
+                            this.#dropped = true;
+                            this.#notifyPeerDroppedFn();
                             if (this.#waitable) {{
                                 const w = this.#waitable;
                                 if (opts.allowPendingEvent) {{
@@ -1067,6 +1084,7 @@ impl AsyncStreamIntrinsic {
                                  rejectLength,
                                  elemMeta,
                                  dropAfterCopy,
+                                 deferSyncFinish,
                              }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
 
@@ -1087,7 +1105,19 @@ impl AsyncStreamIntrinsic {
                                  copyElemMeta.getReallocFn = args.getReallocFn;
                              }}
 
-                             if (this.isDropped()) {{
+                             if (this.hasPendingEvent()) {{
+                                 const event = this.getPendingEvent();
+                                 if (event.code !== eventCode || event.payload0 !== this.waitableIdx()) {{
+                                     throw new Error("invalid pending event during stream operation");
+                                 }}
+                                 if (this.isWritable() && this.isPeerDropped()) {{
+                                     this.setCopyState({stream_end_class}.CopyState.DONE);
+                                     return (event.payload1 & ~0xf) | {stream_end_class}.CopyResult.DROPPED;
+                                 }}
+                                 return event.payload1;
+                             }}
+
+                             if (this.isDropped() || this.isPeerDropped()) {{
                                  if (this.#pendingBufferMeta?.onCopyDoneFn) {{
                                      const f = this.#pendingBufferMeta.onCopyDoneFn;
                                      this.#pendingBufferMeta.onCopyDoneFn = null;
@@ -1159,6 +1189,10 @@ impl AsyncStreamIntrinsic {
                                  if (event.rejectedLength !== undefined) {{
                                      this.#rejectedLength = event.rejectedLength;
                                  }}
+                                 if (this.isWritable() && this.isPeerDropped()) {{
+                                     this.setCopyState({stream_end_class}.CopyState.DONE);
+                                     return (payload & ~0xf) | {stream_end_class}.CopyResult.DROPPED;
+                                 }}
                                  return payload;
                              }};
 
@@ -1187,7 +1221,8 @@ impl AsyncStreamIntrinsic {
                                      const streamEnd = this;
                                      return task.suspendUntil({{
                                          readyFn: () => streamEnd.hasPendingEvent(),
-                                     }}).then(() => {{
+                                     }}).then(async () => {{
+                                         if (deferSyncFinish) {{ await Promise.resolve(); }}
                                          if (!injectedWritePromise) {{ return finishCopy(); }}
                                          return injectedWritePromise.then(cleanupFn => {{
                                              cleanupFn();
@@ -1657,6 +1692,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         getPendingBufferMeta() {{ return this.#pendingBufferMeta; }}
+                        hasPendingBuffer() {{ return !!this.#pendingBufferMeta?.buffer; }}
 
                         resetAndNotifyPending(result) {{
                             const f = this.#pendingBufferMeta.onCopyDoneFn;
@@ -1738,10 +1774,6 @@ impl AsyncStreamIntrinsic {
 
                             this.#elemMeta = elemMeta;
 
-                            let dropped = false;
-                            const setDroppedFn = () => {{ dropped = true }};
-                            const isDroppedFn = () => dropped;
-
                             this.#readEnd = new {read_end_class}({{
                                 tableIdx,
                                 elemMeta: this.#elemMeta,
@@ -1752,8 +1784,8 @@ impl AsyncStreamIntrinsic {
                                 // as that function will *inject* a write when a read is performed
                                 // from inside the guest.
                                 hostInjectFn: args.hostInjectFn,
-                                setDroppedFn,
-                                isDroppedFn,
+                                isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
+                                notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped(),
                             }});
 
                             this.#writeEnd = new {write_end_class}({{
@@ -1763,8 +1795,8 @@ impl AsyncStreamIntrinsic {
                                 target: "stream write end (@ init)",
                                 waitable: writeWaitable,
                                 hostOwned: true,
-                                setDroppedFn,
-                                isDroppedFn,
+                                isPeerDroppedFn: () => this.#readEnd.isDropped(),
+                                notifyPeerDroppedFn: () => this.#readEnd.notifyDropped(),
                             }});
                         }}
 
@@ -2228,6 +2260,9 @@ impl AsyncStreamIntrinsic {
                 };
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::AsyncBlockedConstant,
+                ));
 
                 output.push_str(&format!(r#"
                     function {stream_op_fn}(
@@ -2247,6 +2282,8 @@ impl AsyncStreamIntrinsic {
                             isAsync,
                             streamTableIdx,
                             elemMeta,
+                            syncFastOnly,
+                            deferSyncFinish,
                         }} = ctx;
 
                         if (componentIdx === undefined) {{ throw new TypeError("missing/invalid component idx"); }}
@@ -2280,6 +2317,18 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
 
+                        // A synchronous canonical operation is exposed through a
+                        // plain Wasm fast path so an already-queued event can be
+                        // consumed without entering JSPI. If it would block, the
+                        // generated conditional trampoline retries on its
+                        // suspending slow path.
+                        if (syncFastOnly
+                            && !streamEnd.hasPendingEvent()
+                            && !streamEnd.isPeerDropped()
+                            && !streamEnd.hasPendingBuffer()) {{
+                            return {async_blocked_const};
+                        }}
+
                         return streamEnd.copy({{
                             isAsync,
                             memory: getMemoryFn?.(),
@@ -2291,6 +2340,7 @@ impl AsyncStreamIntrinsic {
                             realloc: getReallocFn?.(),
                             getReallocFn,
                             elemMeta,
+                            deferSyncFinish,
                         }});
                     }}
                 "#));
@@ -2417,10 +2467,7 @@ impl AsyncStreamIntrinsic {
                           throw new Error('invalid stream end class, expected [{stream_end_class}]');
                         }}
 
-                        // Copy completion is not observable until the guest consumes its
-                        // pending event, so both an active copy and an undelivered event
-                        // keep the table-local stream handle busy.
-                        if (streamEnd.isCopying() || streamEnd.hasPendingEvent()) {{
+                        if (streamEnd.isCopying()) {{
                             throw new {runtime_error_class}('{busy_error}');
                         }}
 
