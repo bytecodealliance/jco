@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import * as nativeV8 from "node:v8";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { expect, test, vi } from "vitest";
 import { V8_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
@@ -86,7 +87,14 @@ test.each(["quickjs", "starlingmonkey"])(
                         code: true,
                         cpp: true,
                         gc: true,
-                        cpu: true,
+                        cpu:
+                            typeof nativeV8.startCpuProfile === "function"
+                                ? true
+                                : {
+                                      name: "Error",
+                                      code: "ERR_JCO_UNSUPPORTED_NODE_API",
+                                      message: expect.stringContaining("v8.startCpuProfile()"),
+                                  },
                         unsupported: Array(3).fill("ERR_JCO_UNSUPPORTED_NODE_API"),
                     });
                 }

@@ -2,6 +2,22 @@ import v8, { serialize, deserialize, Serializer, DefaultSerializer, DefaultDeser
 import * as namespace from "node:v8";
 import { Buffer } from "node:buffer";
 
+function cpuProfileReport() {
+    try {
+        const profile = v8.startCpuProfile();
+
+        try {
+            const data = JSON.parse(profile.stop());
+
+            return data.nodes.length > 0 && profile.stop() === undefined;
+        } finally {
+            profile[Symbol.dispose]();
+        }
+    } catch (error) {
+        return { name: error.name, code: error.code, message: error.message };
+    }
+}
+
 export function run(denied) {
     if (denied) {
         const errors = [];
@@ -59,8 +75,6 @@ export function run(denied) {
     const profiler = new v8.GCProfiler();
     profiler.start();
     const gc = profiler.stop();
-    const cpu = v8.startCpuProfile();
-    const cpuData = JSON.parse(cpu.stop());
     const unsupported = [];
 
     for (const operation of [
@@ -101,7 +115,7 @@ export function run(denied) {
         code: v8.getHeapCodeStatistics().code_and_metadata_size > 0,
         cpp: v8.getCppHeapStatistics("brief").detail_level === "brief",
         gc: gc.version === 1 && Array.isArray(gc.statistics) && profiler.stop() === undefined,
-        cpu: cpuData.nodes.length > 0 && cpu.stop() === undefined,
+        cpu: cpuProfileReport(),
         unsupported,
     });
 }
