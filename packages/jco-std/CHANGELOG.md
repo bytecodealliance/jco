@@ -1,5 +1,253 @@
 # Changelog
 
+## [0.4.0] - 2026-09-14
+
+### 🚀 Features
+
+- _(std)_ add V8 API with explicit Node host capability by @vados-cosmonic
+
+- _(std)_ add configurable VFS storage via WASI filesystem by @vados-cosmonic
+
+- _(std)_ port Node VFS core with memory and injected filesystem providers by @vados-cosmonic
+
+- _(std)_ add the node:wasi shim by @vados-cosmonic
+
+- _(std)_ add the jco:node/http-callbacks host binding by @vados-cosmonic
+
+- _(std)_ honor Error.prepareStackTrace in captureStackTrace by @vados-cosmonic
+
+- _(std)_ implement node:crypto by @vados-cosmonic
+
+- _(std)_ implement portable Node VM execution by @vados-cosmonic
+
+- _(std)_ add host-backed Node zlib API by @vados-cosmonic
+
+- _(std)_ implement worker lifecycle and Node host provider by @vados-cosmonic
+
+- _(std)_ add worker thread contracts and message transport by @vados-cosmonic
+
+- _(std)_ implement Node trace events with explicit host providers by @vados-cosmonic
+
+- _(std)_ implement portable Node util APIs by @vados-cosmonic
+
+- _(std)_ expose UDP adapters and Node host provider by @vados-cosmonic
+
+- _(std)_ implement UDP socket lifecycle and send overloads by @vados-cosmonic
+
+- _(std)_ define UDP socket contracts and errors by @vados-cosmonic
+
+- _(std)_ support buffered HTTP/2 response trailers by @vados-cosmonic
+
+- _(std)_ route Node TLS and HTTP through shared capability by @vados-cosmonic
+
+- _(std)_ add native TLS provider and WASI bridge by @vados-cosmonic
+
+- _(std)_ implement portable Node TLS facade by @vados-cosmonic
+
+- _(std)_ define Node TLS capability contract by @vados-cosmonic
+
+- _(std)_ implement Node URL compatibility APIs by @vados-cosmonic
+
+- _(std)_ add portable Node test runner and reporters by @vados-cosmonic
+
+- _(std)_ add the node:tty shim by @vados-cosmonic
+
+- _(std)_ add the node:repl shim by @vados-cosmonic
+
+- _(std)_ expose callback and promise readline APIs by @vados-cosmonic
+
+- _(std)_ implement readline interfaces and line iteration by @vados-cosmonic
+
+- _(std)_ add readline terminal utilities and stream contracts by @vados-cosmonic
+
+- _(std)_ implement Node SQLite over a typed host capability by @vados-cosmonic
+
+- _(std)_ expose the opt-in Node process provider by @vados-cosmonic
+
+- _(std)_ implement the lazy process guest facade by @vados-cosmonic
+
+- _(std)_ define process capability and denial provider by @vados-cosmonic
+
+- _(std)_ implement portable Node perf_hooks by @vados-cosmonic
+
+- _(std)_ add portable classic Node stream support by @vados-cosmonic
+
+- _(std)_ expose node:net servers and module exports by @vados-cosmonic
+
+- _(std)_ add WASI-backed node:net sockets by @vados-cosmonic
+
+- _(std)_ add node:net address utilities and option types by @vados-cosmonic
+
+- _(std)_ support HTTPS over wasi:tls by @vados-cosmonic
+
+- _(std)_ add the node:https shim by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(std)_ report unsupported V8 CPU profiling on older hosts by @vados-cosmonic
+
+- _(std)_ compare VFS host paths against the canonical root by @vados-cosmonic
+
+- _(std)_ omit removed recursive option from Node rmdir by @vados-cosmonic
+
+- _(std)_ return catchable filesystem capability denials by @vados-cosmonic
+
+- _(std)_ expose readable state for buffered HTTP requests by @vados-cosmonic
+
+- _(std)_ make the direct node:http server boundary work by @vados-cosmonic
+
+- _(std)_ preserve headers in WASI HTTP responses by @vados-cosmonic
+
+- _(std)_ share the console inspector and print empty containers like Node by @vados-cosmonic
+
+- _(std)_ align process providers with generated bindings by @vados-cosmonic
+
+- _(std)_ align perf_hooks errors and buffering with Node 24 by @vados-cosmonic
+
+- _(std)_ lint README by @vados-cosmonic in #2094
+
+- _(std)_ consume Web streams through public readers by @vados-cosmonic
+
+- _(std)_ retain narrowed socket methods during bind polling by @vados-cosmonic
+
+- _(std)_ defer TLS worker integration until shim export is published by @vados-cosmonic
+
+- _(std)_ reject non-object node:http server options by @vados-cosmonic
+
+- _(std)_ give agent: false requests a fresh node:http agent by @vados-cosmonic
+
+- _(std)_ match Node 24 in the node:http agent by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(std)_ share structured value transport with V8 by @vados-cosmonic
+
+- _(std)_ extract VFS memory file handles and remove section banners by @vados-cosmonic in #2114
+
+- _(std)_ split util inspection and formatting into helpers by @vados-cosmonic
+
+- _(std)_ consolidate shared Node argument validators by @vados-cosmonic
+
+- _(std)_ share console formatting with util by @vados-cosmonic
+
+- _(std)_ inline process source attribution by @vados-cosmonic
+
+- _(std)_ simplify perf_hooks receiver checks and helpers by @vados-cosmonic
+
+- _(std)_ share WASI TCP transport across HTTP implementations by @vados-cosmonic
+
+- _(std)_ own the opt-in Node TLS provider by @vados-cosmonic
+
+- _(std)_ pass socket streams directly to TLS by @vados-cosmonic
+
+- _(std)_ align the local TLS contract with WASI IO 0.2.12 by @vados-cosmonic
+
+- _(std)_ group TLS under the sockets implementation by @vados-cosmonic
+
+### 🎨 Styling
+
+- _(std)_ separate zlib test setup and cases by @vados-cosmonic
+
+- _(std)_ space out zlib definitions and WIT contracts by @vados-cosmonic
+
+- _(std)_ separate UDP declarations and methods by @vados-cosmonic
+
+- _(std)_ separate readline test declarations by @vados-cosmonic
+
+- _(std)_ space readline function and type declarations by @vados-cosmonic
+
+- _(std)_ separate SQLite WIT declarations by @vados-cosmonic
+
+- _(std)_ space SQLite function and type declarations by @vados-cosmonic
+
+- _(std)_ space process facade definitions by @vados-cosmonic
+
+- _(std)_ space Node process provider definitions by @vados-cosmonic
+
+- _(std)_ format rebased sockets error imports by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(std)_ exercise V8 profiling across host versions by @vados-cosmonic
+
+- _(std)_ verify V8 APIs against native Node by @vados-cosmonic
+
+- _(std)_ cover shared structured value transport by @vados-cosmonic
+
+- _(std)_ cover VFS conformance and filesystem providers by @vados-cosmonic
+
+- _(std)_ add node:wasi unit and provider tests by @vados-cosmonic
+
+- _(std)_ run independent crypto and timer cases concurrently by @vados-cosmonic
+
+- _(std)_ cover the new Node builtin implementations by @vados-cosmonic
+
+- _(std)_ cover VM contracts and explicit engine limits by @vados-cosmonic
+
+- _(std)_ cover Node zlib codecs and provider behavior by @vados-cosmonic
+
+- _(std)_ cover worker lifecycle and structured messages by @vados-cosmonic
+
+- _(std)_ consolidate util type predicates into one suite by @vados-cosmonic in #2101
+
+- _(std)_ preserve shared validator contracts by @vados-cosmonic
+
+- _(std)_ cover Node util APIs and type predicates by @vados-cosmonic
+
+- _(std)_ cover UDP conformance and socket lifecycle by @vados-cosmonic
+
+- _(std)_ cover Node URL API conformance by @vados-cosmonic
+
+- _(std)_ cover Node test runner conformance and mocking by @vados-cosmonic
+
+- _(std)_ add node:tty unit and pty tests by @vados-cosmonic
+
+- _(std)_ add node:repl unit tests by @vados-cosmonic
+
+- _(std)_ cover readline conformance and stream lifecycles by @vados-cosmonic
+
+- _(std)_ cover SQLite conformance and host authority concurrently by @vados-cosmonic
+
+- _(std)_ cover process conformance and capability denial by @vados-cosmonic
+
+- _(std)_ pin perf_hooks validation and runtime edges against Node by @vados-cosmonic in #2090
+
+- _(std)_ group perf_hooks tests by module by @vados-cosmonic
+
+- _(std)_ cover Node perf_hooks conformance by @vados-cosmonic
+
+- _(std)_ cover classic streams and Web reader interop by @vados-cosmonic
+
+- _(std)_ cover shared socket allocation failure cleanup by @vados-cosmonic
+
+- _(std)_ cover node:net conformance and socket lifecycles by @vados-cosmonic
+
+- _(std)_ use the shared transport in HTTP socket tests by @vados-cosmonic
+
+- _(std)_ bind HTTPS hosts to callback factories by @vados-cosmonic
+
+- _(std)_ port TLS lifecycle coverage and fixtures by @vados-cosmonic
+
+- _(std)_ exercise TLS without stream version adaptation by @vados-cosmonic
+
+- _(std)_ update imports for sockets implementation folder by @vados-cosmonic
+
+- _(std)_ cover TLS capability and handshake semantics by @vados-cosmonic
+
+- _(std)_ add node:https unit tests by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update preview2-shim to v0.25.0 by @vados-cosmonic in #2123
+
+- _(std)_ remove duplicate UDP license file by @vados-cosmonic
+
+- _(std)_ remove duplicate text decoder license file by @vados-cosmonic in #2103
+
+- _(std)_ consolidate Node stream license notice by @vados-cosmonic
+
+- _(std)_ omit unused wit-deps metadata from TLS WIT by @vados-cosmonic
+
 ## [0.3.1] - 2026-09-08
 
 ### 🐛 Bug Fixes
