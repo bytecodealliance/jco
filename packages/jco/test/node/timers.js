@@ -27,8 +27,8 @@ test("resolves timers without unrelated capabilities and preserves installed bar
     expect(await plugin.resolveId.call({ resolve: async () => ({ id: "/installed/timers.js" }) }, "timers")).toBeNull();
     expect(plugin.resolveId("timers/promises")).toBeNull();
     expect(plugin.resolveId("node:timers/promises")).toBe("\0jco-node-builtin:node:timers/promises");
-    expect(plugin.load(plugin.resolveId("node:timers"))).toContain(timersModule);
-    expect(plugin.load(plugin.resolveId("node:timers/promises"))).toContain(timersPromisesModule);
+    expect(plugin.load(plugin.resolveId("node:timers"))).toContain(JSON.stringify(timersModule));
+    expect(plugin.load(plugin.resolveId("node:timers/promises"))).toContain(JSON.stringify(timersPromisesModule));
     expect(plugin.resolveId("node:timers/unknown")).toBeNull();
     expect(onWitRequirement).not.toHaveBeenCalled();
 });
