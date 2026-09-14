@@ -35,10 +35,10 @@
             const path_to_root = "../../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../../searchindex-a1c2568a.js";
+            window.path_to_searchindex_js = "../../../searchindex-63fe091b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../../toc-8c817b9d.js"></script>
+        <script src="../../../toc-9011f031.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,7 +195,8 @@
 When either specifier occurs in bundled source, Jco adds a missing import to the
 selected world, installs <code>fs.wit</code> under <code>deps/jco-node-0.1.0</code>, and prints a CLI
 warning to alert to the fact that a WIT dependency has been added.</p>
-<p>The default filesystem host provider always throws <code>ERR_JCO_FS_ADAPTER_REQUIRED</code>.
+<p>The default filesystem host provider returns a typed denial result, which the
+guest reconstructs as <code>ERR_JCO_FS_ADAPTER_REQUIRED</code>.
 To use the passthrough NodeJS host provider you can map it in:</p>
 <pre><code class="language-console">jco transpile component.wasm \
   --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
