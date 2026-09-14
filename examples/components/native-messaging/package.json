@@ -12,7 +12,7 @@
         "all": "pnpm run build && pnpm run test"
     },
     "dependencies": {
-        "@bytecodealliance/preview2-shim": "^0.24.1"
+        "@bytecodealliance/preview2-shim": "^0.25.0"
     },
     "devDependencies": {
         "@bytecodealliance/jco": "^1.32.1",
