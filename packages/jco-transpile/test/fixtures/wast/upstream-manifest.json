@@ -68,6 +68,10 @@
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
         {
+            "name": "idle-drop.wast",
+            "revision": "5a98cd0744de401faa16d1321dbfe1c67ef5bd74"
+        },
+        {
             "name": "partial-stream-copies.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
