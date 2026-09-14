@@ -1,6 +1,7 @@
 /** Explicit access to the host Node V8 isolate through public node:v8 APIs. */
 import * as node from "node:v8";
 import { Buffer } from "node:buffer";
+import { unsupportedNodeApi } from "./errors/core.js";
 import { nativeCall, Writer, Reader } from "./v8/host-serialization.js";
 import type {
   StatisticsKind,
@@ -93,6 +94,10 @@ export class Profile implements ProfileContract {
 
   constructor(cpu: boolean) {
     if (cpu) {
+      if (typeof node.startCpuProfile !== "function") {
+        throw unsupportedNodeApi("v8.startCpuProfile()", "The Node host does not provide this API");
+      }
+
       this.#profile = node.startCpuProfile();
     } else {
       const profiler = new node.GCProfiler();
