@@ -1600,10 +1600,6 @@ impl AsyncFutureIntrinsic {
                                 throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
                             }}
                             if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
-                            if (futureEnd.isWritable() && futureEnd.isPeerDropped()) {{
-                                futureEnd.setCopyState({future_end_class}.CopyState.DONE);
-                                return {future_end_class}.CopyResult.DROPPED;
-                            }}
                             return payload;
                         }}
 
@@ -1630,10 +1626,6 @@ impl AsyncFutureIntrinsic {
                                         throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
                                     }}
                                     if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
-                                    if (futureEnd.isWritable() && futureEnd.isPeerDropped()) {{
-                                        futureEnd.setCopyState({future_end_base_class}.CopyState.DONE);
-                                        return {future_end_class}.CopyResult.DROPPED;
-                                    }}
                                     return payload;
                                 }});
                             }}
@@ -1644,11 +1636,6 @@ impl AsyncFutureIntrinsic {
                              throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
                         }}
                         if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
-
-                        if (futureEnd.isWritable() && futureEnd.isPeerDropped()) {{
-                            futureEnd.setCopyState({future_end_base_class}.CopyState.DONE);
-                            return {future_end_class}.CopyResult.DROPPED;
-                        }}
 
                         return payload;
                     }}
