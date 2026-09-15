@@ -37,6 +37,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/cancel-stream.wast' },
     { relPath: 'async/partial-stream-copies.wast' },
     { relPath: 'async/futures-must-write.wast' },
+    { relPath: 'async/future-completion-order.wast' },
     { relPath: 'async/idle-drop.wast' },
     { relPath: 'async/empty-wait.wast' },
     { relPath: 'async/zero-length.wast' },
