@@ -50,25 +50,6 @@ impl ErrHandling {
     }
 }
 
-/// Execution environment used by generated function calls.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum CallRuntime {
-    /// Use the component-task runtime installed by the transpiler.
-    #[default]
-    TaskManaged,
-    /// Let a native embedding manage execution and canonical ABI call lifetimes.
-    ///
-    /// Calls, result conversion, borrowed-resource cleanup, dealloc, and
-    /// `post_return` are generated without the host-side task runtime. Async
-    /// JavaScript implementations can still be awaited with
-    /// [`FunctionBindgen::requires_async_porcelain`].
-    ///
-    /// This mode supports the synchronous canonical ABI and guest resource
-    /// tables without async metadata.
-    Embedding,
-}
-
 /// Data related to a given resource
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceData {
@@ -158,9 +139,13 @@ pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 #[derive(bon::Builder)]
 #[non_exhaustive]
 pub struct FunctionBindgen<'a> {
-    /// Runtime responsible for generated call execution.
+    /// Skip task management for generated function calls. Defaults to `false`.
+    ///
+    /// This is normally used by embedders when they want to run generated bindings
+    /// inside a wasm guest and let the native embedding manage execution and
+    /// canonical abi call lifetimes instead of the host task runtime.
     #[builder(default)]
-    pub call_runtime: CallRuntime,
+    pub skip_fn_call_task_management: bool,
 
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
@@ -395,23 +380,23 @@ fn instruction_requires_task_runtime(inst: &Instruction<'_>) -> bool {
 }
 
 impl FunctionBindgen<'_> {
-    fn validate_call_runtime(&self) {
-        if self.call_runtime == CallRuntime::TaskManaged {
+    fn validate_task_management(&self) {
+        if !self.skip_fn_call_task_management {
             return;
         }
         assert!(
             !self.is_async && !self.canonical_abi_async && !self.wrap_async_future_result,
-            "Embedding call runtime requires the synchronous canonical ABI"
+            "Skipping task management requires the synchronous canonical ABI"
         );
         assert!(
             !self.asmjs,
-            "Embedding call runtime does not support asm.js"
+            "Skipping task management does not support asm.js"
         );
         assert!(
             self.resource_map
                 .values()
                 .all(|table| matches!(table.data, ResourceData::Guest { extra: None, .. })),
-            "Embedding call runtime requires guest resource tables without async metadata"
+            "Skipping task management requires guest resource tables without async metadata"
         );
     }
 
@@ -426,9 +411,10 @@ impl FunctionBindgen<'_> {
         intrinsic.name().to_string()
     }
 
-    // Task-only templates may be built in either mode, but must only be emitted in TaskManaged.
+    // Task-only templates may be built unconditionally, but must only be emitted
+    // when task management is enabled.
     fn task_intrinsic(&mut self, intrinsic: Intrinsic) -> String {
-        if self.call_runtime == CallRuntime::TaskManaged {
+        if !self.skip_fn_call_task_management {
             self.intrinsic(intrinsic)
         } else {
             intrinsic.name().to_string()
@@ -706,8 +692,8 @@ impl FunctionBindgen<'_> {
     /// invoke guest core exports such as `realloc`, which can access task-local
     /// context in WASI P3 components.
     pub(crate) fn start_wasm_export_task(&mut self) {
-        self.validate_call_runtime();
-        if self.call_runtime == CallRuntime::Embedding {
+        self.validate_task_management();
+        if self.skip_fn_call_task_management {
             return;
         }
         let is_async = self.is_async;
@@ -834,8 +820,8 @@ impl FunctionBindgen<'_> {
     /// the component's current task. This includes argument lowering and
     /// result lifting, both of which may call guest core functions.
     pub(crate) fn begin_wasm_export_body(&mut self) {
-        self.validate_call_runtime();
-        if self.call_runtime == CallRuntime::Embedding {
+        self.validate_task_management();
+        if self.skip_fn_call_task_management {
             return;
         }
         let is_async = self.is_async || self.requires_async_porcelain;
@@ -860,8 +846,8 @@ impl FunctionBindgen<'_> {
     }
 
     pub(crate) fn end_wasm_export_body(&mut self) {
-        self.validate_call_runtime();
-        if self.call_runtime == CallRuntime::Embedding {
+        self.validate_task_management();
+        if self.skip_fn_call_task_management {
             return;
         }
         uwriteln!(
@@ -933,12 +919,12 @@ impl Bindgen for FunctionBindgen<'_> {
         operands: &mut Vec<String>,
         results: &mut Vec<String>,
     ) {
-        self.validate_call_runtime();
-        let task_managed = self.call_runtime == CallRuntime::TaskManaged;
+        self.validate_task_management();
+        let task_managed = !self.skip_fn_call_task_management;
         if !task_managed {
             assert!(
                 !instruction_requires_task_runtime(inst),
-                "Embedding call runtime does not support async ABI instructions"
+                "Async ABI instructions require task management"
             );
         }
         match inst {
