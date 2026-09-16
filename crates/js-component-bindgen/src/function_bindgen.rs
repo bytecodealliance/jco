@@ -50,6 +50,25 @@ impl ErrHandling {
     }
 }
 
+/// Execution environment used by generated function calls.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CallRuntime {
+    /// Use the component-task runtime installed by the transpiler.
+    #[default]
+    TaskManaged,
+    /// Let a native embedding manage execution and canonical ABI call lifetimes.
+    ///
+    /// Calls, result conversion, borrowed-resource cleanup, dealloc, and
+    /// `post_return` are generated without the host-side task runtime. Async
+    /// JavaScript implementations can still be awaited with
+    /// [`FunctionBindgen::requires_async_porcelain`].
+    ///
+    /// This mode supports the synchronous canonical ABI and guest resource
+    /// tables without async metadata.
+    Embedding,
+}
+
 /// Data related to a given resource
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceData {
@@ -139,6 +158,10 @@ pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 #[derive(bon::Builder)]
 #[non_exhaustive]
 pub struct FunctionBindgen<'a> {
+    /// Runtime responsible for generated call execution.
+    #[builder(default)]
+    pub call_runtime: CallRuntime,
+
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
 
@@ -357,7 +380,41 @@ fn unambiguous_result_wrapper_tags(resolve: &Resolve, ty: Option<&Type>) -> (boo
     }
 }
 
+fn instruction_requires_task_runtime(inst: &Instruction<'_>) -> bool {
+    matches!(
+        inst,
+        Instruction::CallInterface { async_: true, .. }
+            | Instruction::AsyncTaskReturn { .. }
+            | Instruction::FutureLift { .. }
+            | Instruction::FutureLower { .. }
+            | Instruction::StreamLift { .. }
+            | Instruction::StreamLower { .. }
+            | Instruction::ErrorContextLift
+            | Instruction::ErrorContextLower
+    )
+}
+
 impl FunctionBindgen<'_> {
+    fn validate_call_runtime(&self) {
+        if self.call_runtime == CallRuntime::TaskManaged {
+            return;
+        }
+        assert!(
+            !self.is_async && !self.canonical_abi_async && !self.wrap_async_future_result,
+            "Embedding call runtime requires the synchronous canonical ABI"
+        );
+        assert!(
+            !self.asmjs,
+            "Embedding call runtime does not support asm.js"
+        );
+        assert!(
+            self.resource_map
+                .values()
+                .all(|table| matches!(table.data, ResourceData::Guest { extra: None, .. })),
+            "Embedding call runtime requires guest resource tables without async metadata"
+        );
+    }
+
     fn tmp(&mut self) -> usize {
         let ret = self.tmp;
         self.tmp += 1;
@@ -367,6 +424,15 @@ impl FunctionBindgen<'_> {
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         intrinsic.name().to_string()
+    }
+
+    // Task-only templates may be built in either mode, but must only be emitted in TaskManaged.
+    fn task_intrinsic(&mut self, intrinsic: Intrinsic) -> String {
+        if self.call_runtime == CallRuntime::TaskManaged {
+            self.intrinsic(intrinsic)
+        } else {
+            intrinsic.name().to_string()
+        }
     }
 
     fn emit_dealloc(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
@@ -640,6 +706,10 @@ impl FunctionBindgen<'_> {
     /// invoke guest core exports such as `realloc`, which can access task-local
     /// context in WASI P3 components.
     pub(crate) fn start_wasm_export_task(&mut self) {
+        self.validate_call_runtime();
+        if self.call_runtime == CallRuntime::Embedding {
+            return;
+        }
         let is_async = self.is_async;
         let is_manual_async = self.requires_async_porcelain;
         let preserve_future_result = self.wrap_async_future_result;
@@ -764,6 +834,10 @@ impl FunctionBindgen<'_> {
     /// the component's current task. This includes argument lowering and
     /// result lifting, both of which may call guest core functions.
     pub(crate) fn begin_wasm_export_body(&mut self) {
+        self.validate_call_runtime();
+        if self.call_runtime == CallRuntime::Embedding {
+            return;
+        }
         let is_async = self.is_async || self.requires_async_porcelain;
         let wrapper = if is_async {
             self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync)
@@ -786,6 +860,10 @@ impl FunctionBindgen<'_> {
     }
 
     pub(crate) fn end_wasm_export_body(&mut self) {
+        self.validate_call_runtime();
+        if self.call_runtime == CallRuntime::Embedding {
+            return;
+        }
         uwriteln!(
             self.src,
             r#"
@@ -855,6 +933,14 @@ impl Bindgen for FunctionBindgen<'_> {
         operands: &mut Vec<String>,
         results: &mut Vec<String>,
     ) {
+        self.validate_call_runtime();
+        let task_managed = self.call_runtime == CallRuntime::TaskManaged;
+        if !task_managed {
+            assert!(
+                !instruction_requires_task_runtime(inst),
+                "Embedding call runtime does not support async ABI instructions"
+            );
+        }
         match inst {
             Instruction::GetArg { nth } => results.push(self.params[*nth].clone()),
 
@@ -1928,7 +2014,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let get_component_state = self.intrinsic(Intrinsic::Component(
+                let get_component_state = self.task_intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
                 let component_idx_expr = self
@@ -2042,10 +2128,11 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Argument lowering can await realloc and allow another task
                 // to run. Reinstall this task immediately before entering Wasm.
-                let call_wrapper = self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
-                uwriteln!(
-                    self.src,
-                    r#"
+                let call_wrapper = self.task_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+                if task_managed {
+                    uwriteln!(
+                        self.src,
+                        r#"
                       {vars_init}
                       try {{
                            {assignment_lhs} {call_prefix}{call_wrapper}({{
@@ -2057,7 +2144,13 @@ impl Bindgen for FunctionBindgen<'_> {
                           {call_err_cleanup}
                       }}
                     "#,
-                );
+                    );
+                } else {
+                    uwriteln!(
+                        self.src,
+                        "{vars_init}\n{assignment_lhs}{call_prefix}{callee_invoke};"
+                    );
+                }
 
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
@@ -2078,21 +2171,21 @@ impl Bindgen for FunctionBindgen<'_> {
             // Call to an imported interface (normally provided by the host)
             Instruction::CallInterface { func, async_ } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let get_component_state = self.intrinsic(Intrinsic::Component(
+                let get_component_state = self.task_intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                let track_host_operation =
-                    self.intrinsic(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
-                let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
+                let track_host_operation = self
+                    .task_intrinsic(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
+                let start_current_task_fn = self.task_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentTask,
                 ));
                 let current_task_get_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                    self.task_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
                 // At first, use the global current task metadata, in case we are executing from
                 // inside a with-global-current-task wrapper
                 let get_global_current_task_meta_fn =
-                    self.intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                    self.task_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 uwriteln!(
                     self.src,
@@ -2111,7 +2204,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     (self.callee.into(), operands.join(", "))
                 };
 
-                uwriteln!(self.src, "const hostProvided = true;");
+                if task_managed {
+                    uwriteln!(self.src, "const hostProvided = true;");
+                }
 
                 // Set task memory index and memory object
                 let (component_idx_expr, callback_fn_name_expr, get_callback_fn_expr) =
@@ -2141,9 +2236,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 // we expect that `Trampoline::LowerImport` and relevant intrinsics were called before
                 // this, and a subtask has been set up.
                 //
-                uwriteln!(
-                    self.src,
-                    r#"
+                if task_managed {
+                    uwriteln!(
+                        self.src,
+                        r#"
                     let parentTask;
                     let task;
                     let subtask;
@@ -2183,10 +2279,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         }}
                     }}
                     "#,
-                    is_async = self.is_async,
-                    fn_name = self.callee,
-                    err_handling = self.err.to_js_string(),
-                );
+                        is_async = self.is_async,
+                        fn_name = self.callee,
+                        err_handling = self.err.to_js_string(),
+                    );
+                }
 
                 let is_async = self.requires_async_porcelain || *async_;
 
@@ -2195,7 +2292,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let fn_wasm_result_count = if func.result.is_none() { 0 } else { 1 };
 
                 // If the task is async, do an explicit wait for backpressure before the call execution
-                if is_async {
+                if task_managed && is_async {
                     uwriteln!(
                         self.src,
                         r#"
@@ -2209,7 +2306,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         }}
                         "#,
                     );
-                } else {
+                } else if task_managed {
                     uwriteln!(self.src, "const started = task.enterSync();",);
                 }
 
@@ -2219,7 +2316,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 {
                     (
                         "await ",
-                        self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync),
+                        self.task_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync),
                         format!(
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during async call', {{
@@ -2238,7 +2335,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     (
                         "",
-                        self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn),
+                        self.task_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn),
                         format!(
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during sync call', {{
@@ -2256,35 +2353,58 @@ impl Bindgen for FunctionBindgen<'_> {
                     )
                 };
 
-                let call = format!(
-                    r#"{call_prefix} {call_wrapper}({{
+                let call = if task_managed {
+                    format!(
+                        r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
                               fn: () => {track_host_operation}(() => {callee_fn_js}({callee_args_js})),
                           }})
                         "#,
-                );
+                    )
+                } else {
+                    format!("{call_prefix}{callee_fn_js}({callee_args_js})")
+                };
+                let (vars_init, assignment_lhs) = if self.err == ErrHandling::ResultCatchHandler {
+                    results.push("ret".to_string());
+                    ("let ret;".to_string(), "ret = ".to_string())
+                } else {
+                    self.generate_result_assignment_lhs(fn_wasm_result_count, results, is_async)
+                };
+                uwriteln!(self.src, "{vars_init}");
+                let borrows = if !task_managed && self.clear_resource_borrows {
+                    let queue =
+                        self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows));
+                    let borrows = format!("borrows{}", self.tmp());
+                    uwriteln!(
+                        self.src,
+                        "const {borrows} = {queue};
+                        {queue} = [];
+                        try {{"
+                    );
+                    Some(borrows)
+                } else {
+                    None
+                };
 
                 match self.err {
                     // If configured to do *no* error handling at all or throw
                     // error objects directly, we can simply perform the call
                     ErrHandling::None | ErrHandling::ThrowResultErr => {
-                        let (vars_init, assignment_lhs) = self.generate_result_assignment_lhs(
-                            fn_wasm_result_count,
-                            results,
-                            is_async,
-                        );
-                        uwriteln!(
-                            self.src,
-                            r#"
-                              {vars_init}
+                        if task_managed {
+                            uwriteln!(
+                                self.src,
+                                r#"
                               try {{
                                  {assignment_lhs}{call};
                               }} catch (err) {{
                                   {call_err_cleanup}
                               }}
                             "#
-                        );
+                            );
+                        } else {
+                            uwriteln!(self.src, "{assignment_lhs}{call};");
+                        }
                     }
                     // If configured to force all thrown errors into result objects,
                     // then we add a try/catch around the call
@@ -2316,22 +2436,24 @@ impl Bindgen for FunctionBindgen<'_> {
                         } else {
                             self.intrinsic(Intrinsic::GetErrorPayload)
                         };
+                        let trap_check = task_managed.then(|| format!(
+                            "if ({get_component_state}({component_idx_expr}).markTrapped(e)) {{ throw e; }}"
+                        ));
                         uwriteln!(
                             self.src,
                             r#"
-                            let ret;
                             try {{
                                 const {host_ret} = {call};
                                 ret = {host_ret} !== null && typeof {host_ret} === 'object' && {wrapper_test}
                                     ? {host_ret}
                                     : {{ tag: 'ok', val: {host_ret} }};
                             }} catch (e) {{
-                                if ({get_component_state}({component_idx_expr}).markTrapped(e)) {{ throw e; }}
+                                {trap_check}
                                 ret = {{ tag: 'err', val: {err_payload}(e) }};
                             }}
                             "#,
+                            trap_check = trap_check.as_deref().unwrap_or_default(),
                         );
-                        results.push("ret".to_string());
                     }
                 }
 
@@ -2359,8 +2481,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
-                    let cur_resource_borrows =
-                        self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows));
+                    let cur_resource_borrows = if let Some(borrows) = borrows {
+                        uwriteln!(self.src, "}} finally {{");
+                        borrows
+                    } else {
+                        self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows))
+                    };
                     uwriteln!(
                         self.src,
                         "for (const entry of {cur_resource_borrows}) {{
@@ -2371,9 +2497,13 @@ impl Bindgen for FunctionBindgen<'_> {
                                 }}
                             }}
                             rsc[{symbol_resource_handle}] = undefined;
-                        }}
-                        {cur_resource_borrows} = [];"
+                        }}"
                     );
+                    if task_managed {
+                        uwriteln!(self.src, "{cur_resource_borrows} = [];");
+                    } else {
+                        uwriteln!(self.src, "}}");
+                    }
                     self.clear_resource_borrows = false;
                 }
             }
@@ -2407,11 +2537,14 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Build the post return functionality
                 // to clean up tasks and possibly return values
-                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                let get_or_create_async_state_fn = self.task_intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
+                        if !task_managed {
+                            return format!("{post_return_call}\n{}", ret_stmt.unwrap_or_default());
+                        }
                         format!(
                             r#"
                         let cstate = {get_or_create_async_state_fn}({component_idx_expr});
@@ -2433,7 +2566,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 match stack_value_count {
                     // (sync) Handle no result case
                     0 => {
-                        uwriteln!(self.src, "task.resolve([ret]);");
+                        if task_managed {
+                            uwriteln!(self.src, "task.resolve([ret]);");
+                        }
                         if let Some(f) = &self.post_return {
                             uwriteln!(
                                 self.src,
@@ -2443,8 +2578,11 @@ impl Bindgen for FunctionBindgen<'_> {
                                     None,
                                 )),
                             );
-                        } else {
+                        } else if task_managed {
                             uwriteln!(self.src, "task.exit();");
+                        }
+                        if !task_managed {
+                            uwriteln!(self.src, "return;");
                         }
                     }
 
@@ -2459,7 +2597,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         };
 
                         uwriteln!(self.src, "const retCopy = {op};");
-                        uwriteln!(self.src, "task.resolve([retCopy.val]);");
+                        if task_managed {
+                            uwriteln!(self.src, "task.resolve([retCopy.val]);");
+                        }
 
                         if let Some(f) = &self.post_return {
                             uwriteln!(
@@ -2473,7 +2613,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     None,
                                 ))
                             );
-                        } else {
+                        } else if task_managed {
                             uwriteln!(self.src, "task.exit();");
                         }
 
@@ -2506,7 +2646,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             ret_val.clone()
                         };
 
-                        uwriteln!(self.src, "task.resolve([{ret_val}]);");
+                        if task_managed {
+                            uwriteln!(self.src, "task.resolve([{ret_val}]);");
+                        }
 
                         // Handle the post return if necessary
                         if let Some(post_return_fn) = self.post_return {
@@ -2532,7 +2674,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             ));
                             uwriteln!(self.src, "{post_return_js}");
                         } else {
-                            uwriteln!(self.src, "task.exit();");
+                            if task_managed {
+                                uwriteln!(self.src, "task.exit();");
+                            }
                             uwriteln!(self.src, "return {return_val};")
                         }
                     }
