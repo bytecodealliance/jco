@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.11.0] - 2026-09-16
+
+### 🚀 Features
+
+- _(bindgen)_ introduce call runtime mode by @andreiltd
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ address code review feedback by @andreiltd in #2132
+
+
+
+
 ## [2.10.1] - 2026-09-14
 
 ### 🐛 Bug Fixes
