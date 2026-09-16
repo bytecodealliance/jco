@@ -32,8 +32,8 @@ use wit_parser::{
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
-    CallRuntime, ErrHandling, FunctionBindgen, FunctionBindgenComponentState, PayloadTypeMetadata,
-    ResourceData, ResourceExtraData, ResourceMap, ResourceTable,
+    ErrHandling, FunctionBindgen, FunctionBindgenComponentState, PayloadTypeMetadata, ResourceData,
+    ResourceExtraData, ResourceMap, ResourceTable,
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
@@ -4899,8 +4899,8 @@ impl<'a> Instantiator<'a, '_> {
 
         // Generate function body
         let mut f = FunctionBindgen {
-            call_runtime: CallRuntime::TaskManaged,
             resource_map,
+            skip_fn_call_task_management: false,
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
             valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
