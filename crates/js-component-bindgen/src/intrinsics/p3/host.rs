@@ -538,7 +538,13 @@ impl HostIntrinsic {
                                 if (preparedTask.needsExclusiveLock()) {{
                                     calleeComponentState.exclusiveRelease(preparedTask.id());
                                 }}
-                                preparedTask.resolve([callbackResult]);
+                                // Cancellation can resolve the task while the
+                                // synchronous callee is still unwinding. Its
+                                // eventual return only ends the slice; it must
+                                // not publish a second resolution.
+                                if (!preparedTask.isResolved()) {{
+                                    preparedTask.resolve([callbackResult]);
+                                }}
                                 preparedTask.exit({{ skipExclusiveLockCheck: true }});
                                 return;
                             }}
