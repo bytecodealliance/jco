@@ -1520,7 +1520,7 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::FutureTransfer
             | Trampoline::StreamTransfer
             | Trampoline::ErrorContextTransfer
-            | Trampoline::Trap
+            | Trampoline::Trap(_)
             | Trampoline::EnterSyncCall
             | Trampoline::ExitSyncCall
             | Trampoline::Transcoder { .. } => return None,
@@ -1653,9 +1653,7 @@ impl<'a> Instantiator<'a, '_> {
                     .get(export.instance)
                     .is_some_and(|analysis| analysis.may_suspend.contains(&function_idx))
             }
-            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
-                false
-            }
+            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) => false,
         }
     }
 
@@ -1675,9 +1673,7 @@ impl<'a> Instantiator<'a, '_> {
                     ),
                 }
             }
-            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
-                false
-            }
+            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) => false,
         }
     }
 
@@ -1728,9 +1724,7 @@ impl<'a> Instantiator<'a, '_> {
                             .get(export.instance)
                             .is_some_and(|analysis| analysis.may_suspend.contains(&function_idx))
             }
-            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) | CoreDef::TaskMayBlock => {
-                false
-            }
+            CoreDef::InstanceFlags(_) | CoreDef::UnsafeIntrinsic(_) => false,
         }
     }
 
@@ -1831,7 +1825,13 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({instance_idx}, {subtask_cancel_fn}.bind(null, {instance_idx}, false)));\n",
+                        r#"
+                        const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, false);
+                        const trampoline{i} = {conditional_suspending_fn}(
+                            trampoline{i}Cancel,
+                            {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
+                        );
+                        "#,
                         instance_idx = instance.as_u32(),
                     );
                 }
@@ -3308,18 +3308,14 @@ impl<'a> Instantiator<'a, '_> {
                 todo!("Trampoline::ThreadYieldThenResume")
             }
 
-            Trampoline::Trap => {
+            Trampoline::Trap(trap) => {
                 let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                let trap_messages = self.bindgen.intrinsic(Intrinsic::FactTrapMessages);
+                let message = trap.to_string();
                 uwriteln!(
                     self.src.js,
                     r#"
-                        function trampoline{i}(rep) {{
-                            const message = {trap_messages}[rep];
-                            if (message === undefined) {{
-                                throw new TypeError(`invalid canonical trap code [${{rep}}]`);
-                            }}
-                            throw new {runtime_error}(message);
+                        function trampoline{i}() {{
+                            throw new {runtime_error}({message:?});
                         }}
                     "#
                 );
@@ -5123,9 +5119,6 @@ impl<'a> Instantiator<'a, '_> {
     fn core_def(&mut self, def: &CoreDef) -> String {
         match def {
             CoreDef::Export(e) => self.core_export_var_name(e),
-            CoreDef::TaskMayBlock => self
-                .bindgen
-                .intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock.into()),
             CoreDef::Trampoline(i) => {
                 let trampoline = &self.translation.trampolines[*i];
                 let name = format!("trampoline{}", i.as_u32());
