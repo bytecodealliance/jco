@@ -694,7 +694,14 @@ impl AsyncTaskIntrinsic {
                                 subtask.cancelProgress = null;
                                 return progress.then(() => {{
                                     if (subtask.isResolved()) {{ return finishCancel(); }}
-                                    return 0xFFFFFFFF;
+                                    if (isAsync) {{ return 0xFFFFFFFF; }}
+                                    const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+                                    const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                                    if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
+                                    return taskMeta.task.waitUntil({{
+                                        cancellable: false,
+                                        readyFn: () => subtask.isResolved(),
+                                    }}).then(finishCancel);
                                 }});
                             }}
 
@@ -711,28 +718,19 @@ impl AsyncTaskIntrinsic {
 
                         if (!subtask.isResolved()) {{
                             const childTask = subtask.getChildTask();
-                            // Subscribe before resuming: a synchronous callback may
-                            // reach its next suspension during this call.
-                            const childProgress = isAsync ? childTask?.waitForProgress() : null;
                             subtask.requestCancellation();
 
                             if (!subtask.isResolved()) {{
-                                // Cancellation immediately resumes one cancellable child
-                                // execution slice. Wait until that slice releases component
-                                // entry by exiting or suspending again before deciding whether
-                                // the cancel blocked.
+                                // Cancellation may resume any ready thread in the callee's
+                                // component instance, not only the cancelled task's implicit
+                                // thread. Drive at most one slice: the host is allowed to stop
+                                // after any resume, and doing so also bounds a ready yield loop.
                                 if (childTask) {{
                                     const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
-                                    if (subtask.getStateNumber() === 0 &&
-                                        childTask.deliverPendingCancel({{ cancellable: true }})) {{
-                                        childTask.cancel();
-                                        childState.resumeTaskByID(childTask.id());
-                                    }} else if (childState.suspendedTaskReady(childTask.id())) {{
-                                        cancellationWillCompleteAsync =
-                                            childState.suspendedTaskCancellable(childTask.id());
-                                        if (!childState.resumeTaskByID(childTask.id())) {{
-                                            throw new Error('failed to resume cancellable subtask');
-                                        }}
+                                    const resumed = childState.resumeOneReadyTask();
+                                    if (resumed) {{
+                                        cancellationWillCompleteAsync = true;
+                                        subtask.cancelProgress = resumed.progress;
                                     }} else if (childTask.hasCallback() &&
                                         childState.exclusivelyLockedBy(childTask.id()) &&
                                         !childState.isTaskSuspended(childTask.id())) {{
@@ -751,13 +749,17 @@ impl AsyncTaskIntrinsic {
                                 // while sync-lowered cancels block the current task until the
                                 // subtask resolves.
                                 if (isAsync) {{
-                                    if (cancellationWillCompleteAsync) {{ subtask.cancelProgress = childProgress; }}
                                     // -1 is the canonical BLOCKED status. -2 is an
                                     // internal signal consumed by the conditional JSPI
                                     // trampoline when a cancellable child was resumed but
                                     // its suspended Wasm stack must finish in a microtask.
                                     return cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF;
                                 }}
+
+                                // The fast half of the conditional JSPI trampoline
+                                // cannot return a Promise. Signal that the slow,
+                                // suspending half must finish the synchronous cancel.
+                                if (!slowOnly) {{ return 0xFFFFFFFE; }}
 
                                 const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
                                 const taskMeta = {current_task_get_fn}(componentIdx, taskID);
@@ -1668,6 +1670,16 @@ impl AsyncTaskIntrinsic {
                             this.cancelRequested = true;
                             if (this.#state === {task_class}.State.INITIAL) {{
                                 this.#state = {task_class}.State.CANCEL_PENDING;
+                                // A task still waiting for backpressure or its
+                                // initial instance lock has no guest thread to
+                                // resume. Cancellation is therefore delivered
+                                // and acknowledged eagerly as
+                                // CANCELLED_BEFORE_STARTED.
+                                if (!this.#entered) {{
+                                    this.deliverPendingCancel({{ cancellable: true }});
+                                    this.cancel();
+                                    return;
+                                }}
                             }}
                             // Nudge the component's tick loop so that any suspended cancellable
                             // wait observes the pending cancellation promptly
@@ -3237,7 +3249,7 @@ impl AsyncTaskIntrinsic {
                         // invoking its Suspending fallback. Avoid creating either
                         // task until the probe knows that entry can complete in the
                         // current Wasm slice.
-                        if (syncOnly && !calleeIsAsync && cstate.isExclusivelyLocked()) {{
+                        if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) {{
                             return 0;
                         }}
 
@@ -3270,6 +3282,10 @@ impl AsyncTaskIntrinsic {
                                 'task',
                                 'new-sync-guest-task',
                             ].join("/"),
+                            // Sync-typed functions do not participate in an
+                            // instance's async exclusive-lock protocol. This is
+                            // what permits ordinary synchronous reentrance.
+                            callingWasmExport: !!calleeIsAsync,
                         }});
 
                         subtask.setChildTask(newTask);
@@ -3329,8 +3345,6 @@ impl AsyncTaskIntrinsic {
                 );
                 let get_current_task_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let clear_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
                 let set_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
                 let symmetric_sync_guest_call_stack =
@@ -3367,10 +3381,10 @@ impl AsyncTaskIntrinsic {
 
                         {current_task_may_block}.value = previousTaskMayBlock;
 
-                        {clear_global_current_task_meta_fn}({{
-                            taskID: task.id(),
-                            componentIdx: task.componentIdx(),
-                        }});
+                        // Restoring the caller directly is important for recursive
+                        // calls into the same component: an enclosing synchronous
+                        // metadata wrapper may already have restored its task before
+                        // this exit trampoline runs.
                         {set_global_current_task_meta_fn}({{
                             taskID: callerTask.id(),
                             componentIdx: callerTask.componentIdx(),

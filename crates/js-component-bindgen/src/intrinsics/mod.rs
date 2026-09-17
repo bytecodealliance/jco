@@ -1740,20 +1740,18 @@ mod tests {
     }
 
     #[test]
-    fn subtask_cancel_drives_one_cancellable_child_slice() {
+    fn subtask_cancel_drives_one_ready_callee_instance_slice() {
         let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
-        assert!(cancel.contains("childState.suspendedTaskReady(childTask.id())"));
-        assert!(cancel.contains("childState.resumeTaskByID(childTask.id())"));
+        assert!(cancel.contains("childState.resumeOneReadyTask()"));
         assert!(cancel.contains("function subtaskCancel"));
         assert!(!cancel.contains("async function subtaskCancel"));
         assert!(cancel.contains(".then(finishCancel)"));
         assert!(cancel.contains("cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF"));
+        assert!(cancel.contains("if (!slowOnly) { return 0xFFFFFFFE; }"));
         assert!(cancel.contains("childState.exclusivelyLockedBy(childTask.id())"));
         assert!(cancel.contains("!childState.isTaskSuspended(childTask.id())"));
         assert!(cancel.contains("return progress.then(() =>"));
-        let subscribe = cancel.find("childTask?.waitForProgress()").unwrap();
-        let request = cancel.find("subtask.requestCancellation();").unwrap();
-        assert!(subscribe < request);
+        assert!(!cancel.contains("childTask.cancel()"));
 
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
         assert!(task.contains("suspendUntilCallback(opts, onResume)"));
@@ -1777,6 +1775,8 @@ mod tests {
         assert!(state.contains("suspendedTaskCancellable(taskID)"));
         assert!(state.contains("task.notifyProgress();"));
         assert!(state.contains("suspendedTaskReady(taskID)"));
+        assert!(state.contains("resumeOneReadyTask()"));
+        assert!(state.contains("const progress = meta.task.waitForProgress();"));
     }
 
     #[test]
@@ -2001,7 +2001,8 @@ mod tests {
         assert!(enter.contains("isAsync: false,"));
         assert!(enter.contains("isAsync: !!calleeIsAsync,"));
         assert!(enter.contains("isManualAsync: callerTask.isManualAsync(),"));
-        assert!(enter.contains("syncOnly && !calleeIsAsync && cstate.isExclusivelyLocked()"));
+        assert!(enter.contains("syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()"));
+        assert!(enter.contains("callingWasmExport: !!calleeIsAsync,"));
         assert!(enter.contains("return 0;"));
         assert!(enter.contains("return 1;"));
         assert!(enter.contains("previousTaskMayBlock: CURRENT_TASK_MAY_BLOCK.value,"));
