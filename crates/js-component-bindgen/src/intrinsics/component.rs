@@ -773,7 +773,11 @@ impl ComponentIntrinsic {
                             if (!meta.readyFn) {{
                                 throw new Error(`suspended task [${{taskID}}] is missing a readiness function`);
                             }}
-                            return meta.task.isRejected() || meta.readyFn();
+                            if (meta.task.isRejected()) {{ return true; }}
+                            if (!meta.readyFn()) {{ return false; }}
+                            return !meta.task.needsExclusiveLock()
+                                || !this.isExclusivelyLocked()
+                                || this.exclusivelyLockedBy(taskID);
                         }}
 
                         suspendedTaskCancellable(taskID) {{
@@ -786,6 +790,24 @@ impl ComponentIntrinsic {
 
                         suspendedTaskMetas() {{
                             return this.#suspendedTasksByTaskID.values();
+                        }}
+
+                        // Resume one ready thread in this component instance and return
+                        // a promise which settles when that execution slice either exits
+                        // or suspends again. `subtask.cancel` uses this to implement the
+                        // nondeterministic callee-instance scheduling step required by
+                        // Task.request_cancellation.
+                        resumeOneReadyTask() {{
+                            for (const taskID of this.#suspendedTaskIDs) {{
+                                if (taskID === null || !this.suspendedTaskReady(taskID)) {{ continue; }}
+                                const meta = this.#getSuspendedTaskMeta(taskID);
+                                const progress = meta.task.waitForProgress();
+                                if (!this.resumeTaskByID(taskID)) {{
+                                    throw new Error(`failed to resume ready task [${{taskID}}]`);
+                                }}
+                                return {{ task: meta.task, progress }};
+                            }}
+                            return null;
                         }}
 
                         addPendingTaskStart() {{ this.#pendingTaskStarts++; }}
@@ -839,7 +861,7 @@ impl ComponentIntrinsic {
                                     return {component_async_state_class}.TickResult.RESUMED;
                                 }}
 
-                                const isReady = meta.readyFn();
+                                const isReady = this.suspendedTaskReady(taskID);
                                 if (!isReady) {{ continue; }}
 
                                 {debug_log_fn}('[{component_async_state_class}#tick()] resuming task via tick', {{
