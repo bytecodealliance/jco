@@ -9,11 +9,19 @@
         },
         {
             "name": "big-interleaving-test.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
             "name": "builtin-trap-poisons-instance.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
+            "name": "cancel-delivery.wast",
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+        },
+        {
+            "name": "cancel-instance-wide-resume.wast",
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
             "name": "cancel-stream.wast",
@@ -21,7 +29,11 @@
         },
         {
             "name": "cancel-subtask.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+        },
+        {
+            "name": "cancel-yield-loop.wast",
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
             "name": "closed-stream.wast",
@@ -82,6 +94,10 @@
         {
             "name": "passing-resources.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
+            "name": "reentrance.wast",
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
             "name": "same-component-stream-future.wast",
