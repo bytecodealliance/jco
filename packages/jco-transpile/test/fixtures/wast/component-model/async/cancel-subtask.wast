@@ -1,7 +1,10 @@
 ;; This test contains two components $C and $D where $D imports and calls $C.
 ;;  $D.run calls $C.f, which blocks on an empty waitable set
-;;  $D.run then subtask.cancels $C.f, which resumes $C.f which promptly resolves
-;;    without returning a value.
+;;  $D.run then subtask.cancels $C.f; the pending cancellation request is
+;;    delivered to $C.f's event loop as a TASK_CANCELLED event, whereupon $C.f
+;;    resolves without returning a value. `subtask.cancel async` resumes $C.f's
+;;    thread directly, so $C.f receives the event and resolves before
+;;    subtask.cancel returns, which therefore completes eagerly.
 (component
   (component $C
     (core module $Memory (memory (export "mem") 1))
@@ -114,7 +117,8 @@
           (then unreachable))
         (local.set $subtask (i32.shr_u (local.get $ret) (i32.const 4)))
 
-        ;; cancel 'f'; it should complete without blocking
+        ;; cancel 'f'; 'f' is resumed directly to receive TASK_CANCELLED and
+        ;; resolves before subtask.cancel returns, so this completes eagerly
         (local.set $ret (call $subtask.cancel (local.get $subtask)))
         (if (i32.ne (i32.const 4 (; CANCELLED_BEFORE_RETURNED ;)) (local.get $ret))
           (then unreachable))
@@ -197,5 +201,61 @@
     (with "g" (func $c "g"))
   ))
   (func (export "run") (alias export $d "run"))
+)
+(assert_return (invoke "run") (u32.const 42))
+
+;; Because 'subtask.cancel' resumes the cancelled task directly rather than
+;; waiting for the host to schedule it, the synchronous form can resolve the
+;; subtask without ever blocking.
+(component
+  (component $C2
+    (canon task.cancel (core func $task.cancel))
+    (canon waitable-set.new (core func $waitable-set.new))
+    (core module $CM
+      (import "" "task.cancel" (func $task.cancel))
+      (import "" "waitable-set.new" (func $waitable-set.new (result i32)))
+      (global $never (mut i32) (i32.const 0))
+      (func $start (global.set $never (call $waitable-set.new)))
+      (start $start)
+      (func (export "park") (result i32)
+        (i32.or (i32.const 2 (; WAIT ;)) (i32.shl (global.get $never) (i32.const 4))))
+      (func (export "park-cb") (param $event i32) (param i32 i32) (result i32)
+        (if (i32.ne (local.get $event) (i32.const 6 (; TASK_CANCELLED ;)))
+          (then unreachable))
+        (call $task.cancel)
+        (i32.const 0 (; EXIT ;)))
+    )
+    (core instance $cm (instantiate $CM (with "" (instance
+      (export "task.cancel" (func $task.cancel))
+      (export "waitable-set.new" (func $waitable-set.new))))))
+    (func (export "park") async
+      (canon lift (core func $cm "park") async (callback (core func $cm "park-cb"))))
+  )
+  (instance $c2 (instantiate $C2))
+  (canon lower (func $c2 "park") async (core func $park'))
+  (canon subtask.cancel (core func $subtask.cancel))
+  (canon subtask.drop (core func $subtask.drop))
+
+  (core module $Main
+    (import "" "park" (func $park (result i32)))
+    (import "" "subtask.cancel" (func $subtask.cancel (param i32) (result i32)))
+    (import "" "subtask.drop" (func $subtask.drop (param i32)))
+    (func (export "run") (result i32)
+      (local $packed i32) (local $sub i32)
+      (local.set $packed (call $park))
+      (if (i32.ne (i32.and (local.get $packed) (i32.const 0xf)) (i32.const 1 (; STARTED ;)))
+        (then unreachable))
+      (local.set $sub (i32.shr_u (local.get $packed) (i32.const 4)))
+      (if (i32.ne (call $subtask.cancel (local.get $sub))
+                  (i32.const 4 (; CANCELLED_BEFORE_RETURNED ;)))
+        (then unreachable))
+      (call $subtask.drop (local.get $sub))
+      (i32.const 42))
+  )
+  (core instance $main (instantiate $Main (with "" (instance
+    (export "park" (func $park'))
+    (export "subtask.cancel" (func $subtask.cancel))
+    (export "subtask.drop" (func $subtask.drop))))))
+  (func (export "run") (result u32) (canon lift (core func $main "run")))
 )
 (assert_return (invoke "run") (u32.const 42))
