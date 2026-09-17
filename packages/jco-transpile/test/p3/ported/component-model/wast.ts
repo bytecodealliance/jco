@@ -12,6 +12,11 @@ import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../..
 interface WastTest {
     relPath: string;
     skip?: boolean;
+    artifactCase?: {
+        index: number;
+        exportName: string;
+        expected: unknown;
+    };
 }
 
 interface WastTestModule {
@@ -34,6 +39,8 @@ interface WastTestArtifact {
 const WAST_TESTS: readonly WastTest[] = [
     // Running tests
     { relPath: 'async/wait-during-callback.wast' },
+    { relPath: 'async/cancel-delivery.wast' },
+    { relPath: 'async/cancel-instance-wide-resume.wast' },
     { relPath: 'async/cancel-stream.wast' },
     { relPath: 'async/partial-stream-copies.wast' },
     { relPath: 'async/futures-must-write.wast' },
@@ -42,7 +49,14 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/empty-wait.wast' },
     { relPath: 'async/zero-length.wast' },
     { relPath: 'async/cancel-subtask.wast' },
+    { relPath: 'async/cancel-yield-loop.wast' },
     { relPath: 'async/passing-resources.wast' },
+    // Only artifact 8 was added by component-model#723. Later artifacts use
+    // thread.* built-ins, which jco does not support yet.
+    {
+        relPath: 'async/reentrance.wast',
+        artifactCase: { index: 8, exportName: 'run', expected: 42 },
+    },
     { relPath: 'async/drop-waitable-set.wast' },
     { relPath: 'async/drop-subtask.wast' },
     { relPath: 'async/async-calls-sync.wast' },
@@ -59,7 +73,6 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/cross-abi-calls.wast' },
     { relPath: 'async/cross-task-future.wast' },
     { relPath: 'async/big-interleaving-test.wast' },
-    { relPath: 'async/trap-on-reenter.wast' },
     { relPath: 'async/validate-no-stream-char.wast' },
     { relPath: 'async/validate-no-async-abi-for-sync-type.wast' },
     { relPath: 'async/builtin-trap-poisons-instance.wast' },
@@ -102,7 +115,7 @@ suite('component-model WAST', () => {
             const wastPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, relPath);
             await buildWastFixture(wastPath);
         }
-    });
+    }, 600_000);
 
     test.each([false, true])('deadlock diagnostics preserve the trap (minify=%s)', async (minify) => {
         const { instance, cleanup } = await setupAsyncTest({
@@ -167,7 +180,7 @@ suite('component-model WAST', () => {
         }
     });
 
-    for (const { relPath, skip } of WAST_TESTS) {
+    for (const { relPath, skip, artifactCase } of WAST_TESTS) {
         const wastPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, relPath);
         const wasmPath = wastPath.replace(/\.wast$/, '.wast.wasm');
         const scriptPath = `${wastPath}.js`;
@@ -178,10 +191,28 @@ suite('component-model WAST', () => {
 
             const cleanups: (() => Promise<void>)[] = [];
             try {
+                const componentName = basename(relPath).replace('.wast', '');
+                if (artifactCase) {
+                    const artifactPath = wastPath.replace(/\.wast$/, `.wast.${artifactCase.index}.wasm`);
+                    assert(await fileExists(artifactPath), `missing generated WAT artifact @ [${artifactPath}]`);
+                    const outputDir = await getTmpDir();
+                    const setup = await setupAsyncTest({
+                        asyncMode: 'jspi',
+                        component: {
+                            name: `${componentName}-artifact-${artifactCase.index}`,
+                            path: artifactPath,
+                            outputDir,
+                        },
+                    });
+                    cleanups.push(setup.cleanup);
+                    const artifactInstance = setup.instance as Record<string, () => Promise<unknown>>;
+                    assert.deepEqual(await artifactInstance[artifactCase.exportName](), artifactCase.expected);
+                    return;
+                }
+
                 const mod = (await import(pathToFileURL(scriptPath).href)) as WastTestModule;
                 const artifacts = mod.wastTestArtifacts ?? [];
                 const requiresInstance = mod.wastTestRequiresInstance ?? true;
-                const componentName = basename(relPath).replace('.wast', '');
                 const artifactInstantiators = new Map<WastTestArtifact, Promise<() => Promise<object>>>();
 
                 let instance;
