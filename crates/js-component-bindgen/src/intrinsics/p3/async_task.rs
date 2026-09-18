@@ -395,14 +395,23 @@ impl AsyncTaskIntrinsic {
                           // adapters have no component index; post-return also runs
                           // after the callee register is cleared. Both use the executing
                           // task, whose context FACT temporarily saves and restores.
-                          const currentTaskMeta = {get_global_current_task_meta_fn}(ctx.componentIdx)
-                              ?? {get_global_current_task_meta_fn}();
+                          let currentTaskMeta = {get_global_current_task_meta_fn}(ctx.componentIdx);
+                          let taskMeta = currentTaskMeta
+                              ? {current_task_get_fn}(currentTaskMeta.componentIdx, currentTaskMeta.taskID)
+                              : undefined;
+
+                          // A post-return may run after the callee has exited. Its
+                          // per-component register can therefore name a task which is
+                          // no longer live; fall back to FACT's executing task.
+                          if (!taskMeta) {{
+                              currentTaskMeta = {get_global_current_task_meta_fn}();
+                              taskMeta = currentTaskMeta
+                                  ? {current_task_get_fn}(currentTaskMeta.componentIdx, currentTaskMeta.taskID)
+                                  : undefined;
+                          }}
                           if (!currentTaskMeta) {{
                               throw new Error(`missing/incomplete global current task meta for component idx [${{ctx.componentIdx}}] during context set`);
                           }}
-                          const {{ taskID, componentIdx }} = currentTaskMeta;
-
-                          const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                           if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
 
                           let task = taskMeta.task;
@@ -441,14 +450,23 @@ impl AsyncTaskIntrinsic {
                           // adapters have no component index; post-return also runs
                           // after the callee register is cleared. Both use the executing
                           // task, whose context FACT temporarily saves and restores.
-                          const currentTaskMeta = {get_global_current_task_meta_fn}(ctx.componentIdx)
-                              ?? {get_global_current_task_meta_fn}();
+                          let currentTaskMeta = {get_global_current_task_meta_fn}(ctx.componentIdx);
+                          let taskMeta = currentTaskMeta
+                              ? {current_task_get_fn}(currentTaskMeta.componentIdx, currentTaskMeta.taskID)
+                              : undefined;
+
+                          // A post-return may run after the callee has exited. Its
+                          // per-component register can therefore name a task which is
+                          // no longer live; fall back to FACT's executing task.
+                          if (!taskMeta) {{
+                              currentTaskMeta = {get_global_current_task_meta_fn}();
+                              taskMeta = currentTaskMeta
+                                  ? {current_task_get_fn}(currentTaskMeta.componentIdx, currentTaskMeta.taskID)
+                                  : undefined;
+                          }}
                           if (!currentTaskMeta) {{
                               throw new Error(`missing/incomplete global current task meta for component idx [${{ctx.componentIdx}}] during context get`);
                           }}
-                          const {{ taskID, componentIdx }} = currentTaskMeta;
-
-                          const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                           if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
 
                           let task = taskMeta.task;
