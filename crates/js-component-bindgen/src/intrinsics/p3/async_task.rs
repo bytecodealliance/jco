@@ -616,7 +616,7 @@ impl AsyncTaskIntrinsic {
                     "
                     async function {yield_fn}(ctx) {{
                         {debug_log_fn}('[{yield_fn}()] args', {{ ctx }});
-                        const {{ componentIdx, isCancellable }} = ctx;
+                        const {{ componentIdx }} = ctx;
                         const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
 
                         const taskMeta = {current_task_get_fn}(componentIdx, taskID);
@@ -630,7 +630,9 @@ impl AsyncTaskIntrinsic {
                         // ordinary ready wait, it cannot take the immediate-completion
                         // shortcut.
                         const keepGoing = await task.immediateSuspend({{
-                            cancellable: isCancellable,
+                            // Cancellation is delivered only while an implicit
+                            // callback thread is parked in its event loop.
+                            cancellable: false,
                             readyFn: () => true,
                         }});
                         return keepGoing ? 0 : 1;
@@ -721,24 +723,20 @@ impl AsyncTaskIntrinsic {
                             subtask.requestCancellation();
 
                             if (!subtask.isResolved()) {{
-                                // Cancellation may resume any ready thread in the callee's
-                                // component instance, not only the cancelled task's implicit
-                                // thread. Drive at most one slice: the host is allowed to stop
-                                // after any resume, and doing so also bounds a ready yield loop.
-                                if (childTask) {{
+                                // Cancellation may resume only the cancelled task's
+                                // implicit callback thread, and only while that thread is
+                                // parked cancellably in its event loop. No other ready
+                                // thread in the component instance may run here.
+                                if (childTask?.hasCallback()) {{
                                     const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
-                                    const resumed = childState.resumeOneReadyTask();
-                                    if (resumed) {{
+                                    if (childState.suspendedTaskCancellable(childTask.id()) &&
+                                        childState.suspendedTaskReady(childTask.id())) {{
+                                        const progress = childTask.waitForProgress();
+                                        if (!childState.resumeTaskByID(childTask.id())) {{
+                                            throw new Error('failed to resume cancelled callback task');
+                                        }}
                                         cancellationWillCompleteAsync = true;
-                                        subtask.cancelProgress = resumed.progress;
-                                    }} else if (childTask.hasCallback() &&
-                                        childState.exclusivelyLockedBy(childTask.id()) &&
-                                        !childState.isTaskSuspended(childTask.id())) {{
-                                        // JSPI can still be returning the initial guest
-                                        // slice, before its callback wait is registered.
-                                        // An existing non-cancellable wait must instead
-                                        // report BLOCKED without waiting for progress.
-                                        cancellationWillCompleteAsync = true;
+                                        subtask.cancelProgress = progress;
                                     }}
                                 }}
                             }}
@@ -1689,7 +1687,7 @@ impl AsyncTaskIntrinsic {
                         cancel(args) {{
                             {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
                             if (this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] invalid task state [${{this.taskState()}}] for cancellation`);
+                                throw new Error('`task.cancel` called by task which has not been cancelled');
                             }}
                             this.validateResourceBorrowScope();
                             this.cancelled = true;
@@ -1831,6 +1829,7 @@ impl AsyncTaskIntrinsic {
                             }});
 
                             if (this.#state === {task_class}.State.RESOLVED) {{
+                                if (this.#errored !== null) {{ throw this.#errored; }}
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved (did you forget to wait for an import?)`);
                             }}
 
