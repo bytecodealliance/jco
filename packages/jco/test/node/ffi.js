@@ -38,8 +38,8 @@ suite("node:ffi in a component", () => {
             extraArgs: ["--backend", "starlingmonkey"],
         });
 
-        assert.include(stderr, "Jco added generated WIT import jco:node/ffi@0.1.0");
-        assert.include(await readFile(join(fixtureDir, "wit/component.wit"), "utf8"), "import jco:node/ffi@0.1.0;");
+        assert.match(stderr, /Jco added generated WIT import jco:node\/ffi@0\.1\.0/);
+        assert.match(await readFile(join(fixtureDir, "wit/component.wit"), "utf8"), /import jco:node\/ffi@0\.1\.0;/);
 
         const { modulePath } = await transpileComponent({
             componentPath,
@@ -58,7 +58,7 @@ suite("node:ffi in a component", () => {
             bytes: [104, 101, 108, 108, 111],
             symbolIsBigInt: true,
             eventLoop: true,
-            suffix: "so",
+            suffix: process.platform === "darwin" ? "dylib" : process.platform === "win32" ? "dll" : "so",
 
             // What a component cannot express, refused rather than answered wrongly.
             rawPointer: UNSUPPORTED,

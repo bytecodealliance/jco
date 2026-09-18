@@ -773,7 +773,11 @@ impl ComponentIntrinsic {
                             if (!meta.readyFn) {{
                                 throw new Error(`suspended task [${{taskID}}] is missing a readiness function`);
                             }}
-                            return meta.task.isRejected() || meta.readyFn();
+                            if (meta.task.isRejected()) {{ return true; }}
+                            if (!meta.readyFn()) {{ return false; }}
+                            return !meta.task.needsExclusiveLock()
+                                || !this.isExclusivelyLocked()
+                                || this.exclusivelyLockedBy(taskID);
                         }}
 
                         suspendedTaskCancellable(taskID) {{
@@ -839,7 +843,7 @@ impl ComponentIntrinsic {
                                     return {component_async_state_class}.TickResult.RESUMED;
                                 }}
 
-                                const isReady = meta.readyFn();
+                                const isReady = this.suspendedTaskReady(taskID);
                                 if (!isReady) {{ continue; }}
 
                                 {debug_log_fn}('[{component_async_state_class}#tick()] resuming task via tick', {{

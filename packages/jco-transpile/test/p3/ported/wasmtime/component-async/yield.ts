@@ -140,9 +140,10 @@ suite('yield scenario', () => {
         }
     });
 
-    // These cancellation cases use hand-rolled ABI code to verify eager-start
-    // scheduling: the callee must reach STARTED before its first suspension.
-    test('cancel synchronous', async () => {
+    // This hand-rolled fixture predates component-model#726 and expects
+    // cancellation to resume a synchronous callee which has no callback
+    // event-loop thread. That scheduling behavior is no longer valid.
+    test.skip('cancel synchronous (obsolete pre-component-model#726 semantics)', async () => {
         let cleanup;
         try {
             const callerPath = join(COMPONENT_FIXTURES_DIR, 'p3/yield/async-yield-caller-cancel.wasm');
