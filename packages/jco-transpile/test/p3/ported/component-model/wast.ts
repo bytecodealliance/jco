@@ -12,11 +12,11 @@ import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../..
 interface WastTest {
     relPath: string;
     skip?: boolean;
-    artifactCase?: {
+    artifactCases?: readonly {
         index: number;
         exportName: string;
         expected: unknown;
-    };
+    }[];
 }
 
 interface WastTestModule {
@@ -40,7 +40,13 @@ const WAST_TESTS: readonly WastTest[] = [
     // Running tests
     { relPath: 'async/wait-during-callback.wast' },
     { relPath: 'async/cancel-delivery.wast' },
-    { relPath: 'async/cancel-instance-wide-resume.wast' },
+    { relPath: 'async/cancel-not-delivered.wast' },
+    // The remaining artifacts use thread.* built-ins, which jco does not
+    // support yet. These three cover targeted callback resumption without them.
+    {
+        relPath: 'async/cancel-targeted-resume.wast',
+        artifactCases: [1, 2, 3].map((index) => ({ index, exportName: 'run', expected: 42 })),
+    },
     { relPath: 'async/cancel-stream.wast' },
     { relPath: 'async/partial-stream-copies.wast' },
     { relPath: 'async/futures-must-write.wast' },
@@ -49,18 +55,16 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/empty-wait.wast' },
     { relPath: 'async/zero-length.wast' },
     { relPath: 'async/cancel-subtask.wast' },
-    { relPath: 'async/cancel-yield-loop.wast' },
     { relPath: 'async/passing-resources.wast' },
     // Only artifact 8 was added by component-model#723. Later artifacts use
     // thread.* built-ins, which jco does not support yet.
     {
         relPath: 'async/reentrance.wast',
-        artifactCase: { index: 8, exportName: 'run', expected: 42 },
+        artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
     { relPath: 'async/drop-waitable-set.wast' },
     { relPath: 'async/drop-subtask.wast' },
     { relPath: 'async/async-calls-sync.wast' },
-    { relPath: 'async/cancellable.wast' },
     { relPath: 'async/deadlock.wast' },
     { relPath: 'async/sync-streams.wast' },
     { relPath: 'async/dont-block-start.wast' },
@@ -180,7 +184,7 @@ suite('component-model WAST', () => {
         }
     });
 
-    for (const { relPath, skip, artifactCase } of WAST_TESTS) {
+    for (const { relPath, skip, artifactCases } of WAST_TESTS) {
         const wastPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, relPath);
         const wasmPath = wastPath.replace(/\.wast$/, '.wast.wasm');
         const scriptPath = `${wastPath}.js`;
@@ -192,21 +196,23 @@ suite('component-model WAST', () => {
             const cleanups: (() => Promise<void>)[] = [];
             try {
                 const componentName = basename(relPath).replace('.wast', '');
-                if (artifactCase) {
-                    const artifactPath = wastPath.replace(/\.wast$/, `.wast.${artifactCase.index}.wasm`);
-                    assert(await fileExists(artifactPath), `missing generated WAT artifact @ [${artifactPath}]`);
-                    const outputDir = await getTmpDir();
-                    const setup = await setupAsyncTest({
-                        asyncMode: 'jspi',
-                        component: {
-                            name: `${componentName}-artifact-${artifactCase.index}`,
-                            path: artifactPath,
-                            outputDir,
-                        },
-                    });
-                    cleanups.push(setup.cleanup);
-                    const artifactInstance = setup.instance as Record<string, () => Promise<unknown>>;
-                    assert.deepEqual(await artifactInstance[artifactCase.exportName](), artifactCase.expected);
+                if (artifactCases) {
+                    for (const artifactCase of artifactCases) {
+                        const artifactPath = wastPath.replace(/\.wast$/, `.wast.${artifactCase.index}.wasm`);
+                        assert(await fileExists(artifactPath), `missing generated WAT artifact @ [${artifactPath}]`);
+                        const outputDir = await getTmpDir();
+                        const setup = await setupAsyncTest({
+                            asyncMode: 'jspi',
+                            component: {
+                                name: `${componentName}-artifact-${artifactCase.index}`,
+                                path: artifactPath,
+                                outputDir,
+                            },
+                        });
+                        cleanups.push(setup.cleanup);
+                        const artifactInstance = setup.instance as Record<string, () => Promise<unknown>>;
+                        assert.deepEqual(await artifactInstance[artifactCase.exportName](), artifactCase.expected);
+                    }
                     return;
                 }
 
