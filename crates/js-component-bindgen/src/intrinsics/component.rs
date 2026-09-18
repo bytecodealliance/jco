@@ -792,24 +792,6 @@ impl ComponentIntrinsic {
                             return this.#suspendedTasksByTaskID.values();
                         }}
 
-                        // Resume one ready thread in this component instance and return
-                        // a promise which settles when that execution slice either exits
-                        // or suspends again. `subtask.cancel` uses this to implement the
-                        // nondeterministic callee-instance scheduling step required by
-                        // Task.request_cancellation.
-                        resumeOneReadyTask() {{
-                            for (const taskID of this.#suspendedTaskIDs) {{
-                                if (taskID === null || !this.suspendedTaskReady(taskID)) {{ continue; }}
-                                const meta = this.#getSuspendedTaskMeta(taskID);
-                                const progress = meta.task.waitForProgress();
-                                if (!this.resumeTaskByID(taskID)) {{
-                                    throw new Error(`failed to resume ready task [${{taskID}}]`);
-                                }}
-                                return {{ task: meta.task, progress }};
-                            }}
-                            return null;
-                        }}
-
                         addPendingTaskStart() {{ this.#pendingTaskStarts++; }}
                         removePendingTaskStart() {{ this.#pendingTaskStarts--; }}
 
