@@ -93,6 +93,55 @@ suite(`Naming`, () => {
         assert.isOk(bindingsSource.includes('class Thing$1{'));
         assert.isOk(bindingsSource.includes('Thing: Thing$1'));
     });
+
+    test.concurrent(`Instantiation helper deduping`, async () => {
+        const fixtureName = 'instantiation-helper-naming';
+        const bytes = await componentNew(
+            await componentEmbed({
+                witSource: await readFile(
+                    fileURLToPath(new URL(`./fixtures/wit/${fixtureName}/${fixtureName}.wit`, import.meta.url)),
+                    'utf8',
+                ),
+                dummy: true,
+                metadata: [
+                    ['language', [['javascript', '']]],
+                    ['processed-by', [['dummy-gen', 'test']]],
+                ],
+            }),
+        );
+
+        const { files } = await transpileBytes(bytes, {
+            name: fixtureName,
+            instantiation: 'async',
+        });
+
+        const bindingsSource = new TextDecoder().decode(files[`${fixtureName}.js`]);
+
+        // Imports keep their names, the helper locals are the ones that get deduped
+        for (const local of [
+            'gen',
+            'promise',
+            'resolve',
+            'reject',
+            'normalizeInstantiationError',
+            'runNext',
+            'maybeSyncReturn',
+        ]) {
+            assert.isOk(bindingsSource.includes(`${local}$1`), `helper local [${local}] should be deduped`);
+        }
+        assert.notInclude(bindingsSource, 'let promise, resolve, reject;');
+
+        // The output must parse (i.e. no "Identifier 'reject' has already been declared")
+        const outDir = await getTmpDir();
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+        await writeFile(join(outDir, `${fixtureName}.js`), bindingsSource);
+        const { instantiate } = await import(`${pathToFileURL(outDir)}/${fixtureName}.js`);
+        assert.isFunction(instantiate);
+
+        try {
+            await rm(outDir, { recursive: true });
+        } catch {}
+    });
 });
 
 suite('Directive Prologue', () => {
