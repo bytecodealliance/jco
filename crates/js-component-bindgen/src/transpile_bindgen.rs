@@ -431,7 +431,38 @@ export_kind,
     }
 }
 
+/// Local names used by the generated `instantiate()`/`$init` helper
+///
+/// These are allocated via `LocalNames` so that they are deconflicted from
+/// imports/exports that use the same identifiers (ex. an import named `reject`)
+struct InstantiationHelperNames {
+    /// Generator that drives instantiation (`gen`)
+    generator: String,
+    promise: String,
+    resolve: String,
+    reject: String,
+    normalize_instantiation_error: String,
+    run_next: String,
+    maybe_sync_return: String,
+}
+
 impl JsBindgen<'_> {
+    /// Allocate deconflicted local names for the instantiation helper
+    fn instantiation_helper_names(&mut self) -> InstantiationHelperNames {
+        InstantiationHelperNames {
+            generator: self.local_names.create_once("gen").to_string(),
+            promise: self.local_names.create_once("promise").to_string(),
+            resolve: self.local_names.create_once("resolve").to_string(),
+            reject: self.local_names.create_once("reject").to_string(),
+            normalize_instantiation_error: self
+                .local_names
+                .create_once("normalizeInstantiationError")
+                .to_string(),
+            run_next: self.local_names.create_once("runNext").to_string(),
+            maybe_sync_return: self.local_names.create_once("maybeSyncReturn").to_string(),
+        }
+    }
+
     fn finish_component(
         &mut self,
         name: &str,
@@ -550,15 +581,16 @@ impl JsBindgen<'_> {
                 &mut self.local_names,
                 opts,
             );
+            let helper = self.instantiation_helper_names();
             uwrite!(
                 output,
                 "\
-                        let gen = (function* _initGenerator () {{
+                        let {gen} = (function* _initGenerator () {{
                             {}\
                             {};
                         }})();
-                        let promise, resolve, reject;
-                        function normalizeInstantiationError (e) {{
+                        let {promise}, {resolve}, {reject};
+                        function {normalize} (e) {{
                             // Native JSPI rejects a suspending import called from a
                             // core start function before entering its JS wrapper.
                             // At component instantiation time that always means the
@@ -568,31 +600,38 @@ impl JsBindgen<'_> {
                             }}
                             return e;
                         }}
-                        function runNext (value) {{
+                        function {run_next} (value) {{
                             try {{
                                 let done;
                                 do {{
-                                    ({{ value, done }} = gen.next(value));
+                                    ({{ value, done }} = {gen}.next(value));
                                 }} while (!(value instanceof Promise) && !done);
                                 if (done) {{
-                                    if (resolve) return resolve(value);
+                                    if ({resolve}) return {resolve}(value);
                                     else return value;
                                 }}
-                                if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
-                                value.then(nextVal => done ? resolve() : runNext(nextVal), e => reject(normalizeInstantiationError(e)));
+                                if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
+                                value.then(nextVal => done ? {resolve}() : {run_next}(nextVal), e => {reject}({normalize}(e)));
                             }}
                             catch (e) {{
-                                e = normalizeInstantiationError(e);
-                                if (reject) reject(e);
+                                e = {normalize}(e);
+                                if ({reject}) {reject}(e);
                                 else throw e;
                             }}
                         }}
-                        const maybeSyncReturn = runNext(null);
-                        return promise || maybeSyncReturn;
+                        const {maybe_sync} = {run_next}(null);
+                        return {promise} || {maybe_sync};
                     }};
                 ",
                 &self.src.js_init as &str,
                 &self.src.js as &str,
+                gen = helper.generator,
+                promise = helper.promise,
+                resolve = helper.resolve,
+                reject = helper.reject,
+                normalize = helper.normalize_instantiation_error,
+                run_next = helper.run_next,
+                maybe_sync = helper.maybe_sync_return,
             );
         } else {
             let (maybe_init_export, maybe_init) =
@@ -613,6 +652,7 @@ impl JsBindgen<'_> {
                     )
                 };
 
+            let helper = self.instantiation_helper_names();
             uwrite!(
                 output,
                 "\
@@ -620,13 +660,13 @@ impl JsBindgen<'_> {
                     {}
                     {}
                     {maybe_init_export}const $init = (() => {{
-                        let gen = (function* _initGenerator () {{
+                        let {gen} = (function* _initGenerator () {{
                             {}\
                             {}\
                             {}\
                         }})();
-                        let promise, resolve, reject;
-                        function normalizeInstantiationError (e) {{
+                        let {promise}, {resolve}, {reject};
+                        function {normalize} (e) {{
                             // Native JSPI rejects a suspending import called from a
                             // core start function before entering its JS wrapper.
                             // At component instantiation time that always means the
@@ -636,27 +676,27 @@ impl JsBindgen<'_> {
                             }}
                             return e;
                         }}
-                        function runNext (value) {{
+                        function {run_next} (value) {{
                             try {{
                                 let done;
                                 do {{
-                                    ({{ value, done }} = gen.next(value));
+                                    ({{ value, done }} = {gen}.next(value));
                                 }} while (!(value instanceof Promise) && !done);
                                 if (done) {{
-                                    if (resolve) resolve(value);
+                                    if ({resolve}) {resolve}(value);
                                     else return value;
                                 }}
-                                if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
-                                value.then(runNext, e => reject(normalizeInstantiationError(e)));
+                                if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
+                                value.then({run_next}, e => {reject}({normalize}(e)));
                             }}
                             catch (e) {{
-                                e = normalizeInstantiationError(e);
-                                if (reject) reject(e);
+                                e = {normalize}(e);
+                                if ({reject}) {reject}(e);
                                 else throw e;
                             }}
                         }}
-                        const maybeSyncReturn = runNext(null);
-                        return promise || maybeSyncReturn;
+                        const {maybe_sync} = {run_next}(null);
+                        return {promise} || {maybe_sync};
                     }})();
                     {maybe_init}\
                 ",
@@ -666,6 +706,13 @@ impl JsBindgen<'_> {
                 &compilation_promises as &str,
                 &self.src.js_init as &str,
                 &core_exported_funcs as &str,
+                gen = helper.generator,
+                promise = helper.promise,
+                resolve = helper.resolve,
+                reject = helper.reject,
+                normalize = helper.normalize_instantiation_error,
+                run_next = helper.run_next,
+                maybe_sync = helper.maybe_sync_return,
             );
 
             self.esm_bindgen.render_exports(
