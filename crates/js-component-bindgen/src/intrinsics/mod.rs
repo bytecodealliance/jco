@@ -1740,18 +1740,20 @@ mod tests {
     }
 
     #[test]
-    fn subtask_cancel_drives_one_ready_callee_instance_slice() {
+    fn subtask_cancel_drives_only_the_target_callback_slice() {
         let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
-        assert!(cancel.contains("childState.resumeOneReadyTask()"));
+        assert!(cancel.contains("childTask?.hasCallback()"));
+        assert!(cancel.contains("childState.suspendedTaskCancellable(childTask.id())"));
+        assert!(cancel.contains("childState.suspendedTaskReady(childTask.id())"));
+        assert!(cancel.contains("childState.resumeTaskByID(childTask.id())"));
         assert!(cancel.contains("function subtaskCancel"));
         assert!(!cancel.contains("async function subtaskCancel"));
         assert!(cancel.contains(".then(finishCancel)"));
         assert!(cancel.contains("cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF"));
         assert!(cancel.contains("if (!slowOnly) { return 0xFFFFFFFE; }"));
-        assert!(cancel.contains("childState.exclusivelyLockedBy(childTask.id())"));
-        assert!(cancel.contains("!childState.isTaskSuspended(childTask.id())"));
         assert!(cancel.contains("return progress.then(() =>"));
         assert!(!cancel.contains("childTask.cancel()"));
+        assert!(!cancel.contains("resumeOneReadyTask()"));
 
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
         assert!(task.contains("suspendUntilCallback(opts, onResume)"));
@@ -1775,8 +1777,7 @@ mod tests {
         assert!(state.contains("suspendedTaskCancellable(taskID)"));
         assert!(state.contains("task.notifyProgress();"));
         assert!(state.contains("suspendedTaskReady(taskID)"));
-        assert!(state.contains("resumeOneReadyTask()"));
-        assert!(state.contains("const progress = meta.task.waitForProgress();"));
+        assert!(!state.contains("resumeOneReadyTask()"));
     }
 
     #[test]
@@ -1788,7 +1789,7 @@ mod tests {
     }
 
     #[test]
-    fn cancellable_wait_poll_and_yield_reach_task_state() {
+    fn only_callback_event_loop_waits_deliver_cancellation() {
         let waitable_set =
             render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass));
         assert!(waitable_set.contains("tryWait(opts)"));
@@ -1799,7 +1800,7 @@ mod tests {
         let wait = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
         assert!(wait.contains("const wset = cstate.handles.get(waitableSetRep);"));
         assert!(!wait.contains("await cstate.handles.get(waitableSetRep);"));
-        assert!(wait.contains("cancellable: isCancellable"));
+        assert!(wait.contains("cancellable: false"));
         assert!(wait.contains("function waitableSetWait"));
         assert!(!wait.contains("async function waitableSetWait"));
         assert!(wait.contains("syncOnly ? wset.tryWait(waitOpts) : wset.waitUntil(waitOpts)"));
@@ -1814,11 +1815,11 @@ mod tests {
         assert!(conditional.contains("0x41, 0x7e"));
 
         let poll = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
-        assert!(poll.contains("deliverPendingCancel({ cancellable: isCancellable })"));
+        assert!(!poll.contains("deliverPendingCancel"));
 
         let yield_ = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
         assert!(yield_.contains("const keepGoing = await task.immediateSuspend({"));
-        assert!(yield_.contains("cancellable: isCancellable"));
+        assert!(yield_.contains("cancellable: false"));
         assert!(yield_.contains("return keepGoing ? 0 : 1;"));
     }
 
