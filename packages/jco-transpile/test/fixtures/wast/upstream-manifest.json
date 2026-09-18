@@ -17,11 +17,15 @@
         },
         {
             "name": "cancel-delivery.wast",
-            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+            "revision": "c52323b20e0717368a67a7f309c6751675333317"
         },
         {
-            "name": "cancel-instance-wide-resume.wast",
-            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+            "name": "cancel-not-delivered.wast",
+            "revision": "13ec1b34f4ada6d8a22602b3ddaec8e1167c543e"
+        },
+        {
+            "name": "cancel-resumed-callback-switch.wast",
+            "revision": "c52323b20e0717368a67a7f309c6751675333317"
         },
         {
             "name": "cancel-stream.wast",
@@ -32,8 +36,8 @@
             "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
-            "name": "cancel-yield-loop.wast",
-            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+            "name": "cancel-targeted-resume.wast",
+            "revision": "c52323b20e0717368a67a7f309c6751675333317"
         },
         {
             "name": "closed-stream.wast",
