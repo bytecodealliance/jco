@@ -1,0 +1,18 @@
+package test:test;
+
+// Every import here shares a name with a local declared by the generated
+// `instantiate()` / `$init` helper (e.g. `let promise, resolve, reject;`)
+interface respondent {
+    gen: func();
+    promise: func();
+    resolve: func(id: u32);
+    reject: func(id: u32);
+    normalize-instantiation-error: func();
+    run-next: func();
+    maybe-sync-return: func();
+}
+
+world test {
+  import respondent;
+  export run: func(id: u32);
+}
