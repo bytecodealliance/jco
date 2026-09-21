@@ -16,17 +16,18 @@ const NODE_HOST = pathToFileURL(
 const UNSUPPORTED = "ERR_JCO_UNSUPPORTED_NODE_API";
 
 // The host adapter requires a runtime with node:ffi enabled via --experimental-ffi.
-function hostHasFfi() {
+function loadHostFfi() {
     try {
-        createRequire(import.meta.url)("node:ffi");
-        return true;
+        return createRequire(import.meta.url)("node:ffi");
     } catch {
-        return false;
+        return undefined;
     }
 }
 
+const HOST_FFI = loadHostFfi();
+
 suite("node:ffi in a component", () => {
-    test.skipIf(!hostHasFfi())("componentizes and calls native code through the opt-in Node host", async () => {
+    test.skipIf(!HOST_FFI)("componentizes and calls native code through the opt-in Node host", async () => {
         // Built from a copy: componentizing rewrites the world in place to add the WIT import.
         const { componentPath, fixtureDir, stderr } = await componentizeFixture({
             fixture: "node-ffi",
@@ -38,8 +39,9 @@ suite("node:ffi in a component", () => {
             extraArgs: ["--backend", "starlingmonkey"],
         });
 
-        assert.include(stderr, "Jco added generated WIT import jco:node/ffi@0.1.0");
-        assert.include(await readFile(join(fixtureDir, "wit/component.wit"), "utf8"), "import jco:node/ffi@0.1.0;");
+        assert.ok(stderr.includes("Jco added generated WIT import jco:node/ffi@0.1.0"));
+        const componentWit = await readFile(join(fixtureDir, "wit/component.wit"), "utf8");
+        assert.ok(componentWit.includes("import jco:node/ffi@0.1.0;"));
 
         const { modulePath } = await transpileComponent({
             componentPath,
@@ -58,7 +60,8 @@ suite("node:ffi in a component", () => {
             bytes: [104, 101, 108, 108, 111],
             symbolIsBigInt: true,
             eventLoop: true,
-            suffix: "so",
+            // Node reports the host platform's suffix: `so`, `dylib`, or `dll`.
+            suffix: HOST_FFI.suffix,
 
             // What a component cannot express, refused rather than answered wrongly.
             rawPointer: UNSUPPORTED,
