@@ -61,6 +61,22 @@ async function responseTrailers(
   };
 }
 
+function trailerEntries(trailers: unknown): Array<[string, Uint8Array]> {
+  if ((trailers as { tag?: string })?.tag === "none") {
+    return [];
+  }
+  if ((trailers as { tag?: string })?.tag === "some") {
+    return trailerEntries((trailers as { val: unknown }).val);
+  }
+  if (trailers instanceof Fields) {
+    return trailers.copyAll();
+  }
+  if (Array.isArray(trailers)) {
+    return trailers;
+  }
+  throw new TypeError("trailers must be Fields or a list of entries");
+}
+
 async function send(request: RequestT): Promise<ResponseT> {
   if (!(request instanceof Request)) {
     throw new TypeError("request must be a Request resource");
@@ -83,7 +99,7 @@ async function send(request: RequestT): Promise<ResponseT> {
         const trailers = await request._trailers();
         if (trailers.tag === "err") {
           result = trailers;
-        } else if (trailers.val && trailers.val.copyAll().length > 0) {
+        } else if (trailers.val && trailerEntries(trailers.val).length > 0) {
           result = {
             tag: "err",
             val: {
