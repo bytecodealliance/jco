@@ -1,0 +1,17 @@
+{
+    "name": "p3-stream-echo-qjs",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Echo Component Model streams through a QuickJS guest",
+    "type": "module",
+    "scripts": {
+        "componentize": "jco componentize echo.js --backend qjs --backend-qjs-stub-wasi --wit wit --world-name component --out p3-stream-echo-qjs.wasm",
+        "transpile": "jco transpile p3-stream-echo-qjs.wasm --out-dir dist --name p3-stream-echo-qjs --async-mode jspi --strict",
+        "demo": "node --experimental-wasm-jspi demo.js",
+        "test": "node --experimental-wasm-jspi test.js",
+        "all": "pnpm run componentize && pnpm run transpile && pnpm run demo && pnpm run test"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco": "workspace:*"
+    }
+}
