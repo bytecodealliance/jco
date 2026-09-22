@@ -16,6 +16,7 @@ export const BASIC_HARNESS_HTML_DIR = fileURLToPath(
 );
 
 export const P2_SHIM_CODE_DIR = fileURLToPath(new URL("../", import.meta.url));
+export const P3_SHIM_CODE_DIR = fileURLToPath(new URL("../../preview3-shim/", import.meta.url));
 
 export const FIXTURES_TYPES_DIR = fileURLToPath(new URL("./fixtures/types", import.meta.url));
 
@@ -111,6 +112,7 @@ export async function startTestServer(args: StartTestServerArgs): Promise<StartT
             // Pre-compute the outDir as a URL
             const outDirURL = pathToFileURL(transpiledOutputDir + "/");
             const p2ShimDirURL = pathToFileURL(P2_SHIM_CODE_DIR);
+            const p3ShimDirURL = pathToFileURL(P3_SHIM_CODE_DIR);
             const htmlDirURL = pathToFileURL(htmlDir + "/");
 
             const newServer = createHTTPServer(async (req, res) => {
@@ -170,6 +172,9 @@ export async function startTestServer(args: StartTestServerArgs): Promise<StartT
                         const rest = req.url.slice("/preview2-shim/".length);
                         // Strip prefix and load file from the symlinked preview2-shim dir
                         fileURL = new URL(`./${rest}`, p2ShimDirURL);
+                    } else if (req.url?.startsWith("/preview3-shim/")) {
+                        const rest = req.url.slice("/preview3-shim/".length);
+                        fileURL = new URL(`./${rest}`, p3ShimDirURL);
                     } else if (req.url === "/") {
                         fileURL = new URL(`./index.html`, htmlDirURL);
                     } else {

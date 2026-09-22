@@ -1,0 +1,100 @@
+<!doctype html>
+<script type="importmap">
+  {
+    "imports": {
+      "@bytecodealliance/preview2-shim/cli": "/preview2-shim/dist/browser/cli.js",
+      "@bytecodealliance/preview2-shim/clocks": "/preview2-shim/dist/browser/clocks.js",
+      "@bytecodealliance/preview2-shim/filesystem": "/preview2-shim/dist/browser/filesystem.js",
+      "@bytecodealliance/preview2-shim/http": "/preview2-shim/dist/browser/http.js",
+      "@bytecodealliance/preview2-shim/io": "/preview2-shim/dist/browser/io.js",
+      "@bytecodealliance/preview2-shim/random": "/preview2-shim/dist/browser/random.js",
+      "@bytecodealliance/preview2-shim/sockets": "/preview2-shim/dist/browser/sockets.js",
+      "@bytecodealliance/preview3-shim/cli": "/preview3-shim/dist/browser/cli.js",
+      "@bytecodealliance/preview3-shim/clocks": "/preview3-shim/dist/browser/clocks.js",
+      "@bytecodealliance/preview3-shim/filesystem": "/preview3-shim/dist/browser/filesystem.js",
+      "@bytecodealliance/preview3-shim/http": "/preview3-shim/dist/browser/http.js",
+      "@bytecodealliance/preview3-shim/random": "/preview3-shim/dist/browser/random.js",
+      "@bytecodealliance/preview3-shim/sockets": "/preview3-shim/dist/browser/sockets.js"
+    }
+  }
+</script>
+<script type="module">
+  import { _setArgs, _setEnv } from "@bytecodealliance/preview3-shim/cli";
+  import { _setFileData } from "@bytecodealliance/preview3-shim/filesystem";
+
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...values) => {
+    logs.push(values.map(String).join(" "));
+    originalLog(...values);
+  };
+  const originalError = console.error;
+  console.error = (...values) => {
+    logs.push(values.map(String).join(" "));
+    originalError(...values);
+  };
+
+  const update = (status, extra = {}) => {
+    document.body.textContent = JSON.stringify({ status, logs, ...extra });
+  };
+
+  const assert = (condition, message) => {
+    if (!condition) {
+      throw new Error(message);
+    }
+  };
+
+  const actions = {
+    async "closed-stream"(component) {
+      const stream = component["local:local/closed-stream"].get();
+      const { value, done } = await stream[Symbol.asyncIterator]().next();
+      assert(value === undefined, "closed stream unexpectedly produced a value");
+      assert(done === true, "component-exported stream did not close");
+    },
+    async "stream-future-inputs"(component) {
+      const closed = component["local:local/closed"];
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(1);
+          controller.enqueue(2);
+          controller.enqueue(3);
+          controller.close();
+        },
+      });
+      await closed.readStream(stream, new Uint8Array([1, 2, 3]));
+      await closed.readFuture(Promise.resolve(42), 42, new Promise(() => {}));
+      await closed.readFuturePostReturn(Promise.resolve(43), 43, new Promise(() => {}));
+    },
+  };
+
+  update("running");
+  try {
+    const params = new URLSearchParams(location.hash.slice(1));
+    const moduleName = params.get("entry");
+    if (!moduleName) {
+      throw new Error("missing transpiled module path");
+    }
+    _setArgs(["component"]);
+    _setEnv({ HTTP_SERVER: location.host });
+    _setFileData({ dir: {} });
+
+    const component = await import(`/transpiled/${moduleName}`);
+    await component.$init;
+    const action = params.get("action");
+    if (action) {
+      if (!actions[action]) {
+        throw new Error(`unknown browser test action: ${action}`);
+      }
+      await actions[action](component);
+    } else {
+      const run = component["wasi:cli/run@0.3.0"] ?? component.run;
+      if (!run || typeof run.run !== "function") {
+        throw new Error(`wasi:cli/run export missing from ${moduleName}`);
+      }
+      await run.run();
+    }
+    update("success");
+  } catch (error) {
+    update("error", { message: String(error), stack: error?.stack });
+  }
+</script>

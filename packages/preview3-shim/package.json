@@ -55,8 +55,10 @@
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "pretest": "pnpm run build",
-    "test": "vitest --run -c test/vitest.ts",
+    "pretest": "pnpm --filter @bytecodealliance/preview2-shim build && pnpm run build",
+    "test": "vitest --run -c test/vitest.ts && vitest --run -c test/vitest.browser-unit.ts",
+    "pretest:browser:unit": "pnpm --filter @bytecodealliance/preview2-shim build && pnpm run build",
+    "test:browser:unit": "vitest --run -c test/vitest.browser-unit.ts",
     "prebench": "pnpm run build",
     "bench": "vitest bench --run",
     "prepack": "pnpm run build"
@@ -66,6 +68,7 @@
     "@bytecodealliance/preview2-shim": "^0.25.0"
   },
   "devDependencies": {
+    "@bytecodealliance/jco": "1.25.2",
     "@types/node": "^24.12.4",
     "globals": "^17.6.0",
     "rolldown": "catalog:",
