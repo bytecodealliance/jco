@@ -30,7 +30,7 @@
   ;; trailing result pointer, rather than the async argument-buffer ABI.
   (core func $lowered-open-at
     (canon lower (func $open-at)
-      (memory $memory-instance "memory")
+      (memory (core memory $memory-instance "memory"))
       string-encoding=utf8
     )
   )

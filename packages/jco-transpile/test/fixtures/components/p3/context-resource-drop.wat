@@ -16,7 +16,7 @@
       (global.set $drops (i32.add (global.get $drops) (i32.const 1))))
     (func (export "drops") (result i32) (global.get $drops)))
   (core instance $destructor (instantiate $destructor (with "context" (instance $context))))
-  (type $thing (resource (rep i32) (dtor (func $destructor "drop"))))
+  (type $thing (resource (rep i32) (dtor (core func $destructor "drop"))))
   (core func $new (canon resource.new $thing))
   (core func $drop (canon resource.drop $thing))
   (core module $caller
