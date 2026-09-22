@@ -56,25 +56,25 @@
     (alias core export $libc "realloc" (core func $realloc))
 
     (core func $list-u8
-      (canon lower (func $test "list-u8") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-u8") (memory $mem) (realloc (core func $realloc))))
     (core func $list-s8
-      (canon lower (func $test "list-s8") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-s8") (memory $mem) (realloc (core func $realloc))))
     (core func $list-u16
-      (canon lower (func $test "list-u16") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-u16") (memory $mem) (realloc (core func $realloc))))
     (core func $list-s16
-      (canon lower (func $test "list-s16") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-s16") (memory $mem) (realloc (core func $realloc))))
     (core func $list-u32
-      (canon lower (func $test "list-u32") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-u32") (memory $mem) (realloc (core func $realloc))))
     (core func $list-s32
-      (canon lower (func $test "list-s32") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-s32") (memory $mem) (realloc (core func $realloc))))
     (core func $list-u64
-      (canon lower (func $test "list-u64") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-u64") (memory $mem) (realloc (core func $realloc))))
     (core func $list-s64
-      (canon lower (func $test "list-s64") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-s64") (memory $mem) (realloc (core func $realloc))))
     (core func $list-float32
-      (canon lower (func $test "list-float32") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-float32") (memory $mem) (realloc (core func $realloc))))
     (core func $list-float64
-      (canon lower (func $test "list-float64") (memory $mem) (realloc (func $realloc))))
+      (canon lower (func $test "list-float64") (memory $mem) (realloc (core func $realloc))))
 
     (core module $m
       (import "" "list-u8" (func $list-u8 (param i32 i32 i32)))
@@ -128,25 +128,25 @@
     ))
 
     (func (export "list-u8") (param "x" (list u8)) (result (list u8))
-      (canon lift (core func $i "list-u8") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-u8") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-s8") (param "x" (list s8)) (result (list s8))
-      (canon lift (core func $i "list-s8") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-s8") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-u16") (param "x" (list u16)) (result (list u16))
-      (canon lift (core func $i "list-u16") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-u16") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-s16") (param "x" (list s16)) (result (list s16))
-      (canon lift (core func $i "list-s16") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-s16") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-u32") (param "x" (list u32)) (result (list u32))
-      (canon lift (core func $i "list-u32") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-u32") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-s32") (param "x" (list s32)) (result (list s32))
-      (canon lift (core func $i "list-s32") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-s32") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-u64") (param "x" (list u64)) (result (list u64))
-      (canon lift (core func $i "list-u64") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-u64") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-s64") (param "x" (list s64)) (result (list s64))
-      (canon lift (core func $i "list-s64") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-s64") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-float32") (param "x" (list float32)) (result (list float32))
-      (canon lift (core func $i "list-float32") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-float32") (memory $mem) (realloc (core func $realloc))))
     (func (export "list-float64") (param "x" (list float64)) (result (list float64))
-      (canon lift (core func $i "list-float64") (memory $mem) (realloc (func $realloc))))
+      (canon lift (core func $i "list-float64") (memory $mem) (realloc (core func $realloc))))
   )
 
   (instance $i1 (instantiate $C (with "test" (instance $test))))
