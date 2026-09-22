@@ -1,8 +1,19 @@
-import { Todo } from "../../common/errors.js";
 import type { Request, Response } from "../../../types/interfaces/wasi-http-handler.d.ts";
 
-function handle(request: Request): Promise<Response> {
-  throw new Todo();
+type Handler = { handle(request: Request): Promise<Response> | Response };
+let currentHandler: Handler | undefined;
+
+async function handle(request: Request): Promise<Response> {
+  if (!currentHandler) {
+    throw new Error("wasi:http/handler import is not configured");
+  }
+  return currentHandler.handle(request);
+}
+
+export function _setHandler(handler: Handler | undefined): Handler | undefined {
+  const previous = currentHandler;
+  currentHandler = handler;
+  return previous;
 }
 
 export default {
