@@ -622,6 +622,9 @@ importers:
         specifier: ^0.25.0
         version: 0.25.0
     devDependencies:
+      '@bytecodealliance/jco':
+        specifier: 1.25.2
+        version: 1.25.2
       '@types/node':
         specifier: ^24.12.4
         version: 24.13.3
