@@ -71,7 +71,7 @@
         "@bytecodealliance/preview2-shim": "^0.25.0",
         "binaryen": "^130.0.0",
         "commander": "^14",
-        "componentize-qjs": "^0.4.2",
+        "componentize-qjs": "^0.4.5",
         "mkdirp": "^3",
         "regexpu-core": "6.4.0",
         "rolldown": "^1.2.4",

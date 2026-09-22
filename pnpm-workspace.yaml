@@ -31,6 +31,7 @@ packages:
   - examples/components/node-grpc-server
   - examples/components/nodejs-platform
   - examples/components/node-fetch
+  - examples/components/p3-stream-echo-qjs
   - examples/components/string-reverse
   - examples/components/string-reverse-upper
   - examples/components/ts-resource-export
@@ -43,7 +44,7 @@ packages:
 
 catalog:
   '@bytecodealliance/componentize-js': ^0.22.0
-  'componentize-qjs': ^0.4.2
+  'componentize-qjs': ^0.4.5
   '@rolldown/binding-android-arm64': ^1.2.4
   '@rolldown/binding-darwin-arm64': ^1.2.4
   '@rolldown/binding-darwin-x64': ^1.2.4
@@ -67,6 +68,15 @@ catalog:
   which: ^2.0.2
 
 minimumReleaseAgeExclude:
+  - 'componentize-qjs@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-darwin-arm64@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-darwin-x64@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-linux-arm64-gnu@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-linux-arm64-musl@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-linux-x64-gnu@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-linux-x64-musl@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-win32-arm64-msvc@0.4.5'
+  - '@andreiltd/componentize-qjs-binding-win32-x64-msvc@0.4.5'
   - '@bytecodealliance/jco-node-fs@0.2.0 || 0.3.2'
   - '@bytecodealliance/jco-node-fs-darwin-arm64@0.2.0 || 0.3.2'
   - '@bytecodealliance/jco-node-fs-darwin-x64@0.2.0 || 0.3.2'

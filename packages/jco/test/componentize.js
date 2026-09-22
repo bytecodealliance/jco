@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { componentWit } from "@bytecodealliance/jco-transpile/wasm-tools";
 import { suite, test, assert, expect } from "vitest";
 import { componentize } from "../src/cmd/componentize.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "./helpers.js";
@@ -107,17 +108,23 @@ suite("componentize", () => {
         assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
     });
 
-    test("componentizes with the QuickJS backend alias", async () => {
+    test.each([false, true])("componentizes with the QuickJS backend alias (stub WASI: %s)", async (stubWasi) => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "typescript-direct",
             entry: "source.ts",
             wit: "source.wit",
-            extraArgs: ["--backend", "qjs"],
+            extraArgs: ["--backend", "qjs", ...(stubWasi ? ["--backend-qjs-stub-wasi"] : [])],
         });
         const component = await readFile(componentPath);
+        const wit = await componentWit(component);
 
         assert.strictEqual(stderr, "");
         assert.deepEqual([...component.subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
+        if (stubWasi) {
+            assert.notMatch(wit, /^\s*import wasi:/m);
+        } else {
+            assert.match(wit, /^\s*import wasi:/m);
+        }
 
         const { instance, cleanup } = await setupAsyncTest({
             component: { name: "quickjs", path: componentPath },
