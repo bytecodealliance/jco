@@ -1,4 +1,4 @@
-import { Todo } from "../../common/errors.js";
+import { types as preview2Types } from "@bytecodealliance/preview2-shim/http";
 import type {
   Fields as FieldsT,
   Request as RequestT,
@@ -16,126 +16,254 @@ import type {
   Result,
 } from "../../../types/interfaces/wasi-http-types.d.ts";
 
-class Fields implements FieldsT {
-  static fromList(entries: Array<[FieldName, FieldValue]>): FieldsT {
-    throw new Todo();
+type Preview2Fields = InstanceType<typeof preview2Types.Fields>;
+
+export class Fields implements FieldsT {
+  readonly _preview2: Preview2Fields;
+
+  constructor(fields = new preview2Types.Fields()) {
+    this._preview2 = fields;
   }
+
+  static fromList(entries: Array<[FieldName, FieldValue]>): Fields {
+    return new Fields(preview2Types.Fields.fromList(entries));
+  }
+
   get(name: FieldName): Array<FieldValue> {
-    throw new Todo();
+    return this._preview2.get(name);
   }
+
   has(name: FieldName): boolean {
-    throw new Todo();
+    return this._preview2.has(name);
   }
+
   set(name: FieldName, value: Array<FieldValue>): void {
-    throw new Todo();
+    this._preview2.set(name, value);
   }
+
   delete(name: FieldName): void {
-    throw new Todo();
+    this._preview2.delete(name);
   }
+
   getAndDelete(name: FieldName): Array<FieldValue> {
-    throw new Todo();
+    const values = this.get(name);
+    this.delete(name);
+    return values;
   }
+
   append(name: FieldName, value: FieldValue): void {
-    throw new Todo();
+    this._preview2.append(name, value);
   }
+
   copyAll(): Array<[FieldName, FieldValue]> {
-    throw new Todo();
+    return this._preview2.entries().map(([name, value]) => [name, value.slice()]);
   }
-  clone(): FieldsT {
-    throw new Todo();
+
+  clone(): Fields {
+    return new Fields(this._preview2.clone());
   }
 }
-class Request implements RequestT {
+
+export class RequestOptions implements RequestOptionsT {
+  #connectTimeout: Duration | undefined;
+  #firstByteTimeout: Duration | undefined;
+  #betweenBytesTimeout: Duration | undefined;
+
+  getConnectTimeout(): Duration | undefined {
+    return this.#connectTimeout;
+  }
+
+  setConnectTimeout(duration: Duration | undefined): void {
+    this.#connectTimeout = duration;
+  }
+
+  getFirstByteTimeout(): Duration | undefined {
+    return this.#firstByteTimeout;
+  }
+
+  setFirstByteTimeout(duration: Duration | undefined): void {
+    this.#firstByteTimeout = duration;
+  }
+
+  getBetweenBytesTimeout(): Duration | undefined {
+    return this.#betweenBytesTimeout;
+  }
+
+  setBetweenBytesTimeout(duration: Duration | undefined): void {
+    this.#betweenBytesTimeout = duration;
+  }
+
+  clone(): RequestOptions {
+    const options = new RequestOptions();
+    options.#connectTimeout = this.#connectTimeout;
+    options.#firstByteTimeout = this.#firstByteTimeout;
+    options.#betweenBytesTimeout = this.#betweenBytesTimeout;
+    return options;
+  }
+}
+
+type TransmissionResult = Result<void, ErrorCode>;
+type TrailersResult = Result<Trailers | undefined, ErrorCode>;
+
+function emptyByteStream(): ReadableStream<number> {
+  return new ReadableStream<number>({
+    start(controller) {
+      controller.close();
+    },
+  });
+}
+
+export class Request implements RequestT {
+  #method: Method = { tag: "get" };
+  #pathWithQuery: string | undefined;
+  #scheme: Scheme | undefined;
+  #authority: string | undefined;
+  #headers!: Fields;
+  #contents: ReadableStream<number> | undefined;
+  #trailers!: Promise<TrailersResult>;
+  #options: RequestOptions | undefined;
+  #resolveTransmission!: (result: TransmissionResult) => void;
+  #consumed = false;
+  #transmissionResolved = false;
+
   static new(
     headers: Headers,
     contents: ReadableStream<number> | undefined,
-    trailers: Promise<Result<Trailers | undefined, ErrorCode>>,
+    trailers: Promise<TrailersResult>,
     options: RequestOptions | undefined,
-  ): [Request, Promise<Result<void, ErrorCode>>] {
-    throw new Todo();
+  ): [Request, Promise<TransmissionResult>] {
+    if (!(headers instanceof Fields)) {
+      throw new TypeError("headers must be a Fields resource");
+    }
+    if (options !== undefined && !(options instanceof RequestOptions)) {
+      throw new TypeError("options must be a RequestOptions resource");
+    }
+    const request = new Request();
+    request.#headers = headers;
+    request.#contents = contents;
+    request.#trailers = Promise.resolve(trailers);
+    request.#options = options;
+    const transmission = new Promise<TransmissionResult>(
+      (resolve) => (request.#resolveTransmission = resolve),
+    );
+    return [request, transmission];
   }
+
   getMethod(): Method {
-    throw new Todo();
+    return this.#method;
   }
+
   setMethod(method: Method): void {
-    throw new Todo();
+    this.#method = method;
   }
+
   getPathWithQuery(): string | undefined {
-    throw new Todo();
+    return this.#pathWithQuery;
   }
+
   setPathWithQuery(pathWithQuery: string | undefined): void {
-    throw new Todo();
+    this.#pathWithQuery = pathWithQuery;
   }
+
   getScheme(): Scheme | undefined {
-    throw new Todo();
+    return this.#scheme;
   }
+
   setScheme(scheme: Scheme | undefined): void {
-    throw new Todo();
+    this.#scheme = scheme;
   }
+
   getAuthority(): string | undefined {
-    throw new Todo();
+    return this.#authority;
   }
+
   setAuthority(authority: string | undefined): void {
-    throw new Todo();
+    this.#authority = authority;
   }
-  getOptions(): RequestOptionsT | undefined {
-    throw new Todo();
+
+  getOptions(): RequestOptions | undefined {
+    return this.#options;
   }
-  getHeaders(): Headers {
-    throw new Todo();
+
+  getHeaders(): Fields {
+    return this.#headers;
   }
+
   static consumeBody(
     this_: Request,
-    res: Promise<Result<void, ErrorCode>>,
-  ): [ReadableStream<number>, Promise<Result<Trailers | undefined, ErrorCode>>] {
-    throw new Todo();
+    res: Promise<TransmissionResult>,
+  ): [ReadableStream<number>, Promise<TrailersResult>] {
+    if (this_.#consumed) {
+      throw new Error("request body has already been consumed");
+    }
+    this_.#consumed = true;
+    void Promise.resolve(res).catch(() => {});
+    return [this_.#contents ?? emptyByteStream(), this_.#trailers];
+  }
+
+  _body(): ReadableStream<number> | undefined {
+    return this.#contents;
+  }
+
+  _trailers(): Promise<TrailersResult> {
+    return this.#trailers;
+  }
+
+  _resolve(result: TransmissionResult): void {
+    if (!this.#transmissionResolved) {
+      this.#transmissionResolved = true;
+      this.#resolveTransmission(result);
+    }
   }
 }
-class RequestOptions implements RequestOptionsT {
-  getConnectTimeout(): Duration | undefined {
-    throw new Todo();
-  }
-  setConnectTimeout(duration: Duration | undefined): void {
-    throw new Todo();
-  }
-  getFirstByteTimeout(): Duration | undefined {
-    throw new Todo();
-  }
-  setFirstByteTimeout(duration: Duration | undefined): void {
-    throw new Todo();
-  }
-  getBetweenBytesTimeout(): Duration | undefined {
-    throw new Todo();
-  }
-  setBetweenBytesTimeout(duration: Duration | undefined): void {
-    throw new Todo();
-  }
-  clone(): RequestOptionsT {
-    throw new Todo();
-  }
-}
-class Response implements ResponseT {
+
+export class Response implements ResponseT {
+  #statusCode: StatusCode = 200;
+  #headers!: Fields;
+  #contents: ReadableStream<number> | undefined;
+  #trailers!: Promise<TrailersResult>;
+  #consumed = false;
+
   static new(
     headers: Headers,
     contents: ReadableStream<number> | undefined,
-    trailers: Promise<Result<Trailers | undefined, ErrorCode>>,
-  ): [Response, Promise<Result<void, ErrorCode>>] {
-    throw new Todo();
+    trailers: Promise<TrailersResult>,
+  ): [Response, Promise<TransmissionResult>] {
+    if (!(headers instanceof Fields)) {
+      throw new TypeError("headers must be a Fields resource");
+    }
+    const response = new Response();
+    response.#headers = headers;
+    response.#contents = contents;
+    response.#trailers = Promise.resolve(trailers);
+    return [response, Promise.resolve({ tag: "ok", val: undefined })];
   }
+
   getStatusCode(): StatusCode {
-    throw new Todo();
+    return this.#statusCode;
   }
+
   setStatusCode(statusCode: StatusCode): void {
-    throw new Todo();
+    if (!Number.isInteger(statusCode) || statusCode < 100 || statusCode > 599) {
+      throw new RangeError(`invalid HTTP status code: ${statusCode}`);
+    }
+    this.#statusCode = statusCode;
   }
-  getHeaders(): Headers {
-    throw new Todo();
+
+  getHeaders(): Fields {
+    return this.#headers;
   }
+
   static consumeBody(
     this_: Response,
-    res: Promise<Result<void, ErrorCode>>,
-  ): [ReadableStream<number>, Promise<Result<Trailers | undefined, ErrorCode>>] {
-    throw new Todo();
+    res: Promise<TransmissionResult>,
+  ): [ReadableStream<number>, Promise<TrailersResult>] {
+    if (this_.#consumed) {
+      throw new Error("response body has already been consumed");
+    }
+    this_.#consumed = true;
+    void Promise.resolve(res).catch(() => {});
+    return [this_.#contents ?? emptyByteStream(), this_.#trailers];
   }
 }
 
