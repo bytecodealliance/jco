@@ -12,20 +12,55 @@ import type {
   Duration,
   StatusCode,
   Trailers,
+  HeaderError,
   ErrorCode,
   Result,
 } from "../../../types/interfaces/wasi-http-types.d.ts";
 
 type Preview2Fields = InstanceType<typeof preview2Types.Fields>;
 
+export class HttpError extends Error {
+  readonly payload: HeaderError;
+
+  constructor(payload: HeaderError, message?: string) {
+    super(message ?? payload.tag);
+    this.name = "HttpError";
+    this.payload = payload;
+  }
+}
+
+export const _forbiddenHeaders = {
+  value: new Set([
+    "connection",
+    "http2-settings",
+    "host",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "transfer-encoding",
+    "upgrade",
+  ]),
+};
+
+function rejectForbidden(name: FieldName): void {
+  if (_forbiddenHeaders.value.has(name.toLowerCase())) {
+    throw new HttpError({ tag: "forbidden" }, `Header ${name} is forbidden`);
+  }
+}
+
 export class Fields implements FieldsT {
   readonly _preview2: Preview2Fields;
+  #immutable = false;
 
   constructor(fields = new preview2Types.Fields()) {
     this._preview2 = fields;
   }
 
   static fromList(entries: Array<[FieldName, FieldValue]>): Fields {
+    for (const [name] of entries) {
+      rejectForbidden(name);
+    }
     return new Fields(preview2Types.Fields.fromList(entries));
   }
 
@@ -38,10 +73,14 @@ export class Fields implements FieldsT {
   }
 
   set(name: FieldName, value: Array<FieldValue>): void {
+    this.#ensureMutable();
+    rejectForbidden(name);
     this._preview2.set(name, value);
   }
 
   delete(name: FieldName): void {
+    this.#ensureMutable();
+    rejectForbidden(name);
     this._preview2.delete(name);
   }
 
@@ -52,6 +91,8 @@ export class Fields implements FieldsT {
   }
 
   append(name: FieldName, value: FieldValue): void {
+    this.#ensureMutable();
+    rejectForbidden(name);
     this._preview2.append(name, value);
   }
 
@@ -62,18 +103,31 @@ export class Fields implements FieldsT {
   clone(): Fields {
     return new Fields(this._preview2.clone());
   }
+
+  static _lock(fields: Fields): Fields {
+    fields.#immutable = true;
+    return fields;
+  }
+
+  #ensureMutable(): void {
+    if (this.#immutable) {
+      throw new HttpError({ tag: "immutable" }, "Cannot modify immutable fields");
+    }
+  }
 }
 
 export class RequestOptions implements RequestOptionsT {
   #connectTimeout: Duration | undefined;
   #firstByteTimeout: Duration | undefined;
   #betweenBytesTimeout: Duration | undefined;
+  #immutable = false;
 
   getConnectTimeout(): Duration | undefined {
     return this.#connectTimeout;
   }
 
   setConnectTimeout(duration: Duration | undefined): void {
+    this.#ensureMutable();
     this.#connectTimeout = duration;
   }
 
@@ -82,6 +136,7 @@ export class RequestOptions implements RequestOptionsT {
   }
 
   setFirstByteTimeout(duration: Duration | undefined): void {
+    this.#ensureMutable();
     this.#firstByteTimeout = duration;
   }
 
@@ -90,6 +145,7 @@ export class RequestOptions implements RequestOptionsT {
   }
 
   setBetweenBytesTimeout(duration: Duration | undefined): void {
+    this.#ensureMutable();
     this.#betweenBytesTimeout = duration;
   }
 
@@ -99,6 +155,19 @@ export class RequestOptions implements RequestOptionsT {
     options.#firstByteTimeout = this.#firstByteTimeout;
     options.#betweenBytesTimeout = this.#betweenBytesTimeout;
     return options;
+  }
+
+  static _lock(options: RequestOptions | undefined): RequestOptions | undefined {
+    if (options) {
+      options.#immutable = true;
+    }
+    return options;
+  }
+
+  #ensureMutable(): void {
+    if (this.#immutable) {
+      throw new HttpError({ tag: "immutable" }, "Cannot modify immutable request options");
+    }
   }
 }
 
@@ -142,7 +211,8 @@ export class Request implements RequestT {
     request.#headers = headers;
     request.#contents = contents;
     request.#trailers = Promise.resolve(trailers);
-    request.#options = options;
+    request.#options = RequestOptions._lock(options);
+    Fields._lock(headers);
     const transmission = new Promise<TransmissionResult>(
       (resolve) => (request.#resolveTransmission = resolve),
     );
@@ -234,6 +304,7 @@ export class Response implements ResponseT {
     }
     const response = new Response();
     response.#headers = headers;
+    Fields._lock(headers);
     response.#contents = contents;
     response.#trailers = Promise.resolve(trailers);
     return [response, Promise.resolve({ tag: "ok", val: undefined })];
