@@ -269,6 +269,12 @@ importers:
         specifier: 1.31.0
         version: 1.31.0
 
+  examples/components/p3-stream-echo-qjs:
+    dependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+
   examples/components/string-reverse:
     dependencies:
       '@bytecodealliance/jco':
@@ -411,8 +417,8 @@ importers:
         specifier: ^14
         version: 14.0.3
       componentize-qjs:
-        specifier: ^0.4.2
-        version: 0.4.3
+        specifier: ^0.4.5
+        version: 0.4.5
       mkdirp:
         specifier: ^3
         version: 3.0.1
@@ -683,14 +689,33 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@andreiltd/componentize-qjs-binding-darwin-arm64@0.4.5':
+    resolution: {integrity: sha512-CW+ukVP778x2NAHAC1FvXb5KVSXmUlUQxhQTFtF0mAqqOVnYrQgy4DDNUa48EGthwtLdgLT1+eE71qmQiyMEqg==}
+    engines: {node: '>=18.0.0'}
+    cpu: [arm64]
+    os: [darwin]
+
   '@andreiltd/componentize-qjs-binding-darwin-x64@0.4.3':
     resolution: {integrity: sha512-fP4Ekzn7pR8KqRIoH41zbOTl1i3nEYCog8r/gy2nDzg86EYl51kdrCP+jN4B9tPmYOH8erae7i88Mb50EshyLA==}
     engines: {node: '>=18.0.0'}
     cpu: [x64]
     os: [darwin]
 
+  '@andreiltd/componentize-qjs-binding-darwin-x64@0.4.5':
+    resolution: {integrity: sha512-37uz97pCEuXNfoVuZMBbI6xUirSndxJyMzPa4UCQb9nJdZhzRujmrU79yiFl+5nDYQxcCjthhBVEKU3OxJNAdg==}
+    engines: {node: '>=18.0.0'}
+    cpu: [x64]
+    os: [darwin]
+
   '@andreiltd/componentize-qjs-binding-linux-arm64-gnu@0.4.3':
     resolution: {integrity: sha512-3+Oz1cQRq2KklYdGjhNiI8kNXjCO3ZxBVxf/ZjeGg8MC6Z9A/fO2Hx3T65xSnA5voc2RlWAs0eSL9veoH3CqWQ==}
+    engines: {node: '>=18.0.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@andreiltd/componentize-qjs-binding-linux-arm64-gnu@0.4.5':
+    resolution: {integrity: sha512-L5S0C6qIx3f+DnwN42HnDuMhV8NgfqaY+J1PaJAw468Ip/JN+h67tVAp4wUvs8xgTqj6UnGSBbSZVGYifK2XtA==}
     engines: {node: '>=18.0.0'}
     cpu: [arm64]
     os: [linux]
@@ -703,8 +728,22 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@andreiltd/componentize-qjs-binding-linux-arm64-musl@0.4.5':
+    resolution: {integrity: sha512-bBaq8/tvQ6HweqBLKWkE5tsPEMf7g3l5EGtka3Z7AFDUOtFzkAkG67nW1OYiYT6/0pjwDYw7Mvya45f79PG28g==}
+    engines: {node: '>=18.0.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
   '@andreiltd/componentize-qjs-binding-linux-x64-gnu@0.4.3':
     resolution: {integrity: sha512-JqknHtOQF5ah6eN7t82f9fPDkbwVhHC5JMS+7UE0iPaJcDss6BqFYMiFBQ8v/iFxZdtrum3PF2xViTBAEdS2EQ==}
+    engines: {node: '>=18.0.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@andreiltd/componentize-qjs-binding-linux-x64-gnu@0.4.5':
+    resolution: {integrity: sha512-Xec4O4sy/xHlhPPhf7GAV41D+AT7f9vxxjBpE7lUIElZNhX/kc+Ty6AQG50xbHsT5Mi4XQvSmtJJqhnB6xi8Vw==}
     engines: {node: '>=18.0.0'}
     cpu: [x64]
     os: [linux]
@@ -717,14 +756,33 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@andreiltd/componentize-qjs-binding-linux-x64-musl@0.4.5':
+    resolution: {integrity: sha512-62+PgJ+tJOjgNvXzRuz3s76tPBaExCodeVhDIIXkGI/PNbulqTHiyYXRw4O3UX6/CO71Nux8onqnXxQkcXBlvg==}
+    engines: {node: '>=18.0.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@andreiltd/componentize-qjs-binding-win32-arm64-msvc@0.4.3':
     resolution: {integrity: sha512-lZ7XQzbXsIRpCKqMnof0YSPiV01JFpcw3LOpR4q6kbR8+J8qqCwxD5hrJM0kCeml1YkxP9VxDpLSBRN40c+GVQ==}
     engines: {node: '>=18.0.0'}
     cpu: [arm64]
     os: [win32]
 
+  '@andreiltd/componentize-qjs-binding-win32-arm64-msvc@0.4.5':
+    resolution: {integrity: sha512-OZO/omsMQFpw3wJJs3XFN+iEu2ZQCWMK8BxkhmXVm1sddEHtgSTY2sT/zq69VZeXjC0zgN1HzlxHbNBq0OkcOQ==}
+    engines: {node: '>=18.0.0'}
+    cpu: [arm64]
+    os: [win32]
+
   '@andreiltd/componentize-qjs-binding-win32-x64-msvc@0.4.3':
     resolution: {integrity: sha512-0kaaM7C9MALnOGKrsJOL2uUJJV6njrfgqJNz7e5aT4LDQbBxjPK0XUVimr3QSyfNBwIySgcZIzufgc+5BVcBMg==}
+    engines: {node: '>=18.0.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@andreiltd/componentize-qjs-binding-win32-x64-msvc@0.4.5':
+    resolution: {integrity: sha512-IlhlcNOEFky46ypfiD6l8MS45zosfhKWUclr10evQFw5Cpky+pji2RAGJRnBXdLQvH4Q3bZr6KYlIhxmtGRhkw==}
     engines: {node: '>=18.0.0'}
     cpu: [x64]
     os: [win32]
@@ -3480,6 +3538,11 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  componentize-qjs@0.4.5:
+    resolution: {integrity: sha512-/Brt+/Ps7DQ1mYuUsDISTQTFSaZfCSoRHkHnh9Dm5WHCO6arc/vzVdD8TXssfyNex2Iv3UR8NHdahsqABPDh0w==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   content-disposition@1.1.0:
     resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
     engines: {node: '>=18'}
@@ -5227,25 +5290,49 @@ snapshots:
   '@andreiltd/componentize-qjs-binding-darwin-arm64@0.4.3':
     optional: true
 
+  '@andreiltd/componentize-qjs-binding-darwin-arm64@0.4.5':
+    optional: true
+
   '@andreiltd/componentize-qjs-binding-darwin-x64@0.4.3':
+    optional: true
+
+  '@andreiltd/componentize-qjs-binding-darwin-x64@0.4.5':
     optional: true
 
   '@andreiltd/componentize-qjs-binding-linux-arm64-gnu@0.4.3':
     optional: true
 
+  '@andreiltd/componentize-qjs-binding-linux-arm64-gnu@0.4.5':
+    optional: true
+
   '@andreiltd/componentize-qjs-binding-linux-arm64-musl@0.4.3':
+    optional: true
+
+  '@andreiltd/componentize-qjs-binding-linux-arm64-musl@0.4.5':
     optional: true
 
   '@andreiltd/componentize-qjs-binding-linux-x64-gnu@0.4.3':
     optional: true
 
+  '@andreiltd/componentize-qjs-binding-linux-x64-gnu@0.4.5':
+    optional: true
+
   '@andreiltd/componentize-qjs-binding-linux-x64-musl@0.4.3':
+    optional: true
+
+  '@andreiltd/componentize-qjs-binding-linux-x64-musl@0.4.5':
     optional: true
 
   '@andreiltd/componentize-qjs-binding-win32-arm64-msvc@0.4.3':
     optional: true
 
+  '@andreiltd/componentize-qjs-binding-win32-arm64-msvc@0.4.5':
+    optional: true
+
   '@andreiltd/componentize-qjs-binding-win32-x64-msvc@0.4.3':
+    optional: true
+
+  '@andreiltd/componentize-qjs-binding-win32-x64-msvc@0.4.5':
     optional: true
 
   '@babel/code-frame@7.29.7':
@@ -7431,6 +7518,17 @@ snapshots:
       '@andreiltd/componentize-qjs-binding-linux-x64-musl': 0.4.3
       '@andreiltd/componentize-qjs-binding-win32-arm64-msvc': 0.4.3
       '@andreiltd/componentize-qjs-binding-win32-x64-msvc': 0.4.3
+
+  componentize-qjs@0.4.5:
+    optionalDependencies:
+      '@andreiltd/componentize-qjs-binding-darwin-arm64': 0.4.5
+      '@andreiltd/componentize-qjs-binding-darwin-x64': 0.4.5
+      '@andreiltd/componentize-qjs-binding-linux-arm64-gnu': 0.4.5
+      '@andreiltd/componentize-qjs-binding-linux-arm64-musl': 0.4.5
+      '@andreiltd/componentize-qjs-binding-linux-x64-gnu': 0.4.5
+      '@andreiltd/componentize-qjs-binding-linux-x64-musl': 0.4.5
+      '@andreiltd/componentize-qjs-binding-win32-arm64-msvc': 0.4.5
+      '@andreiltd/componentize-qjs-binding-win32-x64-msvc': 0.4.5
 
   content-disposition@1.1.0: {}
 

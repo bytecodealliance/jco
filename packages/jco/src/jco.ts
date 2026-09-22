@@ -69,6 +69,7 @@ program
         "--backend-qjs-disable-async",
         "disable async (enable the 'sync' option) when buliding with componentize-qjs",
     )
+    .option("--backend-qjs-stub-wasi", "replace all WASI imports with trap stubs when building with componentize-qjs")
     .option("--debug-starlingmonkey-build", "use a debug build of StarlingMonkey")
     .option("--engine <path>", "use a specific StarlingMonkey build (StarlingMonkey backend only)")
     .option(
