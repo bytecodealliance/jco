@@ -20,7 +20,7 @@
 </script>
 <script type="module">
   import { _setArgs, _setEnv } from "@bytecodealliance/preview3-shim/cli";
-  import { _setFileData } from "@bytecodealliance/preview3-shim/filesystem";
+  import * as filesystem from "@bytecodealliance/preview3-shim/filesystem";
 
   const logs = [];
   const originalLog = console.log;
@@ -44,6 +44,58 @@
     }
   };
 
+  const runComponent = async (component) => {
+    const run = component["wasi:cli/run@0.3.0"] ?? component.run;
+    if (!run || typeof run.run !== "function") {
+      throw new Error("wasi:cli/run export missing");
+    }
+    await run.run();
+  };
+
+  const configureOpfs = async (directory) => {
+    filesystem._clearPreopens();
+    const capability = await filesystem.loadOpfsCapability(directory);
+    const adapter = new filesystem.OpfsFilesystemAdapter();
+    filesystem._addPreopenWithAdapter("/", adapter, capability);
+    filesystem._setCwd("/");
+    return adapter;
+  };
+
+  const withOpfsScratch = async (callback) => {
+    const opfsRoot = await navigator.storage.getDirectory();
+    const scratchName = `preview3-shim-${crypto.randomUUID()}`;
+    const directory = await opfsRoot.getDirectoryHandle(scratchName, { create: true });
+    try {
+      return await callback(directory);
+    } finally {
+      filesystem._clearPreopens();
+      await opfsRoot.removeEntry(scratchName, { recursive: true });
+    }
+  };
+
+  const byteStream = (text) => {
+    const bytes = new TextEncoder().encode(text);
+    return new ReadableStream({
+      start(controller) {
+        for (const byte of bytes) {
+          controller.enqueue(byte);
+        }
+        controller.close();
+      },
+    });
+  };
+
+  const readText = async (descriptor) => {
+    const [stream, completed] = descriptor.readViaStream(0n);
+    const bytes = [];
+    for await (const byte of stream) {
+      bytes.push(byte);
+    }
+    const result = await completed;
+    assert(result.tag === "ok", `file read failed: ${JSON.stringify(result)}`);
+    return new TextDecoder().decode(Uint8Array.from(bytes));
+  };
+
   const actions = {
     async "closed-stream"(component) {
       const stream = component["local:local/closed-stream"].get();
@@ -65,6 +117,65 @@
       await closed.readFuture(Promise.resolve(42), 42, new Promise(() => {}));
       await closed.readFuturePostReturn(Promise.resolve(43), 43, new Promise(() => {}));
     },
+    async "opfs-component"(component) {
+      await withOpfsScratch(async (directory) => {
+        const adapter = await configureOpfs(directory);
+        await runComponent(component);
+        // Component mutations schedule an automatic flush; let it settle before forcing one.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await adapter.flush();
+        console.log("OPFS component run completed");
+      });
+    },
+    async "opfs-persistence"() {
+      await withOpfsScratch(async (directory) => {
+        const adapter = await configureOpfs(directory);
+        const [[root, path]] = filesystem._getPreopens();
+        assert(path === "/", `unexpected OPFS preopen path: ${path}`);
+
+        await root.createDirectoryAt("notes");
+        const file = await root.openAt(
+          {},
+          "notes/todo.txt",
+          { create: true },
+          { read: true, write: true },
+        );
+        const writeResult = await file.writeViaStream(byteStream("buy milk"), 0n);
+        assert(writeResult.tag === "ok", `file write failed: ${JSON.stringify(writeResult)}`);
+        await root.symlinkAt("notes/todo.txt", "todo-link.txt");
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await adapter.flush();
+
+        await configureOpfs(directory);
+        const [[reloadedRoot]] = filesystem._getPreopens();
+        assert(
+          (await reloadedRoot.readlinkAt("todo-link.txt")) === "notes/todo.txt",
+          "symlink target did not survive OPFS reload",
+        );
+        const linked = await reloadedRoot.openAt(
+          { symlinkFollow: true },
+          "todo-link.txt",
+          {},
+          { read: true },
+        );
+        assert(
+          (await readText(linked)) === "buy milk",
+          "file contents did not survive OPFS reload",
+        );
+
+        const [entries, completed] = reloadedRoot.readDirectory();
+        const names = [];
+        for await (const entry of entries) {
+          names.push(entry.name);
+        }
+        assert((await completed).tag === "ok", "directory read did not complete successfully");
+        assert(names.includes("notes"), "persisted directory is missing after OPFS reload");
+        assert(names.includes("todo-link.txt"), "persisted symlink is missing after OPFS reload");
+        assert(!names.includes(".__wasi_symlinks__.json"), "OPFS sidecar leaked to the guest");
+        console.log("OPFS persistence verified");
+      });
+    },
   };
 
   update("running");
@@ -76,7 +187,7 @@
     }
     _setArgs(["component"]);
     _setEnv({ HTTP_SERVER: location.host });
-    _setFileData({ dir: {} });
+    filesystem._setFileData({ dir: {} });
 
     const component = await import(`/transpiled/${moduleName}`);
     await component.$init;
@@ -87,11 +198,7 @@
       }
       await actions[action](component);
     } else {
-      const run = component["wasi:cli/run@0.3.0"] ?? component.run;
-      if (!run || typeof run.run !== "function") {
-        throw new Error(`wasi:cli/run export missing from ${moduleName}`);
-      }
-      await run.run();
+      await runComponent(component);
     }
     update("success");
   } catch (error) {

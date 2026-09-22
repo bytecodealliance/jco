@@ -41,6 +41,24 @@ const CASES = [
     fixture: "fs/p3-filesystem-file-read-write.wasm",
   },
   {
+    title: "OPFS component file read/write",
+    fixture: "fs/p3-filesystem-file-read-write.wasm",
+    action: "opfs-component",
+    output: "OPFS component run completed",
+  },
+  {
+    title: "OPFS component directory operations",
+    fixture: "fs/p3-readdir.wasm",
+    action: "opfs-component",
+    output: "OPFS component run completed",
+  },
+  {
+    title: "OPFS persistence and symlinks",
+    fixture: "fs/p3-filesystem-file-read-write.wasm",
+    action: "opfs-persistence",
+    output: "OPFS persistence verified",
+  },
+  {
     title: "HTTP GET",
     fixture: "http/p3-http-outbound-request-get.wasm",
   },
@@ -95,6 +113,9 @@ suite("Preview 3 browser components", () => {
     outputRoot = await mkdtemp(join(process.cwd(), ".preview3-browser-"));
     try {
       for (const browserCase of CASES) {
+        if (entries.has(browserCase.fixture)) {
+          continue;
+        }
         entries.set(
           browserCase.fixture,
           await writeTranspiledFixture(outputRoot, browserCase.fixture),
