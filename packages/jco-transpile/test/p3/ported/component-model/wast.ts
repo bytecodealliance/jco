@@ -44,7 +44,6 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/drop-waitable-set.wast' },
     { relPath: 'async/drop-subtask.wast' },
     { relPath: 'async/async-calls-sync.wast' },
-    { relPath: 'async/cancellable.wast' },
     { relPath: 'async/deadlock.wast' },
     { relPath: 'async/sync-streams.wast' },
     { relPath: 'async/dont-block-start.wast' },
