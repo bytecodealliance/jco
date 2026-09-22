@@ -1,8 +1,9 @@
-import { Todo } from "../../common/errors.js";
+import { preopens } from "@bytecodealliance/preview2-shim/filesystem";
 import type { Descriptor } from "../../../types/interfaces/wasi-filesystem-preopens.d.ts";
+import { wrapDescriptor } from "./types.js";
 
 function getDirectories(): Array<[Descriptor, string]> {
-  throw new Todo();
+  return preopens.getDirectories().map(([descriptor, path]) => [wrapDescriptor(descriptor), path]);
 }
 
 export default {
