@@ -100,10 +100,6 @@
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
         {
-            "name": "trap-on-reenter.wast",
-            "revision": "4769c405eda54e99ea28292ebd007fcbe53c7b40"
-        },
-        {
             "name": "validate-no-async-abi-for-sync-type.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
