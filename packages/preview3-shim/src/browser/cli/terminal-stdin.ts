@@ -1,8 +1,8 @@
-import { Todo } from "../../common/errors.js";
+import { terminalStdin } from "@bytecodealliance/preview2-shim/cli";
 import type { TerminalInput } from "../../../types/interfaces/wasi-cli-terminal-stdin.d.ts";
 
 function getTerminalStdin(): TerminalInput | undefined {
-  throw new Todo();
+  return terminalStdin.getTerminalStdin();
 }
 
 export default {

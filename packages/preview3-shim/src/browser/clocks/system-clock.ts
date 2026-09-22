@@ -1,12 +1,13 @@
-import { Todo } from "../../common/errors.js";
+import { wallClock } from "@bytecodealliance/preview2-shim/clocks";
 import type { Instant, Duration } from "../../../types/interfaces/wasi-clocks-system-clock.d.ts";
 
 function now(): Instant {
-  throw new Todo();
+  return wallClock.now();
 }
 
 function getResolution(): Duration {
-  throw new Todo();
+  const resolution = wallClock.resolution();
+  return resolution.seconds * 1_000_000_000n + BigInt(resolution.nanoseconds);
 }
 
 export default {

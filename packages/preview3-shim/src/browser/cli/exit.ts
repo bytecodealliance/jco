@@ -1,12 +1,16 @@
-import { Todo } from "../../common/errors.js";
+import { exit as preview2Exit } from "@bytecodealliance/preview2-shim/cli";
 import type { Result } from "../../../types/interfaces/wasi-cli-exit.d.ts";
 
+const exitWithCodeV2 = preview2Exit as typeof preview2Exit & {
+  exitWithCode(statusCode: number): void;
+};
+
 function exit(status: Result<void, void>): void {
-  throw new Todo();
+  preview2Exit.exit(status);
 }
 
 function exitWithCode(statusCode: number): void {
-  throw new Todo();
+  exitWithCodeV2.exitWithCode(statusCode);
 }
 
 export default {

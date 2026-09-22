@@ -1,7 +1,17 @@
-import { Todo } from "../../common/errors.js";
+type RunHandler = () => void | Promise<void>;
+let handler: RunHandler | undefined;
 
-function run(): Promise<void> {
-  throw new Todo();
+async function run(): Promise<void> {
+  if (!handler) {
+    throw new Error("wasi:cli/run import is not configured");
+  }
+  await handler();
+}
+
+export function _setRun(next: RunHandler | undefined): RunHandler | undefined {
+  const previous = handler;
+  handler = next;
+  return previous;
 }
 
 export default {

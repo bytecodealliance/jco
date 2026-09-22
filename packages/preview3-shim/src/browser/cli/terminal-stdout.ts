@@ -1,8 +1,8 @@
-import { Todo } from "../../common/errors.js";
+import { terminalStdout } from "@bytecodealliance/preview2-shim/cli";
 import type { TerminalOutput } from "../../../types/interfaces/wasi-cli-terminal-stdout.d.ts";
 
 function getTerminalStdout(): TerminalOutput | undefined {
-  throw new Todo();
+  return terminalStdout.getTerminalStdout();
 }
 
 export default {
