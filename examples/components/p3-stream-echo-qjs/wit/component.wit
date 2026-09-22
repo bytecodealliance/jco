@@ -1,0 +1,22 @@
+package jco-examples:p3-stream-echo-qjs;
+
+interface echo {
+  enum echo-error {
+    cancelled,
+  }
+
+  type message-stream = stream<string>;
+  type completion = future<result<u32, echo-error>>;
+
+  record echo-output {
+    messages: message-stream,
+    completion: completion,
+  }
+
+  /// Returns each input message unchanged and reports when the input is exhausted.
+  echo: async func(messages: message-stream) -> echo-output;
+}
+
+world component {
+  export echo;
+}

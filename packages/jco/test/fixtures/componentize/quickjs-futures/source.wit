@@ -1,0 +1,7 @@
+package test:quickjs-futures;
+
+world component {
+    export make-value: async func() -> future<u32>;
+    export make-nested-value: async func() -> future<future<u32>>;
+    export read-value: async func(value: future<u32>) -> u32;
+}

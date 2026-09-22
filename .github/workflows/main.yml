@@ -783,6 +783,8 @@ jobs:
             setup-p2-shim: true
           - name: wintertc
             workspace: examples/components/wintertc
+          - name: p3-stream-echo-qjs
+            workspace: examples/components/p3-stream-echo-qjs
           - name: p3-stream-chat
             workspace: examples/transpile/p3-stream-chat
     steps:
