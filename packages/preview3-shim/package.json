@@ -55,10 +55,7 @@
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "pretest": "pnpm --filter @bytecodealliance/preview2-shim build && pnpm run build",
-    "test": "vitest --run -c test/vitest.ts && vitest --run -c test/vitest.browser-unit.ts",
-    "pretest:browser:unit": "pnpm --filter @bytecodealliance/preview2-shim build && pnpm run build",
-    "test:browser:unit": "vitest --run -c test/vitest.browser-unit.ts",
+    "test": "vitest --run -c test/vitest.ts",
     "prebench": "pnpm run build",
     "bench": "vitest bench --run",
     "prepack": "pnpm run build"
