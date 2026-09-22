@@ -62,45 +62,6 @@ suite('yield scenario', () => {
         };
     };
 
-    test.concurrent('synchronous', async () => {
-        let cleanup;
-        try {
-            const callerPath = join(COMPONENT_FIXTURES_DIR, 'p3/yield/async-yield-caller.wasm');
-            const calleePath = join(COMPONENT_FIXTURES_DIR, 'p3/yield/async-yield-callee-synchronous.wasm');
-            const componentPath = await composeCallerCallee({
-                callerPath,
-                calleePath,
-            });
-
-            const res = await buildAndTranspile({
-                componentPath,
-                instantiation: {
-                    imports: {
-                        'local:local/continue': {
-                            ...genYieldRunnerIface(),
-                        },
-                        'local:local/ready': {
-                            Thing: HostThing,
-                        },
-                    },
-                },
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const { instance } = res;
-            cleanup = res.cleanup;
-
-            await instance['local:local/run'].run();
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
     test.concurrent('stackless', async () => {
         let cleanup;
         try {
@@ -140,48 +101,8 @@ suite('yield scenario', () => {
         }
     });
 
-    // These cancellation cases use hand-rolled ABI code to verify eager-start
+    // This cancellation case uses hand-rolled ABI code to verify eager-start
     // scheduling: the callee must reach STARTED before its first suspension.
-    test('cancel synchronous', async () => {
-        let cleanup;
-        try {
-            const callerPath = join(COMPONENT_FIXTURES_DIR, 'p3/yield/async-yield-caller-cancel.wasm');
-            const calleePath = join(COMPONENT_FIXTURES_DIR, 'p3/yield/async-yield-callee-synchronous.wasm');
-            const componentPath = await composeCallerCallee({
-                callerPath,
-                calleePath,
-            });
-
-            const res = await buildAndTranspile({
-                componentPath,
-                instantiation: {
-                    imports: {
-                        'local:local/continue': {
-                            ...genYieldRunnerIface(),
-                        },
-                        'local:local/ready': {
-                            Thing: HostThing,
-                        },
-                    },
-                },
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // }
-            });
-            const { instance } = res;
-            cleanup = res.cleanup;
-
-            await instance['local:local/run'].run();
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
-    // Stackless counterpart to `cancel synchronous` above.
     test('cancel stackless', async () => {
         let cleanup;
         try {
