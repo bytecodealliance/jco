@@ -1,8 +1,9 @@
-import { Todo } from "../../common/errors.js";
+import { stdin } from "@bytecodealliance/preview2-shim/cli";
 import type { Result, ErrorCode } from "../../../types/interfaces/wasi-cli-stdin.d.ts";
+import { readableFromPreview2Input } from "../streams.js";
 
 function readViaStream(): [ReadableStream<number>, Promise<Result<void, ErrorCode>>] {
-  throw new Todo();
+  return readableFromPreview2Input(stdin.getStdin(), () => "io");
 }
 
 export default {

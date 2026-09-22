@@ -1,20 +1,20 @@
-import { Todo } from "../../common/errors.js";
+import { monotonicClock } from "@bytecodealliance/preview2-shim/clocks";
 import type { Mark, Duration } from "../../../types/interfaces/wasi-clocks-monotonic-clock.d.ts";
 
 function now(): Mark {
-  throw new Todo();
+  return monotonicClock.now();
 }
 
 function getResolution(): Duration {
-  throw new Todo();
+  return monotonicClock.resolution();
 }
 
-function waitUntil(when: Mark): Promise<void> {
-  throw new Todo();
+async function waitUntil(when: Mark): Promise<void> {
+  await monotonicClock.subscribeInstant(when).block();
 }
 
-function waitFor(howLong: Duration): Promise<void> {
-  throw new Todo();
+async function waitFor(howLong: Duration): Promise<void> {
+  await monotonicClock.subscribeDuration(howLong).block();
 }
 
 export default {

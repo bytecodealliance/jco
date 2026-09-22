@@ -1,15 +1,22 @@
-import { Todo } from "../../common/errors.js";
+import { _setCwd as setPreview2Cwd, environment } from "@bytecodealliance/preview2-shim/cli";
+
+let initialCwd = environment.initialCwd();
+
+export function _setCwd(cwd: string): void {
+  initialCwd = cwd;
+  setPreview2Cwd(cwd);
+}
 
 function getEnvironment(): Array<[string, string]> {
-  throw new Todo();
+  return environment.getEnvironment();
 }
 
 function getArguments(): Array<string> {
-  throw new Todo();
+  return environment.getArguments();
 }
 
 function getInitialCwd(): string | undefined {
-  throw new Todo();
+  return initialCwd;
 }
 
 export default {
