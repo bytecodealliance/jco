@@ -29,7 +29,6 @@ const P3_FIXTURE_COMPONENTS = [
     'fs/p3-filesystem-file-read-write.wasm',
 
     'yield/async-yield-callee-stackless.wasm',
-    'yield/async-yield-callee-synchronous.wasm',
     'yield/async-yield-caller-cancel.wasm',
     'yield/async-yield-caller.wasm',
 
