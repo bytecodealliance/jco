@@ -133,145 +133,12 @@ export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapt
 > to change. APIs, behavior, and generated component interfaces may change
 > incompatibly without a semver-major release.
 
-Jco can bundle the following Node.js APIs into JavaScript WebAssembly components:
+The table above lists the available adapters. Application code should normally
+keep its `node:` imports and let `jco componentize` select the implementation.
+See the [Node.js built-in compatibility guide](https://bytecodealliance.github.io/jco/interop/nodejs-builtins.html)
+for setup, versioning, capabilities, and compatibility boundaries.
 
-- the portable Node globals already provided by the component engine, plus the
-  existing audited Buffer adapter injected on demand for free `Buffer` references;
-- Node's global error constructors and coded-error foundation, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/errors` and injected on demand;
-- `node:assert` and `node:assert/strict`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert`;
-- `node:path`, `node:path/posix`, and `node:path/win32`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path`;
-- synchronous `node:child_process` operations, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process` and the
-  `jco:node/child-process@0.1.0` host capability;
-- `node:async_hooks`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/async-hooks`, for synchronous scopes;
-- `node:diagnostics_channel`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/diagnostics-channel`;
-- `node:cluster`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster` and the
-  `jco:node/cluster@0.1.0` host capability;
-- `node:console`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console` and the
-  application-provided `jco:node/console@0.1.0` capability;
-- `node:dns` and `node:dns/promises`, implemented by the versioned DNS adapter
-  and the application-provided `jco:node/dns@0.1.0` capability;
-- `node:fs` and `node:fs/promises`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs` and the
-  application-provided `jco:node/fs@0.1.0` capability;
-- `node:os`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os` and the
-  application-provided `jco:node/os@0.1.0` capability;
-- `node:inspector` and `node:inspector/promises`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/inspector` and the
-  application-provided `jco:node/inspector@0.1.0` capability, with the host
-  calling back into the component through a guest-exported callbacks interface;
-- the `node:http` and `node:https` APIs, with selectable direct,
-  `wasi:sockets`, and `wasi:http` implementations;
-- the `node:net` TCP client/server and address APIs over `wasi:sockets`;
-- `node:buffer`, with its modern core provided by Jco's audited unenv
-  compatibility layer;
-- [`node:url`](../../docs/src/interop/nodejs-builtins/supported-modules/url.md),
-  with portable WHATWG URL/URLSearchParams, URLPattern, domain and
-  file conversions, and lazy WASI cwd access for relative paths;
-- `node:querystring`, provided by Jco's audited unenv compatibility layer;
-- `node:events`, whose `EventEmitter` comes from Jco's audited unenv
-  compatibility layer, completed by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/events` for the three
-  module-level functions unenv leaves unimplemented;
-- `node:string_decoder`, implemented guest-locally by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/string-decoder`;
-- `node:repl`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/repl` over the readline port.
-  Evaluation is global-scope only (`useGlobal: true`); the module needs no WIT
-  capability and is the only jco-std module that bundles `acorn`;
-- `node:tty`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty` and the
-  application-provided `jco:node/tty@0.1.0` capability, giving readline and the
-  REPL real terminal streams;
-- `node:wasi`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi` and the
-  application-provided `jco:node/wasi@0.1.0` capability. Construction is exact;
-  `start()` and `initialize()` refuse, because a component cannot instantiate the
-  nested module they would run;
-- `node:module`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/module`. Classification,
-  source maps and `require.resolve` are exact; everything that loads throws,
-  because a component has no module loader;
-- `node:ffi`, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi` and the
-  `jco:node/ffi@0.1.0` host capability. **Node 26 only**, and denied by default:
-  granting it lets a component load native libraries and read and write host
-  memory;
-- `node:stream` and `node:stream/promises`, with portable classic constructors,
-  pipelines, async iteration, disposal, and Web Stream conversion;
-- `node:stream/consumers`, implemented portably by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/consumers`; and
-- the experimental Node 24.20 `node:stream/iter` API, implemented by
-  `@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/stream/iter`.
-
-The two stream modules share portable byte normalization and collection helpers.
-They use the component engine's iterable, typed-array, text-codec, Blob, and abort
-globals and require no WIT capability. The iterable module's `fromReadable()` and
-`fromWritable()` accept duck-typed classic streams. `toReadable()`,
-`toReadableSync()`, and `toWritable()` throw `ERR_JCO_UNSUPPORTED_NODE_API` until
-Jco has a faithful classic `node:stream` implementation; weak unenv constructor
-mocks are not used.
-
-Jco resolves Node compatibility modules in quality order:
-
-- Custom/Higher-fidelity or WASI-aware Jco implementations
-- Explicitly audited `unenv` modules.
-
-Jco does not automatically enable unenv's complete alias list or
-treat mocked and unimplemented exports as supported APIs.
-
-The buffer adapter uses unenv's Feross `buffer` implementation for the portable
-core API. Deprecated entry points (e.g. `Buffer()`/`new Buffer()` and `SlowBuffer`)
-throw immediately.
-
-Runtime-dependent APIs without a compatible guest implementation
-also throw explicit unsupported-API errors.
-
-The current implementation does not support the `base64url` encoding accepted by
-Node's Buffer.
-
-> [!NOTE]
-> The assert shim targets Node.js 24.19.0 and requires no WIT/WASI capability. It is
-> published under the `wasi/0.2.x/node/24.x.x` entry point, which should be used explicitly. Neither WASI
-> versions nor Node majors are interchangeable, so a new Node major or a WASI p3 adaptation
-> is added as its own entry point rather than replacing this one.
-
-There is no unversioned alias for it -- `node/path` keeps one
-only for backwards compatibility (that will be removed in a future breaking-change version
-of `jco-std`).
-
-`jco-std`'s node shimcomparison and assertion behavior is adapted from the corresponding
-MIT-licensed Node.js sources. Error fields and assertion outcomes are compatibility
-targets; some generated diff text and JavaScript engine stack frames can differ
-from Node.
-
-Deprecated APIs remain importable but immediately throw a clear unsupported-API
-error rather than running their deprecated implementation.
-
-### Paths
-
-The `node:path`, `node:path/posix`, and `node:path/win32` builtins use the
-MIT-licensed path algorithms from Node.js 24.20.0. Both lexical namespaces,
-`matchesGlob()`, namespace identities, Node-style validation errors, and the
-legacy `_makeLong` alias match that release. WASI targets use POSIX as the
-default namespace; importing `node:path/win32` or using `path.win32` selects the
-Windows algorithms explicitly.
-
-Most path operations are pure and never access the host. `resolve()` and
-`relative()` obtain the component working directory lazily from
-`wasi:cli/environment#initial-cwd` when their inputs require it. Windows drive-relative
-resolution also reads the matching `=C:`-style environment entry when one exists.
-Therefore, a world that bundles any of these specifiers must import exactly one
-`wasi:cli/environment@0.2.x` interface. No Jco-specific WIT interface or
-deny-by-default host adapter is involved.
+### `node:path`
 
 ```js
 import path, { matchesGlob } from "node:path";
@@ -283,18 +150,9 @@ export function outputPath(name) {
 }
 ```
 
-Adapter authors can import `createPath()` from the versioned `jco-std` entry
-point and supply typed `initialCwd` and `getEnvironment` providers. This is also
-the boundary used by Jco's builtin adapter. `minimatch` 10.2.6 is bundled for
-Node-compatible `matchesGlob()` behavior; it does not add filesystem access.
+See [`node:path`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/path.html).
 
-### String decoder
-
-The versioned string-decoder module implements Node 24's `StringDecoder` in the
-guest and reuses Jco's existing `node:buffer` core. It preserves incomplete UTF-8,
-UTF-16LE, base64, and base64url groups across writes, accepts strings and all
-`ArrayBufferView` inputs, and supports Node's encoding aliases. No WIT import,
-host adapter, JSPI configuration, or machine capability is required.
+### `node:string_decoder`
 
 ```js
 import { Buffer } from "node:buffer";
@@ -305,18 +163,9 @@ decoder.write(Buffer.from([0xf0, 0x9f]));
 decoder.end(Buffer.from([0x8c, 0x8d])); // "🌍"
 ```
 
-The implementation follows Node 24.20.0's module surface and portable decoder
-algorithms. It also retains the legacy `text`, `lastChar`, `lastNeed`, and
-`lastTotal` prototype members that remain present in Node 24, although new code
-should use the documented constructor, `write()`, and `end()` API.
+See [`node:string_decoder`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/string-decoder.html).
 
-### REPL
-
-The versioned repl module ports Node 24.20.0's `node:repl` on top of the readline
-port: `repl.start()`, `REPLServer`, keyword commands, `defineCommand()`, tab
-completion, in-memory history, reverse search, editor mode, top-level `await`,
-recoverable multi-line input and the `_`/`_error` conventions. The application
-supplies the streams; no WIT capability is required.
+### `node:repl`
 
 ```js
 import repl from "node:repl";
@@ -324,114 +173,38 @@ import repl from "node:repl";
 export function attach(input, output) {
   const server = repl.start({ prompt: "app> ", input, output, useGlobal: true });
   server.context.app = { version: "1.0.0" };
-  server.defineCommand("ping", {
-    help: "Answer pong",
-    action() {
-      this.output.write("pong\n");
-      this.displayPrompt();
-    },
-  });
   return server;
 }
 ```
 
-Only `useGlobal: true` is supported. No component engine can create a second
-realm, so Node's default of a separate context is refused at construction with
-`ERR_JCO_UNSUPPORTED_NODE_API`; with the global scope, evaluation is an indirect
-`eval`, which is what `vm.runInThisContext` is. Top-level `let`, `const` and
-`class` are rewritten so they persist between lines as they do in Node, at the
-cost that `const` is not enforced across lines. Strict mode, `breakEvalOnSigint`,
-history files, `.save` and `.load` are refused or report Node's own failure text,
-and core modules are not auto-loaded into the context.
+See [`node:repl`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/repl.html).
 
-`acorn` 8.17.0 and `acorn-walk` 8.3.5, the versions Node vendors, are bundled by
-this module alone. The REPL needs a parser the engine cannot replace: deciding
-whether input is incomplete or wrong (engine `SyntaxError` messages differ
-between SpiderMonkey and QuickJS), rewriting top-level `await`, and locating the
-expression to tab-complete. A component that does not import `node:repl` does
-not carry acorn.
-
-### Terminals
-
-The versioned tty module ports Node 24.20.0's `node:tty`: `isatty()`, `ReadStream`
-with `setRawMode()`, and `WriteStream` with `columns`/`rows`, `getWindowSize()`,
-`getColorDepth()`, `hasColors()`, the cursor helpers and `'resize'`. A component
-has no terminal of its own, so the module is host-backed: the streams address the
-embedding process's descriptors through `jco:node/tty@0.1.0`, which is denied by
-default and mapped explicitly at transpile time.
+### `node:tty`
 
 ```js
 import { ReadStream, WriteStream, isatty } from "node:tty";
-import { createInterface } from "node:readline";
 
-export function ask() {
-  if (!isatty(0) || !isatty(1)) {
-    throw new Error("an interactive terminal is required");
-  }
-  const rl = createInterface({ input: new ReadStream(0), output: new WriteStream(1) });
-  rl.question("Name? ", (name) => {
-    rl.write(`Hello ${name}, your terminal is ${rl.output.columns} columns wide\n`);
-    rl.close();
-  });
+export function terminal() {
+  if (!isatty(0) || !isatty(1)) throw new Error("a terminal is required");
+  return { input: new ReadStream(0), output: new WriteStream(1) };
 }
 ```
 
-```console
-jco transpile component.wasm \
-  --map 'jco:node/tty@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host/node'
+See [`node:tty`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/tty.html).
+
+### `node:wasi`
+
+```js
+import { WASI } from "node:wasi";
+
+export function createWasi() {
+  return new WASI({ version: "preview1" });
+}
 ```
 
-The streams are `stream.Duplex` instances rather than `net.Socket`s, a `ReadStream`
-is not writable and a `WriteStream` is not readable. Reading blocks the component:
-a flowing `ReadStream` pulls one chunk at a time and emits `'data'` synchronously
-between pulls, so terminal input is read inside the export that asked for it.
-`'resize'` is emitted only by `_refreshSize()`, since a component receives no
-`SIGWINCH`. Color detection reads the provider's environment when none is passed.
+See [`node:wasi`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/wasi.html).
 
-### WASI
-
-The versioned wasi module ports Node 24.19.0's `node:wasi`: the `WASI` class with
-its option validation, `wasiImport`, `getImportObject()`, `start()`,
-`initialize()` and `finalizeBindings()`. It exists so that source importing
-`node:wasi` bundles, constructs, and fails with an explanation rather than an
-unresolved import, because the API cannot do its job inside a component:
-`start()` and `initialize()` drive a core `WebAssembly.Instance` the caller
-created, and a Jco component cannot instantiate a nested module (neither guest
-engine has a `WebAssembly` global) nor hand a linear memory to a host.
-
-What does work is Node's constructor. Its option validation is host-free and
-exact, and its `uvwasi_init` step -- opening every preopen and checking the
-standard descriptors -- is the one host operation `jco:node/wasi@0.1.0` carries.
-It is denied by default; the Node provider runs the real `node:wasi` constructor
-and reports its `UVWASI_ENOENT`, `UVWASI_ENOTDIR` and `UVWASI_EBADF` failures with
-Node's `errno`, `code` and `syscall`:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/wasi@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host/node'
-```
-
-Past construction, `wasiImport` answers as Node's binding does before `start()`:
-`UVWASI_EINVAL` for a call with the wrong argument count or types, otherwise
-`ERR_WASI_NOT_STARTED`; `proc_exit` records the code and throws Node's exit
-symbol when `returnOnExit` is set. `start()`, `initialize()` and
-`finalizeBindings()` validate the instance as Node does and then throw
-`ERR_JCO_UNSUPPORTED_NODE_API`, naming composition (`wac`, `wasm-tools compose`)
-or running the module on the host as the alternatives. The deny provider's
-`ERR_JCO_WASI_ADAPTER_REQUIRED` says the same, so the limitation is visible from
-the first `new WASI()`. Node's `ExperimentalWarning` is not emitted.
-
-### Errors globals
-
-Node's [Errors API](https://nodejs.org/docs/latest-v24.x/api/errors.html) is not an
-importable `node:errors` module. It describes global JavaScript error constructors,
-system-error fields, propagation conventions, and the stable `error.code` values
-produced by other Node APIs.
-
-When Jco bundles component source, references to `Error`, `AggregateError`,
-`DOMException`, `EvalError`, `RangeError`, `ReferenceError`, `SuppressedError`,
-`SyntaxError`, `TypeError`, and `URIError` automatically use the versioned errors
-adapter. No source import or WIT capability is required:
+### Node.js error globals
 
 ```js
 export function describeFailure() {
@@ -440,26 +213,9 @@ export function describeFailure() {
 }
 ```
 
-```console
-jco componentize component.js --wit wit --bundle -o component.wasm
-```
+See [Node.js error globals](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/errors.html).
 
-The adapter preserves the guest engine's native constructor identities and adds
-portable Node extensions when the engine lacks them, including
-`Error.captureStackTrace`, `Error.stackTraceLimit`, and `Error.isError`. Shared
-jco-std shims use the same implementation for coded validation and system-error
-objects. Exact stack frames remain engine-specific.
-
-Injection is demand-driven. If a bundled source graph never references one of
-these constructors, Rolldown omits the errors adapter entirely, so the finished
-bundle pays no code-size or runtime cost for it. `node:errors` deliberately remains
-unresolved because Node 24 does not provide that module either.
-
-### Child processes
-
-Source that uses `node:child_process` must be bundled so Jco can replace the
-Node import with the guest adapter. For example, `component.js` can export a
-function backed by Node's synchronous API:
+### `node:child_process`
 
 ```js
 import { execFileSync } from "node:child_process";
@@ -469,65 +225,9 @@ export function nodeVersion() {
 }
 ```
 
-The starting `wit/component.wit` does not need to declare the child-process
-capability itself:
+See [`node:child_process`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/child-process.html).
 
-```wit
-package example:child-process;
-
-world app {
-  export node-version: func() -> string;
-}
-```
-
-Build the component with bundling enabled and, when needed, select the world
-that Jco should update:
-
-```console
-jco componentize component.js \
-  --wit wit \
-  --world-name app \
-  --bundle \
-  -o component.wasm
-```
-
-When Jco detects `node:child_process`, it edits the selected world in place if
-the import is missing:
-
-```wit
-world app {
-  // Added by Jco because bundled source imports node:child_process.
-  import jco:node/child-process@0.1.0;
-  export node-version: func() -> string;
-}
-```
-
-Jco also adds the interface definition at
-`wit/deps/jco-node-0.1.0/package.wit` and prints a warning naming the modified
-files so the generated changes are visible for review and commit. An existing
-import or dependency is preserved, and running the command again does not add a
-duplicate.
-
-Adding the WIT import does not grant permission to spawn processes. By default,
-Jco maps it to a host shim that throws
-`ERR_JCO_CHILD_PROCESS_ADAPTER_REQUIRED`. Applications that intend to grant
-process spawning must explicitly map the opt-in Node host adapter when
-transpiling the component:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/child-process@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/child-process/host/node'
-```
-
-The current WIT interface supports `spawnSync`, `execFileSync`, and `execSync`.
-The asynchronous `spawn`, `exec`, and `execFile` APIs, `ChildProcess`, and
-`fork`/IPC throw `ERR_JCO_UNSUPPORTED_NODE_API`: callbacks, lifecycle events,
-and interactive streams cannot be represented faithfully by the synchronous
-interface yet.
-
-### Filesystem
-
-Source can keep ordinary `node:fs` and `node:fs/promises` imports. For example:
+### `node:fs`
 
 ```js
 import { readFileSync } from "node:fs";
@@ -539,86 +239,9 @@ export async function replace(path, contents) {
 }
 ```
 
-Bundle the source when building the component:
+See [`node:fs`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/fs.html).
 
-```console
-jco componentize component.js --wit wit --bundle -o component.wasm
-```
-
-If the selected world does not already import the filesystem capability, Jco
-edits it in place, installs `fs.wit` under `wit/deps/jco-node-0.1.0`, and warns
-about the generated changes:
-
-```wit
-world app {
-  // Added by Jco because bundled source imports node:fs.
-  import jco:node/fs@0.1.0;
-}
-```
-
-Existing imports and dependency files are preserved, and rerunning the command
-does not add duplicates. Use `--world-name` when the WIT package contains more
-than one world.
-
-The generated import grants no filesystem access by itself. Jco's default host
-provider throws `ERR_JCO_FS_ADAPTER_REQUIRED`. A Node application must opt into
-the real Node filesystem provider while transpiling:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/fs@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/fs/host/node'
-```
-
-The guest adapter shares one descriptor core across synchronous, callback, and
-promise APIs. It supports path operations, metadata, directory entries, file
-descriptors, vector I/O, and promise `FileHandle`s. Callback APIs complete on a
-guest microtask. Stream constructors, file watching, `openAsBlob`, and other
-resource-oriented APIs currently throw `ERR_JCO_UNSUPPORTED_NODE_API`; the WIT
-boundary does not yet model their streams, events, or long-lived resources.
-
-Note that the `node:` specifiers are replaced when Jco bundles source during
-componentization. The package export can also be imported directly:
-
-```ts
-import assert, { deepStrictEqual } from "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/assert";
-
-assert(true);
-deepStrictEqual({ ready: true }, { ready: true });
-```
-
-When bundled source imports `node:console`, Jco adds the host capability to the
-selected WIT world if it is missing:
-
-```wit
-world component {
-    // Added by Jco because bundled source imports node:console.
-    import jco:node/console@0.1.0;
-}
-```
-
-It also installs `console.wit` in the `jco-node-0.1.0` dependency directory and
-prints a warning describing the generated edits. Existing imports and dependency
-files are preserved, so repeated componentization does not create duplicates.
-
-The capability is denied by default. This lets a component containing optional
-console calls build without implicitly granting it Node.js host access; calling
-an output method through the default mapping throws
-`ERR_JCO_CONSOLE_ADAPTER_REQUIRED`.
-
-Applications running under Node can explicitly select the passthrough provider:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/console@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host/node'
-```
-
-The guest boundary contains only a stream selector, strings, and terminal
-metadata queries. It does not expose Node stream objects, so a browser console
-provider can be added later without changing component-facing code.
-
-### Operating-system information
-
-Guest source uses the ordinary Node API:
+### `node:os`
 
 ```js
 import os from "node:os";
@@ -628,34 +251,9 @@ export function hostSummary() {
 }
 ```
 
-When bundled source imports `node:os`, Jco adds a generated
-`jco:node/os@0.1.0` import to the selected WIT world when it is absent, installs
-`os.wit` in `wit/deps/jco-node-0.1.0`, and warns about both source changes.
-Aliased existing imports are recognized and repeated componentization is
-idempotent.
+See [`node:os`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/os.html).
 
-Machine inspection and priority changes are denied by default with
-`ERR_JCO_OS_ADAPTER_REQUIRED`. The value exports `EOL`, `devNull`, and
-`constants` use a non-sensitive POSIX/WASI snapshot so importing optional code
-does not itself reveal host state. A Node application can opt into values from
-the actual machine:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/os@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/os/host/node'
-```
-
-The opt-in adapter delegates the supported Node 24 surface to the runtime's
-real `node:os` module and preserves typed CPU, network-interface, user, constant,
-and structured-error records across WIT. All operations are synchronous, so no
-JSPI configuration is required. Applications can build restricted providers
-against the exported `OsHost` types and use the conversions in
-`wasi/0.2.x/node/24.x.x/os/host-utils`; `os/core` builds the idiomatic guest
-module from such a provider.
-
-### DNS
-
-Application source continues to use ordinary Node imports:
+### `node:dns`
 
 ```js
 import dns from "node:dns";
@@ -666,41 +264,9 @@ export function configuredServers() {
 }
 ```
 
-Bundle the source when creating the component so Jco can replace both imports:
+See [`node:dns`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/dns.html).
 
-```console
-jco componentize component.js --wit wit --world-name component --bundle -o component.wasm
-```
-
-If the selected world does not already import `jco:node/dns@0.1.0`, Jco adds the
-generated import and `dns.wit` dependency and warns about the source changes.
-Repeated builds preserve an existing import and do not add duplicates.
-
-DNS access is denied by default with `ERR_JCO_DNS_ADAPTER_REQUIRED`. A Node host
-can explicitly grant access when transpiling:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/dns@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dns/host/node'
-```
-
-The opt-in provider delegates queries directly to Node's real asynchronous
-`node:dns/promises` implementation. When an application supplies a DNS host map,
-Jco automatically uses JSPI to make that promise-returning host function appear
-synchronous to the Preview 2 guest without blocking Node's event loop. Component
-exports are consequently promise-returning and must be awaited by JavaScript hosts.
-
-`Resolver.cancel()` throws `ERR_JCO_UNSUPPORTED_NODE_API`: the synchronous WIT
-interface does not expose an in-flight c-ares request as a resource that a later
-guest call could cancel. The WIT boundary remains runtime-neutral so a browser DNS
-provider can be added later.
-
-### Net
-
-`node:net` uses Preview 2 DNS, TCP, IO streams, and pollables directly. Jco adds
-the matching `wasi:sockets` and `wasi:io` imports for the selected 0.2.12 or
-0.2.10 world; it does not add a Jco-specific network capability. Ordinary TCP
-client and server code remains unchanged:
+### `node:net`
 
 ```js
 import { connect, createServer } from "node:net";
@@ -709,211 +275,47 @@ createServer((socket) => socket.end("hello")).listen(8080, "127.0.0.1");
 connect(8080, "127.0.0.1").setEncoding("utf8").on("data", console.log);
 ```
 
-The module also provides `BlockList`, `SocketAddress`, IP predicates,
-`BoundSocket`, family-selection defaults, and Node 24.19's exact named-export
-surface. Unix-domain sockets, named pipes, arbitrary file-descriptor/libuv
-handles, custom DNS callbacks, and socket options missing from Preview 2 are
-rejected explicitly. `Socket` provides the common Duplex-shaped API but cannot
-inherit from a classic `node:stream.Duplex` until that stream implementation is
-available.
+See [`node:net`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/net.html).
 
-### HTTP
-
-Application code uses the ordinary Node API:
-
-```js
-import { get } from "node:http";
-
-export function fetchText(url) {
-  return new Promise((resolve, reject) => {
-    const request = get(url, (response) => {
-      const chunks = [];
-      response.setEncoding("utf8");
-      response.on("data", (chunk) => chunks.push(chunk));
-      response.once("error", reject);
-      response.once("end", () => resolve(chunks.join("")));
-    });
-    request.once("error", reject);
-  });
-}
-```
-
-Servers use the same callback and class APIs:
+### `node:http` and `node:https`
 
 ```js
 import { createServer } from "node:http";
+import { get } from "node:https";
 
-const server = createServer((request, response) => {
-  response.writeHead(200, { "Content-Type": "text/plain" });
+createServer((request, response) => {
   response.end(`received ${request.method} ${request.url}`);
-});
+}).listen(8080, "127.0.0.1");
 
-server.listen(8080, "127.0.0.1");
+get("https://example.com/", (response) => response.resume());
 ```
 
-`node:https` is the same core with the `https:` profile, port 443, and a
-TLS-aware `Agent`. Servers take Node's TLS options and clients take the
-`tls.connect` subset (`ca`, `cert`, `key`, `rejectUnauthorized`, `servername`,
-`ALPNProtocols`, and so on), which cross the boundary as a typed record:
+See [`node:http`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/http.html)
+and [`node:https`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/https.html).
 
-```js
-import { createServer, get } from "node:https";
-
-createServer({ key, cert }, (request, response) => response.end("secure")).listen(8443);
-get("https://localhost:8443/", { ca: cert }, (response) => response.resume());
-```
-
-Bundle it and select how `node:http` and `node:https` reach the host:
-
-```console
-jco componentize component.js --wit wit --bundle \
-  --with-nodejs-http-via wasi-http -o component.wasm
-```
-
-`--with-nodejs-http-via` accepts:
-
-- `direct` (the default), which adds `jco:node/http@0.1.0`; its default provider
-  throws `ERR_JCO_HTTP_ADAPTER_REQUIRED`, and a Node application can explicitly
-  map `wasi/0.2.x/node/24.x.x/http/host/node` when transpiling. It supports
-  clients and servers through real `node:http`, and terminates TLS for
-  `node:https` through real `node:https`;
-- `wasi-sockets`, which implements HTTP/1.1 in the guest over Preview 2 TCP.
-  TLS connections implicitly require the additional `wasi:tls` capability;
-  `node:https` adds its import automatically. Verified HTTPS clients work with
-  an explicit host provider; HTTPS servers remain unsupported by the pinned
-  client-only TLS interface; and
-- `wasi-http`, which translates requests to Preview 2
-  `wasi:http/outgoing-handler`, including `https` URLs, though per-request TLS
-  options are refused because the outgoing-handler owns certificate
-  validation. It rejects `Server` construction immediately because an
-  outgoing-handler cannot listen for arbitrary inbound connections.
-
-For HTTPS over sockets, explicitly map `wasi:tls/types@0.2.0-draft` to
-`@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tls/host/node`. TLS support is backend-independent.
-The [local TLS contract](wit/tls-0.2.0-draft/README.md) shares `wasi:io@0.2.12`
-resources with sockets directly. The default mapping denies TLS before connecting. The Node provider wraps the existing TCP streams, validates the
-certificate chain and hostname, and offers HTTP/1.1 ALPN. The draft accepts only
-`servername` (and `rejectUnauthorized: true`); other per-request TLS settings,
-including `ca`, are rejected. Hosts can configure trust with `createTlsProvider`.
-See the [provider example](../../docs/src/interop/nodejs-builtins/supported-modules/https.md).
-
-> [!NOTE]
-> `componentize-qjs` 0.4.3 currently fails to link the TLS interface's shared IO
-> resources during snapshot initialization. StarlingMonkey is a workaround for
-> this build-time issue.
-
-When the selected world is missing a required import or callback export, Jco
-edits that world in place, adds generated comments and declarations, installs
-the corresponding WIT packages under `wit/deps`, and prints a warning. Direct
-servers use an imported host-owned `server` resource plus an exported
-callback dispatcher. Each server passes a guest registration ID to its host;
-the guest retains its handler while listening and releases it after close.
-Node hosts use `createHttpHost(() => instance.httpCallbacks)` from the opt-in
-provider to bind callbacks to one component instance. Jco re-bundles a small entry wrapper so
-the callback implementation is present on the final component export. Existing
-declarations and dependency files are preserved, aliases are recognized, and
-repeated componentization does not add duplicates. Use `--world-name` when the
-WIT package defines multiple worlds.
-
-The initial implementation buffers each request and response at the
-implementation boundary. Client and server objects retain Node-style callbacks
-and events inside the guest. Connection pooling, upgrades, CONNECT proxy
-tunnels, and persistent HTTP/1.1 connections in the `wasi-sockets`
-implementation are not implemented; unavailable operations throw explicit
-errors.
-
-### HTTP/2
-
-HTTP/2 application code also keeps its ordinary Node imports. A client can open
-a session and a stream:
+### `node:http2`
 
 ```js
 import { connect } from "node:http2";
 
 const session = connect("https://example.com");
 const stream = session.request({ ":path": "/status" });
-stream.setEncoding("utf8");
-stream.on("data", (chunk) => console.log(chunk));
 stream.on("end", () => session.close());
 stream.end();
 ```
 
-Servers retain the `stream` and compatibility `request` APIs:
+See [`node:http2`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/http2.html).
+
+### `node:timers`
 
 ```js
-import { createServer } from "node:http2";
+import { setTimeout as delay, scheduler } from "node:timers/promises";
 
-const server = createServer();
-server.on("stream", (stream, headers) => {
-  stream.respond({ ":status": 200, "content-type": "text/plain" });
-  stream.end(`received ${headers[":path"]}`);
-});
-server.listen(8080, "127.0.0.1");
+await delay(10, "ready");
+await scheduler.yield();
 ```
 
-You can select the `node:http` implementation with `--with-nodejs-http2-via`:
-
-```console
-jco componentize component.js \
-  --wit wit \
-  --bundle \
-  --with-nodejs-http2-via direct \
-  -o component.wasm
-```
-
-The default host mapping denies client and server capabilities with
-`ERR_JCO_HTTP2_ADAPTER_REQUIRED`. Opt in to real Node HTTP/2 when transpiling:
-
-```console
-jco transpile component.wasm \
-  --map 'jco:node/http2@0.1.0=@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/http2/host/node'
-```
-
-`direct` is the default which uses the WIT `jco:node/http2@0.1.0` import and
-`jco:node/http2-callbacks@0.1.0` export only when absent. This implementation
-passes through calls to NodeJS std libary functions.Servers, sessions, and streams are
-WIT resources; the separate guest-owned stream and server-error listener resources
-let a real Node host call back into the component.
-
-> [!NOTE]
-> The direct provider buffers HTTP bodies; socket objects, priority, server push, and
-> low-level flow-control access are explicitly unsupported.
-
-Response trailers are supported by `addTrailers()` / `setTrailer()` on the
-compatibility response and by `sendTrailers()` after a server stream's
-`wantTrailers` event. Both direct and WASI sockets providers send them after
-the body. Request trailers and incremental response streaming remain unsupported.
-The [Node gRPC example](../../examples/components/node-grpc-server) uses this
-support for the same server source in Node.js and in a WebAssembly component.
-
-The callback WIT `outgoing-response` record includes a `trailers` list. Refresh
-checked-in `http2.wit` dependencies and custom callback providers together;
-Jco only installs missing WIT files.
-
-Jco re-bundles a small entry wrapper so the callback implementation is present on
-the final component export.
-
-`wasi-sockets` implements cleartext prior-knowledge HTTP/2 (`h2c`) in the guest:
-the client preface, framing, HPACK, multiplexed stream identifiers, settings,
-ping, reset, and connection- and stream-level flow control all run over Preview
-2 TCP streams.
-
-Both clients and TCP servers are supported. The implementation currently buffers complete
-request and response bodies and rejects HTTPS, secure servers, server push,
-Unix-domain listeners, arbitrary custom transports, and HTTP/1.1 `Upgrade: h2c`.
-
-`wasi-http` still rejects session and server operations: an outgoing handler
-represents individual requests, not observable Node HTTP/2 sessions or arbitrary
-inbound servers.
-
-### Node timers
-
-Jco bundles `node:timers` and `node:timers/promises` imports using this package's
-Node 24 adaptation. See the [timer compatibility documentation](../../docs/src/interop/nodejs-builtins.md#timers)
-for usage and engine requirements. StarlingMonkey supplies task timers; QuickJS
-currently rejects scheduling. Active `unref()` and `{ ref: false }` require runtime
-handles with liveness control. Direct adapters can coexist with native Node
-builtins, with separate timer handles and cancellation registries.
+See [`node:timers`](https://bytecodealliance.github.io/jco/interop/nodejs-builtins/supported-modules/timers.html).
 
 # License
 
