@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.7.0] - 2026-09-23
+
+### 🚀 Features
+
+- _(p3-shim)_ adapt browser sockets by @vados-cosmonic
+
+- _(p3-shim)_ adapt browser HTTP by @vados-cosmonic
+
+- _(p3-shim)_ adapt browser filesystem by @vados-cosmonic
+
+- _(p3-shim)_ implement browser CLI and clocks by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ align browser HTTP resources by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p3-shim)_ organize parallel browser suites by @vados-cosmonic in #2142
+
+- _(p3-shim)_ port browser OPFS coverage by @vados-cosmonic
+
+- _(p3-shim)_ add browser regression coverage by @vados-cosmonic
+
 ## [0.6.1] - 2026-09-14
 
 ### 🐛 Bug Fixes
