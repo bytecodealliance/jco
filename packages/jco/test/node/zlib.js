@@ -55,7 +55,7 @@ test.each(["quickjs", "starlingmonkey"])(
             fixture: "node-zlib",
             bundle: true,
             copy: true,
-            extraArgs: ["--backend", backend],
+            extraArgs: ["--backend", backend, ...(backend === "quickjs" ? ["--backend-qjs-disable-async"] : [])],
         });
         for (const mode of ["node", "denied"]) {
             const hostSpecifier = mode === "node" ? NODE_HOST : DENY_HOST;

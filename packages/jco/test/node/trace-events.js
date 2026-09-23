@@ -60,7 +60,7 @@ for (const backend of ["starlingmonkey", "quickjs"]) {
             world: "test",
             bundle: true,
             copy: true,
-            extraArgs: ["--backend", backend],
+            extraArgs: ["--backend", backend, ...(backend === "quickjs" ? ["--backend-qjs-disable-async"] : [])],
         });
 
         expect(stderr).toContain("Jco added generated WIT import jco:node/trace-events@0.1.0");

@@ -50,7 +50,7 @@ test.each(["quickjs", "starlingmonkey"])(
             fixture: "node-v8",
             bundle: true,
             copy: true,
-            extraArgs: ["--backend", backend],
+            extraArgs: ["--backend", backend, ...(backend === "quickjs" ? ["--backend-qjs-disable-async"] : [])],
         });
 
         for (const mode of ["node", "denied"]) {

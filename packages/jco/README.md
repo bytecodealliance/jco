@@ -215,6 +215,10 @@ selected with the `--backend` option, for example [QuickJS-NG][qjs-ng] via [`com
 jco componentize app.js --wit wit -n world-name -o component.wasm --backend qjs
 ```
 
+QuickJS uses an async-capable runtime by default, even for synchronous WIT worlds. For synchronous
+components targeting hosts without async support, such as Node.js 22 when running Jco-generated
+JavaScript, add `--backend-qjs-disable-async` to select the non-async runtime.
+
 The accepted backend names are `starlingmonkey`/`sm` and `quickjs`/`qjs`. The existing `--engine <path>`
 option supplies a custom StarlingMonkey build and is valid only with the StarlingMonkey backend.
 

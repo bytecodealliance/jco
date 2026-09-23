@@ -113,7 +113,12 @@ suite("componentize", () => {
             fixture: "typescript-direct",
             entry: "source.ts",
             wit: "source.wit",
-            extraArgs: ["--backend", "qjs", ...(stubWasi ? ["--backend-qjs-stub-wasi"] : [])],
+            extraArgs: [
+                "--backend",
+                "qjs",
+                "--backend-qjs-disable-async",
+                ...(stubWasi ? ["--backend-qjs-stub-wasi"] : []),
+            ],
         });
         const component = await readFile(componentPath);
         const wit = await componentWit(component);
@@ -183,7 +188,7 @@ suite("componentize", () => {
             entry: "source.js",
             wit: "source.wit",
             bundle: true,
-            extraArgs: ["--backend", "qjs"],
+            extraArgs: ["--backend", "qjs", "--backend-qjs-disable-async"],
         });
         const { instance, cleanup } = await setupAsyncTest({
             component: { name: "local-dependency", path: componentPath },
