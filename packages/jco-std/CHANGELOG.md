@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-09-23
+
+### 🐛 Bug Fixes
+
+- _(std)_ support Windows VFS host paths by @vados-cosmonic in #2146
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update preview2-shim to v0.26.0 by @vados-cosmonic in #2148
+
 ## [0.4.0] - 2026-09-14
 
 ### 🚀 Features
