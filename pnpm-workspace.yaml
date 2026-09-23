@@ -29,6 +29,7 @@ packages:
   - examples/components/node-mcp-server
   - examples/components/node-compat
   - examples/components/node-grpc-server
+  - examples/components/node-sveltekit-server
   - examples/components/nodejs-platform
   - examples/components/node-fetch
   - examples/components/p3-stream-echo-qjs
