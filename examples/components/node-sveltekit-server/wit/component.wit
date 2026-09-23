@@ -1,0 +1,22 @@
+package example:node-sveltekit-server;
+
+/// StarlingMonkey does not yet support component-model async guest exports, so
+/// this world keeps the lifecycle functions synchronous at the WIT boundary.
+world component {
+  // Added by Jco because bundled source imports node:path.
+  import wasi:cli/environment@0.2.12;
+
+  // Added by Jco because bundled source imports node:fs.
+  import jco:node/fs@0.1.0;
+  // Added by Jco because bundled source imports node:http.
+  import jco:node/http@0.1.0;
+  // Added by Jco because bundled source imports node:process.
+  import jco:node/process@0.1.0;
+  // Added by Jco because bundled source imports node:tty.
+  import jco:node/tty@0.1.0;
+
+  // Added by Jco so the node:http host can invoke guest callbacks.
+  export jco:node/http-callbacks@0.1.0;
+  export start: func(port: u16) -> u16;
+  export stop: func();
+}

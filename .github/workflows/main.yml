@@ -773,6 +773,10 @@ jobs:
             workspace: examples/components/node-grpc-server
             setup-p2-shim: true
             setup-std: true
+          - name: node-sveltekit-server
+            workspace: examples/components/node-sveltekit-server
+            setup-p2-shim: true
+            setup-std: true
           - name: fs-write-file
             workspace: examples/components/fs-write-file
           - name: browser-p2-shims
@@ -864,6 +868,11 @@ jobs:
       - name: Install Puppeteer browser
         if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
         run: pnpm run test:setup:puppeteer
+
+      - name: Install SvelteKit example browser
+        if: ${{ matrix.project.name == 'node-sveltekit-server' }}
+        working-directory: ${{ matrix.project.workspace }}
+        run: pnpm run setup:browser
 
       - name: Install Firefox
         if: ${{ matrix.project.name == 'native-messaging' }}

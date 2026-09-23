@@ -21,6 +21,7 @@ A brief description of the examples contained in this folder:
 | [`native-messaging`](./native-messaging)                   | Runs a Jco-built WASI command as a Firefox and Chromium native-messaging host                    |
 | [`node-mcp-server`](./node-mcp-server)                     | MCP 2026-07-28 stateless server: the same source runs in Node.js and as a component using jco-std |
 | [`p3-stream-echo-qjs`](./p3-stream-echo-qjs)               | Echoes a Preview 3 stream through a JavaScript component built with the QuickJS backend          |
+| [`node-sveltekit-server`](./node-sveltekit-server)         | SvelteKit TODO app: the Node adapter output runs in Node.js and as a component using jco-std      |
 | [`string-reverse-upper`](./string-reverse-upper)           | `import`s functionality to build more advanced computation to `export`                           |
 | [`string-reverse`](./string-reverse)                       | `export`s basic functionality with a slightly more involved WIT interface and more complex types |
 | [`typegen-async-export`](./typegen-async-export)           | Showcases how to build that uses an async export, with types provided                            |
