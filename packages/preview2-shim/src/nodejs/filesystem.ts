@@ -510,7 +510,8 @@ class Descriptor implements IDescriptor {
     readlinkAt(path) {
         const fullPath = this.#getFullPath(path);
         try {
-            return readlinkSync(fullPath);
+            const target = readlinkSync(fullPath);
+            return isWindows ? target.replace(/\\/g, "/") : target;
         } catch (e) {
             throw convertFsError(e);
         }

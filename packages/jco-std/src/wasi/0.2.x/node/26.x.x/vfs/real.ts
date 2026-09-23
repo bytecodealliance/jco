@@ -138,6 +138,8 @@ export function createRealFSProvider(
   createCore: (rootPath: string) => FsCore,
 ): RealProviderConstructor {
   return class RealFSProvider extends VirtualProvider {
+    readonly #hostPath: typeof path;
+
     readonly #rootPath: string;
 
     #coreValue: FsCore | undefined;
@@ -146,10 +148,14 @@ export function createRealFSProvider(
 
     constructor(rootPath: string) {
       super();
-      if (typeof rootPath !== "string" || !rootPath.startsWith("/")) {
-        throw invalidArgValue("rootPath", rootPath, "must be an absolute POSIX path");
+      if (typeof rootPath !== "string") {
+        throw invalidArgValue("rootPath", rootPath, "must be an absolute path");
       }
-      this.#rootPath = path.normalize(rootPath);
+      this.#hostPath = path.isAbsolute(rootPath) ? path : path.win32;
+      if (!this.#hostPath.isAbsolute(rootPath)) {
+        throw invalidArgValue("rootPath", rootPath, "must be an absolute path");
+      }
+      this.#rootPath = this.#hostPath.normalize(rootPath);
       Object.defineProperties(this, {
         readonly: { value: false, enumerable: true, writable: true, configurable: true },
         supportsSymlinks: { value: true, enumerable: true, writable: true, configurable: true },
@@ -171,21 +177,28 @@ export function createRealFSProvider(
     }
 
     #inside(candidate: string, root = this.#rootPath): boolean {
-      const prefix = root.endsWith("/") ? root : root + "/";
-      return candidate === root || candidate.startsWith(prefix);
+      const separator = this.#hostPath.sep;
+      const comparable = (value: string) =>
+        this.#hostPath === path.win32 ? value.toLowerCase() : value;
+      const normalizedCandidate = comparable(this.#hostPath.normalize(candidate));
+      const normalizedRoot = comparable(this.#hostPath.normalize(root));
+      const prefix = normalizedRoot.endsWith(separator)
+        ? normalizedRoot
+        : normalizedRoot + separator;
+      return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(prefix);
     }
 
     #resolve(vfsPath: string, followFinal = true): string {
       const relative = vfsPath.startsWith("/") ? vfsPath.slice(1) : vfsPath;
 
-      const candidate = path.resolve(this.#rootPath, relative);
+      const candidate = this.#hostPath.resolve(this.#rootPath, relative);
       if (!this.#inside(candidate)) {
         throw createENOENT("open", vfsPath);
       }
 
       // Check the deepest existing ancestor as well as the lexical path. Keep
       // policy failures outside the ENOENT catch so an escaping link is rejected.
-      let current = followFinal ? candidate : path.dirname(candidate);
+      let current = followFinal ? candidate : this.#hostPath.dirname(candidate);
       while (this.#inside(current)) {
         let resolved: string;
         try {
@@ -194,7 +207,7 @@ export function createRealFSProvider(
           if (!hasCode(error, "ENOENT")) {
             throw error;
           }
-          const parent = path.dirname(current);
+          const parent = this.#hostPath.dirname(current);
           if (parent === current) {
             break;
           }
@@ -215,7 +228,8 @@ export function createRealFSProvider(
       if (!this.#inside(realPath, root)) {
         throw createENOENT("realpath", realPath);
       }
-      return "/" + path.relative(root, realPath);
+      const relative = this.#hostPath.relative(root, realPath);
+      return "/" + (this.#hostPath === path.win32 ? relative.replaceAll("\\", "/") : relative);
     }
 
     openSync(vfsPath: string, flags: string | number = "r", mode?: number): VirtualFileHandle {
@@ -321,7 +335,11 @@ export function createRealFSProvider(
     readlinkSync(vfsPath: string, options?: DirectoryOptions): string | Buffer {
       const target = String(this.#core.readlinkSync(this.#resolve(vfsPath, false)));
 
-      const result = path.isAbsolute(target) ? this.#virtual(target) : target;
+      const result = this.#hostPath.isAbsolute(target)
+        ? this.#virtual(target)
+        : this.#hostPath === path.win32
+          ? target.replaceAll("\\", "/")
+          : target;
       return options?.encoding === "buffer" ? NodeBuffer.from(result) : result;
     }
 
@@ -332,7 +350,9 @@ export function createRealFSProvider(
     symlinkSync(target: string, vfsPath: string, type?: string): void {
       const destination = this.#resolve(vfsPath, false);
 
-      const realTarget = path.isAbsolute(target) ? this.#resolve(target) : target;
+      const realTarget = path.isAbsolute(target)
+        ? this.#resolve(target)
+        : this.#hostPath.normalize(target);
       if (type !== undefined && type !== "file" && type !== "dir" && type !== "junction") {
         throw invalidArgValue("type", type);
       }

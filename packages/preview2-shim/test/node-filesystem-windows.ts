@@ -1,4 +1,4 @@
-import { lstatSync, statSync } from "node:fs";
+import { lstatSync, readlinkSync, statSync } from "node:fs";
 
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -10,6 +10,7 @@ vi.mock("node:fs", async (importOriginal) => ({
     ...(await importOriginal<typeof import("node:fs")>()),
     statSync: vi.fn(),
     lstatSync: vi.fn(),
+    readlinkSync: vi.fn(),
 }));
 vi.mock("../src/io/worker-io.js", () => ({
     earlyDispose: vi.fn(),
@@ -57,6 +58,12 @@ test("Windows drive normalization does not replace an explicit preopen", () => {
     const root = _createPreopenDescriptor("D:/sandbox");
     root.statAt({}, "C:/outside/app.wit");
     expect(lstatSync).toHaveBeenCalledWith("D:/sandbox/C:/outside/app.wit", { bigint: true });
+});
+
+test("Windows readlink targets use WASI path separators", () => {
+    vi.mocked(readlinkSync).mockReturnValue("nested\\target.txt");
+    const root = _createPreopenDescriptor("C:/sandbox");
+    expect(root.readlinkAt("link.txt")).toBe("nested/target.txt");
 });
 
 for (const read of [false, true]) {
