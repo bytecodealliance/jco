@@ -72,8 +72,8 @@
         "prepack": "pnpm run build:release"
     },
     "dependencies": {
-        "@bytecodealliance/preview2-shim": "^0.25.0",
-        "@bytecodealliance/preview3-shim": "^0.6.1",
+        "@bytecodealliance/preview2-shim": "^0.26.0",
+        "@bytecodealliance/preview3-shim": "^0.7.0",
         "binaryen": "^130.0.0",
         "oxc-minify": "^0.136.0"
     },
