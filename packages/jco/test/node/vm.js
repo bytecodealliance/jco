@@ -23,7 +23,7 @@ test.each(["starlingmonkey", "quickjs"])(
             world: "test",
             bundle: true,
             copy: true,
-            extraArgs: ["--backend", backend],
+            extraArgs: ["--backend", backend, ...(backend === "quickjs" ? ["--backend-qjs-disable-async"] : [])],
         });
 
         expect(stderr).not.toContain("Jco added generated WIT import");

@@ -20,6 +20,7 @@ suite("node:assert", () => {
             "--bundle",
             "--backend",
             "qjs",
+            "--backend-qjs-disable-async",
             "-w",
             join(fixtureDir, "source.wit"),
             "-o",

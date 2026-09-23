@@ -58,7 +58,7 @@ export interface ComponentizeOptions {
     withNodejsHttpVia?: NodejsHttpVia;
     withNodejsHttp2Via?: NodejsHttp2Via;
     backend?: ComponentizeJSBackend;
-    backendQjsDisableAysnc: boolean;
+    backendQjsDisableAsync: boolean;
     backendQjsStubWasi?: boolean;
     aot?: boolean;
     aotMinStackSizeBytes?: number;
@@ -385,7 +385,7 @@ async function componentizeQJS(args: BackendComponentizeArgs) {
         jsSource: source,
         jsPath: resolve(jsSource),
         world: opts.worldName,
-        sync: opts.backendQjsDisableAysnc,
+        sync: opts.backendQjsDisableAsync,
         stubWasi: opts.backendQjsStubWasi,
     });
     return result.component;

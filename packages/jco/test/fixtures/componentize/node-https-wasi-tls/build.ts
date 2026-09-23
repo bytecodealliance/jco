@@ -42,7 +42,7 @@ await componentize(join(root, "bundle.js"), {
     wit: join(root, "wit"),
     worldName: "component",
     backend,
-    backendQjsDisableAysnc: false,
+    backendQjsDisableAsync: false,
     ...(backend === "starlingmonkey" ? { disable: ["http"] } : {}),
     out: join(root, "component.wasm"),
 });

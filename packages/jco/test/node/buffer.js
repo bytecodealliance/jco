@@ -164,6 +164,7 @@ suite("node:buffer", () => {
             "--bundle",
             "--backend",
             "qjs",
+            "--backend-qjs-disable-async",
             "-w",
             join(fixtureDir, "source.wit"),
             "-o",

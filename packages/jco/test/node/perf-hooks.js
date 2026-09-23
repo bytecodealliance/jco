@@ -39,6 +39,7 @@ test.each(["starlingmonkey", "quickjs"])(
             entry,
             "--backend",
             backend,
+            ...(backend === "quickjs" ? ["--backend-qjs-disable-async"] : []),
             "-w",
             join(fixtureDir, "source.wit"),
             "-n",

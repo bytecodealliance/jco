@@ -125,6 +125,7 @@ suite("node:querystring", () => {
             "--bundle",
             "--backend",
             "qjs",
+            "--backend-qjs-disable-async",
             "-w",
             join(fixtureDir, "source.wit"),
             "-o",
