@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.26.0] - 2026-09-23
+
+This release contains a fix to supprot VFS host paths
+on Windows which changes those semantics meaningfully.
+
+While not completely a breaking change, users that may
+depend on the previous functionality should check before
+updating.
+
 ## [0.25.0] - 2026-09-14
 
 ### 🚀 Features
