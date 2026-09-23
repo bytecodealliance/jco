@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.0] - 2026-09-23
+
+### 🧪 Testing
+
+- _(transpile)_ remove obsolete trap-on-reenter WAST by @vados-cosmonic in #2136
+
+- _(transpile)_ remove obsolete cancellable WAST by @vados-cosmonic
+
+- _(transpile)_ refresh Wasmtime yield fixtures by @vados-cosmonic
+
+- _(transpile)_ use strict component index syntax by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ preview2-shim -> v0.26.0, preview3-shim -> v0.7.0 by @vados-cosmonic in #2153
+
+## New Contributors
+
+- @GreenBusDriver made their first contribution in [#2135](https://github.com/bytecodealliance/jco/pull/2135)
+
 ## [0.14.0] - 2026-09-14
 
 ### 🧪 Testing
