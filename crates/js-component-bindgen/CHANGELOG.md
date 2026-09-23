@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.12.0] - 2026-09-23
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ deconflict instantiation helper locals from WIT import names by @GreenBusDriver in #2135
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ support Wasmtime 49 translation APIs by @vados-cosmonic
+
+
+
+## New Contributors
+* @GreenBusDriver made their first contribution in [#2135](https://github.com/bytecodealliance/jco/pull/2135)
+
+
 ## [2.11.0] - 2026-09-16
 
 ### 🚀 Features
