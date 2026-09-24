@@ -22,7 +22,7 @@ const typesCommand = [
 
 const componentizeCommand = [
     'componentize',
-    fromProject('src/server.ts'),
+    fromProject('src/component.ts'),
     '--bundle',
     '--bundle-config',
     fromProject('scripts/bundle-config.mjs'),

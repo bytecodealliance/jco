@@ -1,4 +1,4 @@
-import { start, stop } from './server.ts';
+import { start, stop } from './component.ts';
 
 const port = await start(Number(process.env.PORT ?? 3000));
 

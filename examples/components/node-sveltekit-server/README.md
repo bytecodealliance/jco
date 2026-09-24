@@ -23,7 +23,7 @@ it to a `node:http` server, and starts listening.
 When Jco builds the same server into a WebAssembly component, the application
 code stays the same, but the build output and Node API boundary change:
 
-1. [`src/server.ts`](./src/server.ts) exposes `start(port)` and `stop()`; the
+1. [`src/component.ts`](./src/component.ts) exposes `start(port)` and `stop()`; the
    native launcher in [`src/serve-node.ts`](./src/serve-node.ts) calls them
    directly.
 2. Jco componentizes that same server module and exports the lifecycle functions
