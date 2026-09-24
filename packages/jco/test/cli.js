@@ -553,7 +553,7 @@ suite("CLI", () => {
             const { stdout, stderr } = await exec(jcoPath, "metadata-show", outFile, "--json");
             assert.strictEqual(stderr, "");
             const meta = JSON.parse(stdout);
-            // wit-component 0.258 folds the start shim into the fixup module.
+            // wit-component folds the start shim into the fixup module.
             assert.deepStrictEqual(meta[0].metaType, {
                 tag: "component",
                 val: 4,
@@ -562,7 +562,7 @@ suite("CLI", () => {
                 [
                     "processed-by",
                     [
-                        ["wit-component", "0.258.0"],
+                        ["wit-component", "0.259.0"],
                         ["dummy-gen", "test"],
                     ],
                 ],

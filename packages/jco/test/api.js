@@ -152,7 +152,7 @@ suite("API", () => {
         }
 
         const meta = await metadataShow(newComponent);
-        // wit-component 0.258 folds the start shim into the fixup module.
+        // wit-component folds the start shim into the fixup module.
         assert.deepStrictEqual(meta[0].metaType, {
             tag: "component",
             val: 4,
@@ -161,7 +161,7 @@ suite("API", () => {
             [
                 "processed-by",
                 [
-                    ["wit-component", "0.258.0"],
+                    ["wit-component", "0.259.0"],
                     ["dummy-gen", "test"],
                 ],
             ],
@@ -194,7 +194,7 @@ suite("API", () => {
         }
 
         const meta = await metadataShow(newComponent);
-        // wit-component 0.258 folds the start shim into the fixup module.
+        // wit-component folds the start shim into the fixup module.
         assert.deepStrictEqual(meta[0].metaType, {
             tag: "component",
             val: 4,
@@ -204,7 +204,7 @@ suite("API", () => {
                 "processed-by",
                 [
                     // NOTE: this is the current version *in the released jco-transpile* jco uses
-                    ["wit-component", "0.258.0"],
+                    ["wit-component", "0.259.0"],
                     ["dummy-gen", "test"],
                 ],
             ],
