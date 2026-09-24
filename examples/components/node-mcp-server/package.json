@@ -15,8 +15,8 @@
         "all": "pnpm run build && pnpm run transpile && pnpm run test"
     },
     "dependencies": {
-        "@bytecodealliance/jco-std": "^0.4.0",
-        "@bytecodealliance/preview2-shim": "0.25.0",
+        "@bytecodealliance/jco-std": "^0.5.0",
+        "@bytecodealliance/preview2-shim": "0.26.0",
         "@modelcontextprotocol/server": "2.0.0",
         "zod": "4.5.4"
     },
