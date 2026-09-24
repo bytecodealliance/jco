@@ -439,14 +439,14 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: ^0.4.0
-        version: 0.4.0(@bytecodealliance/preview2-shim@0.25.0)
+        specifier: ^0.5.0
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.26.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.14.0
-        version: 0.14.0
+        specifier: ^0.15.0
+        version: 0.15.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.25.0
-        version: 0.25.0
+        specifier: ^0.26.0
+        version: 0.26.0
       binaryen:
         specifier: ^130.0.0
         version: 130.0.0
@@ -574,7 +574,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
       which:
         specifier: ^5.0.0
         version: 5.0.0
@@ -654,7 +654,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
   packages/preview3-shim:
     dependencies:
@@ -685,7 +685,7 @@ importers:
         version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1)
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
   packages/rolldown-plugin-jco:
     dependencies:
@@ -710,7 +710,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1))
+        version: 4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
 
 packages:
 
@@ -1027,6 +1027,14 @@ packages:
       '@bytecodealliance/preview2-shim':
         optional: true
 
+  '@bytecodealliance/jco-std@0.5.0':
+    resolution: {integrity: sha512-TLklLNHUbCtXH9nRDDhZuk8rPYW0kd5R0ClvwpIXCBOyESHZGIGU1y7V47Uggz3i0h5WG3+srOg3aKfyZT4IIg==}
+    peerDependencies:
+      '@bytecodealliance/preview2-shim': ^0.25.0
+    peerDependenciesMeta:
+      '@bytecodealliance/preview2-shim':
+        optional: true
+
   '@bytecodealliance/jco-transpile@0.11.0':
     resolution: {integrity: sha512-0mTr0qGd3Y55BczPO127NTgfY/lSpRgDMElifTnSzbidsyAo4wa4zrSoqwQpBrSiJvXqTLGm1sRT2zkwGaGelw==}
 
@@ -1036,8 +1044,8 @@ packages:
   '@bytecodealliance/jco-transpile@0.13.0':
     resolution: {integrity: sha512-9hZ2GMqOlYP1Bf7qQ8v3sCsmkFoXGbgi0HtjHipzrgyk+9GGDzvvbehTGe0oM54rcbKJacvyjpPDn7wtpgzwYA==}
 
-  '@bytecodealliance/jco-transpile@0.14.0':
-    resolution: {integrity: sha512-5YFi4mc7Vq6ypo/QIKqjpvfTd9xx6WrHZF/pPnWLhVPsm6kAPyGa1BISR4FUk18LMh2A5Xp+UA1dBFtTo1u2GA==}
+  '@bytecodealliance/jco-transpile@0.15.0':
+    resolution: {integrity: sha512-MFftJ81B9TtHbvgCRZQod3jfgl62YvJszxsNdfx9IVNewxlX9q7U4Wd+w6gJzw+o9IjEGWoyg/BFpb/RnaJvlA==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -1089,9 +1097,6 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.6.0':
     resolution: {integrity: sha512-DCAswwLHjOUUIt8P73dftlD+N+sGKEs0CjO2uYZb6oirRO+w9uXMAGQtxqB5EcCUQu0y5uQeQJjr507uIo1Wmg==}
-
-  '@bytecodealliance/preview3-shim@0.6.1':
-    resolution: {integrity: sha512-61mEfjfgGmZhEMA0H3waawPKvYd3za9y0vJ7pmQz/9yvm4FR6Ef+cmqhnxDE7ezsM07MY1btP92ymmgsgFwxmg==}
 
   '@bytecodealliance/preview3-shim@0.7.0':
     resolution: {integrity: sha512-5bBAE1nKSIT6ZyWoyLQwV1VjJciAdgLk7hbMeO3y5mLJhrkBL9egE48x5IfvU1ubMsQsKWFrP0jle7ow0b5I6w==}
@@ -5889,6 +5894,18 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.25.0
 
+  '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.26.0)':
+    dependencies:
+      acorn: 8.17.0
+      acorn-walk: 8.3.5
+      minimatch: 10.2.6
+      punycode: 2.3.1
+      readable-stream: 4.7.0
+      urlpattern-polyfill: 10.1.0
+      whatwg-url: 14.2.0
+    optionalDependencies:
+      '@bytecodealliance/preview2-shim': 0.26.0
+
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.21.0
@@ -5910,10 +5927,10 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
-  '@bytecodealliance/jco-transpile@0.14.0':
+  '@bytecodealliance/jco-transpile@0.15.0':
     dependencies:
-      '@bytecodealliance/preview2-shim': 0.25.0
-      '@bytecodealliance/preview3-shim': 0.6.1
+      '@bytecodealliance/preview2-shim': 0.26.0
+      '@bytecodealliance/preview3-shim': 0.7.0
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
@@ -6009,11 +6026,6 @@ snapshots:
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
       '@bytecodealliance/preview2-shim': 0.24.1
-
-  '@bytecodealliance/preview3-shim@0.6.1':
-    dependencies:
-      '@bytecodealliance/jco-node-fs': 0.3.2
-      '@bytecodealliance/preview2-shim': 0.25.0
 
   '@bytecodealliance/preview3-shim@0.7.0':
     dependencies:
@@ -7780,7 +7792,7 @@ snapshots:
     optionalDependencies:
       vite: 7.3.6(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
 
-  '@vitest/mocker@4.1.11(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1))':
+  '@vitest/mocker@4.1.11(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
@@ -9904,10 +9916,10 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1)):
+  vitest@4.1.11(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@8.1.5(@types/node@24.13.3)(jiti@2.6.1))
+      '@vitest/mocker': 4.1.11(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
