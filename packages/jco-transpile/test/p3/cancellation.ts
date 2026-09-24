@@ -1,37 +1,20 @@
 import { execArgv, execPath } from 'node:process';
 import { spawn } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { beforeAll, suite, test, assert } from 'vitest';
+import { afterAll, beforeAll, suite, test, assert } from 'vitest';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { setupAsyncTest, composeCallerCallee } from '../helpers.js';
+import { parse } from '../../src/wasm-tools.js';
+import { setupAsyncTest, composeCallerCallee, getTmpDir } from '../helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 
 const CANCEL_BEFORE_START_CLEANUP_WAST = fileURLToPath(
     new URL('../fixtures/wast/jco/cancel-before-start-cleanup.wast', import.meta.url),
 );
-
-function buildWastFixture(wastPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const child = spawn('cargo', ['xtask', 'build-wast-fixture', wastPath], {
-            stdio: 'inherit',
-        });
-        child.on('error', reject);
-        child.on('close', (code, signal) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject(
-                    new Error(`WAST fixture build failed with ${signal ? `signal ${signal}` : `exit code ${code}`}`),
-                );
-            }
-        });
-    });
-}
 
 function runNodeToNaturalExit(scriptPath: string, timeoutMs = 2_000): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -66,8 +49,20 @@ function runNodeToNaturalExit(scriptPath: string, timeoutMs = 2_000): Promise<vo
 }
 
 suite('subtask cancellation', () => {
+    let cancelBeforeStartCleanupWasm: string;
+    let fixtureDir: string;
+
     beforeAll(async () => {
-        await buildWastFixture(CANCEL_BEFORE_START_CLEANUP_WAST);
+        fixtureDir = await getTmpDir();
+        cancelBeforeStartCleanupWasm = join(fixtureDir, 'cancel-before-start-cleanup.wasm');
+        await writeFile(
+            cancelBeforeStartCleanupWasm,
+            await parse(await readFile(CANCEL_BEFORE_START_CLEANUP_WAST, 'utf8')),
+        );
+    });
+
+    afterAll(async () => {
+        await rm(fixtureDir, { recursive: true, force: true });
     });
 
     // Dropping a pending async import future in a Rust guest lowers to the
@@ -210,7 +205,7 @@ suite('subtask cancellation', () => {
             asyncMode: 'jspi',
             jco: { transpile: { extraArgs: { minify: false } } },
             component: {
-                path: `${CANCEL_BEFORE_START_CLEANUP_WAST}.wasm`,
+                path: cancelBeforeStartCleanupWasm,
                 skipInstantiation: true,
             },
         });
@@ -237,7 +232,7 @@ suite('subtask cancellation', () => {
             asyncMode: 'jspi',
             jco: { transpile: { extraArgs: { minify: false } } },
             component: {
-                path: `${CANCEL_BEFORE_START_CLEANUP_WAST}.wasm`,
+                path: cancelBeforeStartCleanupWasm,
                 skipInstantiation: true,
             },
         });
