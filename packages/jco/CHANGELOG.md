@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.35.0] - 2026-09-24
+
+### 🚀 Features
+
+- _(jco)_ add quickjs p3 example by @andreiltd
+
+### 🐛 Bug Fixes
+
+- _(jco)_ fix qjs argument typo and select sync runtime in the componentize tests by @andreiltd in #2141
+
+### 🧪 Testing
+
+- _(jco)_ update wit-component metadata version by @vados-cosmonic
+
+- _(jco)_ fix node FFI integration assertions by @vados-cosmonic in #2140
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-std, jco-transpile, preview2-shim by @vados-cosmonic
+
+- _(jco)_ bump componentize-qjs by @andreiltd
+
 ## [1.34.0] - 2026-09-14
 
 ### 🚀 Features
