@@ -607,6 +607,17 @@ impl ComponentIntrinsic {
                             }});
                         }}
 
+                        cancelExclusiveLockWaiter(taskID) {{
+                            const idx = this.#lockWaiters.findIndex(waiter => waiter.taskID === taskID);
+                            if (idx === -1) {{ return false; }}
+                            const [waiter] = this.#lockWaiters.splice(idx, 1);
+                            // Release the awaiting `enter()` continuation without granting
+                            // ownership. It observes the task's resolved cancellation state
+                            // before attempting to execute guest code.
+                            waiter.resolve();
+                            return true;
+                        }}
+
                         exclusiveRelease(taskID) {{
                             {debug_log_fn}('[{component_async_state_class}#exclusiveRelease()] args', {{
                                 holder: this.#lockHolderTaskID,

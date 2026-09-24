@@ -958,18 +958,17 @@ impl AsyncTaskIntrinsic {
                             throw new Error(`no current tasks for component instance [${{componentIdx}}] while ending task`);
                         }}
 
-                        if (taskID !== undefined) {{
-                            const last = tasks[tasks.length - 1];
-                            if (last.id !== taskID) {{
-                                // throw new Error('current task does not match expected task ID');
-                                return;
-                            }}
+                        const taskIdx = taskID === undefined
+                            ? tasks.length - 1
+                            : tasks.findIndex(meta => meta.id === taskID);
+                        if (taskIdx === -1) {{ return; }}
+
+                        const taskMeta = tasks.splice(taskIdx, 1)[0];
+                        const globalTaskIdx = {task_id_globals}.lastIndexOf(taskMeta.id);
+                        if (globalTaskIdx !== -1) {{
+                            {task_id_globals}.splice(globalTaskIdx, 1);
+                            {component_idx_globals}.splice(globalTaskIdx, 1);
                         }}
-
-                        {task_id_globals}.pop();
-                        {component_idx_globals}.pop();
-
-                        const taskMeta = tasks.pop();
                         return taskMeta.task;
                     }}
                 "#,
@@ -1694,6 +1693,18 @@ impl AsyncTaskIntrinsic {
                                 if (!this.#entered) {{
                                     this.deliverPendingCancel({{ cancellable: true }});
                                     this.cancel();
+
+                                    const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                                    // `enter()` may already be parked either in the scheduler's
+                                    // explicit-backpressure wait or in the exclusive-lock FIFO.
+                                    // Wake/remove that entry work now so it cannot retain a timer,
+                                    // waiter count, or lock-queue slot after cancellation.
+                                    cstate.resumeTaskByID(this.#id);
+                                    cstate.cancelExclusiveLockWaiter(this.#id);
+
+                                    // No guest thread was registered, so no driver loop will call
+                                    // `exit()`. Retire the task's JS bookkeeping explicitly.
+                                    this.exit({{ skipExclusiveLockCheck: true }});
                                     return;
                                 }}
                             }}
