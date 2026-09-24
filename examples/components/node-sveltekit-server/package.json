@@ -23,8 +23,8 @@
         "all": "pnpm run generate:types && pnpm run build:app && pnpm run check && pnpm run test:node && pnpm run build:component && pnpm run transpile && pnpm run test:component && pnpm run test:browser"
     },
     "dependencies": {
-        "@bytecodealliance/jco-std": "^0.4.0",
-        "@bytecodealliance/preview2-shim": "0.25.0"
+        "@bytecodealliance/jco-std": "^0.5.0",
+        "@bytecodealliance/preview2-shim": "0.26.0"
     },
     "devDependencies": {
         "@bytecodealliance/jco": "workspace:*",
