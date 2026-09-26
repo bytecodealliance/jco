@@ -369,6 +369,51 @@ describe("Descriptor with os.tmpdir()", () => {
     dirDesc[Symbol.dispose]?.();
   });
 
+  test("normalizes paths before checking symlink confinement", async () => {
+    const dirDesc = await rootDescriptor.openAt(
+      {},
+      relBase,
+      { directory: true },
+      { read: true, mutateDirectory: true },
+    );
+    const outside = await fs.mkdtemp(`${tmpDir}-outside-`);
+
+    try {
+      await fs.writeFile(path.join(outside, "secret.txt"), "outside");
+      await dirDesc.symlinkAt(`../${path.basename(outside)}`, "escape.cleanup");
+
+      const escapedPath = "missing/../escape.cleanup/secret.txt";
+      await expect(
+        dirDesc.openAt({ symlinkFollow: true }, escapedPath, {}, { read: true }),
+      ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
+      await expect(dirDesc.statAt({ symlinkFollow: true }, escapedPath)).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+      await expect(
+        dirDesc.createDirectoryAt("missing/../escape.cleanup/created"),
+      ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
+      await expect(fs.stat(path.join(outside, "created"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+
+      await dirDesc.createDirectoryAt("inside");
+      await fs.writeFile(path.join(tmpDir, "inside", "allowed.txt"), "inside");
+      await dirDesc.symlinkAt("inside", "inside.cleanup");
+      const allowed = await dirDesc.openAt(
+        { symlinkFollow: true },
+        "missing/../inside.cleanup/allowed.txt",
+        {},
+        { read: true },
+      );
+      allowed[Symbol.dispose]?.();
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+      await fs.rm(path.join(tmpDir, "escape.cleanup"), { force: true });
+      await fs.rm(path.join(tmpDir, "inside.cleanup"), { force: true });
+      dirDesc[Symbol.dispose]?.();
+    }
+  });
+
   test("path operations reject non-directory base descriptors", async () => {
     const sub = `${relBase}/not-dir-base.txt`;
     const child = await rootDescriptor.openAt(
