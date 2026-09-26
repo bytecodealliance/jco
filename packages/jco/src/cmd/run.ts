@@ -405,16 +405,21 @@ async function runComponent(
 
         const runPath = resolve(outDir, "_run.js");
         const sandboxSetup = getSandboxSetup(opts);
+        const jcoImportSetup = jcoImport ? `await import(${JSON.stringify(pathToFileURL(jcoImport).href)});` : "";
+        // Let custom environments replace the legacy preopen, then apply sandbox restrictions if requested.
+        const setupBeforeJcoImport = opts.sandbox ? "" : sandboxSetup;
+        const setupAfterJcoImport = opts.sandbox ? sandboxSetup : "";
         if (opts.isolateRequests === "worker") {
             await writeFile(
                 resolve(outDir, "_serve_worker.js"),
                 `
-      ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ""}
       import { parentPort } from 'node:worker_threads';
       import { readFileSync } from 'node:fs';
       import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
       import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
-      ${sandboxSetup}
+      ${setupBeforeJcoImport}
+      ${jcoImportSetup}
+      ${setupAfterJcoImport}
       try {
         process.argv[1] = ${JSON.stringify(name)};
         const mod = await import('./${name}.js');
@@ -440,9 +445,10 @@ async function runComponent(
         await writeFile(
             runPath,
             `
-      ${jcoImport && opts.isolateRequests !== "worker" ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ""}
       import process from 'node:process';
-      ${sandboxSetup}
+      ${setupBeforeJcoImport}
+      ${jcoImport && opts.isolateRequests !== "worker" ? jcoImportSetup : ""}
+      ${setupAfterJcoImport}
       try {
         process.argv[1] = "${name}";
       } catch {}

@@ -1,8 +1,12 @@
 import { env } from "node:process";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { suite, test, assert } from "vitest";
 
-import { createRequestIsolatedHandler, getSandboxSetup } from "../src/cmd/run.js";
+import { createRequestIsolatedHandler, getSandboxSetup, run } from "../src/cmd/run.js";
+import { exec, getTmpDir, jcoPath } from "./helpers.js";
 
 suite("Run sandbox", () => {
     test("preserves legacy behavior unless sandboxing is requested", () => {
@@ -50,6 +54,45 @@ suite("Run sandbox", () => {
                 env.JCO_RUN_SANDBOX_TEST = previous;
             }
         }
+    });
+
+    test("preserves custom preopens for unsandboxed runs and removes them in sandbox mode", async () => {
+        const testDir = await getTmpDir();
+        const importPath = join(testDir, "virtualenv.mjs");
+        const resultPath = join(testDir, "preopens.json");
+        const componentPath = fileURLToPath(
+            new URL("./fixtures/components/hello_stdout.component.wasm", import.meta.url),
+        );
+        await writeFile(
+            importPath,
+            `
+                import { writeFileSync } from "node:fs";
+                import { _setPreopens, preopens } from ${JSON.stringify(import.meta.resolve("@bytecodealliance/preview2-shim/filesystem"))};
+                const initial = preopens.getDirectories().length;
+                _setPreopens({ "/": ${JSON.stringify(testDir)} });
+                const [[configured]] = preopens.getDirectories();
+                process.on("exit", () => {
+                    const current = preopens.getDirectories();
+                    writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify({
+                        initial,
+                        count: current.length,
+                        preserved: current.length === 1 && current[0][0] === configured,
+                    }));
+                });
+            `,
+        );
+
+        await exec(jcoPath, "run", "--jco-import", importPath, componentPath);
+        assert.deepEqual(JSON.parse(await readFile(resultPath, "utf8")), {
+            initial: 1,
+            count: 1,
+            preserved: true,
+        });
+
+        await run(componentPath, [], { sandbox: true, jcoImport: importPath });
+        const sandboxResult = JSON.parse(await readFile(resultPath, "utf8"));
+        assert.strictEqual(sandboxResult.count, 0);
+        assert.isFalse(sandboxResult.preserved);
     });
 });
 
