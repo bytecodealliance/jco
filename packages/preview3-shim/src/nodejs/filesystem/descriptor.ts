@@ -931,6 +931,17 @@ class Descriptor {
    * Resolve a relative subpath against this descriptor.
    */
   #getFullPath(subpath, _followSymlinks) {
+    const segments = this.#normalizeSubpath(subpath);
+    const base = this.#hostPreopen ?? this.#fullPath;
+    if (segments.length === 0) {
+      return base;
+    }
+
+    const baseNormalized = stripTrailingSlash(base);
+    return `${baseNormalized}/${segments.join("/")}`;
+  }
+
+  #normalizeSubpath(subpath) {
     subpath = subpath.replaceAll("\\", "/").replace(/\/\/+/g, "/");
 
     if (subpath === "") {
@@ -956,13 +967,7 @@ class Descriptor {
       }
     }
 
-    const base = this.#hostPreopen ?? this.#fullPath;
-    if (segments.length === 0) {
-      return base;
-    }
-
-    const baseNormalized = stripTrailingSlash(base);
-    return `${baseNormalized}/${segments.join("/")}`;
+    return segments;
   }
 
   async #statForIdentity() {
@@ -982,21 +987,13 @@ class Descriptor {
 
     const base = this.#hostPreopen ?? this.#fullPath;
     const baseResolved = nodePath.resolve(base);
-    const segments = subpath.replaceAll("\\", "/").replace(/\/\/+/g, "/").split("/");
+    // Validate the same normalized path that the filesystem operation will use.
+    // Otherwise an ENOENT segment followed by `..` can stop validation before a
+    // surviving symlink that #getFullPath later exposes.
+    const segments = this.#normalizeSubpath(subpath);
     let current = baseResolved;
 
     for (const seg of segments) {
-      if (seg === "" || seg === ".") {
-        continue;
-      }
-      if (seg === "..") {
-        current = nodePath.dirname(current);
-        if (!isWithinPath(baseResolved, current)) {
-          throw new FSError("not-permitted");
-        }
-        continue;
-      }
-
       current = nodePath.join(current, seg);
       let stat;
       try {
