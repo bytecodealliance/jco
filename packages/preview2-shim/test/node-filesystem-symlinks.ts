@@ -25,13 +25,17 @@ import type {
 
 suite("Node filesystem symlink paths", () => {
     let testDir: string;
+    let outsideDir: string;
     let root: Descriptor;
     let opened: Descriptor[];
 
     beforeEach(() => {
         testDir = mkdtempSync(join(tmpdir(), "jco-symlink-paths-"));
+        outsideDir = mkdtempSync(join(tmpdir(), "jco-symlink-outside-"));
         opened = [];
         writeFileSync(join(testDir, "target.txt"), "target contents");
+        writeFileSync(join(outsideDir, "secret.txt"), "outside contents");
+        mkdirSync(join(outsideDir, "empty"));
         const shim = new WASIShim({ sandbox: { preopens: { "/test": testDir } } });
         [root] = shim.getImportObject()["wasi:filesystem/preopens"].getDirectories()[0];
     });
@@ -41,6 +45,7 @@ suite("Node filesystem symlink paths", () => {
             (descriptor as unknown as Disposable)[Symbol.dispose]();
         }
         rmSync(testDir, { recursive: true, force: true });
+        rmSync(outsideDir, { recursive: true, force: true });
     });
 
     function open(path: string, pathFlags: PathFlags, openFlags: OpenFlags = {}) {
@@ -200,5 +205,74 @@ suite("Node filesystem symlink paths", () => {
             (error) => error === "exist",
         );
         assert.strictEqual(readFileSync(join(testDir, "target.txt"), "utf8"), "target contents");
+    });
+
+    test("rejects host-planted final symlinks that escape the preopen", () => {
+        symlinkSync(join(outsideDir, "secret.txt"), join(testDir, "escape.txt"));
+
+        throws(
+            () => open("escape.txt", { symlinkFollow: true }),
+            (error) => error === "not-permitted",
+        );
+        throws(
+            () => root.statAt({ symlinkFollow: true }, "escape.txt"),
+            (error) => error === "not-permitted",
+        );
+        throws(
+            () => root.metadataHashAt({ symlinkFollow: true }, "escape.txt"),
+            (error) => error === "not-permitted",
+        );
+
+        assert.strictEqual(root.statAt({}, "escape.txt").type, "symbolic-link");
+        assert.strictEqual(root.readlinkAt("escape.txt"), join(outsideDir, "secret.txt"));
+        throws(
+            () => open("escape.txt", {}),
+            (error) => error === "loop",
+        );
+    });
+
+    test("rejects every path operation through an escaping intermediate symlink", () => {
+        symlinkSync(outsideDir, join(testDir, "escape"), "dir");
+        const denied = (operation: () => unknown) =>
+            throws(operation, (error) => error === "not-permitted");
+
+        denied(() => open("escape/secret.txt", {}));
+        denied(() =>
+            root.openAt(
+                { symlinkFollow: true },
+                "escape/created.txt",
+                { create: true },
+                { write: true },
+            ),
+        );
+        denied(() => root.createDirectoryAt("escape/created-dir"));
+        denied(() => root.statAt({}, "escape/secret.txt"));
+        denied(() =>
+            root.setTimesAt(
+                { symlinkFollow: true },
+                "escape/secret.txt",
+                { tag: "now" },
+                { tag: "now" },
+            ),
+        );
+        denied(() => root.linkAt({}, "target.txt", root, "escape/linked.txt"));
+        denied(() => root.linkAt({}, "escape/secret.txt", root, "linked.txt"));
+        denied(() => root.readlinkAt("escape/link.txt"));
+        denied(() => root.removeDirectoryAt("escape/empty"));
+        denied(() => root.renameAt("target.txt", root, "escape/renamed.txt"));
+        denied(() => root.symlinkAt("target.txt", "escape/new-link.txt"));
+        denied(() => root.unlinkFileAt("escape/secret.txt"));
+        denied(() => root.metadataHashAt({}, "escape/secret.txt"));
+
+        assert.strictEqual(
+            readFileSync(join(outsideDir, "secret.txt"), "utf8"),
+            "outside contents",
+        );
+        assert.strictEqual(existsSync(join(outsideDir, "created.txt")), false);
+        assert.strictEqual(existsSync(join(outsideDir, "created-dir")), false);
+        assert.strictEqual(existsSync(join(outsideDir, "linked.txt")), false);
+        assert.strictEqual(existsSync(join(outsideDir, "renamed.txt")), false);
+        assert.strictEqual(existsSync(join(outsideDir, "new-link.txt")), false);
+        assert.strictEqual(existsSync(join(testDir, "target.txt")), true);
     });
 });

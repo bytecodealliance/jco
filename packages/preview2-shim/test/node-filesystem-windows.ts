@@ -11,6 +11,7 @@ vi.mock("node:fs", async (importOriginal) => ({
     statSync: vi.fn(),
     lstatSync: vi.fn(),
     readlinkSync: vi.fn(),
+    realpathSync: vi.fn((path: string) => path),
 }));
 vi.mock("../src/io/worker-io.js", () => ({
     earlyDispose: vi.fn(),
@@ -29,6 +30,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     const stats = {
         isFile: () => true,
+        isSymbolicLink: () => false,
         nlink: 1n,
         size: 0n,
         atimeNs: 0n,
