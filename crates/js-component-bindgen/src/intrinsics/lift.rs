@@ -941,6 +941,8 @@ impl LiftIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_list_fn = self.name();
                 let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
                     function {lift_flat_list_fn}(meta) {{
@@ -952,6 +954,14 @@ impl LiftIntrinsic {
                             : values => new typedArray(values);
 
                         const readValuesAndReset = (ctx, originalPtr, originalLen, dataPtr, len) => {{
+                            if (
+                                dataPtr < 0 || len < 0 ||
+                                (elemSize32 !== 0 && len > Math.floor(((1 << 28) - 1) / elemSize32)) ||
+                                dataPtr > ctx.memory.buffer.byteLength ||
+                                (elemSize32 !== 0 && len > Math.floor((ctx.memory.buffer.byteLength - dataPtr) / elemSize32))
+                            ) {{
+                                throw new {runtime_error}('wasm trap: out of bounds memory access');
+                            }}
                             if (dataPtr % elemAlign32 !== 0) {{
                                 throw new TypeError(`list pointer [${{dataPtr}}] is not aligned to ${{elemAlign32}}`);
                             }}

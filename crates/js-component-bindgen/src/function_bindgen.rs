@@ -439,6 +439,25 @@ impl FunctionBindgen<'_> {
         );
     }
 
+    fn emit_list_bounds_check(&mut self, ptr: &str, len: &str, element_size: usize) {
+        const MAX_LIST_BYTE_LENGTH: usize = (1 << 28) - 1;
+
+        let memory = self.memory.as_ref().unwrap().to_string();
+        let runtime_error = self.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+        if element_size == 0 {
+            uwriteln!(
+                self.src,
+                "if ({ptr} < 0 || {len} < 0 || {ptr} > {memory}.buffer.byteLength) throw new {runtime_error}('wasm trap: out of bounds memory access');"
+            );
+        } else {
+            let max_elements = MAX_LIST_BYTE_LENGTH / element_size;
+            uwriteln!(
+                self.src,
+                "if ({ptr} < 0 || {len} < 0 || {len} > {max_elements} || {ptr} > {memory}.buffer.byteLength || {len} > Math.floor(({memory}.buffer.byteLength - {ptr}) / {element_size})) throw new {runtime_error}('wasm trap: out of bounds memory access');"
+            );
+        }
+    }
+
     fn emit_guest_dealloc(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
         if size == 0 {
             return;
@@ -1696,11 +1715,12 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
-                let memory = self.memory.as_ref().unwrap();
+                let memory = self.memory.as_ref().unwrap().to_string();
                 let size = self.sizes.size(element).size_wasm32();
                 let align = self.sizes.align(element).align_wasm32();
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
+                self.emit_list_bounds_check(&format!("ptr{tmp}"), &format!("len{tmp}"), size);
                 uwriteln!(
                     self.src,
                     "if (ptr{tmp} % {align} !== 0) throw new TypeError(`list pointer [${{ptr{tmp}}}] is not aligned to {align}`);
@@ -1844,6 +1864,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "var {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
                 uwriteln!(self.src, "var {base} = {};", operands[0]);
+                self.emit_list_bounds_check(&base, &len, size);
                 uwriteln!(
                     self.src,
                     "if ({base} % {align} !== 0) throw new TypeError(`list pointer [${{{base}}}] is not aligned to {align}`);"
