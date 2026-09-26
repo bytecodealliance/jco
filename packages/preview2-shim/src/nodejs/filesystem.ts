@@ -415,9 +415,6 @@ class Descriptor implements IDescriptor {
     }
 
     openAt(pathFlags, path, openFlags, descriptorFlags) {
-        if (preopenEntries.length === 0) {
-            throw "access";
-        }
         const fullPath = this.#getFullPath(path);
         let fsOpenFlags = 0x0;
         if (openFlags.create) {
@@ -745,8 +742,6 @@ export const preopens: typeof PreopensNamespace = {
     },
 };
 
-_addPreopen("/", isWindows ? "//" : "/");
-
 export const types: typeof TypesNamespace = {
     Descriptor,
     DirectoryEntryStream,
@@ -791,11 +786,10 @@ export function _addPreopen(virtualPath, hostPreopen) {
 
 /**
  * Clear all preopens, giving the guest no filesystem access.
- * Call this immediately after import to disable default full filesystem access.
  *
  * @example
  * import { _clearPreopens } from '@bytecodealliance/preview2-shim/filesystem';
- * _clearPreopens(); // Now guest has no filesystem access by default
+ * _clearPreopens();
  */
 export function _clearPreopens() {
     preopenEntries = [];

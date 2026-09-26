@@ -1,6 +1,7 @@
 import { env } from "node:process";
 import { throws } from "node:assert";
 import { createServer } from "node:net";
+import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { suite, test, assert, beforeEach, afterEach } from "vitest";
 import {
@@ -114,10 +115,14 @@ suite("Node.js Preview2", () => {
         let toDispose: any[] = [];
         await (async () => {
             const { filesystem } = await import("@bytecodealliance/preview2-shim");
-            const [[rootDescriptor]] = filesystem.preopens.getDirectories();
+            const testFile = fileURLToPath(import.meta.url);
+            const isolated = (filesystem.createFilesystem as any)({
+                preopens: { "/": dirname(testFile) },
+            });
+            const [[rootDescriptor]] = isolated.preopens.getDirectories();
             const childDescriptor = rootDescriptor.openAt(
                 {},
-                fileURLToPath(import.meta.url).slice(1),
+                basename(testFile),
                 {},
                 { read: true },
             );
@@ -146,13 +151,12 @@ suite("Node.js Preview2", () => {
 
     test("FS advise", async () => {
         const { filesystem } = await import("@bytecodealliance/preview2-shim");
-        const [[rootDescriptor]] = filesystem.preopens.getDirectories();
-        const descriptor = rootDescriptor.openAt(
-            {},
-            fileURLToPath(import.meta.url).slice(1),
-            {},
-            { read: true },
-        );
+        const testFile = fileURLToPath(import.meta.url);
+        const isolated = (filesystem.createFilesystem as any)({
+            preopens: { "/": dirname(testFile) },
+        });
+        const [[rootDescriptor]] = isolated.preopens.getDirectories();
+        const descriptor = rootDescriptor.openAt({}, basename(testFile), {}, { read: true });
 
         for (const advice of ADVICE_VALUES) {
             assert.doesNotThrow(() => descriptor.advise(0n, 0n, advice));
@@ -910,20 +914,24 @@ suite("Sandboxing", () => {
     afterEach(async () => {
         const { cli, filesystem } = await import("@bytecodealliance/preview2-shim");
         // Restore default state
-        (filesystem as any)._setPreopens({ "/": "/" });
+        (filesystem as any)._setPreopens({});
         cli._setEnv(Object.fromEntries(originalEnv));
         cli._setArgs(originalArgs);
     });
 
-    test("_clearPreopens removes filesystem access", async () => {
+    test("filesystem starts without host preopens", async () => {
         const { filesystem } = await import("@bytecodealliance/preview2-shim");
         const initialPreopens = filesystem.preopens.getDirectories();
+        assert.strictEqual(initialPreopens.length, 0, "Should have no default preopens");
 
-        assert.ok(initialPreopens.length > 0, "Should have default preopens");
-        filesystem._clearPreopens();
-
-        const clearedPreopens = filesystem.preopens.getDirectories();
-        assert.strictEqual(clearedPreopens.length, 0, "Preopens should be empty after clear");
+        const defaultShim = new (
+            await import("@bytecodealliance/preview2-shim/instantiation")
+        ).WASIShim();
+        assert.strictEqual(
+            defaultShim.getImportObject()["wasi:filesystem/preopens"].getDirectories().length,
+            0,
+            "Default WASIShim should have no preopens",
+        );
     });
 
     test("_setPreopens replaces preopens", async () => {

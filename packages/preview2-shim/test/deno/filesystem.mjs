@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { preopens } from "../../dist/nodejs/filesystem.js";
+import { createFilesystem } from "../../dist/nodejs/filesystem.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -13,8 +13,10 @@ Deno.test("filesystem descriptors remain valid in the I/O worker", () => {
 
     try {
         writeFileSync(file, "abcdef");
-        const [[root]] = preopens.getDirectories();
-        const relativeFile = file.slice(1);
+        const [[root]] = createFilesystem({
+            preopens: { "/": directory },
+        }).preopens.getDirectories();
+        const relativeFile = "worker-resource.txt";
 
         const readDescriptor = root.openAt({}, relativeFile, {}, { read: true });
         const input = readDescriptor.readViaStream(1n);
@@ -47,7 +49,7 @@ Deno.test("filesystem descriptors remain valid in the I/O worker", () => {
 
         const unlinkedFile = join(directory, "unlinked.txt");
         writeFileSync(unlinkedFile, "still open");
-        const unlinkedDescriptor = root.openAt({}, unlinkedFile.slice(1), {}, { read: true });
+        const unlinkedDescriptor = root.openAt({}, "unlinked.txt", {}, { read: true });
         const unlinkedInput = unlinkedDescriptor.readViaStream(0n);
         unlinkSync(unlinkedFile);
 
