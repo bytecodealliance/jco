@@ -58,16 +58,6 @@ function normalizeHostPath(path: string) {
     return isWindows ? path.replace(/\\/g, "/") : path;
 }
 
-function isWithinHostPath(base: string, path: string) {
-    const relative = hostPath.relative(base, path);
-    return (
-        relative === "" ||
-        (!relative.startsWith(`..${hostPath.sep}`) &&
-            relative !== ".." &&
-            !hostPath.isAbsolute(relative))
-    );
-}
-
 const nsMagnitude = 1_000_000_000n;
 function nsToDateTime(ns) {
     const seconds = ns / nsMagnitude;
@@ -697,12 +687,7 @@ class Descriptor implements IDescriptor {
 
             let targetSegments: string[];
             if (hostPath.isAbsolute(target)) {
-                const targetResolved = normalizeHostPath(hostPath.resolve(target));
-                if (!isWithinHostPath(baseResolved, targetResolved)) {
-                    throw "not-permitted";
-                }
-                const relativeTarget = hostPath.relative(baseResolved, targetResolved);
-                targetSegments = relativeTarget ? relativeTarget.split(hostPath.sep) : [];
+                throw "not-permitted";
             } else {
                 const relativeCurrent = hostPath.relative(baseResolved, current);
                 targetSegments = relativeCurrent ? relativeCurrent.split(hostPath.sep) : [];

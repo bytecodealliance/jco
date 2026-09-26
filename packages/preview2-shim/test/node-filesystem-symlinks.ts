@@ -54,7 +54,7 @@ suite("Node filesystem symlink paths", () => {
         return descriptor;
     }
 
-    for (const kind of ["relative", "absolute", "chain", "intermediate"] as const) {
+    for (const kind of ["relative", "chain", "intermediate"] as const) {
         test(`linkAt resolves ${kind} symlinks to the target inode`, () => {
             let source = "link.txt";
             if (kind === "intermediate") {
@@ -63,10 +63,7 @@ suite("Node filesystem symlink paths", () => {
                 symlinkSync("nested", join(testDir, "alias"), "dir");
                 source = "alias/link.txt";
             } else {
-                symlinkSync(
-                    kind === "absolute" ? join(testDir, "target.txt") : "target.txt",
-                    join(testDir, "link.txt"),
-                );
+                symlinkSync("target.txt", join(testDir, "link.txt"));
                 if (kind === "chain") {
                     symlinkSync("link.txt", join(testDir, "chain.txt"));
                     source = "chain.txt";
@@ -85,6 +82,19 @@ suite("Node filesystem symlink paths", () => {
             );
         });
     }
+
+    test("rejects absolute symlink targets when following", () => {
+        symlinkSync(join(testDir, "target.txt"), join(testDir, "absolute.txt"));
+        throws(
+            () => open("absolute.txt", { symlinkFollow: true }),
+            (error) => error === "not-permitted",
+        );
+        throws(
+            () => root.linkAt({ symlinkFollow: true }, "absolute.txt", root, "linked.txt"),
+            (error) => error === "not-permitted",
+        );
+        assert.strictEqual(root.statAt({}, "absolute.txt").type, "symbolic-link");
+    });
 
     for (const target of ["target.txt", "missing.txt", "link.txt"]) {
         test(`linkAt without follow preserves native link behavior for ${target}`, () => {
