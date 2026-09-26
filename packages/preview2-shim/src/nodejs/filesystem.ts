@@ -44,12 +44,29 @@ import {
     unlinkSync,
     utimesSync,
 } from "node:fs";
+import { posix, win32 } from "node:path";
 import { platform } from "node:process";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 const isWindows = platform === "win32";
 const isMac = platform === "darwin";
+const hostPath = isWindows ? win32 : posix;
+const MAX_SYMLINKS = 40;
+
+function normalizeHostPath(path: string) {
+    return isWindows ? path.replace(/\\/g, "/") : path;
+}
+
+function isWithinHostPath(base: string, path: string) {
+    const relative = hostPath.relative(base, path);
+    return (
+        relative === "" ||
+        (!relative.startsWith(`..${hostPath.sep}`) &&
+            relative !== ".." &&
+            !hostPath.isAbsolute(relative))
+    );
+}
 
 const nsMagnitude = 1_000_000_000n;
 function nsToDateTime(ns) {
@@ -303,7 +320,7 @@ class Descriptor implements IDescriptor {
     }
 
     createDirectoryAt(path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, false);
         try {
             mkdirSync(fullPath);
         } catch (e) {
@@ -333,7 +350,7 @@ class Descriptor implements IDescriptor {
     }
 
     statAt(pathFlags, path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
         let stats;
         try {
             stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, {
@@ -354,7 +371,7 @@ class Descriptor implements IDescriptor {
     }
 
     setTimesAt(pathFlags, path, dataAccessTimestamp, dataModificationTimestamp) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
         let stats;
         if (
             dataAccessTimestamp.tag === "no-change" ||
@@ -374,7 +391,7 @@ class Descriptor implements IDescriptor {
             throw new Error("Changing the timestamps of symlinks isn't supported");
         }
 
-        let metadataSetFn = pathFlags.symlinkFollow ? lutimesSync : utimesSync;
+        let metadataSetFn = pathFlags.symlinkFollow ? utimesSync : lutimesSync;
         try {
             metadataSetFn(fullPath, atime / 1000, mtime / 1000);
         } catch (e) {
@@ -383,39 +400,21 @@ class Descriptor implements IDescriptor {
     }
 
     linkAt(oldPathFlags, oldPath, newDescriptor, newPath) {
-        const oldFullPath = this.#getFullPath(oldPath);
-        const newFullPath = newDescriptor.#getFullPath(newPath);
+        const oldFullPath = this.#getFullPath(oldPath, oldPathFlags.symlinkFollow);
+        const newFullPath = newDescriptor.#getFullPath(newPath, false);
         // Windows doesn't automatically fail on trailing slashes
         if (isWindows && newFullPath.endsWith("/")) {
             throw "no-entry";
         }
         try {
-            // Unlike open/stat, Node's link does not follow the final symlink.
-            // Resolve only this operation's source, propagating resolution errors
-            // instead of silently hard-linking a dangling or cyclic symlink.
-            let source = oldFullPath;
-            if (oldPathFlags.symlinkFollow) {
-                source = realpathSync(source);
-                // realpath strips trailing slashes; keep the caller's directory
-                // requirement so a regular-file source ending in '/' still fails.
-                if (oldFullPath.endsWith("/")) {
-                    // Windows may ignore a trailing slash even in linkSync.
-                    if (!statSync(source).isDirectory()) {
-                        throw "not-directory";
-                    }
-                    if (!source.endsWith("/")) {
-                        source += "/";
-                    }
-                }
-            }
-            linkSync(source, newFullPath);
+            linkSync(oldFullPath, newFullPath);
         } catch (e) {
             throw convertFsError(e);
         }
     }
 
     openAt(pathFlags, path, openFlags, descriptorFlags) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
         let fsOpenFlags = 0x0;
         if (openFlags.create) {
             fsOpenFlags |= constants.O_CREAT;
@@ -505,7 +504,7 @@ class Descriptor implements IDescriptor {
     }
 
     readlinkAt(path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, false);
         try {
             const target = readlinkSync(fullPath);
             return isWindows ? target.replace(/\\/g, "/") : target;
@@ -515,7 +514,7 @@ class Descriptor implements IDescriptor {
     }
 
     removeDirectoryAt(path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, false);
         try {
             rmdirSync(fullPath);
         } catch (e: any) {
@@ -527,8 +526,8 @@ class Descriptor implements IDescriptor {
     }
 
     renameAt(oldPath, newDescriptor, newPath) {
-        const oldFullPath = this.#getFullPath(oldPath);
-        const newFullPath = newDescriptor.#getFullPath(newPath);
+        const oldFullPath = this.#getFullPath(oldPath, false);
+        const newFullPath = newDescriptor.#getFullPath(newPath, false);
         try {
             renameSync(oldFullPath, newFullPath);
         } catch (e: any) {
@@ -540,7 +539,7 @@ class Descriptor implements IDescriptor {
     }
 
     symlinkAt(target, path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, false);
         if (target.startsWith("/")) {
             throw "not-permitted";
         }
@@ -568,7 +567,7 @@ class Descriptor implements IDescriptor {
     }
 
     unlinkFileAt(path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, false);
         try {
             if (fullPath.endsWith("/")) {
                 let isDir = false;
@@ -610,7 +609,7 @@ class Descriptor implements IDescriptor {
     }
 
     metadataHashAt(pathFlags, path) {
-        const fullPath = this.#getFullPath(path);
+        const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
         try {
             const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, {
                 bigint: true,
@@ -621,76 +620,111 @@ class Descriptor implements IDescriptor {
         }
     }
 
-    // Join paths lexically; each operation supplies its own symlink semantics.
-    #getFullPath(subpath) {
-        let descriptor = this;
-        if (subpath.indexOf("\\") !== -1) {
-            subpath = subpath.replace(/\\/g, "/");
-        }
-        if (subpath.indexOf("//") !== -1) {
-            subpath = subpath.replace(/\/\/+/g, "/");
-        }
-        if (subpath[0] === "/") {
+    #getFullPath(subpath, followFinalSymlink) {
+        subpath = subpath.replace(/\\/g, "/").replace(/\/\/+/g, "/");
+        if (subpath.startsWith("/")) {
             throw "not-permitted";
         }
 
-        // segment resolution
+        const trailingSlash = subpath.endsWith("/");
         const segments: string[] = [];
-        let segmentIndex = -1;
-        for (let i = 0; i < subpath.length; i++) {
-            // busy reading a segment - only terminate on '/'
-            if (segmentIndex !== -1) {
-                if (subpath[i] === "/") {
-                    segments.push(subpath.slice(segmentIndex, i + 1));
-                    segmentIndex = -1;
-                }
+        for (const segment of subpath.split("/")) {
+            if (segment === "" || segment === ".") {
                 continue;
             }
-            // new segment - check if it is relative
-            else if (subpath[i] === ".") {
-                // ../ segment
-                if (
-                    subpath[i + 1] === "." &&
-                    (subpath[i + 2] === "/" || i + 2 === subpath.length)
-                ) {
-                    if (segments.pop() === undefined) {
-                        throw "not-permitted";
+            if (segment === "..") {
+                if (segments.pop() === undefined) {
+                    throw "not-permitted";
+                }
+            } else {
+                segments.push(segment);
+            }
+        }
+
+        const base = this.#hostPreopen ?? this.#fullPath;
+
+        // The default Windows preopen intentionally represents every drive and
+        // UNC share, so there is no narrower host boundary to enforce.
+        if (isWindows && this.#hostPreopen === "//") {
+            const normalized = segments.join("/");
+            const fullPath = /^[a-zA-Z]:\//.test(normalized)
+                ? `//?/${normalized}`
+                : `//${normalized}`;
+            return trailingSlash && normalized ? `${fullPath}/` : fullPath;
+        }
+
+        let baseResolved: string;
+        try {
+            baseResolved = normalizeHostPath(realpathSync(base));
+        } catch (error) {
+            throw convertFsError(error);
+        }
+
+        let current = baseResolved;
+        let pending = [...segments];
+        let followedSymlinks = 0;
+
+        while (pending.length > 0) {
+            const segment = pending.shift()!;
+            const candidate = normalizeHostPath(hostPath.join(current, segment));
+            let stats;
+            try {
+                stats = lstatSync(candidate);
+            } catch (error: any) {
+                if (error.code === "ENOENT") {
+                    const unresolved = normalizeHostPath(hostPath.join(candidate, ...pending));
+                    return trailingSlash ? `${unresolved}/` : unresolved;
+                }
+                throw convertFsError(error);
+            }
+
+            const isFinal = pending.length === 0;
+            if (!stats.isSymbolicLink() || (isFinal && !followFinalSymlink && !trailingSlash)) {
+                current = candidate;
+                continue;
+            }
+
+            if (++followedSymlinks > MAX_SYMLINKS) {
+                throw "loop";
+            }
+
+            let target: string;
+            try {
+                target = readlinkSync(candidate);
+            } catch (error) {
+                throw convertFsError(error);
+            }
+
+            let targetSegments: string[];
+            if (hostPath.isAbsolute(target)) {
+                const targetResolved = normalizeHostPath(hostPath.resolve(target));
+                if (!isWithinHostPath(baseResolved, targetResolved)) {
+                    throw "not-permitted";
+                }
+                const relativeTarget = hostPath.relative(baseResolved, targetResolved);
+                targetSegments = relativeTarget ? relativeTarget.split(hostPath.sep) : [];
+            } else {
+                const relativeCurrent = hostPath.relative(baseResolved, current);
+                targetSegments = relativeCurrent ? relativeCurrent.split(hostPath.sep) : [];
+                for (const targetSegment of target.replace(/\\/g, "/").split("/")) {
+                    if (targetSegment === "" || targetSegment === ".") {
+                        continue;
                     }
-                    i += 2;
-                    continue;
-                }
-                // ./ segment
-                else if (subpath[i + 1] === "/" || i + 1 === subpath.length) {
-                    i += 1;
-                    continue;
+                    if (targetSegment === "..") {
+                        if (targetSegments.pop() === undefined) {
+                            throw "not-permitted";
+                        }
+                    } else {
+                        targetSegments.push(targetSegment);
+                    }
                 }
             }
-            // it is the start of a new segment
-            while (subpath[i] === "/") {
-                i++;
-            }
-            segmentIndex = i;
-        }
-        // finish reading out the last segment
-        if (segmentIndex !== -1) {
-            segments.push(subpath.slice(segmentIndex));
+
+            pending = [...targetSegments, ...pending];
+            current = baseResolved;
         }
 
-        subpath = segments.join("");
-
-        // The default Windows preopen represents all drives.
-        //
-        // Convert drive paths to namespaced paths so joining them to the preopen
-        // does not produce an invalid UNC server name such as //C:/Users/...
-        if (isWindows && descriptor.#hostPreopen === "//" && /^[a-zA-Z]:\//.test(subpath)) {
-            return "//?/" + subpath;
-        }
-
-        return descriptor.#hostPreopen
-            ? descriptor.#hostPreopen +
-                  (descriptor.#hostPreopen.endsWith("/") ? "" : subpath.length > 0 ? "/" : "") +
-                  subpath
-            : descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
+        return trailingSlash && current !== baseResolved ? `${current}/` : current;
     }
 }
 const descriptorCreatePreopen = Descriptor._createPreopen;
