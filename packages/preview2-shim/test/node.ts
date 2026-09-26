@@ -1078,6 +1078,40 @@ suite("Sandboxing", () => {
         assert.doesNotThrow(() => allowedSocket.startBind(allowedNetwork, address));
     });
 
+    test("WASIShim denies outgoing HTTP without dispatching or leaking policy", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        let dispatched = 0;
+        const customHttp = {
+            types: {},
+            incomingHandler: {},
+            outgoingHandler: {
+                handle() {
+                    dispatched++;
+                    return "dispatched";
+                },
+            },
+        };
+        const restricted = new WASIShim({
+            http: customHttp,
+            sandbox: { enableNetwork: false },
+        }).getImportObject();
+        const allowed = new WASIShim({
+            http: customHttp,
+            sandbox: { enableNetwork: true },
+        }).getImportObject();
+
+        assert.throws(
+            () => restricted["wasi:http/outgoing-handler"].handle({} as any, undefined),
+            /access-denied/,
+        );
+        assert.strictEqual(dispatched, 0, "denied HTTP must not reach the configured handler");
+        assert.strictEqual(
+            allowed["wasi:http/outgoing-handler"].handle({} as any, undefined),
+            "dispatched",
+        );
+        assert.strictEqual(dispatched, 1, "an allowed shim must retain its own HTTP capability");
+    });
+
     test("Fully sandboxed WASIShim", async () => {
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 

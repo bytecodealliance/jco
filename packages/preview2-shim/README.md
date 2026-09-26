@@ -107,8 +107,7 @@ const shim = new WASIShim({
 ```
 
 This keeps permission prompts, handle acquisition, persistence, and synchronization policy in
-application code. Raw TCP, UDP, and DNS are denied by default; outbound HTTP remains a separate
-`fetch` capability.
+application code. `sandbox.enableNetwork: false` denies raw TCP, UDP, DNS, and outbound HTTP.
 
 Deterministic in-memory transports are available for components that act as servers and for tests:
 
@@ -240,9 +239,8 @@ const component = await instantiate(loader, sandboxedShim.getImportObject());
 - The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and
   affect all components not using `WASIShim` with explicit configuration. For isolation, prefer
   using `WASIShim` with the `sandbox` option containing `preopens` and `env`.
-- When `sandbox.enableNetwork: false`, Node.js socket operations receive an instance-local denied
-  network capability. Outbound HTTP is a separate Fetch capability; replace or omit the HTTP
-  namespace when the embedding must deny it as well.
+- When `sandbox.enableNetwork: false`, socket operations and outbound HTTP receive instance-local
+  denied network capabilities.
 
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
