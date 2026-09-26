@@ -24,7 +24,7 @@ pub mod intrinsics;
 use intrinsics::Intrinsic;
 
 pub use transpile_bindgen::{
-    AsyncMode, BindingsMode, ExportKind, InstantiationMode, TranspileOpts,
+    AsyncMode, BindingsMode, DEFAULT_RUNTIME_MODULE, ExportKind, InstantiationMode, TranspileOpts,
 };
 use transpile_bindgen::{TranspileBindgenResult, transpile_bindgen};
 
@@ -223,6 +223,12 @@ fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
     if opts.use_namespace_objects {
         opts.flags_as_bigint = true;
     }
+    if let Some(runtime_module) = &opts.runtime_module {
+        ensure!(
+            !runtime_module.is_empty() && !runtime_module.chars().any(char::is_control),
+            "runtimeModule must be a non-empty module specifier without control characters"
+        );
+    }
     Ok(())
 }
 
@@ -392,6 +398,17 @@ mod tests {
         }
     "#;
 
+    fn generated_javascript(transpiled: &Transpiled) -> &str {
+        transpiled
+            .files
+            .iter()
+            .find_map(|(name, contents)| {
+                name.ends_with(".js")
+                    .then(|| std::str::from_utf8(contents).unwrap())
+            })
+            .unwrap()
+    }
+
     fn flags_interface(flags_as_bigint: bool) -> String {
         let mut resolve = Resolve::default();
         let package = resolve.push_str("flags.wit", FLAGS_WIT).unwrap();
@@ -444,5 +461,115 @@ mod tests {
             "example:component/run@1.0.0",
             &async_funcs,
         ));
+    }
+
+    #[test]
+    fn validates_runtime_module_specifiers() {
+        let mut default = TranspileOpts::default();
+        normalize_namespace_object_options(&mut default).unwrap();
+        assert_eq!(default.runtime_module(), DEFAULT_RUNTIME_MODULE);
+
+        let mut custom = TranspileOpts::builder()
+            .name("component".into())
+            .runtime_module("./runtime.js".into())
+            .build();
+        normalize_namespace_object_options(&mut custom).unwrap();
+        assert_eq!(custom.runtime_module(), "./runtime.js");
+
+        for invalid in ["", "runtime\nmodule"] {
+            let mut opts = TranspileOpts::builder()
+                .name("component".into())
+                .runtime_module(invalid.into())
+                .build();
+            assert!(normalize_namespace_object_options(&mut opts).is_err());
+        }
+    }
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn resource_rep_uses_external_runtime_provider() {
+        let component = wat::parse_str(
+            r#"
+                (component
+                    (core module $module
+                        (type $rep-type (func (param i32) (result i32)))
+                        (import "intrinsics" "rep" (func $rep (type $rep-type)))
+                        (func (export "run") (param i32) (result i32)
+                            local.get 0
+                            call $rep
+                        )
+                    )
+                    (type $resource (resource (rep i32)))
+                    (core func $rep (canon resource.rep $resource))
+                    (core instance $intrinsics
+                        (export "rep" (func $rep))
+                    )
+                    (core instance (instantiate $module
+                        (with "intrinsics" (instance $intrinsics))
+                    ))
+                )
+            "#,
+        )
+        .unwrap();
+        let direct = transpile(
+            &component,
+            TranspileOpts::builder()
+                .name("resource-runtime-direct".into())
+                .build(),
+        )
+        .unwrap();
+        let direct_source = generated_javascript(&direct);
+        let direct_import_position = direct_source
+            .find(
+                "import { runtime as _jcoRuntimeProvider } from \"@bytecodealliance/jco-cm-runtime\";",
+            )
+            .unwrap();
+        let direct_create_position = direct_source.find("_jcoRuntimeProvider.create(").unwrap();
+        let direct_init_position = direct_source.find("const $init").unwrap();
+        assert!(direct_import_position < direct_create_position);
+        assert!(direct_create_position < direct_init_position);
+
+        let transpiled = transpile(
+            &component,
+            TranspileOpts::builder()
+                .name("resource-runtime".into())
+                .runtime_module("./custom-runtime.js".into())
+                .instantiation_mode(InstantiationMode::Sync)
+                .build(),
+        )
+        .unwrap();
+        let source = generated_javascript(&transpiled);
+
+        let import_position = source
+            .find("import { runtime as _jcoRuntimeProvider } from \"./custom-runtime.js\";")
+            .unwrap();
+        let instantiate_position = source.find("export function instantiate(").unwrap();
+        let create_position = source.find("_jcoRuntimeProvider.create(").unwrap();
+        assert!(import_position < instantiate_position);
+        assert!(instantiate_position < create_position);
+        assert!(source.contains("const rscTableGet = _jcoIntrinsics.resource.tableGet;"));
+        assert!(source.contains("rscTableGet("));
+        assert!(!source.contains("function rscTableGet(table, handle)"));
+        assert_eq!(source.matches("_jcoRuntimeProvider.create(").count(), 1);
+        assert!(
+            !transpiled
+                .imports
+                .contains(&"./custom-runtime.js".to_string())
+        );
+    }
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn unrelated_component_does_not_import_external_runtime() {
+        let component = wat::parse_str("(component)").unwrap();
+        let transpiled = transpile(
+            &component,
+            TranspileOpts::builder().name("adder".into()).build(),
+        )
+        .unwrap();
+        let source = generated_javascript(&transpiled);
+
+        assert!(!source.contains("_jcoRuntimeProvider"));
+        assert!(!source.contains(DEFAULT_RUNTIME_MODULE));
     }
 }
