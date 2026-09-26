@@ -444,16 +444,15 @@ impl FunctionBindgen<'_> {
 
         let memory = self.memory.as_ref().unwrap().to_string();
         let runtime_error = self.intrinsic(Intrinsic::WebAssemblyRuntimeError);
-        if element_size == 0 {
-            uwriteln!(
-                self.src,
-                "if ({ptr} < 0 || {len} < 0 || {ptr} > {memory}.buffer.byteLength) throw new {runtime_error}('wasm trap: out of bounds memory access');"
-            );
-        } else {
-            let max_elements = MAX_LIST_BYTE_LENGTH / element_size;
+        if let Some(max_elements) = MAX_LIST_BYTE_LENGTH.checked_div(element_size) {
             uwriteln!(
                 self.src,
                 "if ({ptr} < 0 || {len} < 0 || {len} > {max_elements} || {ptr} > {memory}.buffer.byteLength || {len} > Math.floor(({memory}.buffer.byteLength - {ptr}) / {element_size})) throw new {runtime_error}('wasm trap: out of bounds memory access');"
+            );
+        } else {
+            uwriteln!(
+                self.src,
+                "if ({ptr} < 0 || {len} < 0 || {ptr} > {memory}.buffer.byteLength) throw new {runtime_error}('wasm trap: out of bounds memory access');"
             );
         }
     }
