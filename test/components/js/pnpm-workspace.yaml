@@ -2,6 +2,9 @@ minimumReleaseAge: 10080
 blockExoticSubdeps: true
 allowBuilds: {}
 
+overrides:
+  '@bytecodealliance/weval': 0.5.0
+
 packages:
   - jco-issue-1390/callee
 
@@ -10,3 +13,4 @@ catalog:
 
 minimumReleaseAgeExclude:
   - '@bytecodealliance/componentize-js@0.22.0'
+  - '@bytecodealliance/weval@0.5.0'
