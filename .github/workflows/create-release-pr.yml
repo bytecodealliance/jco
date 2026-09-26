@@ -211,10 +211,10 @@ jobs:
             node -e '
               const fs = require("node:fs");
               const path = "src/jco.ts";
-              const current = `version("${process.env.CURRENT_VERSION}")`;
-              const next = `version("${process.env.NEXT_VERSION}")`;
+              const current = "version(\"" + process.env.CURRENT_VERSION + "\")";
+              const next = "version(\"" + process.env.NEXT_VERSION + "\")";
               const source = fs.readFileSync(path, "utf8");
-              if (!source.includes(current)) throw new Error(`Missing ${current} in ${path}`);
+              if (!source.includes(current)) throw new Error("Missing " + current + " in " + path);
               fs.writeFileSync(path, source.replace(current, next));
             ';
           fi
