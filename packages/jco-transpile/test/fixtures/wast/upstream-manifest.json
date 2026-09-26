@@ -9,11 +9,23 @@
         },
         {
             "name": "big-interleaving-test.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
             "name": "builtin-trap-poisons-instance.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
+            "name": "cancel-delivery.wast",
+            "revision": "c52323b20e0717368a67a7f309c6751675333317"
+        },
+        {
+            "name": "cancel-not-delivered.wast",
+            "revision": "13ec1b34f4ada6d8a22602b3ddaec8e1167c543e"
+        },
+        {
+            "name": "cancel-resumed-callback-switch.wast",
+            "revision": "c52323b20e0717368a67a7f309c6751675333317"
         },
         {
             "name": "cancel-stream.wast",
@@ -21,7 +33,11 @@
         },
         {
             "name": "cancel-subtask.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+        },
+        {
+            "name": "cancel-targeted-resume.wast",
+            "revision": "c52323b20e0717368a67a7f309c6751675333317"
         },
         {
             "name": "closed-stream.wast",
@@ -68,12 +84,24 @@
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
         {
+            "name": "future-completion-order.wast",
+            "revision": "e6832646ee9c1e59444294a5f9f22af3d2c7f76d"
+        },
+        {
+            "name": "idle-drop.wast",
+            "revision": "5a98cd0744de401faa16d1321dbfe1c67ef5bd74"
+        },
+        {
             "name": "partial-stream-copies.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "e6832646ee9c1e59444294a5f9f22af3d2c7f76d"
         },
         {
             "name": "passing-resources.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
+            "name": "reentrance.wast",
+            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
             "name": "same-component-stream-future.wast",
@@ -113,7 +141,7 @@
         },
         {
             "name": "zero-length.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "e6832646ee9c1e59444294a5f9f22af3d2c7f76d"
         }
     ]
 }

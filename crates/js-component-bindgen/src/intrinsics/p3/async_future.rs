@@ -680,6 +680,8 @@ impl AsyncFutureIntrinsic {
             Self::FutureEndClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
+                let async_event_code_enum =
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
 
                 uwriteln!(
                     output,
@@ -705,6 +707,7 @@ impl AsyncFutureIntrinsic {
 
                         #dropped = false;
                         #isPeerDroppedFn;
+                        #notifyPeerDroppedFn;
 
                         constructor(args) {{
                             {debug_log_fn}('[{future_end_class}#constructor()] args', args);
@@ -719,6 +722,10 @@ impl AsyncFutureIntrinsic {
                                 throw new TypeError('isPeerDroppedFn must be a function');
                             }}
                             this.#isPeerDroppedFn = args.isPeerDroppedFn ?? (() => false);
+                            if (args.notifyPeerDroppedFn !== undefined && typeof args.notifyPeerDroppedFn !== 'function') {{
+                                throw new TypeError('notifyPeerDroppedFn must be a function');
+                            }}
+                            this.#notifyPeerDroppedFn = args.notifyPeerDroppedFn ?? (() => {{}});
                         }}
 
                         getWaitable() {{ return this.#waitable; }}
@@ -801,6 +808,21 @@ impl AsyncFutureIntrinsic {
                         isDropped() {{ return this.#dropped; }}
                         isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
 
+                        notifyDropped() {{
+                            if (this.isDropped() || this.isDoneState() || this.hasPendingEvent()) {{ return; }}
+                            const eventCode = this.isReadable()
+                                ? {async_event_code_enum}.FUTURE_READ
+                                : {async_event_code_enum}.FUTURE_WRITE;
+                            this.setPendingEvent(() => {{
+                                this.setCopyState({future_end_class}.CopyState.DONE);
+                                return {{
+                                    code: eventCode,
+                                    payload0: this.waitableIdx(),
+                                    payload1: {future_end_class}.CopyResult.DROPPED,
+                                }};
+                            }});
+                        }}
+
                         drop() {{
                             if (this.isDropped()) {{ throw new Error('future already dropped'); }}
 
@@ -812,6 +834,8 @@ impl AsyncFutureIntrinsic {
                             }}
 
                             this.#dropped = true;
+                            this.#notifyPeerDroppedFn();
+                            this.#waitable.drop();
                         }}
 
                     }}
@@ -1372,6 +1396,7 @@ impl AsyncFutureIntrinsic {
                                 // from inside the guest.
                                 hostInjectFn: args.hostInjectFn,
                                 isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
+                                notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped(),
                             }});
 
                             this.#writeEnd = new {write_end_class}({{
@@ -1382,6 +1407,7 @@ impl AsyncFutureIntrinsic {
                                 waitable: writeWaitable,
                                 hostOwned: true,
                                 isPeerDroppedFn: () => this.#readEnd.isDropped(),
+                                notifyPeerDroppedFn: () => this.#readEnd.notifyDropped(),
                             }});
                         }}
 
@@ -1568,6 +1594,15 @@ impl AsyncFutureIntrinsic {
                             throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
                         }}
 
+                        if (futureEnd.hasPendingEvent()) {{
+                            const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
+                            if (code !== {event_code}) {{
+                                throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
+                            }}
+                            if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
+                            return payload;
+                        }}
+
                         futureEnd.{guest_op_fn}({{
                             componentIdx,
                             stringEncoding,
@@ -1599,7 +1634,7 @@ impl AsyncFutureIntrinsic {
                         const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
                         if (code !== {event_code}) {{
                              throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);
-                         }}
+                        }}
                         if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
 
                         return payload;

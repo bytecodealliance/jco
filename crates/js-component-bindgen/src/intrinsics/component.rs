@@ -607,6 +607,17 @@ impl ComponentIntrinsic {
                             }});
                         }}
 
+                        cancelExclusiveLockWaiter(taskID) {{
+                            const idx = this.#lockWaiters.findIndex(waiter => waiter.taskID === taskID);
+                            if (idx === -1) {{ return false; }}
+                            const [waiter] = this.#lockWaiters.splice(idx, 1);
+                            // Release the awaiting `enter()` continuation without granting
+                            // ownership. It observes the task's resolved cancellation state
+                            // before attempting to execute guest code.
+                            waiter.resolve();
+                            return true;
+                        }}
+
                         exclusiveRelease(taskID) {{
                             {debug_log_fn}('[{component_async_state_class}#exclusiveRelease()] args', {{
                                 holder: this.#lockHolderTaskID,
@@ -773,7 +784,11 @@ impl ComponentIntrinsic {
                             if (!meta.readyFn) {{
                                 throw new Error(`suspended task [${{taskID}}] is missing a readiness function`);
                             }}
-                            return meta.task.isRejected() || meta.readyFn();
+                            if (meta.task.isRejected()) {{ return true; }}
+                            if (!meta.readyFn()) {{ return false; }}
+                            return !meta.task.needsExclusiveLock()
+                                || !this.isExclusivelyLocked()
+                                || this.exclusivelyLockedBy(taskID);
                         }}
 
                         suspendedTaskCancellable(taskID) {{
@@ -839,7 +854,7 @@ impl ComponentIntrinsic {
                                     return {component_async_state_class}.TickResult.RESUMED;
                                 }}
 
-                                const isReady = meta.readyFn();
+                                const isReady = this.suspendedTaskReady(taskID);
                                 if (!isReady) {{ continue; }}
 
                                 {debug_log_fn}('[{component_async_state_class}#tick()] resuming task via tick', {{

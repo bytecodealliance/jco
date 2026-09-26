@@ -423,9 +423,6 @@ impl WaitableIntrinsic {
                                 componentIdx: this.#componentIdx,
                                 waitable: this,
                             }});
-                            if (this.hasPendingEvent()) {{
-                                throw new Error('waitables with pending events cannot be dropped');
-                            }}
                             this.join(null);
                         }}
 
@@ -491,7 +488,6 @@ impl WaitableIntrinsic {
                         const {{
                             componentIdx,
                             isAsync,
-                            isCancellable,
                             memoryIdx,
                             getMemoryFn,
                         }} = ctx;
@@ -522,7 +518,9 @@ impl WaitableIntrinsic {
                                 task,
                                 memoryIdx,
                             }});
-                        const waitOpts = {{ readyFn: () => true, task, cancellable: isCancellable }};
+                        // Built-in waits never deliver cancellation. Only the
+                        // callback event loop's wait is cancellable.
+                        const waitOpts = {{ readyFn: () => true, task, cancellable: false }};
                         const event = syncOnly ? wset.tryWait(waitOpts) : wset.waitUntil(waitOpts);
                         if (event === null) {{ return -1; }}
                         if (event && typeof event.then === 'function') {{
@@ -547,7 +545,7 @@ impl WaitableIntrinsic {
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 output.push_str(&format!(r#"
                     function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
-                        const {{ componentIdx, memoryIdx, getMemoryFn, isAsync, isCancellable }} = ctx;
+                        const {{ componentIdx, memoryIdx, getMemoryFn, isAsync }} = ctx;
                         {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{
                             componentIdx,
                             memoryIdx,
@@ -575,14 +573,7 @@ impl WaitableIntrinsic {
                         }}
 
                         let event;
-                        const cancelDelivered = task.deliverPendingCancel({{ cancellable: isCancellable }});
-                        if (cancelDelivered) {{
-                            {debug_log_fn}('[{waitable_set_poll_fn}()] detected cancel delivered', {{
-                                componentIdx,
-                                waitableSetRep,
-                            }});
-                            event = {{ code: {async_event_code_enum}.TASK_CANCELLED, payload0: 0, payload1: 0 }};
-                        }} else if (!wset.hasPendingEvent()) {{
+                        if (!wset.hasPendingEvent()) {{
                             {debug_log_fn}('[{waitable_set_poll_fn}()] no pending event', {{
                                 componentIdx,
                                 waitableSetRep,

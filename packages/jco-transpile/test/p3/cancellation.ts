@@ -1,13 +1,70 @@
+import { execArgv, execPath } from 'node:process';
+import { spawn } from 'node:child_process';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { suite, test, assert } from 'vitest';
+import { afterAll, beforeAll, suite, test, assert } from 'vitest';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { setupAsyncTest, composeCallerCallee } from '../helpers.js';
+import { parse } from '../../src/wasm-tools.js';
+import { setupAsyncTest, composeCallerCallee, getTmpDir } from '../helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 
+const CANCEL_BEFORE_START_CLEANUP_WAST = fileURLToPath(
+    new URL('../fixtures/wast/jco/cancel-before-start-cleanup.wast', import.meta.url),
+);
+
+function runNodeToNaturalExit(scriptPath: string, timeoutMs = 2_000): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(execPath, ['--no-warnings', ...execArgv, scriptPath], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (chunk) => (stdout += chunk));
+        child.stderr.on('data', (chunk) => (stderr += chunk));
+
+        const timeout = setTimeout(() => {
+            child.kill();
+            reject(new Error(`child process did not become idle within ${timeoutMs}ms\n${stdout}${stderr}`));
+        }, timeoutMs);
+
+        child.on('error', (error) => {
+            clearTimeout(timeout);
+            reject(error);
+        });
+        child.on('close', (code, signal) => {
+            clearTimeout(timeout);
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(
+                    new Error(`child exited with ${signal ? `signal ${signal}` : `code ${code}`}\n${stdout}${stderr}`),
+                );
+            }
+        });
+    });
+}
+
 suite('subtask cancellation', () => {
+    let cancelBeforeStartCleanupWasm: string;
+    let fixtureDir: string;
+
+    beforeAll(async () => {
+        fixtureDir = await getTmpDir();
+        cancelBeforeStartCleanupWasm = join(fixtureDir, 'cancel-before-start-cleanup.wasm');
+        await writeFile(
+            cancelBeforeStartCleanupWasm,
+            await parse(await readFile(CANCEL_BEFORE_START_CLEANUP_WAST, 'utf8')),
+        );
+    });
+
+    afterAll(async () => {
+        await rm(fixtureDir, { recursive: true, force: true });
+    });
+
     // Dropping a pending async import future in a Rust guest lowers to the
     // `subtask.cancel` canonical built-in (wit-bindgen's cooperative
     // cancellation drop path).
@@ -140,6 +197,75 @@ suite('subtask cancellation', () => {
             assert.isTrue(completedCalled, 'caller should complete normally after cancelling the starting call');
         } finally {
             await cleanup();
+        }
+    });
+
+    test('cancelling under persistent backpressure releases the scheduler', async () => {
+        const setup = await setupAsyncTest({
+            asyncMode: 'jspi',
+            jco: { transpile: { extraArgs: { minify: false } } },
+            component: {
+                path: cancelBeforeStartCleanupWasm,
+                skipInstantiation: true,
+            },
+        });
+
+        try {
+            const runnerPath = join(setup.outputDir, 'cancel-before-start-runner.mjs');
+            await writeFile(
+                runnerPath,
+                [
+                    `const { instantiate } = await import(${JSON.stringify(setup.esModuleSourcePathURL.href)});`,
+                    'const instance = await instantiate();',
+                    'const result = await instance.runPersistent();',
+                    'if (result !== 42) throw new Error(`unexpected result [${result}]`);',
+                ].join('\n'),
+            );
+            await runNodeToNaturalExit(runnerPath);
+        } finally {
+            await setup.cleanup();
+        }
+    });
+
+    test('cancelling before start retires each callee task', async () => {
+        const setup = await setupAsyncTest({
+            asyncMode: 'jspi',
+            jco: { transpile: { extraArgs: { minify: false } } },
+            component: {
+                path: cancelBeforeStartCleanupWasm,
+                skipInstantiation: true,
+            },
+        });
+        const taskCountKey = '__jcoCancelBeforeStartLiveTaskCount';
+        const testGlobal = globalThis as typeof globalThis & Record<string, () => number>;
+
+        try {
+            const source = await readFile(setup.esModuleOutputPath, 'utf8');
+            const taskMapDeclaration = 'const ASYNC_TASKS_BY_COMPONENT_IDX = new Map();';
+            const instrumented = source.replace(
+                taskMapDeclaration,
+                `${taskMapDeclaration}\n` +
+                    `globalThis.${taskCountKey} = () => ` +
+                    'Array.from(ASYNC_TASKS_BY_COMPONENT_IDX.values(), tasks => tasks.length)' +
+                    '.reduce((total, count) => total + count, 0);',
+            );
+            assert.notEqual(instrumented, source, 'failed to install the runtime task-count probe');
+            await writeFile(setup.esModuleOutputPath, instrumented);
+
+            const instrumentedUrl = new URL(setup.esModuleSourcePathURL);
+            instrumentedUrl.searchParams.set('task-cleanup-probe', String(Date.now()));
+            const { instantiate } = await import(instrumentedUrl.href);
+            const instance = await instantiate();
+
+            for (let i = 0; i < 3; i++) {
+                assert.equal(await instance.runRelease(), 42);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 20));
+
+            assert.equal(testGlobal[taskCountKey](), 0);
+        } finally {
+            delete testGlobal[taskCountKey];
+            await setup.cleanup();
         }
     });
 });

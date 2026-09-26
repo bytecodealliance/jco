@@ -1875,7 +1875,13 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({instance_idx}, {subtask_cancel_fn}.bind(null, {instance_idx}, false)));\n",
+                        r#"
+                        const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, false);
+                        const trampoline{i} = {conditional_suspending_fn}(
+                            trampoline{i}Cancel,
+                            {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
+                        );
+                        "#,
                         instance_idx = instance.as_u32(),
                     );
                 }
@@ -2134,9 +2140,16 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional_suspending_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending3I32ToI32Fn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional_suspending_fn}(
+                            {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}),
+                            {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                        );"#,
                     );
                 }
             }
