@@ -533,10 +533,11 @@ export function getSandboxSetup(opts: GetSandboxSetupArgs): string {
     return `
       import { _setEnv, _setCwd } from '@bytecodealliance/preview2-shim/cli';
       import { _setPreopens, _addPreopen } from '@bytecodealliance/preview2-shim/filesystem';
+      import { _denyHttp } from '@bytecodealliance/preview2-shim/http';
       import { _denyDnsLookup, _denyTcp, _denyUdp } from '@bytecodealliance/preview2-shim/sockets';
       _setEnv(${JSON.stringify(env)});
       _setCwd(undefined);
       ${configurePreopens}
-      ${opts.sandboxNetInherit ? "" : "_denyDnsLookup(); _denyTcp(); _denyUdp();"}
+      ${opts.sandboxNetInherit ? "" : "_denyDnsLookup(); _denyTcp(); _denyUdp(); _denyHttp();"}
     `;
 }
