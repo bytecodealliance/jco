@@ -188,6 +188,17 @@ export class WASIShim {
             };
         }
         this.#http = shims?.http ?? wasi.http;
+        if (sandbox?.enableNetwork === false) {
+            this.#http = {
+                ...this.#http,
+                outgoingHandler: {
+                    ...this.#http.outgoingHandler,
+                    handle() {
+                        throw "access-denied";
+                    },
+                },
+            };
+        }
         if (shims?.incomingHandler) {
             if (!this.#http.createIncomingHandler) {
                 throw new TypeError(

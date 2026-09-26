@@ -642,13 +642,25 @@ const fieldsFromEntriesChecked = Fields._fromEntriesChecked;
 // @ts-expect-error - Deleting static method
 delete Fields._fromEntriesChecked;
 
+let httpEnabled = true;
+
+/** Deny outbound HTTP for the process-global HTTP namespace. */
+export function _denyHttp() {
+    httpEnabled = false;
+}
+
 export const outgoingHandler = {
     /**
      * @param {OutgoingRequest} request
      * @param {RequestOptions | undefined} options
      * @returns {FutureIncomingResponse}
      */
-    handle: outgoingRequestHandle,
+    handle(request, options) {
+        if (!httpEnabled) {
+            throw "access-denied";
+        }
+        return outgoingRequestHandle(request, options);
+    },
 };
 
 function httpErrorCode(err) {
