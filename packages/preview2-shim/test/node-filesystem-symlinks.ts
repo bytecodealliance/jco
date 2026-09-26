@@ -12,7 +12,7 @@ import {
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { afterEach, assert, beforeEach, suite, test } from "vitest";
@@ -284,5 +284,48 @@ suite("Node filesystem symlink paths", () => {
         assert.strictEqual(existsSync(join(outsideDir, "renamed.txt")), false);
         assert.strictEqual(existsSync(join(outsideDir, "new-link.txt")), false);
         assert.strictEqual(existsSync(join(testDir, "target.txt")), true);
+    });
+
+    for (const symlinkFollow of [false, true]) {
+        test(`rejects guest-created parent escapes with final follow=${symlinkFollow}`, () => {
+            const target = `../${basename(outsideDir)}`;
+            root.symlinkAt(target, "guest-escape");
+            assert.strictEqual(root.readlinkAt("guest-escape"), target);
+
+            throws(
+                () => open("guest-escape/secret.txt", { symlinkFollow }),
+                (error) => error === "not-permitted",
+            );
+            throws(
+                () =>
+                    root.openAt(
+                        { symlinkFollow },
+                        "guest-escape/created.txt",
+                        { create: true },
+                        { write: true },
+                    ),
+                (error) => error === "not-permitted",
+            );
+
+            assert.strictEqual(
+                readFileSync(join(outsideDir, "secret.txt"), "utf8"),
+                "outside contents",
+            );
+            assert.strictEqual(existsSync(join(outsideDir, "created.txt")), false);
+            root.unlinkFileAt("guest-escape");
+            assert.strictEqual(existsSync(join(testDir, "guest-escape")), false);
+        });
+    }
+
+    test("rejects guest-created escape paths that re-enter through the host parent", () => {
+        root.symlinkAt("..", "guest-parent");
+        throws(
+            () => open(`guest-parent/${basename(outsideDir)}/secret.txt`, {}),
+            (error) => error === "not-permitted",
+        );
+        assert.strictEqual(
+            readFileSync(join(outsideDir, "secret.txt"), "utf8"),
+            "outside contents",
+        );
     });
 });
