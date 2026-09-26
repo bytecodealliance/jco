@@ -52,7 +52,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || 'main' }}
-          token: ${{ secrets.RELEASE_PAT || github.token }}
+          persist-credentials: false
 
       # Pull project and version
       # (automatically triggered run)
@@ -102,10 +102,11 @@ jobs:
       - name: Push tag
         if: ${{ steps.meta.outputs.proceed }}
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          PROJECT: ${{ steps.meta.outputs.project }}
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          git config user.name "github-actions[bot]";
-          git config user.email "github-actions[bot]@users.noreply.github.com";
-          export TAG=${{ steps.meta.outputs.project }}-v${{ steps.meta.outputs.version }};
-          git tag $TAG;
-          git push origin $TAG;
+          TAG="$PROJECT-v$VERSION"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$TAG" \
+            -f "sha=$(git rev-parse HEAD)"
