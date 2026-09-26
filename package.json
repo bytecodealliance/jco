@@ -17,12 +17,12 @@
     "build:test:idl": "node scripts/create-idl-component.mjs"
   },
   "devDependencies": {
-    "@actions/github": "^6.0.1",
+    "@actions/github": "^9.1.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@commitlint/lint": "^21.2.0",
     "@commitlint/load": "^21.2.0",
     "@commitlint/read": "^21.2.1",
-    "@puppeteer/browsers": "^2.13.2",
+    "@puppeteer/browsers": "^3.2.3",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "git-cliff": "^2.13.1",
     "oxfmt": "^0.32.0",
