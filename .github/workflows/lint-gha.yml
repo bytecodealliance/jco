@@ -32,6 +32,9 @@ jobs:
       - name: Run actionlint
         run: actionlint -color
 
+      - name: Test release metadata validation
+        run: node --test .github/scripts/release-metadata.test.cjs
+
   gha-workflows:
     runs-on: ubuntu-22.04
     permissions:

@@ -61,42 +61,14 @@ jobs:
         id: meta
         with:
           script: |
-            switch (context.eventName) {
-              case 'pull_request':
-                const pr = context?.payload?.pull_request;
-                if (!pr) {
-                  throw new Error("Invalid/missing pull request payload");
-                  return;
-                }
-                console.log(`sha: [${pr.merge_commit_sha}]`);
-                const headMerged = pr.merged;
-                const numCommits = pr.commits.len;
-                const title = pr.title;
-
-                if (!headMerged) {
-                  console.log("Invalid/unexpected pull request event type (must be merged)");
-                  return;
-                }
-
-                if (!title?.startsWith("release:")) {
-                  console.log(`Invalid ref [${title}]: does not include 'prep-release'`);
-                  return;
-                }
-
-                const [_, project, version] = /^release:\s+([^\s]+)\s+v([^\s]+)$/.exec(title);
-
-                core.setOutput('proceed', "true");
-                core.setOutput('project', project);
-                core.setOutput('version', version);
-                return;
-              case 'workflow_dispatch':
-                core.setOutput('proceed', "true");
-                core.setOutput('project', context.payload.inputs.project);
-                core.setOutput('version', context.payload.inputs.version);
-                return;
-              default:
-                console.log(`unexpected github event name [${context.eventName}]`);
-                return;
+            const { collectReleaseMetadata } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/release-metadata.cjs`
+            );
+            const metadata = collectReleaseMetadata(context);
+            if (metadata) {
+              core.setOutput('proceed', 'true');
+              core.setOutput('project', metadata.project);
+              core.setOutput('version', metadata.version);
             }
 
       - name: Push tag
