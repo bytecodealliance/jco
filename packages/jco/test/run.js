@@ -25,7 +25,7 @@ suite("Run sandbox", () => {
         assert.include(setup, "_setEnv({})");
         assert.include(setup, "_setCwd(undefined)");
         assert.include(setup, "_setPreopens({})");
-        assert.include(setup, "_denyDnsLookup(); _denyTcp(); _denyUdp();");
+        assert.include(setup, "_denyDnsLookup(); _denyTcp(); _denyUdp(); _denyHttp();");
     });
 
     test("configures explicit environment, filesystem, and network grants", () => {
@@ -47,6 +47,7 @@ suite("Run sandbox", () => {
             assert.isAbove(second, first);
             assert.isAbove(duplicate, second);
             assert.notInclude(setup, "_denyDnsLookup()");
+            assert.notInclude(setup, "_denyHttp()");
         } finally {
             if (previous === undefined) {
                 delete env.JCO_RUN_SANDBOX_TEST;
