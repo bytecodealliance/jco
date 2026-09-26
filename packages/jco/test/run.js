@@ -6,7 +6,10 @@ import { createRequestIsolatedHandler, getSandboxSetup } from "../src/cmd/run.js
 
 suite("Run sandbox", () => {
     test("preserves legacy behavior unless sandboxing is requested", () => {
-        assert.strictEqual(getSandboxSetup({}), "");
+        const setup = getSandboxSetup({});
+        assert.include(setup, "import { _setPreopens }");
+        assert.include(setup, '_setPreopens({ "/":');
+        assert.notInclude(setup, "_setEnv");
     });
 
     test("requires sandbox mode for capability grants", () => {

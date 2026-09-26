@@ -484,7 +484,11 @@ export function getSandboxSetup(opts: GetSandboxSetupArgs): string {
         ) {
             throw new Error("sandbox grants require --sandbox");
         }
-        return "";
+        const hostRoot = process.platform === "win32" ? "//" : "/";
+        return `
+      import { _setPreopens } from '@bytecodealliance/preview2-shim/filesystem';
+      _setPreopens({ "/": ${JSON.stringify(hostRoot)} });
+    `;
     }
 
     const env: Record<string, string> = opts.sandboxEnvInherit
