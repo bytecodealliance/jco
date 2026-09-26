@@ -42,6 +42,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Install Rust deps
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -174,10 +175,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Ensure next version is after current
+        env:
+          CURRENT_VERSION: ${{ steps.project-meta.outputs.current-version }}
+          NEXT_VERSION: ${{ steps.project-meta.outputs.next-version }}
+          PROJECT: ${{ steps.project-meta.outputs.project }}
         run: |
-          IS_AFTER=$(node scripts/semver-lt.mjs ${{ steps.project-meta.outputs.current-version }} ${{ steps.project-meta.outputs.next-version }});
+          IS_AFTER=$(node scripts/semver-lt.mjs "$CURRENT_VERSION" "$NEXT_VERSION");
           if [ "$IS_AFTER" == "false" ]; then \
-            echo "::error::project [${{ steps.project-meta.outputs.project }}] next version [${{ steps.project-meta.outputs.next-version }}] is not after current version [${{ steps.project-meta.outputs.current-version }}]";
+            echo "::error::project [$PROJECT] next version [$NEXT_VERSION] is not after current version [$CURRENT_VERSION]";
             exit 1;
           fi
 
@@ -187,6 +192,7 @@ jobs:
         shell: bash
         env:
           PROJECT: ${{ steps.project-meta.outputs.project }}
+          CURRENT_VERSION: ${{ steps.project-meta.outputs.current-version }}
           NEXT_VERSION: ${{ steps.project-meta.outputs.next-version }}
           IS_RUST_PROJECT: ${{ steps.project-meta.outputs.is-rust-project }}
           IS_JS_PROJECT: ${{ steps.project-meta.outputs.is-js-project }}
@@ -202,10 +208,15 @@ jobs:
           fi
 
           if [ "jco" == "$PROJECT" ]; then
-            sed \
-              -i \
-              's/version("${{ steps.project-meta.outputs.current-version }}")/version("${{ steps.project-meta.outputs.next-version }}")/' \
-              src/jco.ts;
+            node -e '
+              const fs = require("node:fs");
+              const path = "src/jco.ts";
+              const current = `version("${process.env.CURRENT_VERSION}")`;
+              const next = `version("${process.env.NEXT_VERSION}")`;
+              const source = fs.readFileSync(path, "utf8");
+              if (!source.includes(current)) throw new Error(`Missing ${current} in ${path}`);
+              fs.writeFileSync(path, source.replace(current, next));
+            ';
           fi
 
       # Generate changelog
@@ -229,15 +240,15 @@ jobs:
 
           # NOTE: we use a custom local-only tag here to force git cliff to
           # use the version we expect rather than built-in bump logic
-          git tag ${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}
+          git tag -- "$PROJECT_VERSION_TAG"
 
           git cliff \
-            --repository=${{ github.workspace }}/.git \
-            --config=${{ steps.project-meta.outputs.project-dir }}/cliff.toml \
+            --repository="$GITHUB_WORKSPACE/.git" \
+            --config="$PROJECT_DIR/cliff.toml" \
             --latest \
             "$OPT_TAG" \
             "$OPT_TAG_PATTERN" \
-            --prepend=${{ steps.project-meta.outputs.project-dir }}/CHANGELOG.md
+            --prepend="$PROJECT_DIR/CHANGELOG.md"
 
       - name: fmt
         run: |
