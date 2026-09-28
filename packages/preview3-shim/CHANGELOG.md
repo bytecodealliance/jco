@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0] - 2026-09-28
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ normalize sandbox paths before validation by @vados-cosmonic in #2160
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.27.0 by @vados-cosmonic
+
 ## [0.7.0] - 2026-09-23
 
 ### 🚀 Features
