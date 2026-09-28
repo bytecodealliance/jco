@@ -600,9 +600,6 @@ importers:
 
   packages/jco-transpile:
     dependencies:
-      '@bytecodealliance/jco-cm-runtime':
-        specifier: workspace:^
-        version: link:../jco-cm-runtime
       '@bytecodealliance/preview2-shim':
         specifier: ^0.27.0
         version: 0.27.0

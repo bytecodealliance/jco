@@ -147,7 +147,7 @@ export interface TranspilationOptions {
     /** Whether to run bindgen in strict mode */
     strict?: boolean;
 
-    /** ES module providing the Component Model runtime implementation */
+    /** Optional ES module specifier imported by generated bindings for the Component Model runtime */
     runtimeModule?: string;
 
     /** Represent WIT flags as bigint values instead of objects of booleans */

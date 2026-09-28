@@ -130,7 +130,6 @@ suite('Browser', () => {
             jco: {
                 transpile: {
                     extraArgs: {
-                        runtimeModule: `http://localhost:${serverPort}/jco-cm-runtime/dist/index.js`,
                         asyncImports: ['something:test/test-interface#call-async'],
                         asyncExports: ['run-async'],
                     },

@@ -66,8 +66,6 @@ const MAX_FLAT_PARAMS: usize = 16;
 /// Maximum direct flat results for sync canonical lowering.
 const MAX_FLAT_RESULTS: usize = 1;
 
-pub const DEFAULT_RUNTIME_MODULE: &str = "@bytecodealliance/jco-cm-runtime";
-
 #[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
@@ -152,14 +150,6 @@ pub struct TranspileOpts {
     /// behind a flag in today's JS engines.
     #[builder(default)]
     pub supports_wasm_exnref: bool,
-}
-
-impl TranspileOpts {
-    pub fn runtime_module(&self) -> &str {
-        self.runtime_module
-            .as_deref()
-            .unwrap_or(DEFAULT_RUNTIME_MODULE)
-    }
 }
 
 #[derive(Default, Clone, Debug)]
@@ -560,11 +550,11 @@ impl JsBindgen<'_> {
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
-        if uses_external_runtime(&self.all_intrinsics) {
+        if uses_external_runtime(&self.all_intrinsics, opts.runtime_module.is_some()) {
             uwriteln!(
                 output,
                 "import {{ runtime as {RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
-                js_string_literal(opts.runtime_module()),
+                js_string_literal(opts.runtime_module.as_deref().unwrap()),
             );
         }
 

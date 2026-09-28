@@ -61,7 +61,6 @@ async function transpileOne(componentPath) {
         noNodejsCompat: true,
         instantiation: { tag: 'async' },
         base64Cutoff: 1_000_000,
-        runtimeModule: new URL('/jco-cm-runtime/dist/index.js', location.href).href,
         map: WASI_MAP,
     });
     const source = output.files.find(([name]) => name === 'test.js')?.[1];
@@ -74,9 +73,7 @@ async function transpileOne(componentPath) {
     // for resolving relative URLs. In instantiation mode that is only safe because nothing is
     // fetched relative to the module: the core modules are handed over via getCoreModule
     // below (bindgen otherwise falls back to fetching them next to `import.meta.url`) and the
-    // component imports are passed in rather than imported. The only static import is
-    // the Component Model runtime, configured above with an absolute HTTP URL so it is
-    // resolvable from the blob module.
+    // component imports are passed in rather than imported.
     const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     let module;
     try {
