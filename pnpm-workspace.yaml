@@ -101,9 +101,9 @@ minimumReleaseAgeExclude:
   - '@bytecodealliance/componentize-js@0.22.0'
   - '@bytecodealliance/weval@0.5.0'
   - '@actions/github@9.1.1'
-  - '@puppeteer/browsers@3.2.3'
-  - puppeteer-core@25.12.0
-  - puppeteer@25.12.0
+  - '@puppeteer/browsers@3.0.4 || 3.2.3'
+  - puppeteer-core@25.1.0 || 25.12.0
+  - puppeteer@25.1.0 || 25.12.0
   - brace-expansion@5.0.9
   - cookie@0.7.2
   - fast-uri@3.1.6
@@ -113,8 +113,7 @@ minimumReleaseAgeExclude:
   - undici@6.28.0
   - '@bytecodealliance/jco-transpile@0.3.7 || 0.3.8 || 0.3.9 || 0.4.0 || 0.4.1 || 0.4.2 || 0.5.0 || 0.5.1 || 0.5.2 || 0.6.0 || 0.6.1 || 0.7.0 || 0.8.0 || 0.10.0 || 0.11.0 || 0.12.0 || 0.12.1 || 0.13.0 || 0.14.0 || 0.15.0'
   - '@bytecodealliance/preview2-shim@0.19.0 || 0.20.1 || 0.20.2 || 0.21.0 || 0.22.0 || 0.24.0 || 0.24.1 || 0.25.0 || 0.26.0 || 0.26.1 || 0.27.0'
-  - '@bytecodealliance/preview3-shim@0.1.2 || 0.2.0 || 0.2.2 || 0.3.0 || 0.3.1 || 0.3.2 || 0.4.0 || 0.5.0 || 0.6.0 || 0.6.1 || 0.7.0'
-  - '@puppeteer/browsers@3.0.4'
+  - '@bytecodealliance/preview3-shim@0.1.2 || 0.2.0 || 0.2.2 || 0.3.0 || 0.3.1 || 0.3.2 || 0.4.0 || 0.5.0 || 0.6.0 || 0.6.1 || 0.7.0 || 0.8.0'
   - '@rolldown/binding-android-arm64@1.2.0 || 1.2.4'
   - '@rolldown/binding-darwin-arm64@1.2.0 || 1.2.4'
   - '@rolldown/binding-darwin-x64@1.2.0 || 1.2.4'
@@ -132,8 +131,6 @@ minimumReleaseAgeExclude:
   - '@rolldown/binding-win32-x64-msvc@1.2.0 || 1.2.4'
   - hono@4.12.27 || 4.12.34
   - rolldown@1.2.0 || 1.2.4
-  - puppeteer-core@25.1.0
-  - puppeteer@25.1.0
   - ws@8.21.0
   - vitest@4.1.11
   - '@bytecodealliance/jco@1.26.0 || 1.26.1 || 1.27.0 || 1.30.0 || 1.31.0'
