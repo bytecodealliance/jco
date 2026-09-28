@@ -751,12 +751,9 @@ function handle(call, id, payload) {
             if (stream.flushPromise) {
                 return stream.flushPromise.then(() => handle(call, id, payload));
             }
-            if (
-                payload.byteLength >
-                stream.stream.writableHighWaterMark - stream.stream.writableLength
-            ) {
-                throw new Error("wasi-io trap: Cannot write more than permitted writable length");
-            }
+            // Unlike write(), blocking-write-and-flush does not need a check-write
+            // permit. Node may buffer the write above its high-water mark while
+            // we wait for its completion callback below.
             stream.pollState.ready = false;
             return (stream.flushPromise = new Promise((resolve, reject) => {
                 if (stream.stream === stdout || stream.stream === stderr) {
