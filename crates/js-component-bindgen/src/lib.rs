@@ -24,7 +24,7 @@ pub mod intrinsics;
 use intrinsics::Intrinsic;
 
 pub use transpile_bindgen::{
-    AsyncMode, BindingsMode, DEFAULT_RUNTIME_MODULE, ExportKind, InstantiationMode, TranspileOpts,
+    AsyncMode, BindingsMode, ExportKind, InstantiationMode, TranspileOpts,
 };
 use transpile_bindgen::{TranspileBindgenResult, transpile_bindgen};
 
@@ -467,14 +467,14 @@ mod tests {
     fn validates_runtime_module_specifiers() {
         let mut default = TranspileOpts::default();
         normalize_namespace_object_options(&mut default).unwrap();
-        assert_eq!(default.runtime_module(), DEFAULT_RUNTIME_MODULE);
+        assert!(default.runtime_module.is_none());
 
         let mut custom = TranspileOpts::builder()
             .name("component".into())
             .runtime_module("./runtime.js".into())
             .build();
         normalize_namespace_object_options(&mut custom).unwrap();
-        assert_eq!(custom.runtime_module(), "./runtime.js");
+        assert_eq!(custom.runtime_module.as_deref(), Some("./runtime.js"));
 
         for invalid in ["", "runtime\nmodule"] {
             let mut opts = TranspileOpts::builder()
@@ -519,15 +519,8 @@ mod tests {
         )
         .unwrap();
         let direct_source = generated_javascript(&direct);
-        let direct_import_position = direct_source
-            .find(
-                "import { runtime as _jcoRuntimeProvider } from \"@bytecodealliance/jco-cm-runtime\";",
-            )
-            .unwrap();
-        let direct_create_position = direct_source.find("_jcoRuntimeProvider.create(").unwrap();
-        let direct_init_position = direct_source.find("const $init").unwrap();
-        assert!(direct_import_position < direct_create_position);
-        assert!(direct_create_position < direct_init_position);
+        assert!(direct_source.contains("function rscTableGet(table, handle)"));
+        assert!(!direct_source.contains("_jcoRuntimeProvider"));
 
         let transpiled = transpile(
             &component,
@@ -570,6 +563,6 @@ mod tests {
         let source = generated_javascript(&transpiled);
 
         assert!(!source.contains("_jcoRuntimeProvider"));
-        assert!(!source.contains(DEFAULT_RUNTIME_MODULE));
+        assert!(!source.contains("@bytecodealliance/jco-cm-runtime"));
     }
 }

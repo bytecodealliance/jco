@@ -1,5 +1,3 @@
-import { runtime as defaultRuntime } from '../../../jco-cm-runtime/dist/index.js';
-
 export let tableGetCallCount = 0;
 export let runtimeCreateCallCount = 0;
 
@@ -12,20 +10,27 @@ export function resetRuntimeCreateCallCount() {
 }
 
 export const runtime = {
-    abiVersion: defaultRuntime.abiVersion,
+    abiVersion: 1,
     create(options) {
+        if (options.requestedAbiVersion !== 1) {
+            throw new Error(`unsupported runtime ABI ${options.requestedAbiVersion}`);
+        }
         runtimeCreateCallCount++;
-        const instance = defaultRuntime.create(options);
-        const resource = instance.intrinsics.resource;
         return {
-            ...instance,
+            abiVersion: 1,
             intrinsics: {
-                ...instance.intrinsics,
                 resource: {
-                    ...resource,
-                    tableGet(...args) {
+                    tableGet(table, handle) {
                         tableGetCallCount++;
-                        return resource.tableGet(...args);
+                        const flag = 1 << 30;
+                        const scope = table[handle << 1];
+                        const value = table[(handle << 1) + 1];
+                        const own = (value & flag) !== 0;
+                        const rep = value & ~flag;
+                        if (rep === 0 || (scope & flag) !== 0) {
+                            throw new WebAssembly.RuntimeError(`unknown handle index ${(handle << 1) + 1}`);
+                        }
+                        return { rep, scope, own };
                     },
                 },
             },

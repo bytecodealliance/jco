@@ -2,7 +2,7 @@ import { dirname, join, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import process from "node:process";
+import process from 'node:process';
 import { tmpdir } from 'node:os';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -29,16 +29,11 @@ function findTarball(pattern) {
 
 async function main() {
     try {
-        // Pack the tarballs for the runtime, jco-transpile, and jco.
-        for (const project of [
-            '@bytecodealliance/jco-cm-runtime',
-            '@bytecodealliance/jco-transpile',
-            '@bytecodealliance/jco',
-        ]) {
+        // Pack jco-transpile and jco independently of the optional runtime.
+        for (const project of ['@bytecodealliance/jco-transpile', '@bytecodealliance/jco']) {
             run('pnpm', ['--filter', project, 'pack', '--pack-destination', packDir]);
         }
 
-        const jcoRuntimeTarball = findTarball(/^bytecodealliance-jco-cm-runtime-.+\.tgz$/);
         const jcoTranspileTarball = findTarball(/^bytecodealliance-jco-transpile-.+\.tgz$/);
         const jcoTarball = findTarball(/^bytecodealliance-jco-\d.+\.tgz$/);
 
@@ -54,10 +49,10 @@ async function main() {
         }
 
         // Unzip the packed tarballs, since we need to install overriden dependencies
-        for (const tarballPath of [jcoTarball, jcoTranspileTarball, jcoRuntimeTarball]) {
-            const pkgDir = basename(tarballPath).replace(/.tgz$/,'');
+        for (const tarballPath of [jcoTarball, jcoTranspileTarball]) {
+            const pkgDir = basename(tarballPath).replace(/.tgz$/, '');
             mkdirSync(join(packDir, pkgDir));
-            execFileSync('tar', ['xzf', tarballPath, '--strip-components=1', '-C', pkgDir ], {
+            execFileSync('tar', ['xzf', tarballPath, '--strip-components=1', '-C', pkgDir], {
                 encoding: 'utf8',
                 cwd: packDir,
             });
@@ -65,17 +60,10 @@ async function main() {
         // Remove the tarballs
         rmSync(jcoTarball);
         rmSync(jcoTranspileTarball);
-        rmSync(jcoRuntimeTarball);
 
         // Install the freshly packed dependency chain into each parent package.
-        const jcoPkgDir = jcoTarball.replace(/.tgz$/,'');
-        const jcoTranspilePkgDir = jcoTranspileTarball.replace(/.tgz$/,'');
-        const jcoRuntimePkgDir = jcoRuntimeTarball.replace(/.tgz$/,'');
-        try {
-            run('pnpm', ['add', jcoRuntimePkgDir], {
-                cwd: jcoTranspilePkgDir,
-            });
-        } catch {}
+        const jcoPkgDir = jcoTarball.replace(/.tgz$/, '');
+        const jcoTranspilePkgDir = jcoTranspileTarball.replace(/.tgz$/, '');
         try {
             // NOTE: pnpm add will *seem* to fail due to ignored build scripts,
             // but we can generally ignore this failure
@@ -118,15 +106,7 @@ if (typeof transpile !== "function") throw new Error("transpile not exported");
         });
         run(
             'pnpm',
-            [
-                'exec',
-                'rolldown',
-                'main.js',
-                '--format=esm',
-                '--platform=browser',
-                '--file=out.js',
-                '--external=node:*',
-            ],
+            ['exec', 'rolldown', 'main.js', '--format=esm', '--platform=browser', '--file=out.js', '--external=node:*'],
             { cwd: projectDir },
         );
 
@@ -138,8 +118,7 @@ if (typeof transpile !== "function") throw new Error("transpile not exported");
     }
 }
 
-main()
-    .catch(err => {
-        console.error(`ERROR: ${err}`);
-        process.exitCode = 1;
-    });
+main().catch((err) => {
+    console.error(`ERROR: ${err}`);
+    process.exitCode = 1;
+});
