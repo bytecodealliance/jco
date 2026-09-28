@@ -100,8 +100,8 @@ importers:
   examples/components/browser-p2-shims:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.32.1
@@ -122,8 +122,8 @@ importers:
   examples/components/fs-write-file:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.31.0
@@ -198,8 +198,8 @@ importers:
   examples/components/native-messaging:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.32.1
@@ -233,10 +233,10 @@ importers:
         version: 2.14.1
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.26.0)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.0)
       '@bytecodealliance/preview2-shim':
-        specifier: 0.26.0
-        version: 0.26.0
+        specifier: 0.27.0
+        version: 0.27.0
       '@connectrpc/connect':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.14.1)
@@ -255,10 +255,10 @@ importers:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.26.0)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.0)
       '@bytecodealliance/preview2-shim':
-        specifier: 0.26.0
-        version: 0.26.0
+        specifier: 0.27.0
+        version: 0.27.0
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
@@ -277,10 +277,10 @@ importers:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.26.0)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.0)
       '@bytecodealliance/preview2-shim':
-        specifier: 0.26.0
-        version: 0.26.0
+        specifier: 0.27.0
+        version: 0.27.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: workspace:*
@@ -428,8 +428,8 @@ importers:
         specifier: ^0.15.0
         version: 0.15.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
     devDependencies:
       '@types/node':
         specifier: ^24.12.4
@@ -565,8 +565,8 @@ importers:
         specifier: ^0.15.0
         version: 0.15.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
       '@types/node':
         specifier: ^24.12.4
         version: 24.13.3
@@ -672,8 +672,8 @@ importers:
         specifier: 0.3.2
         version: 0.3.2
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.25.2
@@ -1078,6 +1078,9 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.26.0':
     resolution: {integrity: sha512-oYekIJYroM1yJygziKpuMGmL2XDKZ4XspkdxfKCQqF/E0tVkCxyRRT+gFP0dFzhrSL8oh6obRCv84bBf1sYmAA==}
+
+  '@bytecodealliance/preview2-shim@0.27.0':
+    resolution: {integrity: sha512-Tn8XzwB6JxTWXr0nQr3NR724ANwEA3rvQxRk4VZ89ouQBGvCETG1mRP0yPsvGJJuJdCyvIpritv8I/wv0sWCBQ==}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -5458,6 +5461,18 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.26.0
 
+  '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.27.0)':
+    dependencies:
+      acorn: 8.17.0
+      acorn-walk: 8.3.5
+      minimatch: 10.2.6
+      punycode: 2.3.1
+      readable-stream: 4.7.0
+      urlpattern-polyfill: 10.1.0
+      whatwg-url: 14.2.0
+    optionalDependencies:
+      '@bytecodealliance/preview2-shim': 0.27.0
+
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.21.0
@@ -5544,6 +5559,10 @@ snapshots:
     optional: true
 
   '@bytecodealliance/preview2-shim@0.26.0':
+    dependencies:
+      '@bytecodealliance/jco-node-fs': 0.3.2
+
+  '@bytecodealliance/preview2-shim@0.27.0':
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
 
