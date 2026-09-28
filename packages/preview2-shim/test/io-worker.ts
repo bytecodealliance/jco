@@ -5,6 +5,7 @@ import {
     futureSubscribe,
     futureTakeValue,
     futureDispose,
+    outputStreamCreate,
 } from "../dist/nodejs/io-worker.js";
 
 const module = new URL("./fixtures/io-worker.ts", import.meta.url);
@@ -33,4 +34,15 @@ test("extension futures preserve rejection, polling and single-consumption owner
     expect(futureTakeValue(id)).toEqual({ tag: "err", val: undefined });
     futureDispose(id);
     expect(callExtension(module, "resources", [])).toEqual(before);
+});
+
+test("blocking write flushes 4096 bytes even when Node's buffer is smaller", (): void => {
+    const id = callExtension(module, "small-buffer-output", []);
+    assert(typeof id === "number");
+    const output = outputStreamCreate(id);
+    const before = callExtension(module, "written-bytes", []);
+    assert(typeof before === "number");
+    output.blockingWriteAndFlush(new Uint8Array(4096));
+    expect(callExtension(module, "written-bytes", [])).toBe(before + 4096);
+    output[Symbol.dispose]();
 });
