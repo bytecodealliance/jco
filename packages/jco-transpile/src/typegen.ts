@@ -1,7 +1,5 @@
 import { basename, resolve, extname } from 'node:path';
 
-import { _addPreopen, preopens } from '@bytecodealliance/preview2-shim/filesystem';
-
 import {
     $init as $initBindgenComponent,
     type AsyncMode,
@@ -15,6 +13,7 @@ import { TranspilationOptions } from './transpile.js';
 import { extractWITAsyncModeFromOpts, type FileBytes, isWindows } from './common.js';
 
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
+import { ensureWitFilesystemPreopen } from './preopens.js';
 
 /** Expand an encoded WIT package into a conventional path-to-source map. */
 export async function unpackWit(packageSpec: string | undefined, bytes: Uint8Array) {
@@ -116,13 +115,7 @@ export async function generateGuestTypes(witPath: string, opts: TypegenOptions):
  * @returns A `Promise` that resolves to written file data
  */
 export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
-    // The vendored component caches preopens on its first call. Type generation
-    // accepts host paths on subsequent calls, so retain the previous default
-    // filesystem access when the shim has no preopens configured.
-    if (preopens.getDirectories().length === 0) {
-        // The package declarations describe browser file data; Node uses a host path.
-        (_addPreopen as (virtualPath: string, hostPath: string) => void)('/', isWindows ? '//' : '/');
-    }
+    ensureWitFilesystemPreopen();
     await $initBindgenComponent;
 
     let name;

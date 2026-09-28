@@ -1,5 +1,6 @@
 import { $init, tools } from '../vendor/wasm-tools.js';
 import type { tools as ToolsNamespace } from '../vendor/wasm-tools.js';
+import { ensureWitFilesystemPreopen } from './preopens.js';
 
 /**
  * Generate WIT metadata for a given world
@@ -12,6 +13,9 @@ export async function componentWitMetadataForWorld(
     worldWitSpecifier: ToolsNamespace.WitSpecifier,
     worldName: string | undefined,
 ): Promise<ToolsNamespace.WitMetadata> {
+    if (worldWitSpecifier.tag === 'path') {
+        ensureWitFilesystemPreopen();
+    }
     await $init;
     return tools.componentWitMetadataForWorld(worldWitSpecifier, worldName);
 }
@@ -79,6 +83,9 @@ export async function componentWit(bytes: Uint8Array): Promise<string> {
  * @returns WebAssembly binary bytes with WIT metadata embedded
  */
 export async function componentEmbed(opts: ToolsNamespace.EmbedOpts): Promise<Uint8Array> {
+    if (opts.witPath) {
+        ensureWitFilesystemPreopen();
+    }
     await $init;
     return tools.componentEmbed(opts);
 }

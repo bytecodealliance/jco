@@ -17,6 +17,7 @@ import { runOptimizeComponent, type OptimizeOptions } from './opt.js';
 import { isWindows } from './common.js';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 import { generateASMJS } from './asm.js';
+import { ensureWitFilesystemPreopen } from './preopens.js';
 
 /** Instantiation mode for a transpiled component */
 export type InstantiationMode = 'async' | 'sync';
@@ -186,6 +187,7 @@ export async function transpile(componentPath: string, opts: TranspilationOption
     let component: Uint8Array;
     if (opts?.stub) {
         try {
+            ensureWitFilesystemPreopen();
             await $initWasmToolsComponent;
             component = componentNew(
                 componentEmbed({
