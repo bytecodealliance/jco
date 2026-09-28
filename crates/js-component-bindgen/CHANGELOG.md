@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.13.0] - 2026-09-28
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ retire cancelled tasks before entry by @vados-cosmonic
+
+- _(bindgen)_ resolve live FACT context tasks by @vados-cosmonic
+
+- _(bindgen)_ target callback cancellation delivery by @vados-cosmonic
+
+- _(bindgen)_ tighten subtask cancellation scheduling by @vados-cosmonic
+
+- _(bindgen)_ preserve completed future events by @vados-cosmonic
+
+- _(bindgen)_ deliver idle stream and future drop events by @vados-cosmonic
+
+
+
+
 ## [2.12.1] - 2026-09-28
 
 This release fixes the following important security advisory filed against Jco:
