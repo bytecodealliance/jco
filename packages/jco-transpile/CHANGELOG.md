@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.16.0] - 2026-09-28
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ preopen WIT paths for wasm-tools by @vados-cosmonic in #2173
+
+- _(transpile)_ preopen filesystem for WIT type generation by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ compile cancellation fixture in process by @vados-cosmonic in #2131
+
+- _(transpile)_ cover pre-entry cancellation cleanup by @vados-cosmonic
+
+- _(transpile)_ retire obsolete cancellation cases by @vados-cosmonic
+
+- _(transpile)_ sync targeted cancellation WASTs by @vados-cosmonic
+
+- _(transpile)_ sync tightened cancellation WASTs by @vados-cosmonic
+
+- _(transpile)_ cover out-of-bounds list lifts by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update oxc-minify to 0.151.0 by @vados-cosmonic
+
+- _(transpile)_ update binaryen to v132.0.0 by @vados-cosmonic
+
+- _(transpile)_ preview2-shim -> v0.27.0, preview3-shim -> v0.8.0 by @vados-cosmonic
+
 ## [0.15.0] - 2026-09-23
 
 ### 🧪 Testing
