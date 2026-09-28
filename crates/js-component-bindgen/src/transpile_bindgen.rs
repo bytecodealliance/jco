@@ -66,8 +66,6 @@ const MAX_FLAT_PARAMS: usize = 16;
 /// Maximum direct flat results for sync canonical lowering.
 const MAX_FLAT_RESULTS: usize = 1;
 
-pub const DEFAULT_RUNTIME_MODULE: &str = "@bytecodealliance/jco-cm-runtime";
-
 #[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
@@ -178,14 +176,6 @@ impl TranspileOpts {
     /// Whether the trampoline Wasm is loaded through `getCoreModule`
     pub(crate) fn loads_conditional_suspending_wasm(&self) -> bool {
         self.emit_conditional_suspending_wasm && self.instantiation_mode.is_some()
-    }
-}
-
-impl TranspileOpts {
-    pub fn runtime_module(&self) -> &str {
-        self.runtime_module
-            .as_deref()
-            .unwrap_or(DEFAULT_RUNTIME_MODULE)
     }
 }
 
@@ -606,11 +596,11 @@ impl JsBindgen<'_> {
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
-        if uses_external_runtime(&self.all_intrinsics) {
+        if uses_external_runtime(&self.all_intrinsics, opts.runtime_module.is_some()) {
             uwriteln!(
                 output,
                 "import {{ runtime as {RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
-                js_string_literal(opts.runtime_module()),
+                js_string_literal(opts.runtime_module.as_deref().unwrap()),
             );
         }
 

@@ -1482,8 +1482,8 @@ mod tests {
         let remove = Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove);
         let (source, _) = render([get, remove]);
 
-        assert!(source.contains("const rscTableGet = _jcoIntrinsics.resource.tableGet;"));
-        assert!(!source.contains("function rscTableGet(table, handle)"));
+        assert!(source.contains("function rscTableGet(table, handle)"));
+        assert!(!source.contains("_jcoRuntimeProvider"));
         assert!(source.contains(
             "throw new WebAssemblyRuntimeError(`unknown handle index ${(handle << 1) + 1}`);"
         ));
@@ -1557,14 +1557,11 @@ mod tests {
         }
         assert!(!intrinsics.contains(&table_remove));
 
-        let runtime_position = source.find("_jcoRuntimeProvider.create").unwrap();
-        let get_position = source
-            .find("const rscTableGet = _jcoIntrinsics.resource.tableGet")
-            .unwrap();
+        let get_position = source.find("function rscTableGet(table, handle)").unwrap();
         let flag_position = source.find("const T_FLAG").unwrap();
         let transfer_position = source.find("function resourceTransferBorrow").unwrap();
-        assert!(runtime_position < get_position);
-        assert!(get_position < flag_position);
+        assert!(!source.contains("_jcoRuntimeProvider"));
+        assert!(flag_position < get_position);
         assert!(flag_position < transfer_position);
         assert!(get_position < transfer_position);
     }
@@ -2012,8 +2009,8 @@ mod tests {
                 .build(),
         );
 
-        assert!(source.contains("const rscTableGet = _jcoIntrinsics.resource.tableGet;"));
-        assert!(!source.contains("function rscTableGet(table, handle)"));
+        assert!(source.contains("function rscTableGet(table, handle)"));
+        assert!(!source.contains("_jcoRuntimeProvider"));
         assert!(!source.contains("function rscTableRemove(table, handle)"));
         assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
         assert!(!source.contains("if (!own) rscTableRemove(fromTable, handle);"));
@@ -2422,7 +2419,9 @@ impl RenderIntrinsicsArgs<'_> {
             .lock()
             .expect("intrinsic dependency collector lock should not be poisoned")
             .insert(intrinsic);
-        intrinsic.binding().local_name()
+        intrinsic
+            .binding(self.transpile_opts.runtime_module.is_some())
+            .local_name()
     }
 
     fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {
@@ -2453,7 +2452,10 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
 
         debug_assert!(args.take_discovered_intrinsics().is_empty());
         let mut source = Source::default();
-        if matches!(intrinsic.binding(), IntrinsicBinding::Inline { .. }) {
+        if matches!(
+            intrinsic.binding(args.transpile_opts.runtime_module.is_some()),
+            IntrinsicBinding::Inline { .. }
+        ) {
             intrinsic.render(&mut source, args);
         }
         let discovered = args.take_discovered_intrinsics();
@@ -2468,7 +2470,10 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
     }
 
     let mut output = Source::default();
-    if uses_external_runtime(args.intrinsics) {
+    if uses_external_runtime(
+        args.intrinsics,
+        args.transpile_opts.runtime_module.is_some(),
+    ) {
         uwriteln!(
             output,
             r#"
@@ -2497,7 +2502,9 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         );
 
         for intrinsic in args.intrinsics.iter() {
-            let IntrinsicBinding::Runtime { local_name, path } = intrinsic.binding() else {
+            let IntrinsicBinding::Runtime { local_name, path } =
+                intrinsic.binding(args.transpile_opts.runtime_module.is_some())
+            else {
                 continue;
             };
             uwriteln!(
@@ -2625,20 +2632,25 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 ];
 
 impl Intrinsic {
-    pub(crate) fn binding(&self) -> IntrinsicBinding {
+    pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
-            Self::Resource(ResourceIntrinsic::ResourceTableGet) => IntrinsicBinding::Runtime {
-                local_name: self.name(),
-                path: "resource.tableGet",
-            },
+            Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
+                IntrinsicBinding::Runtime {
+                    local_name: self.name(),
+                    path: "resource.tableGet",
+                }
+            }
             _ => IntrinsicBinding::Inline {
                 local_name: self.name(),
             },
         }
     }
 
-    pub(crate) fn is_runtime_provided(&self) -> bool {
-        matches!(self.binding(), IntrinsicBinding::Runtime { .. })
+    pub(crate) fn is_runtime_provided(&self, external_runtime: bool) -> bool {
+        matches!(
+            self.binding(external_runtime),
+            IntrinsicBinding::Runtime { .. }
+        )
     }
 
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
@@ -2844,6 +2856,11 @@ impl Intrinsic {
     }
 }
 
-pub(crate) fn uses_external_runtime(intrinsics: &BTreeSet<Intrinsic>) -> bool {
-    intrinsics.iter().any(Intrinsic::is_runtime_provided)
+pub(crate) fn uses_external_runtime(
+    intrinsics: &BTreeSet<Intrinsic>,
+    external_runtime: bool,
+) -> bool {
+    intrinsics
+        .iter()
+        .any(|intrinsic| intrinsic.is_runtime_provided(external_runtime))
 }

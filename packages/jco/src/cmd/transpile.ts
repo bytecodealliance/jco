@@ -166,6 +166,7 @@ export interface TranspileOpts {
     quiet?: boolean;
     noTypescript?: boolean;
     wasiShim?: boolean;
+    /** Optional module specifier imported by generated bindings, never loaded during transpilation. */
     runtimeModule?: string;
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
