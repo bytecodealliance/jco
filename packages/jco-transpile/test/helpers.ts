@@ -19,8 +19,6 @@ import { componentize } from '@bytecodealliance/componentize-js';
 import { transpileBytes } from '../src/index.js';
 import type { TranspilationOptions } from '../src/transpile.js';
 
-const DEFAULT_TEST_RUNTIME_MODULE = new URL('../../jco-cm-runtime/dist/index.js', import.meta.url).href;
-
 /** Stable path to the jco's fixture directory containing WIT files */
 export const JCO_WIT_FIXTURE_DIR = fileURLToPath(new URL('../../jco/test/fixtures/wit', import.meta.url));
 
@@ -261,7 +259,6 @@ export async function setupAsyncTest(args) {
 
     const transpileOpts: TranspilationOptions = {
         name: componentName,
-        runtimeModule: DEFAULT_TEST_RUNTIME_MODULE,
         minify: true,
         validLiftingOptimization: true,
         tlaCompat: true,
