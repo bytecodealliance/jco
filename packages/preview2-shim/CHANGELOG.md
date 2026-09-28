@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.27.0] - 2026-09-28
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ deny sandboxed outgoing HTTP by @vados-cosmonic
+
+- _(p2-shim)_ reject rooted symlink targets by @vados-cosmonic in #2162
+
+- _(p2-shim)_ confine symlink path resolution by @vados-cosmonic
+
+- _(p2-shim)_ remove implicit root preopen by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ cover guest-created symlink escapes by @vados-cosmonic in #2161
+
 ## [0.26.1] - 2026-09-28
 
 This release fixes the following security advisories filed against Jco:
