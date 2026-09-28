@@ -75,7 +75,7 @@
         "@bytecodealliance/preview2-shim": "^0.27.0",
         "@bytecodealliance/preview3-shim": "^0.8.0",
         "binaryen": "^132.0.0",
-        "oxc-minify": "^0.136.0"
+        "oxc-minify": "^0.151.0"
     },
     "devDependencies": {
         "@bytecodealliance/componentize-js": "catalog:",
