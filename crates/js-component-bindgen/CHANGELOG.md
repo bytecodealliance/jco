@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.12.1] - 2026-09-28
+
+This release fixes the following important security advisory filed against Jco:
+[GHSA-3827-xxx2-c5qc](https://github.com/bytecodealliance/jco/security/advisories/GHSA-3827-xxx2-c5qc)
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ trap on out-of-bounds list lifts by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ fix clippy by @vados-cosmonic in #2159
+
+
+
+
 ## [2.12.0] - 2026-09-23
 
 ### 🐛 Bug Fixes
