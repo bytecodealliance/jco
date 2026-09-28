@@ -151,7 +151,7 @@ jobs:
               exit 1;
           esac
 
-          IS_PRERELEASE="$(node scripts/semver-is-prerelease.mjs "$NEXT_VERSION");"
+          IS_PRERELEASE="$(node scripts/semver-is-prerelease.mjs "$NEXT_VERSION")"
           export IS_PRERELEASE;
 
           echo -e "project=$PROJECT"
@@ -208,15 +208,7 @@ jobs:
           fi
 
           if [ "jco" == "$PROJECT" ]; then
-            node -e '
-              const fs = require("node:fs");
-              const path = "src/jco.ts";
-              const current = "version(\"" + process.env.CURRENT_VERSION + "\")";
-              const next = "version(\"" + process.env.NEXT_VERSION + "\")";
-              const source = fs.readFileSync(path, "utf8");
-              if (!source.includes(current)) throw new Error("Missing " + current + " in " + path);
-              fs.writeFileSync(path, source.replace(current, next));
-            ';
+            node "$GITHUB_WORKSPACE/scripts/update-jco-version.mjs";
           fi
 
       # Generate changelog
@@ -226,6 +218,7 @@ jobs:
       - name: Generate changelog
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          PROJECT_DIR: ${{ steps.project-meta.outputs.project-dir }}
           PROJECT_VERSION_TAG: ${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}
           IS_PRERELEASE: ${{ steps.project-meta.outputs.is-prerelease }}
           DEFAULT_TAG_PATTERN: "^${{ steps.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$"
