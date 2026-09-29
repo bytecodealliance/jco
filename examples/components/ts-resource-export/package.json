@@ -17,7 +17,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.22.0",
+    "@bytecodealliance/componentize-js": "^0.23.0",
     "@bytecodealliance/jco": "1.31.0",
     "@bytecodealliance/preview2-shim": "file:../../../packages/preview2-shim",
     "@rollup/plugin-node-resolve": "^16.0.1",
