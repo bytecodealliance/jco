@@ -692,7 +692,7 @@
     "whatwg-url": "14.2.0"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.22.0",
+    "@bytecodealliance/componentize-js": "^0.23.0",
     "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
     "@bytecodealliance/jco-transpile": "^0.15.0",
     "@bytecodealliance/preview2-shim": "^0.27.0",
