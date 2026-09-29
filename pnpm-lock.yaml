@@ -337,8 +337,8 @@ importers:
   examples/components/ts-resource-export:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.22.0
-        version: 0.22.0
+        specifier: ^0.23.0
+        version: 0.23.0
       '@bytecodealliance/jco':
         specifier: 1.31.0
         version: 1.31.0
@@ -361,8 +361,8 @@ importers:
   examples/components/ts-resource-import:
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.22.0
-        version: 0.22.0
+        specifier: ^0.23.0
+        version: 0.23.0
       '@bytecodealliance/jco':
         specifier: 1.31.0
         version: 1.31.0
@@ -443,23 +443,23 @@ importers:
   packages/jco:
     dependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.22.0
-        version: 0.22.0
+        specifier: ^0.23.0
+        version: 0.23.0
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.26.0)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.15.0
-        version: 0.15.0
+        specifier: ^0.16.0
+        version: 0.16.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.27.0
+        version: 0.27.0
       binaryen:
-        specifier: ^130.0.0
-        version: 130.0.0
+        specifier: ^132.0.0
+        version: 132.0.0
       commander:
         specifier: ^14
         version: 14.0.3
@@ -556,8 +556,8 @@ importers:
         version: 14.2.0
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: ^0.22.0
-        version: 0.22.0
+        specifier: ^0.23.0
+        version: 0.23.0
       '@bytecodealliance/componentize-js-0-19-3':
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
@@ -642,8 +642,8 @@ importers:
         version: 0.3.2
     devDependencies:
       '@bytecodealliance/componentize-js':
-        specifier: 0.22.0
-        version: 0.22.0
+        specifier: 0.23.0
+        version: 0.23.0
       '@bytecodealliance/jco':
         specifier: 1.25.2
         version: 1.25.2
@@ -917,6 +917,10 @@ packages:
     resolution: {integrity: sha512-sscwKDazGgMWZkS6azvY66tY3X09nzl58jn9j6X0E9/V4B5hCXTI+v7PFUyLowKYgu8MG4FJsSvCpq64lSXsIA==}
     hasBin: true
 
+  '@bytecodealliance/componentize-js@0.23.0':
+    resolution: {integrity: sha512-Qc2+lrwJHU7lq4CBMyVVYE8ASyUFeegMYdRnMVG0wNpNiATzGDF/mWpjDNTeVZeT8L9chhK3vuLaQE9FVANvfw==}
+    hasBin: true
+
   '@bytecodealliance/jco-node-fs-darwin-arm64@0.2.0':
     resolution: {integrity: sha512-+Nu0mjp6TiR+QcY1TRbJeG70u4370eM6Kk9BkzeUuAKn920IAJJ8wFU05OKRsCXwiCSHm/A0DDcZM/TVy7gXhw==}
     engines: {node: '>=20'}
@@ -1045,6 +1049,9 @@ packages:
 
   '@bytecodealliance/jco-transpile@0.15.0':
     resolution: {integrity: sha512-MFftJ81B9TtHbvgCRZQod3jfgl62YvJszxsNdfx9IVNewxlX9q7U4Wd+w6gJzw+o9IjEGWoyg/BFpb/RnaJvlA==}
+
+  '@bytecodealliance/jco-transpile@0.16.0':
+    resolution: {integrity: sha512-WsZrMkOUEzuGg93gjHxA2Q+sBPyuL37DTpOiSJOhZlCDPbd8NSt8TkjfUDBylxCnFVl5SY4TBzE8dY0DLdBs8w==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -5500,6 +5507,14 @@ snapshots:
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
 
+  '@bytecodealliance/componentize-js@0.23.0':
+    dependencies:
+      '@bytecodealliance/jco': 1.32.1
+      '@bytecodealliance/weval': 0.5.0
+      '@bytecodealliance/wizer': 10.0.0
+      es-module-lexer: 1.7.0
+      oxc-parser: 0.76.0
+
   '@bytecodealliance/jco-node-fs-darwin-arm64@0.2.0':
     optional: true
 
@@ -5582,18 +5597,6 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.25.0
 
-  '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.26.0)':
-    dependencies:
-      acorn: 8.17.0
-      acorn-walk: 8.3.5
-      minimatch: 10.2.6
-      punycode: 2.3.1
-      readable-stream: 4.7.0
-      urlpattern-polyfill: 10.1.0
-      whatwg-url: 14.2.0
-    optionalDependencies:
-      '@bytecodealliance/preview2-shim': 0.26.0
-
   '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.27.0)':
     dependencies:
       acorn: 8.17.0
@@ -5626,6 +5629,13 @@ snapshots:
       '@bytecodealliance/preview3-shim': 0.7.0
       binaryen: 130.0.0
       oxc-minify: 0.136.0
+
+  '@bytecodealliance/jco-transpile@0.16.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.27.0
+      '@bytecodealliance/preview3-shim': 0.8.0
+      binaryen: 132.0.0
+      oxc-minify: 0.151.0
 
   '@bytecodealliance/jco-transpile@0.4.2':
     dependencies:
