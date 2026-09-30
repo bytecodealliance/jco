@@ -2997,7 +2997,17 @@ impl<'a> Instantiator<'a, '_> {
                             "#
                         );
                     }
-                    Transcode::Copy(FixedEncoding::Utf16) => unimplemented!("utf16 copier"),
+                    Transcode::Copy(FixedEncoding::Utf16) => {
+                        // `len` is in UTF-16 code units, i.e. `2 * len` bytes
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  new Uint8Array(memory{to}.buffer, to_ptr, len * 2).set(new Uint8Array(memory{from}.buffer, from_ptr, len * 2));
+                              }}
+                            "#
+                        );
+                    }
                     Transcode::Copy(FixedEncoding::Latin1) => unimplemented!("latin1 copier"),
                     Transcode::Latin1ToUtf16 => unimplemented!("latin to utf16 transcoder"),
                     Transcode::Latin1ToUtf8 => unimplemented!("latin to utf8 transcoder"),

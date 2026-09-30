@@ -56,7 +56,9 @@ useful but likely incomplete list is below:
 | [Rust (`rust`)](./rust) | `rustup target add wasm32-wasip2` | Rust toolchain and WASI P2 target used by the `wstd` HTTP client fixture      |
 | [Python](./python)   | [`uv`][uv]                           | Python package manager                                                       |
 |                      | [`componentize-py`][componentize-py] | Bytecode Alliance maintained tooling for building Python projects components |
+| [MoonBit (`moonbit`)](./moonbit) | [`moon`][moon]            | MoonBit toolchain, components are embedded with the `utf16` string encoding   |
 
 [wasi-sdk]: https://github.com/WebAssembly/wasi-sdk
 [uv]: https://github.com/astral-sh/uv
 [componentize-py]: https://github.com/bytecodealliance/componentize-py/
+[moon]: https://www.moonbitlang.com/download/

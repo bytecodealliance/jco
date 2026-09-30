@@ -1,0 +1,10 @@
+package test:jco-bug;
+
+interface greet {
+    greet: func(name: string) -> string;
+}
+
+world consumer {
+    import greet;
+    export run: func() -> string;
+}

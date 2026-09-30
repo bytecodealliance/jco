@@ -1,0 +1,25 @@
+wit_bindgen := env_var_or_default("WIT_BINDGEN", "wit-bindgen")
+wasm_tools := env_var_or_default("WASM_TOOLS", "wasm-tools")
+moon := env_var_or_default("MOON", "moon")
+just := env_var_or_default("JUST", just_executable())
+
+bindings_dir := "bindings"
+
+@_default:
+    {{just}} --list
+
+# Generate WIT bindings, with component.mbt in place of the generated stub
+gen-bindings:
+    rm -rf {{bindings_dir}}
+    {{wit_bindgen}} moonbit wit --world component --out-dir {{bindings_dir}}
+    cp component.mbt {{bindings_dir}}/gen/interface/test/jco-bug/greet/impl.mbt
+
+# Build moonbit wasm component (MoonBit strings are UTF-16)
+build: gen-bindings
+    cd {{bindings_dir}} && {{moon}} build --target wasm --release
+    {{wasm_tools}} component embed wit \
+      --world component \
+      --encoding utf16 \
+      {{bindings_dir}}/_build/wasm/release/build/gen/gen.wasm \
+      -o {{bindings_dir}}/embedded.wasm
+    {{wasm_tools}} component new {{bindings_dir}}/embedded.wasm -o component.wasm
