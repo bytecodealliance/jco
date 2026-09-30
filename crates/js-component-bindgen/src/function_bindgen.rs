@@ -576,7 +576,7 @@ impl FunctionBindgen<'_> {
             );
         };
         results.push(format!(
-            "{view}({memory}).{method}(({} >>> 0) + {offset}, true)",
+            "{view}({memory}).{method}(({}) + {offset}, true)",
             operands[0],
             offset = offset.size_wasm32()
         ));
@@ -587,7 +587,7 @@ impl FunctionBindgen<'_> {
         let memory = self.memory.as_ref().unwrap();
         uwriteln!(
             self.src,
-            "{view}({memory}).{method}(({} >>> 0) + {offset}, {}, true);",
+            "{view}({memory}).{method}(({}) + {offset}, {}, true);",
             operands[1],
             operands[0],
             offset = offset.size_wasm32()
@@ -689,11 +689,12 @@ impl FunctionBindgen<'_> {
             | Bitcast::LToI32
             | Bitcast::I32ToL
             | Bitcast::LToP
-            | Bitcast::PToL
-            | Bitcast::PToI32
-            | Bitcast::I32ToP => op.to_string(),
+            | Bitcast::PToL => op.to_string(),
+            Bitcast::PToI32 => format!("({op} | 0)"),
+            Bitcast::I32ToP => format!("({op} >>> 0)"),
             Bitcast::PToP64 | Bitcast::I64ToP64 | Bitcast::LToI64 => format!("BigInt({op})"),
-            Bitcast::P64ToP | Bitcast::I64ToL => format!("Number({op})"),
+            Bitcast::P64ToP => format!("(Number({op}) >>> 0)"),
+            Bitcast::I64ToL => format!("Number({op})"),
             Bitcast::Sequence(casts) => {
                 let mut statement = op.to_string();
                 for cast in casts.iter() {
@@ -1844,6 +1845,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // ... then consume the vector and use the block to lower the
                 // result.
+                self.emit_list_bounds_check(&result, &len, size);
                 uwriteln!(self.src, "for (let i = 0; i < {vec}.length; i++) {{");
                 uwriteln!(self.src, "const e = {vec}[i];");
                 uwrite!(self.src, "const base = {result} + i * {size};");
@@ -1913,6 +1915,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     },
                 );
 
+                self.emit_list_bounds_check(&result, &len, size);
                 uwriteln!(self.src, "let i = 0;");
                 uwriteln!(self.src, "for (const [key, value] of {entries}) {{");
                 uwriteln!(self.src, "const base = {result} + i * {size};");
@@ -1936,6 +1939,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "const {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
                 uwriteln!(self.src, "const {base} = {} >>> 0;", operands[0]);
+                self.emit_list_bounds_check(&base, &len, entry_size);
                 let result = format!("result{tmp}");
                 uwriteln!(self.src, "const {result} = new Map();");
                 results.push(result.clone());
@@ -2156,6 +2160,14 @@ impl Bindgen for FunctionBindgen<'_> {
                         self.src,
                         "{vars_init}\n{assignment_lhs}{call_prefix}{callee_invoke};"
                     );
+                }
+
+                // Core wasm32 pointers arrive as signed i32 values. Normalize
+                // them before any host-side arithmetic, which must not wrap.
+                for (result, ty) in results.iter_mut().zip(&sig.results) {
+                    if matches!(ty, WasmType::Pointer) {
+                        *result = format!("({result} >>> 0)");
+                    }
                 }
 
                 if self.tracing_enabled {
