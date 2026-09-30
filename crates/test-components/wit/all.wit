@@ -1002,3 +1002,25 @@ world resource-reexport-caller {
   export reexport-runner;
   export reexport-handoff;
 }
+
+interface host-resource-source {
+  resource thing {
+    name: func() -> string;
+  }
+  make-sync: func(name: string) -> thing;
+  make-async: async func(name: string) -> thing;
+}
+
+interface host-resource-runner {
+  run: async func(sync-count: u32) -> list<string>;
+}
+
+world host-resource-g2g-callee {
+  import host-resource-source;
+  export host-resource-runner;
+}
+
+world host-resource-g2g-caller {
+  import host-resource-runner;
+  export host-resource-runner;
+}
