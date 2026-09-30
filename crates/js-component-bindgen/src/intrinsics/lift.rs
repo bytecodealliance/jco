@@ -683,7 +683,7 @@ impl LiftIntrinsic {
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
                             let offset = ctx.params[0];
-                            if (typeof offset === 'bigint') {{ offset = Number(offset); }}
+                            if (typeof offset === 'bigint') {{ offset = Number(offset); }} else {{ offset >>>= 0; }}
                             if (!Number.isSafeInteger(offset)) {{ throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
@@ -722,7 +722,7 @@ impl LiftIntrinsic {
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
                             let offset = ctx.params[0];
-                            if (typeof offset === 'bigint') {{ offset = Number(offset); }}
+                            if (typeof offset === 'bigint') {{ offset = Number(offset); }} else {{ offset >>>= 0; }}
                             if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
@@ -1012,7 +1012,7 @@ impl LiftIntrinsic {
 
                                 if (ctx.useDirectParams) {{
                                     // unknown length list ptr w/ direct params
-                                    const dataPtr = ctx.params[0];
+                                    const dataPtr = ctx.params[0] >>> 0;
                                     const len = ctx.params[1];
                                     ctx.params = ctx.params.slice(2);
 
@@ -1085,7 +1085,7 @@ impl LiftIntrinsic {
                             let originalPtr = ctx.storagePtr;
                             const originalLen = ctx.storageLen;
                             if (ctx.useDirectParams) {{
-                                dataPtr = ctx.params[0];
+                                dataPtr = ctx.params[0] >>> 0;
                                 len = ctx.params[1];
                                 ctx.params = ctx.params.slice(2);
                             }} else {{

@@ -209,7 +209,7 @@ impl HostIntrinsic {
                         if (hasResultPointer) {{
                             directParamsArr = argArray.slice(10, argArray.length - 1);
                             getCalleeParamsFn = () => directParamsArr;
-                            resultPtr = argArray[argArray.length - 1];
+                            resultPtr = argArray[argArray.length - 1] >>> 0;
                         }} else {{
                             directParamsArr = argArray.slice(10);
                             getCalleeParamsFn = () => directParamsArr;
@@ -1014,8 +1014,8 @@ impl HostIntrinsic {
                         if (event.payload1 === undefined) {{ throw new Error('invalid event object, missing payload1'); }}
 
                         const dv = new DataView(memory.buffer);
-                        dv.setUint32(ptr, event.payload0, true);
-                        dv.setUint32(ptr + 4, event.payload1, true);
+                        dv.setUint32(ptr >>> 0, event.payload0, true);
+                        dv.setUint32((ptr >>> 0) + 4, event.payload1, true);
 
                         return event.code;
                     }}

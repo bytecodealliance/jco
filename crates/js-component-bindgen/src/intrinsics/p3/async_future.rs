@@ -1564,6 +1564,9 @@ impl AsyncFutureIntrinsic {
                             isAsync,
                         }} = ctx;
 
+                        // pointers at or above 2GiB come in as negative values
+                        ptr >>>= 0;
+
                         const taskMeta = {current_task_get_fn}(componentIdx);
                         if (!taskMeta) {{ throw new Error('missing task metadata during future operation'); }}
 
