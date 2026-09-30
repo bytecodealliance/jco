@@ -1,0 +1,6 @@
+package test:jco-bug;
+
+world component {
+    export greet: async func(name: string) -> string;
+    export names: async func() -> list<string>;
+}

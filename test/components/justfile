@@ -16,6 +16,7 @@ build:
     {{just}} build-jco-issue-1383
     {{just}} build-jco-issue-1384
     {{just}} build-jco-issue-1390
+    {{just}} build-jco-issue-2185
     {{just}} build-jco-issue-1887
     {{just}} build-jco-issue-1887-list-param
     {{just}} build-jco-issue-1887-resource-drop
@@ -58,6 +59,14 @@ build:
     mkdir -p output/jco-issue-1887-resource-drop
     {{just}} -f c/jco-issue-1887-resource-drop/justfile build
     mv c/jco-issue-1887-resource-drop/component.wasm output/jco-issue-1887-resource-drop/component.wasm
+
+# Build the moonbit component required to test jco issue #2185
+[group('build')]
+@build-jco-issue-2185:
+    echo "==> building jco-issue-2185 component (moonbit)..."
+    mkdir -p output/jco-issue-2185
+    {{just}} -f moonbit/jco-issue-2185/justfile build
+    mv moonbit/jco-issue-2185/component.wasm output/jco-issue-2185/component.wasm
 
 # Build the wasi-sdk experimental coop-threads reactor for the POSIX
 # pthread_mutex_lock conformance test case 1-1

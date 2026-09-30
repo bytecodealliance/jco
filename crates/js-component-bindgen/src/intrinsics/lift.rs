@@ -702,7 +702,7 @@ impl LiftIntrinsic {
                         val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
 
                         ctx.storagePtr += 8;
-                        if (ctx.storageLen !== undefined) {{ ctx.storagelen -= 8; }}
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
                         return [val, ctx];
                     }}
@@ -726,17 +726,22 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
-                            val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len));
+                            val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len * 2));
                             ctx.params = ctx.params.slice(2);
                             return [val, ctx];
                         }}
 
-                        const data = new DataView(ctx.memory.buffer)
-                        const start = data.getUint32(ctx.storagePtr, vals[0], true);
-                        const codeUnits = data.getUint32(ctx.storagePtr, vals[0] + 4, true);
-                        val = {decoder}.decode(new Uint16Array(ctx.memory.buffer, start, codeUnits));
-                        ctx.storagePtr = ctx.storagePtr + 2 * codeUnits;
-                        if (ctx.storageLen !== undefined) {{ ctx.storageLen = ctx.storageLen - 2 * codeUnits }}
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
+                        const dv = new DataView(ctx.memory.buffer);
+                        const start = dv.getUint32(ctx.storagePtr, true);
+                        const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
+
+                        val = {decoder}.decode(new DataView(ctx.memory.buffer, start, codeUnits * 2));
+
+                        ctx.storagePtr += 8;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
                         return [val, ctx];
                     }}
