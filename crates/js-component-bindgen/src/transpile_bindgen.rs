@@ -118,6 +118,22 @@ pub struct TranspileOpts {
     /// Configure whether to generate code that includes strict type checks
     #[builder(default)]
     pub strict: bool,
+    /// Skip validating utf8 strings that are copied between components which
+    /// both use utf8.
+    ///
+    /// The canonical ABI requires the validation, so by default every such
+    /// string is decoded in full before it is copied. Skipping it trades that
+    /// cost for passing invalid utf8 on to the receiving component.
+    #[builder(default)]
+    pub perf_strings_skip_copy_utf8_validation: bool,
+    /// Skip validating utf16 strings that are copied between components which
+    /// both use utf16.
+    ///
+    /// The canonical ABI requires the validation, so by default every code
+    /// unit is checked as it is copied. Skipping it trades that cost for
+    /// passing unpaired surrogates on to the receiving component.
+    #[builder(default)]
+    pub perf_strings_skip_copy_utf16_validation: bool,
     /// Represent WIT flags as bigint values instead of objects of booleans.
     #[builder(default)]
     pub flags_as_bigint: bool,
@@ -2991,10 +3007,16 @@ impl<'a> Instantiator<'a, '_> {
                 let to = to.as_u32();
                 match op {
                     // The bytes are copied as they are, but must still be valid UTF-8
+                    // unless validation has been explicitly skipped
                     Transcode::Copy(FixedEncoding::Utf8) => {
-                        let utf8_decoder = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+                        let validate = if self.bindgen.opts.perf_strings_skip_copy_utf8_validation {
+                            String::new()
+                        } else {
+                            let utf8_decoder = self.bindgen.intrinsic(Intrinsic::String(
+                                StringIntrinsic::GlobalTextDecoderUtf8,
+                            ));
+                            format!("{utf8_decoder}.decode(from);")
+                        };
                         uwriteln!(
                             self.src.js,
                             r#"
@@ -3002,28 +3024,38 @@ impl<'a> Instantiator<'a, '_> {
                                   from_ptr >>>= 0;
                                   to_ptr >>>= 0;
                                   const from = new Uint8Array(memory{from}.buffer, from_ptr, len);
-                                  {utf8_decoder}.decode(from);
+                                  {validate}
                                   new Uint8Array(memory{to}.buffer, to_ptr, len).set(from);
                               }}
                             "#
                         );
                     }
                     // The code units are copied as they are, but must still be valid UTF-16
+                    // unless validation has been explicitly skipped
                     Transcode::Copy(FixedEncoding::Utf16) => {
-                        let utf16_validating_copy = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16ValidatingCopy));
                         // `len` is in UTF-16 code units, i.e. `2 * len` bytes
+                        let copy = if self.bindgen.opts.perf_strings_skip_copy_utf16_validation {
+                            format!(
+                                "new Uint8Array(memory{to}.buffer, to_ptr, len * 2).set(new Uint8Array(memory{from}.buffer, from_ptr, len * 2));"
+                            )
+                        } else {
+                            let utf16_validating_copy = self
+                                .bindgen
+                                .intrinsic(Intrinsic::String(StringIntrinsic::Utf16ValidatingCopy));
+                            format!(
+                                "{utf16_validating_copy}(
+                                     new Uint16Array(memory{from}.buffer, from_ptr, len),
+                                     new Uint16Array(memory{to}.buffer, to_ptr, len),
+                                 );"
+                            )
+                        };
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
                                   from_ptr >>>= 0;
                                   to_ptr >>>= 0;
-                                  {utf16_validating_copy}(
-                                      new Uint16Array(memory{from}.buffer, from_ptr, len),
-                                      new Uint16Array(memory{to}.buffer, to_ptr, len),
-                                  );
+                                  {copy}
                               }}
                             "#
                         );
