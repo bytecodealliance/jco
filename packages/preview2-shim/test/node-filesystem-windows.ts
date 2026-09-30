@@ -21,7 +21,6 @@ vi.mock("../src/io/worker-io.js", () => ({
     registerDispose: vi.fn(),
 }));
 
-import { FILESYSTEM_DESCRIPTOR_CLOSE } from "../src/io/calls.js";
 import { ioCall, registerDispose } from "../src/io/worker-io.js";
 
 import { _createPreopenDescriptor } from "../src/nodejs/filesystem.js";
@@ -30,6 +29,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     const stats = {
         isFile: () => true,
+        isDirectory: () => false,
         isSymbolicLink: () => false,
         nlink: 1n,
         size: 0n,
@@ -69,21 +69,40 @@ test("Windows readlink targets use WASI path separators", () => {
 });
 
 for (const read of [false, true]) {
-    test(`rejects a writable Windows directory and closes its handle (read=${read})`, () => {
-        vi.mocked(ioCall).mockReturnValue({ id: 42, type: "directory" });
+    test(`rejects a writable Windows directory without opening it (read=${read})`, () => {
+        vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<
+            typeof statSync
+        >);
         const root = _createPreopenDescriptor("C:/sandbox");
         expect(() => root.openAt({}, ".", { directory: true }, { read, write: true })).toThrow(
             "is-directory",
         );
-        expect(ioCall).toHaveBeenLastCalledWith(FILESYSTEM_DESCRIPTOR_CLOSE, 42);
+        expect(ioCall).not.toHaveBeenCalled();
         expect(registerDispose).not.toHaveBeenCalled();
     });
 }
 
-test("still permits read-only Windows directory handles", () => {
-    vi.mocked(ioCall).mockReturnValue({ id: 42, type: "directory" });
+test("reads a Windows directory without opening it as a file", () => {
+    vi.mocked(statSync).mockReturnValue({
+        isDirectory: () => true,
+        isFile: () => false,
+        isSocket: () => false,
+        isSymbolicLink: () => false,
+        isFIFO: () => false,
+        isCharacterDevice: () => false,
+        isBlockDevice: () => false,
+        nlink: 1n,
+        size: 0n,
+        atimeNs: 0n,
+        mtimeNs: 1n,
+        ctimeNs: 0n,
+        ino: 2n,
+    } as ReturnType<typeof statSync>);
     const root = _createPreopenDescriptor("C:/sandbox");
-    expect(() => root.openAt({}, ".", { directory: true }, { read: true })).not.toThrow();
-    expect(ioCall).not.toHaveBeenCalledWith(FILESYSTEM_DESCRIPTOR_CLOSE, 42);
-    expect(registerDispose).toHaveBeenCalled();
+    const directory = root.openAt({}, ".", { directory: true }, { read: true });
+    expect(directory.getType()).toBe("directory");
+    expect(directory.stat().type).toBe("directory");
+    expect(directory.metadataHash()).toEqual({ upper: 1n, lower: 2n });
+    expect(ioCall).not.toHaveBeenCalled();
+    expect(registerDispose).not.toHaveBeenCalled();
 });
