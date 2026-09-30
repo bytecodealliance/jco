@@ -147,6 +147,20 @@ export interface TranspilationOptions {
     /** Whether to run bindgen in strict mode */
     strict?: boolean;
 
+    /**
+     * Skip validating utf8 strings that are copied between components which both use utf8
+     *
+     * Strings are validated by default, as the canonical ABI requires.
+     */
+    perfStringsSkipCopyUtf8Validation?: boolean;
+
+    /**
+     * Skip validating utf16 strings that are copied between components which both use utf16
+     *
+     * Strings are validated by default, as the canonical ABI requires.
+     */
+    perfStringsSkipCopyUtf16Validation?: boolean;
+
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
 
@@ -328,6 +342,8 @@ export async function transpileBytes(
         multiMemory: opts.multiMemory === true,
         bindgenEnableWasmExnref: opts.bindgenEnableWasmExnref === true,
         strict: opts.strict === true,
+        perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
+        perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,
