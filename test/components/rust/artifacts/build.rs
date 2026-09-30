@@ -42,8 +42,9 @@ async fn main() -> Result<()> {
         std::env::var_os("CARGO_MANIFEST_DIR")
             .context("missing CARGO_MANIFEST_DIR env variable")?,
     );
-    let p1_adapter_path = cargo_manifest_dir
-        .join("../../../../packages/jco-transpile/test/fixtures/wasi_snapshot_preview1.reactor.wasm");
+    let p1_adapter_path = cargo_manifest_dir.join(
+        "../../../../packages/jco-transpile/test/fixtures/wasi_snapshot_preview1.reactor.wasm",
+    );
 
     // Build p3 components
     let p3_components = build_test_p3_components(&output_dir, p1_adapter_path)
