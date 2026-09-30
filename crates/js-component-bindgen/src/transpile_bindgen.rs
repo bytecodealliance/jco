@@ -63,6 +63,23 @@ const MAX_FLAT_PARAMS: usize = 16;
 /// Maximum direct flat results for sync canonical lowering.
 const MAX_FLAT_RESULTS: usize = 1;
 
+/// JS snippet for string transcoders that copies UTF-16 code units from `from` to `to`
+/// (equal-length `Uint16Array`s), throwing on unpaired surrogates.
+///
+/// Leaves `allLatin1` set to whether every code unit copied fits in latin1.
+const JS_UTF16_VALIDATING_COPY: &str = r#"
+    let allLatin1 = true;
+    let highSurrogate = false;
+    for (let i = 0; i < from.length; i++) {
+        const unit = from[i];
+        if (highSurrogate !== ((unit & 0xfc00) === 0xdc00)) { throw new Error('invalid utf16 encoding'); }
+        highSurrogate = (unit & 0xfc00) === 0xd800;
+        if (unit > 0xff) { allLatin1 = false; }
+        to[i] = unit;
+    }
+    if (highSurrogate) { throw new Error('invalid utf16 encoding'); }
+"#;
+
 #[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
@@ -3008,16 +3025,115 @@ impl<'a> Instantiator<'a, '_> {
                             "#
                         );
                     }
-                    Transcode::Copy(FixedEncoding::Latin1) => unimplemented!("latin1 copier"),
-                    Transcode::Latin1ToUtf16 => unimplemented!("latin to utf16 transcoder"),
-                    Transcode::Latin1ToUtf8 => unimplemented!("latin to utf8 transcoder"),
+                    // All byte sequences are valid latin1, so this is a plain copy
+                    Transcode::Copy(FixedEncoding::Latin1) => {
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                              }}
+                            "#
+                        );
+                    }
+                    // Every latin1 byte inflates to exactly one UTF-16 code unit
+                    Transcode::Latin1ToUtf16 => {
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  new Uint16Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                              }}
+                            "#
+                        );
+                    }
+                    // Returns the latin1 bytes read and UTF-8 bytes written, which may be
+                    // a partial transcode if the destination is too small. The first pass
+                    // must stop at the first byte that needs a multi-byte UTF-8 sequence.
+                    Transcode::Latin1ToUtf8 => {
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (src, src_len, dst, dst_len, first_pass) {{
+                                  const from = new Uint8Array(memory{from}.buffer, src, src_len);
+                                  const to = new Uint8Array(memory{to}.buffer, dst, dst_len);
+                                  let read = 0;
+                                  let written = 0;
+                                  for (; read < src_len; read++) {{
+                                      const byte = from[read];
+                                      if (byte < 0x80) {{
+                                          if (written === dst_len) {{ break; }}
+                                          to[written++] = byte;
+                                      }} else {{
+                                          if (first_pass || written + 2 > dst_len) {{ break; }}
+                                          to[written++] = 0xc0 | (byte >> 6);
+                                          to[written++] = 0x80 | (byte & 0x3f);
+                                      }}
+                                  }}
+                                  return [read, written];
+                              }}
+                            "#,
+                        );
+                    }
+                    // Transcodes UTF-16 into a destination of the same code unit length,
+                    // then deflates it in place to latin1 if every code unit fits. The
+                    // returned length is tagged when the destination was left as UTF-16.
                     Transcode::Utf16ToCompactProbablyUtf16 => {
-                        unimplemented!("utf16 to compact wtf16 transcoder")
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  const from = new Uint16Array(memory{from}.buffer, from_ptr, len);
+                                  const to = new Uint16Array(memory{to}.buffer, to_ptr, len);
+                                  {JS_UTF16_VALIDATING_COPY}
+                                  if (!allLatin1) {{ return len | 0x80000000; }}
+                                  const deflated = new Uint8Array(memory{to}.buffer, to_ptr, len);
+                                  for (let i = 0; i < len; i++) {{ deflated[i] = to[i]; }}
+                                  return len;
+                              }}
+                            "#,
+                        );
                     }
+                    // Second step of transcoding to latin1+utf16, after `Utf16ToLatin1`
+                    // stopped early: inflates the latin1 bytes already in the destination
+                    // to UTF-16 in place, then transcodes the rest of the source after them.
+                    // Returns the total number of code units in the destination.
                     Transcode::Utf16ToCompactUtf16 => {
-                        unimplemented!("utf16 to compact utf16 transcoder")
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (src, src_len, dst, dst_len, latin1_bytes_so_far) {{
+                                  const latin1 = new Uint8Array(memory{to}.buffer, dst, latin1_bytes_so_far);
+                                  const inflated = new Uint16Array(memory{to}.buffer, dst, latin1_bytes_so_far);
+                                  for (let i = latin1_bytes_so_far - 1; i >= 0; i--) {{ inflated[i] = latin1[i]; }}
+                                  const from = new Uint16Array(memory{from}.buffer, src, src_len);
+                                  const to = new Uint16Array(memory{to}.buffer, dst + 2 * latin1_bytes_so_far, src_len);
+                                  {JS_UTF16_VALIDATING_COPY}
+                                  return latin1_bytes_so_far + src_len;
+                              }}
+                            "#,
+                        );
                     }
-                    Transcode::Utf16ToLatin1 => unimplemented!("utf16 to latin1 transcoder"),
+                    // First step of transcoding to latin1+utf16: stops at the first code
+                    // unit that is not latin1, returning the code units read and bytes written.
+                    Transcode::Utf16ToLatin1 => {
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  const from = new Uint16Array(memory{from}.buffer, from_ptr, len);
+                                  const to = new Uint8Array(memory{to}.buffer, to_ptr, len);
+                                  let i = 0;
+                                  for (; i < len; i++) {{
+                                      const unit = from[i];
+                                      if (unit > 0xff) {{ break; }}
+                                      to[i] = unit;
+                                  }}
+                                  return [i, i];
+                              }}
+                            "#,
+                        );
+                    }
                     Transcode::Utf16ToUtf8 => {
                         uwriteln!(
                             self.src.js,
@@ -3030,10 +3146,59 @@ impl<'a> Instantiator<'a, '_> {
                             "#,
                         );
                     }
+                    // Second step of transcoding to latin1+utf16, after `Utf8ToLatin1`
+                    // stopped early: inflates the latin1 bytes already in the destination
+                    // to UTF-16 in place, then transcodes the rest of the source after them.
+                    // Returns the total number of code units in the destination.
                     Transcode::Utf8ToCompactUtf16 => {
-                        unimplemented!("utf8 to compact utf16 transcoder")
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (src, src_len, dst, dst_len, latin1_bytes_so_far) {{
+                                  const latin1 = new Uint8Array(memory{to}.buffer, dst, latin1_bytes_so_far);
+                                  const inflated = new Uint16Array(memory{to}.buffer, dst, latin1_bytes_so_far);
+                                  for (let i = latin1_bytes_so_far - 1; i >= 0; i--) {{ inflated[i] = latin1[i]; }}
+                                  const decoder = new TextDecoder('utf-8', {{ fatal: true, ignoreBOM: true }});
+                                  const content = decoder.decode(new Uint8Array(memory{from}.buffer, src, src_len));
+                                  const codeUnits = content.length;
+                                  const to = new Uint16Array(memory{to}.buffer, dst + 2 * latin1_bytes_so_far, codeUnits);
+                                  for (let i = 0; i < codeUnits; i++) {{
+                                      to[i] = content.charCodeAt(i);
+                                  }}
+                                  return latin1_bytes_so_far + codeUnits;
+                              }}
+                            "#,
+                        );
                     }
-                    Transcode::Utf8ToLatin1 => unimplemented!("utf8 to latin1 transcoder"),
+                    // First step of transcoding to latin1+utf16: stops at the first byte
+                    // that starts an invalid or non-latin1 sequence, returning the bytes
+                    // read and bytes written.
+                    Transcode::Utf8ToLatin1 => {
+                        uwriteln!(
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  const from = new Uint8Array(memory{from}.buffer, from_ptr, len);
+                                  const to = new Uint8Array(memory{to}.buffer, to_ptr, len);
+                                  let read = 0;
+                                  let written = 0;
+                                  while (read < len) {{
+                                      const byte = from[read];
+                                      if (byte < 0x80) {{
+                                          to[written++] = byte;
+                                          read += 1;
+                                      }} else if ((byte === 0xc2 || byte === 0xc3) && read + 1 < len && (from[read + 1] & 0xc0) === 0x80) {{
+                                          to[written++] = (byte & 0x03) << 6 | (from[read + 1] & 0x3f);
+                                          read += 2;
+                                      }} else {{
+                                          break;
+                                      }}
+                                  }}
+                                  return [read, written];
+                              }}
+                            "#,
+                        );
+                    }
                     Transcode::Utf8ToUtf16 => {
                         uwriteln!(
                             self.src.js,
