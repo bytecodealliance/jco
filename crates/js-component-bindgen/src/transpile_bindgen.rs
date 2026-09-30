@@ -7347,7 +7347,7 @@ pub fn gen_flat_lower_fn_js_expr(
                                   if (!handle) {{
                                     const rep = obj[{symbol_resource_rep}] || ++captureCnt{rid};
                                     captureTable{rid}.set(rep, obj);
-                                    handle = {create_own_fn}(handleTable{tid}, rep);
+                                    handle = {create_own_fn}(handleTable{table_idx}, rep);
                                   }}
                                   return handle;
                               }}
