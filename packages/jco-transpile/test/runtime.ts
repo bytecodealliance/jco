@@ -29,6 +29,7 @@ const CODEGEN_TRANSPILE_DEPS = {
     'multi-version': ['multi-version/multi-version.js'],
     numbers: ['numbers/numbers.js'],
     records: ['records/records.js'],
+    'string-transcoding': ['string-transcoding/string-transcoding.js'],
     'strings.async+js': ['strings.async+js/strings.async+js.js'],
     'strings.sync+js': ['strings.sync+js/strings.sync+js.js'],
     'strings.sync': ['strings.sync/strings.sync.js'],
