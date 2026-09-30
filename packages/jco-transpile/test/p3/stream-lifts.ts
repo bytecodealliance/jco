@@ -12,7 +12,8 @@ import {
 } from '../common.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-suite('stream<T> lifts', () => {
+// NOTE: `high-*` components are the same component linked with all of its memory above 2GiB
+suite.each(['stream-tx', 'high-stream-tx'])('stream<T> lifts (%s)', (name) => {
     let esModule, cleanup, getInstance, instance;
 
     class ExampleResource {
@@ -26,7 +27,6 @@ suite('stream<T> lifts', () => {
     }
 
     beforeAll(async () => {
-        const name = 'stream-tx';
         const setupRes = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {

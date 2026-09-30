@@ -6,7 +6,8 @@ import { setupAsyncTest } from '../helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, toTypedArray } from '../common.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-suite('future<T> lowers', () => {
+// NOTE: `high-*` components are the same component linked with all of its memory above 2GiB
+suite.each(['future-lower', 'high-future-lower'])('future<T> lowers (%s)', (name) => {
     let esModule, cleanup, getInstance, instance;
 
     class ExampleResource {
@@ -24,7 +25,6 @@ suite('future<T> lowers', () => {
     }
 
     beforeAll(async () => {
-        const name = 'future-lower';
         const setupRes = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {

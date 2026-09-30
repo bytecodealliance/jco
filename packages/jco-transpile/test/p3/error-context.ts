@@ -6,8 +6,8 @@ import { setupAsyncTest } from '../helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 
 suite('Error Context (WASI P3)', () => {
-    test('async-error-context', async () => {
-        const name = 'async-error-context';
+    // NOTE: `high-*` components are the same component linked with all of its memory above 2GiB
+    test.each(['async-error-context', 'high-async-error-context'])('%s', async (name) => {
         const { esModule, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {

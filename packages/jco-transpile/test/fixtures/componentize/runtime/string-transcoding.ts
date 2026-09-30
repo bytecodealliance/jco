@@ -1,9 +1,10 @@
-// Flags: --tla-compat
+// Flags: --instantiation
 
 import * as assert from 'assert';
 
 // @ts-expect-error
-import * as wasm from '../js-test-components/string-transcoding/string-transcoding.js';
+import { instantiate } from '../js-test-components/string-transcoding/string-transcoding.js';
+import { loadWasm } from './helpers.js';
 
 const UTF16_TAG = 0x8000_0000;
 
@@ -40,33 +41,115 @@ const STRINGS = [
     'é🚀é',
     // the non-latin1 remainder starts with U+FEFF, which must not be dropped as a BOM
     'a﻿bom',
-    // long enough to need memory growth
+    // long enough to need memory growth, and too long to be spread as call arguments
     'é'.repeat(70_000),
-    'abc中'.repeat(10_000),
+    'abc中'.repeat(40_000),
 ];
 
+const INTERFACES = [
+    'utf8ToCompact',
+    'utf16ToCompact',
+    'utf16ViaUtf8',
+    'utf8ViaUtf16',
+    'utf8ViaCompact',
+    'utf8ViaInflatedCompact',
+    // these chains pass through components that allocate above 2GiB
+    'utf8ViaHighCompact',
+    'utf8ViaHighUtf16',
+];
+
+/**
+ * Check that a call traps
+ *
+ * A trap leaves the component instances involved unusable, so every
+ * call is made against newly instantiated components.
+ */
+async function assertTraps(call: (wasm: any) => unknown, expected: RegExp | typeof TypeError) {
+    const wasm = await instantiate(loadWasm, {});
+    assert.throws(() => call(wasm), expected);
+}
+
 async function run() {
-    await wasm.$init;
+    const wasm = await instantiate(loadWasm, {});
 
     for (const s of STRINGS) {
         const expected = compact(s);
         const label = JSON.stringify(s.length > 40 ? `${s.slice(0, 40)}...` : s);
 
-        for (const name of ['utf8ToCompact', 'utf8ViaCompact', 'utf8ViaInflatedCompact', 'utf16ToCompact']) {
+        for (const name of INTERFACES) {
             const iface = wasm[name];
             assert.strictEqual(iface.taggedLen(s), expected.taggedLen, `${name}.taggedLen(${label})`);
             assert.deepStrictEqual(iface.raw(s), expected.raw, `${name}.raw(${label})`);
-            if (iface.echo) {
-                assert.strictEqual(iface.echo(s), s, `${name}.echo(${label})`);
-            }
+            assert.strictEqual(iface.echo(s), s, `${name}.echo(${label})`);
         }
     }
 
+    // A leading U+FEFF is part of the string, and must not be dropped as a BOM
+    for (const s of ['\ufeff', '\ufeffbom', '\ufeff中文']) {
+        const expected = compact(s);
+        const label = JSON.stringify(s);
+
+        for (const name of INTERFACES) {
+            const iface = wasm[name];
+            assert.strictEqual(iface.taggedLen(s), expected.taggedLen, `${name}.taggedLen(${label})`);
+            assert.deepStrictEqual(iface.raw(s), expected.raw, `${name}.raw(${label})`);
+            assert.strictEqual(iface.echo(s), s, `${name}.echo(${label})`);
+        }
+    }
+
+    // Unpaired surrogates in a JS string are replaced when it is lowered by the host
+    for (const [s, lowered] of [
+        ['\ud800', '\ufffd'],
+        ['a\ud800b', 'a\ufffdb'],
+        ['\udc00\ud800', '\ufffd\ufffd'],
+        ['\ud800🚀\udc00', '\ufffd🚀\ufffd'],
+    ]) {
+        const expected = compact(lowered);
+        const label = JSON.stringify(s);
+
+        for (const name of INTERFACES) {
+            const iface = wasm[name];
+            assert.deepStrictEqual(iface.raw(s), expected.raw, `${name}.raw(${label})`);
+            assert.strictEqual(iface.echo(s), lowered, `${name}.echo(${label})`);
+        }
+    }
+
+    // Dropping the last byte only leaves invalid UTF-8 if it was part of a multi-byte sequence
+    assert.deepStrictEqual(wasm.utf8ToCompact.truncatedRaw('abc'), compact('ab').raw);
+    assert.deepStrictEqual(wasm.utf8ViaUtf16.truncatedRaw('abc'), compact('ab').raw);
+    assert.deepStrictEqual(wasm.utf8ViaHighCompact.truncatedRaw('abc'), compact('ab').raw);
+
+    // Truncated sequences are not valid UTF-8, and must not be transcoded
+    for (const s of ['é', 'abc中', 'abc🚀']) {
+        // utf8 -> latin1+utf16
+        await assertTraps((wasm) => wasm.utf8ToCompact.truncatedRaw(s), TypeError);
+        // utf8 -> utf16
+        await assertTraps((wasm) => wasm.utf8ViaUtf16.truncatedRaw(s), TypeError);
+        // utf8 -> utf8
+        await assertTraps((wasm) => wasm.utf8ViaHighCompact.truncatedRaw(s), TypeError);
+    }
+
+    // Writing part of a surrogate into a string is fine as long as it ends up paired
+    assert.deepStrictEqual(wasm.utf16ToCompact.pokedRaw('🚀', 0, 0x3e), compact('\ud83e\ude80').raw);
+    assert.deepStrictEqual(wasm.utf16ViaUtf8.pokedRaw('🚀', 0, 0x3e), compact('\ud83e\ude80').raw);
+
     // Unpaired surrogates are not valid UTF-16, and must not be transcoded
-    for (const s of ['\ud800', 'a\ud800', '\ud800a', '\udc00', 'Ā\udc00\ud800', '\ud800𐀀']) {
-        assert.throws(() => wasm.utf16ToCompact.raw(s), /invalid utf16 encoding/);
+    for (const [s, at, byte] of [
+        // a high surrogate that is not followed by a low surrogate
+        ['ab', 1, 0xd8],
+        // a high surrogate at the end of the string
+        ['ab', 3, 0xd8],
+        // a low surrogate that does not follow a high surrogate
+        ['ab', 1, 0xdc],
+        ['Āb', 3, 0xdc],
+        // a high surrogate followed by another high surrogate
+        ['🚀', 3, 0xd8],
+    ] as const) {
+        // utf16 -> latin1+utf16
+        await assertTraps((wasm) => wasm.utf16ToCompact.pokedRaw(s, at, byte), /invalid utf16 encoding/);
+        // utf16 -> utf8
+        await assertTraps((wasm) => wasm.utf16ViaUtf8.pokedRaw(s, at, byte), TypeError);
     }
 }
 
-// Async cycle handling
-setTimeout(run);
+await run();

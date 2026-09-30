@@ -146,9 +146,9 @@ suite('Transpile (WASI P3)', () => {
             'open-at must use its seven-parameter flat core import signature',
         );
         assert.include(body, 'var handle1 = arg0;');
-        assert.include(body, 'var ptr3 = arg2;');
+        assert.include(body, 'var ptr3 = arg2 >>> 0;');
         assert.include(body, 'var len3 = arg3;');
-        assert.notInclude(body, 'getInt32(arg0 + 0', 'open-at parameters must not use the async buffer ABI');
+        assert.notInclude(body, 'getInt32((arg0 >>> 0) + 0', 'open-at parameters must not use the async buffer ABI');
     });
 
     for (const componentRelPath of P3_FIXTURE_COMPONENTS) {
