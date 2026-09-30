@@ -1,0 +1,45 @@
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# Changelog\n
+"""
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="jco-cm-runtime-v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.scope %}_({{ commit.scope }})_ {% endif %}\
+          {% if commit.breaking %}[**breaking**] {% endif %}\
+          {{ commit.message | split(pat="\n") | first | trim }}\
+          {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif %}\
+          {% if commit.remote.pr_number %} in #{{ commit.remote.pr_number }}{%- endif %}
+    {% endfor %}
+{% endfor %}\n
+"""
+trim = true
+
+[git]
+commit_parsers = [
+    { message = '^feat\((bindgen|cm-runtime)\)', group = '<!-- 0 -->🚀 Features' },
+    { message = '^fix\((bindgen|cm-runtime)\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+    { message = '^refactor\((bindgen|cm-runtime)\)', group = '<!-- 2 -->🚜 Refactor' },
+    { message = '^doc\((bindgen|cm-runtime)\)', group = '<!-- 3 -->📚 Documentation' },
+    { message = '^perf\((bindgen|cm-runtime)\)', group = '<!-- 4 -->⚡ Performance' },
+    { message = '^style\((bindgen|cm-runtime)\)', group = '<!-- 5 -->🎨 Styling' },
+    { message = '^test\((bindgen|cm-runtime)\)', group = '<!-- 6 -->🧪 Testing' },
+    { message = '^chore\((bindgen|cm-runtime)\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
+    { message = '^sec\((bindgen|cm-runtime)\)', group = '<!-- 8 -->🔒️ Security' },
+    { message = '^release', skip = true },
+]
+filter_commits = true
+topo_order = false
+sort_commits = "newest"
+tag_pattern = "^jco-cm-runtime-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
+link_parsers = [{ pattern = "\\(#(\\d+)\\)$", href = "https://github.com/bytecodealliance/jco/pull/$1" }]
+
+include_paths = ["packages/jco-cm-runtime/**/*", "crates/js-component-bindgen/**/*"]

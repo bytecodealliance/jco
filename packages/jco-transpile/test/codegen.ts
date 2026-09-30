@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,6 +13,7 @@ import { suite, test, assert, describe } from 'vitest';
 import { readFixtureFlags, getTmpDir, getRandomPort } from './helpers.js';
 
 import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR } from './common.js';
+import { resetRuntimeCreateCallCount, runtimeCreateCallCount } from './fixtures/custom-runtime-provider.js';
 
 suite('codegen', async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -150,6 +151,100 @@ suite('Directive Prologue', () => {
         const { files } = await transpileBytes(bytes, { name: 'adder' });
         const bindingsSource = new TextDecoder().decode(files['adder.js']);
         assert.isOk(bindingsSource.includes('"use components";'));
+    });
+});
+
+suite('External Component Model runtime', () => {
+    const fixture = fileURLToPath(new URL('./fixtures/components/runtime/resources.2.component.wat', import.meta.url));
+
+    test('does not depend on the optional runtime package', async () => {
+        const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+        assert.notProperty(manifest.dependencies, '@bytecodealliance/jco-cm-runtime');
+    });
+
+    test('keeps canon resource.rep self-contained by default', async () => {
+        const { files, imports } = await transpile(fixture, { name: 'external-runtime-resource' });
+        const source = new TextDecoder().decode(files['external-runtime-resource.js']);
+
+        assert.notInclude(source, '_jcoRuntimeProvider');
+        assert.include(source, 'function rscTableGet(table, handle)');
+        assert.include(source, 'rscTableGet(');
+        assert.notInclude(imports, '@bytecodealliance/jco-cm-runtime');
+    });
+
+    test('places custom runtime creation inside each instantiation', async () => {
+        const runtimeModule = './test-runtime-provider.js';
+        const { files, imports } = await transpile(fixture, {
+            name: 'external-runtime-instantiation',
+            instantiation: 'sync',
+            runtimeModule,
+        });
+        const source = new TextDecoder().decode(files['external-runtime-instantiation.js']);
+        const importPosition = source.indexOf(
+            'import { runtime as _jcoRuntimeProvider } from "./test-runtime-provider.js";',
+        );
+        const instantiatePosition = source.indexOf('export function instantiate(');
+        const createPosition = source.indexOf('_jcoRuntimeProvider.create(');
+
+        assert.isAtLeast(importPosition, 0);
+        assert.isAbove(instantiatePosition, importPosition);
+        assert.isAbove(createPosition, instantiatePosition);
+        assert.lengthOf(source.match(/_jcoRuntimeProvider\.create\(/g) ?? [], 1);
+        assert.notInclude(imports, runtimeModule);
+    });
+
+    test('loads a bare runtime module installed only with the generated component', async () => {
+        const outDir = await getTmpDir();
+        const name = 'external-runtime-local-package';
+        const runtimeModule = 'test-runtime-provider';
+        const packageDir = join(outDir, 'node_modules', runtimeModule);
+
+        try {
+            await mkdir(packageDir, { recursive: true });
+            await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: runtimeModule, type: 'module' }));
+            await copyFile(
+                new URL('./fixtures/custom-runtime-provider.js', import.meta.url),
+                join(packageDir, 'index.js'),
+            );
+            const provider = await import(pathToFileURL(join(packageDir, 'index.js')).href);
+            provider.resetRuntimeCreateCallCount();
+
+            const { files } = await transpile(fixture, { name, instantiation: 'sync', runtimeModule });
+            await writeFiles(files, { baseDir: outDir });
+            const source = new TextDecoder().decode(files[`${name}.js`]);
+            assert.include(source, `from "${runtimeModule}"`);
+
+            const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
+            bindings.instantiate((moduleName: string) => new WebAssembly.Module(files[moduleName]), {});
+            assert.strictEqual(provider.runtimeCreateCallCount, 1);
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
+        }
+    });
+
+    test('creates a fresh runtime instance for each generated store', async () => {
+        const outDir = await getTmpDir();
+        const name = 'external-runtime-two-stores';
+        const runtimeModule = new URL('./fixtures/custom-runtime-provider.js', import.meta.url).href;
+        resetRuntimeCreateCallCount();
+
+        try {
+            const { files } = await transpile(fixture, {
+                name,
+                instantiation: 'sync',
+                runtimeModule,
+            });
+            await writeFiles(files, { baseDir: outDir });
+            const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
+            const getCoreModule = (moduleName: string) => new WebAssembly.Module(files[moduleName]);
+
+            bindings.instantiate(getCoreModule, {});
+            bindings.instantiate(getCoreModule, {});
+
+            assert.strictEqual(runtimeCreateCallCount, 2);
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
+        }
     });
 });
 
