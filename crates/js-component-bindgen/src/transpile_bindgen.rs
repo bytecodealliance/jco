@@ -23,7 +23,7 @@ use wasmtime_environ::component::{
 use wasmtime_environ::{EntityIndex, FuncIndex, PrimaryMap};
 use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
-use wit_parser::abi::AbiVariant;
+use wit_parser::abi::{AbiVariant, WasmType};
 use wit_parser::{
     Function, FunctionKind, Handle, Resolve, Result_, SizeAlign, Type, TypeDefKind, TypeId,
     WorldId, WorldItem, WorldKey,
@@ -5162,6 +5162,16 @@ impl<'a> Instantiator<'a, '_> {
             params.push(param);
         }
         uwriteln!(self.src.js, ") {{");
+        if for_import {
+            // Normalize core pointers once, before memory accesses or derived
+            // addresses. Masking derived addresses would wrap them at 4 GiB.
+            let sig = self.resolve.wasm_signature(abi, func);
+            for (param, ty) in params.iter_mut().zip(&sig.params) {
+                if matches!(ty, WasmType::Pointer) {
+                    *param = format!("({param} >>> 0)");
+                }
+            }
+        }
         if wrap_async_future_result {
             let future_value = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                 AsyncFutureIntrinsic::FutureValueClass,

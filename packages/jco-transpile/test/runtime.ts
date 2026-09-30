@@ -29,6 +29,7 @@ const CODEGEN_TRANSPILE_DEPS = {
     'many-arguments': ['many-arguments/many-arguments.js'],
     'multi-version': ['multi-version/multi-version.js'],
     numbers: ['numbers/numbers.js'],
+    'pointer-overflow': ['pointer-overflow/pointer-overflow.js'],
     records: ['records/records.js'],
     'string-transcoding': ['string-transcoding/string-transcoding.js'],
     'strings.async+js': ['strings.async+js/strings.async+js.js'],
