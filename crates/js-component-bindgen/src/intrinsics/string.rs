@@ -14,6 +14,12 @@ pub enum StringIntrinsic {
 
     Utf16EncodeAsync,
 
+    /// Copy UTF-16 code units between two equal-length `Uint16Array`s,
+    /// throwing on unpaired surrogates
+    ///
+    /// Returns whether every code unit copied fits in latin1.
+    Utf16ValidatingCopy,
+
     /// UTF8 Decoder (a JS `TextDecoder`)
     GlobalTextDecoderUtf8,
 
@@ -37,6 +43,7 @@ impl StringIntrinsic {
             Self::Utf16Decoder.name(),
             Self::Utf16Encode.name(),
             Self::Utf16EncodeAsync.name(),
+            Self::Utf16ValidatingCopy.name(),
             Self::GlobalTextDecoderUtf8.name(),
             Self::GlobalTextEncoderUtf8.name(),
             Self::Utf8Encode.name(),
@@ -52,6 +59,7 @@ impl StringIntrinsic {
             Self::Utf16Decoder => "utf16Decoder",
             Self::Utf16Encode => "_utf16AllocateAndEncode",
             Self::Utf16EncodeAsync => "_utf16AllocateAndEncodeAsync",
+            Self::Utf16ValidatingCopy => "_utf16ValidatingCopy",
             Self::GlobalTextDecoderUtf8 => "TEXT_DECODER_UTF8",
             Self::GlobalTextEncoderUtf8 => "TEXT_ENCODER_UTF8",
             Self::Utf8Encode => "_utf8AllocateAndEncode",
@@ -96,6 +104,25 @@ impl StringIntrinsic {
                     "#
                 );
             }
+
+            Self::Utf16ValidatingCopy => uwriteln!(
+                output,
+                r#"
+                  function {name}(from, to) {{
+                      let allLatin1 = true;
+                      let highSurrogate = false;
+                      for (let i = 0; i < from.length; i++) {{
+                          const unit = from[i];
+                          if (highSurrogate !== ((unit & 0xfc00) === 0xdc00)) {{ throw new Error('invalid utf16 encoding'); }}
+                          highSurrogate = (unit & 0xfc00) === 0xd800;
+                          if (unit > 0xff) {{ allLatin1 = false; }}
+                          to[i] = unit;
+                      }}
+                      if (highSurrogate) {{ throw new Error('invalid utf16 encoding'); }}
+                      return allLatin1;
+                  }}
+                "#
+            ),
 
             Self::GlobalTextDecoderUtf8 => uwriteln!(output, "const {name} = new TextDecoder();"),
             Self::GlobalTextEncoderUtf8 => uwriteln!(output, "const {name} = new TextEncoder();"),

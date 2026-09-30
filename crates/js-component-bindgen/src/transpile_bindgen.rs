@@ -63,23 +63,6 @@ const MAX_FLAT_PARAMS: usize = 16;
 /// Maximum direct flat results for sync canonical lowering.
 const MAX_FLAT_RESULTS: usize = 1;
 
-/// JS snippet for string transcoders that copies UTF-16 code units from `from` to `to`
-/// (equal-length `Uint16Array`s), throwing on unpaired surrogates.
-///
-/// Leaves `allLatin1` set to whether every code unit copied fits in latin1.
-const JS_UTF16_VALIDATING_COPY: &str = r#"
-    let allLatin1 = true;
-    let highSurrogate = false;
-    for (let i = 0; i < from.length; i++) {
-        const unit = from[i];
-        if (highSurrogate !== ((unit & 0xfc00) === 0xdc00)) { throw new Error('invalid utf16 encoding'); }
-        highSurrogate = (unit & 0xfc00) === 0xd800;
-        if (unit > 0xff) { allLatin1 = false; }
-        to[i] = unit;
-    }
-    if (highSurrogate) { throw new Error('invalid utf16 encoding'); }
-"#;
-
 #[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
@@ -3079,14 +3062,16 @@ impl<'a> Instantiator<'a, '_> {
                     // then deflates it in place to latin1 if every code unit fits. The
                     // returned length is tagged when the destination was left as UTF-16.
                     Transcode::Utf16ToCompactProbablyUtf16 => {
+                        let utf16_validating_copy = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16ValidatingCopy));
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
                                   const from = new Uint16Array(memory{from}.buffer, from_ptr, len);
                                   const to = new Uint16Array(memory{to}.buffer, to_ptr, len);
-                                  {JS_UTF16_VALIDATING_COPY}
-                                  if (!allLatin1) {{ return len | 0x80000000; }}
+                                  if (!{utf16_validating_copy}(from, to)) {{ return len | 0x80000000; }}
                                   const deflated = new Uint8Array(memory{to}.buffer, to_ptr, len);
                                   for (let i = 0; i < len; i++) {{ deflated[i] = to[i]; }}
                                   return len;
@@ -3099,6 +3084,9 @@ impl<'a> Instantiator<'a, '_> {
                     // to UTF-16 in place, then transcodes the rest of the source after them.
                     // Returns the total number of code units in the destination.
                     Transcode::Utf16ToCompactUtf16 => {
+                        let utf16_validating_copy = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16ValidatingCopy));
                         uwriteln!(
                             self.src.js,
                             r#"
@@ -3108,7 +3096,7 @@ impl<'a> Instantiator<'a, '_> {
                                   for (let i = latin1_bytes_so_far - 1; i >= 0; i--) {{ inflated[i] = latin1[i]; }}
                                   const from = new Uint16Array(memory{from}.buffer, src, src_len);
                                   const to = new Uint16Array(memory{to}.buffer, dst + 2 * latin1_bytes_so_far, src_len);
-                                  {JS_UTF16_VALIDATING_COPY}
+                                  {utf16_validating_copy}(from, to);
                                   return latin1_bytes_so_far + src_len;
                               }}
                             "#,
