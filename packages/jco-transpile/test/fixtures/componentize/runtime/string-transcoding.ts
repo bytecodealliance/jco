@@ -50,6 +50,7 @@ const INTERFACES = [
     'utf8ToCompact',
     'utf16ToCompact',
     'utf16ViaUtf8',
+    'utf16ViaUtf16',
     'utf8ViaUtf16',
     'utf8ViaCompact',
     'utf8ViaInflatedCompact',
@@ -82,6 +83,24 @@ async function run() {
             assert.deepStrictEqual(iface.raw(s), expected.raw, `${name}.raw(${label})`);
             assert.strictEqual(iface.echo(s), s, `${name}.echo(${label})`);
         }
+    }
+
+    // Between two utf8 components a string is copied as it is
+    for (const s of STRINGS) {
+        const label = JSON.stringify(s.length > 40 ? `${s.slice(0, 40)}...` : s);
+        const bytes = new TextEncoder().encode(s);
+
+        assert.strictEqual(wasm.utf8ToUtf8.taggedLen(s), bytes.length, `utf8ToUtf8.taggedLen(${label})`);
+        assert.deepStrictEqual(wasm.utf8ToUtf8.raw(s), bytes, `utf8ToUtf8.raw(${label})`);
+        assert.strictEqual(wasm.utf8ToUtf8.echo(s), s, `utf8ToUtf8.echo(${label})`);
+    }
+
+    // The same goes for two utf16 components
+    for (const s of STRINGS) {
+        const label = JSON.stringify(s.length > 40 ? `${s.slice(0, 40)}...` : s);
+
+        assert.strictEqual(wasm.utf16ToUtf16.taggedLen(s), s.length, `utf16ToUtf16.taggedLen(${label})`);
+        assert.strictEqual(wasm.utf16ToUtf16.echo(s), s, `utf16ToUtf16.echo(${label})`);
     }
 
     // A leading U+FEFF is part of the string, and must not be dropped as a BOM
@@ -126,12 +145,14 @@ async function run() {
         // utf8 -> utf16
         await assertTraps((wasm) => wasm.utf8ViaUtf16.truncatedRaw(s), TypeError);
         // utf8 -> utf8
+        await assertTraps((wasm) => wasm.utf8ToUtf8.truncatedRaw(s), TypeError);
         await assertTraps((wasm) => wasm.utf8ViaHighCompact.truncatedRaw(s), TypeError);
     }
 
     // Writing part of a surrogate into a string is fine as long as it ends up paired
     assert.deepStrictEqual(wasm.utf16ToCompact.pokedRaw('🚀', 0, 0x3e), compact('\ud83e\ude80').raw);
     assert.deepStrictEqual(wasm.utf16ViaUtf8.pokedRaw('🚀', 0, 0x3e), compact('\ud83e\ude80').raw);
+    assert.deepStrictEqual(wasm.utf16ViaUtf16.pokedRaw('🚀', 0, 0x3e), compact('\ud83e\ude80').raw);
 
     // Unpaired surrogates are not valid UTF-16, and must not be transcoded
     for (const [s, at, byte] of [
@@ -149,6 +170,9 @@ async function run() {
         await assertTraps((wasm) => wasm.utf16ToCompact.pokedRaw(s, at, byte), /invalid utf16 encoding/);
         // utf16 -> utf8
         await assertTraps((wasm) => wasm.utf16ViaUtf8.pokedRaw(s, at, byte), TypeError);
+        // utf16 -> utf16
+        await assertTraps((wasm) => wasm.utf16ToUtf16.pokedRaw(s, at, byte), /invalid utf16 encoding/);
+        await assertTraps((wasm) => wasm.utf16ViaUtf16.pokedRaw(s, at, byte), /invalid utf16 encoding/);
     }
 }
 

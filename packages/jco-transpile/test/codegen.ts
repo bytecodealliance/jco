@@ -383,3 +383,102 @@ suite('--strict', () => {
         }
     });
 });
+
+suite('--perf-strings-skip-copy-utf8-validation', () => {
+    /** Transpile a fixture in which a utf8 component passes strings to another utf8 component */
+    async function setup(opts: { perfStringsSkipCopyUtf8Validation?: boolean }) {
+        const outDir = await getTmpDir();
+        const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'runtime', 'string-transcoding.component.wat'), 'utf8');
+        const { files } = await transpileBytes(await parse(wat), {
+            name: 'string-transcoding',
+            outDir,
+            instantiation: 'async',
+            ...opts,
+        });
+        await writeFiles(files);
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+
+        const esModule = await import(pathToFileURL(join(outDir, 'string-transcoding.js')).href);
+        const instance = await esModule.instantiate(undefined, {});
+        return { instance, cleanup: () => rm(outDir, { recursive: true }) };
+    }
+
+    // The caller drops the last byte of 'é', leaving a sequence that is not valid utf8
+    test.concurrent('copied strings are validated by default', async () => {
+        const { instance, cleanup } = await setup({});
+        try {
+            assert.throws(() => instance.utf8ToUtf8.truncatedRaw('é'), TypeError);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('copied strings are not validated when skipped', async () => {
+        const { instance, cleanup } = await setup({ perfStringsSkipCopyUtf8Validation: true });
+        try {
+            assert.deepStrictEqual(instance.utf8ToUtf8.truncatedRaw('é'), new Uint8Array([0xc3]));
+            assert.strictEqual(instance.utf8ToUtf8.echo('asdf中文🀄️⏰'), 'asdf中文🀄️⏰');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('strings that are transcoded are still validated when skipped', async () => {
+        const { instance, cleanup } = await setup({ perfStringsSkipCopyUtf8Validation: true });
+        try {
+            assert.throws(() => instance.utf8ToCompact.truncatedRaw('é'), TypeError);
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+suite('--perf-strings-skip-copy-utf16-validation', () => {
+    /** Transpile a fixture in which a utf16 component passes strings to another utf16 component */
+    async function setup(opts: { perfStringsSkipCopyUtf16Validation?: boolean }) {
+        const outDir = await getTmpDir();
+        const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'runtime', 'string-transcoding.component.wat'), 'utf8');
+        const { files } = await transpileBytes(await parse(wat), {
+            name: 'string-transcoding',
+            outDir,
+            instantiation: 'async',
+            ...opts,
+        });
+        await writeFiles(files);
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+
+        const esModule = await import(pathToFileURL(join(outDir, 'string-transcoding.js')).href);
+        const instance = await esModule.instantiate(undefined, {});
+        return { instance, cleanup: () => rm(outDir, { recursive: true }) };
+    }
+
+    // The caller overwrites the high byte of 'a', leaving a high surrogate that is not followed by a low surrogate
+    test.concurrent('copied strings are validated by default', async () => {
+        const { instance, cleanup } = await setup({});
+        try {
+            assert.throws(() => instance.utf16ToUtf16.pokedRaw('ab', 1, 0xd8), /invalid utf16 encoding/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('copied strings are not validated when skipped', async () => {
+        const { instance, cleanup } = await setup({ perfStringsSkipCopyUtf16Validation: true });
+        try {
+            // NOTE: the callee reports as many bytes as there are code units, which is the first code unit
+            assert.deepStrictEqual(instance.utf16ToUtf16.pokedRaw('ab', 1, 0xd8), new Uint8Array([0x61, 0xd8]));
+            assert.strictEqual(instance.utf16ToUtf16.echo('asdf中文🀄️⏰'), 'asdf中文🀄️⏰');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('strings that are transcoded are still validated when skipped', async () => {
+        const { instance, cleanup } = await setup({ perfStringsSkipCopyUtf16Validation: true });
+        try {
+            assert.throws(() => instance.utf16ToCompact.pokedRaw('ab', 1, 0xd8), /invalid utf16 encoding/);
+        } finally {
+            await cleanup();
+        }
+    });
+});
