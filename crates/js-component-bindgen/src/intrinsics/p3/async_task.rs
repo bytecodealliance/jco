@@ -3017,7 +3017,8 @@ impl AsyncTaskIntrinsic {
 
                         {check_may_leave_fn}(componentIdx);
 
-                        let meta = {get_global_current_task_meta_fn}(componentIdx);
+                        const meta = {get_global_current_task_meta_fn}(componentIdx);
+                        let taskMeta = meta && {current_task_get_fn}(componentIdx, meta.taskID);
                         let createdTask;
 
                         // Some components depend on initialization logic (i.e. `_initialize` or some such
@@ -3028,7 +3029,9 @@ impl AsyncTaskIntrinsic {
                         // transpiled context -- so we may get a call to an export that is lowered without going
                         // through `CallWasm` or `CallInterface`.
                         //
-                        if (!meta) {{
+                        // A nested synchronous call can leave global metadata for a task
+                        // that has already exited. Treat it like a call with no current task.
+                        if (!taskMeta) {{
                            if (funcTypeIsAsync || (isAsync && !isManualAsync)) {{
                                throw new Error('p3 async wasm exports cannot use backwards compat auto-task init');
                            }}
@@ -3054,12 +3057,8 @@ impl AsyncTaskIntrinsic {
                                 taskID: newTaskID,
                             }});
 
-                            meta = {get_global_current_task_meta_fn}(componentIdx);
+                            taskMeta = {current_task_get_fn}(componentIdx, newTaskID);
                         }}
-
-                        const {{ taskID }} = meta;
-
-                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                         if (!taskMeta) {{
                             throw new Error('invalid/missing async task meta');
                         }}
