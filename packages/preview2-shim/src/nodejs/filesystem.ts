@@ -101,6 +101,7 @@ class Descriptor implements IDescriptor {
     #finalizer;
     #mode;
     #fullPath;
+    #virtualDirectory = false;
     private _id = 0;
 
     static _createPreopen(hostPreopen) {
@@ -132,6 +133,14 @@ class Descriptor implements IDescriptor {
         return descriptor;
     }
 
+    static _createVirtualDirectory(mode, fullPath) {
+        const descriptor = new Descriptor();
+        descriptor.#mode = mode;
+        descriptor.#fullPath = fullPath;
+        descriptor.#virtualDirectory = true;
+        return descriptor;
+    }
+
     [symbolDispose]() {
         if (this.#finalizer) {
             earlyDispose(this.#finalizer);
@@ -140,7 +149,7 @@ class Descriptor implements IDescriptor {
     }
 
     readViaStream(offset): any {
-        if (this.#hostPreopen) {
+        if (this.#hostPreopen || this.#virtualDirectory) {
             throw "is-directory";
         }
         return inputStreamCreate(
@@ -153,7 +162,7 @@ class Descriptor implements IDescriptor {
     }
 
     writeViaStream(offset): any {
-        if (this.#hostPreopen) {
+        if (this.#hostPreopen || this.#virtualDirectory) {
             throw "is-directory";
         }
         return outputStreamCreate(
@@ -203,14 +212,14 @@ class Descriptor implements IDescriptor {
     }
 
     getType() {
-        if (this.#hostPreopen) {
+        if (this.#hostPreopen || this.#virtualDirectory) {
             return "directory";
         }
         return ioCall(FILESYSTEM_DESCRIPTOR_GET_TYPE, this.#fileResourceId);
     }
 
     setSize(size) {
-        if (this.#hostPreopen) {
+        if (this.#hostPreopen || this.#virtualDirectory) {
             throw "is-directory";
         }
         try {
@@ -261,6 +270,9 @@ class Descriptor implements IDescriptor {
     }
 
     read(length, offset): [Uint8Array, boolean] {
+        if (this.#virtualDirectory) {
+            throw "is-directory";
+        }
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
@@ -272,6 +284,9 @@ class Descriptor implements IDescriptor {
     }
 
     write(buffer, offset) {
+        if (this.#virtualDirectory) {
+            throw "is-directory";
+        }
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
@@ -296,7 +311,7 @@ class Descriptor implements IDescriptor {
     }
 
     sync() {
-        if (this.#hostPreopen) {
+        if (this.#hostPreopen || this.#virtualDirectory) {
             throw "invalid";
         }
         try {
@@ -324,11 +339,13 @@ class Descriptor implements IDescriptor {
         }
         let stats;
         try {
-            stats = ioCall(FILESYSTEM_DESCRIPTOR_STAT, this.#fileResourceId);
+            stats = this.#virtualDirectory
+                ? statSync(this.#fullPath, { bigint: true })
+                : ioCall(FILESYSTEM_DESCRIPTOR_STAT, this.#fileResourceId);
         } catch (e) {
             throw convertFsError(e);
         }
-        const type = stats.type;
+        const type = this.#virtualDirectory ? lookupType(stats) : stats.type;
         return {
             type,
             linkCount: stats.nlink,
@@ -464,6 +481,23 @@ class Descriptor implements IDescriptor {
                     throw "not-directory";
                 }
             }
+            // Node cannot open a directory with fs.open on Windows (EISDIR).
+            // Directory operations use the path, so keep a descriptor without an fd.
+            try {
+                if (statSync(fullPath).isDirectory()) {
+                    if (descriptorFlags.write || openFlags.create || openFlags.truncate) {
+                        throw "is-directory";
+                    }
+                    return Descriptor._createVirtualDirectory(descriptorFlags, fullPath);
+                }
+            } catch (e: any) {
+                if (e === "is-directory") {
+                    throw e;
+                }
+                if (e.code !== "ENOENT") {
+                    throw convertFsError(e);
+                }
+            }
         }
         try {
             const { id, type } = ioCall(FILESYSTEM_DESCRIPTOR_OPEN, null, {
@@ -590,6 +624,10 @@ class Descriptor implements IDescriptor {
     metadataHash() {
         if (this.#hostPreopen) {
             return { upper: 0n, lower: BigInt(this._id) };
+        }
+        if (this.#virtualDirectory) {
+            const stats = statSync(this.#fullPath, { bigint: true });
+            return { upper: stats.mtimeNs, lower: stats.ino };
         }
         try {
             return ioCall(FILESYSTEM_DESCRIPTOR_METADATA_HASH, this.#fileResourceId);
