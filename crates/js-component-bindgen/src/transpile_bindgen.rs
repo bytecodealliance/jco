@@ -2618,21 +2618,23 @@ impl<'a> Instantiator<'a, '_> {
                     .as_u32();
 
                 // Generate a string decoding function to match this trampoline that does appropriate encoding
-                let decoder = match string_encoding {
-                    wasmtime_environ::component::StringEncoding::Utf8 => self
-                        .bindgen
-                        .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8)),
-                    wasmtime_environ::component::StringEncoding::Utf16 => self
-                        .bindgen
-                        .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
-                    enc => panic!(
-                        "unsupported string encoding [{enc:?}] for error-context.debug-message"
+                let (decoder, code_units_ty) = match string_encoding {
+                    wasmtime_environ::component::StringEncoding::Utf8 => (
+                        self.bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8)),
+                        "Uint8Array",
                     ),
+                    wasmtime_environ::component::StringEncoding::Utf16 => (
+                        self.bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
+                        "Uint16Array",
+                    ),
+                    enc => panic!("unsupported string encoding [{enc:?}] for error-context.new"),
                 };
                 uwriteln!(
                     self.src.js,
                     "function trampoline{i}InputStr(ptr, len) {{
-                         return {decoder}.decode(new DataView(memory{memory_idx}.buffer, ptr, len));
+                         return {decoder}.decode(new {code_units_ty}(memory{memory_idx}.buffer, ptr >>> 0, len));
                     }}"
                 );
 
@@ -2697,6 +2699,7 @@ impl<'a> Instantiator<'a, '_> {
                                  const memory = memory{memory_idx};
                                  const reallocFn = realloc{realloc_fn_idx};
                                  let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
+                                 outputPtr >>>= 0;
                                  new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
                                  new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
                              }}"
@@ -2711,8 +2714,8 @@ impl<'a> Instantiator<'a, '_> {
                             "function trampoline{i}OutputStr(s, outputPtr) {{
                                  const memory = memory{memory_idx};
                                  const reallocFn = realloc{realloc_fn_idx};
-                                 let ptr = {encode_fn}(s, reallocFn, memory);
-                                 let len = s.length;
+                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
+                                 outputPtr >>>= 0;
                                  new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
                                  new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
                              }}"
@@ -2987,23 +2990,40 @@ impl<'a> Instantiator<'a, '_> {
                 let from = from.as_u32();
                 let to = to.as_u32();
                 match op {
+                    // The bytes are copied as they are, but must still be valid UTF-8
                     Transcode::Copy(FixedEncoding::Utf8) => {
+                        let utf8_decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
-                                  new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
+                                  const from = new Uint8Array(memory{from}.buffer, from_ptr, len);
+                                  {utf8_decoder}.decode(from);
+                                  new Uint8Array(memory{to}.buffer, to_ptr, len).set(from);
                               }}
                             "#
                         );
                     }
+                    // The code units are copied as they are, but must still be valid UTF-16
                     Transcode::Copy(FixedEncoding::Utf16) => {
+                        let utf16_validating_copy = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16ValidatingCopy));
                         // `len` is in UTF-16 code units, i.e. `2 * len` bytes
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
-                                  new Uint8Array(memory{to}.buffer, to_ptr, len * 2).set(new Uint8Array(memory{from}.buffer, from_ptr, len * 2));
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
+                                  {utf16_validating_copy}(
+                                      new Uint16Array(memory{from}.buffer, from_ptr, len),
+                                      new Uint16Array(memory{to}.buffer, to_ptr, len),
+                                  );
                               }}
                             "#
                         );
@@ -3014,6 +3034,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
                                   new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
                               }}
                             "#
@@ -3025,6 +3047,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
                                   new Uint16Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
                               }}
                             "#
@@ -3038,6 +3062,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (src, src_len, dst, dst_len, first_pass) {{
+                                  src >>>= 0;
+                                  dst >>>= 0;
                                   const from = new Uint8Array(memory{from}.buffer, src, src_len);
                                   const to = new Uint8Array(memory{to}.buffer, dst, dst_len);
                                   let read = 0;
@@ -3069,6 +3095,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
                                   const from = new Uint16Array(memory{from}.buffer, from_ptr, len);
                                   const to = new Uint16Array(memory{to}.buffer, to_ptr, len);
                                   if (!{utf16_validating_copy}(from, to)) {{ return len | 0x80000000; }}
@@ -3091,6 +3119,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (src, src_len, dst, dst_len, latin1_bytes_so_far) {{
+                                  src >>>= 0;
+                                  dst >>>= 0;
                                   const latin1 = new Uint8Array(memory{to}.buffer, dst, latin1_bytes_so_far);
                                   const inflated = new Uint16Array(memory{to}.buffer, dst, latin1_bytes_so_far);
                                   for (let i = latin1_bytes_so_far - 1; i >= 0; i--) {{ inflated[i] = latin1[i]; }}
@@ -3109,6 +3139,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
                                   const from = new Uint16Array(memory{from}.buffer, from_ptr, len);
                                   const to = new Uint8Array(memory{to}.buffer, to_ptr, len);
                                   let i = 0;
@@ -3123,12 +3155,20 @@ impl<'a> Instantiator<'a, '_> {
                         );
                     }
                     Transcode::Utf16ToUtf8 => {
+                        let utf16_decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder));
+                        let utf8_encoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (src, src_len, dst, dst_len) {{
-                                  const encoder = new TextEncoder();
-                                  const {{ read, written }} = encoder.encodeInto(String.fromCharCode.apply(null, new Uint16Array(memory{from}.buffer, src, src_len)), new Uint8Array(memory{to}.buffer, dst, dst_len));
+                                  src >>>= 0;
+                                  dst >>>= 0;
+                                  const content = {utf16_decoder}.decode(new Uint16Array(memory{from}.buffer, src, src_len));
+                                  const {{ read, written }} = {utf8_encoder}.encodeInto(content, new Uint8Array(memory{to}.buffer, dst, dst_len));
                                   return [read, written];
                               }}
                             "#,
@@ -3139,15 +3179,19 @@ impl<'a> Instantiator<'a, '_> {
                     // to UTF-16 in place, then transcodes the rest of the source after them.
                     // Returns the total number of code units in the destination.
                     Transcode::Utf8ToCompactUtf16 => {
+                        let utf8_decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (src, src_len, dst, dst_len, latin1_bytes_so_far) {{
+                                  src >>>= 0;
+                                  dst >>>= 0;
                                   const latin1 = new Uint8Array(memory{to}.buffer, dst, latin1_bytes_so_far);
                                   const inflated = new Uint16Array(memory{to}.buffer, dst, latin1_bytes_so_far);
                                   for (let i = latin1_bytes_so_far - 1; i >= 0; i--) {{ inflated[i] = latin1[i]; }}
-                                  const decoder = new TextDecoder('utf-8', {{ fatal: true, ignoreBOM: true }});
-                                  const content = decoder.decode(new Uint8Array(memory{from}.buffer, src, src_len));
+                                  const content = {utf8_decoder}.decode(new Uint8Array(memory{from}.buffer, src, src_len));
                                   const codeUnits = content.length;
                                   const to = new Uint16Array(memory{to}.buffer, dst + 2 * latin1_bytes_so_far, codeUnits);
                                   for (let i = 0; i < codeUnits; i++) {{
@@ -3166,6 +3210,8 @@ impl<'a> Instantiator<'a, '_> {
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
                                   const from = new Uint8Array(memory{from}.buffer, from_ptr, len);
                                   const to = new Uint8Array(memory{to}.buffer, to_ptr, len);
                                   let read = 0;
@@ -3188,12 +3234,16 @@ impl<'a> Instantiator<'a, '_> {
                         );
                     }
                     Transcode::Utf8ToUtf16 => {
+                        let utf8_decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
-                                  const decoder = new TextDecoder();
-                                  const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                                  from_ptr >>>= 0;
+                                  to_ptr >>>= 0;
+                                  const content = {utf8_decoder}.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
                                   const codeUnits = content.length;
                                   const view = new Uint16Array(memory{to}.buffer, to_ptr, codeUnits);
                                   for (var i = 0; i < codeUnits; i++) {{
@@ -3660,16 +3710,22 @@ impl<'a> Instantiator<'a, '_> {
                 let idx = r.index.as_u32();
                 uwriteln!(self.src.js, "let realloc{idx};");
                 uwriteln!(self.src.js, "let realloc{idx}Async;");
-                uwriteln!(self.src.js_init, "realloc{idx} = {def};",);
+                // Core functions return pointers as signed 32-bit integers, which are negative
+                // for allocations at or above 2GiB, so make them unsigned for use as offsets
+                uwriteln!(
+                    self.src.js_init,
+                    "realloc{idx} = (oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize) >>> 0;",
+                );
                 // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
                 // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')
                 uwriteln!(
                     self.src.js_init,
                     r#"
                       try {{
-                          realloc{idx}Async = WebAssembly.promising({def});
+                          const realloc{idx}Promising = WebAssembly.promising({def});
+                          realloc{idx}Async = async (oldPtr, oldSize, align, newSize) => (await realloc{idx}Promising(oldPtr, oldSize, align, newSize)) >>> 0;
                       }} catch(err) {{
-                          realloc{idx}Async = {def};
+                          realloc{idx}Async = realloc{idx};
                       }}
                     "#
                 );
@@ -5243,81 +5299,83 @@ impl<'a> Instantiator<'a, '_> {
                 match op {
                     core::AugmentedOp::I32Load => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getInt32(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getInt32((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::I32Load8U => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getUint8(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getUint8((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::I32Load8S => {
-                        format!("(ptr, off) => new DataView({mem}.buffer).getInt8(ptr + off, true)")
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getInt8((ptr >>> 0) + off, true)"
+                        )
                     }
                     core::AugmentedOp::I32Load16U => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getUint16(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getUint16((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::I32Load16S => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getInt16(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getInt16((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::I64Load => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getBigInt64(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getBigInt64((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::F32Load => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getFloat32(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getFloat32((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::F64Load => {
                         format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getFloat64(ptr + off, true)"
+                            "(ptr, off) => new DataView({mem}.buffer).getFloat64((ptr >>> 0) + off, true)"
                         )
                     }
                     core::AugmentedOp::I32Store8 => {
                         format!(
                             "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setInt8(ptr + offset, val, true);
+                                new DataView({mem}.buffer).setInt8((ptr >>> 0) + offset, val, true);
                             }}"
                         )
                     }
                     core::AugmentedOp::I32Store16 => {
                         format!(
                             "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setInt16(ptr + offset, val, true);
+                                new DataView({mem}.buffer).setInt16((ptr >>> 0) + offset, val, true);
                             }}"
                         )
                     }
                     core::AugmentedOp::I32Store => {
                         format!(
                             "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setInt32(ptr + offset, val, true);
+                                new DataView({mem}.buffer).setInt32((ptr >>> 0) + offset, val, true);
                             }}"
                         )
                     }
                     core::AugmentedOp::I64Store => {
                         format!(
                             "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setBigInt64(ptr + offset, val, true);
+                                new DataView({mem}.buffer).setBigInt64((ptr >>> 0) + offset, val, true);
                             }}"
                         )
                     }
                     core::AugmentedOp::F32Store => {
                         format!(
                             "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setFloat32(ptr + offset, val, true);
+                                new DataView({mem}.buffer).setFloat32((ptr >>> 0) + offset, val, true);
                             }}"
                         )
                     }
                     core::AugmentedOp::F64Store => {
                         format!(
                             "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setFloat64(ptr + offset, val, true);
+                                new DataView({mem}.buffer).setFloat64((ptr >>> 0) + offset, val, true);
                             }}"
                         )
                     }

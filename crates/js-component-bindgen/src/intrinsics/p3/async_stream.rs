@@ -2290,6 +2290,9 @@ impl AsyncStreamIntrinsic {
                         if (streamTableIdx === undefined) {{ throw new TypeError("missing/invalid stream table idx"); }}
                         if (streamEndWaitableIdx === undefined) {{ throw new TypeError("missing/invalid stream end idx"); }}
 
+                        // pointers at or above 2GiB come in as negative values
+                        ptr >>>= 0;
+
                         // count may come in as u32::MAX which is mangled by JS into a negative value
                         count = Math.min(count >>> 0, {managed_buffer_class}.MAX_LENGTH);
 

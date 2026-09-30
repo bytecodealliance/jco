@@ -576,7 +576,7 @@ impl FunctionBindgen<'_> {
             );
         };
         results.push(format!(
-            "{view}({memory}).{method}({} + {offset}, true)",
+            "{view}({memory}).{method}(({} >>> 0) + {offset}, true)",
             operands[0],
             offset = offset.size_wasm32()
         ));
@@ -587,7 +587,7 @@ impl FunctionBindgen<'_> {
         let memory = self.memory.as_ref().unwrap();
         uwriteln!(
             self.src,
-            "{view}({memory}).{method}({} + {offset}, {}, true);",
+            "{view}({memory}).{method}(({} >>> 0) + {offset}, {}, true);",
             operands[1],
             operands[0],
             offset = offset.size_wasm32()
@@ -1717,7 +1717,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let memory = self.memory.as_ref().unwrap().to_string();
                 let size = self.sizes.size(element).size_wasm32();
                 let align = self.sizes.align(element).align_wasm32();
-                uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
+                uwriteln!(self.src, "var ptr{tmp} = {} >>> 0;", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 self.emit_list_bounds_check(&format!("ptr{tmp}"), &format!("len{tmp}"), size);
                 uwriteln!(
@@ -1790,7 +1790,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 });
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
-                uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
+                uwriteln!(self.src, "var ptr{tmp} = {} >>> 0;", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 uwriteln!(
                     self.src,
@@ -1862,7 +1862,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let len = format!("len{tmp}");
                 uwriteln!(self.src, "var {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
-                uwriteln!(self.src, "var {base} = {};", operands[0]);
+                uwriteln!(self.src, "var {base} = {} >>> 0;", operands[0]);
                 self.emit_list_bounds_check(&base, &len, size);
                 uwriteln!(
                     self.src,
@@ -1935,7 +1935,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let len = format!("len{tmp}");
                 uwriteln!(self.src, "const {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
-                uwriteln!(self.src, "const {base} = {};", operands[0]);
+                uwriteln!(self.src, "const {base} = {} >>> 0;", operands[0]);
                 let result = format!("result{tmp}");
                 uwriteln!(self.src, "const {result} = new Map();");
                 results.push(result.clone());

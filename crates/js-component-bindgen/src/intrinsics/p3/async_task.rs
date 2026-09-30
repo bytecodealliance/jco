@@ -578,7 +578,7 @@ impl AsyncTaskIntrinsic {
                                 {debug_log_fn}('missing memory despite indirect param usage', {{ useDirectParams, liftCtx, ctx }});
                                 throw new Error('missing memory despite indirect param usage');
                             }}
-                            liftCtx.storagePtr = params[0];
+                            liftCtx.storagePtr = params[0] >>> 0;
                             liftCtx.storageLen = params[1];
                         }}
 
@@ -2766,7 +2766,7 @@ impl AsyncTaskIntrinsic {
                         // Canonical ABI lower appends result storage as a trailing
                         // param when async lower has any flat result, or sync lower
                         // has more than one flat result.
-                        const resultPtr = hasResultPointer ? params[params.length - 1] : undefined;
+                        const resultPtr = hasResultPointer ? params[params.length - 1] >>> 0 : undefined;
                         const subtask = task.createSubtask({{
                            componentIdx,
                            parentTask: task,
@@ -3077,7 +3077,7 @@ impl AsyncTaskIntrinsic {
                         // Canonical ABI lower appends result storage as a trailing
                         // param when async lower has any flat result, or sync lower
                         // has more than one flat result.
-                        const resultPtr = hasResultPointer ? params[params.length - 1] : undefined;
+                        const resultPtr = hasResultPointer ? params[params.length - 1] >>> 0 : undefined;
                         const subtask = task.createSubtask({{
                            componentIdx,
                            parentTask: task,

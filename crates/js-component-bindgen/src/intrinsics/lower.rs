@@ -206,6 +206,23 @@ pub enum LowerIntrinsic {
     LowerFlatErrorContext,
 }
 
+/// Generate JS that checks whether the value about to be lowered (`ctx.vals[0]`)
+/// is valid for the given primitive type
+///
+/// Values are only checked when strict type checks are enabled, otherwise they
+/// are coerced when they are written to memory.
+fn strict_check_js(render_args: &RenderIntrinsicsArgs<'_>, ty: &str) -> String {
+    if !render_args.transpile_opts.strict {
+        return String::new();
+    }
+    if ty == "bool" {
+        return "if (typeof ctx.vals[0] !== 'boolean') { throw new TypeError(`invalid bool value [${ctx.vals[0]}]`); }".into();
+    }
+    let require_valid_numeric_primitive_fn = render_args.require_intrinsic(Intrinsic::Conversion(
+        ConversionIntrinsic::RequireValidNumericPrimitive,
+    ));
+    format!("{require_valid_numeric_primitive_fn}('{ty}', ctx.vals[0]);")
+}
 impl LowerIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
@@ -252,9 +269,7 @@ impl LowerIntrinsic {
         match self {
             Self::LowerFlatBool => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "bool");
                 output.push_str(&format!(r#"
                     function _lowerFlatBool(ctx) {{
                         {debug_log_fn}('[_lowerFlatBool()] args', {{ ctx }});
@@ -264,7 +279,7 @@ impl LowerIntrinsic {
                             throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
-                        {require_valid_numeric_primitive_fn}.bind('bool', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setUint8(ctx.storagePtr, ctx.vals[0] ? 1 : 0);
 
                         ctx.storagePtr += 1;
@@ -274,9 +289,7 @@ impl LowerIntrinsic {
 
             Self::LowerFlatS8 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "s8");
                 output.push_str(&format!(r#"
                     function _lowerFlatS8(ctx) {{
                         {debug_log_fn}('[_lowerFlatS8()] args', {{ ctx }});
@@ -286,7 +299,7 @@ impl LowerIntrinsic {
                         }}
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('s8', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setInt8(ctx.storagePtr, ctx.vals[0]);
 
                         ctx.storagePtr += 1;
@@ -297,9 +310,7 @@ impl LowerIntrinsic {
             Self::LowerFlatU8 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u8_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "u8");
 
                 output.push_str(&format!(r#"
                     function {lower_flat_u8_fn}(ctx) {{
@@ -309,7 +320,7 @@ impl LowerIntrinsic {
                             throw new Error(`unexpected number [${{ctx.vals.length}}] of vals (expected 1)`);
                         }}
 
-                        {require_valid_numeric_primitive_fn}.bind('u8', ctx.vals[0]);
+                        {strict_check}
 
                         if (!ctx.memory) {{ throw new Error("missing memory for lower"); }}
                         new DataView(ctx.memory.buffer).setUint8(ctx.storagePtr, ctx.vals[0]);
@@ -322,9 +333,7 @@ impl LowerIntrinsic {
             Self::LowerFlatS16 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_s16_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "s16");
 
                 output.push_str(&format!(r#"
                     function {lower_flat_s16_fn}(ctx) {{
@@ -338,7 +347,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 2;
                         if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('s16', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setInt16(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 2;
@@ -349,9 +358,7 @@ impl LowerIntrinsic {
             Self::LowerFlatU16 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u16_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "u16");
 
                 output.push_str(&format!(r#"
                     function {lower_flat_u16_fn}(ctx) {{
@@ -365,7 +372,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 2;
                         if (rem !== 0) {{ ctx.storagePtr += (2 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('u16', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setUint16(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 2;
@@ -376,9 +383,7 @@ impl LowerIntrinsic {
             Self::LowerFlatS32 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_s32_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "s32");
 
                 output.push_str(&format!(r#"
                     function {lower_flat_s32_fn}(ctx) {{
@@ -391,7 +396,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('s32', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setInt32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 4;
@@ -405,9 +410,7 @@ impl LowerIntrinsic {
             Self::LowerFlatU32 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u32_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "u32");
 
                 output.push_str(&format!(r#"
                     function {lower_flat_u32_fn}(ctx) {{
@@ -420,7 +423,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('u32', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 4;
@@ -431,9 +434,7 @@ impl LowerIntrinsic {
             Self::LowerFlatS64 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_s64_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "s64");
 
                 output.push_str(&format!("
                     function {lower_flat_s64_fn}(ctx) {{
@@ -444,7 +445,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('s64', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setBigInt64(ctx.storagePtr, ctx.vals[0], true);
 
 
@@ -456,9 +457,7 @@ impl LowerIntrinsic {
             Self::LowerFlatU64 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_u64_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "u64");
 
                 output.push_str(&format!("
                     function {lower_flat_u64_fn}(ctx) {{
@@ -469,7 +468,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('u64', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setBigUint64(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 8;
@@ -480,9 +479,7 @@ impl LowerIntrinsic {
             Self::LowerFlatFloat32 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_f32_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "f32");
 
                 output.push_str(&format!(r#"
                     function {lower_flat_f32_fn}(ctx) {{
@@ -493,7 +490,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('f32', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setFloat32(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 4;
@@ -504,9 +501,7 @@ impl LowerIntrinsic {
             Self::LowerFlatFloat64 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_f64_fn = self.name();
-                let require_valid_numeric_primitive_fn = render_args.require_intrinsic(
-                    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-                );
+                let strict_check = strict_check_js(render_args, "f64");
 
                 output.push_str(&format!("
                     function {lower_flat_f64_fn}(ctx) {{
@@ -517,7 +512,7 @@ impl LowerIntrinsic {
                         const rem = ctx.storagePtr % 8;
                         if (rem !== 0) {{ ctx.storagePtr += (8 - rem); }}
 
-                        {require_valid_numeric_primitive_fn}.bind('f64', ctx.vals[0]);
+                        {strict_check}
                         new DataView(ctx.memory.buffer).setFloat64(ctx.storagePtr, ctx.vals[0], true);
 
                         ctx.storagePtr += 8;
@@ -722,7 +717,7 @@ impl LowerIntrinsic {
 
                             if (ctx.useDirectParams) {{
                                 if (ctx.params.length < 2) {{ throw new Error('insufficient params left to lower list'); }}
-                                const storagePtr = ctx.params[0];
+                                const storagePtr = ctx.params[0] >>> 0;
                                 const elemCount = ctx.params[1];
                                 ctx.params = ctx.params.slice(2);
 
@@ -828,7 +823,7 @@ impl LowerIntrinsic {
                             let restorePtr;
                             if (ctx.useDirectParams) {{
                                 if (ctx.params.length < 2) {{ throw new Error('insufficient params left to lower map'); }}
-                                dataPtr = ctx.params[0];
+                                dataPtr = ctx.params[0] >>> 0;
                                 const expectedLen = ctx.params[1];
                                 ctx.params = ctx.params.slice(2);
                                 if (expectedLen !== map.size) {{ throw new Error('map length does not match allocated storage'); }}

@@ -8,6 +8,9 @@ use crate::{intrinsics::Intrinsic, source::Source};
 /// This enum contains intrinsics for manipulating strings
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum StringIntrinsic {
+    /// UTF16 Decoder (a JS `TextDecoder`)
+    ///
+    /// Decoding throws on unpaired surrogates, and keeps a leading U+FEFF.
     Utf16Decoder,
 
     Utf16Encode,
@@ -21,6 +24,8 @@ pub enum StringIntrinsic {
     Utf16ValidatingCopy,
 
     /// UTF8 Decoder (a JS `TextDecoder`)
+    ///
+    /// Decoding throws on invalid UTF-8, and keeps a leading U+FEFF.
     GlobalTextDecoderUtf8,
 
     /// UTF8 Encoder (a JS `TextEncoder`)
@@ -73,7 +78,12 @@ impl StringIntrinsic {
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         let name = self.name();
         match self {
-            Self::Utf16Decoder => uwriteln!(output, "const {name} = new TextDecoder('utf-16');"),
+            // NOTE: strings that are lifted must be passed on exactly as they were provided,
+            // so the decoders neither replace invalid sequences nor drop a leading U+FEFF
+            Self::Utf16Decoder => uwriteln!(
+                output,
+                "const {name} = new TextDecoder('utf-16', {{ fatal: true, ignoreBOM: true }});"
+            ),
 
             Self::Utf16Encode | Self::Utf16EncodeAsync => {
                 let is_le = render_args.require_intrinsic(Intrinsic::IsLE);
@@ -87,17 +97,27 @@ impl StringIntrinsic {
                     output,
                     r#"
                       {fn_preamble}function {name}(str, realloc, memory) {{
+                          if (typeof str !== 'string') {{
+                              throw new TypeError('expected a string, received [' + typeof str + ']');
+                          }}
                           const len = str.length;
                           const ptr = {realloc_call}(0, 0, 2, len * 2);
                           const out = new Uint16Array(memory.buffer, ptr, len);
-                          let i = 0;
-                          if ({is_le}) {{
-                              while (i < len) {{ out[i] = str.charCodeAt(i++); }}
-                          }} else {{
-                              while (i < len) {{
-                                  const ch = str.charCodeAt(i);
-                                  out[i++] = (ch & 0xff) << 8 | ch >>> 8;
+                          const put = {is_le}
+                              ? (i, ch) => {{ out[i] = ch; }}
+                              : (i, ch) => {{ out[i] = (ch & 0xff) << 8 | ch >>> 8; }};
+                          for (let i = 0; i < len; i++) {{
+                              let ch = str.charCodeAt(i);
+                              if ((ch & 0xf800) === 0xd800) {{
+                                  if (ch < 0xdc00 && i + 1 < len && (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {{
+                                      put(i++, ch);
+                                      ch = str.charCodeAt(i);
+                                  }} else {{
+                                      // Unpaired surrogates are replaced, as when converting to a `USVString`
+                                      ch = 0xfffd;
+                                  }}
                               }}
+                              put(i, ch);
                           }}
                           return {{ ptr, len, codepoints: [...str].length }};
                       }}
@@ -124,7 +144,10 @@ impl StringIntrinsic {
                 "#
             ),
 
-            Self::GlobalTextDecoderUtf8 => uwriteln!(output, "const {name} = new TextDecoder();"),
+            Self::GlobalTextDecoderUtf8 => uwriteln!(
+                output,
+                "const {name} = new TextDecoder('utf-8', {{ fatal: true, ignoreBOM: true }});"
+            ),
             Self::GlobalTextEncoderUtf8 => uwriteln!(output, "const {name} = new TextEncoder();"),
 
             Self::Utf8Encode | Self::Utf8EncodeAsync => {
