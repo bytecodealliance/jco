@@ -55,3 +55,64 @@ suite('async host import 1-byte scalar result lowering', () => {
         }
     });
 });
+
+// With strict type checks enabled, values are validated before they are
+// written into guest memory, rather than being coerced by the write.
+suite('async host import scalar result lowering (strict)', () => {
+    async function setup(overrides: Record<string, () => Promise<unknown>>) {
+        return await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-scalar-lowers.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/async-scalar-lowers-host': {
+                        getBool: async () => true,
+                        getU8: async () => 0xab,
+                        getS8: async () => -5,
+                        getListU8: async () => new Uint8Array(Array.from({ length: 32 }, (_, i) => i)),
+                        ...overrides,
+                    },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                        strict: true,
+                    },
+                },
+            },
+        });
+    }
+
+    test.concurrent('valid results are lowered', async () => {
+        const { instance, cleanup } = await setup({});
+        try {
+            await instance['jco:test-components/local-run-async'].run();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent.each([
+        { name: 'a non-boolean bool', overrides: { getBool: async () => 1 }, message: 'invalid bool value [1]' },
+        { name: 'an out of range u8', overrides: { getU8: async () => 300 }, message: 'invalid u8 value [300]' },
+        { name: 'a fractional s8', overrides: { getS8: async () => 1.5 }, message: 'invalid s8 value [1.5]' },
+        { name: 'a non-numeric s8', overrides: { getS8: async () => '5' }, message: 'invalid s8 value [5]' },
+    ])('$name is rejected', async ({ overrides, message }) => {
+        const { instance, cleanup } = await setup(overrides);
+        try {
+            let error: unknown;
+            try {
+                await instance['jco:test-components/local-run-async'].run();
+            } catch (err) {
+                error = err;
+            }
+            assert.instanceOf(error, TypeError);
+            assert.strictEqual((error as TypeError).message, message);
+        } finally {
+            await cleanup();
+        }
+    });
+});

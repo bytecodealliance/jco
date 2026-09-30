@@ -22,6 +22,7 @@ const CODEGEN_TRANSPILE_DEPS = {
     example_guest_export: ['example_guest_export/example_guest_export.js'],
     example_guest_import: ['example_guest_import/example_guest_import.js'],
     flavorful: ['flavorful/flavorful.js'],
+    'high-memory': ['high-memory/high-memory.js'],
     'flags-bigint': ['flags-bigint/flags-bigint.js'],
     'list-adapter-fusion': ['list-adapter-fusion/list-adapter-fusion.js'],
     lists: ['lists/lists.js'],

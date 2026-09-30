@@ -4,17 +4,28 @@
 ;; $Leaf (latin1+utf16) reports exactly what it received, and is called either
 ;; directly or through a chain of forwarding components, so that every string
 ;; crosses at least one encoding boundary in each direction.
+;;
+;; Every component takes the address its allocator starts at (the "base" core
+;; module), so that the same chains can also be run with allocations that sit
+;; above 2GiB, where pointers are negative when read as signed 32-bit integers.
 (component $Root
+  (core module $LowBase
+    (global (export "base") i32 (i32.const 1024)))
+  (core module $HighBase
+    (global (export "base") i32 (i32.const 0x80000400)))
+
   ;; Allocator that always moves on `realloc`, so that transcoders which depend
   ;; on stale pointers or on bytes past the old allocation are caught.
   (core module $Libc
+    (import "config" "base" (global $base i32))
     (memory (export "memory") 1)
-    (global $next (mut i32) (i32.const 1024))
+    (global $next (mut i32) (global.get $base))
 
     (func $realloc (export "realloc")
       (param $old i32) (param $old-size i32) (param $align i32) (param $new-size i32)
       (result i32)
       (local $ret i32)
+      (local $pages i32)
 
       (local.set $ret
         (i32.and
@@ -22,11 +33,14 @@
           (i32.sub (i32.const 0) (local.get $align))))
       (global.set $next (i32.add (local.get $ret) (local.get $new-size)))
 
-      (loop $grow
-        (if (i32.gt_u (global.get $next) (i32.shl (memory.size) (i32.const 16)))
-          (then
-            (drop (memory.grow (i32.const 1)))
-            (br $grow))))
+      (local.set $pages
+        (i32.sub
+          (i32.shr_u (i32.add (global.get $next) (i32.const 0xffff)) (i32.const 16))
+          (memory.size)))
+      (if (i32.gt_s (local.get $pages) (i32.const 0))
+        (then
+          (if (i32.eq (memory.grow (local.get $pages)) (i32.const -1))
+            (then (unreachable)))))
 
       (memory.copy
         (local.get $ret)
@@ -106,6 +120,12 @@
       (call $raw (local.get 0) (local.get 1) (i32.const 16))
       (i32.const 16))
 
+    ;; Drops the last byte of the string. For utf8 this leaves an invalid
+    ;; (truncated) sequence when the string ends in a multi-byte character.
+    (func (export "truncated-raw") (param i32 i32) (result i32)
+      (call $raw (local.get 0) (i32.sub (local.get 1) (i32.const 1)) (i32.const 16))
+      (i32.const 16))
+
     (func (export "inflated-echo") (param i32 i32) (result i32)
       (call $echo (call $inflate (local.get 0) (local.get 1)) (i32.const 16))
       (i32.const 16))
@@ -116,10 +136,12 @@
       (i32.const 16)))
 
   (component $Leaf
+    (import "base" (core module $Base (export "base" (global i32))))
     (alias outer $Root $Libc (core module $Libc))
     (alias outer $Root $LeafImpl (core module $LeafImpl))
 
-    (core instance $libc (instantiate $Libc))
+    (core instance $base (instantiate $Base))
+    (core instance $libc (instantiate $Libc (with "config" (instance $base))))
     (alias core export $libc "memory" (core memory $mem))
     (alias core export $libc "realloc-align2" (core func $realloc))
     (core instance $i (instantiate $LeafImpl (with "libc" (instance $libc))))
@@ -135,6 +157,7 @@
         string-encoding=latin1+utf16 (memory $mem) (realloc (core func $realloc)))))
 
   (component $Utf8Forwarder
+    (import "base" (core module $Base (export "base" (global i32))))
     (import "callee" (instance $callee
       (export "echo" (func (param "s" string) (result string)))
       (export "tagged-len" (func (param "s" string) (result u32)))
@@ -142,7 +165,8 @@
     (alias outer $Root $Libc (core module $Libc))
     (alias outer $Root $ForwardImpl (core module $ForwardImpl))
 
-    (core instance $libc (instantiate $Libc))
+    (core instance $base (instantiate $Base))
+    (core instance $libc (instantiate $Libc (with "config" (instance $base))))
     (alias core export $libc "memory" (core memory $mem))
     (alias core export $libc "realloc" (core func $realloc))
 
@@ -171,17 +195,23 @@
         string-encoding=utf8 (memory $mem) (realloc (core func $realloc))))
     (func (export "raw") (param "s" string) (result (list u8))
       (canon lift (core func $i "raw")
+        string-encoding=utf8 (memory $mem) (realloc (core func $realloc))))
+    (func (export "truncated-raw") (param "s" string) (result (list u8))
+      (canon lift (core func $i "truncated-raw")
         string-encoding=utf8 (memory $mem) (realloc (core func $realloc)))))
 
-  ;; NOTE: `echo` is left out, since returning a latin1+utf16 string to a utf16
-  ;; component needs the (not yet implemented) utf16 copy transcoder
+  ;; NOTE: `echo` returns the string as this component received it rather than
+  ;; forwarding it, since returning a latin1+utf16 string to a utf16 component
+  ;; needs the (not yet implemented) utf16 copy transcoder
   (component $Utf16Forwarder
+    (import "base" (core module $Base (export "base" (global i32))))
     (import "callee" (instance $callee
       (export "tagged-len" (func (param "s" string) (result u32)))
       (export "raw" (func (param "s" string) (result (list u8))))))
     (alias outer $Root $Libc (core module $Libc))
 
-    (core instance $libc (instantiate $Libc))
+    (core instance $base (instantiate $Base))
+    (core instance $libc (instantiate $Libc (with "config" (instance $base))))
     (alias core export $libc "memory" (core memory $mem))
     (alias core export $libc "realloc" (core func $realloc))
 
@@ -193,29 +223,51 @@
         string-encoding=utf16 (memory $mem) (realloc (core func $realloc))))
 
     (core module $Impl
+      (import "libc" "memory" (memory 1))
       (import "callee" "tagged-len" (func $tagged-len (param i32 i32) (result i32)))
       (import "callee" "raw" (func $raw (param i32 i32 i32)))
 
+      (func (export "echo") (param i32 i32) (result i32)
+        (i32.store (i32.const 16) (local.get 0))
+        (i32.store (i32.const 20) (local.get 1))
+        (i32.const 16))
       (func (export "tagged-len") (param i32 i32) (result i32)
         (call $tagged-len (local.get 0) (local.get 1)))
       (func (export "raw") (param i32 i32) (result i32)
         (call $raw (local.get 0) (local.get 1) (i32.const 16))
+        (i32.const 16))
+
+      ;; As `raw`, after writing a byte into the string
+      (func (export "poked-raw")
+        (param $ptr i32) (param $len i32) (param $at i32) (param $byte i32)
+        (result i32)
+        (i32.store8 (i32.add (local.get $ptr) (local.get $at)) (local.get $byte))
+        (call $raw (local.get $ptr) (local.get $len) (i32.const 16))
         (i32.const 16)))
     (core instance $i (instantiate $Impl
+      (with "libc" (instance $libc))
       (with "callee" (instance
         (export "tagged-len" (func $tagged-len))
         (export "raw" (func $raw))))))
 
+    (func (export "echo") (param "s" string) (result string)
+      (canon lift (core func $i "echo")
+        string-encoding=utf16 (memory $mem) (realloc (core func $realloc))))
     (func (export "tagged-len") (param "s" string) (result u32)
       (canon lift (core func $i "tagged-len")
         string-encoding=utf16 (memory $mem) (realloc (core func $realloc))))
     (func (export "raw") (param "s" string) (result (list u8))
       (canon lift (core func $i "raw")
+        string-encoding=utf16 (memory $mem) (realloc (core func $realloc))))
+    (func (export "poked-raw")
+      (param "s" string) (param "at" u32) (param "byte" u8) (result (list u8))
+      (canon lift (core func $i "poked-raw")
         string-encoding=utf16 (memory $mem) (realloc (core func $realloc)))))
 
   ;; Forwards latin1+utf16 strings, either untouched (`plain`) or after
   ;; re-encoding latin1 strings as UTF-16 (`inflated`)
   (component $CompactForwarder
+    (import "base" (core module $Base (export "base" (global i32))))
     (import "callee" (instance $callee
       (export "echo" (func (param "s" string) (result string)))
       (export "tagged-len" (func (param "s" string) (result u32)))
@@ -223,7 +275,8 @@
     (alias outer $Root $Libc (core module $Libc))
     (alias outer $Root $ForwardImpl (core module $ForwardImpl))
 
-    (core instance $libc (instantiate $Libc))
+    (core instance $base (instantiate $Base))
+    (core instance $libc (instantiate $Libc (with "config" (instance $base))))
     (alias core export $libc "memory" (core memory $mem))
     (alias core export $libc "realloc" (core func $realloc))
     (alias core export $libc "realloc-align2" (core func $realloc-align2))
@@ -274,21 +327,66 @@
       (export "tagged-len" (func $inflated-tagged-len))
       (export "raw" (func $inflated-raw))))
 
-  (instance $leaf (instantiate $Leaf))
-  (instance $compact (instantiate $CompactForwarder (with "callee" (instance $leaf))))
+  (instance $leaf (instantiate $Leaf (with "base" (core module $LowBase))))
+  (instance $compact (instantiate $CompactForwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $leaf))))
 
   ;; utf8 <-> latin1+utf16
-  (instance $utf8 (instantiate $Utf8Forwarder (with "callee" (instance $leaf))))
+  (instance $utf8 (instantiate $Utf8Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $leaf))))
   ;; utf16 -> latin1+utf16
-  (instance $utf16 (instantiate $Utf16Forwarder (with "callee" (instance $leaf))))
+  (instance $utf16 (instantiate $Utf16Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $leaf))))
+  ;; utf16 -> utf8 <-> latin1+utf16
+  (instance $utf16-via-utf8 (instantiate $Utf16Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $utf8))))
+  ;; utf8 <-> utf16 -> latin1+utf16
+  (instance $utf8-via-utf16 (instantiate $Utf8Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $utf16))))
   ;; utf8 <-> latin1+utf16 <-> latin1+utf16
-  (instance $utf8-via-compact
-    (instantiate $Utf8Forwarder (with "callee" (instance $compact "plain"))))
-  (instance $utf8-via-inflated-compact
-    (instantiate $Utf8Forwarder (with "callee" (instance $compact "inflated"))))
+  (instance $utf8-via-compact (instantiate $Utf8Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $compact "plain"))))
+  (instance $utf8-via-inflated-compact (instantiate $Utf8Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $compact "inflated"))))
+
+  ;; The same again, between components that allocate above 2GiB. These are
+  ;; entered through a utf8 component that allocates low in memory, as the host
+  ;; reads and writes the strings of the component that it calls.
+  (instance $high-leaf (instantiate $Leaf (with "base" (core module $HighBase))))
+  (instance $high-compact (instantiate $CompactForwarder
+    (with "base" (core module $HighBase))
+    (with "callee" (instance $high-leaf))))
+  (instance $high-utf16 (instantiate $Utf16Forwarder
+    (with "base" (core module $HighBase))
+    (with "callee" (instance $high-leaf))))
+  (instance $high-utf8-to-compact (instantiate $Utf8Forwarder
+    (with "base" (core module $HighBase))
+    (with "callee" (instance $high-compact "inflated"))))
+  (instance $high-utf8-to-utf16 (instantiate $Utf8Forwarder
+    (with "base" (core module $HighBase))
+    (with "callee" (instance $high-utf16))))
+  ;; utf8 <-> utf8 <-> latin1+utf16 <-> latin1+utf16
+  (instance $utf8-via-high-compact (instantiate $Utf8Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $high-utf8-to-compact))))
+  ;; utf8 <-> utf8 <-> utf16 -> latin1+utf16
+  (instance $utf8-via-high-utf16 (instantiate $Utf8Forwarder
+    (with "base" (core module $LowBase))
+    (with "callee" (instance $high-utf8-to-utf16))))
 
   (export "utf8-to-compact" (instance $utf8))
   (export "utf16-to-compact" (instance $utf16))
+  (export "utf16-via-utf8" (instance $utf16-via-utf8))
+  (export "utf8-via-utf16" (instance $utf8-via-utf16))
   (export "utf8-via-compact" (instance $utf8-via-compact))
   (export "utf8-via-inflated-compact" (instance $utf8-via-inflated-compact))
+  (export "utf8-via-high-compact" (instance $utf8-via-high-compact))
+  (export "utf8-via-high-utf16" (instance $utf8-via-high-utf16))
 )

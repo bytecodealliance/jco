@@ -7,8 +7,6 @@ import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { setupAsyncTest } from '../helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 
-const componentPath = join(LOCAL_TEST_COMPONENTS_DIR, 'argument-spillover.wasm');
-
 function args(count: number, offset = 0): number[] {
     return Array.from({ length: count }, (_, index) => offset + index + 1);
 }
@@ -42,7 +40,10 @@ function spilloverHost(overrides: Record<string, (...args: number[]) => number |
     };
 }
 
-suite('Canonical ABI argument spillover', () => {
+// NOTE: `high-*` components are the same component linked with all of its memory above 2GiB
+suite.each(['argument-spillover', 'high-argument-spillover'])('Canonical ABI argument spillover (%s)', (name) => {
+    const componentPath = join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`);
+
     test('sync calls preserve 16 flat parameters', async () => {
         const expected = args(16);
         const { instance, cleanup } = await setupAsyncTest({

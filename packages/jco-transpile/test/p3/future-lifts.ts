@@ -12,7 +12,8 @@ import {
 } from '../common.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-suite('future<T> lifts', () => {
+// NOTE: `high-*` components are the same component linked with all of its memory above 2GiB
+suite.each(['future-tx', 'high-future-tx'])('future<T> lifts (%s)', (name) => {
     let esModule, cleanup, instance;
 
     class ExampleResource {
@@ -26,7 +27,6 @@ suite('future<T> lifts', () => {
     }
 
     beforeAll(async () => {
-        const name = 'future-tx';
         const setupRes = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
