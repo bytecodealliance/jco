@@ -172,6 +172,14 @@ program
     .option("-q, --quiet", "disable output summary")
     .option("--no-namespaced-exports", "disable namespaced exports for typescript compatibility")
     .option("--multi-memory", "optimized output for Wasm multi-memory")
+    .option(
+        "--perf-strings-skip-copy-utf8-validation",
+        "skip validating utf8 strings copied between components that both use utf8 (validated by default)",
+    )
+    .option(
+        "--perf-strings-skip-copy-utf16-validation",
+        "skip validating utf16 strings copied between components that both use utf16 (validated by default)",
+    )
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")

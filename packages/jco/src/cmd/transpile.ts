@@ -157,6 +157,8 @@ export interface TranspileOpts {
     namespacedExports?: boolean;
     outDir?: string;
     multiMemory?: boolean;
+    perfStringsSkipCopyUtf8Validation?: boolean;
+    perfStringsSkipCopyUtf16Validation?: boolean;
     bindgenEnableWasmExnref?: boolean;
     experimentalIdlImports?: boolean;
     optArgs?: string[];
