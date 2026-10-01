@@ -94,6 +94,8 @@ pub enum Intrinsic {
     SymbolDispose,
     SymbolAsyncIterator,
     SymbolIterator,
+    /// Dispose of a host-provided value (e.g. a `Promise` or iterator) that a guest discarded
+    DisposeHostValue,
     ScopeId,
     HandleTables,
 
@@ -512,6 +514,43 @@ impl Intrinsic {
             Intrinsic::SymbolIterator => {
                 let var_name = self.name();
                 uwriteln!(output, "const {var_name} = Symbol.iterator;");
+            }
+
+            Intrinsic::DisposeHostValue => {
+                let fn_name = self.name();
+                let symbol_dispose = args.require_intrinsic(Intrinsic::SymbolDispose);
+                uwriteln!(
+                    output,
+                    r#"
+                    // Dispose of a host-provided value that a guest discarded, using `disposeFn`
+                    // if provided, otherwise the value's `Symbol.asyncDispose` or `Symbol.dispose`.
+                    //
+                    // Disposal runs in a microtask, so host code never runs inside a canonical
+                    // built-in (where it could re-enter the component), and errors are reported
+                    // rather than surfaced to the guest.
+                    function {fn_name}(value, disposeFn) {{
+                        if (!disposeFn) {{
+                            if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {{ return; }}
+                            if (typeof Symbol.asyncDispose === 'symbol' && typeof value[Symbol.asyncDispose] === 'function') {{
+                                disposeFn = value[Symbol.asyncDispose];
+                            }} else if (typeof value[{symbol_dispose}] === 'function') {{
+                                disposeFn = value[{symbol_dispose}];
+                            }} else {{
+                                return;
+                            }}
+                        }}
+                        const reportErr = (err) => console.error('[jco] error while disposing discarded host value', err);
+                        queueMicrotask(() => {{
+                            try {{
+                                const res = disposeFn.call(value);
+                                if (res && typeof res.then === 'function') {{ res.then(undefined, reportErr); }}
+                            }} catch (err) {{
+                                reportErr(err);
+                            }}
+                        }});
+                    }}
+                    "#
+                );
             }
 
             Intrinsic::ThrowInvalidBool => output.push_str(
@@ -2654,6 +2693,7 @@ impl Intrinsic {
             Intrinsic::SymbolDispose => "symbolDispose",
             Intrinsic::SymbolAsyncIterator => "symbolAsyncIterator",
             Intrinsic::SymbolIterator => "symbolIterator",
+            Intrinsic::DisposeHostValue => "_disposeHostValue",
             Intrinsic::SymbolResourceHandle => "symbolRscHandle",
             Intrinsic::SymbolResourceRep => "symbolRscRep",
 

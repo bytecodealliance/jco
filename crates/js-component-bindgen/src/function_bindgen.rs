@@ -2371,7 +2371,22 @@ impl Bindgen for FunctionBindgen<'_> {
                     )
                 };
 
-                let call = if task_managed {
+                let call = if task_managed && is_async {
+                    // Hand the raw host return value to the subtask, so it can be disposed
+                    // if the guest cancels the call and discards the result
+                    format!(
+                        r#"{call_prefix} {call_wrapper}({{
+                              componentIdx: task.componentIdx(),
+                              taskID: task.id(),
+                              fn: () => {track_host_operation}(() => {{
+                                  const hostRet = {callee_fn_js}({callee_args_js});
+                                  subtask?.setHostPendingResult(hostRet);
+                                  return hostRet;
+                              }}),
+                          }})
+                        "#,
+                    )
+                } else if task_managed {
                     format!(
                         r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),

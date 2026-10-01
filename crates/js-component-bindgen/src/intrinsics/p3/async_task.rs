@@ -2009,6 +2009,7 @@ impl AsyncTaskIntrinsic {
                 );
                 let lookup_memories_for_component =
                     render_args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
+                let dispose_host_value = render_args.require_intrinsic(Intrinsic::DisposeHostValue);
 
                 output.push_str(&format!(r#"
                     class {subtask_class} {{
@@ -2053,6 +2054,10 @@ impl AsyncTaskIntrinsic {
 
                         #result = null;
                         #resultSet = false;
+
+                        // Pending value returned by a host implementation of this (async import)
+                        // subtask, held so it can be disposed if the guest discards the call
+                        #hostPendingResult = null;
 
                         fnName;
                         target;
@@ -2160,11 +2165,11 @@ impl AsyncTaskIntrinsic {
                         // If the callee is another guest task, the request is delivered to it and
                         // the callee confirms via `task.cancel` (or still resolves via `task.return`).
                         //
-                        // If the callee is a host function there is (currently) no host-side
-                        // cancellation hook, so the pending call is treated as immediately
-                        // cancelled -- consistent with hosts being expected to resolve
+                        // If the callee is a host function, the pending call is treated as
+                        // immediately cancelled -- consistent with hosts being expected to resolve
                         // cancellation promptly -- and any later host resolution is discarded
-                        // (see `AsyncTask#onResolve`).
+                        // (see `AsyncTask#onResolve`). The host is notified of the discard by
+                        // disposing the pending value it returned (see `setHostPendingResult`).
                         requestCancellation() {{
                             {debug_log_fn}('[{subtask_class}#requestCancellation()] args', {{
                                 componentIdx: this.#componentIdx,
@@ -2186,6 +2191,30 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             this.onResolve(null);
+                            this.#disposeHostPendingResult();
+                        }}
+
+                        // Record the value returned by the host implementation of this subtask.
+                        //
+                        // Host imports may return a thenable that implements `Symbol.asyncDispose`
+                        // or `Symbol.dispose`. If the guest cancels the call before its result is
+                        // delivered, the result is discarded and the thenable is disposed so the
+                        // host can stop pending work and release anything it produced.
+                        setHostPendingResult(v) {{
+                            if (v === null || (typeof v !== 'object' && typeof v !== 'function') || typeof v.then !== 'function') {{
+                                return;
+                            }}
+                            this.#hostPendingResult = v;
+                            if (this.#resolved && this.#state !== {subtask_class}.State.RETURNED) {{
+                                this.#disposeHostPendingResult();
+                            }}
+                        }}
+
+                        #disposeHostPendingResult() {{
+                            const pending = this.#hostPendingResult;
+                            if (!pending) {{ return; }}
+                            this.#hostPendingResult = null;
+                            {dispose_host_value}(pending);
                         }}
 
                         registerOnStartHandler(f) {{
@@ -2247,6 +2276,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             this.#resolved = true;
+                            this.#hostPendingResult = null;
                             this.#parentTask.removeSubtask(this);
                             this.#parentTask.reject(subtaskErr);
                         }}
@@ -2282,6 +2312,8 @@ impl AsyncTaskIntrinsic {
                                     throw new Error('resolved subtask must have been started before completion');
                                 }}
                                 this.#state = {subtask_class}.State.RETURNED;
+                                // The host result is delivered to the guest, so it is no longer ours to dispose
+                                this.#hostPendingResult = null;
                             }}
 
                             this.setResult(subtaskValue);
