@@ -1234,6 +1234,8 @@ impl AsyncFutureIntrinsic {
                                       throw new Error(`mismatched event code [${{code}}] for host future write`);
                                   }}
                                   if (index !== this.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
+                                  // Whether the value was delivered to the reader (rather than the reader being dropped)
+                                  return payload === {future_end_class}.CopyResult.COMPLETED;
                               }}
                             "#
                         ),
@@ -1346,6 +1348,8 @@ impl AsyncFutureIntrinsic {
                         drop() {{
                             {drop_check}
                             super.drop();
+                            // Let a host-provided future know if its value was discarded
+                            this.#hostInjectFn?.drop?.();
                         }}
                     }}
                 "#
@@ -1846,6 +1850,7 @@ impl AsyncFutureIntrinsic {
                 let get_error_payload = render_args.require_intrinsic(Intrinsic::GetErrorPayload);
                 let track_host_operation =
                     render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
+                let dispose_host_value = render_args.require_intrinsic(Intrinsic::DisposeHostValue);
 
                 uwriteln!(
                     output,
@@ -1856,8 +1861,9 @@ impl AsyncFutureIntrinsic {
                               promise.catch(() => {{}});
                           }}
                           let done;
+                          let delivered = false;
 
-                          return async function generateFutureHostInject(args) {{
+                          const inject = async function generateFutureHostInject(args) {{
                               let {{ count }} = args;
                               if (count !== 1) {{ throw new Error('invalid count'); }}
 
@@ -1875,6 +1881,9 @@ impl AsyncFutureIntrinsic {
                               try {{
                                   value = await {track_host_operation}(() => promise);
                               }} catch (err) {{
+                                  // The reader was dropped (and the promise disposed) while it was pending,
+                                  // so a rejection (e.g. from handling disposal) has nowhere to go
+                                  if (hostWriteEnd.isPeerDropped()) {{ return () => {{}}; }}
                                   const elemMeta = hostWriteEnd.getElemMeta();
                                   if (!elemMeta.payloadTypeName?.startsWith('Result(')) {{
                                       {debug_log_fn}("failed to inject host write", err);
@@ -1882,6 +1891,9 @@ impl AsyncFutureIntrinsic {
                                   }}
                                   value = {{ tag: 'err', val: {get_error_payload}(err) }};
                               }}
+
+                              // A value produced after the reader was dropped is never delivered
+                              if (hostWriteEnd.isPeerDropped()) {{ return () => {{}}; }}
 
                               try {{
                                   // If we've read a nested promise from the outside,
@@ -1891,7 +1903,7 @@ impl AsyncFutureIntrinsic {
                                       value = Promise.resolve(value);
                                   }}
 
-                                  await hostWriteEnd.hostWrite({{ stringEncoding, value, getReallocFn }});
+                                  delivered = await hostWriteEnd.hostWrite({{ stringEncoding, value, getReallocFn }});
                               }} catch (err) {{
                                   {debug_log_fn}("failed to inject host write", err);
                                   throw new Error("cannot inject write: promise failed");
@@ -1906,6 +1918,14 @@ impl AsyncFutureIntrinsic {
                                   if (hostWriteEnd.hasPendingEvent()) {{ hostWriteEnd.getPendingEvent(); }}
                               }};
                           }};
+
+                          // Called when the guest drops the read end: a value that was never delivered
+                          // was discarded, so the host promise is disposed
+                          inject.drop = () => {{
+                              if (!delivered) {{ {dispose_host_value}(promise); }}
+                          }};
+
+                          return inject;
                       }}
                     "#
                 );

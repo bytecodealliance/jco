@@ -200,6 +200,7 @@ impl ComponentIntrinsic {
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
                 let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
                 output.push_str(&format!(
                     r#"
                     function {track_host_operation_fn}(operation) {{
@@ -211,7 +212,7 @@ impl ComponentIntrinsic {
                         }}
 
                         {store_async_state}.pendingHostOperations++;
-                        return Promise.resolve(result).finally(() => {{
+                        const tracked = Promise.resolve(result).finally(() => {{
                             {store_async_state}.pendingHostOperations--;
                             if ({store_async_state}.pendingHostOperations < 0) {{
                                 throw new Error('negative pending host operation count');
@@ -219,6 +220,16 @@ impl ComponentIntrinsic {
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                             {check_for_deadlock_fn}();
                         }});
+
+                        // Forward disposal to the host's value, so it is notified if a guest
+                        // discards the value (e.g. a future) produced from this operation
+                        for (const sym of [Symbol.asyncDispose, {symbol_dispose}]) {{
+                            if (typeof sym === 'symbol' && typeof result[sym] === 'function') {{
+                                tracked[sym] = () => result[sym]();
+                            }}
+                        }}
+
+                        return tracked;
                     }}
                     "#,
                 ));

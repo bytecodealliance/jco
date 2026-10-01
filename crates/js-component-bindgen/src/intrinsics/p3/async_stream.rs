@@ -1732,13 +1732,9 @@ impl AsyncStreamIntrinsic {
                             const hostDropFn = this.#hostDropFn;
                             this.#hostDropFn = null;
                             super.drop(opts);
-                            if (hostDropFn) {{
-                                // A source drop hook can re-enter the component, so both ends must
-                                // observe the drop before the hook wakes a waiting writer.
-                                Promise.resolve(hostDropFn()).catch(err => {{
-                                    {debug_log_fn}('[{stream_end_class}#drop()] host drop failed', err);
-                                }});
-                            }}
+                            // A source drop hook can re-enter the component, so both ends must
+                            // observe the drop before the hook (which is deferred) wakes a waiting writer.
+                            if (hostDropFn) {{ hostDropFn(); }}
                             if (this.#pendingBufferMeta) {{
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.DROPPED);
                             }}
@@ -2600,7 +2596,7 @@ impl AsyncStreamIntrinsic {
                 let iterator_symbol = render_args.require_intrinsic(Intrinsic::SymbolIterator);
                 let external_readable_stream_class =
                     render_args.require_intrinsic(Intrinsic::PlatformReadableStreamClass);
-                let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
+                let dispose_host_value = render_args.require_intrinsic(Intrinsic::DisposeHostValue);
 
                 output.push_str(&format!(
                     r#"
@@ -2613,11 +2609,15 @@ impl AsyncStreamIntrinsic {
                           if ({async_iterator_symbol} in stream) {{
                               let asyncIterator = stream[{async_iterator_symbol}]();
                               readFn = () => asyncIterator.next();
-                              readFn.drop = (reason) => asyncIterator.return?.(reason) ?? stream[{symbol_dispose}]?.();
+                              readFn.drop = (reason) => asyncIterator.return
+                                  ? {dispose_host_value}(asyncIterator, () => asyncIterator.return(reason))
+                                  : {dispose_host_value}(stream);
                           }} else if ({iterator_symbol} in stream) {{
                               let iterator = stream[{iterator_symbol}]();
                               readFn = async () => iterator.next();
-                              readFn.drop = (reason) => iterator.return?.(reason) ?? stream[{symbol_dispose}]?.();
+                              readFn.drop = (reason) => iterator.return
+                                  ? {dispose_host_value}(iterator, () => iterator.return(reason))
+                                  : {dispose_host_value}(stream);
                               // Synchronous sources can be drained eagerly (up to a
                               // requested count) without risking an indefinite wait
                               readFn.sourceIsSync = true;
@@ -2626,7 +2626,10 @@ impl AsyncStreamIntrinsic {
                               // implement the async iterator protocol.
                               const lockedReader = stream.getReader();
                               readFn = () => lockedReader.read();
-                              readFn.drop = (reason) => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock());
+                              readFn.drop = (reason) => {dispose_host_value}(
+                                  lockedReader,
+                                  () => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock()),
+                              );
                           }} else {{
                               throw new Error("invalid stream object, cannot generate read fn");
                           }}
