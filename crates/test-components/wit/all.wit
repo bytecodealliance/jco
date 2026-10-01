@@ -1024,3 +1024,34 @@ world host-resource-g2g-caller {
   import host-resource-runner;
   export host-resource-runner;
 }
+
+/// Host-provided async values that a guest may cancel or discard before receiving them
+interface host-value-disposal-host {
+  /// Async import the guest cancels while it is in flight
+  pending: async func(n: u32) -> u32;
+  /// A future the guest may read, cancel a read of, or drop unread
+  get-future: func() -> future<u32>;
+  /// A stream the guest drops without reading
+  get-stream: func() -> stream<u8>;
+}
+
+interface host-value-disposal-guest {
+  /// Start `pending(n)` and drop it while it is in flight
+  cancel-pending: async func(n: u32);
+  /// Drop a host-provided future without reading it
+  drop-future-unread: async func();
+  /// Start reading a host-provided future, cancel the read and drop the future,
+  /// returning whether the read was cancelled (rather than completed)
+  cancel-future-read: async func() -> bool;
+  /// Read a host-provided future to completion
+  read-future: async func() -> u32;
+  /// Drop a future passed in by the host without reading it
+  consume-future: async func(f: future<u32>);
+  /// Drop a host-provided stream without reading it
+  drop-stream-unread: async func();
+}
+
+world host-value-disposal {
+  import host-value-disposal-host;
+  export host-value-disposal-guest;
+}
