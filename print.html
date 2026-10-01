@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-901e1de1.js";
+            window.path_to_searchindex_js = "searchindex-25129576.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6d739654.js"></script>
+        <script src="toc-57473397.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1840,6 +1840,86 @@ when assuming the component received it.</li>
 </ul>
 <p>Timing-only assertions are not a good idea, and you should generally make sure to
 interact with the stream directly.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-3-host-value-disposal"><a class="header" href="#preview-3-host-value-disposal">Preview 3 Host Value Disposal</a></h1>
+<p>A guest can discard asynchronous values that JavaScript provided before it ever receives
+their result. For example:</p>
+<ul>
+<li>It can cancel an <code>async</code> import call that is still in flight. A Rust guest does this when
+it drops the future returned by an import, which lowers to the <code>subtask.cancel</code> canonical
+built-in.</li>
+<li>It can drop a <code>future&lt;T&gt;</code> provided by the host without reading its value. A Rust guest does
+this when it drops a <code>FutureReader</code>, cancelling any pending read first.</li>
+<li>It can drop a <code>stream&lt;T&gt;</code> provided by the host before reading all of it.</li>
+</ul>
+<p>Jco never waits for the host when this happens: the call, future or stream is treated as
+cancelled immediately, and anything the host produces later is discarded. The host is
+notified by <em>disposing</em> the value it provided.</p>
+<h2 id="async-imports-and-futures"><a class="header" href="#async-imports-and-futures">Async imports and futures</a></h2>
+<p>Return a thenable (usually a <code>Promise</code>) that implements <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/asyncDispose"><code>Symbol.asyncDispose</code></a>
+or <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/dispose"><code>Symbol.dispose</code></a>. This applies to promises returned from <code>async</code> imports
+and to promises lowered into a <code>future&lt;T&gt;</code> (whether returned from an import or passed as an
+argument to an export):</p>
+<pre><code class="language-js">const imports = {
+    'example:websocket/client': {
+        connect(url) {
+            const controller = new AbortController();
+            const pending = openSocket(url, { signal: controller.signal });
+
+            // Called only if the guest discards this call and its result
+            pending[Symbol.asyncDispose] = async () =&gt; {
+                controller.abort();
+                // A socket that opened just before cancellation will never reach the guest
+                const socket = await pending.catch(() =&gt; undefined);
+                socket?.close();
+            };
+
+            return pending;
+        },
+    },
+};
+</code></pre>
+<p>Native promises are extensible, so no wrapper type is needed. Promises without a dispose
+method behave exactly as before.</p>
+<p>If both methods are present, only <code>Symbol.asyncDispose</code> is called.</p>
+<h2 id="streams"><a class="header" href="#streams">Streams</a></h2>
+<p>When the guest drops the readable end of a host-provided stream, Jco cleans up the source in
+the following order of preference:</p>
+<ol>
+<li>Calls <code>return()</code> on the source’s iterator (as <code>for await ... of</code> does when breaking out of
+a loop), which runs any <code>finally</code> blocks in a started generator.</li>
+<li>Otherwise, calls the stream object’s <code>Symbol.asyncDispose</code> or <code>Symbol.dispose</code> method.</li>
+<li>For a <code>ReadableStream</code> without the async iterator protocol, cancels its reader.</li>
+</ol>
+<p>Unlike futures, a stream is cleaned up whenever the guest drops it, including after it has
+read everything, so cleanup must be safe to run on an exhausted source.</p>
+<p>Cancelling a single in-progress read of a stream does <em>not</em> clean up the source, because the
+stream remains usable (see <a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>).</p>
+<h2 id="semantics"><a class="header" href="#semantics">Semantics</a></h2>
+<ul>
+<li>A call or future is disposed <strong>only</strong> when the guest discards it. Values delivered to the
+guest are never disposed: from then on, the guest owns them.</li>
+<li>A promise may be disposed <em>after</em> it settled, if the guest discarded it before the settled
+value was delivered. In that case the value will never reach the guest, and the host is
+responsible for releasing it.</li>
+<li>Disposal is called at most once, asynchronously (never from inside the canonical built-in
+the guest called). The guest does not wait for it.</li>
+<li>Fulfilling or rejecting a promise after disposal (for example with an <code>AbortError</code>) is
+ignored, and does not trap the component.</li>
+<li>Errors thrown (or rejections returned) during disposal are reported with <code>console.error</code>
+and do not affect the guest.</li>
+<li>Providers that ignore disposal, or never settle, do not block the guest.</li>
+</ul>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li>Only async-lowered calls can be cancelled by a guest. Sync-lowered calls to async imports,
+and synchronous imports suspended via JSPI, give the guest no handle with which to cancel the
+individual call, so they are never disposed.</li>
+<li>If a guest cancels an <code>async</code> import call whose result would have contained a future or
+stream, only the returned promise is disposed, as the future or stream was never created.</li>
+<li>Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
+delivered to the guest are not covered by this mechanism.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="jco-std"><a class="header" href="#jco-std"><code>jco-std</code></a></h1>
 <p><a href="https://www.npmjs.com/package/@bytecodealliance/jco-std"><code>@bytecodealliance/jco-std</code></a> is Jco’s library of reusable JavaScript and
