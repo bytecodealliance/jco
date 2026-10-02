@@ -16,7 +16,7 @@
     "dependencies": {
         "@bytecodealliance/jco": "1.31.0",
         "@bytecodealliance/jco-transpile": "^0.15.0",
-        "@bytecodealliance/preview2-shim": "^0.27.0"
+        "@bytecodealliance/preview2-shim": "^0.27.1"
     },
     "devDependencies": {
         "@types/node": "^24.12.4",
