@@ -1,4 +1,4 @@
-import { lstatSync, readlinkSync, statSync } from "node:fs";
+import { lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
 
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -105,4 +105,25 @@ test("reads a Windows directory without opening it as a file", () => {
     expect(directory.metadataHash()).toEqual({ upper: 1n, lower: 2n });
     expect(ioCall).not.toHaveBeenCalled();
     expect(registerDispose).not.toHaveBeenCalled();
+});
+
+test.each([
+    ["C:/Users/test/wit", "C:/Users/test/wit/app.wit"],
+    ["?/C:/Users/test/wit", "C:/Users/test/wit/app.wit"],
+    ["?/UNC/server/share/wit", "//server/share/wit/app.wit"],
+])("resolves entries of a directory opened at %s through the Windows root", (path, expected) => {
+    // Node's realpathSync() stats the root of a namespaced path, which is not a directory
+    vi.mocked(realpathSync).mockImplementationOnce((path) => {
+        if (/^[\\/]{2}\?[\\/]/.test(String(path))) {
+            throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
+        }
+        return String(path);
+    });
+    vi.mocked(statSync).mockReturnValueOnce({ isDirectory: () => true } as ReturnType<
+        typeof statSync
+    >);
+    const root = _createPreopenDescriptor("/");
+    const directory = root.openAt({}, path, { directory: true }, { read: true });
+    directory.statAt({}, "app.wit");
+    expect(lstatSync).toHaveBeenLastCalledWith(expected, { bigint: true });
 });
