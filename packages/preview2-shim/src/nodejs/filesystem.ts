@@ -58,6 +58,24 @@ function normalizeHostPath(path: string) {
     return isWindows ? path.replace(/\\/g, "/") : path;
 }
 
+/**
+ * Resolve symlinks in a host path.
+ *
+ * Node's realpathSync() cannot walk namespaced Windows paths (`\\?\C:\...`): it
+ * stats the namespace root (`\\?\C:`), which is a volume rather than a directory
+ * and fails with EISDIR. Drive and UNC paths resolve the same without the prefix.
+ */
+function realHostPath(path: string) {
+    if (isWindows) {
+        path = path
+            .replace(/^[\\/]{2}\?[\\/]UNC[\\/]/i, "//")
+            .replace(/^[\\/]{2}\?[\\/]([a-zA-Z]:)(?=[\\/]|$)/, "$1")
+            // A bare drive would otherwise resolve against that drive's cwd
+            .replace(/^([a-zA-Z]:)$/, "$1/");
+    }
+    return normalizeHostPath(realpathSync(path));
+}
+
 const nsMagnitude = 1_000_000_000n;
 function nsToDateTime(ns) {
     const seconds = ns / nsMagnitude;
@@ -683,7 +701,7 @@ class Descriptor implements IDescriptor {
 
         let baseResolved: string;
         try {
-            baseResolved = normalizeHostPath(realpathSync(base));
+            baseResolved = realHostPath(base);
         } catch (error) {
             throw convertFsError(error);
         }
