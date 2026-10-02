@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.14.0] - 2026-10-02
+
+### 🚀 Features
+
+- _(bindgen)_ dispose host async values discarded by guests by @vados-cosmonic
+
+- _(bindgen)_ allow skipping validation of copied strings by @vados-cosmonic
+
+- _(bindgen)_ implement latin1 and compact utf16 transcoders by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ preserve computed memory addresses beyond wasm32 by @vados-cosmonic
+
+- _(bindgen)_ match the canonical ABI for strings and pointers by @vados-cosmonic
+
+- _(bindgen)_ lift utf16 strings passed to task.return in #2186
+
+- _(bindgen)_ lower owned async import results into the call site's table by @luizribeiro
+
+- _(bindgen)_ implement utf16 copy transcoder in #2184
+
+- _(bindgen)_ recover stale task metadata in compatibility imports by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ make utf16 validating copy an intrinsic by @vados-cosmonic
+
+
+
+
 ## [2.13.0] - 2026-09-28
 
 ### 🐛 Bug Fixes
