@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.27.1] - 2026-10-02
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ support Windows directory descriptors by @vados-cosmonic
+
+- _(p2-shim)_ allow blocking writes beyond Node buffer by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ cover Windows directory descriptors by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ update componentize-js dep to v0.23.0 by @vados-cosmonic
+
 ## [0.27.0] - 2026-09-28
 
 ### 🐛 Bug Fixes
