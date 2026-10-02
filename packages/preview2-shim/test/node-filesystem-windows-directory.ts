@@ -23,6 +23,11 @@ test.skipIf(process.platform !== "win32")(
             const entries = wit.readDirectory();
             expect(entries.readDirectoryEntry()?.name).toBe("component.wit");
             entries[Symbol.dispose]();
+            // Guests look each entry up through the directory they are listing
+            expect(wit.statAt({ symlinkFollow: false }, "component.wit").type).toBe("regular-file");
+            expect(() =>
+                wit.metadataHashAt({ symlinkFollow: false }, "component.wit"),
+            ).not.toThrow();
             wit[Symbol.dispose]();
         } finally {
             await rm(dir, { recursive: true, force: true });
