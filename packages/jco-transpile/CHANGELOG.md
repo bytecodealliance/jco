@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.17.0] - 2026-10-04
+
+### 🚀 Features
+
+- _(transpile)_ add options to skip validation of copied strings by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ cover disposal of discarded host async values by @vados-cosmonic
+
+- _(transpile)_ update normalized pointer output assertion by @vados-cosmonic in #2187
+
+- _(transpile)_ cover copies between components with the same encoding by @vados-cosmonic
+
+- _(transpile)_ cover strings and pointers in adapters and host bindings by @vados-cosmonic
+
+- _(transpile)_ cover latin1+utf16 string transcoding by @vados-cosmonic
+
+- _(transpile)_ cover host resources returned into a composed callee by @luizribeiro in #2183
+
+- _(transpile)_ cover stale task metadata in composed commands by @vados-cosmonic
+
+- _(transpile)_ relax CI sync call overhead limit by @vados-cosmonic in #2177
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update preview3-shim to v0.8.1 by @vados-cosmonic in #2199
+
+- _(transpile)_ update preview2-shim to v0.27.1 by @vados-cosmonic
+
 ## [0.16.0] - 2026-09-28
 
 ### 🐛 Bug Fixes
