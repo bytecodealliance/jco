@@ -453,8 +453,8 @@ importers:
         specifier: ^0.5.0
         version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.16.0
-        version: 0.16.0
+        specifier: ^0.17.0
+        version: 0.17.0
       '@bytecodealliance/preview2-shim':
         specifier: ^0.27.1
         version: 0.27.1
@@ -1051,8 +1051,8 @@ packages:
   '@bytecodealliance/jco-transpile@0.15.0':
     resolution: {integrity: sha512-MFftJ81B9TtHbvgCRZQod3jfgl62YvJszxsNdfx9IVNewxlX9q7U4Wd+w6gJzw+o9IjEGWoyg/BFpb/RnaJvlA==}
 
-  '@bytecodealliance/jco-transpile@0.16.0':
-    resolution: {integrity: sha512-WsZrMkOUEzuGg93gjHxA2Q+sBPyuL37DTpOiSJOhZlCDPbd8NSt8TkjfUDBylxCnFVl5SY4TBzE8dY0DLdBs8w==}
+  '@bytecodealliance/jco-transpile@0.17.0':
+    resolution: {integrity: sha512-mfSXL9a8drjGW/kr3V55cClJ8Rs3cs50GhsJ+wTHl3/gFPPw0Ej6z9KyYiuZ2veuf0WwrDWFuCKW7CyBpniLFw==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -1104,9 +1104,6 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.7.0':
     resolution: {integrity: sha512-5bBAE1nKSIT6ZyWoyLQwV1VjJciAdgLk7hbMeO3y5mLJhrkBL9egE48x5IfvU1ubMsQsKWFrP0jle7ow0b5I6w==}
-
-  '@bytecodealliance/preview3-shim@0.8.0':
-    resolution: {integrity: sha512-ZMvZ9WeqN1/X2h4VLiAKGdZogZs47fvwoSo6BA5cOHuZzSHuSEEkJDH8IVeSrV3EkjOTicUuVCs2bo/3aOJeAA==}
 
   '@bytecodealliance/preview3-shim@0.8.1':
     resolution: {integrity: sha512-9vGL5lSV9Cjxmkage9MCnR+EWyI2GSbqE7h/P6F/CIoDmTfXkSYoG8c0HAeCNfmTVQDqD8Bo3eeM+zNeWeeXcA==}
@@ -5634,10 +5631,10 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
-  '@bytecodealliance/jco-transpile@0.16.0':
+  '@bytecodealliance/jco-transpile@0.17.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.27.1
-      '@bytecodealliance/preview3-shim': 0.8.0
+      '@bytecodealliance/preview3-shim': 0.8.1
       binaryen: 132.0.0
       oxc-minify: 0.151.0
 
@@ -5734,11 +5731,6 @@ snapshots:
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
       '@bytecodealliance/preview2-shim': 0.26.0
-
-  '@bytecodealliance/preview3-shim@0.8.0':
-    dependencies:
-      '@bytecodealliance/jco-node-fs': 0.3.2
-      '@bytecodealliance/preview2-shim': 0.27.1
 
   '@bytecodealliance/preview3-shim@0.8.1':
     dependencies:
