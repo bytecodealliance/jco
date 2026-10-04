@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.36.0] - 2026-10-04
+
+### 🚀 Features
+
+- _(jco)_ add flags to skip validation of copied strings by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ deny HTTP in sandboxed runs by @vados-cosmonic
+
+- _(jco)_ preserve run filesystem access by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ defer composed CLI test until transpile release by @vados-cosmonic in #2188
+
+- _(jco)_ skip Windows HTTP/2 tests pending shim release by @vados-cosmonic in #2174
+
+- _(jco)_ defer sandbox preopen integration by @vados-cosmonic in #2163
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.17.0 by @vados-cosmonic in #2202
+
+- _(jco)_ update preview2-shim to v0.27.1 by @vados-cosmonic
+
+- _(jco)_ update deps by @vados-cosmonic
+
 ## [1.35.0] - 2026-09-24
 
 ### 🚀 Features
