@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.36.1] - 2026-10-05
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-std to v0.6.0 by @vados-cosmonic in #2211
+
 ## [1.36.0] - 2026-10-04
 
 ### 🚀 Features
