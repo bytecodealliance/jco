@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.15.0] - 2026-10-05
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ load conditional-suspending trampolines through getCoreModule by @O6lvl4
+
+
+
+## New Contributors
+* @O6lvl4 made their first contribution
+
+
 ## [2.14.0] - 2026-10-02
 
 ### 🚀 Features
