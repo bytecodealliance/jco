@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0] - 2026-10-05
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update preview2-shim to v0.27.1 by @vados-cosmonic
+
+- _(std)_ update componentize-js to v0.23.0 by @vados-cosmonic
+
+- _(std)_ update preview2-shim to v0.27.0 by @vados-cosmonic
+
+- _(std)_ update jco-transpile and preview2-shim by @vados-cosmonic
+
 ## [0.5.0] - 2026-09-23
 
 ### 🐛 Bug Fixes
