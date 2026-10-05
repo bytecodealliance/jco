@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.28.0] - 2026-10-05
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ resolve entries of namespaced Windows directories by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ cover entry lookups in namespaced Windows directories by @vados-cosmonic in #2201
+
 ## [0.27.1] - 2026-10-02
 
 ### 🐛 Bug Fixes
