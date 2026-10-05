@@ -93,6 +93,9 @@ impl bindings::Guest for JsComponentBindgenComponent {
                 options.enum_values_screaming_snake_case.unwrap_or(false),
             )
             .asmjs(options.asmjs.unwrap_or(false))
+            .emit_conditional_suspending_wasm(
+                options.emit_conditional_suspending_wasm.unwrap_or(false),
+            )
             .build();
 
         let js_component_bindgen::Transpiled {

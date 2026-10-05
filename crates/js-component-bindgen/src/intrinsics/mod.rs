@@ -190,6 +190,9 @@ pub enum Intrinsic {
     /// Build an `(i32, i32, i32) -> ()` Wasm trampoline that calls a plain fast
     /// path before falling back to a JSPI-suspending slow path.
     ConditionalSuspending3I32ToVoidFn,
+
+    /// Compiled Wasm of the conditional-suspending trampolines, by trampoline name
+    ConditionalSuspendingWasm,
 }
 
 macro_rules! impl_from_intrinsic {
@@ -1311,27 +1314,21 @@ impl Intrinsic {
                 ));
             }
 
-            Self::ConditionalSuspending2I32ToI32Fn => {
-                let conditional_suspending_fn =
-                    args.require_intrinsic(Self::ConditionalSuspending2I32ToI32Fn);
+            Self::ConditionalSuspending1I32ToI32Fn
+            | Self::ConditionalSuspending2I32ToI32Fn
+            | Self::ConditionalSuspending3I32ToI32Fn
+            | Self::ConditionalSuspending3I32ToVoidFn => {
+                let conditional_suspending_fn = args.require_intrinsic(*self);
+                let wasm = args.require_intrinsic(Self::ConditionalSuspendingWasm);
+                let register = self.register_conditional_suspending_js(args);
 
                 output.push_str(&format!(
                     r#"
-                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
-                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-                          0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f,
-                          0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74,
-                          0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f, 0x77, 0x00,
-                          0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03,
-                          0x72, 0x75, 0x6e, 0x00, 0x02, 0x0a, 0x1d, 0x01, 0x1b,
-                          0x01, 0x01, 0x7f, 0x20, 0x00, 0x20, 0x01, 0x10, 0x00,
-                          0x22, 0x02, 0x41, 0x7f, 0x47, 0x04, 0x7f, 0x20, 0x02,
-                          0x05, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0b,
-                      ]));
+                      {register}
 
                       function {conditional_suspending_fn}(fast, slow) {{
                           return new WebAssembly.Instance(
-                              {conditional_suspending_fn}Module,
+                              {wasm}.{conditional_suspending_fn},
                               {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
                           ).exports.run;
                       }}
@@ -1339,92 +1336,8 @@ impl Intrinsic {
                 ));
             }
 
-            Self::ConditionalSuspending1I32ToI32Fn => {
-                let conditional_suspending_fn =
-                    args.require_intrinsic(Self::ConditionalSuspending1I32ToI32Fn);
-
-                output.push_str(&format!(
-                    r#"
-                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
-                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-                          0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f,
-                          0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73,
-                          0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
-                          0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07,
-                          0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02,
-                          0x0a, 0x19, 0x01, 0x17, 0x01, 0x01, 0x7f, 0x20,
-                          0x00, 0x10, 0x00, 0x22, 0x01, 0x41, 0x7e, 0x47,
-                          0x04, 0x7f, 0x20, 0x01, 0x05, 0x20, 0x00, 0x10,
-                          0x01, 0x0b, 0x0b,
-                      ]));
-
-                      function {conditional_suspending_fn}(fast, slow) {{
-                          return new WebAssembly.Instance(
-                              {conditional_suspending_fn}Module,
-                              {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
-                          ).exports.run;
-                      }}
-                    "#,
-                ));
-            }
-
-            Self::ConditionalSuspending3I32ToI32Fn => {
-                let conditional_suspending_fn =
-                    args.require_intrinsic(Self::ConditionalSuspending3I32ToI32Fn);
-
-                output.push_str(&format!(
-                    r#"
-                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
-                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-                          0x01, 0x08, 0x01, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x01,
-                          0x7f, 0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73,
-                          0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f, 0x77,
-                          0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01,
-                          0x03, 0x72, 0x75, 0x6e, 0x00, 0x02, 0x0a, 0x21, 0x01,
-                          0x1f, 0x01, 0x01, 0x7f, 0x20, 0x00, 0x20, 0x01, 0x20,
-                          0x02, 0x10, 0x00, 0x22, 0x03, 0x41, 0x7e, 0x47, 0x04,
-                          0x7f, 0x20, 0x03, 0x05, 0x20, 0x00, 0x20, 0x01, 0x20,
-                          0x02, 0x10, 0x01, 0x0b, 0x0b,
-                      ]));
-
-                      function {conditional_suspending_fn}(fast, slow) {{
-                          return new WebAssembly.Instance(
-                              {conditional_suspending_fn}Module,
-                              {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
-                          ).exports.run;
-                      }}
-                    "#,
-                ));
-            }
-
-            Self::ConditionalSuspending3I32ToVoidFn => {
-                let conditional_suspending_fn =
-                    args.require_intrinsic(Self::ConditionalSuspending3I32ToVoidFn);
-
-                output.push_str(&format!(
-                    r#"
-                      const {conditional_suspending_fn}Module = new WebAssembly.Module(new Uint8Array([
-                          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-                          0x01, 0x0e, 0x02, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
-                          0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x00,
-                          0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73,
-                          0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
-                          0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x07,
-                          0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02,
-                          0x0a, 0x19, 0x01, 0x17, 0x00, 0x20, 0x00, 0x20,
-                          0x01, 0x20, 0x02, 0x10, 0x00, 0x45, 0x04, 0x40,
-                          0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0x10, 0x01,
-                          0x1a, 0x0b, 0x0b,
-                      ]));
-
-                      function {conditional_suspending_fn}(fast, slow) {{
-                          return new WebAssembly.Instance(
-                              {conditional_suspending_fn}Module,
-                              {{ '': {{ fast, slow: new WebAssembly.Suspending(slow) }} }},
-                          ).exports.run;
-                      }}
-                    "#,
-                ));
+            Self::ConditionalSuspendingWasm => {
+                uwriteln!(output, "const {} = {{}};", self.name());
             }
 
             // TODO(feat): customizable stream classes
@@ -2600,6 +2513,40 @@ fn emit_intrinsic(
     }
 }
 
+const CONDITIONAL_SUSPENDING_1_I32_TO_I32: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f,
+    0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
+    0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02,
+    0x0a, 0x19, 0x01, 0x17, 0x01, 0x01, 0x7f, 0x20, 0x00, 0x10, 0x00, 0x22, 0x01, 0x41, 0x7e, 0x47,
+    0x04, 0x7f, 0x20, 0x01, 0x05, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x0b,
+];
+
+const CONDITIONAL_SUSPENDING_2_I32_TO_I32: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
+    0x7f, 0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c,
+    0x6f, 0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00,
+    0x02, 0x0a, 0x1d, 0x01, 0x1b, 0x01, 0x01, 0x7f, 0x20, 0x00, 0x20, 0x01, 0x10, 0x00, 0x22, 0x02,
+    0x41, 0x7f, 0x47, 0x04, 0x7f, 0x20, 0x02, 0x05, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0b,
+];
+
+const CONDITIONAL_SUSPENDING_3_I32_TO_I32: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x01, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
+    0x01, 0x7f, 0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73,
+    0x6c, 0x6f, 0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 0x72, 0x75, 0x6e,
+    0x00, 0x02, 0x0a, 0x21, 0x01, 0x1f, 0x01, 0x01, 0x7f, 0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0x10,
+    0x00, 0x22, 0x03, 0x41, 0x7e, 0x47, 0x04, 0x7f, 0x20, 0x03, 0x05, 0x20, 0x00, 0x20, 0x01, 0x20,
+    0x02, 0x10, 0x01, 0x0b, 0x0b,
+];
+
+const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0e, 0x02, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
+    0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x00, 0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73,
+    0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f, 0x77, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x07,
+    0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02, 0x0a, 0x19, 0x01, 0x17, 0x00, 0x20, 0x00, 0x20,
+    0x01, 0x20, 0x02, 0x10, 0x00, 0x45, 0x04, 0x40, 0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0x10, 0x01,
+    0x1a, 0x0b, 0x0b,
+];
+
 impl Intrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         JsHelperIntrinsic::get_global_names()
@@ -2609,6 +2556,7 @@ impl Intrinsic {
                 "base64Compile",
                 "clampGuest",
                 "ComponentError",
+                "CONDITIONAL_SUSPENDING_WASM",
                 "WebAssemblyRuntimeError",
                 "FACT_TRAP_MESSAGES",
                 "fetchCompile",
@@ -2730,6 +2678,7 @@ impl Intrinsic {
             Self::ConditionalSuspending2I32ToI32Fn => "_conditionalSuspending2I32ToI32",
             Self::ConditionalSuspending3I32ToI32Fn => "_conditionalSuspending3I32ToI32",
             Self::ConditionalSuspending3I32ToVoidFn => "_conditionalSuspending3I32ToVoid",
+            Self::ConditionalSuspendingWasm => "CONDITIONAL_SUSPENDING_WASM",
 
             // Iteratively saved metadata
             Intrinsic::GlobalComponentMemoryMap => "GLOBAL_COMPONENT_MEMORY_MAP",
@@ -2747,5 +2696,54 @@ impl Intrinsic {
             // Helpers for working with async state
             Intrinsic::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
         }
+    }
+
+    /// File name suffix and Wasm of a conditional-suspending trampoline
+    pub(crate) fn conditional_suspending_wasm(&self) -> Option<(&'static str, &'static [u8])> {
+        match self {
+            Self::ConditionalSuspending1I32ToI32Fn => Some((
+                "conditional-suspending-1-i32-to-i32",
+                CONDITIONAL_SUSPENDING_1_I32_TO_I32,
+            )),
+            Self::ConditionalSuspending2I32ToI32Fn => Some((
+                "conditional-suspending-2-i32-to-i32",
+                CONDITIONAL_SUSPENDING_2_I32_TO_I32,
+            )),
+            Self::ConditionalSuspending3I32ToI32Fn => Some((
+                "conditional-suspending-3-i32-to-i32",
+                CONDITIONAL_SUSPENDING_3_I32_TO_I32,
+            )),
+            Self::ConditionalSuspending3I32ToVoidFn => Some((
+                "conditional-suspending-3-i32-to-void",
+                CONDITIONAL_SUSPENDING_3_I32_TO_VOID,
+            )),
+            _ => None,
+        }
+    }
+
+    /// JS expression compiling the trampoline Wasm at runtime
+    pub(crate) fn compile_conditional_suspending_js(&self) -> String {
+        let (_, wasm) = self
+            .conditional_suspending_wasm()
+            .expect("only conditional-suspending intrinsics have Wasm");
+        let bytes = wasm
+            .iter()
+            .map(|b| format!("0x{b:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("new WebAssembly.Module(new Uint8Array([{bytes}]))")
+    }
+
+    /// JS registering the trampoline Wasm, unless it is emitted as a file
+    fn register_conditional_suspending_js(&self, args: &RenderIntrinsicsArgs) -> String {
+        if args.transpile_opts.loads_conditional_suspending_wasm() {
+            return String::new();
+        }
+        format!(
+            "{}.{} = {};",
+            Self::ConditionalSuspendingWasm.name(),
+            self.name(),
+            self.compile_conditional_suspending_js()
+        )
     }
 }

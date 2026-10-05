@@ -122,6 +122,10 @@ world js-component-bindgen {
 
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
+
+    /// Emit the Wasm of conditional-suspending trampolines as files loaded
+    /// through `getCoreModule` (instantiation mode only).
+    emit-conditional-suspending-wasm: option<bool>,
   }
 
   record async-imports-exports {

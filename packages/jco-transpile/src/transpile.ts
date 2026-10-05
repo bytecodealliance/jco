@@ -350,6 +350,9 @@ export async function transpileBytes(
         enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
+        // Lets hosts that forbid runtime Wasm compilation (ex. Cloudflare Workers) precompile
+        // the trampolines; asm.js output converts core Wasm to JS, so it keeps them inline.
+        emitConditionalSuspendingWasm: instantiation !== undefined && opts.js !== true,
     };
 
     // Generate the component
