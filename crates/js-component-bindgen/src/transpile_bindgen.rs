@@ -553,6 +553,25 @@ impl JsBindgen<'_> {
         // Render the telemery directive
         uwriteln!(output, r#""use components";"#);
 
+        // Emit helper modules as core modules so hosts can precompile them
+        let mut helper_compilation_promises = source::Source::default();
+        if self.opts.instantiation_mode.is_some() {
+            let helpers = self
+                .all_intrinsics
+                .iter()
+                .filter_map(|intrinsic| Some((intrinsic, intrinsic.helper_module()?)));
+            for (idx, (intrinsic, bytes)) in (self.core_module_cnt..).zip(helpers) {
+                let file_name = core_file_name(name, idx as u32);
+                files.push(&file_name, bytes);
+                uwriteln!(
+                    helper_compilation_promises,
+                    "{}Module = (yield getCoreModule('{file_name}')) ?? {};",
+                    intrinsic.name(),
+                    intrinsic.helper_module_inline(),
+                );
+            }
+        }
+
         let render_args = RenderIntrinsicsArgs::builder()
             .intrinsics(&mut self.all_intrinsics)
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
@@ -606,6 +625,7 @@ impl JsBindgen<'_> {
                 "\
                         let {gen} = (function* _initGenerator () {{
                             {}\
+                            {}\
                             {};
                         }})();
                         let {promise}, {resolve}, {reject};
@@ -642,6 +662,7 @@ impl JsBindgen<'_> {
                         return {promise} || {maybe_sync};
                     }};
                 ",
+                &helper_compilation_promises as &str,
                 &self.src.js_init as &str,
                 &self.src.js as &str,
                 gen = helper.generator,
