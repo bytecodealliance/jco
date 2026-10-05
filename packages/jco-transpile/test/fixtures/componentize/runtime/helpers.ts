@@ -11,14 +11,14 @@ import { basename } from 'node:path';
 // `imports` object provided. The `path` is a relative path to a wasm file
 // within the generated directory.
 export async function loadWasm(path: string) {
-    const name = basename(path).replace(/\.core\d*\.wasm$/, '');
+    const name = basename(path).replace(/\.(core\d*|conditional-suspending-[\w-]+)\.wasm$/, '');
     const buf = await readFile(new URL(`./${name}/${path}`, import.meta.url));
     return await WebAssembly.compile(buf.buffer as ArrayBuffer);
 }
 
 // Just like `loadWasm`, but not async :-).
 export function loadWasmSync(path: string) {
-    const name = basename(path).replace(/\.core\d*\.wasm$/, '');
+    const name = basename(path).replace(/\.(core\d*|conditional-suspending-[\w-]+)\.wasm$/, '');
     const buf = readFileSync(new URL(`./${name}/${path}`, import.meta.url));
     return new WebAssembly.Module(buf.buffer as ArrayBuffer);
 }
