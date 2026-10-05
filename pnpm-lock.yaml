@@ -450,8 +450,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
+        specifier: ^0.6.0
+        version: 0.6.0(@bytecodealliance/preview2-shim@0.27.1)
       '@bytecodealliance/jco-transpile':
         specifier: ^0.17.0
         version: 0.17.0
@@ -1038,6 +1038,14 @@ packages:
     resolution: {integrity: sha512-TLklLNHUbCtXH9nRDDhZuk8rPYW0kd5R0ClvwpIXCBOyESHZGIGU1y7V47Uggz3i0h5WG3+srOg3aKfyZT4IIg==}
     peerDependencies:
       '@bytecodealliance/preview2-shim': ^0.25.0
+    peerDependenciesMeta:
+      '@bytecodealliance/preview2-shim':
+        optional: true
+
+  '@bytecodealliance/jco-std@0.6.0':
+    resolution: {integrity: sha512-7c8S9NJv/WB8J3RXbDBuFrSbiB6W+P2rAdT6oBwfra+BiCr+9KZcsfEoDhBlBA/OVc3P6KOn7Wq65A1VOuTwHg==}
+    peerDependencies:
+      '@bytecodealliance/preview2-shim': ^0.27.1
     peerDependenciesMeta:
       '@bytecodealliance/preview2-shim':
         optional: true
@@ -5599,6 +5607,18 @@ snapshots:
       '@bytecodealliance/preview2-shim': 0.25.0
 
   '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.27.1)':
+    dependencies:
+      acorn: 8.17.0
+      acorn-walk: 8.3.5
+      minimatch: 10.2.6
+      punycode: 2.3.1
+      readable-stream: 4.7.0
+      urlpattern-polyfill: 10.1.0
+      whatwg-url: 14.2.0
+    optionalDependencies:
+      '@bytecodealliance/preview2-shim': 0.27.1
+
+  '@bytecodealliance/jco-std@0.6.0(@bytecodealliance/preview2-shim@0.27.1)':
     dependencies:
       acorn: 8.17.0
       acorn-walk: 8.3.5
