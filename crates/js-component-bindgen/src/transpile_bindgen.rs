@@ -160,6 +160,17 @@ pub struct TranspileOpts {
     /// behind a flag in today's JS engines.
     #[builder(default)]
     pub supports_wasm_exnref: bool,
+    /// Emit the Wasm of conditional-suspending trampolines as files loaded through
+    /// `getCoreModule`. Takes effect only with `instantiation_mode`.
+    #[builder(default)]
+    pub emit_conditional_suspending_wasm: bool,
+}
+
+impl TranspileOpts {
+    /// Whether the trampoline Wasm is loaded through `getCoreModule`
+    pub(crate) fn loads_conditional_suspending_wasm(&self) -> bool {
+        self.emit_conditional_suspending_wasm && self.instantiation_mode.is_some()
+    }
 }
 
 #[derive(Default, Clone, Debug)]
@@ -553,6 +564,25 @@ impl JsBindgen<'_> {
         // Render the telemery directive
         uwriteln!(output, r#""use components";"#);
 
+        // Emit conditional-suspending trampolines as files so hosts can precompile them
+        let mut conditional_suspending_compilations = source::Source::default();
+        if self.opts.loads_conditional_suspending_wasm() {
+            let wasm = Intrinsic::ConditionalSuspendingWasm.name();
+            for intrinsic in self.all_intrinsics.iter() {
+                let Some((suffix, bytes)) = intrinsic.conditional_suspending_wasm() else {
+                    continue;
+                };
+                let file_name = format!("{name}.{suffix}.wasm");
+                files.push(&file_name, bytes);
+                uwriteln!(
+                    conditional_suspending_compilations,
+                    "{wasm}.{} = (yield getCoreModule('{file_name}')) ?? {};",
+                    intrinsic.name(),
+                    intrinsic.compile_conditional_suspending_js(),
+                );
+            }
+        }
+
         let render_args = RenderIntrinsicsArgs::builder()
             .intrinsics(&mut self.all_intrinsics)
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
@@ -606,6 +636,7 @@ impl JsBindgen<'_> {
                 "\
                         let {gen} = (function* _initGenerator () {{
                             {}\
+                            {}\
                             {};
                         }})();
                         let {promise}, {resolve}, {reject};
@@ -642,6 +673,7 @@ impl JsBindgen<'_> {
                         return {promise} || {maybe_sync};
                     }};
                 ",
+                &conditional_suspending_compilations as &str,
                 &self.src.js_init as &str,
                 &self.src.js as &str,
                 gen = helper.generator,
