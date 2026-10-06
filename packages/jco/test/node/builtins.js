@@ -19,10 +19,8 @@ function resolveBare(plugin, specifier, installed = null) {
     return plugin.resolveId.call({ resolve: async () => installed }, specifier);
 }
 
-const environment = (patch = 6n) => ({
-    imports: [
-        { namespace: "wasi", package: "cli", interface: "environment", version: { major: 0n, minor: 2n, patch } },
-    ],
+const environment = (patch = 6n, minor = 2n) => ({
+    imports: [{ namespace: "wasi", package: "cli", interface: "environment", version: { major: 0n, minor, patch } }],
     exports: [],
 });
 
@@ -228,6 +226,27 @@ describe("Node builtin adapters", () => {
         expect(core).toContain('from "wasi:cli/environment@0.2.6"');
         expect(core).toContain('from "/jco/node/path.js"');
     });
+
+    test.each(["node:path", "node:path/posix", "node:path/win32"])(
+        "generates a P3 environment adapter for %s without injecting P2 imports",
+        (specifier) => {
+            const onWitRequirement = vi.fn();
+            const plugin = nodeBuiltinPlugin(environment(0n, 3n), {
+                pathFactory: "/jco/p3/path.js",
+                onWitRequirement,
+            });
+            const id = plugin.resolveId(specifier);
+            expect(id).toBe(`\0jco-node-builtin:${specifier}@0.3.0`);
+            expect(plugin.load(id)).toContain("jco-node-builtin:path-core@0.3.0");
+            const core = plugin.load(plugin.resolveId("\0jco-node-builtin:path-core@0.3.0"));
+            expect(core).toContain(
+                'import { getInitialCwd as initialCwd, getEnvironment } from "wasi:cli/environment@0.3.0"',
+            );
+            expect(core).toContain('from "/jco/p3/path.js"');
+            expect(core).toContain("createPath({ initialCwd: () => initialCwd() ?? undefined, getEnvironment })");
+            expect(onWitRequirement).not.toHaveBeenCalled();
+        },
+    );
 
     test.each(["node:assert", "node:assert/strict"])("generates a capability-free adapter for %s", (specifier) => {
         const plugin = nodeBuiltinPlugin(
@@ -847,6 +866,19 @@ describe("Node builtin adapters", () => {
         metadata.imports.push(environment(3n).imports[0]);
         const plugin = nodeBuiltinPlugin(metadata, { pathFactory: "/jco/node/path.js" });
         expect(() => plugin.resolveId("node:path")).toThrow(/multiple wasi:cli\/environment/);
+    });
+
+    test.each([
+        [environment(), environment(0n, 3n)],
+        [environment(0n, 3n), environment(1n, 3n)],
+    ])("rejects ambiguous P3 environment versions", (first, second) => {
+        const onWitRequirement = vi.fn();
+        const plugin = nodeBuiltinPlugin(
+            { imports: [...first.imports, ...second.imports], exports: [] },
+            { pathFactory: "/jco/p3/path.js", onWitRequirement },
+        );
+        expect(() => plugin.resolveId("node:path")).toThrow(/multiple wasi:cli\/environment/);
+        expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
     test.concurrent("reports the WIT capability required by node:console", () => {

@@ -26,9 +26,15 @@ export interface BuiltinContext {
 }
 
 /** Keep both the WASI and Node major pinned; resolve only when an adapter is loaded. */
-export function stdModule(override: string | undefined, subpath: string, major = "24.x.x"): string {
+export function stdModule(
+    override: string | undefined,
+    subpath: string,
+    major = "24.x.x",
+    wasiVersion: "0.2.x" | "0.3.x" = "0.2.x",
+): string {
     return (
-        override ?? fileURLToPath(import.meta.resolve(`@bytecodealliance/jco-std/wasi/0.2.x/node/${major}/${subpath}`))
+        override ??
+        fileURLToPath(import.meta.resolve(`@bytecodealliance/jco-std/wasi/${wasiVersion}/node/${major}/${subpath}`))
     );
 }
 

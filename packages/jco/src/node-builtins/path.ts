@@ -21,14 +21,14 @@ function environmentVersion(worldMetadata: WorldMetadata): string | undefined {
             iface.package === "cli" &&
             iface.interface === "environment" &&
             iface.version?.major === 0n &&
-            iface.version?.minor === 2n,
+            (iface.version?.minor === 2n || iface.version?.minor === 3n),
     );
     if (matches.length === 0) {
         return undefined;
     }
     if (matches.length > 1) {
         throw new Error(
-            "node:path cannot select a WASI environment adapter because the selected WIT world imports multiple wasi:cli/environment@0.2.x versions",
+            "node:path cannot select a WASI environment adapter because the selected WIT world imports multiple wasi:cli/environment versions (0.2.x or 0.3.x)",
         );
     }
     const { major, minor, patch, pre } = matches[0].version!;
@@ -37,10 +37,16 @@ function environmentVersion(worldMetadata: WorldMetadata): string | undefined {
 
 /** Source of the shared `node:path` core, which owns the single WASI-backed path instance */
 function pathCore(version: string, factoryPath: string) {
+    const preview3 = version.startsWith("0.3.");
+    const cwdProvider = preview3 ? "getInitialCwd as initialCwd" : "initialCwd";
+    // QuickJS lifts an absent option<string> as null; the shared factory expects undefined.
+    const providers = preview3
+        ? "initialCwd: () => initialCwd() ?? undefined, getEnvironment"
+        : "initialCwd, getEnvironment";
     return `
-import { initialCwd, getEnvironment } from "wasi:cli/environment@${version}";
+import { ${cwdProvider}, getEnvironment } from "wasi:cli/environment@${version}";
 import { createPath } from ${JSON.stringify(factoryPath)};
-export const portablePath = createPath({ initialCwd, getEnvironment });
+export const portablePath = createPath({ ${providers} });
 `;
 }
 
@@ -93,7 +99,8 @@ export function createPathBuiltin({ options, worldMetadata }: BuiltinContext): B
             const specifier = value.slice(0, separator);
             const version = value.slice(separator + 1);
             if (specifier === "path-core") {
-                return pathCore(version, stdModule(options.pathFactory, "path"));
+                const wasiVersion = version.startsWith("0.3.") ? "0.3.x" : "0.2.x";
+                return pathCore(version, stdModule(options.pathFactory, "path", "24.x.x", wasiVersion));
             }
             return PATH_SPECIFIERS.has(specifier) ? pathAdapter(specifier, version) : null;
         },

@@ -30,7 +30,7 @@ export interface NodeBuiltinOptions {
     workerThreadsModule?: string;
 
     cryptoModule?: string;
-    /** Path to jco-std's `wasi/0.2.x/node/24.x.x/path` module (overridable for tests) */
+    /** Path to jco-std's Node 24 path factory for the world's WASI version (overridable for tests). */
     pathFactory?: string;
     /** Path to jco-std's `wasi/0.2.x/node/24.x.x/assert` module (overridable for tests) */
     assertModule?: string;
