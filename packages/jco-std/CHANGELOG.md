@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0] - 2026-10-06
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update preview2-shim to v0.28.0 by @vados-cosmonic
+
 ## [0.6.0] - 2026-10-05
 
 ### ⚙️ Miscellaneous Tasks
