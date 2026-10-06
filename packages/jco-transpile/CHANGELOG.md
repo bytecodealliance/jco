@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.0] - 2026-10-06
+
+### 🧪 Testing
+
+- _(transpile)_ instantiate conditional-suspending trampolines without runtime compilation by @O6lvl4 in #2209
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ preview2-shim -> 0.28.0, preview3-shim -> v0.9.0 by @vados-cosmonic
+
+## New Contributors
+
+- @O6lvl4 made their first contribution in [#2209](https://github.com/bytecodealliance/jco/pull/2209)
+
 ## [0.17.0] - 2026-10-04
 
 ### 🚀 Features
