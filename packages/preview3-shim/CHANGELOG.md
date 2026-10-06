@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.0] - 2026-10-06
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.28.0 by @vados-cosmonic
+
 ## [0.8.1] - 2026-10-02
 
 ### ⚙️ Miscellaneous Tasks
