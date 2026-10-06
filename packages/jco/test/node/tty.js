@@ -59,10 +59,7 @@ suite("node:tty", () => {
         expect((await readFile(world, "utf8")).match(/import jco:node\/tty@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    // TODO(unskip): publish and depend on a jco-std release with the `wasi/0.2.x/node/24.x.x/tty`
-    // export; the workspace copy has it, the published 0.3.x does not, and jco componentizes
-    // against the published package.
-    test.skip.each(["quickjs", "starlingmonkey"])(
+    test.each(["quickjs", "starlingmonkey"])(
         "componentizes and runs against the deny, scripted, and Node terminal providers (%s)",
         async (backend) => {
             const { componentPath, fixtureDir, stderr } = await componentizeFixture({

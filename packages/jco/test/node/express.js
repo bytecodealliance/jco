@@ -26,6 +26,10 @@ const NODE_FS_HOST = pathToFileURL(
     fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/fs-host.js", import.meta.url)),
 ).href;
 
+const NODE_ZLIB_HOST = pathToFileURL(
+    fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/zlib-host.js", import.meta.url)),
+).href;
+
 /**
  * The exports and imports that have to cross the JSPI boundary asynchronously.
  *
@@ -36,10 +40,7 @@ const NODE_FS_HOST = pathToFileURL(
 const ASYNC_EXPORTS = ["start", "stop", "jco:node/http-callbacks@0.1.0#*"];
 
 describe("express in a component", () => {
-    // TODO(unskip): update to the next jco-std release and verify that the injected process
-    // fallback no longer opens host TTY streams during Wizer initialization. Express currently
-    // traps on jco:node/tty@0.1.0#open before it can run.
-    test.skip("serves an unmodified Express application over a socket", async () => {
+    test("serves an unmodified Express application over a socket", async () => {
         // Componentizing rewrites the world in place to add the Node WIT imports, so the
         // fixture is built from a copy. The copy stays inside this package because the
         // fixture imports `express` by name, and a copy outside the workspace would not
@@ -51,7 +52,16 @@ describe("express in a component", () => {
                 bundle: true,
                 copy: true,
                 outputDir,
-                extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "direct"],
+                extraArgs: [
+                    "--backend",
+                    "starlingmonkey",
+                    "--with-nodejs-http-via",
+                    "direct",
+                    "--bundle-config",
+                    fileURLToPath(
+                        new URL("../fixtures/componentize/node-express/rolldown.config.mjs", import.meta.url),
+                    ),
+                ],
             });
 
             // The world the fixture declares carries nothing but its own two exports.
@@ -76,6 +86,7 @@ describe("express in a component", () => {
                                 // satisfied; the deny-by-default host does that without
                                 // granting access.
                                 "jco:node/fs@0.1.0": NODE_FS_HOST,
+                                "jco:node/zlib@0.1.0": NODE_ZLIB_HOST,
                             },
                         },
                     },
@@ -89,6 +100,7 @@ describe("express in a component", () => {
                     esModuleOutputPath,
                     NODE_HTTP_HOST,
                     `${NODE_FS_HOST}=${NODE_FS_HOST}`,
+                    `${NODE_ZLIB_HOST}=${NODE_ZLIB_HOST}`,
                 );
                 const results = JSON.parse(output.stdout);
 

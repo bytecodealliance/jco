@@ -65,16 +65,14 @@ function expectTypeChecks(paths) {
     expect(diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))).toEqual([]);
 }
 
-// TODO(unskip): publish and depend on a jco-std release with the process exports and ProcessHost type.
-test.concurrent.skip("custom process provider conforms to the public ProcessHost type", () => {
+test.concurrent("custom process provider conforms to the public ProcessHost type", () => {
     const provider = fileURLToPath(
         new URL("../fixtures/componentize/node-process-custom/provider.js", import.meta.url),
     );
     expectTypeChecks([provider]);
 });
 
-// TODO(unskip): publish and depend on a jco-std release with the process facade and host providers.
-test.concurrent.skip.each(["quickjs", "starlingmonkey"])(
+test.concurrent.each(["quickjs", "starlingmonkey"])(
     "process component runs with native and default-denied providers (%s)",
     async (backend) => {
         const nodeHost = import.meta.resolve(NODE_HOST);
@@ -147,8 +145,7 @@ test.concurrent.skip.each(["quickjs", "starlingmonkey"])(
     600000,
 );
 
-// TODO(unskip): publish and depend on a jco-std release with the process exports and ProcessHost type.
-test.concurrent.skip.each(["quickjs", "starlingmonkey"])(
+test.concurrent.each(["quickjs", "starlingmonkey"])(
     "custom process provider handles guest exit without exiting the host (%s)",
     async (backend) => {
         const nodeHost = import.meta.resolve(NODE_HOST);

@@ -9,9 +9,8 @@ import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 const [modulePath, mode] = nativeProcess.argv.slice(2);
 const { instantiate } = await import(pathToFileURL(modulePath));
 
-// The default transpile mapping names jco-std's deny host; instantiation supplies the module
-// under that name, so the same component runs against every provider here.
-const DENY_SPECIFIER = "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/wasi/host";
+// Instantiation output takes the WIT interface name unless an explicit map renames it.
+const WASI_INTERFACE = "jco:node/wasi";
 // The sibling workspace build, so the runner needs no published jco-std release.
 const std = new URL("../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/", import.meta.url);
 
@@ -40,7 +39,7 @@ const host = await import(new URL(mode === "node" ? "wasi-host-node.js" : "wasi-
 const sandbox = mkdtempSync(join(tmpdir(), "jco-node-wasi-"));
 writeFileSync(join(sandbox, "file"), "");
 
-const instance = await instantiate(undefined, { ...new WASIShim().getImportObject(), [DENY_SPECIFIER]: host });
+const instance = await instantiate(undefined, { ...new WASIShim().getImportObject(), [WASI_INTERFACE]: host });
 const guest = JSON.parse(instance.run(mode, sandbox));
 const native = {
     badVersion: failure(() => new NodeWASI({ version: "preview2" })),

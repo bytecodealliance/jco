@@ -88,8 +88,7 @@ async function run(root: string, url: string, policy = "trusted", body = "", ser
 }
 
 for (const backend of ["starlingmonkey"]) {
-    // TODO(unskip): restore the Node TLS provider/export once preview2-shim publishes ./io-worker.
-    describe.skip(`node:https over wasi:sockets + wasi:tls (${backend})`, () => {
+    describe(`node:https over wasi:sockets + wasi:tls (${backend})`, () => {
         let root: string;
         beforeAll(async () => {
             root = await mkdtemp(join(tmpdir(), "jco-https-tls-"));

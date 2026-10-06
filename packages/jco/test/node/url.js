@@ -17,10 +17,7 @@ try {
 }
 
 suite("node:url in components", () => {
-    // TODO(unskip): update to the next jco-std release with resolvable TTY host exports, and
-    // verify that generated WIT does not leave imports without dependencies for the next backend.
-    // Keep the URL-export and Node 24 oracle guards when restoring this test.
-    test.skip.skipIf(!hasUrlExport || !isNode24).each(["qjs", "starlingmonkey"])(
+    test.skipIf(!hasUrlExport || !isNode24).each(["qjs", "starlingmonkey"])(
         "matches Node 24 extensively through %s",
         async (backend) => {
             // Avoid importing Node 24-only named exports during collection on other hosts.
@@ -34,6 +31,7 @@ suite("node:url in components", () => {
                 wit: "source.wit",
                 world: "test",
                 bundle: true,
+                copy: true,
                 extraArgs: ["--backend", backend],
             });
             const { modulePath } = await transpileComponent({ componentPath, name: "node-url" });
@@ -62,10 +60,7 @@ suite("node:url in components", () => {
         },
         180_000,
     );
-    // TODO(unskip): update to the next jco-std release and verify its TTY host export resolves
-    // from transpiled temporary directories. Both engines currently fail to import
-    // @bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/tty/host in CI.
-    test.skip.each(["qjs", "starlingmonkey"])(
+    test.each(["qjs", "starlingmonkey"])(
         "uses the WIT world's WASI cwd through %s",
         async (backend) => {
             const { componentPath } = await componentizeFixture({
@@ -73,6 +68,7 @@ suite("node:url in components", () => {
                 entry: "cwd.js",
                 world: "cwd",
                 bundle: true,
+                copy: true,
                 extraArgs: ["--backend", backend],
             });
             const { modulePath } = await transpileComponent({ componentPath, name: "node-url-cwd" });
