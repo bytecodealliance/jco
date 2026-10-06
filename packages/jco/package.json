@@ -67,7 +67,7 @@
         "@bytecodealliance/componentize-js": "^0.23.0",
         "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
         "@bytecodealliance/jco-std": "^0.7.0",
-        "@bytecodealliance/jco-transpile": "^0.17.0",
+        "@bytecodealliance/jco-transpile": "^0.18.0",
         "@bytecodealliance/preview2-shim": "^0.28.0",
         "binaryen": "^132.0.0",
         "commander": "^14",
