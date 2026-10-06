@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 
 import { componentizeFixture, exec, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 /**
  * Express is the widest test of Node builtin compatibility: nothing about it is written for
@@ -39,7 +40,7 @@ const NODE_ZLIB_HOST = pathToFileURL(
  */
 const ASYNC_EXPORTS = ["start", "stop", "jco:node/http-callbacks@0.1.0#*"];
 
-describe("express in a component", () => {
+describe.skipIf(!hasJspi)("express in a component", () => {
     test("serves an unmodified Express application over a socket", async () => {
         // Componentizing rewrites the world in place to add the Node WIT imports, so the
         // fixture is built from a copy. The copy stays inside this package because the

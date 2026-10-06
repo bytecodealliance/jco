@@ -7,6 +7,7 @@ import ts from "typescript-compiler-api";
 import { PROCESS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 function runNode(args) {
     return new Promise((resolve, reject) => {
@@ -72,9 +73,13 @@ test.concurrent("custom process provider conforms to the public ProcessHost type
     expectTypeChecks([provider]);
 });
 
-test.concurrent.each(["quickjs", "starlingmonkey"])(
+test.concurrent.for(["quickjs", "starlingmonkey"])(
     "process component runs with native and default-denied providers (%s)",
-    async (backend) => {
+    { timeout: 600000 },
+    async (backend, { skip }) => {
+        if (backend === "quickjs" && !hasJspi) {
+            skip("QuickJS async ABI trampolines require modern JSPI");
+        }
         const nodeHost = import.meta.resolve(NODE_HOST);
         const { componentPath } = await componentizeFixture({
             fixture: "node-process",
@@ -142,12 +147,15 @@ test.concurrent.each(["quickjs", "starlingmonkey"])(
             }
         }
     },
-    600000,
 );
 
-test.concurrent.each(["quickjs", "starlingmonkey"])(
+test.concurrent.for(["quickjs", "starlingmonkey"])(
     "custom process provider handles guest exit without exiting the host (%s)",
-    async (backend) => {
+    { timeout: 600000 },
+    async (backend, { skip }) => {
+        if (backend === "quickjs" && !hasJspi) {
+            skip("QuickJS async ABI trampolines require modern JSPI");
+        }
         const nodeHost = import.meta.resolve(NODE_HOST);
         const { componentPath } = await componentizeFixture({
             fixture: "node-process-custom",
@@ -186,5 +194,4 @@ test.concurrent.each(["quickjs", "starlingmonkey"])(
             await cleanup();
         }
     },
-    600000,
 );

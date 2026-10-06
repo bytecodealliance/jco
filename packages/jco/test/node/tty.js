@@ -10,6 +10,7 @@ import which from "which";
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { TTY_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const FIXTURE = fileURLToPath(new URL("../fixtures/componentize/node-tty/", import.meta.url));
 const python = which.sync("python3", { nothrow: true });
@@ -59,9 +60,13 @@ suite("node:tty", () => {
         expect((await readFile(world, "utf8")).match(/import jco:node\/tty@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    test.each(["quickjs", "starlingmonkey"])(
+    test.for(["quickjs", "starlingmonkey"])(
         "componentizes and runs against the deny, scripted, and Node terminal providers (%s)",
-        async (backend) => {
+        { timeout: 600_000 },
+        async (backend, { skip }) => {
+            if (backend === "quickjs" && !hasJspi) {
+                skip("QuickJS async ABI trampolines require modern JSPI");
+            }
             const { componentPath, fixtureDir, stderr } = await componentizeFixture({
                 fixture: "node-tty",
                 bundle: true,
@@ -188,6 +193,5 @@ suite("node:tty", () => {
                 await cleanup();
             }
         },
-        600_000,
     );
 });

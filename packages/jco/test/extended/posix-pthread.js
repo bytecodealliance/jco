@@ -8,7 +8,9 @@ import { exec, jcoPath, fileExists, getTmpDir } from "../helpers.js";
 import { EXTENDED_TEST_COMPONENTS_DIR } from "../common.js";
 
 suite("posix-pthread-mutex-lock", () => {
-    test("1-1", async () => {
+    // TODO(unskip): Restore when jco-transpile supports cooperative threading intrinsics
+    // and wasi-sdk's thread-local context slot; the current release rejects context.set 1.
+    test.skip("1-1", async () => {
         const componentPath = join(EXTENDED_TEST_COMPONENTS_DIR, "posix/pthread-mutex-lock/1-1/component.wasm");
         assert(await fileExists(componentPath), "built posix-pthread-mutex-lock-1-1 component must be in place");
 

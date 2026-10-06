@@ -13,6 +13,7 @@ import {
     injectNodeWitImports,
 } from "../../src/node-wit.js";
 import { componentizeFixture, exec, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const modulePaths = {
     httpModule: "/jco/http.js",
@@ -138,7 +139,7 @@ describe("node:https WIT installation", () => {
     });
 });
 
-describe("node:https in a component", () => {
+describe.skipIf(!hasJspi)("node:https in a component", () => {
     test("terminates TLS for a guest server through the host node:https", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-https-server",
