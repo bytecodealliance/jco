@@ -153,8 +153,8 @@ policy; changing `CLIENT_RENEG_LIMIT` or `CLIENT_RENEG_WINDOW` throws. The socke
 is a portable `Duplex`; it is not an instance of the separate `node:net` shim's
 Socket class.
 
-The component fixture includes enabled tests for StarlingMonkey and QuickJS.
-The QuickJS case currently fails in componentize-qjs's linker because of shared
-WASI TLS resource types. Export a synchronous starter for long-lived event-driven
-work: a guest export cannot await a promise resolved solely by a future independent
-host callback. The fixture's starter/status exports demonstrate this engine boundary.
+StarlingMonkey runs the component fixture. The QuickJS case is skipped until
+componentize-qjs can link the shared WASI TLS/IO resource types. Export a synchronous
+starter for long-lived event-driven work: a guest export cannot await a promise
+resolved solely by a future independent host callback. The fixture's starter/status
+exports demonstrate this engine boundary.
