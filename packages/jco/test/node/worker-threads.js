@@ -94,55 +94,49 @@ describe.skipIf(!hasJspi)("node:worker_threads components", () => {
                 }
             });
 
-            // TODO(unskip): QuickJS exported resource callbacks trap; enable alongside
-            // the equivalent node:dgram and node:inspector callback tests when fixed.
-            test.skipIf(backend === "quickjs")(
-                "real host workers exchange structured messages with isolated component instances",
-                async () => {
-                    const { createWorkerThreadsHost } = await loadNodeProvider();
-                    let first;
-                    let second;
-                    first = await instantiate(createWorkerThreadsHost(() => first.instance.workerThreadsCallbacks));
-                    second = await instantiate(createWorkerThreadsHost(() => second.instance.workerThreadsCallbacks));
-                    try {
-                        const ids = [await first.instance.start(7), await second.instance.start(9)];
-                        expect(ids[0]).not.toBe(ids[1]);
-                        for (const [result, token] of [
-                            [first, 7],
-                            [second, 9],
-                        ]) {
-                            let state;
-                            for (let attempt = 0; attempt < 300; attempt++) {
-                                state = JSON.parse(await result.instance.status());
-                                if (state.exit !== null) {
-                                    break;
-                                }
-                                await delay(10);
+            test("real host workers exchange structured messages with isolated component instances", async () => {
+                const { createWorkerThreadsHost } = await loadNodeProvider();
+                let first;
+                let second;
+                first = await instantiate(createWorkerThreadsHost(() => first.instance.workerThreadsCallbacks));
+                second = await instantiate(createWorkerThreadsHost(() => second.instance.workerThreadsCallbacks));
+                try {
+                    const ids = [await first.instance.start(7), await second.instance.start(9)];
+                    expect(ids[0]).not.toBe(ids[1]);
+                    for (const [result, token] of [
+                        [first, 7],
+                        [second, 9],
+                    ]) {
+                        let state;
+                        for (let attempt = 0; attempt < 300; attempt++) {
+                            state = JSON.parse(await result.instance.status());
+                            if (state.exit !== null) {
+                                break;
                             }
-                            expect(state.errors).toEqual([]);
-                            expect(state.events).toEqual(["online", "message", "exit"]);
-                            expect(state.message).toEqual({
-                                token,
-                                data: { token },
-                                main: false,
-                                cycle: true,
-                                bigint: "123",
-                                map: 42,
-                                undefinedPresent: true,
-                            });
-                            expect(state.exit).toBe(0);
-                            expect(state.threadId).toBe(-1);
-                            await result.instance.stop();
+                            await delay(10);
                         }
-                    } finally {
-                        await first.instance.stop();
-                        await second.instance.stop();
-                        await first.cleanup();
-                        await second.cleanup();
+                        expect(state.errors).toEqual([]);
+                        expect(state.events).toEqual(["online", "message", "exit"]);
+                        expect(state.message).toEqual({
+                            token,
+                            data: { token },
+                            main: false,
+                            cycle: true,
+                            bigint: "123",
+                            map: 42,
+                            undefinedPresent: true,
+                        });
+                        expect(state.exit).toBe(0);
+                        expect(state.threadId).toBe(-1);
+                        await result.instance.stop();
                     }
-                },
-                30_000,
-            );
+                } finally {
+                    await first.instance.stop();
+                    await second.instance.stop();
+                    await first.cleanup();
+                    await second.cleanup();
+                }
+            }, 30_000);
         });
     }
 });

@@ -149,5 +149,4 @@ test.skipIf(!hasJspi).concurrent(
     () => documentationExample("starlingmonkey"),
     60_000,
 );
-// TODO(unskip): componentize-qjs cannot link the TLS interface's shared WASI IO resource types.
-test.skip("TLS documentation echo examples execute in QuickJS", () => documentationExample("quickjs"), 60_000);
+test("TLS documentation echo examples execute in QuickJS", () => documentationExample("quickjs"), 60_000);
