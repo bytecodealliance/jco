@@ -593,10 +593,13 @@ impl JsBindgen<'_> {
 
         // Write out instantiation
         if let Some(instantiation) = &self.opts.instantiation_mode {
+            // Choose the default core instantiator in the body, after binding the
+            // WebAssembly override used by both instantiation and the intrinsics.
             uwrite!(
                 output,
                 "\
-                    export function instantiate(getCoreModule, imports, instantiateCore = {}) {{
+                    export function instantiate(getCoreModule, imports, instantiateCore, {{ WebAssembly = globalThis.WebAssembly }} = {{}}) {{
+                        if (typeof instantiateCore === 'undefined') instantiateCore = {};
                         {}
                         {}
                         {}

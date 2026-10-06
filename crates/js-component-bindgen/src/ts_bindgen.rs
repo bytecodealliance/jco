@@ -474,16 +474,22 @@ pub fn ts_bindgen(
                  * identified by `path` and returning its compiled
                  * `WebAssembly.Module` object. This would use the
                  * `WebAssembly.Module` constructor on the web, for example.
+                 *
+                 * The optional `globals` argument overrides the WebAssembly
+                 * implementation used by this instance, including the default
+                 * `instantiateCore`. It defaults to `globalThis.WebAssembly`.
                  */
                 export function instantiate(
                     getCoreModule: (path: string) => WebAssembly.Module,
                     imports: ImportObject,
-                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
+                    globals?: {{ WebAssembly?: typeof WebAssembly }}
                 ): {camel};
                 export function instantiate(
                     getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
                     imports: ImportObject,
-                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
+                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>,
+                    globals?: {{ WebAssembly?: typeof WebAssembly }}
                 ): {camel} | Promise<{camel}>;
                 ",
                 );
@@ -511,11 +517,16 @@ pub fn ts_bindgen(
                      * identified by `path` and returning its compiled
                      * `WebAssembly.Module` object. This would use the
                      * `WebAssembly.Module` constructor on the web, for example.
+                     *
+                     * The optional `globals` argument overrides the WebAssembly
+                     * implementation used by this instance, including the default
+                     * `instantiateCore`. It defaults to `globalThis.WebAssembly`.
                      */
                     export function instantiate(
                         getCoreModule: (path: string) => WebAssembly.Module,
                         imports: ImportObject,
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
+                        globals?: {{ WebAssembly?: typeof WebAssembly }}
                     ): {camel};
                     ",
                 )
