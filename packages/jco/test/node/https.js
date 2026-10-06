@@ -4,7 +4,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, test, vi } from "vitest";
 
-import { withDefaultNodeCapabilities } from "../../src/cmd/transpile.js";
 import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import {
     HTTP_WIT_REQUIREMENT,
@@ -139,32 +138,24 @@ describe("node:https WIT installation", () => {
     });
 });
 
-// The direct mode's guest tests need two things before they can run: a published jco-std that
-// carries the node:https exports, and a working direct round trip. Today a transpiled component
-// also imports `jco:node/http-callbacks` (the `http` interface `use`s it, so the world imports it
-// transitively) and the JSPI-suspended `request` import hands `undefined` back to the guest; the
-// same happens for plain node:http, see the sibling tests in http.js.
 describe("node:https in a component", () => {
-    // TODO(unskip): use the published jco-std node:https exports once a release containing them
-    // is available, and remove the callbacks/JSPI blockers described above.
-    test.skip("terminates TLS for a guest server through the host node:https", async () => {
+    test("terminates TLS for a guest server through the host node:https", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-https-server",
             bundle: true,
             copy: true,
             extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "direct"],
         });
-        expect(stderr).toContain("Jco added generated WIT import jco:node/http@0.1.0");
+        expect(stderr).toMatch(/Jco added generated WIT imports? jco:node\/http@0\.1\.0/);
         expect(stderr).toContain("jco:node/http-callbacks@0.1.0");
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
             component: { name: "node-https-server", path: componentPath, skipInstantiation: true },
             jco: {
                 transpile: {
-                    // The same defaults the CLI applies: JSPI plus the async host imports.
-                    extraArgs: withDefaultNodeCapabilities({
-                        asyncExports: ["*"],
+                    extraArgs: {
+                        asyncExports: ["start", "stop", "jco:node/http-callbacks@0.1.0#*"],
                         map: { "jco:node/http@0.1.0": NODE_HOST },
-                    }),
+                    },
                 },
             },
         });
@@ -177,23 +168,22 @@ describe("node:https in a component", () => {
         }
     }, 600_000);
 
-    // TODO(unskip): same blockers as above.
-    test.skip("performs a verified HTTPS request from a guest through the host node:https", async () => {
+    test("performs a verified HTTPS request from a guest through the host node:https", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-https",
             bundle: true,
             copy: true,
             extraArgs: ["--backend", "starlingmonkey", "--with-nodejs-http-via", "direct"],
         });
-        expect(stderr).toContain("Jco added generated WIT import jco:node/http@0.1.0");
+        expect(stderr).toMatch(/Jco added generated WIT imports? jco:node\/http@0\.1\.0/);
         const { esModuleOutputPath, cleanup } = await setupAsyncTest({
             component: { name: "node-https-direct", path: componentPath, skipInstantiation: true },
             jco: {
                 transpile: {
-                    extraArgs: withDefaultNodeCapabilities({
+                    extraArgs: {
                         asyncExports: ["run"],
                         map: { "jco:node/http@0.1.0": NODE_HOST },
-                    }),
+                    },
                 },
             },
         });

@@ -10,11 +10,8 @@ import { assert, expect, suite, test } from "vitest";
 import { componentizeFixture, setupAsyncTest } from "../helpers.js";
 
 suite("node:path in a component", () => {
-    // TODO(unskip): update to the next jco-std release and verify warning-free componentization.
-    // The injected process fallback currently adds a host TTY capability to path-only bundles;
-    // its unresolved import and WIT injection warnings fail the stderr assertion.
-    test.skip("componentizes and runs lexical and cwd-backed path operations", async () => {
-        const { componentPath, stderr } = await componentizeFixture({ fixture: "node-path", bundle: true });
+    test("componentizes and runs lexical and cwd-backed path operations", async () => {
+        const { componentPath, stderr } = await componentizeFixture({ fixture: "node-path", bundle: true, copy: true });
         assert.strictEqual(stderr, "");
 
         const { instance, cleanup } = await setupAsyncTest({

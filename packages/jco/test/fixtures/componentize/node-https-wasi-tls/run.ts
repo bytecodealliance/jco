@@ -2,7 +2,7 @@ import { createWasiTlsBridge } from "../../../../../jco-std/dist/wasi/0.2.x/node
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import * as sockets from "../../../../../preview2-shim/dist/nodejs/sockets.js";
+import * as sockets from "@bytecodealliance/preview2-shim/sockets";
 import * as tls from "../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls-host-node.js";
 import * as denied from "../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tls-host.js";
 
@@ -23,7 +23,8 @@ class CountedHandshake extends provider.ClientHandshake {
 }
 const imports: Record<string, unknown> = {};
 for (const name of ["cli", "clocks", "filesystem", "http", "io", "random"]) {
-    imports[name] = await import(new URL(`../../../../../preview2-shim/dist/nodejs/${name}.js`, import.meta.url).href);
+    // Share the provider's installed shim instance so IO resources retain their class identity.
+    imports[name] = await import(`@bytecodealliance/preview2-shim/${name}`);
 }
 imports.sockets = {
     ...sockets,

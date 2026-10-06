@@ -144,6 +144,25 @@ suite("Node globals", () => {
         assert.include(source, "__BUFFER_GLOBAL_MARKER__");
     });
 
+    test.concurrent("initializes the injected process without a host TTY capability", async () => {
+        const root = await getTmpDir();
+        const entry = join(root, "entry.js");
+        await writeFile(entry, "export const value = [process.cwd(), process.stdout.isTTY, process.stderr.isTTY];");
+        const requirements = [];
+        const source = await bundleComponentSource(entry, {
+            inject: nodeGlobals(),
+            plugins: [
+                nodeBuiltinPlugin(
+                    { imports: [], exports: [] },
+                    { onWitRequirement: (requirement) => requirements.push(requirement) },
+                ),
+            ],
+        });
+        expect(requirements).toEqual([]);
+        const { value } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+        expect(value).toEqual(["/", false, false]);
+    });
+
     test.concurrent("routes the Buffer global through the audited Node builtin adapter", async () => {
         const root = await getTmpDir();
         const entry = join(root, "entry.js");

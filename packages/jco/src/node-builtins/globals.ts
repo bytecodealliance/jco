@@ -1,4 +1,5 @@
 import { unenvModule } from "./unenv.js";
+import { fileURLToPath } from "node:url";
 import {
     VIRTUAL_PREFIX,
     type BuiltinContext,
@@ -65,6 +66,21 @@ export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [m
 
 export function createGlobalsBuiltin({ options }: BuiltinContext): BuiltinAdapter {
     return composeBuiltins([
+        {
+            resolveId(id, importer) {
+                // unenv's portable process initializes its stdio while the module loads.
+                // Keep those streams portable too, rather than opening host TTYs during Wizer.
+                // Explicit application imports of node:tty still use the capability adapter.
+                if (
+                    id === "node:tty" &&
+                    importer === fileURLToPath(import.meta.resolve("unenv/node/internal/process/process"))
+                ) {
+                    return unenvModule("node:tty", options);
+                }
+                return null;
+            },
+            load: () => null,
+        },
         // Dependency initialization cannot call host-backed node:process during Wizer.
         // Keep this portable global distinct from explicit imports of that API.
         virtualBuiltin("jco:node-process-globals", `${VIRTUAL_PREFIX}process-globals`, () =>
