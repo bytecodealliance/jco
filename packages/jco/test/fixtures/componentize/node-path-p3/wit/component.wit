@@ -1,0 +1,12 @@
+package jco-fixtures:node-path-p3;
+
+world component {
+    import wasi:cli/environment@0.3.0;
+
+    export lexical: async func() -> string;
+    export from-cwd: async func() -> string;
+    export match: async func(path: string, pattern: string, windows: bool) -> bool;
+    export identities: async func() -> bool;
+    export from-drive: async func() -> string;
+    export missing-cwd: async func() -> string;
+}
