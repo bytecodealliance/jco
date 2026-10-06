@@ -207,6 +207,11 @@
       "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
       "default": "./dist/wasi/0.2.x/node/24.x.x/path.js"
     },
+    "./wasi/0.3.x/node/24.x.x/path": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/path.d.ts",
+      "browser": "./dist/wasi/0.2.x/node/24.x.x/path.js",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/path.js"
+    },
     "./wasi/0.2.x/node/24.x.x/os": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/os.d.ts",
       "browser": "./dist/wasi/0.2.x/node/24.x.x/os.js",

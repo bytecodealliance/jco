@@ -41,6 +41,7 @@ build NodeJS programs as components.
 | `wasi/0.2.x/node/24.x.x/net/core`                      | `node:net` core over injected WASI Preview 2 sockets                          |
 | `wasi/0.2.x/node/24.x.x/os`                            | `node:os` guest adapter over an explicit host capability                      |
 | `wasi/0.2.x/node/24.x.x/path`                          | `node:path` adapter, Node 24 on WASI p2                                       |
+| `wasi/0.3.x/node/24.x.x/path`                          | The same Node 24 path implementation and types, used with P3 environment providers |
 | `wasi/0.2.x/node/24.x.x/string-decoder`                | Guest-local `node:string_decoder` implementation for Node 24                  |
 | `wasi/0.2.x/node/24.x.x/timers`                        | Node 24 callback timers over engine scheduling                                |
 | `wasi/0.2.x/node/24.x.x/timers/promises`               | Promise timers, abortable interval iterators and scheduler                    |
