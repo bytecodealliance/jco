@@ -450,14 +450,14 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: ^0.6.0
-        version: 0.6.0(@bytecodealliance/preview2-shim@0.27.1)
+        specifier: ^0.7.0
+        version: 0.7.0(@bytecodealliance/preview2-shim@0.28.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.27.1
-        version: 0.27.1
+        specifier: ^0.28.0
+        version: 0.28.0
       binaryen:
         specifier: ^132.0.0
         version: 132.0.0
@@ -1042,10 +1042,10 @@ packages:
       '@bytecodealliance/preview2-shim':
         optional: true
 
-  '@bytecodealliance/jco-std@0.6.0':
-    resolution: {integrity: sha512-7c8S9NJv/WB8J3RXbDBuFrSbiB6W+P2rAdT6oBwfra+BiCr+9KZcsfEoDhBlBA/OVc3P6KOn7Wq65A1VOuTwHg==}
+  '@bytecodealliance/jco-std@0.7.0':
+    resolution: {integrity: sha512-QSiIRXS5eMUTe0gt5D45vZK4Pt7Hdf0S0Gr2Lt3+Q0h4YIq+n8EbEioQ2lem2edNWT/Zym+YvEXDZOhS3qZ2dw==}
     peerDependencies:
-      '@bytecodealliance/preview2-shim': ^0.27.1
+      '@bytecodealliance/preview2-shim': ^0.28.0
     peerDependenciesMeta:
       '@bytecodealliance/preview2-shim':
         optional: true
@@ -1059,8 +1059,8 @@ packages:
   '@bytecodealliance/jco-transpile@0.15.0':
     resolution: {integrity: sha512-MFftJ81B9TtHbvgCRZQod3jfgl62YvJszxsNdfx9IVNewxlX9q7U4Wd+w6gJzw+o9IjEGWoyg/BFpb/RnaJvlA==}
 
-  '@bytecodealliance/jco-transpile@0.17.0':
-    resolution: {integrity: sha512-mfSXL9a8drjGW/kr3V55cClJ8Rs3cs50GhsJ+wTHl3/gFPPw0Ej6z9KyYiuZ2veuf0WwrDWFuCKW7CyBpniLFw==}
+  '@bytecodealliance/jco-transpile@0.18.0':
+    resolution: {integrity: sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -1115,9 +1115,6 @@ packages:
 
   '@bytecodealliance/preview3-shim@0.7.0':
     resolution: {integrity: sha512-5bBAE1nKSIT6ZyWoyLQwV1VjJciAdgLk7hbMeO3y5mLJhrkBL9egE48x5IfvU1ubMsQsKWFrP0jle7ow0b5I6w==}
-
-  '@bytecodealliance/preview3-shim@0.8.1':
-    resolution: {integrity: sha512-9vGL5lSV9Cjxmkage9MCnR+EWyI2GSbqE7h/P6F/CIoDmTfXkSYoG8c0HAeCNfmTVQDqD8Bo3eeM+zNeWeeXcA==}
 
   '@bytecodealliance/preview3-shim@0.9.0':
     resolution: {integrity: sha512-/0dEMWyxFyTF/1tsxspU8p6dgfWnQ4SSY+ray8QBJi7KFJu1W6R3M3BFRL83PJ+PmMyuOBaRhhYH3rR6kE+pcA==}
@@ -5624,7 +5621,7 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.27.1
 
-  '@bytecodealliance/jco-std@0.6.0(@bytecodealliance/preview2-shim@0.27.1)':
+  '@bytecodealliance/jco-std@0.7.0(@bytecodealliance/preview2-shim@0.28.0)':
     dependencies:
       acorn: 8.17.0
       acorn-walk: 8.3.5
@@ -5634,7 +5631,7 @@ snapshots:
       urlpattern-polyfill: 10.1.0
       whatwg-url: 14.2.0
     optionalDependencies:
-      '@bytecodealliance/preview2-shim': 0.27.1
+      '@bytecodealliance/preview2-shim': 0.28.0
 
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
@@ -5657,10 +5654,10 @@ snapshots:
       binaryen: 130.0.0
       oxc-minify: 0.136.0
 
-  '@bytecodealliance/jco-transpile@0.17.0':
+  '@bytecodealliance/jco-transpile@0.18.0':
     dependencies:
-      '@bytecodealliance/preview2-shim': 0.27.1
-      '@bytecodealliance/preview3-shim': 0.8.1
+      '@bytecodealliance/preview2-shim': 0.28.0
+      '@bytecodealliance/preview3-shim': 0.9.0
       binaryen: 132.0.0
       oxc-minify: 0.151.0
 
@@ -5761,11 +5758,6 @@ snapshots:
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
       '@bytecodealliance/preview2-shim': 0.26.0
-
-  '@bytecodealliance/preview3-shim@0.8.1':
-    dependencies:
-      '@bytecodealliance/jco-node-fs': 0.3.2
-      '@bytecodealliance/preview2-shim': 0.27.1
 
   '@bytecodealliance/preview3-shim@0.9.0':
     dependencies:
