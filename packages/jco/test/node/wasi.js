@@ -8,6 +8,7 @@ import { assert, expect, suite, test } from "vitest";
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { WASI_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { componentizeFixture, getTmpDir, setupAsyncTest } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const FIXTURE = new URL("../fixtures/componentize/node-wasi/", import.meta.url);
 
@@ -56,9 +57,13 @@ suite("node:wasi", () => {
         expect((await readFile(world, "utf8")).match(/import jco:node\/wasi@0\.1\.0;/g)).toHaveLength(1);
     });
 
-    test.each(["quickjs", "starlingmonkey"])(
+    test.for(["quickjs", "starlingmonkey"])(
         "componentizes and runs against the deny and Node providers (%s)",
-        async (backend) => {
+        { timeout: 600_000 },
+        async (backend, { skip }) => {
+            if (backend === "quickjs" && !hasJspi) {
+                skip("QuickJS async ABI trampolines require modern JSPI");
+            }
             const { componentPath, fixtureDir, stderr } = await componentizeFixture({
                 fixture: "node-wasi",
                 bundle: true,
@@ -132,6 +137,5 @@ suite("node:wasi", () => {
                 await cleanup();
             }
         },
-        600_000,
     );
 });

@@ -6,6 +6,7 @@ import { rolldown } from "rolldown";
 import { suite, test } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { componentizeFixture, transpileComponent, getTmpDir } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/componentize/node-readline/", import.meta.url));
 const simpleOutput = "What do you think of Node.js? Thank you for your valuable feedback: Useful!\n";
@@ -46,43 +47,48 @@ suite("node:readline", () => {
     });
 
     for (const backend of ["quickjs", "starlingmonkey"]) {
-        test.concurrent(`questions, line parsing and terminal APIs execute in ${backend}`, async () => {
-            const { componentPath, stderr } = await componentizeFixture({
-                fixture: "node-readline",
-                entry: "source.js",
-                wit: backend === "quickjs" ? "quickjs.wit" : "source.wit",
-                world: "test",
-                bundle: true,
-                extraArgs: ["--backend", backend],
-            });
-            assert.equal(stderr, "");
-            const { modulePath } = await transpileComponent({ componentPath, name: `node-readline-${backend}` });
-            const component = await import(modulePath);
-            assert.deepEqual(JSON.parse(await component.run()), {
-                simple: simpleOutput,
-                moduleIdentity: true,
-                eventIdentity: true,
-                callbackAnswer: "yes",
-                lines: ["A🌍", "", "next", "last", "para", "tail"],
-                cleanup: true,
-                editedLine: "abXc",
-                cursor: { cols: 5, rows: 0 },
-                history: ["abXc"],
-                recalled: "abXc",
-                rawReleased: true,
-                completion: "hel",
-                promiseCompletion: "wor",
-                keys: [
-                    ["a", "a", false],
-                    [null, "left", true],
-                ],
-                deferred: true,
-                actions: "\x1b[2;3H\x1b[1D\x1b[3B\x1b[2K\x1b[0J",
-                autoCommit: "\x1b[1G",
-                iterated: ["first", "second", "tail"],
-                abort: ["AbortError", "ABORT_ERR", "cancelled"],
-                closedError: "ERR_USE_AFTER_CLOSE",
-            });
-        }, 180_000);
+        // QuickJS bindings instantiate async ABI trampolines that require modern JSPI.
+        test.skipIf(backend === "quickjs" && !hasJspi).concurrent(
+            `questions, line parsing and terminal APIs execute in ${backend}`,
+            async () => {
+                const { componentPath, stderr } = await componentizeFixture({
+                    fixture: "node-readline",
+                    entry: "source.js",
+                    wit: backend === "quickjs" ? "quickjs.wit" : "source.wit",
+                    world: "test",
+                    bundle: true,
+                    extraArgs: ["--backend", backend],
+                });
+                assert.equal(stderr, "");
+                const { modulePath } = await transpileComponent({ componentPath, name: `node-readline-${backend}` });
+                const component = await import(modulePath);
+                assert.deepEqual(JSON.parse(await component.run()), {
+                    simple: simpleOutput,
+                    moduleIdentity: true,
+                    eventIdentity: true,
+                    callbackAnswer: "yes",
+                    lines: ["A🌍", "", "next", "last", "para", "tail"],
+                    cleanup: true,
+                    editedLine: "abXc",
+                    cursor: { cols: 5, rows: 0 },
+                    history: ["abXc"],
+                    recalled: "abXc",
+                    rawReleased: true,
+                    completion: "hel",
+                    promiseCompletion: "wor",
+                    keys: [
+                        ["a", "a", false],
+                        [null, "left", true],
+                    ],
+                    deferred: true,
+                    actions: "\x1b[2;3H\x1b[1D\x1b[3B\x1b[2K\x1b[0J",
+                    autoCommit: "\x1b[1G",
+                    iterated: ["first", "second", "tail"],
+                    abort: ["AbortError", "ABORT_ERR", "cancelled"],
+                    closedError: "ERR_USE_AFTER_CLOSE",
+                });
+            },
+            180_000,
+        );
     }
 });

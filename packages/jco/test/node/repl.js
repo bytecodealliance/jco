@@ -5,6 +5,7 @@ import { rolldown } from "rolldown";
 import { suite, test } from "vitest";
 import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
 import { componentizeFixture, transpileComponent } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const fixtures = fileURLToPath(new URL("../fixtures/componentize/", import.meta.url));
 
@@ -34,66 +35,71 @@ suite("node:repl", () => {
     });
 
     for (const backend of ["quickjs", "starlingmonkey"]) {
-        test(`a scripted session evaluates, recovers, errors and exits in ${backend}`, async () => {
-            const { componentPath, stderr } = await componentizeFixture({
-                fixture: "node-repl",
-                entry: "source.js",
-                wit: backend === "quickjs" ? "quickjs.wit" : "source.wit",
-                world: "test",
-                bundle: true,
-                extraArgs: ["--backend", backend],
-            });
-            assert.equal(stderr, "");
-            const { modulePath } = await transpileComponent({ componentPath, name: `node-repl-${backend}` });
-            const component = await import(modulePath);
-            const report = JSON.parse(await component.run());
-            assert.deepEqual(
-                { ...report, output: undefined },
-                {
-                    moduleIdentity: true,
-                    prototype: true,
-                    builtinModules: true,
-                    validSyntax: [true, false],
-                    closed: true,
-                    events: ["exit"],
-                    lines: 15,
-                    refusal: ["ERR_JCO_UNSUPPORTED_NODE_API", 0, ""],
-                    deprecated: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
-                    output: undefined,
-                },
-            );
-            assert.equal(
-                report.output,
-                [
-                    "> 2",
-                    "> undefined",
-                    "> 42",
-                    "> | | | undefined",
-                    "> 42",
-                    "> { a: 1, b: 'two' }",
-                    "> 'from the host program'",
-                    "> 'from the host program'",
-                    "> Uncaught Error: boom",
-                    "> 'boom'",
-                    "> foo bar",
-                    "    ^",
-                    "",
-                    "Uncaught SyntaxError: Unexpected identifier 'bar'",
-                    "> HELLO THERE",
-                    "> undefined",
-                    "> 'awaited'",
-                    "> .break   Sometimes you get stuck, this gets you out",
-                    ".clear   Alias for .break",
-                    ".exit    Exit the REPL",
-                    ".help    Print this help message",
-                    ".load    Load JS from a file into the REPL session",
-                    ".save    Save all evaluated commands in this REPL session to a file",
-                    ".shout   Shout the rest",
-                    "",
-                    "Press Ctrl+C to abort current expression, Ctrl+D to exit the REPL",
-                    "> ",
-                ].join("\n"),
-            );
-        }, 180_000);
+        // QuickJS bindings instantiate async ABI trampolines that require modern JSPI.
+        test.skipIf(backend === "quickjs" && !hasJspi)(
+            `a scripted session evaluates, recovers, errors and exits in ${backend}`,
+            async () => {
+                const { componentPath, stderr } = await componentizeFixture({
+                    fixture: "node-repl",
+                    entry: "source.js",
+                    wit: backend === "quickjs" ? "quickjs.wit" : "source.wit",
+                    world: "test",
+                    bundle: true,
+                    extraArgs: ["--backend", backend],
+                });
+                assert.equal(stderr, "");
+                const { modulePath } = await transpileComponent({ componentPath, name: `node-repl-${backend}` });
+                const component = await import(modulePath);
+                const report = JSON.parse(await component.run());
+                assert.deepEqual(
+                    { ...report, output: undefined },
+                    {
+                        moduleIdentity: true,
+                        prototype: true,
+                        builtinModules: true,
+                        validSyntax: [true, false],
+                        closed: true,
+                        events: ["exit"],
+                        lines: 15,
+                        refusal: ["ERR_JCO_UNSUPPORTED_NODE_API", 0, ""],
+                        deprecated: "ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API",
+                        output: undefined,
+                    },
+                );
+                assert.equal(
+                    report.output,
+                    [
+                        "> 2",
+                        "> undefined",
+                        "> 42",
+                        "> | | | undefined",
+                        "> 42",
+                        "> { a: 1, b: 'two' }",
+                        "> 'from the host program'",
+                        "> 'from the host program'",
+                        "> Uncaught Error: boom",
+                        "> 'boom'",
+                        "> foo bar",
+                        "    ^",
+                        "",
+                        "Uncaught SyntaxError: Unexpected identifier 'bar'",
+                        "> HELLO THERE",
+                        "> undefined",
+                        "> 'awaited'",
+                        "> .break   Sometimes you get stuck, this gets you out",
+                        ".clear   Alias for .break",
+                        ".exit    Exit the REPL",
+                        ".help    Print this help message",
+                        ".load    Load JS from a file into the REPL session",
+                        ".save    Save all evaluated commands in this REPL session to a file",
+                        ".shout   Shout the rest",
+                        "",
+                        "Press Ctrl+C to abort current expression, Ctrl+D to exit the REPL",
+                        "> ",
+                    ].join("\n"),
+                );
+            },
+            180_000,
+        );
     }
 });

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { suite, test } from "vitest";
 import { componentizeFixture, transpileComponent } from "../helpers.js";
+import { hasJspi } from "../common.js";
 
 const isNode24 = process.versions.node.split(".")[0] === "24";
 let hasUrlExport = true;
@@ -60,9 +61,13 @@ suite("node:url in components", () => {
         },
         180_000,
     );
-    test.each(["qjs", "starlingmonkey"])(
+    test.for(["qjs", "starlingmonkey"])(
         "uses the WIT world's WASI cwd through %s",
-        async (backend) => {
+        { timeout: 180_000 },
+        async (backend, { skip }) => {
+            if (backend === "qjs" && !hasJspi) {
+                skip("QuickJS async ABI trampolines require modern JSPI");
+            }
             const { componentPath } = await componentizeFixture({
                 fixture: "node-url",
                 entry: "cwd.js",
@@ -80,7 +85,6 @@ suite("node:url in components", () => {
                 });
             }
         },
-        180_000,
     );
 });
 
