@@ -265,7 +265,8 @@ export async function instantiate(
   imports: {
     [importName: string]: any
   },
-  instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
+  instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>,
+  globals?: { WebAssembly?: typeof WebAssembly }
 ): Promise<{ [exportName: string]: any }>;
 ```
 
@@ -292,8 +293,27 @@ export function instantiate(
   imports: {
     [importName: string]: any
   },
-  instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+  instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
+  globals?: { WebAssembly?: typeof WebAssembly }
 ): Promise<{ [exportName: string]: any }>;
 ```
 
 Where instead of promises, all functions are synchronous.
+
+The optional fourth argument, `globals`, lets each instance use a custom `WebAssembly`
+implementation. It defaults to `globalThis.WebAssembly` when the override is omitted.
+The override applies to the generated component's helpers and its default core instantiator
+(`WebAssembly.instantiate` in async mode, `new WebAssembly.Instance` in sync mode).
+An explicit `instantiateCore` callback still takes precedence.
+
+```js
+const component = await instantiate(getCoreModule, imports, undefined, {
+  WebAssembly: customWebAssembly,
+});
+```
+
+The supplied object must provide the WebAssembly APIs used by the component, including JSPI
+APIs when needed. To override only selected APIs, inherit from the platform implementation
+with `Object.create(WebAssembly)`; its properties are not enumerable, so object spread does
+not copy them. Callbacks supplied by the caller, such as `getCoreModule`, must use the custom
+implementation themselves if needed.

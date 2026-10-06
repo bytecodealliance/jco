@@ -1,14 +1,62 @@
 /* global TextDecoder */
-import { readFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { fileURLToPath, URL } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
+import ts from 'typescript-compiler-api';
 
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 import { transpileBytes, generateGuestTypes } from '../src/index.js';
+import { getTmpDir } from './helpers.js';
 
 suite(`TypeScript`, async () => {
+    for (const instantiation of ['async', 'sync'] as const) {
+        test.concurrent(`custom WebAssembly types (${instantiation})`, async () => {
+            const component = await componentNew(
+                await componentEmbed({
+                    witSource: 'package test:globals; world test { export run: func(); }',
+                    dummy: true,
+                }),
+            );
+            const { files } = await transpileBytes(component, { name: 'component', instantiation });
+            const dir = await getTmpDir();
+            try {
+                await writeFile(join(dir, 'component.d.ts'), files['component.d.ts']);
+                const testFile = join(dir, 'test.mts');
+                await writeFile(
+                    testFile,
+                    `
+                    import { instantiate } from './component.js';
+                    declare const load: (path: string) => WebAssembly.Module;
+                    const globals = { WebAssembly };
+                    instantiate(load, {});
+                    instantiate(load, {}, undefined, globals);
+                    instantiate(load, {}, (module, imports) => new WebAssembly.Instance(module, imports), globals);
+                    ${instantiation === 'async' ? 'instantiate(async path => load(path), {}, WebAssembly.instantiate, globals);' : ''}
+                    // @ts-expect-error An incompatible WebAssembly implementation must be rejected.
+                    instantiate(load, {}, undefined, { WebAssembly: { compile: () => 0 } });
+                    `,
+                );
+                const program = ts.createProgram([testFile], {
+                    noEmit: true,
+                    strict: true,
+                    types: [],
+                    target: ts.ScriptTarget.ESNext,
+                    module: ts.ModuleKind.NodeNext,
+                });
+                const diagnostics = ts.getPreEmitDiagnostics(program);
+                assert.deepStrictEqual(
+                    diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
+                    [],
+                );
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+    }
+
     test.concurrent(`TS aliasing`, async () => {
         const witSource = await readFile(
             fileURLToPath(new URL(`./fixtures/wit/issue-365/issue-365.wit`, import.meta.url)),
