@@ -598,7 +598,7 @@ impl JsBindgen<'_> {
             uwrite!(
                 output,
                 "\
-                    export function instantiate(getCoreModule, imports, instantiateCore, {{ WebAssembly = globalThis.WebAssembly }} = {{}}) {{
+                    export function instantiate(getCoreModule, imports, instantiateCore, {{ shim: {{ globals: {{ WebAssembly = globalThis.WebAssembly }} = {{}} }} = {{}} }} = {{}}) {{
                         if (typeof instantiateCore === 'undefined') instantiateCore = {};
                         {}
                         {}

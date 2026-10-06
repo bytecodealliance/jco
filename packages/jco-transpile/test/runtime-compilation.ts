@@ -58,7 +58,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                     },
                     {},
                     undefined,
-                    { WebAssembly: wasm },
+                    { shim: { globals: { WebAssembly: wasm } } },
                 );
                 assert.strictEqual(instance.run(), 42);
                 assert.strictEqual(instantiate.mock.calls.length, instantiation === 'async' ? 2 : 0);
@@ -70,6 +70,23 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                     'every emitted core module, the trampoline Wasm included, is loaded through getCoreModule',
                 );
                 assert.strictEqual(modules.size, 3);
+
+                // Omitting either options or its nested overrides uses the platform defaults.
+                for (const options of [
+                    undefined,
+                    {},
+                    { shim: {} },
+                    { shim: { globals: {} } },
+                    { shim: { globals: { WebAssembly: undefined } } },
+                ]) {
+                    const defaultInstance = await esModule.instantiate(
+                        (name: string) => modules.get(name),
+                        {},
+                        undefined,
+                        options,
+                    );
+                    assert.strictEqual(defaultInstance.run(), 42);
+                }
             } finally {
                 await cleanup();
             }
@@ -110,7 +127,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                             ? undefined
                             : new native.Module(readFileSync(new URL(name, import.meta.url)));
 
-                        const result = instantiate(load, {}, undefined, { WebAssembly: wasm });
+                        const result = instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: wasm } } });
                         if ('${instantiation}' === 'sync') assert.ok(!(result instanceof Promise));
                         const instance = await result;
                         assert.equal(instance.run(), 42);
@@ -125,7 +142,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                         const custom = await instantiate(load, {}, (module, imports) => {
                             calls++;
                             return new native.Instance(module, imports);
-                        }, { WebAssembly: wasm });
+                        }, { shim: { globals: { WebAssembly: wasm } } });
                         assert.equal(custom.run(), 42);
                         assert.equal(calls, 2);
                         assert.ok(!used.has('instantiate'));
@@ -133,7 +150,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                         // The default async loader must also compile through the override.
                         if ('${instantiation}' === 'async') {
                             used.clear();
-                            const loaded = await instantiate(undefined, {}, undefined, { WebAssembly: wasm });
+                            const loaded = await instantiate(undefined, {}, undefined, { shim: { globals: { WebAssembly: wasm } } });
                             assert.equal(loaded.run(), 42);
                             assert.ok(used.has('compile'));
                         }
@@ -143,7 +160,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                         Object.defineProperty(globalThis, 'WebAssembly', {
                             get() { throw new Error('accessed the platform WebAssembly'); },
                         });
-                        const isolated = await instantiate(load, {}, undefined, { WebAssembly: wasm });
+                        const isolated = await instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: wasm } } });
                         assert.equal(isolated.run(), 42);
                         `,
                     );
