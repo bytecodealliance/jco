@@ -100,6 +100,8 @@ export async function bundleComponentSource(
         input: absoluteEntryPath,
         cwd: dirname(absoluteEntryPath),
         platform: "neutral",
+        // Timing advice depends on machine load. Keep it opt-in so CLI diagnostics are predictable.
+        checks: { pluginTimings: false, ...config.checks },
         tsconfig: options.typescript ? (inputConfig.tsconfig ?? true) : inputConfig.tsconfig,
         external: mergeExternal(config.external, options.external),
         plugins: [config.plugins ?? [], options.plugins ?? []],
