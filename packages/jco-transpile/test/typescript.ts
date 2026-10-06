@@ -30,13 +30,20 @@ suite(`TypeScript`, async () => {
                     `
                     import { instantiate } from './component.js';
                     declare const load: (path: string) => WebAssembly.Module;
-                    const globals = { WebAssembly };
+                    const options = { shim: { globals: { WebAssembly } } };
                     instantiate(load, {});
-                    instantiate(load, {}, undefined, globals);
-                    instantiate(load, {}, (module, imports) => new WebAssembly.Instance(module, imports), globals);
-                    ${instantiation === 'async' ? 'instantiate(async path => load(path), {}, WebAssembly.instantiate, globals);' : ''}
+                    instantiate(load, {}, undefined, {});
+                    instantiate(load, {}, undefined, { shim: {} });
+                    instantiate(load, {}, undefined, { shim: { globals: {} } });
+                    instantiate(load, {}, undefined, options);
+                    instantiate(load, {}, (module, imports) => new WebAssembly.Instance(module, imports), options);
+                    ${instantiation === 'async' ? 'instantiate(async path => load(path), {}, WebAssembly.instantiate, options);' : ''}
                     // @ts-expect-error An incompatible WebAssembly implementation must be rejected.
-                    instantiate(load, {}, undefined, { WebAssembly: { compile: () => 0 } });
+                    instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: { compile: () => 0 } } } });
+                    // @ts-expect-error Global overrides belong inside options.shim.globals.
+                    instantiate(load, {}, undefined, { WebAssembly });
+                    // @ts-expect-error Global overrides must be grouped under shim.
+                    instantiate(load, {}, undefined, { globals: { WebAssembly } });
                     `,
                 );
                 const program = ts.createProgram([testFile], {
