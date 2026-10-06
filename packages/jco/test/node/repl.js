@@ -22,9 +22,7 @@ async function bundle(entry) {
 const acornMarkers = ["Unterminated template", "Unterminated string constant", "acorn"];
 
 suite("node:repl", () => {
-    // TODO(unskip): use the published jco-std node:repl export once a release containing it ships and
-    // jco's dependency range is bumped; the workspace copy has it, the published 0.3.x does not.
-    test.skip("acorn is bundled only when node:repl is imported", async () => {
+    test("acorn is bundled only when node:repl is imported", async () => {
         const withoutRepl = await bundle(join(fixtures, "node-string-decoder/source.js"));
         for (const marker of acornMarkers) {
             assert.equal(withoutRepl.includes(marker), false, `unexpected ${marker} in a bundle without node:repl`);
@@ -36,9 +34,7 @@ suite("node:repl", () => {
     });
 
     for (const backend of ["quickjs", "starlingmonkey"]) {
-        // TODO(unskip): publish the jco-std node:repl export and update jco's dependency range;
-        // componentize resolves the installed package, which does not yet export this module.
-        test.skip(`a scripted session evaluates, recovers, errors and exits in ${backend}`, async () => {
+        test(`a scripted session evaluates, recovers, errors and exits in ${backend}`, async () => {
             const { componentPath, stderr } = await componentizeFixture({
                 fixture: "node-repl",
                 entry: "source.js",

@@ -57,8 +57,7 @@ suite("Run sandbox", () => {
         }
     });
 
-    // TODO(unskip): Enable once a preview2-shim version containing _denyHttp is released.
-    test.skip("preserves custom preopens for unsandboxed runs and removes them in sandbox mode", async () => {
+    test("preserves custom preopens for unsandboxed runs and removes them in sandbox mode", async () => {
         const testDir = await getTmpDir();
         const importPath = join(testDir, "virtualenv.mjs");
         const resultPath = join(testDir, "preopens.json");
