@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.37.0] - 2026-10-06
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.18.0 by @vados-cosmonic
+
+- _(jco)_ update preview2-shim to v0.28.0 by @vados-cosmonic
+
+- _(jco)_ update jco-std to v0.7.0 by @vados-cosmonic
+
 ## [1.36.1] - 2026-10-05
 
 ### ⚙️ Miscellaneous Tasks
