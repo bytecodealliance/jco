@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-25129576.js";
+            window.path_to_searchindex_js = "searchindex-11feac8b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57473397.js"></script>
@@ -4183,11 +4183,11 @@ callbacks, OpenSSL engine options, and server <code>newSession</code>, <code>res
 policy; changing <code>CLIENT_RENEG_LIMIT</code> or <code>CLIENT_RENEG_WINDOW</code> throws. The socket
 is a portable <code>Duplex</code>; it is not an instance of the separate <code>node:net</code> shim’s
 Socket class.</p>
-<p>StarlingMonkey runs the component fixture. QuickJS is explicitly skipped with
-<code>TODO(unskip)</code> because componentize-qjs cannot link the shared WASI TLS resource
-types. Export a synchronous starter for long-lived event-driven work: a guest
-export cannot await a promise resolved solely by a future independent host
-callback. The fixture’s starter/status exports demonstrate this engine boundary.</p>
+<p>StarlingMonkey runs the component fixture. The QuickJS case is skipped until
+componentize-qjs can link the shared WASI TLS/IO resource types. Export a synchronous
+starter for long-lived event-driven work: a guest export cannot await a promise
+resolved solely by a future independent host callback. The fixture’s starter/status
+exports demonstrate this engine boundary.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodetrace_events"><a class="header" href="#nodetrace_events"><code>node:trace_events</code></a></h1>
 <div class="table-wrapper">
