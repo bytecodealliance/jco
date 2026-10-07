@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { sep, normalize, resolve, extname } from "node:path";
 import { createServer as createHTTPServer } from "node:http";
 
-import ts from "typescript";
+import ts from "typescript-compiler-api";
 import puppeteer, { Browser } from "puppeteer";
 import mime from "mime";
 
