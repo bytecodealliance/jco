@@ -84,24 +84,25 @@ function consoleStream(writeLine: (line: string) => void): OutputStreamHandler {
         }
     };
 
+    const flush = () => {
+        pending += decoder.decode();
+        if (pending) {
+            writeLine(pending);
+        }
+        pending = "";
+    };
+
     return {
         write(contents: Uint8Array) {
             pending += decoder.decode(contents, { stream: true });
             emitCompleteLines();
         },
-        flush() {
-            pending += decoder.decode();
-            if (pending) {
-                writeLine(pending);
-            }
-            pending = "";
-        },
+        flush,
         blockingFlush() {
             this.flush?.();
         },
-        drop() {
-            this.flush?.();
-        },
+        // OutputStream marks itself closed before calling the handler's drop.
+        drop: flush,
     };
 }
 

@@ -83,6 +83,7 @@
         "puppeteer": "catalog:",
         "rolldown": "catalog:",
         "typescript": "catalog:",
+        "typescript-compiler-api": "npm:typescript@6.0.3",
         "vitest": "catalog:"
     }
 }

@@ -238,7 +238,7 @@ test("a downstream Preview 2 component bundles and runs in the browser", async (
     });
     try {
         const page = await browser.newPage();
-        await page.goto(baseURL);
+        await page.goto(`${baseURL}/index.html`);
         await page.waitForFunction(() => document.body.dataset.result === "browser-run-completed");
         expect(await page.evaluate(() => document.body.dataset.result)).toBe("browser-run-completed");
         await page.close();

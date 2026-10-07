@@ -11,6 +11,6 @@
         "@bytecodealliance/rolldown-plugin-jco": "file:../../.."
     },
     "devDependencies": {
-        "rolldown": "1.2.0"
+        "rolldown": "1.2.13"
     }
 }
