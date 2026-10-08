@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4b8fdb1d.js";
+            window.path_to_searchindex_js = "searchindex-5e9ed119.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57473397.js"></script>
@@ -402,7 +402,8 @@ export { test }
   imports: {
     [importName: string]: any
   },
-  instantiateCore?: (module: WebAssembly.Module, imports: Record&lt;string, any&gt;) =&gt; Promise&lt;WebAssembly.Instance&gt;
+  instantiateCore?: (module: WebAssembly.Module, imports: Record&lt;string, any&gt;) =&gt; Promise&lt;WebAssembly.Instance&gt;,
+  options?: InstantiateOptions
 ): Promise&lt;{ [exportName: string]: any }&gt;;
 </code></pre>
 <p><code>imports</code> allows customizing the imports provided for instantiation. Its keys are the component’s
@@ -421,10 +422,40 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
   imports: {
     [importName: string]: any
   },
-  instantiateCore?: (module: WebAssembly.Module, imports: Record&lt;string, any&gt;) =&gt; WebAssembly.Instance
-): Promise&lt;{ [exportName: string]: any }&gt;;
+  instantiateCore?: (module: WebAssembly.Module, imports: Record&lt;string, any&gt;) =&gt; WebAssembly.Instance,
+  options?: InstantiateOptions
+): { [exportName: string]: any };
 </code></pre>
 <p>Where instead of promises, all functions are synchronous.</p>
+<p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
+from the generated bindings as <code>InstantiateOptions</code>:</p>
+<pre><code class="language-ts">export interface InstantiateOptions {
+  shim?: {
+    globals?: {
+      WebAssembly?: typeof WebAssembly;
+    };
+  };
+}
+</code></pre>
+<p>Runtime overrides are grouped under <code>shim</code>. Set <code>options.shim.globals.WebAssembly</code> to provide
+a custom <code>WebAssembly</code> implementation for that instance. It defaults to <code>globalThis.WebAssembly</code>
+when the override is omitted or nullish at any level.
+The override applies to the generated component’s helpers and its default core instantiator
+(<code>WebAssembly.instantiate</code> in async mode, <code>new WebAssembly.Instance</code> in sync mode), which calls
+the implementation as a method. An explicit <code>instantiateCore</code> callback still takes precedence.
+When neither an override nor a platform <code>WebAssembly</code> global is available, <code>instantiate</code> throws
+unless an explicit <code>instantiateCore</code> is supplied.</p>
+<pre><code class="language-js">const component = await instantiate(getCoreModule, imports, undefined, {
+  shim: {
+    globals: { WebAssembly: customWebAssembly },
+  },
+});
+</code></pre>
+<p>The supplied WebAssembly implementation must provide the APIs used by the component, including JSPI
+APIs when needed. To override only selected APIs, inherit from the platform implementation
+with <code>Object.create(WebAssembly)</code>; its properties are not enumerable, so object spread does
+not copy them. Callbacks supplied by the caller, such as <code>getCoreModule</code>, must use the custom
+implementation themselves if needed.</p>
 
                     </main>
 
