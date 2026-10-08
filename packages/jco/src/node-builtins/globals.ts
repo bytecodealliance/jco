@@ -79,7 +79,7 @@ export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [m
         clearImmediate: [options.timersModule ?? "node:timers", "clearImmediate"],
         TextEncoder: ["jco:text-encoding", "TextEncoder"],
         TextDecoder: ["jco:text-encoding", "TextDecoder"],
-        console: ["jco:console-globals", "default"],
+        console: [options.webGlobals ? "jco:console-host-globals" : "jco:console-globals", "default"],
         queueMicrotask: ["jco:microtask-globals", "queueMicrotask"],
         setTimeout: ["jco:timer-globals", "setTimeout"],
         clearTimeout: ["jco:timer-globals", "clearTimeout"],
@@ -113,16 +113,21 @@ export const setInterval = scoped(globalThis.setInterval?.bind(globalThis) ?? ti
 export const clearInterval = globalThis.clearInterval?.bind(globalThis) ?? timers.clearInterval;
 `,
         ),
+        virtualBuiltin(
+            "jco:console-globals",
+            `${VIRTUAL_PREFIX}console-globals`,
+            () => "export default globalThis.console;",
+        ),
         {
             resolveId(id) {
-                if (id !== "jco:console-globals") {
+                if (id !== "jco:console-host-globals") {
                     return null;
                 }
                 options.onWitRequirement?.(CONSOLE_WIT_REQUIREMENT);
-                return `${VIRTUAL_PREFIX}console-globals`;
+                return `${VIRTUAL_PREFIX}console-host-globals`;
             },
             load(id) {
-                return id === `${VIRTUAL_PREFIX}console-globals`
+                return id === `${VIRTUAL_PREFIX}console-host-globals`
                     ? `import fallback from ${JSON.stringify(stdModule(options.consoleModule, "console"))}; export default globalThis.console ?? fallback;`
                     : null;
             },

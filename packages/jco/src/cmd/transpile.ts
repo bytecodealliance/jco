@@ -30,6 +30,8 @@ const DNS_ASYNC_IMPORTS = [
 const HTTP_CAPABILITY = "jco:node/http@0.1.0";
 const HTTP_ASYNC_IMPORTS = [
     `${HTTP_CAPABILITY}#request`,
+    `${HTTP_CAPABILITY}#[method]client-request.socket`,
+    `${HTTP_CAPABILITY}#[method]client-request.response`,
     `${HTTP_CAPABILITY}#[method]server.listen`,
     `${HTTP_CAPABILITY}#[method]server.close`,
     `${HTTP_CAPABILITY}#[method]server.get-connections`,
