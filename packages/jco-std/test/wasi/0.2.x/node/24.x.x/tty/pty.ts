@@ -22,7 +22,7 @@ test.skipIf(!python || !built || process.platform === "win32")(
   "drives readline through real terminal streams on a pseudo-terminal",
   async () => {
     const steps = [{ expect: "Name? " }, { send: "Ada\r" }, { expect: "REPORT " }, { send: "\n" }];
-    const { stdout } = await exec(
+    const { stdout, stderr } = await exec(
       python as string,
       [
         fileURLToPath(new URL("tty-pty.py", helpers)),
@@ -35,7 +35,7 @@ test.skipIf(!python || !built || process.platform === "win32")(
       { timeout: 60_000 },
     );
     const { output, status } = JSON.parse(stdout) as { output: string; status: number };
-    expect(status, output).toBe(0);
+    expect(status, output + stderr).toBe(0);
     // readline's cursor sequences precede the line, so locate the marker rather than the line start.
     const start = output.indexOf("REPORT ");
     expect(start, output).toBeGreaterThan(-1);
