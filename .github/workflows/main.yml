@@ -982,6 +982,9 @@ jobs:
           WASI_SDK: ${{ steps.wasi-sdk.outputs.wasi-sdk-path }}
         run: just build
 
+      - name: Build workspace jco-std
+        run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
+
       - name: Run extended component tests
         run: |
           pnpm --filter '@bytecodealliance/jco' run test:extended
