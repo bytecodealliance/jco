@@ -56,6 +56,7 @@ export interface ComponentizeOptions {
      * the command line arrives under this key rather than the API one.
      */
     withNodejsHttpVia?: NodejsHttpVia;
+    withNodejsCryptoVia?: "portable" | "direct";
     withNodejsHttp2Via?: NodejsHttp2Via;
     backend?: ComponentizeJSBackend;
     backendQjsDisableAsync: boolean;
@@ -181,6 +182,7 @@ async function usesOlderWasiHTTP(witPath: string, worldName?: string) {
  * @param {ComponentizeOptions} opts
  */
 export async function componentize(jsSource: string, opts: ComponentizeOptions): Promise<void> {
+    jsSource = resolve(jsSource);
     // normalize the backend option
     const backend = normalizeBackend(opts.backend);
     validateBackendOptions(backend, opts);
@@ -209,11 +211,13 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             typescript: isTypeScript,
             // The component engine supplies Web globals. Rolldown injects only Jco-backed Node
             // globals when referenced, so unused adapters add no bundle cost.
-            inject: nodeGlobals(),
+            inject: nodeGlobals({ webGlobals: backend === "quickjs" }),
             // Node builtin adapters are supplied while the source graph is bundled, which is
             // why `node:path` only works together with `--bundle`.
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
+                    hostTaskTimers: backend === "quickjs",
+                    nodejsCryptoVia: opts.withNodejsCryptoVia,
                     nodejsHttpVia: opts.nodejsHttpVia ?? opts.withNodejsHttpVia,
                     nodejsVfsVia: opts.nodejsVfsVia ?? opts.withNodejsVfsVia,
                     vfsWasiConfigModule: opts.withNodejsVfsWasiConfig
@@ -248,7 +252,9 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
     } else {
         source = await readFile(jsSource, "utf8");
     }
-    const injection = await injectNodeWitImports(witPath, opts.worldName, [...witRequirements.values()]);
+    const injection = await injectNodeWitImports(witPath, opts.worldName, [...witRequirements.values()], {
+        asyncGuestCallbacks: backend === "quickjs",
+    });
     if (injection) {
         witPath = injection.witPath;
         const warning = styleText(["yellow", "bold"], "warning");
@@ -379,7 +385,9 @@ function calculateFeatureSet(opts: ComponentizeOptions) {
 /** Componentize with componentize-qjs (QuickJS) */
 async function componentizeQJS(args: BackendComponentizeArgs) {
     const { source, jsSource, opts, witPath } = args;
-    const componentizeQJSModule = await eval('import("componentize-qjs")');
+    const componentizeQJSModule = process.env.JCO_QJS_BINDING_PATH
+        ? (await import("node:module")).createRequire(import.meta.url)(resolve(process.env.JCO_QJS_BINDING_PATH))
+        : await eval('import("componentize-qjs")');
     const result = await componentizeQJSModule.componentize({
         witPath,
         jsSource: source,
@@ -387,6 +395,7 @@ async function componentizeQJS(args: BackendComponentizeArgs) {
         world: opts.worldName,
         sync: opts.backendQjsDisableAsync,
         stubWasi: opts.backendQjsStubWasi,
+        runtime: process.env.JCO_QJS_RUNTIME_PATH,
     });
     return result.component;
 }

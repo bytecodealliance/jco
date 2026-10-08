@@ -15,6 +15,9 @@ export interface WorldMetadata {
 }
 
 export interface NodeBuiltinOptions {
+    nodejsCryptoVia?: "portable" | "direct";
+    /** Supply typed task timers when the selected engine does not provide them. */
+    hostTaskTimers?: boolean;
     /** Override the portable vm module when bundling or testing. */
     vmModule?: string;
 
@@ -155,6 +158,7 @@ export interface NodeErrorGlobalsOptions {
 }
 
 export interface NodeGlobalsOptions extends NodeErrorGlobalsOptions {
+    webGlobals?: boolean;
     timersModule?: string;
     processModule?: string;
     /** Path to the native Abort globals compatibility adapter (overridable for tests). */

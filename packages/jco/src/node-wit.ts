@@ -34,6 +34,8 @@ export interface NodeGuestExport {
     witExport: string;
     jsExport: string;
     moduleSpecifier: string;
+    /** JS members returning Promises; QuickJS requires asynchronous WIT declarations. */
+    asyncMembers?: string[];
 }
 
 export interface WitDependencyPackage {
@@ -199,9 +201,22 @@ export const HTTP_WIT_REQUIREMENT = nodeRequirement("node:http", "http", {
             witExport: "jco:node/http-callbacks@0.1.0",
             jsExport: "httpCallbacks",
             moduleSpecifier: "jco:node-http-callbacks",
+            asyncMembers: ["handle", "start", "poll", "upgrade", "socket-event"],
         },
     ],
 });
+
+export const TIMERS_WIT_REQUIREMENT = nodeRequirement("node:timers", "timers", {
+    guestExports: [
+        {
+            witExport: "jco:node/timers-callbacks@0.1.0",
+            jsExport: "timersCallbacks",
+            moduleSpecifier: "jco:node-timer-callbacks",
+            asyncMembers: ["dispatch"],
+        },
+    ],
+});
+export const CRYPTO_KDF_WIT_REQUIREMENT = nodeRequirement("node:crypto", "crypto-kdf");
 
 /**
  * `node:https` is `node:http` with TLS terminated by the same host interface, so it shares the
@@ -232,6 +247,7 @@ export const HTTP2_WIT_REQUIREMENT: NodeWitRequirement = {
 
 const WASI_0_2_12_ROOT = new URL("../lib/wit/builtin/0.2.12/", import.meta.url);
 const WASI_0_2_10_ROOT = new URL("../lib/wit/builtin/0.2.10/", import.meta.url);
+export const RANDOM_WIT_REQUIREMENT = wasiRequirement("wasi:random/random@0.2.12", [wasiDependency("wasi-random")]);
 
 function wasiDependency(name: string, version = "0.2.12"): WitDependencyPackage {
     const root = version === "0.2.10" ? WASI_0_2_10_ROOT : WASI_0_2_12_ROOT;
@@ -542,6 +558,7 @@ export async function injectNodeWitImports(
     witPath: string,
     worldName: string | undefined,
     requirements: NodeWitRequirement[],
+    options: { asyncGuestCallbacks?: boolean } = {},
 ): Promise<WitInjectionResult | undefined> {
     if (requirements.length === 0) {
         return undefined;
@@ -599,7 +616,29 @@ export async function injectNodeWitImports(
         for (const source of dependency.dependencySources) {
             const destination = join(dependencyDir, basename(source));
             try {
-                await writeFile(destination, await readFile(source), { flag: "wx" });
+                let contents = await readFile(source, "utf8");
+                if (options.asyncGuestCallbacks) {
+                    for (const requirement of changedRequirements) {
+                        for (const guest of requirement.guestExports ?? []) {
+                            const iface = guest.witExport.split("/").pop()!.split("@")[0];
+                            if (!guest.asyncMembers?.length) {
+                                continue;
+                            }
+                            const declaration = new RegExp(`\\binterface\\s+${iface}\\s*\\{`).exec(contents);
+                            if (!declaration) {
+                                continue;
+                            }
+                            const open = declaration.index + declaration[0].lastIndexOf("{");
+                            const close = matchingBrace(contents, open);
+                            let body = contents.slice(open + 1, close);
+                            for (const member of guest.asyncMembers) {
+                                body = body.replace(new RegExp(`(\\b${member}:\\s*)func\\b`, "g"), "$1async func");
+                            }
+                            contents = contents.slice(0, open + 1) + body + contents.slice(close);
+                        }
+                    }
+                }
+                await writeFile(destination, contents, { flag: "wx" });
                 dependencyFiles.push(destination);
             } catch (error) {
                 if ((error as NodeJS.ErrnoException).code !== "EEXIST") {

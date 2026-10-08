@@ -2,6 +2,7 @@ package jco:node@0.1.0;
 
 /// Guest-owned callback resources used by the direct Node-compatible HTTP implementation.
 interface http-callbacks {
+  use http.{connection};
   variant errno {
     number(s64),
     symbolic(string),
@@ -31,6 +32,7 @@ interface http-callbacks {
     body: list<u8>,
     remote-address: option<string>,
     remote-port: option<u16>,
+    connection: option<connection>,
   }
 
   record outgoing-response {
@@ -38,10 +40,24 @@ interface http-callbacks {
     status-message: string,
     headers: list<header>,
     body: list<u8>,
+    body-stream: option<response-body>,
+  }
+
+  variant body-event { pending, chunk(list<u8>), end }
+  resource response-body {
+    poll: func() -> result<body-event, error>;
   }
 
   resource request-listener {
     handle: func(request: incoming-request) -> result<outgoing-response, error>;
+    start: func(request: incoming-request) -> pending-response;
+    upgrade: func(request: incoming-request, head: list<u8>) -> bool;
+    socket-event: func(id: u32, event: socket-event);
+  }
+  variant socket-event { data(list<u8>), end, close, timeout, drain, error(error) }
+
+  resource pending-response {
+    poll: func() -> result<option<outgoing-response>, error>;
   }
 
   /// Redeem a registration once. The host owns the returned listener until the server closes.
@@ -50,6 +66,26 @@ interface http-callbacks {
 
 /// Typed host boundary for Node-compatible HTTP clients and servers.
 interface http {
+  resource client-request {
+    constructor(options: request-options);
+    socket: func() -> option<connection>;
+    finish: func(headers: list<header>, body: list<u8>) -> result<bool, error>;
+    response: func() -> result<option<response>, error>;
+    close: func();
+  }
+  resource connection {
+    id: func() -> u32;
+    write: func(data: list<u8>) -> result<bool, error>;
+    end: func();
+    destroy: func();
+    pause: func();
+    resume: func();
+    set-timeout: func(milliseconds: u32);
+    set-no-delay: func(value: bool);
+    set-keep-alive: func(value: bool, delay: u32);
+    ref: func();
+    unref: func();
+  }
   variant errno {
     number(s64),
     symbolic(string),

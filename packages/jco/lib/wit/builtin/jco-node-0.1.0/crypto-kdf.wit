@@ -1,0 +1,6 @@
+interface crypto-kdf {
+  record error { name: string, message: string, code: option<string> }
+  pbkdf2: func(password: list<u8>, salt: list<u8>, iterations: u32, length: u32, digest: string) -> result<list<u8>, error>;
+  hkdf: func(digest: string, key: list<u8>, salt: list<u8>, info: list<u8>, length: u32) -> result<list<u8>, error>;
+  scrypt: func(password: list<u8>, salt: list<u8>, length: u32, cost: u32, block-size: u32, parallelization: u32, maxmem: u64) -> result<list<u8>, error>;
+}

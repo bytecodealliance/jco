@@ -2,6 +2,41 @@ import type { Plugin } from "rolldown";
 import { parseSync, Visitor } from "rolldown/utils";
 import rewritePattern from "regexpu-core";
 
+/** Native prototype probes must retain their empty async generator after lowering. */
+export function preserveAsyncIteratorProbes(code: string, filename: string): string | undefined {
+    if (!code.includes("getPrototypeOf") || !code.includes("async")) {
+        return undefined;
+    }
+    const parsed = parseSync(filename, code);
+    if (parsed.errors.length) {
+        return undefined;
+    }
+    const edits: Array<{ start: number; end: number; replacement: string }> = [];
+    new Visitor({
+        CallExpression(node) {
+            const expression = code.slice(node.start, node.end);
+            if (
+                /^Object\.getPrototypeOf\(\s*Object\.getPrototypeOf\(\s*async\s+function\s*\*\s*\(\s*\)\s*\{\s*\}\s*\)\s*\.prototype\s*\)$/.test(
+                    expression,
+                )
+            ) {
+                edits.push({
+                    start: node.start,
+                    end: node.end,
+                    replacement: `Function(${JSON.stringify(`return ${expression}`)})()`,
+                });
+            }
+        },
+    }).visit(parsed.program);
+    if (!edits.length) {
+        return undefined;
+    }
+    for (const edit of edits.sort((a, b) => b.start - a.start)) {
+        code = code.slice(0, edit.start) + edit.replacement + code.slice(edit.end);
+    }
+    return code;
+}
+
 /**
  * Lower Unicode property escapes for the pinned StarlingMonkey runtime.
  * Only parsed regex literals are edited: strings, comments and template text must

@@ -12,6 +12,7 @@ export interface BundleComponentSourceOptions {
 
 /** External imports that represent WebAssembly Component capabilities. */
 const WASI_EXTERNAL = /^wasi:/;
+const NODE_CAPABILITY_EXTERNAL = /^jco:node\//;
 const TYPESCRIPT_ENTRY = /\.(?:[cm]?ts|tsx)$/i;
 const TYPESCRIPT_DECLARATION_ENTRY = /\.d\.(?:[cm]?ts|tsx)$/i;
 
@@ -149,7 +150,7 @@ export async function bundleComponentSource(
 }
 
 function mergeExternal(configExternal: ExternalOption | undefined, jcoExternal: ExternalOption[] = []) {
-    const external = [WASI_EXTERNAL, configExternal, ...jcoExternal].filter(
+    const external = [WASI_EXTERNAL, NODE_CAPABILITY_EXTERNAL, configExternal, ...jcoExternal].filter(
         (option): option is Exclude<ExternalOption, undefined> => option !== undefined,
     );
     return (id: string, parentId: string | undefined, isResolved: boolean) =>
