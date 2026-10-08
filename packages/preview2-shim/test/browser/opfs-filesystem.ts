@@ -151,6 +151,71 @@ suite("Browser OPFS filesystem adapter", () => {
         assert.strictEqual(sidecarStillExists, false);
     });
 
+    test.concurrent("a dangling symlink survives a flush + reload", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
+        const root = new FakeDirectoryHandle();
+
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const descriptor = adapter.getRoot(capability);
+        descriptor.symlinkAt("missing-target.txt", "dangling-link.txt");
+
+        assert.strictEqual(descriptor.statAt({}, "dangling-link.txt").type, "symbolic-link");
+        assert.strictEqual(descriptor.readlinkAt("dangling-link.txt"), "missing-target.txt");
+
+        const entries = descriptor.readDirectory();
+        const names: string[] = [];
+        for (
+            let entry = entries.readDirectoryEntry();
+            entry;
+            entry = entries.readDirectoryEntry()
+        ) {
+            names.push(entry.name);
+        }
+        assert.deepStrictEqual(names, ["dangling-link.txt"]);
+
+        await adapter.flush();
+
+        const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const reloadedAdapter = new OpfsFilesystemAdapter();
+        const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
+
+        assert.strictEqual(
+            reloadedDescriptor.statAt({}, "dangling-link.txt").type,
+            "symbolic-link",
+        );
+        assert.strictEqual(
+            reloadedDescriptor.readlinkAt("dangling-link.txt"),
+            "missing-target.txt",
+        );
+    });
+
+    test.concurrent("deleting and recreating a symlink round-trips through the sidecar", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
+        const root = new FakeDirectoryHandle();
+        root.entriesMap.set("target.txt", new FakeFileHandle(new TextEncoder().encode("hello")));
+
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const descriptor = adapter.getRoot(capability);
+        descriptor.symlinkAt("target.txt", "link.txt");
+        await adapter.flush();
+
+        descriptor.unlinkFileAt("link.txt");
+        descriptor.symlinkAt("target.txt", "link.txt");
+        await adapter.flush();
+
+        const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const reloadedAdapter = new OpfsFilesystemAdapter();
+        const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
+
+        assert.strictEqual(reloadedDescriptor.readlinkAt("link.txt"), "target.txt");
+        assert.strictEqual(reloadedDescriptor.statAt({}, "link.txt").type, "symbolic-link");
+        assert.strictEqual(reloadedDescriptor.statAt({ symlinkFollow: true }, "link.txt").size, 5n);
+    });
+
     test.concurrent("nested symlinks are recorded in a single root-level sidecar file, not one per directory", async () => {
         const { loadOpfsCapability, OpfsFilesystemAdapter } =
             await import("../../src/browser/opfs-filesystem.js");
