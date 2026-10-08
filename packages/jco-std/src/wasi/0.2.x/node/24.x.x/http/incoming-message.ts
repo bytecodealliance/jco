@@ -1,15 +1,12 @@
 import { EventEmitter } from "../internal/event-emitter.js";
+import { Readable } from "node:stream";
+import { Buffer } from "node:buffer";
 import { incomingHeaders } from "./headers.js";
 import type { HttpImplementationResponse, HttpIncomingRequestData } from "./types.js";
 
 export type IncomingHeaderValue = string | string[] | undefined;
 
-interface WritableDestination {
-  write(chunk: Uint8Array | string): unknown;
-  end?(): unknown;
-}
-
-export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8Array | string> {
+export class IncomingMessage extends Readable {
   readonly aborted = false;
   readonly complete = true;
   readonly httpVersion: string;
@@ -35,18 +32,11 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
       }
     | undefined;
   readonly signal: AbortSignal | undefined = undefined;
-  closed = false;
-  destroyed = false;
-  readable = true;
-  readableEnded = false;
-  errored: Error | null = null;
   #body: Uint8Array;
-  #read = false;
-  #encoding: string | undefined;
-  #started = false;
+  #offset = 0;
 
   constructor(message: HttpImplementationResponse | HttpIncomingRequestData) {
-    super();
+    super({ autoDestroy: false });
     const [major = 1, minor = 1] = message.httpVersion.split(".").map(Number);
     const { headers, rawHeaders } = incomingHeaders(message.headers);
     this.httpVersion = message.httpVersion;
@@ -71,20 +61,32 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
       this.statusMessage = undefined;
       this.method = message.method;
       this.url = message.url;
-      this.socket = {
+      this.socket = Object.assign(new EventEmitter(), {
         // The buffered request is complete at the transport, but its body has not
         // been consumed. Middleware uses the socket state to distinguish those cases.
         readable: true,
         writable: true,
         remoteAddress: message.remoteAddress,
         remotePort: message.remotePort,
+        setTimeout: (ms: number) => {
+          message.connection?.setTimeout(ms);
+          return this.socket;
+        },
+        setNoDelay: (value = true) => {
+          message.connection?.setNoDelay(value);
+          return this.socket;
+        },
+        setKeepAlive: (value = false, delay = 0) => {
+          message.connection?.setKeepAlive(value, delay);
+          return this.socket;
+        },
         remoteFamily:
           message.remoteAddress === undefined
             ? undefined
             : message.remoteAddress.includes(":")
-              ? "IPv6"
-              : "IPv4",
-      };
+              ? ("IPv6" as const)
+              : ("IPv4" as const),
+      });
     }
     this.#body = message.body.slice();
   }
@@ -93,36 +95,15 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
     return this.socket;
   }
 
-  setEncoding(encoding: string): this {
-    this.#encoding = encoding;
-    return this;
-  }
-
-  read(): Uint8Array | string | null {
-    if (this.#read) {
-      return null;
+  _read(size: number): void {
+    if (this.#offset === this.#body.length) {
+      this.push(null);
+      return;
     }
-    this.#read = true;
-    return this.#decodedBody();
-  }
-
-  resume(): this {
-    this._start();
-    return this;
-  }
-
-  pause(): this {
-    return this;
-  }
-
-  pipe(destination: WritableDestination): WritableDestination {
-    const body = this.#decodedBody();
-    if (this.#body.byteLength > 0) {
-      destination.write(body);
-    }
-    destination.end?.();
-    this._start();
-    return destination;
+    const end = Math.min(this.#offset + size, this.#body.length);
+    const chunk = Buffer.from(this.#body.subarray(this.#offset, end));
+    this.#offset = end;
+    this.push(chunk);
   }
 
   setTimeout(_milliseconds: number, callback?: () => void): this {
@@ -132,57 +113,9 @@ export class IncomingMessage extends EventEmitter implements AsyncIterable<Uint8
     return this;
   }
 
-  destroy(error?: Error): this {
-    if (this.destroyed) {
-      return this;
-    }
-    this.destroyed = true;
-    this.readable = false;
-    this.errored = error ?? null;
-    queueMicrotask(() => {
-      if (error) {
-        this.emit("error", error);
-      }
-      this.closed = true;
-      this.emit("close");
-    });
-    return this;
-  }
-
   _start(): void {
-    if (this.#started || this.destroyed) {
-      return;
+    if (this.listenerCount("data") || this.listenerCount("end")) {
+      this.resume();
     }
-    this.#started = true;
-    queueMicrotask(() => {
-      if (this.destroyed) {
-        return;
-      }
-      if (this.#body.byteLength > 0) {
-        this.#read = true;
-        this.emit("data", this.#decodedBody());
-      }
-      this.readable = false;
-      this.readableEnded = true;
-      this.emit("end");
-      this.closed = true;
-      this.emit("close");
-    });
-  }
-
-  async *[Symbol.asyncIterator](): AsyncIterator<Uint8Array | string> {
-    if (!this.#read && this.#body.byteLength > 0) {
-      this.#read = true;
-      yield this.#decodedBody();
-    }
-    this.readable = false;
-    this.readableEnded = true;
-  }
-
-  #decodedBody(): Uint8Array | string {
-    if (!this.#encoding) {
-      return this.#body.slice();
-    }
-    return new TextDecoder(this.#encoding).decode(this.#body);
   }
 }

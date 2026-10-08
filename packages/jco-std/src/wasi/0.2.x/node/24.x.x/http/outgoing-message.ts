@@ -16,6 +16,7 @@ import type { HttpBodyChunk, HttpCallback, HttpHeaderValue, HttpHeaders } from "
 
 export class OutgoingMessage extends EventEmitter {
   readonly #body: Uint8Array[] = [];
+  protected _bodyStream: import("./response-body.js").ResponseBody | undefined;
   readonly _headers: HeaderStore;
   chunkedEncoding = false;
   shouldKeepAlive = true;
@@ -45,11 +46,11 @@ export class OutgoingMessage extends EventEmitter {
     return this.#body.reduce((total, chunk) => total + chunk.byteLength, 0);
   }
 
-  get socket(): undefined {
+  get socket(): import("./connection.js").ConnectionSocket | undefined {
     return undefined;
   }
 
-  get connection(): undefined {
+  get connection(): import("./connection.js").ConnectionSocket | undefined {
     return this.socket;
   }
 
@@ -107,11 +108,14 @@ export class OutgoingMessage extends EventEmitter {
     const actualEncoding = typeof encoding === "string" ? encoding : undefined;
     const actualCallback = typeof encoding === "function" ? encoding : callback;
     this._headers.markSent();
-    this.#body.push(bodyBytes(chunk, actualEncoding));
+    const bytes = bodyBytes(chunk, actualEncoding);
+    const accepted = this._bodyStream
+      ? this._bodyStream.write(bytes)
+      : (this.#body.push(bytes), true);
     if (actualCallback) {
       queueMicrotask(actualCallback);
     }
-    return true;
+    return accepted;
   }
 
   end(
@@ -139,7 +143,12 @@ export class OutgoingMessage extends EventEmitter {
       return this;
     }
     if (chunk !== undefined) {
-      this.#body.push(bodyBytes(chunk, actualEncoding));
+      const bytes = bodyBytes(chunk, actualEncoding);
+      if (this._bodyStream) {
+        this._bodyStream.write(bytes);
+      } else {
+        this.#body.push(bytes);
+      }
     }
     this.writableEnded = true;
     this.finished = true;
@@ -148,6 +157,9 @@ export class OutgoingMessage extends EventEmitter {
     let deliver: (() => void) | undefined;
     let failure: unknown;
     try {
+      if (this._bodyStream) {
+        this._bodyStream.end();
+      }
       deliver = this._finalize(concatBytes(this.#body));
     } catch (error) {
       failure = error;

@@ -50,8 +50,17 @@ function captureStackTrace(targetObject: object, constructorOpt?: ConstructorFun
     throw invalidArgType("targetObject", "Object", targetObject);
   }
   const target = targetObject as { message?: unknown; name?: unknown };
-  const captured = new globalThis.Error();
-  const raw = captured.stack ?? "Error";
+  // QuickJS applies prepareStackTrace to native Error stacks too. Capture raw
+  // text without the caller's formatter before installing our own lazy getter.
+  const constructor = globalThis.Error as NodeErrorConstructor;
+  const previousPrepare = constructor.prepareStackTrace;
+  let raw: string;
+  try {
+    Reflect.set(constructor, "prepareStackTrace", undefined);
+    raw = String(new constructor().stack ?? "Error");
+  } finally {
+    constructor.prepareStackTrace = previousPrepare;
+  }
   let stack = raw;
   if (constructorOpt?.name) {
     const lines = stack.split("\n");

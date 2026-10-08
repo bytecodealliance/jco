@@ -85,5 +85,4 @@ function installAbortCompatibility(): void {
 
 installAbortCompatibility();
 
-export const AbortController = globalThis.AbortController;
-export const AbortSignal = globalThis.AbortSignal;
+export { AbortController, AbortSignal } from "./abort-fallback.js";

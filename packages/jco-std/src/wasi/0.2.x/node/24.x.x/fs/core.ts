@@ -23,6 +23,7 @@ import { callHost, decodeErrno } from "../internal/host-error.js";
 import type { HostImports } from "../internal/wit-types.js";
 
 import { Dir, Dirent, Stats } from "./classes.js";
+import { createFsStreams, type FileStreamOptions } from "./streams.js";
 import type {
   AsyncDisposableTempDir,
   BinaryData,
@@ -309,18 +310,26 @@ export class FileHandle implements AsyncDisposable {
     this.#closed = true;
   }
 
-  createReadStream(..._args: unknown[]): never {
-    return unsupported(
-      "filehandle.createReadStream",
-      "Node streams cannot cross the filesystem host boundary",
-    );
+  createReadStream(options?: FileStreamOptions) {
+    this.#open();
+    const stream = createFsStreams(this.#core).createReadStream("", { ...options, fd: this.fd });
+    if (options?.autoClose !== false) {
+      stream.once("close", () => {
+        this.#closed = true;
+      });
+    }
+    return stream;
   }
 
-  createWriteStream(..._args: unknown[]): never {
-    return unsupported(
-      "filehandle.createWriteStream",
-      "Node streams cannot cross the filesystem host boundary",
-    );
+  createWriteStream(options?: FileStreamOptions) {
+    this.#open();
+    const stream = createFsStreams(this.#core).createWriteStream("", { ...options, fd: this.fd });
+    if (options?.autoClose !== false) {
+      stream.once("close", () => {
+        this.#closed = true;
+      });
+    }
+    return stream;
   }
 
   async datasync(): Promise<void> {

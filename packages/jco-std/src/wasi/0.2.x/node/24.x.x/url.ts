@@ -32,12 +32,15 @@ Object.defineProperty(URLSearchParams.prototype, "constructor", {
   configurable: true,
 });
 
-export function createUrl(providers: PathProviders): UrlModule {
+export function createUrl(
+  providers: PathProviders,
+  legacy?: Pick<UrlModule, "Url" | "parse" | "resolve" | "resolveObject">,
+): UrlModule {
   return {
-    Url,
-    parse,
-    resolve,
-    resolveObject,
+    Url: legacy?.Url ?? Url,
+    parse: legacy?.parse ?? parse,
+    resolve: legacy?.resolve ?? resolve,
+    resolveObject: legacy?.resolveObject ?? resolveObject,
     format,
     URL,
     URLPattern,

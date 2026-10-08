@@ -27,15 +27,19 @@ export const S_IFSOCK = 49_152;
 export const O_CREAT = 64;
 export const O_EXCL = 128;
 export const UV_FS_O_FILEMAP = 0;
+export const UV_FS_O_RANDOM = 0;
+export const UV_FS_O_SEQUENTIAL = 0;
+export const UV_FS_O_SHORT_LIVED = 0;
+export const UV_FS_O_TEMPORARY = 0;
 export const O_NOCTTY = 256;
 export const O_TRUNC = 512;
 export const O_APPEND = 1_024;
-export const O_DIRECTORY = 16_384;
+export const O_DIRECTORY = 65_536;
 export const O_NOATIME = 262_144;
-export const O_NOFOLLOW = 32_768;
+export const O_NOFOLLOW = 131_072;
 export const O_SYNC = 1_052_672;
 export const O_DSYNC = 4_096;
-export const O_DIRECT = 65_536;
+export const O_DIRECT = 16_384;
 export const O_NONBLOCK = 2_048;
 export const S_IRWXU = 448;
 export const S_IRUSR = 256;
@@ -85,6 +89,10 @@ export const constants = {
   O_CREAT,
   O_EXCL,
   UV_FS_O_FILEMAP,
+  UV_FS_O_RANDOM,
+  UV_FS_O_SEQUENTIAL,
+  UV_FS_O_SHORT_LIVED,
+  UV_FS_O_TEMPORARY,
   O_NOCTTY,
   O_TRUNC,
   O_APPEND,

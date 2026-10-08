@@ -301,7 +301,7 @@ function base64Text(
 }
 
 /** A guest-local implementation of Node's streaming string decoder. */
-export class StringDecoder {
+class StringDecoderImplementation {
   encoding: StringDecoderEncoding;
   private [kNativeDecoder]: DecoderState;
 
@@ -434,6 +434,25 @@ export class StringDecoder {
     return state.lastTotal;
   }
 }
+
+export type StringDecoder = StringDecoderImplementation;
+export const StringDecoder = function StringDecoder(
+  this: StringDecoder | undefined,
+  encoding?: StringDecoderInputEncoding,
+): StringDecoder {
+  const initialized = new StringDecoderImplementation(encoding);
+  return this === undefined ? initialized : Object.assign(this, initialized);
+} as unknown as {
+  new (encoding?: StringDecoderInputEncoding): StringDecoder;
+  (this: StringDecoder | undefined, encoding?: StringDecoderInputEncoding): StringDecoder;
+  prototype: StringDecoder;
+};
+StringDecoder.prototype = StringDecoderImplementation.prototype;
+Object.defineProperty(StringDecoder.prototype, "constructor", {
+  configurable: true,
+  writable: true,
+  value: StringDecoder,
+});
 
 for (const name of ["write", "end", "text", "lastChar", "lastNeed", "lastTotal"] as const) {
   const descriptor = Object.getOwnPropertyDescriptor(StringDecoder.prototype, name);

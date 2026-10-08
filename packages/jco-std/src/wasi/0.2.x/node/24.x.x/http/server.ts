@@ -16,6 +16,8 @@ import { codedError } from "../errors/core.js";
 import { invalidArgType, invalidArgValue, unsupported } from "./errors.js";
 import { IncomingMessage } from "./incoming-message.js";
 import { OutgoingMessage } from "./outgoing-message.js";
+import { ResponseBody } from "./response-body.js";
+import { ConnectionSocket } from "./connection.js";
 import type { ProtocolProfile } from "./profile.js";
 import { tlsMaterial } from "./tls.js";
 import type {
@@ -89,14 +91,50 @@ export class ServerResponse extends OutgoingMessage {
   readonly #completed: Promise<HttpOutgoingResponseData>;
   #resolveCompleted!: (response: HttpOutgoingResponseData) => void;
   #rejectCompleted!: (error: unknown) => void;
+  readonly #streaming: boolean;
 
-  constructor(request: IncomingMessage) {
+  constructor(request: IncomingMessage, streaming = false) {
     super();
     this.req = request;
+    this.#streaming = streaming;
     this.#completed = new Promise((resolve, reject) => {
       this.#resolveCompleted = resolve;
       this.#rejectCompleted = reject;
     });
+  }
+
+  get _header(): string | null {
+    return this.headersSent ? `HTTP/1.1 ${this.statusCode}\r\n` : null;
+  }
+  _implicitHeader(): void {
+    this.writeHead(this.statusCode);
+  }
+  flushHeaders(): void {
+    if (this.headersSent) {
+      return;
+    }
+    if (!this.#streaming) {
+      super.flushHeaders();
+      return;
+    }
+    this._bodyStream = new ResponseBody(
+      () => this.emit("drain"),
+      () => this.req.destroy(),
+    );
+    super.flushHeaders();
+    this.#resolveCompleted({
+      statusCode: this.statusCode,
+      statusMessage: this.statusMessage || STATUS_CODES[this.statusCode] || "",
+      headers: this._headers.fields(),
+      body: new Uint8Array(),
+      bodyStream: this._bodyStream,
+    });
+  }
+  write(chunk: HttpBodyChunk, encoding?: string | HttpCallback, callback?: HttpCallback): boolean {
+    if (!this.headersSent) {
+      this._implicitHeader();
+    }
+    return super.write(chunk, encoding, callback);
   }
 
   writeHead(
@@ -179,10 +217,32 @@ export class ServerResponse extends OutgoingMessage {
     encodingOrCallback?: string | HttpCallback,
     callback?: HttpCallback,
   ): this {
+    const empty =
+      chunkOrCallback === undefined ||
+      typeof chunkOrCallback === "function" ||
+      (typeof chunkOrCallback === "string"
+        ? chunkOrCallback.length === 0
+        : ArrayBuffer.isView(chunkOrCallback)
+          ? chunkOrCallback.byteLength === 0
+          : false);
+    if (
+      !this.headersSent &&
+      empty &&
+      this.statusCode !== 204 &&
+      this.statusCode !== 304 &&
+      !this.hasHeader("content-length") &&
+      !this.hasHeader("transfer-encoding")
+    ) {
+      this.setHeader("Content-Length", 0);
+    }
+    if (!this.headersSent) {
+      this._implicitHeader();
+    }
     return super.end(chunkOrCallback, encodingOrCallback, callback);
   }
 
   destroy(error?: Error): this {
+    this._bodyStream?.fail(error ?? new Error("HTTP response was destroyed before it completed"));
     super.destroy(error);
     this.#rejectCompleted(error ?? new Error("HTTP response was destroyed before it completed"));
     return this;
@@ -200,6 +260,7 @@ export class ServerBase extends EventEmitter {
   keepAliveTimeoutBuffer: number;
   requestTimeout: number;
   #server: HttpServerImplementation;
+  readonly #streaming: boolean;
 
   readonly #profile: ProtocolProfile;
 
@@ -211,6 +272,7 @@ export class ServerBase extends EventEmitter {
   ) {
     super();
     this.#profile = profile;
+    this.#streaming = implementation.streamResponses === true;
     if (!implementation.createServer) {
       unsupported(
         `${profile.module}.Server`,
@@ -256,6 +318,16 @@ export class ServerBase extends EventEmitter {
       { ...options, tls },
       (request) => this.#handle(request),
       (error) => queueMicrotask(() => this.emit("error", error)),
+      (data, head) => {
+        if (!data.connection || this.listenerCount("upgrade") === 0) {
+          return false;
+        }
+        const request = new IncomingMessage(data);
+        const socket = new ConnectionSocket(data.connection, data.remoteAddress, data.remotePort);
+        Object.defineProperty(request, "socket", { value: socket, configurable: true });
+        this.emit("upgrade", request, socket, head);
+        return true;
+      },
     );
   }
 
@@ -352,12 +424,18 @@ export class ServerBase extends EventEmitter {
 
   async #handle(data: HttpIncomingRequestData): Promise<HttpOutgoingResponseData> {
     const request = new IncomingMessage(data);
-    const response = new ServerResponse(request);
+    request.once("close", () => data.connection?.[Symbol.dispose]());
+    const response = new ServerResponse(request, this.#streaming);
     if (!this.emit("request", request, response)) {
       unsupported(`${this.#profile.module}.Server request`, "the server has no request listener");
     }
     request._start();
-    return response._completed();
+    return response._completed().then((value) => {
+      if (!value.bodyStream) {
+        request.destroy();
+      }
+      return value;
+    });
   }
 }
 

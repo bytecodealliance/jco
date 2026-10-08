@@ -113,7 +113,7 @@ export class EventEmitter {
       if (registration.once) {
         this.removeListener(event, registration.listener);
       }
-      (registration.listener as (...values: unknown[]) => unknown)(...args);
+      Reflect.apply(registration.listener, this, args);
     }
     return true;
   }

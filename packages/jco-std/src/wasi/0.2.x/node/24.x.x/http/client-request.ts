@@ -14,6 +14,10 @@ import { base64 } from "./body.js";
 import { deprecated, invalidArgType, invalidArgValue, unsupported } from "./errors.js";
 import { validateHeaderName } from "./headers.js";
 import { IncomingMessage } from "./incoming-message.js";
+import { ConnectionSocket } from "./connection.js";
+import type { HttpClientTransport } from "./types.js";
+import { callHost } from "../internal/host-error.js";
+import { fromImplementationError } from "./errors.js";
 import { OutgoingMessage } from "./outgoing-message.js";
 import type { ProtocolProfile } from "./profile.js";
 import { tlsMaterial } from "./tls.js";
@@ -142,6 +146,9 @@ function abortError(reason: unknown): Error & { code: string } {
 }
 
 export class ClientRequestBase extends OutgoingMessage {
+  readonly #authority: string;
+  #transport: HttpClientTransport | undefined;
+  #socket: ConnectionSocket | undefined;
   readonly agent: Agent;
   readonly protocol: string;
   readonly host: string;
@@ -183,9 +190,40 @@ export class ClientRequestBase extends OutgoingMessage {
         ? new (profile.globalAgent.constructor as new () => Agent)()
         : ((normalized.options.agent as Agent | null | undefined) ?? profile.globalAgent);
     this.protocol = normalized.protocol;
-    this.host = normalized.authority;
+    this.host = normalized.hostname;
+    this.#authority = normalized.authority;
     this.path = normalized.path;
     this.method = normalized.method;
+    this.#transport = implementation.openRequest?.({
+      method: this.method,
+      scheme: profile.scheme,
+      authority: this.#authority,
+      pathWithQuery: this.path,
+      headers: this._headers.fields(),
+      body: new Uint8Array(),
+    });
+    if (this.#transport) {
+      const checkSocket = () => {
+        if (this.destroyed || !this.#transport) {
+          return;
+        }
+        try {
+          const connection = this.#transport!.socket();
+          if (connection) {
+            this.#socket = new ConnectionSocket(connection);
+            const agent = this.agent as Agent;
+            const key = agent.getName({ host: this.#hostname, port: this.#port });
+            (agent.sockets[key] ??= []).push(this.#socket);
+            this.emit("socket", this.#socket);
+          } else {
+            setTimeout(checkSocket, 1);
+          }
+        } catch (error) {
+          this.destroy(error as Error);
+        }
+      };
+      setTimeout(checkSocket, 1);
+    }
     if (normalized.options.setHost !== false && !this.hasHeader("host")) {
       this.setHeader("Host", normalized.authority);
     }
@@ -238,7 +276,7 @@ export class ClientRequestBase extends OutgoingMessage {
     const request: HttpImplementationRequest = {
       method: this.method,
       scheme: this.#profile.scheme,
-      authority: this.host,
+      authority: this.#authority,
       pathWithQuery: this.path,
       headers: this._headers.fields(),
       body,
@@ -249,6 +287,32 @@ export class ClientRequestBase extends OutgoingMessage {
     if (this.#tls !== undefined) {
       request.tls = this.#tls;
     }
+    if (this.#transport) {
+      const poll = () => {
+        if (this.destroyed) {
+          return;
+        }
+        try {
+          const response = callHost(() => this.#transport!.response(), fromImplementationError);
+          if (response) {
+            this.#deliver(response);
+          } else {
+            setTimeout(poll, 1);
+          }
+        } catch (error) {
+          this.destroy(error as Error);
+        }
+      };
+      setTimeout(() => {
+        try {
+          callHost(() => this.#transport!.finish(request.headers, body), fromImplementationError);
+          setTimeout(poll, 1);
+        } catch (error) {
+          this.destroy(error as Error);
+        }
+      }, 1);
+      return () => {};
+    }
     const response = this.#implementation.request(request);
     return () => this.#deliver(response);
   }
@@ -258,11 +322,45 @@ export class ClientRequestBase extends OutgoingMessage {
       return;
     }
     const message = new IncomingMessage(response);
+    const release = () => this.#release();
+    message.once("end", release);
+    message.once("close", release);
+    Object.defineProperty(message, "req", { value: this });
+    Object.defineProperty(message, "socket", { value: this.#socket });
     this.emit("response", message);
     this.#responseListener?.(message);
     message._start();
   }
 
+  get socket(): ConnectionSocket | undefined {
+    return this.#socket;
+  }
+
+  #release(): void {
+    if (this.#socket) {
+      const key = this.agent.getName({ host: this.#hostname, port: this.#port });
+      const active = this.agent.sockets[key];
+      if (active) {
+        const index = active.indexOf(this.#socket);
+        if (index >= 0) {
+          active.splice(index, 1);
+        }
+        if (active.length === 0) {
+          delete this.agent.sockets[key];
+        }
+      }
+      this.#socket.release();
+    }
+    this.#transport?.[Symbol.dispose]();
+    this.#transport = undefined;
+  }
+  override destroy(error?: Error): this {
+    if (!this.destroyed) {
+      this.#transport?.close();
+      this.#release();
+    }
+    return super.destroy(error);
+  }
   _remote(): { hostname: string; port: number } {
     return { hostname: this.#hostname, port: this.#port };
   }

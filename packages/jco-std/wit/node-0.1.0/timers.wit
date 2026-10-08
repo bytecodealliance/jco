@@ -1,0 +1,10 @@
+interface timers-callbacks {
+  dispatch: func(id: u32);
+}
+
+interface timers {
+  record error { name: string, message: string, code: option<string> }
+  schedule: func(delay-ms: u32, repeat: bool, callback: u32) -> result<u32, error>;
+  cancel: func(id: u32);
+  set-ref: func(id: u32, referenced: bool);
+}

@@ -14,6 +14,11 @@
 
 import { unsupported, useWebCrypto } from "./errors.js";
 import { encodeDigest, Hash, Hmac } from "./hash.js";
+import { Buffer } from "node:buffer";
+import { KeyObject, createSecretKey } from "./keys.js";
+import { pbkdf2, pbkdf2Sync, hkdf, hkdfSync, scrypt, scryptSync } from "./kdf.js";
+
+export { KeyObject, createSecretKey, pbkdf2, pbkdf2Sync, hkdf, hkdfSync, scrypt, scryptSync };
 
 export { Hash, Hmac } from "./hash.js";
 export { UNSUPPORTED_CODE } from "./errors.js";
@@ -110,14 +115,16 @@ export function randomBytes(
 ): Uint8Array | undefined {
   const bytes = new Uint8Array(size);
   webCryptoOrThrow().getRandomValues(bytes);
-  const buffer = (globalThis as { Buffer?: { from(b: Uint8Array): Uint8Array } }).Buffer;
-  const result = buffer ? buffer.from(bytes) : bytes;
+  const result = Buffer.from(bytes);
   if (callback) {
     callback(null, result);
     return undefined;
   }
   return result;
 }
+
+/** Legacy Node alias retained by cookie signing packages. */
+export const pseudoRandomBytes = randomBytes;
 
 /**
  * Produce a random integer in `[min, max)`, as Node's `crypto.randomInt()` does.
@@ -197,7 +204,7 @@ export const subtle: SubtleCrypto = new Proxy({} as SubtleCrypto, {
 
 /** Digest algorithms `createHash()` accepts here. */
 export function getHashes(): string[] {
-  return ["sha1", "sha256"];
+  return ["sha1", "sha256", "sha384", "sha512"];
 }
 
 /** Node's FIPS flag, which a component's engine never sets. */
@@ -233,7 +240,6 @@ export const createPrivateKey = refuse("crypto.createPrivateKey()");
 export const createPublicKey = refuse("crypto.createPublicKey()");
 
 /** Key objects belong to `crypto.subtle`. */
-export const createSecretKey = refuse("crypto.createSecretKey()");
 
 /** Key generation belongs to `crypto.subtle`. */
 export const generateKeyPairSync = refuse("crypto.generateKeyPairSync()");
@@ -242,16 +248,12 @@ export const generateKeyPairSync = refuse("crypto.generateKeyPairSync()");
 export const generateKeyPair = refuse("crypto.generateKeyPair()");
 
 /** Key derivation belongs to `crypto.subtle`. */
-export const pbkdf2Sync = refuse("crypto.pbkdf2Sync()");
 
 /** Key derivation belongs to `crypto.subtle`. */
-export const pbkdf2 = refuse("crypto.pbkdf2()");
 
 /** Key derivation belongs to `crypto.subtle`. */
-export const hkdfSync = refuse("crypto.hkdfSync()");
 
 /** Key derivation belongs to `crypto.subtle`. */
-export const hkdf = refuse("crypto.hkdf()");
 
 /** Diffie-Hellman belongs to `crypto.subtle`. */
 export const createDiffieHellman = refuse("crypto.createDiffieHellman()");
@@ -272,6 +274,7 @@ export const X509Certificate = class {
 export { encodeDigest };
 
 export default {
+  KeyObject,
   Hash,
   Hmac,
   X509Certificate,
@@ -298,9 +301,12 @@ export default {
   pbkdf2,
   pbkdf2Sync,
   randomBytes,
+  pseudoRandomBytes,
   randomFillSync,
   randomInt,
   randomUUID,
+  scrypt,
+  scryptSync,
   subtle,
   timingSafeEqual,
   webcrypto,

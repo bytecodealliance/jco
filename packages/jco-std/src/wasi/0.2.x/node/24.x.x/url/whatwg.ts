@@ -68,7 +68,7 @@ export const URL: typeof globalThis.URL = new Proxy(WhatwgURL, {
       throw missingArgs("url");
     }
     const input = `${args[0]}`;
-    const base = args[1] === undefined ? undefined : `${args[1]}`;
+    const base = args.length < 2 || args[1] === undefined ? undefined : `${args[1]}`;
     try {
       const instance: URL = Reflect.construct(target, [input, base], newTarget);
       instances.add(instance);

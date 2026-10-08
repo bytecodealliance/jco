@@ -1,18 +1,10 @@
 import { deprecatedNodeApi, invalidArgType } from "../errors/core.js";
 
-import {
-  Dir,
-  Dirent,
-  FileReadStream,
-  FileWriteStream,
-  ReadStream,
-  Stats,
-  Utf8Stream,
-  WriteStream,
-} from "./classes.js";
+import { Dir, Dirent, Stats, Utf8Stream } from "./classes.js";
 import { constants, F_OK } from "./constants.js";
 import { type FsCore, toUnixTimestamp, unsupportedFsApi } from "./core.js";
 import type { FsPromises } from "./promises.js";
+import { createFsStreams } from "./streams.js";
 import type {
   BufferEncoding,
   CopyOptions,
@@ -66,6 +58,14 @@ function splitCallback(args: unknown[]): { args: unknown[]; callback: Callback }
 
 /** Build Node's callback/synchronous facade over one filesystem core. */
 export function createFs(core: FsCore, promises: FsPromises) {
+  const {
+    ReadStream,
+    WriteStream,
+    FileReadStream,
+    FileWriteStream,
+    createReadStream,
+    createWriteStream,
+  } = createFsStreams(core);
   const access = (
     path: PathLike,
     modeOrCallback: number | Callback,
@@ -638,8 +638,8 @@ export function createFs(core: FsCore, promises: FsPromises) {
     copyFileSync: core.copyFileSync.bind(core),
     cp,
     cpSync: core.cpSync.bind(core),
-    createReadStream: unsupported("fs.createReadStream"),
-    createWriteStream: unsupported("fs.createWriteStream"),
+    createReadStream,
+    createWriteStream,
     exists: deprecated("fs.exists", "fs.stat or fs.access"),
     existsSync: core.existsSync.bind(core),
     fchmod,

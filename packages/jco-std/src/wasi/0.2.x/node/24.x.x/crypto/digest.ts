@@ -13,13 +13,25 @@
  */
 
 /** Digest algorithms implemented here, under the names Node accepts. */
-export type DigestAlgorithm = "sha1" | "sha256";
+import { sha384, sha512 } from "@noble/hashes/sha2";
+
+export type DigestAlgorithm = "sha1" | "sha256" | "sha384" | "sha512";
 
 /** Byte length of each algorithm's output. */
-export const DIGEST_LENGTH: Record<DigestAlgorithm, number> = { sha1: 20, sha256: 32 };
+export const DIGEST_LENGTH: Record<DigestAlgorithm, number> = {
+  sha1: 20,
+  sha256: 32,
+  sha384: 48,
+  sha512: 64,
+};
 
 /** Byte length of each algorithm's compression block, which HMAC keys are padded to. */
-export const BLOCK_LENGTH: Record<DigestAlgorithm, number> = { sha1: 64, sha256: 64 };
+export const BLOCK_LENGTH: Record<DigestAlgorithm, number> = {
+  sha1: 64,
+  sha256: 64,
+  sha384: 128,
+  sha512: 128,
+};
 
 /** Normalize the algorithm spellings Node accepts, or return `undefined` if unknown. */
 export function normalizeAlgorithm(algorithm: string): DigestAlgorithm | undefined {
@@ -29,6 +41,9 @@ export function normalizeAlgorithm(algorithm: string): DigestAlgorithm | undefin
   }
   if (normalized === "sha256") {
     return "sha256";
+  }
+  if (normalized === "sha384" || normalized === "sha512") {
+    return normalized;
   }
   return undefined;
 }
@@ -178,5 +193,5 @@ export function sha256(message: Uint8Array): Uint8Array {
 
 /** Run one of the implemented digests over a message. */
 export function digest(algorithm: DigestAlgorithm, message: Uint8Array): Uint8Array {
-  return algorithm === "sha1" ? sha1(message) : sha256(message);
+  return { sha1, sha256, sha384, sha512 }[algorithm](message);
 }

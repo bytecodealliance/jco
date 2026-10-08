@@ -13,4 +13,10 @@ export const Server: DirectHttp2Host["Server"] = class Server {
   }
 } as unknown as DirectHttp2Host["Server"];
 
-export default { ClientSession, Server };
+export class ClientStream {
+  constructor() {
+    adapterRequired();
+  }
+}
+
+export default { ClientSession, ClientStream, Server };
