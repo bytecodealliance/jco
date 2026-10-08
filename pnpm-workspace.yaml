@@ -80,6 +80,8 @@ catalog:
   which: ^2.0.2
 
 minimumReleaseAgeExclude:
+  - '@modelcontextprotocol/client@2.2.0'
+  - '@modelcontextprotocol/core@2.2.0'
   - '@types/node@26.6.4'
   - 'rollup@4.64.1'
   - '@rolldown/binding-android-arm-eabi@1.2.13'
