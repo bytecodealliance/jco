@@ -28,6 +28,7 @@ suite("Node stream modules", () => {
             entry: "source.js",
             wit: "source.wit",
             bundle: true,
+            copy: true,
             extraArgs: ["--backend", "starlingmonkey"],
         });
         const { instance, cleanup } = await setupAsyncTest({

@@ -51,11 +51,11 @@ describe("node:http builtin adapter", () => {
             expect(onWitRequirement).toHaveBeenCalledWith(
                 expect.objectContaining({
                     guestExports: [
-                        {
+                        expect.objectContaining({
                             witExport: "jco:node/http-callbacks@0.1.0",
                             jsExport: "httpCallbacks",
                             moduleSpecifier: HTTP_CALLBACKS_SPECIFIER,
-                        },
+                        }),
                     ],
                 }),
             );
@@ -118,6 +118,8 @@ describe("node:http builtin adapter", () => {
         expect(opts.asyncMode).toBe("jspi");
         expect(opts.asyncImports).toEqual([
             "jco:node/http@0.1.0#request",
+            "jco:node/http@0.1.0#[method]client-request.socket",
+            "jco:node/http@0.1.0#[method]client-request.response",
             "jco:node/http@0.1.0#[method]server.listen",
             "jco:node/http@0.1.0#[method]server.close",
             "jco:node/http@0.1.0#[method]server.get-connections",
@@ -215,7 +217,7 @@ describe.skipIf(!hasJspi)("node:http in a component", () => {
             jco: {
                 transpile: {
                     extraArgs: {
-                        asyncExports: ["*"],
+                        asyncExports: ["start", "stop", "jco:node/http-callbacks@0.1.0#*"],
                         map: { "jco:node/http@0.1.0": NODE_HOST },
                     },
                 },
