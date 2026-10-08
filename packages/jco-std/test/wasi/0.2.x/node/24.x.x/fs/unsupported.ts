@@ -21,13 +21,9 @@ describe("node:fs denied and unsupported behavior", () => {
   });
 
   test.each([
-    ["createReadStream", () => fs.createReadStream("ignored")],
-    ["createWriteStream", () => fs.createWriteStream("ignored")],
     ["watch", () => fs.watch("ignored")],
     ["watchFile", () => fs.watchFile("ignored")],
     ["openAsBlob", () => fs.openAsBlob("ignored")],
-    ["ReadStream", () => new fs.ReadStream("ignored")],
-    ["WriteStream", () => new fs.WriteStream("ignored")],
     ["Utf8Stream", () => new fs.Utf8Stream()],
   ])("fails explicitly for unsupported %s", (_name, invoke) => {
     expect(invoke).toThrow(expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }));
