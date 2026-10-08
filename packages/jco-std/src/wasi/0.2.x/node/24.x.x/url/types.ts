@@ -28,9 +28,9 @@ export interface UrlObject {
   query?: string | UrlQuery | null;
 }
 export interface LegacyUrl extends UrlObject {
-  parse(url: string, parseQueryString?: boolean, slashesDenoteHost?: boolean): never;
+  parse(url: string, parseQueryString?: boolean, slashesDenoteHost?: boolean): LegacyUrl;
   format(): string;
-  resolve(relative: string): never;
+  resolve(relative: string): string;
   resolveObject(relative: string | UrlObject): LegacyUrl;
   parseHost(): void;
 }
