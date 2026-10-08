@@ -1,5 +1,5 @@
 /* global TextDecoder */
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { fileURLToPath, URL } from 'node:url';
@@ -10,6 +10,8 @@ import ts from 'typescript-compiler-api';
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 import { transpileBytes, generateGuestTypes } from '../src/index.js';
 import { getTmpDir } from './helpers.js';
+
+const typescriptFixturesDir = fileURLToPath(new URL('./fixtures/typescript/', import.meta.url));
 
 suite(`TypeScript`, async () => {
     for (const instantiation of ['async', 'sync'] as const) {
@@ -23,30 +25,21 @@ suite(`TypeScript`, async () => {
             const { files } = await transpileBytes(component, { name: 'component', instantiation });
             const dir = await getTmpDir();
             try {
+                // The fixtures import the generated types as a sibling module, so they
+                // are copied next to them before compilation.
                 await writeFile(join(dir, 'component.d.ts'), files['component.d.ts']);
-                const testFile = join(dir, 'test.mts');
-                await writeFile(
-                    testFile,
-                    `
-                    import { instantiate, type InstantiateOptions } from './component.js';
-                    declare const load: (path: string) => WebAssembly.Module;
-                    const options: InstantiateOptions = { shim: { globals: { WebAssembly } } };
-                    instantiate(load, {});
-                    instantiate(load, {}, undefined, {});
-                    instantiate(load, {}, undefined, { shim: {} });
-                    instantiate(load, {}, undefined, { shim: { globals: {} } });
-                    instantiate(load, {}, undefined, options);
-                    instantiate(load, {}, (module, imports) => new WebAssembly.Instance(module, imports), options);
-                    ${instantiation === 'async' ? 'instantiate(async path => load(path), {}, WebAssembly.instantiate, options);' : ''}
-                    // @ts-expect-error An incompatible WebAssembly implementation must be rejected.
-                    instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: { compile: () => 0 } } } });
-                    // @ts-expect-error Global overrides belong inside options.shim.globals.
-                    instantiate(load, {}, undefined, { WebAssembly });
-                    // @ts-expect-error Global overrides must be grouped under shim.
-                    instantiate(load, {}, undefined, { globals: { WebAssembly } });
-                    `,
+                const fixtures = ['instantiate-options.mts'];
+                if (instantiation === 'async') {
+                    fixtures.push('instantiate-options.async.mts');
+                }
+                const testFiles = await Promise.all(
+                    fixtures.map(async (fixture) => {
+                        const testFile = join(dir, fixture);
+                        await copyFile(join(typescriptFixturesDir, fixture), testFile);
+                        return testFile;
+                    }),
                 );
-                const program = ts.createProgram([testFile], {
+                const program = ts.createProgram(testFiles, {
                     noEmit: true,
                     strict: true,
                     types: [],

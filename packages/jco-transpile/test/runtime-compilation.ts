@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,9 @@ import { nodeExec, setupAsyncTest } from './helpers.js';
 
 const componentPath = fileURLToPath(
     new URL('./fixtures/components/runtime/waitable-set-wait-unused.component.wat', import.meta.url),
+);
+const customWebAssemblyScript = fileURLToPath(
+    new URL('./fixtures/runtime-compilation/custom-webassembly.mjs', import.meta.url),
 );
 
 /** A WebAssembly implementation that forbids compilation from bytes, as on Cloudflare Workers. */
@@ -109,89 +112,14 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                 });
 
                 try {
-                    // A separate process lets this test remove the platform global without
-                    // interfering with other tests or with the transpiler itself.
-                    const script = join(esModuleOutputDir, 'test.mjs');
-                    await writeFile(
-                        script,
-                        `
-                        import assert from 'node:assert/strict';
-                        import { readFileSync } from 'node:fs';
-
-                        const native = globalThis.WebAssembly;
-                        delete globalThis.WebAssembly;
-                        const { instantiate } = await import('./custom-webassembly.js');
-                        const used = new Set();
-                        const wasm = new Proxy(native, {
-                            get(target, key) {
-                                used.add(key);
-                                return target[key];
-                            },
-                        });
-                        const load = name => name.includes('.conditional-suspending-')
-                            ? undefined
-                            : new native.Module(readFileSync(new URL(name, import.meta.url)));
-
-                        const result = instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: wasm } } });
-                        if ('${instantiation}' === 'sync') assert.ok(!(result instanceof Promise));
-                        const instance = await result;
-                        assert.equal(instance.run(), 42);
-                        for (const key of ['Module', 'Instance', 'Global', 'Suspending']) {
-                            assert.ok(used.has(key), key + ' must use the injected implementation');
-                        }
-                        assert.equal(used.has('instantiate'), '${instantiation}' === 'async');
-
-                        // An explicit core instantiator still takes precedence over the default.
-                        used.clear();
-                        let calls = 0;
-                        const custom = await instantiate(load, {}, (module, imports) => {
-                            calls++;
-                            return new native.Instance(module, imports);
-                        }, { shim: { globals: { WebAssembly: wasm } } });
-                        assert.equal(custom.run(), 42);
-                        assert.equal(calls, 2);
-                        assert.ok(!used.has('instantiate'));
-
-                        // The default async loader must also compile through the override.
-                        if ('${instantiation}' === 'async') {
-                            used.clear();
-                            const loaded = await instantiate(undefined, {}, undefined, { shim: { globals: { WebAssembly: wasm } } });
-                            assert.equal(loaded.run(), 42);
-                            assert.ok(used.has('compile'));
-                        }
-                        assert.equal(globalThis.WebAssembly, undefined);
-
-                        // The default core instantiator must call the implementation as a
-                        // method, so that custom implementations may rely on \`this\`.
-                        if ('${instantiation}' === 'async') {
-                            let receiver;
-                            const method = Object.assign(Object.create(native), {
-                                instantiate(module, imports) {
-                                    receiver = this;
-                                    return native.instantiate(module, imports);
-                                },
-                            });
-                            const viaMethod = await instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: method } } });
-                            assert.equal(viaMethod.run(), 42);
-                            assert.equal(receiver, method);
-                        }
-
-                        // Without any implementation, the default core instantiator fails clearly.
-                        for (const options of [undefined, null, { shim: { globals: { WebAssembly: null } } }]) {
-                            assert.throws(() => instantiate(load, {}, undefined, options), {
-                                message: /no WebAssembly implementation is available/,
-                            });
-                        }
-
-                        // Even feature detection must use the injected object.
-                        Object.defineProperty(globalThis, 'WebAssembly', {
-                            get() { throw new Error('accessed the platform WebAssembly'); },
-                        });
-                        const isolated = await instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: wasm } } });
-                        assert.equal(isolated.run(), 42);
-                        `,
+                    // The script runs in a separate process so that it can remove the
+                    // platform global without interfering with other tests or with the
+                    // transpiler itself.
+                    await nodeExec(
+                        customWebAssemblyScript,
+                        join(esModuleOutputDir, 'custom-webassembly.js'),
+                        instantiation,
                     );
-                    await nodeExec(script);
                 } finally {
                     await cleanup();
                 }
