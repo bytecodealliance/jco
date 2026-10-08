@@ -266,7 +266,7 @@ export async function instantiate(
     [importName: string]: any
   },
   instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>,
-  options?: { shim?: { globals?: { WebAssembly?: typeof WebAssembly } } }
+  options?: InstantiateOptions
 ): Promise<{ [exportName: string]: any }>;
 ```
 
@@ -294,19 +294,33 @@ export function instantiate(
     [importName: string]: any
   },
   instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
-  options?: { shim?: { globals?: { WebAssembly?: typeof WebAssembly } } }
-): Promise<{ [exportName: string]: any }>;
+  options?: InstantiateOptions
+): { [exportName: string]: any };
 ```
 
 Where instead of promises, all functions are synchronous.
 
-The optional fourth argument, `options`, configures the instantiation. Runtime overrides
-are grouped under `shim`. Set `options.shim.globals.WebAssembly` to provide a custom
-`WebAssembly` implementation for that instance. It defaults to `globalThis.WebAssembly`
-when the override is omitted.
+The optional fourth argument, `options`, configures the instantiation. Its type is exported
+from the generated bindings as `InstantiateOptions`:
+
+```ts
+export interface InstantiateOptions {
+  shim?: {
+    globals?: {
+      WebAssembly?: typeof WebAssembly;
+    };
+  };
+}
+```
+
+Runtime overrides are grouped under `shim`. Set `options.shim.globals.WebAssembly` to provide
+a custom `WebAssembly` implementation for that instance. It defaults to `globalThis.WebAssembly`
+when the override is omitted or nullish at any level.
 The override applies to the generated component's helpers and its default core instantiator
-(`WebAssembly.instantiate` in async mode, `new WebAssembly.Instance` in sync mode).
-An explicit `instantiateCore` callback still takes precedence.
+(`WebAssembly.instantiate` in async mode, `new WebAssembly.Instance` in sync mode), which calls
+the implementation as a method. An explicit `instantiateCore` callback still takes precedence.
+When neither an override nor a platform `WebAssembly` global is available, `instantiate` throws
+unless an explicit `instantiateCore` is supplied.
 
 ```js
 const component = await instantiate(getCoreModule, imports, undefined, {

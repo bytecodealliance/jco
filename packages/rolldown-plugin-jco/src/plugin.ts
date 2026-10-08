@@ -284,7 +284,7 @@ export function createProxySource(
         ].join("\n");
     }
 
-    const invoke = "generatedInstantiate(getCoreModule, imports, instantiateCore)";
+    const invoke = "generatedInstantiate(getCoreModule, imports, instantiateCore, options)";
     const bindings = exports.map((name, index) => ({
         exported: JSON.stringify(name),
         local: `componentExport${index}`,
@@ -304,7 +304,7 @@ export function createProxySource(
     if (instantiation === "async") {
         return [
             ...common,
-            "export default function instantiate(getCoreModule, imports, instantiateCore) {",
+            "export default function instantiate(getCoreModule, imports, instantiateCore, options) {",
             '  if (state !== "idle") throw new Error("This WebAssembly Component has already been instantiated");',
             '  state = "pending";',
             "  let pending;",
@@ -324,7 +324,7 @@ export function createProxySource(
 
     return [
         ...common,
-        "export default function instantiate(getCoreModule, imports, instantiateCore) {",
+        "export default function instantiate(getCoreModule, imports, instantiateCore, options) {",
         '  if (state !== "idle") throw new Error("This WebAssembly Component has already been instantiated");',
         '  state = "pending";',
         "  try {",

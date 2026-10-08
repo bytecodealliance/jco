@@ -28,9 +28,9 @@ suite(`TypeScript`, async () => {
                 await writeFile(
                     testFile,
                     `
-                    import { instantiate } from './component.js';
+                    import { instantiate, type InstantiateOptions } from './component.js';
                     declare const load: (path: string) => WebAssembly.Module;
-                    const options = { shim: { globals: { WebAssembly } } };
+                    const options: InstantiateOptions = { shim: { globals: { WebAssembly } } };
                     instantiate(load, {});
                     instantiate(load, {}, undefined, {});
                     instantiate(load, {}, undefined, { shim: {} });

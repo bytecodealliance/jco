@@ -593,19 +593,27 @@ impl JsBindgen<'_> {
 
         // Write out instantiation
         if let Some(instantiation) = &self.opts.instantiation_mode {
-            // Choose the default core instantiator in the body, after binding the
-            // WebAssembly override used by both instantiation and the intrinsics.
+            // Bind the WebAssembly override before the intrinsics, which refer to it
+            // by name. A nullish value at any level of `options` falls back to the
+            // platform global. The default core instantiator is chosen afterwards so
+            // that it uses the override too, and it calls the implementation as a
+            // method so that custom implementations may rely on `this`.
             uwrite!(
                 output,
                 "\
-                    export function instantiate(getCoreModule, imports, instantiateCore, {{ shim: {{ globals: {{ WebAssembly = globalThis.WebAssembly }} = {{}} }} = {{}} }} = {{}}) {{
-                        if (typeof instantiateCore === 'undefined') instantiateCore = {};
+                    export function instantiate(getCoreModule, imports, instantiateCore, options) {{
+                        const WebAssembly = options?.shim?.globals?.WebAssembly ?? globalThis.WebAssembly;
+                        if (typeof instantiateCore === 'undefined') {{
+                            if (typeof WebAssembly === 'undefined') throw new Error('no WebAssembly implementation is available: pass instantiateCore or options.shim.globals.WebAssembly');
+                            instantiateCore = {};
+                        }}
                         {}
                         {}
                         {}
                 ",
                 match instantiation {
-                    InstantiationMode::Async => "WebAssembly.instantiate",
+                    InstantiationMode::Async =>
+                        "(module, importObject) => WebAssembly.instantiate(module, importObject)",
                     InstantiationMode::Sync =>
                         "(module, importObject) => new WebAssembly.Instance(module, importObject)",
                 },
@@ -648,7 +656,7 @@ impl JsBindgen<'_> {
                             // core start function before entering its JS wrapper.
                             // At component instantiation time that always means the
                             // implicit synchronous task attempted to block.
-                            if (typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
                                 return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
                             }}
                             return e;
@@ -725,7 +733,7 @@ impl JsBindgen<'_> {
                             // core start function before entering its JS wrapper.
                             // At component instantiation time that always means the
                             // implicit synchronous task attempted to block.
-                            if (typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
                                 return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
                             }}
                             return e;

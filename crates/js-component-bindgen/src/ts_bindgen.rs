@@ -451,6 +451,30 @@ pub fn ts_bindgen(
             );
         }
     } else {
+        if opts.instantiation_mode.is_some() {
+            uwriteln!(
+                bindgen.src,
+                "
+                /**
+                 * Options accepted by `instantiate`.
+                 */
+                export interface InstantiateOptions {{
+                    /** Runtime overrides for this instance. */
+                    shim?: {{
+                        /** Platform globals used instead of those on `globalThis`. */
+                        globals?: {{
+                            /**
+                             * The WebAssembly implementation used by this instance,
+                             * including by the default `instantiateCore`. Defaults to
+                             * `globalThis.WebAssembly`.
+                             */
+                            WebAssembly?: typeof WebAssembly;
+                        }};
+                    }};
+                }}
+                ",
+            );
+        }
         match opts.instantiation_mode {
             Some(InstantiationMode::Async) => {
                 uwriteln!(
@@ -475,22 +499,20 @@ pub fn ts_bindgen(
                  * `WebAssembly.Module` object. This would use the
                  * `WebAssembly.Module` constructor on the web, for example.
                  *
-                 * The optional `options` argument configures instantiation. Its
-                 * `shim.globals.WebAssembly` property overrides the implementation
-                 * used by this instance, including the default
-                 * `instantiateCore`. It defaults to `globalThis.WebAssembly`.
+                 * The optional `options` argument configures instantiation; see
+                 * `InstantiateOptions`.
                  */
                 export function instantiate(
                     getCoreModule: (path: string) => WebAssembly.Module,
                     imports: ImportObject,
                     instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
-                    options?: {{ shim?: {{ globals?: {{ WebAssembly?: typeof WebAssembly }} }} }}
+                    options?: InstantiateOptions
                 ): {camel};
                 export function instantiate(
                     getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
                     imports: ImportObject,
                     instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>,
-                    options?: {{ shim?: {{ globals?: {{ WebAssembly?: typeof WebAssembly }} }} }}
+                    options?: InstantiateOptions
                 ): {camel} | Promise<{camel}>;
                 ",
                 );
@@ -519,16 +541,14 @@ pub fn ts_bindgen(
                      * `WebAssembly.Module` object. This would use the
                      * `WebAssembly.Module` constructor on the web, for example.
                      *
-                     * The optional `options` argument configures instantiation. Its
-                     * `shim.globals.WebAssembly` property overrides the implementation
-                     * used by this instance, including the default
-                     * `instantiateCore`. It defaults to `globalThis.WebAssembly`.
+                     * The optional `options` argument configures instantiation; see
+                     * `InstantiateOptions`.
                      */
                     export function instantiate(
                         getCoreModule: (path: string) => WebAssembly.Module,
                         imports: ImportObject,
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
-                        options?: {{ shim?: {{ globals?: {{ WebAssembly?: typeof WebAssembly }} }} }}
+                        options?: InstantiateOptions
                     ): {camel};
                     ",
                 )
