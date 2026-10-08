@@ -80,6 +80,11 @@ try {
     const localPort = await waitForPort(localServer);
     const { instantiate } = await import(pathToFileURL(argv[2]));
     const imports = withWasiSockets(new WASIShim().getImportObject());
+    // Portable Web globals include a lazy fetch implementation. Its unused
+    // capabilities must be satisfied without granting HTTP or timer access.
+    for (const name of ["http", "console", "timers"]) {
+        imports[`jco:node/${name}`] ??= await import(`@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/${name}/host`);
+    }
     const instance = await instantiate(undefined, imports);
     const local = JSON.parse(await instance.runClient(`http://127.0.0.1:${localPort}`, "/large", ""));
 

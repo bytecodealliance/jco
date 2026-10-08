@@ -169,16 +169,10 @@ suite("Node globals", () => {
                 ),
             ],
         });
-        // The console fallback adds its deny-by-default interface, while process stdio
-        // initialization must remain portable and must not request node:tty.
-        expect([...new Set(requirements.map((requirement) => requirement.witImport))]).toEqual([
-            "jco:node/console@0.1.0",
-        ]);
-        const provider = new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/console-host.js", import.meta.url).href;
-        const mapped = source.replaceAll('"jco:node/console@0.1.0"', JSON.stringify(provider));
+        expect(requirements).toEqual([]);
         const buffer = globalThis.Buffer;
         try {
-            const { value } = await import(`data:text/javascript,${encodeURIComponent(mapped)}`);
+            const { value } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
             expect(value).toEqual(["/", false, false]);
         } finally {
             globalThis.Buffer = buffer;
