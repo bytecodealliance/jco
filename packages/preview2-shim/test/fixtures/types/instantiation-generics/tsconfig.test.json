@@ -1,0 +1,17 @@
+{
+    "include": [
+        "test/fixtures/types/instantiation-generics/example.ts",
+        "src/common/instantiation.ts"
+    ],
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": ".",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "noEmit": true,
+        "noImplicitAny": false,
+        "strict": true,
+        "declaration": true,
+        "sourceMap": true
+    }
+}
