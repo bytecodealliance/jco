@@ -1,5 +1,11 @@
 """Run a command on a pseudo-terminal of a fixed size with scripted interaction.
 
+The TTY tests need a real terminal for isatty(), window sizing, raw mode, and
+readline. Node's standard library cannot allocate a pseudo-terminal; Python's
+pty, fcntl, and termios modules provide the required Unix APIs without any
+third-party dependencies. The caller skips this helper on Windows or when
+python3 is unavailable.
+
 usage: tty-pty.py ROWS COLS STEPS COMMAND...
 
 STEPS is a JSON list of {"expect": text} (wait until the output so far contains text) and
