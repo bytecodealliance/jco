@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { nodeUrl, url } from "./helpers/conformance.js";
+import { createUrl, type UrlModule } from "../../../../../../src/wasi/0.2.x/node/24.x.x/url.js";
 
 test("complete Node24 module shape, aliases and constructors", () => {
   assert.deepEqual(Object.keys(url), Object.keys(nodeUrl));
@@ -24,4 +25,30 @@ test("complete Node24 module shape, aliases and constructors", () => {
     const expected = Object.getOwnPropertyDescriptor(nodeUrl.URL, key)!;
     assert.deepEqual({ ...actual, value: undefined }, { ...expected, value: undefined });
   }
+});
+
+test("adapts legacy parsing without changing the supplied constructor or prototype", () => {
+  const descriptors = Object.getOwnPropertyDescriptors(nodeUrl.Url.prototype);
+  const adapted = createUrl(
+    { initialCwd: () => "/", getEnvironment: () => [] },
+    {
+      Url: nodeUrl.Url as unknown as UrlModule["Url"],
+    },
+  );
+  assert.deepEqual(Object.getOwnPropertyDescriptors(nodeUrl.Url.prototype), descriptors);
+  assert.deepEqual(Object.entries(new adapted.Url()), Object.entries(new nodeUrl.Url()));
+  const input = "https://example.com/items?q=one&q=two";
+  const parsed = adapted.parse(input, true);
+  assert.ok(parsed instanceof adapted.Url);
+  assert.equal(parsed.constructor, adapted.Url);
+  assert.equal(adapted.parse(parsed), parsed);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(parsed)),
+    JSON.parse(JSON.stringify(nodeUrl.parse(input, true))),
+  );
+  assert.equal(adapted.resolve(input, "../next"), nodeUrl.resolve(input, "../next"));
+  const resolved = adapted.resolveObject(input, "../next");
+  assert.ok(resolved instanceof adapted.Url);
+  assert.equal(resolved.href, nodeUrl.resolveObject(input, "../next").href);
+  assert.deepEqual(Object.getOwnPropertyDescriptors(nodeUrl.Url.prototype), descriptors);
 });
