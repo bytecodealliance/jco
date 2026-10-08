@@ -1,7 +1,7 @@
 import { version, env, argv, execArgv, platform } from "node:process";
 import { createServer as createHttpServer } from "node:http";
 import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from "node:path";
-import { cp, mkdtemp, writeFile, stat, mkdir, readFile, rm, symlink } from "node:fs/promises";
+import { cp, mkdtemp, writeFile, stat, mkdir, readFile, realpath, rm, symlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
@@ -100,12 +100,21 @@ export async function exec(cmd, ...args) {
  * The new directory is created using `fsPromises.mkdtemp()`.
  */
 export async function getTmpDir() {
-    const directory = await mkdtemp(normalize(tmpdir() + sep));
-    // ESM output resolves the default-denied Node providers from the workspace.
-    const modules = join(directory, "node_modules", "@bytecodealliance");
-    await mkdir(modules, { recursive: true });
-    await symlink(fileURLToPath(new URL("../../jco-std", import.meta.url)), join(modules, "jco-std"), "dir");
-    return directory;
+    return mkdtemp(normalize(tmpdir() + sep));
+}
+
+/** Resolve workspace providers and WASI shims beside generated components or runners. */
+export async function linkWorkspaceNodeModules(directory) {
+    const source = fileURLToPath(new URL("../node_modules", import.meta.url));
+    const destination = join(directory, "node_modules");
+    try {
+        await symlink(source, destination, "dir");
+    } catch (error) {
+        // Repeated setup is safe only when it refers to the same workspace.
+        if (error.code !== "EEXIST" || (await realpath(destination)) !== (await realpath(source))) {
+            throw error;
+        }
+    }
 }
 
 /**
@@ -400,6 +409,7 @@ export async function transpileComponent(args) {
     const transpiledDir = args.outputDir ?? (await getTmpDir());
     await exec(jcoPath, "transpile", componentPath, "--name", name, "--out-dir", transpiledDir, ...extraArgs);
     await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+    await linkWorkspaceNodeModules(transpiledDir);
     return { transpiledDir, modulePath: `${pathToFileURL(transpiledDir)}/${name}.js` };
 }
 

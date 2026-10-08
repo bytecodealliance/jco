@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as nodeQuerystring from "node:querystring";
-import { pathToFileURL } from "node:url";
 
 import unenvDefault, * as unenvQuerystring from "unenv/node/querystring";
 import { suite, test } from "vitest";
-import { componentizeFixture, exec, getTmpDir, jcoPath, materializeUnenvAdapter } from "../helpers.js";
+import { componentizeFixture, getTmpDir, materializeUnenvAdapter, transpileComponent } from "../helpers.js";
 
 suite("node:querystring", () => {
     test.concurrent("matches the Node 24 module and alias contract", () => {
@@ -123,10 +121,13 @@ suite("node:querystring", () => {
             outputDir,
             extraArgs: ["--backend", "qjs", "--backend-qjs-disable-async"],
         });
-        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "node-querystring");
-        await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
+        const { modulePath } = await transpileComponent({
+            componentPath,
+            name: "node-querystring",
+            outputDir: transpiledDir,
+        });
 
-        const component = await import(`${pathToFileURL(transpiledDir)}/node-querystring.js`);
+        const component = await import(modulePath);
         assert.deepEqual(component.run(), {
             repeated: ["one", "two words"],
             empty: "",
