@@ -15,7 +15,7 @@ import {
  * gets the same bytes it would get on Node, so every case is checked against it rather than
  * against a hard-coded vector.
  */
-const ALGORITHMS = ["sha1", "sha256"] as const;
+const ALGORITHMS = ["sha1", "sha256", "sha384", "sha512"] as const;
 
 const INPUTS = [
   "",
@@ -88,7 +88,7 @@ describe("createHash", () => {
   });
 
   test.concurrent("reports what it implements", () => {
-    expect(getHashes()).toEqual(["sha1", "sha256"]);
+    expect(getHashes()).toEqual([...ALGORITHMS]);
   });
 });
 
