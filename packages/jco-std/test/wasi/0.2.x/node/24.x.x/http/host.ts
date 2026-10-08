@@ -3,6 +3,7 @@ import nodeHttp from "node:http";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  ClientRequest,
   createHttpHost,
   request,
 } from "../../../../../../src/wasi/0.2.x/node/24.x.x/http-host-node.js";
@@ -60,6 +61,43 @@ function callbacks(
 }
 
 describe("node:http direct Node host", () => {
+  test("lets socket and response polling advance host I/O", async () => {
+    const port = await listen(nodeHttp.createServer((_request, response) => response.end("ready")));
+    const client = new ClientRequest({
+      method: "GET",
+      scheme: "http",
+      authority: `127.0.0.1:${port}`,
+      pathWithQuery: "/",
+      headers: [],
+      body: new Uint8Array(),
+    });
+    const deadline = Date.now() + 3_000;
+    try {
+      while (!(await client.socket())) {
+        if (Date.now() > deadline) {
+          throw new Error("socket polling did not allow host I/O to progress");
+        }
+      }
+      expect(client.finish([], new Uint8Array())).toEqual({ tag: "ok", val: true });
+      for (;;) {
+        const result = await client.response();
+        if (result.tag === "err") {
+          throw new Error(result.val.message);
+        }
+        if (result.val) {
+          expect(result.val.statusCode).toBe(200);
+          expect(new TextDecoder().decode(result.val.body)).toBe("ready");
+          break;
+        }
+        if (Date.now() > deadline) {
+          throw new Error("response polling did not allow host I/O to progress");
+        }
+      }
+    } finally {
+      client.close();
+    }
+  });
+
   test("serves requests through an instance-bound guest callback resource", async () => {
     const registry = callbacks(async (listener, incoming) => {
       expect(listener).toBe(1);
