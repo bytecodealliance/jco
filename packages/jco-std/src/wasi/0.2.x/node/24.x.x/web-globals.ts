@@ -3,7 +3,6 @@ import {
   WritableStream as Sink,
   TransformStream as Transform,
 } from "web-streams-polyfill";
-import http from "node:http";
 import { Buffer } from "node:buffer";
 import { TextEncoder, TextDecoder } from "./text-encoding.js";
 
@@ -199,6 +198,9 @@ export const Request =
 export const fetch: typeof globalThis.fetch =
   globalThis.fetch ??
   ((async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    // Loading Web streams while node:stream initializes must not eagerly load
+    // node:http, whose connection classes extend that same stream module.
+    const { default: http } = await import("node:http");
     const url = input instanceof Request ? input.url : String(input);
     const headers = new Headers(init.headers);
     return new Promise<Response>((resolve, reject) => {

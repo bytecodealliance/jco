@@ -140,7 +140,12 @@ export class ClientRequest implements Disposable {
       });
     });
   }
-  socket(): Connection | undefined {
+  async socket(): Promise<Connection | undefined> {
+    if (!this.#connection) {
+      // Guest WASI polling blocks this thread. Suspend through JSPI so Node can
+      // deliver the socket event even when the guest waits before ending a request.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     const connection = this.#connection;
     this.#connection = undefined;
     return connection;
@@ -156,7 +161,11 @@ export class ClientRequest implements Disposable {
       return { tag: "err", val: serializeNodeError(error) };
     }
   }
-  response(): DirectHttpResult<DirectHttpResponse | undefined> {
+  async response(): AsyncResult<DirectHttpResponse | undefined> {
+    if (!this.#response && !this.#error) {
+      // Yield to the host event loop before the guest polls again.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     return this.#error ? { tag: "err", val: this.#error } : { tag: "ok", val: this.#response };
   }
   close(): void {
