@@ -170,7 +170,7 @@ suite("node:tty", () => {
                 ]);
                 expect(pty.status, pty.stderr).toBe(0);
                 const { output, status } = JSON.parse(pty.stdout);
-                expect(status, output).toBe(0);
+                expect(status, output + pty.stderr).toBe(0);
                 const { guest: ptyGuest, native: ptyNative } = resultOf(output);
                 expect(ptyGuest.isatty).toEqual([true, true, true, false]);
                 expect(ptyNative.isatty).toEqual([true, true, true, false]);

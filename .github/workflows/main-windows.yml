@@ -118,6 +118,7 @@ jobs:
     needs:
       - build
     strategy:
+      fail-fast: false
       matrix:
         os:
           - windows-2025
@@ -131,10 +132,6 @@ jobs:
             weval-bin-path: .weval-bin/weval.exe
           - os: windows-latest
             weval-bin-path: .weval-bin/weval.exe
-          - os: ubuntu-22.04
-            weval-bin-path: .weval-bin/weval
-          - os: macos-latest
-            weval-bin-path: .weval-bin/weval
         exclude:
           - os: windows-2025
             node: latest
