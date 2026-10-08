@@ -22,6 +22,24 @@ export interface Component {
 }
 
 /**
+* Options accepted by `instantiate`.
+*/
+export interface InstantiateOptions {
+/** Runtime overrides for this instance. */
+shim?: {
+/** Platform globals used instead of those on `globalThis`. */
+globals?: {
+/**
+* The WebAssembly implementation used by this instance,
+* including by the default `instantiateCore`. Defaults to
+* `globalThis.WebAssembly`.
+*/
+WebAssembly?: typeof WebAssembly;
+};
+};
+}
+
+/**
 * Instantiates this component with the provided imports and
 * returns a map of all the exports of the component.
 *
@@ -39,15 +57,20 @@ export interface Component {
 * identified by `path` and returning its compiled
 * `WebAssembly.Module` object. This would use the
 * `WebAssembly.Module` constructor on the web, for example.
+*
+* The optional `options` argument configures instantiation; see
+* `InstantiateOptions`.
 */
 export function instantiate(
 getCoreModule: (path: string) => WebAssembly.Module,
 imports: ImportObject,
-instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
+options?: InstantiateOptions
 ): Component;
 export function instantiate(
 getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
 imports: ImportObject,
-instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
+instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>,
+options?: InstantiateOptions
 ): Component | Promise<Component>;
 

@@ -7,6 +7,7 @@ declare module "*.wasm" {
             module: WebAssembly.Module,
             imports: Record<string, any>,
         ) => WebAssembly.Instance | Promise<WebAssembly.Instance>,
+        options?: { shim?: { globals?: { WebAssembly?: typeof WebAssembly } } },
     ): any | Promise<any>;
     export default instantiate;
 }
@@ -20,6 +21,7 @@ declare module "*.wasm?component" {
             module: WebAssembly.Module,
             imports: Record<string, any>,
         ) => WebAssembly.Instance | Promise<WebAssembly.Instance>,
+        options?: { shim?: { globals?: { WebAssembly?: typeof WebAssembly } } },
     ): any | Promise<any>;
     export default instantiate;
 }

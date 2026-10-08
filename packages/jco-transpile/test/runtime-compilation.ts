@@ -71,13 +71,18 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                 );
                 assert.strictEqual(modules.size, 3);
 
-                // Omitting either options or its nested overrides uses the platform defaults.
+                // Omitting options or its nested overrides, or passing null at any
+                // level, uses the platform defaults.
                 for (const options of [
                     undefined,
+                    null,
                     {},
                     { shim: {} },
+                    { shim: null },
                     { shim: { globals: {} } },
+                    { shim: { globals: null } },
                     { shim: { globals: { WebAssembly: undefined } } },
+                    { shim: { globals: { WebAssembly: null } } },
                 ]) {
                     const defaultInstance = await esModule.instantiate(
                         (name: string) => modules.get(name),
@@ -155,6 +160,28 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation'
                             assert.ok(used.has('compile'));
                         }
                         assert.equal(globalThis.WebAssembly, undefined);
+
+                        // The default core instantiator must call the implementation as a
+                        // method, so that custom implementations may rely on \`this\`.
+                        if ('${instantiation}' === 'async') {
+                            let receiver;
+                            const method = Object.assign(Object.create(native), {
+                                instantiate(module, imports) {
+                                    receiver = this;
+                                    return native.instantiate(module, imports);
+                                },
+                            });
+                            const viaMethod = await instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: method } } });
+                            assert.equal(viaMethod.run(), 42);
+                            assert.equal(receiver, method);
+                        }
+
+                        // Without any implementation, the default core instantiator fails clearly.
+                        for (const options of [undefined, null, { shim: { globals: { WebAssembly: null } } }]) {
+                            assert.throws(() => instantiate(load, {}, undefined, options), {
+                                message: /no WebAssembly implementation is available/,
+                            });
+                        }
 
                         // Even feature detection must use the injected object.
                         Object.defineProperty(globalThis, 'WebAssembly', {

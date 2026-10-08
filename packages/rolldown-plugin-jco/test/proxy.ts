@@ -48,6 +48,22 @@ describe("component proxy source", () => {
         expect(() => facade.default(null, { ready: true })).toThrow(/already been instantiated/);
     });
 
+    test.each(["async", "sync"] as const)("forwards every instantiate argument in %s mode", async (mode) => {
+        const generated = moduleUrl(`
+            export function instantiate(...args) {
+                return { args };
+            }
+        `);
+        const facade = await import(moduleUrl(createProxySource(JSON.stringify(generated), mode, ["args"])));
+
+        const getCoreModule = () => undefined;
+        const instantiateCore = () => undefined;
+        const options = { shim: { globals: { WebAssembly } } };
+        const instance = await facade.default(getCoreModule, { value: 1 }, instantiateCore, options);
+        expect(instance.args).toEqual([getCoreModule, { value: 1 }, instantiateCore, options]);
+        expect(instance.args[3]).toBe(options);
+    });
+
     test("returns the component instance synchronously in sync mode", async () => {
         const generated = moduleUrl(`
             export function instantiate(_getCoreModule, imports) {
