@@ -1,11 +1,15 @@
 import nativeProcess from "node:process";
 import { pathToFileURL } from "node:url";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+import { withDefaultNodeImports } from "../helpers/node-imports.js";
 const { instantiate } = await import(pathToFileURL(nativeProcess.argv[2]));
 const specifier = nativeProcess.argv[3];
 const host = await import(specifier);
 const importName = nativeProcess.argv[4] === "denied" ? "jco:node/process" : specifier;
-const instance = await instantiate(undefined, { ...new WASIShim().getImportObject(), [importName]: host });
+const instance = await instantiate(
+    undefined,
+    withDefaultNodeImports({ ...new WASIShim().getImportObject(), [importName]: host }),
+);
 if (nativeProcess.argv[4] === "exit") {
     await instance.terminate(23);
     throw new Error("process.exit returned");

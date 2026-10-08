@@ -240,6 +240,15 @@ export function run() {
         legacy.format(),
         legacy.resolveObject({ pathname: "../next", hash: "#end", href: "../next#end" }).href,
     ];
+    const parsedLegacy = url.parse("https://example.com/items?q=one&q=two", true);
+    report.legacyParsing = [
+        parsedLegacy.hostname,
+        parsedLegacy.pathname,
+        parsedLegacy.query,
+        parsedLegacy instanceof Url,
+        url.resolve("https://example.com/base/file", "../next"),
+        url.resolveObject("https://example.com/base/file", "../next").href,
+    ];
 
     const http = new URL("https://u%20s:p%40ss@[::1]:8443/a?b=1#c");
     http.extra = "kept";
@@ -315,12 +324,7 @@ export function policy() {
         },
     );
     const errors = [
-        () => url.parse(poison),
-        () => url.resolve(poison, poison),
-        () => url.resolveObject(poison, poison),
         () => url.format("https://example.com", poison),
-        () => new Url().parse(poison),
-        () => new Url().resolve(poison),
         () => URL.createObjectURL(poison),
         () => URL.revokeObjectURL(poison),
     ].map(errorOf);

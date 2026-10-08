@@ -3,6 +3,7 @@ import nodeTty from "node:tty";
 import { pathToFileURL } from "node:url";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { createTtyHost } from "./provider.js";
+import { withDefaultNodeImports } from "../helpers/node-imports.js";
 
 const [modulePath, mode] = nativeProcess.argv.slice(2);
 const { instantiate } = await import(pathToFileURL(modulePath));
@@ -40,7 +41,10 @@ if (mode === "node") {
     host = fake.host;
 }
 
-const instance = await instantiate(undefined, { ...new WASIShim().getImportObject(), [TTY_INTERFACE]: host });
+const instance = await instantiate(
+    undefined,
+    withDefaultNodeImports({ ...new WASIShim().getImportObject(), [TTY_INTERFACE]: host }),
+);
 const guest = JSON.parse(instance.run(mode));
 const result = {
     guest,

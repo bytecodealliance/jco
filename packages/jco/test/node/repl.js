@@ -47,7 +47,13 @@ suite("node:repl", () => {
                     bundle: true,
                     extraArgs: ["--backend", backend],
                 });
-                assert.equal(stderr, "");
+                if (backend === "quickjs") {
+                    assert.match(stderr, /Jco added generated WIT imports/);
+                    assert.match(stderr, /jco:node\/console@0\.1\.0/);
+                    assert.match(stderr, /jco:node\/timers@0\.1\.0/);
+                } else {
+                    assert.equal(stderr, "");
+                }
                 const { modulePath } = await transpileComponent({ componentPath, name: `node-repl-${backend}` });
                 const component = await import(modulePath);
                 const report = JSON.parse(await component.run());

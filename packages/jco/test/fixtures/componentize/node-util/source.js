@@ -40,17 +40,13 @@ export function run() {
     inherits(Child, Parent);
     const refusals = {};
     for (const name of [
-        "getCallSites",
         "getSystemErrorName",
         "getSystemErrorMessage",
         "getSystemErrorMap",
         "setTraceSigInt",
         "convertProcessSignalToExitCode",
-        "debuglog",
-        "deprecate",
         "transferableAbortController",
         "transferableAbortSignal",
-        "_extend",
         "isArray",
         "_errnoException",
         "_exceptionWithHostPort",
@@ -115,6 +111,12 @@ export function run() {
         unicode: toUSVString("\ud800x🌍"),
         encoded,
         decoded,
+        supported: {
+            callSites: Array.isArray(util.getCallSites()),
+            debuglog: typeof util.debuglog("jco-test") === "function",
+            deprecate: typeof util.deprecate(() => 42, "deprecated") === "function",
+            extend: util._extend({ a: 1 }, { b: 2 }),
+        },
         equal: isDeepStrictEqual(new Map([[1, { x: 2 }]]), new Map([[1, { x: 2 }]])),
         inherited: Object.getPrototypeOf(Child.prototype) === Parent.prototype,
         brands: [

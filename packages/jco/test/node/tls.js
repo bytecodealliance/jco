@@ -14,7 +14,7 @@ const std = fileURLToPath(new URL("../../../jco-std/", import.meta.url));
 const impl = join(std, "dist/wasi/0.2.x/node/24.x.x");
 const certificate = join(std, "test/wasi/0.2.x/node/24.x.x/https/helpers/tls/localhost");
 
-test.concurrent("node:tls declares its primary capability and opt-in callback binding mode", () => {
+test.concurrent("node:tls declares its primary capability and opt-in callback binding mode", async () => {
     const requirements = [];
     const plugin = nodeBuiltinPlugin(
         { imports: [], exports: [] },
@@ -25,7 +25,7 @@ test.concurrent("node:tls declares its primary capability and opt-in callback bi
     );
     const id = plugin.resolveId("node:tls");
     expect(plugin.load(id)).toContain('export * from "/tls.js"');
-    expect(plugin.resolveId("tls")).toBeNull();
+    expect(await plugin.resolveId.call({ resolve: async () => ({ id: "/installed/tls.js" }) }, "tls")).toBeNull();
     expect(requirements).toEqual([TLS_WIT_REQUIREMENT]);
     expect(withDefaultNodeCapabilities({ map: { "jco:node/tls@0.1.0": "/my-tls.js" } })).toMatchObject({
         asyncMode: "jspi",

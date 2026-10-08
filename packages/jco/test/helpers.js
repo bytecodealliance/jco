@@ -14,6 +14,7 @@ import { componentize } from "../src/cmd/componentize.js";
 import { nodeBuiltinPlugin } from "../src/node-builtins/index.js";
 import { COMPONENT_JS_FIXTURES_DIR, JCO_JS_PATH } from "./common.js";
 import { getRandomPort } from "./bench/server-helpers.js";
+import { withDefaultNodeImports } from "./fixtures/componentize/helpers/node-imports.js";
 
 export { getRandomPort, terminateServer, waitForServer } from "./bench/server-helpers.js";
 
@@ -99,7 +100,12 @@ export async function exec(cmd, ...args) {
  * The new directory is created using `fsPromises.mkdtemp()`.
  */
 export async function getTmpDir() {
-    return mkdtemp(normalize(tmpdir() + sep));
+    const directory = await mkdtemp(normalize(tmpdir() + sep));
+    // ESM output resolves the default-denied Node providers from the workspace.
+    const modules = join(directory, "node_modules", "@bytecodealliance");
+    await mkdir(modules, { recursive: true });
+    await symlink(fileURLToPath(new URL("../../jco-std", import.meta.url)), join(modules, "jco-std"), "dir");
+    return directory;
 }
 
 /**
@@ -292,7 +298,10 @@ export async function setupAsyncTest(args) {
     if (!component.skipInstantiation) {
         // Components transpiled for explicit instantiation get no imports wired up for them,
         // so default to the WASI shim rather than leaving WASI imports undefined.
-        instance = await esModule.instantiate(undefined, componentImports ?? new WASIShim().getImportObject());
+        instance = await esModule.instantiate(
+            undefined,
+            withDefaultNodeImports(componentImports ?? new WASIShim().getImportObject()),
+        );
     }
 
     return {
@@ -338,7 +347,7 @@ export async function componentizeFixture(args) {
         wit = "wit",
         world,
         bundle = false,
-        copy = false,
+        copy = true,
         extraArgs = [],
     } = args ?? {};
     if (!fixture) {

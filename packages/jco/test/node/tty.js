@@ -73,7 +73,8 @@ suite("node:tty", () => {
                 copy: true,
                 extraArgs: ["--backend", backend],
             });
-            assert.include(stderr, "Jco added generated WIT import jco:node/tty@0.1.0");
+            assert.include(stderr, "Jco added generated WIT import");
+            assert.include(stderr, "jco:node/tty@0.1.0");
             assert.include(await readFile(join(fixtureDir, "wit/component.wit"), "utf8"), "import jco:node/tty@0.1.0;");
 
             const { esModuleOutputPath, cleanup } = await setupAsyncTest({
@@ -101,7 +102,7 @@ suite("node:tty", () => {
                     "Readable",
                     "Stream",
                 ]);
-                expect(guest.chain[5]).toMatch(/EventEmitter$/);
+                expect(guest.chain[5]).toMatch(/EventEmitter(?:\$\d+)?$/);
                 expect({ ...guest, chain: undefined }).toEqual({
                     identity: true,
                     outOfRange: [false, false, false, false, false],

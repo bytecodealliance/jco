@@ -2,18 +2,25 @@ import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { createProcessHost } from "./provider.js";
+import { withDefaultNodeImports } from "../helpers/node-imports.js";
 
 const { instantiate } = await import(pathToFileURL(process.argv[2]));
 const { host, exitRequests } = createProcessHost();
 const other = createProcessHost();
-const component = await instantiate(undefined, {
-    ...new WASIShim().getImportObject(),
-    "jco:node/process": host,
-});
-const otherComponent = await instantiate(undefined, {
-    ...new WASIShim().getImportObject(),
-    "jco:node/process": other.host,
-});
+const component = await instantiate(
+    undefined,
+    withDefaultNodeImports({
+        ...new WASIShim().getImportObject(),
+        "jco:node/process": host,
+    }),
+);
+const otherComponent = await instantiate(
+    undefined,
+    withDefaultNodeImports({
+        ...new WASIShim().getImportObject(),
+        "jco:node/process": other.host,
+    }),
+);
 assert.equal(await component.denied(), "ERR_JCO_PROCESS_ADAPTER_REQUIRED");
 assert.deepEqual(exitRequests, []);
 await assert.rejects(async () => component.run());
