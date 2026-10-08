@@ -7,6 +7,12 @@ import type { TestEvent, TestModule } from "./types.js";
 let started = false;
 const harness = createTestHarness({
   report(event: TestEvent): void {
+    // Some engines lack a console during initialization; reporting must not
+    // prevent tests, mocks, or custom reporters from running there.
+    const console = globalThis.console;
+    if (!console) {
+      return;
+    }
     if (!started) {
       console.log("TAP version 13");
       started = true;
