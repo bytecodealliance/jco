@@ -92,6 +92,14 @@ program
             .default("direct"),
     )
     .addOption(
+        new Option(
+            "--with-nodejs-crypto-via <implementation>",
+            "key derivation implementation used by bundled node:crypto code",
+        )
+            .choices(["portable", "direct"])
+            .default("portable"),
+    )
+    .addOption(
         new Option("--with-nodejs-vfs-via <implementation>", "implementation used by bundled node:vfs code")
             .choices(["direct", "wasi-filesystem"])
             .default("direct"),

@@ -450,8 +450,8 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: ^0.7.0
-        version: 0.7.0(@bytecodealliance/preview2-shim@0.28.0)
+        specifier: workspace:^
+        version: link:../jco-std
       '@bytecodealliance/jco-transpile':
         specifier: ^0.18.0
         version: 0.18.0

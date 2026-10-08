@@ -10,6 +10,7 @@ import {
     starReexportAdapter,
 } from "./shared.js";
 import { type NodeErrorGlobalsOptions, type NodeGlobalsOptions } from "./types.js";
+import { CONSOLE_WIT_REQUIREMENT } from "../node-wit.js";
 
 const ABORT_GLOBALS_SPECIFIER = "jco:node-abort-globals";
 
@@ -54,6 +55,21 @@ export function nodeErrorGlobals(
  */
 export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [module: string, exportName: string]> {
     return {
+        ...(options.webGlobals
+            ? Object.fromEntries(
+                  [
+                      "ReadableStream",
+                      "WritableStream",
+                      "TransformStream",
+                      "Blob",
+                      "File",
+                      "Headers",
+                      "Response",
+                      "Request",
+                      "fetch",
+                  ].map((name) => [name, ["jco:web-globals", name] as [string, string]]),
+              )
+            : {}),
         ...nodeErrorGlobals(options),
         AbortController: [options.abortGlobalsModule ?? ABORT_GLOBALS_SPECIFIER, "AbortController"],
         AbortSignal: [options.abortGlobalsModule ?? ABORT_GLOBALS_SPECIFIER, "AbortSignal"],
@@ -61,11 +77,67 @@ export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [m
         process: [options.processModule ?? "jco:node-process-globals", "default"],
         setImmediate: [options.timersModule ?? "node:timers", "setImmediate"],
         clearImmediate: [options.timersModule ?? "node:timers", "clearImmediate"],
+        TextEncoder: ["jco:text-encoding", "TextEncoder"],
+        TextDecoder: ["jco:text-encoding", "TextDecoder"],
+        console: ["jco:console-globals", "default"],
+        queueMicrotask: ["jco:microtask-globals", "queueMicrotask"],
+        setTimeout: ["jco:timer-globals", "setTimeout"],
+        clearTimeout: ["jco:timer-globals", "clearTimeout"],
+        setInterval: ["jco:timer-globals", "setInterval"],
+        clearInterval: ["jco:timer-globals", "clearInterval"],
+        global: ["jco:global-this", "default"],
     };
 }
 
 export function createGlobalsBuiltin({ options }: BuiltinContext): BuiltinAdapter {
     return composeBuiltins([
+        virtualBuiltin(
+            "jco:web-globals",
+            `${VIRTUAL_PREFIX}web-globals`,
+            () => `export * from ${JSON.stringify(stdModule(undefined, "web-globals"))};`,
+        ),
+        virtualBuiltin("jco:global-this", `${VIRTUAL_PREFIX}global-this`, () => "export default globalThis;"),
+        virtualBuiltin(
+            "jco:timer-globals",
+            `${VIRTUAL_PREFIX}timer-globals`,
+            () => `
+import timers from "node:timers";
+import { captureAll, withCaptured } from ${JSON.stringify(stdModule(undefined, "async-hooks/context"))};
+const scoped = timer => function(callback, ...args) {
+    const captured = captureAll();
+    return timer(function(...values) { return withCaptured(captured, () => Reflect.apply(callback, this, values)); }, ...args);
+};
+export const setTimeout = scoped(globalThis.setTimeout?.bind(globalThis) ?? timers.setTimeout);
+export const clearTimeout = globalThis.clearTimeout?.bind(globalThis) ?? timers.clearTimeout;
+export const setInterval = scoped(globalThis.setInterval?.bind(globalThis) ?? timers.setInterval);
+export const clearInterval = globalThis.clearInterval?.bind(globalThis) ?? timers.clearInterval;
+`,
+        ),
+        {
+            resolveId(id) {
+                if (id !== "jco:console-globals") {
+                    return null;
+                }
+                options.onWitRequirement?.(CONSOLE_WIT_REQUIREMENT);
+                return `${VIRTUAL_PREFIX}console-globals`;
+            },
+            load(id) {
+                return id === `${VIRTUAL_PREFIX}console-globals`
+                    ? `import fallback from ${JSON.stringify(stdModule(options.consoleModule, "console"))}; export default globalThis.console ?? fallback;`
+                    : null;
+            },
+        },
+        virtualBuiltin(
+            "jco:microtask-globals",
+            `${VIRTUAL_PREFIX}microtask-globals`,
+            () =>
+                `export const queueMicrotask = globalThis.queueMicrotask?.bind(globalThis) ?? (callback => Promise.resolve().then(callback));`,
+        ),
+        virtualBuiltin(
+            "jco:text-encoding",
+            `${VIRTUAL_PREFIX}text-encoding`,
+            () => `export * from ${JSON.stringify(stdModule(undefined, "text-encoding"))};`,
+        ),
         {
             resolveId(id, importer) {
                 // unenv's portable process initializes its stdio while the module loads.

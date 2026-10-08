@@ -18,8 +18,18 @@ const EVENTS_SPECIFIER = "node:events";
 function eventsAdapter(eventsCoreModule: string, eventsModule: string): string {
     return `
 import { completeEvents } from ${JSON.stringify(eventsModule)};
-import events from ${JSON.stringify(eventsCoreModule)};
+import CoreEmitter from ${JSON.stringify(eventsCoreModule)};
 export * from ${JSON.stringify(eventsCoreModule)};
+// Node's constructor is callable by legacy subclasses (EventEmitter.call(this)).
+// unenv uses a class; copy its initialized own state onto the supplied receiver.
+export function EventEmitter(options) {
+    const initialized = new CoreEmitter(options);
+    return this === undefined ? initialized : Object.assign(this, initialized);
+}
+Object.setPrototypeOf(EventEmitter, CoreEmitter);
+EventEmitter.prototype = CoreEmitter.prototype;
+Object.defineProperty(EventEmitter.prototype, "constructor", { configurable: true, writable: true, value: EventEmitter });
+const events = EventEmitter;
 const completed = completeEvents(events);
 // Explicit exports shadow the star re-export above, replacing the stubs with the real thing.
 export const getMaxListeners = completed.getMaxListeners;
@@ -32,6 +42,7 @@ export const setMaxListeners = completed.setMaxListeners;
 for (const [name, value] of Object.entries(completed)) {
     Object.defineProperty(events, name, { configurable: true, value, writable: true });
 }
+Object.defineProperty(events, "EventEmitter", { configurable: true, writable: true, value: EventEmitter });
 export default events;
 `;
 }

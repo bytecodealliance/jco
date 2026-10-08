@@ -46,6 +46,7 @@ import { createQuerystringBuiltin } from "./querystring.js";
 import { createUrlBuiltin } from "./url.js";
 import { createPathBuiltin } from "./path.js";
 import { composeBuiltins, VIRTUAL_PREFIX } from "./shared.js";
+import { preserveAsyncIteratorProbes } from "../engine-compat.js";
 
 export type {
     NodeBuiltinOptions,
@@ -118,7 +119,19 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
     const composed = composeBuiltins(adapters.map((create) => create(context)));
     return {
         name: "jco-node-builtins",
+        options(config) {
+            return { ...config, transform: { ...config.transform, target: config.transform?.target ?? "es2016" } };
+        },
+        transform(code, id) {
+            return preserveAsyncIteratorProbes(code, id) ?? null;
+        },
         resolveId(id, importer, extraOptions) {
+            if (id === "node:events" && extraOptions?.kind === "require-call") {
+                return `${VIRTUAL_PREFIX}commonjs-events.cjs`;
+            }
+            if (id === "node:assert" && extraOptions?.kind === "require-call") {
+                return `${VIRTUAL_PREFIX}commonjs-assert.cjs`;
+            }
             if (id === "node:stream" && extraOptions?.kind === "require-call") {
                 return `${VIRTUAL_PREFIX}commonjs-stream`;
             }
@@ -135,13 +148,21 @@ export function nodeBuiltinPlugin(worldMetadata: WorldMetadata, options: NodeBui
                         ? null
                         : id === "stream"
                           ? `${VIRTUAL_PREFIX}commonjs-stream`
-                          : composed.resolveId(`node:${id}`, importer),
+                          : (id === "events" || id === "assert") && extraOptions?.kind === "require-call"
+                            ? `${VIRTUAL_PREFIX}commonjs-${id}.cjs`
+                            : composed.resolveId(`node:${id}`, importer),
                 );
             }
             return null;
         },
 
         load(id) {
+            if (id === `${VIRTUAL_PREFIX}commonjs-events.cjs`) {
+                return `module.exports = require(${JSON.stringify(`${VIRTUAL_PREFIX}node:events`)}).default;`;
+            }
+            if (id === `${VIRTUAL_PREFIX}commonjs-assert.cjs`) {
+                return `module.exports = require(${JSON.stringify(`${VIRTUAL_PREFIX}node:assert`)}).default;`;
+            }
             return id.startsWith(VIRTUAL_PREFIX) ? composed.load(id) : null;
         },
     };
@@ -177,6 +198,10 @@ const BARE_SPECIFIER_BUILTINS = new Set([
     "http",
     "https",
     "net",
+    "os",
+    "tls",
+    "worker_threads",
+    "module",
     "stream",
     "stream/promises",
     "string_decoder",

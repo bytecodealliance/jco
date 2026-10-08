@@ -41,6 +41,36 @@ Buffer.prototype.constructor = Buffer;
 // TypedArray-derived methods must allocate through the upstream implementation,
 // not the deprecated-constructor guard exposed to users.
 Object.defineProperty(Buffer, Symbol.species, { value: UnenvBuffer });
+// Feross Buffer predates Node's base64url encoding. Normalize its entry points
+// while preserving Node's overloads and byte offsets.
+const toString = UnenvBuffer.prototype.toString;
+UnenvBuffer.prototype.toString = function(encoding, ...args) {
+    const value = Reflect.apply(toString, this, [encoding === "base64url" ? "base64" : encoding, ...args]);
+    return encoding === "base64url" ? value.replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "") : value;
+};
+const from = UnenvBuffer.from;
+UnenvBuffer.from = function(value, encoding, ...args) {
+    return Reflect.apply(from, this, [value, encoding === "base64url" ? "base64" : encoding, ...args]);
+};
+const isEncoding = UnenvBuffer.isEncoding;
+UnenvBuffer.isEncoding = encoding => encoding === "base64url" || isEncoding(encoding);
+for (const name of ["write", "fill"]) {
+    const original = UnenvBuffer.prototype[name];
+    UnenvBuffer.prototype[name] = function(...args) {
+        if (args.at(-1) === "base64url") args[args.length - 1] = "base64";
+        return Reflect.apply(original, this, args);
+    };
+}
+for (const name of ["byteLength", "alloc"]) {
+    const original = UnenvBuffer[name];
+    UnenvBuffer[name] = function(...args) {
+        if (args.at(-1) === "base64url") args[args.length - 1] = "base64";
+        return Reflect.apply(original, this, args);
+    };
+}
+for (const [name, encoding] of Object.entries({ latin1: "latin1", utf8: "utf8", ascii: "ascii", base64: "base64", base64url: "base64url", ucs2: "utf16le", hex: "hex" })) {
+    UnenvBuffer.prototype[name + "Slice"] = function(start, end) { return this.toString(encoding, start, end); };
+}
 export const SlowBuffer = new Proxy(function SlowBuffer() {}, {
     apply: deprecatedBufferConstructor,
     construct: deprecatedBufferConstructor,
@@ -59,8 +89,18 @@ export const constants = {
 };
 export const atob = globalThis.atob?.bind(globalThis) ?? ((value) => UnenvBuffer.from(value, "base64").toString("latin1"));
 export const btoa = globalThis.btoa?.bind(globalThis) ?? ((value) => UnenvBuffer.from(value, "latin1").toString("base64"));
-export const isAscii = () => unsupported("buffer.isAscii");
-export const isUtf8 = () => unsupported("buffer.isUtf8");
+function byteView(value) {
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    const error = new TypeError('The "input" argument must be an ArrayBuffer, Buffer, TypedArray, or DataView');
+    error.code = "ERR_INVALID_ARG_TYPE";
+    throw error;
+}
+export const isAscii = value => byteView(value).every(byte => byte < 128);
+export const isUtf8 = value => {
+    const bytes = byteView(value);
+    try { new TextDecoder("utf-8", { fatal: true }).decode(bytes); return true; } catch { return false; }
+};
 export const resolveObjectURL = () => unsupported("buffer.resolveObjectURL");
 export const transcode = () => unsupported("buffer.transcode");
 globalThis.Buffer = Buffer;
