@@ -1,9 +1,20 @@
 /** Runtime bridge: engine timers own scheduling; no Node host capability is assumed. */
 import { unsupportedNodeApi } from "../errors/core.js";
+import { captureAll, withCaptured } from "../async-hooks/context.js";
 
 export interface RuntimeTimer {
   cancel(): void;
   setRef(ref: boolean): void;
+}
+
+type Scheduler = (
+  callback: () => void,
+  delay: number,
+  kind: "timeout" | "interval" | "immediate",
+) => RuntimeTimer;
+let fallback: Scheduler | undefined;
+export function setFallbackScheduler(scheduler: Scheduler): void {
+  fallback = scheduler;
 }
 
 export function schedule(
@@ -11,6 +22,9 @@ export function schedule(
   delay: number,
   kind: "timeout" | "interval" | "immediate",
 ): RuntimeTimer {
+  const captured = captureAll();
+  const original = callback;
+  callback = () => withCaptured(captured, original);
   const immediate = kind === "immediate" && typeof globalThis.setImmediate === "function";
   const name = immediate ? "setImmediate" : kind === "interval" ? "setInterval" : "setTimeout";
   const clearName = immediate
@@ -21,6 +35,9 @@ export function schedule(
   const start: unknown = globalThis[name];
   const clear: unknown = globalThis[clearName];
   if (typeof start !== "function" || typeof clear !== "function") {
+    if (fallback) {
+      return fallback(callback, delay, kind);
+    }
     throw unsupportedNodeApi(
       `timers.${kind === "immediate" ? "setImmediate" : name}`,
       "the engine must supply task timers",

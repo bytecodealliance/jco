@@ -8,7 +8,6 @@ import { stripVTControlCharacters, styleText, toUSVString } from "./text.js";
 import { aborted } from "./aborted.js";
 import { isDeepStrictEqual } from "../assert/comparisons.js";
 import types from "../util-types.js";
-import { unsupportedNodeApi } from "../errors/core.js";
 import * as unsupported from "./unsupported.js";
 
 export {
@@ -38,17 +37,8 @@ export type { Difference } from "./diff.js";
 
 // These fallbacks are constructor-only refusal points, with the public constructor
 // types retained for callers. They never create an incomplete decoder or encoder.
-export const TextDecoder: typeof globalThis.TextDecoder =
-  globalThis.TextDecoder ??
-  (function TextDecoder(): never {
-    throw unsupportedNodeApi("util.TextDecoder", "the engine does not provide TextDecoder");
-  } as unknown as typeof globalThis.TextDecoder);
-
-export const TextEncoder: typeof globalThis.TextEncoder =
-  globalThis.TextEncoder ??
-  (function TextEncoder(): never {
-    throw unsupportedNodeApi("util.TextEncoder", "the engine does not provide TextEncoder");
-  } as unknown as typeof globalThis.TextEncoder);
+import { TextDecoder, TextEncoder } from "../text-encoding.js";
+export { TextDecoder, TextEncoder };
 
 export default {
   ...unsupported,

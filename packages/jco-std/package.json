@@ -29,6 +29,50 @@
   ],
   "type": "module",
   "exports": {
+    "./wasi/0.2.x/node/24.x.x/web-globals": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/web-globals.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/web-globals.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/crypto/kdf-host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/crypto/kdf-host.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/crypto/kdf-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/crypto/kdf/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/crypto-kdf-host.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/crypto-kdf-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/crypto/kdf/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/crypto-kdf-host-node.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/crypto-kdf-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/timers/host": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/timers-host.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/timers-host.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/crypto/random": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/crypto/random.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/crypto/random.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/async-hooks/context": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/async-hooks/context.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/async-hooks/context.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/timers/task-runtime": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/timers/task-runtime.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/timers/task-runtime.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/timers/runtime": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/timers/runtime.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/timers/runtime.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/timers/host/node": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/timers-host-node.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/timers-host-node.js"
+    },
+    "./wasi/0.2.x/node/24.x.x/text-encoding": {
+      "types": "./dist/wasi/0.2.x/node/24.x.x/text-encoding.d.ts",
+      "default": "./dist/wasi/0.2.x/node/24.x.x/text-encoding.js"
+    },
     "./wasi/0.2.x/node/24.x.x/abort-globals": {
       "types": "./dist/wasi/0.2.x/node/24.x.x/abort-globals.d.ts",
       "default": "./dist/wasi/0.2.x/node/24.x.x/abort-globals.js"
@@ -692,12 +736,14 @@
     "build:bindings:wasi:tls": "node scripts/generate-tls-bindings.mjs"
   },
   "dependencies": {
+    "@noble/hashes": "1.8.0",
     "acorn": "8.17.0",
     "acorn-walk": "8.3.5",
     "minimatch": "10.2.6",
     "punycode": "2.3.1",
     "readable-stream": "4.7.0",
     "urlpattern-polyfill": "10.1.0",
+    "web-streams-polyfill": "4.2.0",
     "whatwg-url": "14.2.0"
   },
   "devDependencies": {

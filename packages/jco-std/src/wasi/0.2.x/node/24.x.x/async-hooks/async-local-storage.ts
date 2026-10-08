@@ -7,6 +7,7 @@ import {
   setCurrent,
   withCaptured,
   withStore,
+  hasAsyncPropagation,
   type ContextKey,
   type Store,
 } from "./context.js";
@@ -29,7 +30,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
  * an empty store somewhere unrelated.
  */
 function rejectAsync(api: string, result: unknown): void {
-  if (isThenable(result)) {
+  if (!hasAsyncPropagation() && isThenable(result)) {
     throw unsupported(api, ASYNC_REASON);
   }
 }

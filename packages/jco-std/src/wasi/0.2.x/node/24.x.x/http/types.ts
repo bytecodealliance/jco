@@ -196,6 +196,7 @@ export interface HttpIncomingRequestData {
   body: Uint8Array;
   remoteAddress?: string;
   remotePort?: number;
+  connection?: HttpConnection;
 }
 
 export interface HttpOutgoingResponseData {
@@ -203,6 +204,7 @@ export interface HttpOutgoingResponseData {
   statusMessage: string;
   headers: HttpHeaderField[];
   body: Uint8Array;
+  bodyStream?: import("./response-body.js").ResponseBody;
 }
 
 export interface HttpServerImplementation {
@@ -221,11 +223,14 @@ export type HttpRequestHandler = (
 ) => HttpOutgoingResponseData | Promise<HttpOutgoingResponseData>;
 
 export interface HttpImplementation {
+  streamResponses?: boolean;
+  openRequest?(options: HttpImplementationRequest): HttpClientTransport | undefined;
   request(options: HttpImplementationRequest): HttpImplementationResponse;
   createServer?(
     options: HttpServerOptions,
     handler: HttpRequestHandler,
     onError: (error: Error) => void,
+    onUpgrade?: (request: HttpIncomingRequestData, head: Uint8Array) => boolean,
   ): HttpServerImplementation;
   serverUnsupportedReason?: string;
 }
@@ -334,6 +339,23 @@ export type DirectHttpOutgoingResponse = HttpOutgoingResponseData;
 
 /** Exported resource methods use the JS return/throw convention. */
 export interface DirectHttpRequestListener extends Disposable {
+  upgrade?(request: DirectHttpIncomingRequest, head: Uint8Array): boolean | Promise<boolean>;
+  socketEvent?(id: number, event: HttpSocketEvent): void | Promise<void>;
+  start?(request: DirectHttpIncomingRequest):
+    | {
+        poll():
+          | DirectHttpOutgoingResponse
+          | undefined
+          | Promise<DirectHttpOutgoingResponse | undefined>;
+        [Symbol.dispose](): void | Promise<void>;
+      }
+    | Promise<{
+        poll():
+          | DirectHttpOutgoingResponse
+          | undefined
+          | Promise<DirectHttpOutgoingResponse | undefined>;
+        [Symbol.dispose](): void | Promise<void>;
+      }>;
   handle(
     request: DirectHttpIncomingRequest,
   ): DirectHttpOutgoingResponse | Promise<DirectHttpOutgoingResponse>;
@@ -363,4 +385,30 @@ export interface DirectHttpServerConstructor {
 export interface DirectHttpHost {
   request(options: DirectHttpRequest): DirectHttpResult<DirectHttpResponse>;
   Server: DirectHttpServerConstructor;
+  Connection?: unknown;
+  ClientRequest?: new (options: DirectHttpRequest) => HttpClientTransport;
 }
+
+export interface HttpConnection extends Disposable {
+  id(): number;
+  write(data: Uint8Array): DirectHttpResult<boolean>;
+  end(): void;
+  destroy(): void;
+  pause(): void;
+  resume(): void;
+  setTimeout(milliseconds: number): void;
+  setNoDelay(value: boolean): void;
+  setKeepAlive(value: boolean, delay: number): void;
+  ref(): void;
+  unref(): void;
+}
+export interface HttpClientTransport extends Disposable {
+  socket(): HttpConnection | undefined;
+  finish(headers: HttpHeaderField[], body: Uint8Array): void;
+  response(): HttpImplementationResponse | undefined;
+  close(): void;
+}
+export type HttpSocketEvent =
+  | { tag: "data"; val: Uint8Array }
+  | { tag: "error"; val: DirectHttpError }
+  | { tag: "end" | "close" | "timeout" | "drain" };

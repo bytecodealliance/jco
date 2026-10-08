@@ -1,9 +1,9 @@
 /**
- * Synchronous context stack shared by `AsyncLocalStorage` and `AsyncResource`.
+ * Context scopes shared by `AsyncLocalStorage` and `AsyncResource`.
  *
  * Each storage keeps its own stack of active values. Entering pushes, leaving pops, so nesting
- * behaves like Node's for synchronous code. There is deliberately no asynchronous propagation --
- * see `errors.ts` and the module docs for why it cannot be done here.
+ * behaves like Node's for synchronous code. Jco enables continuation snapshots after lowering
+ * async functions to Promise continuations; direct imports retain synchronous scopes.
  */
 
 /** A value bound to a storage for the duration of a scope. */
@@ -16,6 +16,36 @@ export interface ContextKey {
 
 const stacks = new Map<number, Store[]>();
 let nextId = 1;
+let propagation = false;
+export function hasAsyncPropagation(): boolean {
+  return propagation;
+}
+
+/** The bundler lowers await to Promise continuations before enabling this hook. */
+export function installAsyncPropagation(): void {
+  if (propagation) {
+    return;
+  }
+  propagation = true;
+  const then = Promise.prototype.then;
+  Promise.prototype.then = function (fulfilled, rejected) {
+    const captured = captureAll();
+    const bind = (callback: unknown) =>
+      typeof callback === "function"
+        ? function (this: unknown, ...args: unknown[]) {
+            return withCaptured(captured, () => Reflect.apply(callback, this, args));
+          }
+        : callback;
+    return Reflect.apply(then, this, [bind(fulfilled), bind(rejected)]);
+  };
+  const microtask = globalThis.queueMicrotask;
+  if (microtask) {
+    globalThis.queueMicrotask = (callback) => {
+      const captured = captureAll();
+      microtask(() => withCaptured(captured, callback));
+    };
+  }
+}
 
 /** Create a key with its own independent stack. */
 export function createKey(): ContextKey {

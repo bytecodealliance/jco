@@ -14,6 +14,8 @@ import {
   type DigestAlgorithm,
 } from "./digest.js";
 import { unsupportedAlgorithm } from "./errors.js";
+import { Buffer } from "node:buffer";
+import { KeyObject } from "./keys.js";
 
 const ENCODER = new TextEncoder();
 
@@ -31,7 +33,10 @@ export type DigestEncoding =
   | "utf8"
   | "utf-8";
 
-function toBytes(data: unknown, encoding?: string): Uint8Array {
+export function toBytes(data: unknown, encoding?: string): Uint8Array {
+  if (data instanceof KeyObject) {
+    return data.export();
+  }
   if (typeof data === "string") {
     if (encoding === "hex") {
       const bytes = new Uint8Array(data.length >> 1);
@@ -107,8 +112,7 @@ export function encodeDigest(bytes: Uint8Array, encoding?: string): string | Uin
   switch (encoding) {
     case undefined:
     case "buffer": {
-      const buffer = (globalThis as { Buffer?: { from(b: Uint8Array): Uint8Array } }).Buffer;
-      return buffer ? buffer.from(bytes) : bytes;
+      return Buffer.from(bytes);
     }
     case "hex":
       return hex(bytes);
