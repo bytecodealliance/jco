@@ -1,5 +1,5 @@
 import { mergeNodeWitRequirement } from "../node-wit.js";
-import { mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, basename, dirname, extname, join } from "node:path";
 
@@ -119,8 +119,44 @@ const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
  * @returns bool
  */
 export async function worldMetadataFor(witPath: string, worldName?: string): Promise<WorldMetadata> {
-    const path = (isWindows ? "//?/" : "") + resolve(witPath);
-    return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
+    const directory = await isolateWitFile(witPath);
+    try {
+        const path = (isWindows ? "//?/" : "") + resolve(directory ?? witPath);
+        return (await componentWitMetadataForWorld({ tag: "path", val: path }, worldName)) as WorldMetadata;
+    } finally {
+        if (directory) {
+            await rm(directory, { recursive: true, force: true });
+        }
+    }
+}
+
+/** Resolve a selected WIT file with its dependencies, excluding sibling worlds. */
+async function isolateWitFile(witPath: string): Promise<string | undefined> {
+    const path = resolve(witPath);
+    if (!(await stat(path)).isFile()) {
+        return undefined;
+    }
+    const directory = await mkdtemp(join(tmpdir(), "jco-wit-"));
+    try {
+        await cp(path, join(directory, basename(path)));
+        const dependencies = join(dirname(path), "deps");
+        let hasDependencies = true;
+        try {
+            await stat(dependencies);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+            }
+            hasDependencies = false;
+        }
+        if (hasDependencies) {
+            await cp(dependencies, join(directory, "deps"), { recursive: true });
+        }
+        return directory;
+    } catch (error) {
+        await rm(directory, { recursive: true, force: true });
+        throw error;
+    }
 }
 
 /** Re-bundle an entry wrapper that explicitly implements guest callback interface exports. */
@@ -216,7 +252,9 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             // why `node:path` only works together with `--bundle`.
             plugins: [
                 nodeBuiltinPlugin(await worldMetadataFor(witPath, opts.worldName), {
-                    hostTaskTimers: backend === "quickjs",
+                    // QuickJS needs host timers, whose callback resources require the async ABI.
+                    // Omit them when the caller explicitly disables async support.
+                    hostTaskTimers: backend === "quickjs" && !opts.backendQjsDisableAsync,
                     nodejsCryptoVia: opts.withNodejsCryptoVia,
                     nodejsHttpVia: opts.nodejsHttpVia ?? opts.withNodejsHttpVia,
                     nodejsVfsVia: opts.nodejsVfsVia ?? opts.withNodejsVfsVia,
@@ -253,7 +291,7 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         source = await readFile(jsSource, "utf8");
     }
     const injection = await injectNodeWitImports(witPath, opts.worldName, [...witRequirements.values()], {
-        asyncGuestCallbacks: backend === "quickjs",
+        asyncGuestCallbacks: backend === "quickjs" && !opts.backendQjsDisableAsync,
     });
     if (injection) {
         witPath = injection.witPath;
@@ -262,6 +300,8 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             console.error(`${warning} ${message}`);
         }
     }
+    const temporaryWitDirectory = await isolateWitFile(opts.wit);
+    witPath = temporaryWitDirectory ?? witPath;
     const sourceName = isTypeScript ? `${basename(jsSource, extname(jsSource))}.js` : basename(jsSource);
 
     // Build the component
@@ -298,6 +338,9 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         throw err;
     } finally {
         process.chdir(callerCwd);
+        if (temporaryWitDirectory) {
+            await rm(temporaryWitDirectory, { recursive: true, force: true });
+        }
     }
 
     // Write out the component

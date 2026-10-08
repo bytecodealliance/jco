@@ -39,17 +39,16 @@ export function createUrlBuiltin({ options, worldMetadata }: BuiltinContext): Bu
         }
         return `
 import { createUrl } from ${JSON.stringify(stdModule(options.urlFactory, "url"))};
-import { Url, parse, resolve, resolveObject } from ${JSON.stringify(unenvModule("node:url", options))};
+import { Url as LegacyUrl } from ${JSON.stringify(unenvModule("node:url", options))};
 ${providerSource}
-const url = createUrl({ initialCwd, getEnvironment }, { Url, parse, resolve, resolveObject });
+const url = createUrl({ initialCwd, getEnvironment }, { Url: LegacyUrl });
 // The Node module and global web APIs must share classes and search-param state.
 globalThis.URL = url.URL;
 globalThis.URLSearchParams = url.URLSearchParams;
 globalThis.URLPattern = url.URLPattern;
 export default url;
-export const { format, URL, URLPattern, URLSearchParams,
+export const { Url, parse, resolve, resolveObject, format, URL, URLPattern, URLSearchParams,
     domainToASCII, domainToUnicode, pathToFileURL, fileURLToPath, fileURLToPathBuffer, urlToHttpOptions } = url;
-export { Url, parse, resolve, resolveObject };
 `;
     });
     // Resolve only the audited dependency graph. Lexical prefilters avoid even
