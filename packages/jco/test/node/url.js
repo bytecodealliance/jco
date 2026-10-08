@@ -52,10 +52,7 @@ suite("node:url in components", () => {
             assert.strictEqual(policy.touched, false);
             assert.deepEqual(
                 policy.errors.map((error) => error.code),
-                [
-                    ...Array(6).fill("ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API"),
-                    ...Array(2).fill("ERR_JCO_UNSUPPORTED_NODE_API"),
-                ],
+                ["ERR_JCO_UNSUPPORTED_DEPRECATED_NODE_API", ...Array(2).fill("ERR_JCO_UNSUPPORTED_NODE_API")],
             );
             assert.match(policy.missingCwd, /node:url.*wasi:cli\/environment@0\.2\.x/);
         },
@@ -118,7 +115,13 @@ suite("node:url optional environment selection", () => {
         // component tests above exercise the real implementation and WASI import.
         for (const imports of [[], [environment(6n), environment(12n)]]) {
             const factory = `data:text/javascript,${encodeURIComponent("export function createUrl(providers) { return { pathToFileURL: providers.initialCwd }; }")}`;
-            const plugin = nodeBuiltinPlugin({ imports, exports: [] }, { urlFactory: factory });
+            const plugin = nodeBuiltinPlugin(
+                { imports, exports: [] },
+                {
+                    urlFactory: factory,
+                    unenvAliases: { "node:url": import.meta.resolve("unenv/node/url") },
+                },
+            );
             const source = plugin.load(plugin.resolveId("node:url"));
             const globals = [globalThis.URL, globalThis.URLSearchParams, globalThis.URLPattern];
             try {

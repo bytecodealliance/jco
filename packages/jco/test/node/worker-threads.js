@@ -21,7 +21,12 @@ const workerThreadsModule = fileURLToPath(
 test("worker_threads requests its own capability and callback and keeps bare imports unresolved", async () => {
     const onWitRequirement = vi.fn();
     const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { workerThreadsModule, onWitRequirement });
-    expect(plugin.resolveId("worker_threads")).toBeNull();
+    expect(
+        await plugin.resolveId.call(
+            { resolve: async () => ({ id: "/installed/worker_threads.js" }) },
+            "worker_threads",
+        ),
+    ).toBeNull();
     expect(plugin.resolveId("node:worker_threads/missing")).toBeNull();
     expect(plugin.resolveId("node:worker_threads")).toBe("\0jco-node-builtin:node:worker_threads");
     expect(onWitRequirement).toHaveBeenCalledExactlyOnceWith(WORKER_THREADS_WIT_REQUIREMENT);

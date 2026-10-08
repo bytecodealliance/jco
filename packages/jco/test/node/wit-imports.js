@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 
 import { CHILD_PROCESS_WIT_REQUIREMENT, injectNodeWitImports, witInjectionWarnings } from "../../src/node-wit.js";
-import { getTmpDir } from "../helpers.js";
+import { exec, getTmpDir, jcoPath, transpileComponent } from "../helpers.js";
 
 async function fixture(files) {
     const root = await getTmpDir();
@@ -20,6 +20,35 @@ async function fixture(files) {
 const requirement = CHILD_PROCESS_WIT_REQUIREMENT;
 
 describe("Node API WIT import injection", () => {
+    test("keeps a selected WIT file isolated from sibling worlds after injecting dependencies", async () => {
+        const root = await fixture({
+            "source.js": 'import console from "node:console"; export function run() { return typeof console.log; }\n',
+            "selected.wit": "package test:selected; world component { export run: func() -> string; }\n",
+            "alternative.wit": "package test:selected; world component { export run: func() -> u32; }\n",
+        });
+        const componentPath = join(root, "component.wasm");
+        for (let attempt = 0; attempt < 2; attempt++) {
+            await exec(
+                jcoPath,
+                "componentize",
+                join(root, "source.js"),
+                "--bundle",
+                "-w",
+                join(root, "selected.wit"),
+                "-n",
+                "component",
+                "-o",
+                componentPath,
+                { closeStdin: true },
+            );
+        }
+        expect(await readFile(join(root, "selected.wit"), "utf8")).toContain("import jco:node/console@0.1.0;");
+        expect(await readFile(join(root, "alternative.wit"), "utf8")).not.toContain("jco:node");
+        const { modulePath } = await transpileComponent({ componentPath, name: "selected" });
+        const component = await import(modulePath);
+        expect(component.run()).toBe("function");
+    }, 180_000);
+
     test.concurrent("adds a generated import and dependency to a single-world WIT directory", async () => {
         const root = await fixture({
             "app.wit": "package example:app;\n\nworld app {\n  export run: func();\n}\n",

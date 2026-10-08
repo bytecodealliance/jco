@@ -137,12 +137,18 @@ test.skipIf(!hasJspi).each(["quickjs", "starlingmonkey"])(
         assert.equal(report.styled, native.styleText(["bold", "red"], "hello", { validateStream: false }));
         assert.equal(report.stripped, "red");
         assert.equal(report.unicode, "�x🌍");
-        assert.deepEqual(report.encoded, backend === "quickjs" ? "ERR_JCO_UNSUPPORTED_NODE_API" : [240, 159, 140, 141]);
-        assert.equal(report.decoded, backend === "quickjs" ? "ERR_JCO_UNSUPPORTED_NODE_API" : "🌍");
+        assert.deepEqual(report.encoded, [240, 159, 140, 141]);
+        assert.equal(report.decoded, "🌍");
+        assert.deepEqual(report.supported, {
+            callSites: true,
+            debuglog: true,
+            deprecate: true,
+            extend: { a: 1, b: 2 },
+        });
         assert.equal(report.equal, true);
         assert.equal(report.inherited, true);
         assert.deepEqual(report.brands, [true, true, true, false, true, true, true, true]);
-        assert.equal(Object.keys(report.refusals).length, 14);
+        assert.equal(Object.keys(report.refusals).length, 10);
         for (const [name, code] of Object.entries(report.refusals)) {
             assert.equal(
                 code,

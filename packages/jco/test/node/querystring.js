@@ -6,8 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import unenvDefault, * as unenvQuerystring from "unenv/node/querystring";
 import { suite, test } from "vitest";
-import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
-import { exec, getTmpDir, jcoPath, materializeUnenvAdapter } from "../helpers.js";
+import { componentizeFixture, exec, getTmpDir, jcoPath, materializeUnenvAdapter } from "../helpers.js";
 
 suite("node:querystring", () => {
     test.concurrent("matches the Node 24 module and alias contract", () => {
@@ -113,24 +112,17 @@ suite("node:querystring", () => {
     });
 
     test("bundles and executes APIs guest-side", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-querystring");
         const outputDir = await getTmpDir();
-        const componentPath = join(outputDir, "component.wasm");
         const transpiledDir = join(outputDir, "transpiled");
 
-        await exec(
-            jcoPath,
-            "componentize",
-            join(fixtureDir, "source.js"),
-            "--bundle",
-            "--backend",
-            "qjs",
-            "--backend-qjs-disable-async",
-            "-w",
-            join(fixtureDir, "source.wit"),
-            "-o",
-            componentPath,
-        );
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-querystring",
+            entry: "source.js",
+            wit: "source.wit",
+            bundle: true,
+            outputDir,
+            extraArgs: ["--backend", "qjs", "--backend-qjs-disable-async"],
+        });
         await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "node-querystring");
         await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
 
