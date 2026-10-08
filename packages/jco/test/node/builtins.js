@@ -55,6 +55,8 @@ describe("Node builtin adapters", () => {
             "jco:node/worker-threads@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/worker-threads/host",
             "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
             "jco:node/trace-events@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/trace-events/host",
+            "jco:node/crypto-kdf@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/crypto/kdf/host",
+            "jco:node/timers@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers/host",
             "jco:node/console@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host",
             "jco:node/sqlite@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host",
             "jco:node/dgram@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram/host",
@@ -72,6 +74,8 @@ describe("Node builtin adapters", () => {
         });
         expect(
             withDefaultNodeCapabilityMap({
+                "jco:node/crypto-kdf@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/crypto/kdf/host",
+                "jco:node/timers@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers/host",
                 "jco:node/console@0.1.0": "/application/console-host.js",
                 "jco:node/fs@0.1.0": "/application/fs-host.js",
                 "jco:node/process@0.1.0": "/application/process-host.js",
@@ -85,6 +89,8 @@ describe("Node builtin adapters", () => {
             "jco:node/worker-threads@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/worker-threads/host",
             "jco:node/ffi@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/26.x.x/ffi/host",
             "jco:node/trace-events@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/trace-events/host",
+            "jco:node/crypto-kdf@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/crypto/kdf/host",
+            "jco:node/timers@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/timers/host",
             "jco:node/console@0.1.0": "/application/console-host.js",
             "jco:node/sqlite@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/sqlite/host",
             "jco:node/dgram@0.1.0": "@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/dgram/host",
@@ -398,9 +404,10 @@ describe("Node builtin adapters", () => {
         expect(onWitRequirement).not.toHaveBeenCalled();
     });
 
-    test.concurrent("does not intercept the bare module specifier", () => {
+    test.concurrent("resolves bare module when no installed package shadows it", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { moduleModule: "/jco/node/module.js" });
-        expect(plugin.resolveId("module")).toBeNull();
+        expect(await resolveBare(plugin, "module", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "module")).toBe("\0jco-node-builtin:node:module");
     });
 
     test.concurrent("generates a host-backed adapter for node:ffi", () => {
@@ -669,9 +676,10 @@ describe("Node builtin adapters", () => {
         );
     });
 
-    test.concurrent("does not intercept the bare os specifier", () => {
+    test.concurrent("resolves bare os when no package shadows it", async () => {
         const plugin = nodeBuiltinPlugin({ imports: [], exports: [] }, { osModule: "/jco/node/os.js" });
-        expect(plugin.resolveId("os")).toBeNull();
+        expect(await resolveBare(plugin, "os", INSTALLED)).toBeNull();
+        expect(await resolveBare(plugin, "os")).toBe("\0jco-node-builtin:node:os");
     });
 
     test.each([

@@ -1,5 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+import * as consoleHost from "../../../jco-std/dist/wasi/0.2.x/node/24.x.x/console-host.js";
 
 import { assert, expect, suite, test } from "vitest";
 
@@ -110,6 +112,15 @@ suite("Node globals", () => {
             setImmediate: ["node:timers", "setImmediate"],
             clearImmediate: ["node:timers", "clearImmediate"],
             process: ["jco:node-process-globals", "default"],
+            TextEncoder: ["jco:text-encoding", "TextEncoder"],
+            TextDecoder: ["jco:text-encoding", "TextDecoder"],
+            console: ["jco:console-globals", "default"],
+            queueMicrotask: ["jco:microtask-globals", "queueMicrotask"],
+            setTimeout: ["jco:timer-globals", "setTimeout"],
+            clearTimeout: ["jco:timer-globals", "clearTimeout"],
+            setInterval: ["jco:timer-globals", "setInterval"],
+            clearInterval: ["jco:timer-globals", "clearInterval"],
+            global: ["jco:global-this", "default"],
         });
     });
 
@@ -158,9 +169,20 @@ suite("Node globals", () => {
                 ),
             ],
         });
-        expect(requirements).toEqual([]);
-        const { value } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
-        expect(value).toEqual(["/", false, false]);
+        // The console fallback adds its deny-by-default interface, while process stdio
+        // initialization must remain portable and must not request node:tty.
+        expect([...new Set(requirements.map((requirement) => requirement.witImport))]).toEqual([
+            "jco:node/console@0.1.0",
+        ]);
+        const provider = new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/console-host.js", import.meta.url).href;
+        const mapped = source.replaceAll('"jco:node/console@0.1.0"', JSON.stringify(provider));
+        const buffer = globalThis.Buffer;
+        try {
+            const { value } = await import(`data:text/javascript,${encodeURIComponent(mapped)}`);
+            expect(value).toEqual(["/", false, false]);
+        } finally {
+            globalThis.Buffer = buffer;
+        }
     });
 
     test.concurrent("routes the Buffer global through the audited Node builtin adapter", async () => {
@@ -225,7 +247,14 @@ suite("Node globals", () => {
             extraArgs: ["--backend", "starlingmonkey"],
         });
         const { instance, cleanup } = await setupAsyncTest({
-            component: { name: "node-globals", path: componentPath },
+            component: {
+                name: "node-globals",
+                path: componentPath,
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    "jco:node/console": consoleHost,
+                },
+            },
         });
 
         try {

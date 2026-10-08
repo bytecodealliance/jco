@@ -10,8 +10,7 @@ import {
     kMaxLength as UNENV_K_MAX_LENGTH,
 } from "unenv/node/internal/buffer/buffer";
 import { suite, test } from "vitest";
-import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
-import { exec, getTmpDir, jcoPath, materializeUnenvAdapter } from "../helpers.js";
+import { exec, getTmpDir, jcoPath, materializeUnenvAdapter, componentizeFixture } from "../helpers.js";
 
 function bytes(value) {
     return [...value];
@@ -108,7 +107,11 @@ suite("node:buffer", () => {
             assert.throws(() => SlowBuffer(1), deprecated);
 
             // Jco-controlled exports: refusals, constants, and runtime-dependent members.
-            for (const api of ["isAscii", "isUtf8", "resolveObjectURL", "transcode"]) {
+            assert.equal(module.isAscii(Buffer.from("ascii")), true);
+            assert.equal(module.isAscii(Buffer.from("é")), false);
+            assert.equal(module.isUtf8(Buffer.from("é😀")), true);
+            assert.equal(module.isUtf8(Buffer.from([0xc0, 0x80])), false);
+            for (const api of ["resolveObjectURL", "transcode"]) {
                 assert.throws(() => module[api](), {
                     code: "ERR_JCO_UNSUPPORTED_NODE_API",
                     message: `buffer.${api} is not supported by the Jco component runtime`,
@@ -142,35 +145,41 @@ suite("node:buffer", () => {
                 "transcode",
             ]);
 
-            // Importing the adapter installs the guarded class as the global, as Node does, and the
-            // audited base64url gap is reachable through it.
+            // The adapter supplies base64url while preserving the guarded global class.
             assert.strictEqual(globalThis.Buffer, Buffer);
-            assert.throws(() => Buffer.from("SGVsbG8", "base64url"), /Unknown encoding: base64url/);
+            assert.equal(Buffer.from("SGVsbG8", "base64url").toString(), "Hello");
+            assert.equal(Buffer.from([255, 239]).toString("base64url"), "_-8");
         } finally {
             globalThis.Buffer = previousGlobalBuffer;
         }
     });
 
     test("bundles and executes APIs guest-side", async () => {
-        const fixtureDir = join(COMPONENT_JS_FIXTURES_DIR, "node-buffer");
         const outputDir = await getTmpDir();
-        const componentPath = join(outputDir, "component.wasm");
         const transpiledDir = join(outputDir, "transpiled");
 
+        const { componentPath } = await componentizeFixture({
+            fixture: "node-buffer",
+            entry: "source.js",
+            wit: ".",
+            bundle: true,
+            copy: true,
+            outputDir,
+            extraArgs: ["--backend", "qjs", "--backend-qjs-disable-async"],
+        });
+        const consoleHost = new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/console-host.js", import.meta.url)
+            .href;
         await exec(
             jcoPath,
-            "componentize",
-            join(fixtureDir, "source.js"),
-            "--bundle",
-            "--backend",
-            "qjs",
-            "--backend-qjs-disable-async",
-            "-w",
-            join(fixtureDir, "source.wit"),
-            "-o",
+            "transpile",
             componentPath,
+            "-o",
+            transpiledDir,
+            "--name",
+            "node-buffer",
+            "--map",
+            `jco:node/console@0.1.0=${consoleHost}`,
         );
-        await exec(jcoPath, "transpile", componentPath, "-o", transpiledDir, "--name", "node-buffer");
         await writeFile(join(transpiledDir, "package.json"), JSON.stringify({ type: "module" }));
 
         const component = await import(`${pathToFileURL(transpiledDir)}/node-buffer.js`);

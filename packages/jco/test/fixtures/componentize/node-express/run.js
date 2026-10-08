@@ -20,6 +20,11 @@ if (httpHostPath === "native") {
     Object.assign(imports["wasi:sockets/tcp-create-socket"], imports["wasi:sockets/tcp"]);
     imports["wasi:sockets/network"].Network.prototype.noop ??= () => {};
     imports["wasi:sockets/network"].networkErrorCode ??= () => undefined;
+    for (const name of ["zlib", "http2", "dns", "os", "process", "child-process", "worker-threads", "v8"]) {
+        imports[`jco:node/${name}`] = await import(
+            new URL(`../../../../../jco-std/dist/wasi/0.2.x/node/24.x.x/${name}-host.js`, import.meta.url)
+        );
+    }
     imports[httpHostPath] = httpHost.createHttpHost(() => instance.httpCallbacks);
     for (const capability of capabilities) {
         const separator = capability.indexOf("=");

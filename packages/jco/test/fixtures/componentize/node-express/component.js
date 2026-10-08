@@ -1,8 +1,8 @@
-import express from "express";
-
 let server;
 
-export function start() {
+export async function start() {
+    // Application initialization runs after the component's providers are bound.
+    const { default: express } = await import("express");
     const app = express();
 
     app.use(express.json());

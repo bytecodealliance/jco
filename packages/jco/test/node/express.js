@@ -26,6 +26,8 @@ const NODE_HTTP_HOST = pathToFileURL(
 const NODE_FS_HOST = pathToFileURL(
     fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/fs-host.js", import.meta.url)),
 ).href;
+const NODE_CONSOLE_HOST = new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/console-host.js", import.meta.url).href;
+const NODE_TTY_HOST = new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/tty-host-node.js", import.meta.url).href;
 
 const NODE_ZLIB_HOST = pathToFileURL(
     fileURLToPath(new URL("../../../jco-std/dist/wasi/0.2.x/node/24.x.x/zlib-host.js", import.meta.url)),
@@ -79,6 +81,7 @@ describe.skipIf(!hasJspi)("express in a component", () => {
                 jco: {
                     transpile: {
                         extraArgs: {
+                            minify: false,
                             asyncExports: ASYNC_EXPORTS,
                             map: {
                                 "jco:node/http@0.1.0": NODE_HTTP_HOST,
@@ -88,6 +91,8 @@ describe.skipIf(!hasJspi)("express in a component", () => {
                                 // granting access.
                                 "jco:node/fs@0.1.0": NODE_FS_HOST,
                                 "jco:node/zlib@0.1.0": NODE_ZLIB_HOST,
+                                "jco:node/console@0.1.0": NODE_CONSOLE_HOST,
+                                "jco:node/tty@0.1.0": NODE_TTY_HOST,
                             },
                         },
                     },
@@ -102,6 +107,8 @@ describe.skipIf(!hasJspi)("express in a component", () => {
                     NODE_HTTP_HOST,
                     `${NODE_FS_HOST}=${NODE_FS_HOST}`,
                     `${NODE_ZLIB_HOST}=${NODE_ZLIB_HOST}`,
+                    `${NODE_CONSOLE_HOST}=${NODE_CONSOLE_HOST}`,
+                    `${NODE_TTY_HOST}=${NODE_TTY_HOST}`,
                 );
                 const results = JSON.parse(output.stdout);
 
