@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-11feac8b.js";
+            window.path_to_searchindex_js = "searchindex-4b8fdb1d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-57473397.js"></script>
@@ -3312,25 +3312,43 @@ Node <code>node:os</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Imports</th><th>Implementation</th></tr>
+<tr><th>Imports</th><th>WASI</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td></tr>
+<tr><td><code>node:path</code>, <code>node:path/posix</code>, <code>node:path/win32</code></td><td>P2</td><td><code>@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/path</code></td></tr>
+<tr><td>Same imports</td><td>P3</td><td><code>@bytecodealliance/jco-std/wasi/0.3.x/node/24.x.x/path</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>Path manipulation is portable, but <code>path.resolve()</code> and related operations need a
 current working directory.</p>
-<p>Jco obtains that value through <code>wasi:cli/environment@0.2.x</code>, so the selected WIT
-world must import exactly one compatible version when it uses <code>node:path</code>:</p>
+<p>Jco obtains that value through <code>wasi:cli/environment</code>. The selected WIT world
+can import one P2 or P3 version, which determines the adapter Jco uses:</p>
 <pre><code class="language-wit">world app {
   import wasi:cli/environment@0.2.6;
   // component imports and exports...
 }
 </code></pre>
-<p>Jco selects the adapter matching the version in the world. A component that only
-uses capability-free built-ins such as assert, Buffer, or querystring does not
-need this import.</p>
+<p>For P3, declare <code>wasi:cli/environment@0.3.0</code> and build with
+<code>jco componentize --bundle --backend qjs</code>. P3 componentization currently requires
+<code>componentize-qjs</code>.</p>
+<p>Both package paths export the same <code>createPath</code> factory and Node 24 types. The
+P3 adapter imports <code>getInitialCwd</code> as <code>initialCwd</code>, matching the existing factory’s
+provider contract, and normalizes an absent cwd to <code>undefined</code>; the path algorithms
+remain shared. When using the factory directly, pass
+<code>{ initialCwd: () =&gt; getInitialCwd() ?? undefined, getEnvironment }</code> from the P3
+environment interface. This also accepts QuickJS’s <code>null</code> representation of an
+absent WIT option.</p>
+<p>When the component’s WIT exports use <code>async func</code>, implement those JavaScript
+exports with <code>async</code> functions for QuickJS. The <code>node:path</code> methods themselves
+remain synchronous.</p>
+<p>Importing multiple supported environment versions, including a mix of P2 and
+P3, is ambiguous and rejected. If no supported environment import is present,
+Jco still adds the existing P2 <code>wasi:cli/environment@0.2.12</code> requirement. P3 users
+must declare the P3 environment import explicitly for this adapter.</p>
+<p>This P3 support covers <code>node:path</code>; other built-ins are being reviewed separately.
+A component that only uses capability-free built-ins such as assert, Buffer, or
+querystring does not need the environment import.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodeperf_hooks"><a class="header" href="#nodeperf_hooks"><code>node:perf_hooks</code></a></h1>
 <div class="table-wrapper">
