@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-10-08
+
+### 🧪 Testing
+
+- _(rolldown-plugin-jco)_ remove test filename suffixes by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(rolldown-plugin-jco)_ update dependencies by @vados-cosmonic in #2228
+
 ## [0.1.0] - 2026-08-04
 
 ### 🚀 Features
