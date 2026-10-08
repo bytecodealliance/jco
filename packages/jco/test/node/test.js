@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
 import { bundleComponentSource } from "../../src/bundle.js";
-import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
+import { nodeBuiltinPlugin, nodeGlobals } from "../../src/node-builtins/index.js";
 import { COMPONENT_JS_FIXTURES_DIR } from "../common.js";
 import { exec, getTmpDir, jcoPath, transpileComponent } from "../helpers.js";
 
@@ -42,6 +42,7 @@ test.each(["starlingmonkey", "quickjs"])(
         const entry = join(outputDir, "source.js");
         const componentPath = join(outputDir, "component.wasm");
         const source = await bundleComponentSource(join(fixtureDir, "source.js"), {
+            inject: nodeGlobals(),
             plugins: [nodeBuiltinPlugin({ imports: [], exports: [] }, overrides)],
         });
         await writeFile(entry, source);
@@ -63,19 +64,6 @@ test.each(["starlingmonkey", "quickjs"])(
         const { modulePath } = await transpileComponent({ componentPath, name: "node-test" });
         const component = await import(modulePath);
         const result = JSON.parse(component.run());
-        if (backend === "quickjs") {
-            expect(result).toEqual({
-                identity: true,
-                lifecycle: [],
-                passed: [],
-                errors: [],
-                runner: "ERR_JCO_UNSUPPORTED_NODE_API",
-                property: 2,
-                restored: 1,
-                reporters: true,
-            });
-            return;
-        }
         expect(result).toEqual({
             identity: true,
             suiteName: "suite",

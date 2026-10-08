@@ -59,7 +59,14 @@ suite("node:readline", () => {
                     bundle: true,
                     extraArgs: ["--backend", backend],
                 });
-                assert.equal(stderr, "");
+                if (backend === "quickjs") {
+                    assert.match(stderr, /Jco added generated WIT imports/);
+                    assert.match(stderr, /jco:node\/console@0\.1\.0/);
+                    assert.match(stderr, /jco:node\/timers@0\.1\.0/);
+                    assert.match(stderr, /Jco added generated WIT export jco:node\/timers-callbacks@0\.1\.0/);
+                } else {
+                    assert.equal(stderr, "");
+                }
                 const { modulePath } = await transpileComponent({ componentPath, name: `node-readline-${backend}` });
                 const component = await import(modulePath);
                 assert.deepEqual(JSON.parse(await component.run()), {

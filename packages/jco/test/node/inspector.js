@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, symlink, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -64,7 +64,7 @@ suite.skipIf(!hasJspi)("node:inspector in a component", () => {
         assert.ok(worldText.includes("import jco:node/inspector@0.1.0;"), worldText);
         assert.ok(worldText.includes("export jco:node/inspector-callbacks@0.1.0;"), worldText);
 
-        const { modulePath, transpiledDir } = await transpileComponent({
+        const { modulePath } = await transpileComponent({
             componentPath,
             name: "node-inspector",
             extraArgs: [
@@ -76,14 +76,6 @@ suite.skipIf(!hasJspi)("node:inspector in a component", () => {
                 "run",
             ],
         });
-
-        // The transpiled component imports @bytecodealliance/preview2-shim by bare specifier; a
-        // spawned process resolves it only with a node_modules beside the output.
-        await symlink(
-            fileURLToPath(new URL("../../node_modules", import.meta.url)),
-            join(transpiledDir, "node_modules"),
-            "dir",
-        );
 
         const runner = fileURLToPath(new URL("../fixtures/componentize/node-inspector/run.js", import.meta.url));
         const { stdout } = await exec(runner, modulePath, NODE_HOST);

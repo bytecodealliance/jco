@@ -1,11 +1,9 @@
 // End-to-end coverage for `node:console` in StarlingMonkey components.
 import { assert, suite, test } from "vitest";
 
-import { symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { componentizeFixture, exec, setupAsyncTest } from "../helpers.js";
+import { componentizeFixture, exec, linkWorkspaceNodeModules, setupAsyncTest } from "../helpers.js";
 
 /** jco-std's Node host adapter, which an application must opt into explicitly. */
 const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/console/host/node");
@@ -33,11 +31,7 @@ suite("node:console in a component", () => {
             },
         });
 
-        await symlink(
-            fileURLToPath(new URL("../../node_modules", import.meta.url)),
-            join(outputDir, "node_modules"),
-            "dir",
-        );
+        await linkWorkspaceNodeModules(outputDir);
 
         try {
             const output = await exec(join(fixtureDir, "run.js"), esModuleOutputPath, NODE_HOST);

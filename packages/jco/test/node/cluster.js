@@ -1,10 +1,9 @@
-import { readFile, symlink, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { assert, suite, test } from "vitest";
 
-import { componentizeFixture, exec, transpileComponent } from "../helpers.js";
+import { componentizeFixture, exec, linkWorkspaceNodeModules, transpileComponent } from "../helpers.js";
 
 /** jco-std's Node host adapter, which an application must opt into explicitly. */
 const NODE_HOST = import.meta.resolve("@bytecodealliance/jco-std/wasi/0.2.x/node/24.x.x/cluster/host/node");
@@ -63,11 +62,7 @@ suite("node:cluster in a component", () => {
 
         // The runner is a bare node process outside the workspace, so give the transpiled output a
         // node_modules to resolve @bytecodealliance/preview2-shim through.
-        await symlink(
-            fileURLToPath(new URL("../../node_modules", import.meta.url)),
-            join(outputDir, "node_modules"),
-            "dir",
-        );
+        await linkWorkspaceNodeModules(outputDir);
 
         const runnerPath = join(outputDir, "runner.mjs");
         await writeFile(

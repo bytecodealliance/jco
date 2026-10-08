@@ -26,7 +26,11 @@ test.each(["starlingmonkey", "quickjs"])(
             extraArgs: ["--backend", backend, ...(backend === "quickjs" ? ["--backend-qjs-disable-async"] : [])],
         });
 
-        expect(stderr).not.toContain("Jco added generated WIT import");
+        if (backend === "quickjs") {
+            expect(stderr).toContain("Jco added generated WIT import jco:node/console@0.1.0");
+        } else {
+            expect(stderr).not.toContain("Jco added generated WIT import");
+        }
 
         const { modulePath } = await transpileComponent({ componentPath, name: `vm-${backend}` });
         const component = await import(modulePath);

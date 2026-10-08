@@ -1,4 +1,4 @@
-import { readFile, symlink, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
@@ -71,12 +71,6 @@ for (const backend of ["starlingmonkey", "quickjs"]) {
                 name: `trace-events-${mode}`,
                 extraArgs: mode === "denied" ? [] : ["--map", `jco:node/trace-events@0.1.0=${NODE_HOST}`],
             });
-
-            await symlink(
-                fileURLToPath(new URL("../../node_modules", import.meta.url)),
-                join(transpiledDir, "node_modules"),
-                "dir",
-            );
 
             const result = await exec(runner, modulePath, transpiledDir, mode, { closeStdin: true });
 
