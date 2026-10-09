@@ -489,9 +489,11 @@ impl ComponentIntrinsic {
                             if (current < 0 || current > 2**16) {{
                                 throw new Error(`invalid current backpressure value [${{current}}]`);
                             }}
-                            const newValue = Math.max(0, current - 1);
+                            // Canonical ABI `backpressure.dec`: trap if the counter would go
+                            // below zero.
+                            const newValue = current - 1;
                             if (newValue < 0) {{
-                                throw new Error(`invalid new backpressure value [${{newValue}}], underflow`);
+                                throw new {runtime_error_class}('backpressure counter underflow');
                             }}
                             return this.setBackpressure(newValue);
                         }}
