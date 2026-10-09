@@ -10,7 +10,7 @@ import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 
 import { suite, test, assert, describe } from 'vitest';
 
-import { readFixtureFlags, getTmpDir, getRandomPort } from './helpers.js';
+import { readFixtureFlags, getTmpDir, getRandomPort, nodeExec } from './helpers.js';
 
 import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR } from './common.js';
 import { resetRuntimeCreateCallCount, runtimeCreateCallCount } from './fixtures/custom-runtime-provider.js';
@@ -156,6 +156,36 @@ suite('Directive Prologue', () => {
 
 suite('External Component Model runtime', () => {
     const fixture = fileURLToPath(new URL('./fixtures/components/runtime/resources.2.component.wat', import.meta.url));
+    const resourceFixture = fileURLToPath(
+        new URL('./fixtures/components/runtime/external-runtime-resource.component.wat', import.meta.url),
+    );
+    const defaultRuntimeModule = new URL('../../jco-cm-runtime/dist/index.js', import.meta.url).href;
+
+    for (const instantiation of ['sync', 'async'] as const) {
+        test.each([false, true])(
+            `uses the selected WebAssembly realm without a platform global (${instantiation}, minify=%s)`,
+            async (minify) => {
+                const outDir = await getTmpDir();
+                const name = 'external-runtime-platform';
+                try {
+                    const { files } = await transpile(resourceFixture, {
+                        name,
+                        instantiation,
+                        minify,
+                        runtimeModule: defaultRuntimeModule,
+                    });
+                    await writeFiles(files, { baseDir: outDir });
+                    await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+                    await nodeExec(
+                        fileURLToPath(new URL('./fixtures/external-runtime/override-platform.mjs', import.meta.url)),
+                        join(outDir, `${name}.js`),
+                    );
+                } finally {
+                    await rm(outDir, { recursive: true, force: true });
+                }
+            },
+        );
+    }
 
     test('does not depend on the optional runtime package', async () => {
         const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
