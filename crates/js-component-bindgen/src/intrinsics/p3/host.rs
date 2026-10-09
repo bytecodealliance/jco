@@ -671,42 +671,49 @@ impl HostIntrinsic {
 
                             // Entry is blocked by backpressure or an in-flight component slice,
                             // so resume the call once the task is allowed to enter.
+                            // Nothing catches an exception thrown from a timer callback:
+                            // it would take down the whole process rather than the call.
+                            // Any failure here is reported through the subtask instead.
+                            const failDeferredStart = (err) => {{
+                                handleCalleeError(err);
+                                if (!subtask.isResolved()) {{ subtask.reject(err); }}
+                            }};
                             setTimeout(async () => {{
-                                {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
-                                    taskID: preparedTask.id(),
-                                    subtaskID: subtask.id(),
-                                    callerComponentIdx,
-                                    calleeComponentIdx,
-                                }});
-
-                                // Entry queues FIFO when another slice of the callee
-                                // component is already in flight.
-                                const started = await enterPromise;
-                                if (started) {{ calleeComponentState.removePendingTaskStart(); }}
-                                if (!started) {{
-                                    {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
+                                try {{
+                                    {debug_log_fn}('[{async_start_call_fn}()] continuing started subtask (in JS task)', {{
                                         taskID: preparedTask.id(),
                                         subtaskID: subtask.id(),
+                                        callerComponentIdx,
+                                        calleeComponentIdx,
                                     }});
-                                    // A cancellation-before-start is a valid resolution, not a failure
-                                    if (preparedTask.isCancelled()) {{ return; }}
-                                    throw new Error("task failed to start");
-                                }}
 
-                                try {{
+                                    // Entry queues FIFO when another slice of the callee
+                                    // component is already in flight.
+                                    const started = await enterPromise;
+                                    if (started) {{ calleeComponentState.removePendingTaskStart(); }}
+                                    if (!started) {{
+                                        {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
+                                            taskID: preparedTask.id(),
+                                            subtaskID: subtask.id(),
+                                        }});
+                                        // A cancellation-before-start is a valid resolution, not a failure
+                                        if (preparedTask.isCancelled()) {{ return; }}
+                                        throw preparedTask.isErrored() ?? new Error("task failed to start");
+                                    }}
+
                                     startSubtask();
-                                }} catch (err) {{
-                                    handleCalleeError(err);
-                                    return;
-                                }}
 
-                                if (callee._jcoMaySuspend === false) {{
-                                    driveDirectCallee();
-                                }} else {{
-                                    await driveJspiCallee();
+                                    if (callee._jcoMaySuspend === false) {{
+                                        driveDirectCallee();
+                                    }} else {{
+                                        await driveJspiCallee();
+                                    }}
+                                }} catch (err) {{
+                                    failDeferredStart(err);
                                 }}
                             }}, 0);
                         }}
+
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{

@@ -904,6 +904,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskMap);
                 let current_component_idx_globals = render_args
                     .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
+                let global_current_task_meta_obj =
+                    render_args.require_intrinsic(Intrinsic::GlobalCurrentTaskMeta);
                 output.push_str(&format!(
                     r#"
                     function {fn_name}(componentIdx, taskID) {{
@@ -919,6 +921,17 @@ impl AsyncTaskIntrinsic {
 
                         if (taskID) {{
                             return taskMetas.find(meta => meta.task.id() === taskID);
+                        }}
+
+                        // The task whose guest code is running is the one the metadata
+                        // wrappers record for the component (and restore when a suspended
+                        // stack resumes). The component's most recently created task may
+                        // be another one, e.g. a prepared callee that has not entered yet
+                        // while an earlier task of the component is suspended.
+                        const current = {global_current_task_meta_obj}[componentIdx];
+                        if (current && current.taskID !== undefined) {{
+                            const currentMeta = taskMetas.find(meta => meta.task.id() === current.taskID);
+                            if (currentMeta) {{ return currentMeta; }}
                         }}
 
                         const taskMeta = taskMetas[taskMetas.length - 1];
