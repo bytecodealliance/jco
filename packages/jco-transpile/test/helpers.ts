@@ -640,6 +640,13 @@ export async function readFixtureFlags(fixturePath: string): Promise<Transpilati
             opts.tlaCompat = true;
         } else if (arg === '--strict') {
             opts.strict = true;
+        } else if (arg === '--runtime-module') {
+            const runtimeModule = args[idx + 1];
+            if (!runtimeModule) {
+                throw new Error('missing runtime module specifier');
+            }
+            opts.runtimeModule = runtimeModule;
+            idx++;
         } else if (arg === '--flags-as-bigint') {
             opts.flagsAsBigInt = true;
         } else if (arg === '--variants-inline-cases') {

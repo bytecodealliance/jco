@@ -49,9 +49,12 @@ use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{
-    AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs, render_intrinsics,
+    AsyncDeterminismProfile, Intrinsic, RUNTIME_PROVIDER_LOCAL_NAME, RenderIntrinsicsArgs,
+    render_intrinsics, uses_external_runtime,
 };
-use crate::names::{LocalNames, is_js_reserved_word, maybe_quote_id, maybe_quote_member};
+use crate::names::{
+    LocalNames, is_js_reserved_word, js_string_literal, maybe_quote_id, maybe_quote_member,
+};
 use crate::{
     FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
     requires_async_porcelain, source, uwrite, uwriteln,
@@ -134,6 +137,9 @@ pub struct TranspileOpts {
     /// passing unpaired surrogates on to the receiving component.
     #[builder(default)]
     pub perf_strings_skip_copy_utf16_validation: bool,
+    /// ES module providing the Component Model runtime implementation used by
+    /// generated bindings. The module must export a `runtime` provider.
+    pub runtime_module: Option<String>,
     /// Represent WIT flags as bigint values instead of objects of booleans.
     #[builder(default)]
     pub flags_as_bigint: bool,
@@ -590,6 +596,13 @@ impl JsBindgen<'_> {
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
+        if uses_external_runtime(&self.all_intrinsics, opts.runtime_module.is_some()) {
+            uwriteln!(
+                output,
+                "import {{ runtime as {RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
+                js_string_literal(opts.runtime_module.as_deref().unwrap()),
+            );
+        }
 
         // Write out instantiation
         if let Some(instantiation) = &self.opts.instantiation_mode {

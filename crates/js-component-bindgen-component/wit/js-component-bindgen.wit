@@ -105,6 +105,8 @@ world js-component-bindgen {
     /// Skip validating utf16 strings that are copied between components which
     /// both use utf16 (they are validated by default)
     perf-strings-skip-copy-utf16-validation: option<bool>,
+    /// ES module providing the Component Model runtime implementation.
+    runtime-module: option<string>,
 
     /// Represent WIT flags as bigint values instead of objects of booleans.
     flags-as-bigint: option<bool>,

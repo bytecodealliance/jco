@@ -1,0 +1,15 @@
+{
+    "include": ["src/**/*", "test/**/*"],
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ESNext", "DOM"],
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "strict": true,
+        "noEmit": true,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "skipLibCheck": true
+    }
+}
