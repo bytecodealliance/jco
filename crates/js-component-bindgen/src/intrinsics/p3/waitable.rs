@@ -543,6 +543,9 @@ impl WaitableIntrinsic {
                     render_args.require_intrinsic(HostIntrinsic::StoreEventInComponentMemory);
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(r#"
                     function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
                         const {{ componentIdx, memoryIdx, getMemoryFn, isAsync }} = ctx;
@@ -567,9 +570,10 @@ impl WaitableIntrinsic {
                         }}
 
                         const cstate = {get_or_create_async_state_fn}(task.componentIdx());
-                        const wset = cstate.handles.get(waitableSetRep);
-                        if (!wset) {{
-                            throw new Error(`missing waitable set [${{waitableSetRep}}] in component [${{componentIdx}}]`);
+                        // (the index must name a waitable set, as for `waitable-set.wait`)
+                        const wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
+                        if (!(wset instanceof {waitable_set_class})) {{
+                            throw new {runtime_error_class}(`unknown handle index ${{waitableSetRep}}`);
                         }}
 
                         let event;
