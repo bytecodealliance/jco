@@ -685,13 +685,12 @@ impl ComponentIntrinsic {
                             queueMicrotask(() => {{
                                 this.#lockHandoffScheduled = false;
                                 // A synchronous call triggered by a release handler gets the
-                                // first opportunity to use the unlocked component.
-                                //
-                                // Its release will leave this queued handoff in place.
-                                if (this.#lockHolderTaskID !== null) {{
-                                    this.#scheduleLockHandoff();
-                                    return;
-                                }}
+                                // first opportunity to use the unlocked component. Its own
+                                // release schedules the next handoff; re-queueing one here
+                                // would spin the microtask queue for as long as the holder
+                                // stays blocked (e.g. in a synchronous wait), starving every
+                                // timer, the deadlock detector included.
+                                if (this.#lockHolderTaskID !== null) {{ return; }}
                                 const next = this.#lockWaiters.shift();
                                 if (!next) {{ return; }}
                                 this.#lockHolderTaskID = next.taskID;
