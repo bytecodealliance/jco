@@ -2524,6 +2524,8 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::UnpackCallbackResult => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let unpack_callback_result_fn =
                     render_args.require_intrinsic(Self::UnpackCallbackResult);
                 let i32_typecheck_fn = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
@@ -2532,9 +2534,9 @@ impl AsyncTaskIntrinsic {
                         if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
                         const eventCode = result & 0xF;
                         if (eventCode < 0 || eventCode > 3) {{
-                            throw new Error('invalid async return value [' + eventCode + '], outside callback code range');
+                            throw new {runtime_error_class}('invalid async return value [' + eventCode + '], outside callback code range');
                         }}
-                        if (result < 0 || result >= 2**32) {{ throw new Error('invalid callback result'); }}
+                        if (result < 0 || result >= 2**32) {{ throw new {runtime_error_class}('invalid callback result'); }}
                         // TODO: table max length check?
                         const waitableSetRep = result >> 4;
                         return [eventCode, waitableSetRep];
@@ -2588,14 +2590,14 @@ impl AsyncTaskIntrinsic {
                         let unpacked;
                         const unpackCallback = (value) => {{
                             if (!({i32_typecheck}(value))) {{
-                                throw new Error('invalid callback result [' + value + '], not a number');
+                                throw new {runtime_error_class}('invalid callback result [' + value + '], not a number');
                             }}
 
                             unpacked = {unpack_callback_result_fn}(value);
                             callbackCode = unpacked[0];
                             waitableSetRep = unpacked[1];
                             if (callbackCode < 0 || callbackCode > 3) {{
-                                throw new Error('invalid async return value, outside callback code range');
+                                throw new {runtime_error_class}('invalid async return value, outside callback code range');
                             }}
                         }};
 

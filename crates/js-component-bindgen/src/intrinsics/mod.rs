@@ -896,6 +896,8 @@ impl Intrinsic {
             }
 
             Intrinsic::RepTableClass => {
+                let runtime_error_class =
+                    args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let rep_table_class = args.require_intrinsic(Intrinsic::RepTableClass);
                 output.push_str(&format!(r#"
@@ -940,7 +942,7 @@ impl Intrinsic {
 
                         get(rep) {{
                             {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
-                            if (rep === 0) {{ throw new Error('invalid resource rep during get, (cannot be 0)'); }}
+                            if (rep === 0) {{ throw new {runtime_error_class}('invalid resource rep during get, (cannot be 0)'); }}
 
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
@@ -968,7 +970,7 @@ impl Intrinsic {
                             }}
                             const val = this.#data[baseIdx];
                             if (val === {rep_table_class}.FREE) {{
-                                throw new Error(`double removal of rep [${{rep}}] (already freed)`);
+                                throw new {runtime_error_class}(`double removal of rep [${{rep}}] (already freed)`);
                             }}
 
                             this.#data[baseIdx] = {rep_table_class}.FREE;
