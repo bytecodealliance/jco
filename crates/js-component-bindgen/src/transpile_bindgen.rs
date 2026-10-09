@@ -272,6 +272,8 @@ struct JsFunctionBindgenArgs<'a> {
     /// Whether the function in question is being generated for an import
     /// (false implies generation is happening for an export)
     for_import: bool,
+    /// The interned index of the function's result tuple type, for exports
+    result_type_idx: Option<u32>,
 }
 
 impl<'a> ManagesIntrinsics for JsBindgen<'a> {
@@ -3569,6 +3571,7 @@ impl<'a> Instantiator<'a, '_> {
                     .unwrap_or_else(|| "null".into());
                 let string_encoding_js = string_encoding_js_literal(string_encoding);
 
+                let result_type_idx = results.as_u32();
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {task_return_fn}.bind(
@@ -3582,6 +3585,7 @@ impl<'a> Instantiator<'a, '_> {
                              liftFns: {lift_fns_js},
                              lowerFns: {lower_fns_js},
                              stringEncoding: {string_encoding_js},
+                             resultTypeIdx: {result_type_idx},
                          }},
                      );",
                 );
@@ -4341,6 +4345,7 @@ impl<'a> Instantiator<'a, '_> {
                     is_async,
                     wrap_async_future_result: false,
                     for_import: true,
+                    result_type_idx: None,
                 });
                 uwriteln!(self.src.js, "");
 
@@ -5135,6 +5140,7 @@ impl<'a> Instantiator<'a, '_> {
             is_async,
             wrap_async_future_result,
             for_import,
+            result_type_idx,
         } = args;
 
         let (memory, realloc) =
@@ -5304,6 +5310,7 @@ impl<'a> Instantiator<'a, '_> {
             requires_async_porcelain,
             is_async,
             canonical_abi_async: opts.async_,
+            return_result_type_idx: result_type_idx,
             func_type_async: matches!(
                 func.kind,
                 FunctionKind::AsyncFreestanding
@@ -5903,7 +5910,7 @@ impl<'a> Instantiator<'a, '_> {
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
-        _func_ty_idx: &TypeFuncIndex,
+        func_ty_idx: &TypeFuncIndex,
         export_name: &String,
         export_resource_map: &ResourceMap,
     ) {
@@ -6091,6 +6098,7 @@ impl<'a> Instantiator<'a, '_> {
             is_async,
             wrap_async_future_result,
             for_import: false,
+            result_type_idx: Some(self.types[*func_ty_idx].results.as_u32()),
         });
         if let Some(target) = wrapped_function_target {
             let async_fn_ctor = self.bindgen.intrinsic(Intrinsic::AsyncFunctionCtor);

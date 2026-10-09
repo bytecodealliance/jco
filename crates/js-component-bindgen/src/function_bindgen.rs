@@ -236,6 +236,9 @@ pub struct FunctionBindgen<'a> {
     /// Whether the component-level function type is `async` (independently of
     /// how it was lifted or lowered)
     pub func_type_async: bool,
+    /// The interned index of the result tuple type of an exported function,
+    /// which `task.return` must match
+    pub return_result_type_idx: Option<u32>,
 
     /// Whether an async export returning a future needs a non-async outer
     /// function to preserve the future as a distinct awaitable layer.
@@ -766,9 +769,14 @@ impl FunctionBindgen<'_> {
               }});
               task.setCalleeIsAsync({canonical_abi_async});
               task.setFuncTypeIsAsync({func_type_async});
+              {set_return_result_type_idx}
             "#,
             canonical_abi_async = self.canonical_abi_async,
             func_type_async = self.func_type_async,
+            set_return_result_type_idx = self
+                .return_result_type_idx
+                .map(|idx| format!("task.setReturnResultTypeIdx({idx});"))
+                .unwrap_or_default(),
         );
 
         if self.is_async || self.requires_async_porcelain {
