@@ -863,11 +863,13 @@ impl FunctionBindgen<'_> {
         } else {
             self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn)
         };
-        if is_async {
-            // The caller gets the task's result as soon as the task resolves
-            // (Canonical ABI: `on_resolve` runs at `task.return`), even when the
-            // task keeps running afterwards, e.g. blocked in a synchronous wait.
-            // The body's own completion is raced against that resolution.
+        if self.is_async {
+            // The caller of an async-lifted export gets the task's result as
+            // soon as the task resolves (Canonical ABI: `on_resolve` runs at
+            // `task.return`), even when the task keeps running afterwards, e.g.
+            // blocked in a synchronous wait. The body's own completion is raced
+            // against that resolution. (A manually async, sync-typed export
+            // resolves when its core function returns, so it needs no race.)
             let return_task_res = if self.wrap_async_future_result {
                 "{ value: taskRes }"
             } else {
@@ -901,13 +903,15 @@ impl FunctionBindgen<'_> {
                 "#,
             );
         } else {
+            let await_ = if is_async { "await " } else { "" };
+            let async_ = if is_async { "async " } else { "" };
             uwriteln!(
                 self.src,
                 r#"
-                  return {wrapper}({{
+                  return {await_}{wrapper}({{
                       taskID: task.id(),
                       componentIdx: task.componentIdx(),
-                      fn: () => {{
+                      fn: {async_}() => {{
                           try {{
                 "#,
             );
@@ -919,7 +923,6 @@ impl FunctionBindgen<'_> {
         if self.skip_fn_call_task_management {
             return;
         }
-        let is_async = self.is_async || self.requires_async_porcelain;
         uwriteln!(
             self.src,
             r#"
@@ -935,7 +938,7 @@ impl FunctionBindgen<'_> {
               }});
             "#,
         );
-        if is_async {
+        if self.is_async {
             uwriteln!(
                 self.src,
                 r#"
