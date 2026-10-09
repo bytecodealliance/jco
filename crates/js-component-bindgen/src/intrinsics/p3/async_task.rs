@@ -1467,30 +1467,41 @@ impl AsyncTaskIntrinsic {
                                 return this.#entered;
                             }}
 
-                            // Perform intial backpressure check
-                            if (cstate.hasBackpressure()) {{
-                                cstate.addBackpressureWaiter();
+                            // Wait until there is no backpressure *and* the exclusive lock (if
+                            // needed) is ours. Backpressure can be set while we wait for the
+                            // lock (by the task holding it), so it's checked again once the lock
+                            // is acquired, as the Canonical ABI's `enter_implicit_thread` waits
+                            // for both together.
+                            while (true) {{
+                                if (cstate.hasBackpressure()) {{
+                                    cstate.addBackpressureWaiter();
 
-                                const result = await this.waitUntil({{
-                                    readyFn: () => {{
-                                        return !cstate.hasBackpressure();
-                                    }},
-                                    cancellable: true,
-                                }});
+                                    const result = await this.waitUntil({{
+                                        readyFn: () => {{
+                                            return !cstate.hasBackpressure();
+                                        }},
+                                        cancellable: true,
+                                    }});
 
-                                cstate.removeBackpressureWaiter();
+                                    cstate.removeBackpressureWaiter();
 
-                                if (!result || this.isCancelled()) {{
-                                    if (!this.isResolvedState()) {{ this.cancel(); }}
-                                    return false;
+                                    if (!result || this.isCancelled()) {{
+                                        if (!this.isResolvedState()) {{ this.cancel(); }}
+                                        return false;
+                                    }}
                                 }}
-                            }}
 
-                            // Acquire the per-slice exclusive lock (FIFO-queued when
-                            // contended); the first slice runs under this hold and the
-                            // driver loop releases/re-acquires it per slice thereafter.
-                            if (this.needsExclusiveLock()) {{
-                                await cstate.acquireExclusiveLock(this.#id);
+                                // Acquire the per-slice exclusive lock (FIFO-queued when
+                                // contended); the first slice runs under this hold and the
+                                // driver loop releases/re-acquires it per slice thereafter.
+                                if (this.needsExclusiveLock()) {{
+                                    await cstate.acquireExclusiveLock(this.#id);
+                                    if (cstate.hasBackpressure()) {{
+                                        cstate.exclusiveRelease(this.#id);
+                                        continue;
+                                    }}
+                                }}
+                                break;
                             }}
 
                             // Cancellation-before-start may resolve this task while its
