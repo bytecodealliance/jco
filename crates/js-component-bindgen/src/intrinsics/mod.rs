@@ -2549,8 +2549,25 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 
 impl Intrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
+        // Every intrinsic is bound in the generated module's scope, so each
+        // name is reserved against the local names of exports and imports (an
+        // export named `stream-read` must not become a local `streamRead` that
+        // shadows the intrinsic the trampolines call).
         JsHelperIntrinsic::get_global_names()
             .into_iter()
+            .chain(ConversionIntrinsic::get_global_names())
+            .chain(WebIdlIntrinsic::get_global_names())
+            .chain(StringIntrinsic::get_global_names())
+            .chain(ResourceIntrinsic::get_global_names())
+            .chain(LiftIntrinsic::get_global_names())
+            .chain(LowerIntrinsic::get_global_names())
+            .chain(ComponentIntrinsic::get_global_names())
+            .chain(AsyncFutureIntrinsic::get_global_names())
+            .chain(AsyncStreamIntrinsic::get_global_names())
+            .chain(AsyncTaskIntrinsic::get_global_names())
+            .chain(ErrCtxIntrinsic::get_global_names())
+            .chain(p3::host::HostIntrinsic::get_global_names())
+            .chain(p3::waitable::WaitableIntrinsic::get_global_names())
             .chain(vec![
                 // Intrinsic list exactly as below
                 "base64Compile",
