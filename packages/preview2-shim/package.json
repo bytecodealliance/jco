@@ -32,20 +32,24 @@
     "type": "module",
     "exports": {
         ".": {
-            "types": "./dist/browser/index.d.ts",
             "node": {
                 "types": "./dist/nodejs/index.d.ts",
                 "default": "./dist/nodejs/index.js"
             },
-            "default": "./dist/browser/index.js"
+            "default": {
+                "types": "./dist/browser/index.d.ts",
+                "default": "./dist/browser/index.js"
+            }
         },
         "./*": {
-            "types": "./dist/browser/*.d.ts",
             "node": {
                 "types": "./dist/nodejs/*.d.ts",
                 "default": "./dist/nodejs/*.js"
             },
-            "default": "./dist/browser/*.js"
+            "default": {
+                "types": "./dist/browser/*.d.ts",
+                "default": "./dist/browser/*.js"
+            }
         },
         "./instantiation": {
             "types": "./dist/common/instantiation.d.ts",
@@ -54,6 +58,10 @@
         },
         "./interfaces/*": {
             "types": "./types/interfaces/*.d.ts"
+        },
+        "./browser/helpers/cli": {
+            "types": "./dist/browser/helpers/cli.d.ts",
+            "default": "./dist/browser/helpers/cli.js"
         },
         "./io-worker": {
             "types": "./dist/nodejs/io-worker.d.ts",

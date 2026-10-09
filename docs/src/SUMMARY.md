@@ -14,6 +14,8 @@
     - [Detecting traps](./advanced/detecting-traps.md)
     - [Preview 3 streams and backpressure](./advanced/preview3-streams-and-backpressure.md)
     - [Preview 3 host value disposal](./advanced/preview3-host-value-disposal.md)
+    - [Preview 2 shim helpers]()
+        - [CLI helpers](./advanced/preview2-shim-helpers/cli.md)
 - [JavaScript ecosystem interoperability]()
     - [`jco-std`](./interop/jco-std.md)
     - [Node.js built-in compatibility](./interop/nodejs-builtins.md)
