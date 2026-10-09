@@ -339,4 +339,63 @@ suite("Browser filesystem", () => {
         a.unlock();
         assert.doesNotThrow(() => b.lockExclusive());
     });
+
+    test("_writeFileAt and _readFileAt round-trip bytes without a guest", async () => {
+        const { _setFileData, _writeFileAt, _readFileAt } =
+            await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: {} });
+
+        _writeFileAt("/", "output.txt", new Uint8Array([1, 2, 3]));
+
+        assert.deepStrictEqual(_readFileAt("/", "output.txt"), new Uint8Array([1, 2, 3]));
+    });
+
+    test("_writeFileAt creates missing intermediate directories", async () => {
+        const { _setFileData, _writeFileAt, _readFileAt } =
+            await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: {} });
+
+        _writeFileAt("/", "nested/dir/output.txt", new Uint8Array([4, 5]));
+
+        assert.deepStrictEqual(_readFileAt("/", "nested/dir/output.txt"), new Uint8Array([4, 5]));
+    });
+
+    test("_writeFileAt truncates by default and appends when asked", async () => {
+        const { _setFileData, _writeFileAt, _readFileAt } =
+            await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: {} });
+
+        _writeFileAt("/", "log.txt", new Uint8Array([1, 2, 3]));
+        _writeFileAt("/", "log.txt", new Uint8Array([9]));
+        assert.deepStrictEqual(_readFileAt("/", "log.txt"), new Uint8Array([9]));
+
+        _writeFileAt("/", "log.txt", new Uint8Array([1, 2]), { append: true });
+        assert.deepStrictEqual(_readFileAt("/", "log.txt"), new Uint8Array([9, 1, 2]));
+    });
+
+    test("_writeFileAt resolves the virtual path against the matching preopen", async () => {
+        const { _setPreopens, _writeFileAt, _readFileAt } =
+            await import("../../src/browser/filesystem.js");
+        _setPreopens({ "/a": { dir: {} }, "/b": { dir: {} } });
+
+        _writeFileAt("/b", "file.txt", new Uint8Array([7]));
+
+        assert.deepStrictEqual(_readFileAt("/b", "file.txt"), new Uint8Array([7]));
+        assert.throws(() => _readFileAt("/a", "file.txt"));
+        assert.throws(() => _readFileAt("/missing", "file.txt"), /no preopen/);
+    });
+
+    test("_readFileAt reads a file larger than a single read chunk", async () => {
+        const { _setFileData, _writeFileAt, _readFileAt } =
+            await import("../../src/browser/filesystem.js");
+        _setFileData({ dir: {} });
+        const data = new Uint8Array(2 * 1024 * 1024 + 17);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = i % 256;
+        }
+
+        _writeFileAt("/", "big.bin", data);
+
+        assert.deepStrictEqual(_readFileAt("/", "big.bin"), data);
+    });
 });
