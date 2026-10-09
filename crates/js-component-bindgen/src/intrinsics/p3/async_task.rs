@@ -1057,6 +1057,7 @@ impl AsyncTaskIntrinsic {
 
                         #getCalleeParamsFn = null;
                         #calleeIsAsync = null;
+                        #calleeLiftedAsync = false;
 
                         #stringEncoding = null;
 
@@ -1328,7 +1329,10 @@ impl AsyncTaskIntrinsic {
 
                         // Legacy manually-async exports are sync-typed in the component
                         // but use JSPI precisely so their guest stack may suspend.
-                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() }}
+                        // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
+                        // an async-lifted callee may, even when called through a sync lowering.
+                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync }}
+                        setCalleeLiftedAsync(v) {{ this.#calleeLiftedAsync = v; }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
