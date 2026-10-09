@@ -1248,6 +1248,11 @@ impl Intrinsic {
             // suspended stack resumes. EnterSyncCall instead leaves the newly
             // entered callee current (switchesTask), including after lock contention.
             Self::SuspendingImportWrapperFn => {
+                let get_or_create_async_state_fn = args.require_intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let record_trap_fn =
+                    args.require_intrinsic(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
                 let suspending_import_wrapper_fn =
                     args.require_intrinsic(Self::SuspendingImportWrapperFn);
                 let global_current_task_meta_obj =
@@ -1284,7 +1289,9 @@ impl Intrinsic {
                                   }} catch (err) {{
                                       {global_current_task_meta_obj}[componentIdx] = saved;
                                       if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
-                                      throw err;
+                                      // A trap is recorded before it propagates: nothing else in
+                                      // the store may run after it, not even a queued call.
+                                      throw {record_trap_fn}(componentIdx, err);
                                   }}
 
                                   {global_current_task_meta_obj}[componentIdx] = saved;
@@ -1304,7 +1311,13 @@ impl Intrinsic {
 
                               return (async () => {{
                                   try {{
-                                      return await fn.apply(null, args);
+                                      const result = await fn.apply(null, args);
+                                      // The instance trapped while this stack was suspended: it
+                                      // must not resume into guest code (Canonical ABI).
+                                      {get_or_create_async_state_fn}(componentIdx).throwIfInterrupted();
+                                      return result;
+                                  }} catch (err) {{
+                                      throw {record_trap_fn}(componentIdx, err);
                                   }} finally {{
                                       {global_current_task_meta_obj}[componentIdx] = saved;
                                       if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
@@ -1583,7 +1596,7 @@ mod tests {
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
         assert!(source.contains("return (async () => {"));
-        assert!(source.contains("return await fn.apply(null, args);"));
+        assert!(source.contains("const result = await fn.apply(null, args);"));
         assert!(source.contains("CURRENT_TASK_META[componentIdx] = saved;"));
     }
 

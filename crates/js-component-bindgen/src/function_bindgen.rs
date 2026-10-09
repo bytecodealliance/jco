@@ -792,6 +792,16 @@ impl FunctionBindgen<'_> {
                       // (the deadlock detector records why entry was given up on)
                       throw task.isErrored() ?? new Error("failed to enter task");
                   }}
+                  // The store may have trapped while this task waited to enter: nothing
+                  // runs after a trap (Canonical ABI), so this call fails too.
+                  try {{
+                      {get_component_state}({component_idx_expr}).throwIfInterrupted();
+                  }} catch (err) {{
+                      task.setErrored(err);
+                      task.reject(err);
+                      task.exit({{ skipExclusiveLockCheck: true }});
+                      throw err;
+                  }}
                 "#,
             );
         } else {

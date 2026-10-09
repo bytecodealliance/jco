@@ -35,6 +35,13 @@ pub enum ComponentIntrinsic {
     /// Wrap a non-suspending canonical ABI trampoline with a `may_leave` check.
     GuardMayLeave,
 
+    /// Record a `WebAssembly.RuntimeError` as the store's trap, synchronously at the throw site
+    RecordTrap,
+
+    /// Wrap a non-suspending canonical ABI trampoline so that a trap it throws is recorded
+    /// before it propagates (nothing in the store may run after a trap)
+    GuardTrap,
+
     /// Global that stores async state by component instance
     ///
     /// ```ts
@@ -97,6 +104,8 @@ impl ComponentIntrinsic {
             Self::NormalizeCoreTrap => "_normalizeCoreTrap",
             Self::CheckMayLeave => "_checkMayLeave",
             Self::GuardMayLeave => "_guardMayLeave",
+            Self::RecordTrap => "_recordTrap",
+            Self::GuardTrap => "_guardTrap",
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
             Self::GetOrCreateAsyncState => "getOrCreateAsyncState",
             Self::BackpressureInc => "backpressureInc",
@@ -187,6 +196,8 @@ impl ComponentIntrinsic {
                                     task.reject(err);
                                 }}
                             }}
+                            // A deadlock is a trap of the whole store: no instance may be entered again.
+                            for (const state of {async_state_map}.values()) {{ state.markTrapped(err); }}
                             for (const state of {async_state_map}.values()) {{ state.abandonLockWaiters(); }}
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                         }}, 0);
@@ -302,6 +313,49 @@ impl ComponentIntrinsic {
                 ));
             }
 
+            Self::RecordTrap => {
+                let record_trap_fn = render_args.require_intrinsic(Self::RecordTrap);
+                let get_or_create_async_state_fn =
+                    render_args.require_intrinsic(Self::GetOrCreateAsyncState);
+                let global_current_task_meta_obj =
+                    render_args.require_intrinsic(Intrinsic::GlobalCurrentTaskMeta);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(
+                    r#"
+                    function {record_trap_fn}(componentIdx, err) {{
+                        if (err instanceof {runtime_error_class}) {{
+                            // (a trampoline without a static instance records against the
+                            // component whose guest code is running)
+                            const idx = componentIdx ?? {global_current_task_meta_obj}.current?.componentIdx;
+                            if (idx !== undefined && idx !== null) {{
+                                {get_or_create_async_state_fn}(idx).markTrapped(err);
+                            }}
+                        }}
+                        return err;
+                    }}
+                    "#,
+                ));
+            }
+
+            Self::GuardTrap => {
+                let guard_trap_fn = render_args.require_intrinsic(Self::GuardTrap);
+                let record_trap_fn = render_args.require_intrinsic(Self::RecordTrap);
+                output.push_str(&format!(
+                    r#"
+                    function {guard_trap_fn}(componentIdx, fn) {{
+                        return function (...args) {{
+                            try {{
+                                return fn.apply(this, args);
+                            }} catch (err) {{
+                                throw {record_trap_fn}(componentIdx, err);
+                            }}
+                        }};
+                    }}
+                    "#,
+                ));
+            }
+
             Self::GlobalAsyncStateMap => {
                 let var_name = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 uwriteln!(output, r#"const {var_name} = new Map();"#);
@@ -384,6 +438,7 @@ impl ComponentIntrinsic {
                         #suspendedTaskIDs = [];
                         #errored = null;
                         #trapped = false;
+                        #trapError = null;
                         #backpressure = 0;
                         #backpressureWaiters = 0n;
 
@@ -436,11 +491,20 @@ impl ComponentIntrinsic {
                             }}
                             err = {normalize_core_trap_fn}(err);
                             this.#trapped = true;
+                            if (this.#trapError === null) {{ this.#trapError = err; }}
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
                             if ({store_trap}.error === null) {{ {store_trap}.error = err; }}
                             return true;
                         }}
 
+                        isTrapped() {{ return this.#trapped; }}
+                        // For work that was already under way or queued when the instance
+                        // trapped: it fails with that trap (nothing runs after a trap).
+                        throwIfInterrupted() {{
+                            if (this.#trapped) {{
+                                throw this.#trapError ?? new {runtime_error_class}({cannot_enter_component:?});
+                            }}
+                        }}
                         throwIfTrapped() {{
                             if (this.#trapped) {{
                                 throw new {runtime_error_class}({cannot_enter_component:?});

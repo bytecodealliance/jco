@@ -584,6 +584,7 @@ impl HostIntrinsic {
                         }};
 
                         const driveJspiCallee = async () => {{
+                            try {{ calleeComponentState.throwIfInterrupted(); }} catch (err) {{ handleCalleeError(err); return; }}
                             let callbackResult;
                             // A synchronous callee blocks its caller until it fully returns (it may
                             // suspend mid-way, e.g. on a nested blocking import). Hold the blocking
@@ -620,6 +621,7 @@ impl HostIntrinsic {
                         }};
 
                         const driveDirectCallee = () => {{
+                            try {{ calleeComponentState.throwIfInterrupted(); }} catch (err) {{ handleCalleeError(err); return; }}
                             let callbackResult;
                             if (!calleeIsAsync) {{ {blocking_call_depth}.value++; }}
                             try {{
