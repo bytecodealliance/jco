@@ -72,6 +72,28 @@ const stdinStream = inputStreamCreate({
     [symbolDispose]() {},
 });
 
+/** Build an `InputStreamHandler` that serves a fixed buffer, then reports `closed`. */
+export function bufferedInputStream(input: Uint8Array | string): InputStreamHandler {
+    const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
+    let offset = 0;
+
+    return {
+        blockingRead(len: bigint): Uint8Array {
+            if (offset >= bytes.length) {
+                throw { tag: "closed" };
+            }
+            const remaining = bytes.length - offset;
+            const toRead = len < BigInt(remaining) ? Number(len) : remaining;
+            const chunk = bytes.slice(offset, offset + toRead);
+            offset += toRead;
+            return chunk;
+        },
+        subscribe() {
+            return pollableCreate();
+        },
+    };
+}
+
 function consoleStream(writeLine: (line: string) => void): OutputStreamHandler {
     const decoder = new TextDecoder();
     let pending = "";
