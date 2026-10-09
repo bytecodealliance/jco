@@ -1,3 +1,4 @@
+| `@bytecodealliance/preview2-shim/helpers/filesystem` | Host-side filesystem helpers for both builds (see [Helpers](#helpers))     |
 # Preview 2 shim
 
 [`@bytecodealliance/preview2-shim`][npm-p2-shim] implements WASI 0.2 (`wasi:cli`, `wasi:clocks`,
@@ -57,6 +58,8 @@ underscore-prefixed functions (`_setStdin`, `_setPreopens`, ...) that configure 
 Helpers that only exist for one build are exported under that build's prefix.
 
 - [CLI helpers](./preview2-shim/helpers/cli.md): feed a guest a fixed stdin buffer in the browser.
+- [Filesystem helpers](./preview2-shim/helpers/filesystem.md): write and read files under a preopen
+  from host code, on both builds.
 
 [npm-p2-shim]: https://www.npmjs.com/package/@bytecodealliance/preview2-shim
 [p2-readme]: https://github.com/bytecodealliance/jco/blob/main/packages/preview2-shim/README.md

@@ -7,6 +7,7 @@
 - [WASI support](./wasi/index.md)
     - [Preview 2 shim](./wasi/preview2-shim.md)
         - [CLI helpers](./wasi/preview2-shim/helpers/cli.md)
+        - [Filesystem helpers](./wasi/preview2-shim/helpers/filesystem.md)
     - [Preview 3 shim](./wasi/preview3-shim.md)
 - [Performance](./performance/index.md)
     - [Benchmarks](./performance/benchmarks/index.md)
