@@ -746,15 +746,17 @@ impl HostIntrinsic {
                             if (!subtask.resolveDelivered()) {{
                                 subtask.deliverResolve();
                             }}
-                            const removed = callerComponentState.handles.remove(subtask.waitableRep());
-                            if (removed !== subtask) {{
-                                throw new Error('subtask handle cleanup removed unexpected entry');
+                            if (subtask.waitableRep() !== null) {{
+                                const removed = callerComponentState.handles.remove(subtask.waitableRep());
+                                if (removed !== subtask) {{
+                                    throw new Error('subtask handle cleanup removed unexpected entry');
+                                }}
                             }}
                             subtask.drop();
                             return subtaskState;
                         }}
 
-                        return Number(subtask.waitableRep()) << 4 | subtaskState;
+                        return Number(subtask.ensureHandle()) << 4 | subtaskState;
                     }}
                 "#));
             }
