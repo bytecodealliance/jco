@@ -5304,6 +5304,12 @@ impl<'a> Instantiator<'a, '_> {
             requires_async_porcelain,
             is_async,
             canonical_abi_async: opts.async_,
+            func_type_async: matches!(
+                func.kind,
+                FunctionKind::AsyncFreestanding
+                    | FunctionKind::AsyncMethod(_)
+                    | FunctionKind::AsyncStatic(_)
+            ),
             wrap_async_future_result,
             result_ty: func.result.as_ref(),
             iface_name,

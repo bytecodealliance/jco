@@ -991,6 +991,8 @@ impl AsyncTaskIntrinsic {
             // NOTE: since threads are not yet supported, places that would have called out to threads instead run
             // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
+                let store_trap = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1071,6 +1073,7 @@ impl AsyncTaskIntrinsic {
                         #getCalleeParamsFn = null;
                         #calleeIsAsync = null;
                         #calleeLiftedAsync = false;
+                        #funcTypeIsAsync = false;
 
                         #stringEncoding = null;
 
@@ -1344,8 +1347,10 @@ impl AsyncTaskIntrinsic {
                         // but use JSPI precisely so their guest stack may suspend.
                         // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
                         // an async-lifted callee may, even when called through a sync lowering.
-                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync }}
+                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync || this.#funcTypeIsAsync }}
                         setCalleeLiftedAsync(v) {{ this.#calleeLiftedAsync = v; }}
+                        // (an async-typed function may block however it was lifted)
+                        setFuncTypeIsAsync(v) {{ this.#funcTypeIsAsync = v; }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -1515,6 +1520,15 @@ impl AsyncTaskIntrinsic {
                                     }}
                                 }}
                                 break;
+                            }}
+
+                            // The store may have trapped (e.g. a deadlock was detected) while
+                            // this task waited to enter: it must not run, and its call fails
+                            // with that trap.
+                            if ({store_trap}.error !== null) {{
+                                cstate.exclusiveRelease(this.#id);
+                                this.setErrored({store_trap}.error);
+                                return false;
                             }}
 
                             // Cancellation-before-start may resolve this task while its
