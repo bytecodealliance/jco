@@ -1000,8 +1000,6 @@ impl AsyncTaskIntrinsic {
             // NOTE: since threads are not yet supported, places that would have called out to threads instead run
             // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
-                let store_trap = render_args
-                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1538,9 +1536,11 @@ impl AsyncTaskIntrinsic {
                             // The store may have trapped (e.g. a deadlock was detected) while
                             // this task waited to enter: it must not run, and its call fails
                             // with that trap.
-                            if ({store_trap}.error !== null) {{
+                            try {{
+                                cstate.throwIfInterrupted();
+                            }} catch (err) {{
                                 cstate.exclusiveRelease(this.#id);
-                                this.setErrored({store_trap}.error);
+                                this.setErrored(err);
                                 return false;
                             }}
 
@@ -2724,6 +2724,15 @@ impl AsyncTaskIntrinsic {
 
                         const runCallback = () => {{
                             try {{
+                                // No callback runs once the component instance has trapped.
+                                if (!task.isRejected()) {{
+                                    try {{
+                                        componentState.throwIfInterrupted();
+                                    }} catch (err) {{
+                                        task.setErrored(err);
+                                        task.reject(err);
+                                    }}
+                                }}
                                 if (task.isRejected()) {{
                                     {debug_log_fn}('[{driver_loop_fn}()] detected task rejection, leaving early');
                                     componentState.exclusiveRelease(task.id());

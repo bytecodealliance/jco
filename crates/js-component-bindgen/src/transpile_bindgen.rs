@@ -1922,6 +1922,9 @@ impl<'a> Instantiator<'a, '_> {
                 let conditional_suspending_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::ConditionalSuspending1I32ToI32Fn);
+                let guard_trap_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                 // NOTE: core wasm passes the subtask handle as the remaining argument.
                 // Async-lowered cancellation reports BLOCKED directly unless a
                 // cancellable child is already resuming toward eager completion.
@@ -1932,7 +1935,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, true);
                         const trampoline{i} = {conditional_suspending_fn}(
-                            trampoline{i}Cancel,
+                            {guard_trap_fn}({instance_idx}, trampoline{i}Cancel),
                             {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                         );
                         "#,
@@ -1944,7 +1947,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, false);
                         const trampoline{i} = {conditional_suspending_fn}(
-                            trampoline{i}Cancel,
+                            {guard_trap_fn}({instance_idx}, trampoline{i}Cancel),
                             {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                         );
                         "#,
@@ -2209,11 +2212,14 @@ impl<'a> Instantiator<'a, '_> {
                     let conditional_suspending_fn = self
                         .bindgen
                         .intrinsic(Intrinsic::ConditionalSuspending3I32ToI32Fn);
+                    let guard_trap_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}(
-                            {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}),
+                            {guard_trap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
                             {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
                         );"#,
                     );
@@ -3677,6 +3683,9 @@ impl<'a> Instantiator<'a, '_> {
                 let conditional_suspending_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::ConditionalSuspending3I32ToVoidFn);
+                let guard_trap_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                 // Under JSPI, contended entry queues for the callee's per-slice
                 // exclusive lock by returning a promise, which requires the
                 // trampoline to be Suspending (fused sync calls then run inside
@@ -3694,7 +3703,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                           const trampoline{i} = {conditional_suspending_fn}(
-                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true),
+                              {guard_trap_fn}(null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true)),
                               (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}(callerComponentIdx, {enter_symmetric_sync_guest_call_fn}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
                           );
                         "#,
@@ -5496,18 +5505,41 @@ impl<'a> Instantiator<'a, '_> {
             CoreDef::Trampoline(i) => {
                 let trampoline = &self.translation.trampolines[*i];
                 let name = format!("trampoline{}", i.as_u32());
-                let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {
-                    return name;
+                // A suspending trampoline cannot be wrapped in JS (the wrapper frame
+                // would break JSPI suspension); the suspending import wrapper records
+                // its traps itself. Every other trampoline is wrapped so that a trap it
+                // throws is recorded before it propagates: nothing else in the store
+                // may run after a trap, not even a call that was already queued.
+                // (`subtask.cancel` is always a conditional trampoline with a suspending
+                // slow path, however it was lowered)
+                let may_suspend = self.trampoline_may_suspend(*i, trampoline)
+                    || matches!(trampoline, Trampoline::SubtaskCancel { .. });
+                let instance_js = self
+                    .trampoline_may_leave_instance(trampoline)
+                    .map(|instance| instance.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
+                let guard_trap = |this: &mut Self, expr: String| {
+                    if may_suspend {
+                        expr
+                    } else {
+                        let guard_trap_fn = this
+                            .bindgen
+                            .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
+                        format!("{guard_trap_fn}({instance_js}, {expr})")
+                    }
                 };
-
+                let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {
+                    return guard_trap(self, name);
+                };
                 self.used_instance_flags.borrow_mut().insert(instance);
                 if Self::trampoline_checks_may_leave_internally(trampoline) {
-                    name
+                    guard_trap(self, name)
                 } else {
                     let guard_may_leave_fn = self
                         .bindgen
                         .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardMayLeave));
-                    format!("{guard_may_leave_fn}({}, {name})", instance.as_u32())
+                    let expr = format!("{guard_may_leave_fn}({}, {name})", instance.as_u32());
+                    guard_trap(self, expr)
                 }
             }
             CoreDef::InstanceFlags(i) => {

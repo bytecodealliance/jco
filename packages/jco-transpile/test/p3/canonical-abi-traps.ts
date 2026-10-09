@@ -443,6 +443,34 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent.each(['trapDec', 'trapWait'])(
+        'a trap stops a call that was already queued to enter (%s)',
+        async (fn: string) => {
+            const steps: number[] = [];
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: `late-trap-${fn}`,
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'late-trap.wat'),
+                    imports: { progress: { default: (step: number) => steps.push(step) } },
+                },
+            });
+            try {
+                // Back to back, before either is awaited: the second call is queued
+                // behind the first when the first traps.
+                const outcomes = await Promise.allSettled([instance[fn](), instance[fn]()]);
+                for (const outcome of outcomes) {
+                    assert.strictEqual(outcome.status, 'rejected');
+                    assert.instanceOf((outcome as PromiseRejectedResult).reason, WebAssembly.RuntimeError);
+                }
+                // Only the first call ran guest code; nothing runs after a trap.
+                assert.deepStrictEqual(steps, [1]);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
