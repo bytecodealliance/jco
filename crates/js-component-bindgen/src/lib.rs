@@ -540,7 +540,8 @@ mod tests {
         let create_position = source.find("_jcoRuntimeProvider.create(").unwrap();
         assert!(import_position < instantiate_position);
         assert!(instantiate_position < create_position);
-        assert!(source.contains("const rscTableGet = _jcoIntrinsics.resource.tableGet;"));
+        assert!(source.contains("const rscTableGet = (() => {"));
+        assert!(source.contains("return intrinsic.bind(receiver);"));
         assert!(source.contains("rscTableGet("));
         assert!(!source.contains("function rscTableGet(table, handle)"));
         assert_eq!(source.matches("_jcoRuntimeProvider.create(").count(), 1);
