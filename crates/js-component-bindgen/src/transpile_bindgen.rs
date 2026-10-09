@@ -1728,9 +1728,14 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::FutureCancelRead { async_, .. }
             | Trampoline::FutureCancelWrite { async_, .. } => !async_,
             Trampoline::WaitableSetWait { .. } | Trampoline::ThreadYield { .. } => true,
-            // These composition trampolines are plain functions outside JSPI;
-            // counting them as suspending would add promising wrappers to sync output.
-            Trampoline::SyncStartCall { .. } | Trampoline::EnterSyncCall => matches!(
+            // The sync start call trampoline is always a Suspending import: a
+            // sync-lowered call into an async-lifted callee suspends the caller
+            // while the callee blocks. Every core function that can reach it
+            // must therefore run in a promising activation (callbacks included).
+            Trampoline::SyncStartCall { .. } => true,
+            // The enter trampoline is a plain function outside JSPI; counting it
+            // as suspending would add promising wrappers to sync output.
+            Trampoline::EnterSyncCall => matches!(
                 self.bindgen.opts.async_mode,
                 Some(AsyncMode::JavaScriptPromiseIntegration { .. })
             ),
