@@ -1092,6 +1092,7 @@ impl AsyncStreamIntrinsic {
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
+
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
@@ -2287,9 +2288,6 @@ impl AsyncStreamIntrinsic {
                 };
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
-                    AsyncTaskIntrinsic::AsyncBlockedConstant,
-                ));
 
                 output.push_str(&format!(r#"
                     function {stream_op_fn}(
@@ -2356,7 +2354,9 @@ impl AsyncStreamIntrinsic {
                             && !streamEnd.hasPendingEvent()
                             && !streamEnd.isPeerDropped()
                             && !streamEnd.hasPendingBuffer()) {{
-                            return {async_blocked_const};
+                            // -2 tells the conditional trampoline to take its suspending
+                            // slow path (a synchronous copy must block, never report BLOCKED).
+                            return 0xFFFFFFFE;
                         }}
 
                         return streamEnd.copy({{
@@ -2377,12 +2377,12 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamCancelRead | Self::StreamCancelWrite => {
-                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let stream_cancel_fn = self.name();
-                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let stream_cancel_fn = self.name();
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let is_cancel_write = matches!(self, Self::StreamCancelWrite);
                 let event_code_enum = format!(
                     "{}.STREAM_{}",

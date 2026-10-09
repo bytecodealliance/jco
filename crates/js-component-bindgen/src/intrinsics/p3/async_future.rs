@@ -1627,7 +1627,12 @@ impl AsyncFutureIntrinsic {
                                 futureEnd.setCopyState({future_end_base_class}.CopyState.SYNC_COPYING);
                                 return task.suspendUntil({{
                                     readyFn: () => futureEnd.hasPendingEvent(),
-                                }}).then(() => {{
+                                }}).then((completed) => {{
+                                    // The wait is resumed without the copy's event when the
+                                    // task is torn down (e.g. the store trapped meanwhile).
+                                    if (!completed || !futureEnd.hasPendingEvent()) {{
+                                        throw task.isErrored() ?? new {runtime_error_class}('synchronous future operation interrupted before completion');
+                                    }}
                                     const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
                                     if (code !== {event_code}) {{
                                         throw new Error(`mismatched event code [${{code}}] (expected {event_code})`);

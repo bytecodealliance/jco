@@ -233,6 +233,9 @@ pub struct FunctionBindgen<'a> {
     /// This can differ from `is_async` when an async component function is
     /// canonically lifted from a synchronous core function.
     pub canonical_abi_async: bool,
+    /// Whether the component-level function type is `async` (independently of
+    /// how it was lifted or lowered)
+    pub func_type_async: bool,
 
     /// Whether an async export returning a future needs a non-async outer
     /// function to preserve the future as a distinct awaitable layer.
@@ -762,8 +765,10 @@ impl FunctionBindgen<'_> {
                   callingWasmExport: true,
               }});
               task.setCalleeIsAsync({canonical_abi_async});
+              task.setFuncTypeIsAsync({func_type_async});
             "#,
             canonical_abi_async = self.canonical_abi_async,
+            func_type_async = self.func_type_async,
         );
 
         if self.is_async || self.requires_async_porcelain {

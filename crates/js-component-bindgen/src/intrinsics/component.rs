@@ -187,6 +187,7 @@ impl ComponentIntrinsic {
                                     task.reject(err);
                                 }}
                             }}
+                            for (const state of {async_state_map}.values()) {{ state.abandonLockWaiters(); }}
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                         }}, 0);
                     }}
@@ -618,6 +619,13 @@ impl ComponentIntrinsic {
                             return new Promise((resolve) => {{
                                 this.#lockWaiters.push({{ taskID, resolve }});
                             }});
+                        }}
+
+                        // Release every queued entry without granting ownership, so that
+                        // calls waiting to enter a trapped store fail instead of hanging.
+                        abandonLockWaiters() {{
+                            const waiters = this.#lockWaiters.splice(0);
+                            for (const waiter of waiters) {{ waiter.resolve(); }}
                         }}
 
                         cancelExclusiveLockWaiter(taskID) {{
