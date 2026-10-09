@@ -493,6 +493,23 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         },
     );
 
+    test.concurrent('a subtask takes its handle index after the moved-out arguments free theirs', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'subtask-index-order',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'subtask-index-order.wat'),
+            },
+        });
+        try {
+            // The readable end (index 1) is moved into the call, so the subtask
+            // reuses index 1: (1 << 4) | STARTED.
+            assert.strictEqual(await instance.run(), 0x11);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',

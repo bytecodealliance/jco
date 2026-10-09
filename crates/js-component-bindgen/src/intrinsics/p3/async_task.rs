@@ -2048,8 +2048,8 @@ impl AsyncTaskIntrinsic {
                             }});
                             this.#subtasks.push(newSubtask);
                             newSubtask.setTarget(`subtask (internal ID [${{newSubtask.id()}}], waitable [${{waitable.idx()}}], component [${{componentIdx}}])`);
-                            waitable.setIdx(cstate.handles.insert(newSubtask));
-                            waitable.setTarget(`waitable for subtask (waitable id [${{waitable.idx()}}], subtask internal ID [${{newSubtask.id()}}])`);
+                            // The subtask gets a handle index in this task's table only once the
+                            // guest is given it (see `AsyncSubtask#ensureHandle`).
                             return newSubtask;
                         }}
 
@@ -2178,6 +2178,17 @@ impl AsyncTaskIntrinsic {
 
                         waitable() {{ return this.#waitable; }}
                         waitableRep() {{ return this.#waitable.idx(); }}
+                        // The handle index is allocated only when the guest gets to see the
+                        // subtask (an async lower that did not complete at once), and after the
+                        // lifted arguments have freed theirs (Canonical ABI `canon_lower`).
+                        ensureHandle() {{
+                            const existing = this.#waitable.idx();
+                            if (existing !== null && existing !== undefined) {{ return existing; }}
+                            const idx = this.#getComponentState().handles.insert(this);
+                            this.#waitable.setIdx(idx);
+                            this.#waitable.setTarget(`waitable for subtask (waitable id [${{idx}}], subtask internal ID [${{this.id()}}])`);
+                            return idx;
+                        }}
 
                         join() {{ return this.#waitable.join(...arguments); }}
                         getPendingEvent() {{ return this.#waitable.getPendingEvent(...arguments); }}
@@ -3057,15 +3068,17 @@ impl AsyncTaskIntrinsic {
                                         if (!subtask.resolveDelivered()) {{
                                             subtask.deliverResolve();
                                         }}
-                                        const removed = cstate.handles.remove(subtask.waitableRep());
-                                        if (removed !== subtask) {{
-                                            reject(new Error('subtask handle cleanup removed unexpected entry'));
-                                            return;
+                                        if (subtask.waitableRep() !== null) {{
+                                            const removed = cstate.handles.remove(subtask.waitableRep());
+                                            if (removed !== subtask) {{
+                                                reject(new Error('subtask handle cleanup removed unexpected entry'));
+                                                return;
+                                            }}
                                         }}
                                         subtask.drop();
                                         res = subtaskState;
                                     }} else {{
-                                        res = Number(subtask.waitableRep()) << 4 | subtaskState;
+                                        res = Number(subtask.ensureHandle()) << 4 | subtaskState;
                                     }}
                                     {debug_log_fn}('[{lower_import_fn}()] async-lowered import return', {{
                                         fnName: importFn.fnName,
@@ -3348,7 +3361,7 @@ impl AsyncTaskIntrinsic {
                             packedResult: Number(subtask.waitableRep()) << 4 | subtaskState,
                         }});
 
-                        return Number(subtask.waitableRep()) << 4 | subtaskState;
+                        return Number(subtask.ensureHandle()) << 4 | subtaskState;
                     }}
                     "#
                 ));
