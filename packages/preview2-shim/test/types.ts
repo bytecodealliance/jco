@@ -16,15 +16,8 @@ suite("preview2-shim types", () => {
 
     test("WASIShim.getImportObject infers its version from asVersion", async () => {
         const { diagnostics } = tsCodegen({
-            tsConfigPath: join(
-                FIXTURES_TYPES_DIR,
-                "instantiation-generics/tsconfig.test.json",
-            ),
+            tsConfigPath: join(FIXTURES_TYPES_DIR, "instantiation-generics/tsconfig.test.json"),
         });
-        assert.strictEqual(
-            diagnostics.length,
-            0,
-            diagnostics.map((d) => d.messageText).join("\n"),
-        );
+        assert.strictEqual(diagnostics.length, 0, diagnostics.map((d) => d.messageText).join("\n"));
     });
 });

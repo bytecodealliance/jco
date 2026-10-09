@@ -2,7 +2,19 @@ import * as wasi from "@bytecodealliance/preview2-shim";
 import type {
     WASIShimConfig,
     GetImportObjectArgs,
+    VersionedWASIImportObject,
+} from "../../types/instantiation.js";
+
+export type {
+    WASIShimConfig,
+    SandboxConfig,
+    GetImportObjectArgs,
     WASIImportObject,
+    VersionedWASIImportObject,
+    FilesystemShim,
+    TcpSocketsShim,
+    UdpSocketsShim,
+    WebIncomingHandler,
 } from "../../types/instantiation.js";
 
 /**
@@ -225,7 +237,9 @@ export class WASIShim {
      * @param opts - options for import object generation
      * @returns WASIImportObject
      */
-    getImportObject(opts?: GetImportObjectArgs) {
+    getImportObject<const V extends string = "">(
+        opts?: GetImportObjectArgs<V>,
+    ): VersionedWASIImportObject<V> {
         const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : "";
 
         const obj = {};
@@ -267,7 +281,7 @@ export class WASIShim {
         obj[`wasi:http/incoming-handler${versionSuffix}`] = this.#http.incomingHandler;
         obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
 
-        return obj as WASIImportObject;
+        return obj as VersionedWASIImportObject<V>;
     }
 }
 
