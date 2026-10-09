@@ -1681,6 +1681,10 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
+                            // A task that already resolved (via `task.return`) has delivered
+                            // its result: a caller must not wait for this block to end
+                            // (Canonical ABI: `on_resolve` runs at `task.return`).
+                            this.settleCompletion();
                             // TODO(threads): store readyFn on the thread
                             const {{ cancellable, readyFn }} = opts;
                             {debug_log_fn}('[{task_class}#immediateSuspend()] args', {{ cancellable, readyFn }});

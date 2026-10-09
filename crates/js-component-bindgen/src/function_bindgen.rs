@@ -863,19 +863,55 @@ impl FunctionBindgen<'_> {
         } else {
             self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn)
         };
-        let await_ = if is_async { "await " } else { "" };
-        let async_ = if is_async { "async " } else { "" };
-
-        uwriteln!(
-            self.src,
-            r#"
-              return {await_}{wrapper}({{
-                  taskID: task.id(),
-                  componentIdx: task.componentIdx(),
-                  fn: {async_}() => {{
-                      try {{
-            "#,
-        );
+        if is_async {
+            // The caller gets the task's result as soon as the task resolves
+            // (Canonical ABI: `on_resolve` runs at `task.return`), even when the
+            // task keeps running afterwards, e.g. blocked in a synchronous wait.
+            // The body's own completion is raced against that resolution.
+            let return_task_res = if self.wrap_async_future_result {
+                "{ value: taskRes }"
+            } else {
+                "taskRes"
+            };
+            let throw_result_err = if self.no_component_error_wrapping {
+                "throw taskRes.val;".to_string()
+            } else {
+                let component_err = self.intrinsic(Intrinsic::ComponentError);
+                format!("throw new {component_err}(taskRes.val);")
+            };
+            uwriteln!(
+                self.src,
+                r#"
+                  const finishCompletion = async () => {{
+                      let taskRes = await task.completionPromise();
+                      if (task.getErrHandling() === 'throw-result-err') {{
+                          if (typeof taskRes !== 'object') {{
+                              return {return_task_res};
+                          }}
+                          if (taskRes.tag === 'err') {{ {throw_result_err} }}
+                          if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
+                      }}
+                      return {return_task_res};
+                  }};
+                  const body = {wrapper}({{
+                      taskID: task.id(),
+                      componentIdx: task.componentIdx(),
+                      fn: async () => {{
+                          try {{
+                "#,
+            );
+        } else {
+            uwriteln!(
+                self.src,
+                r#"
+                  return {wrapper}({{
+                      taskID: task.id(),
+                      componentIdx: task.componentIdx(),
+                      fn: () => {{
+                          try {{
+                "#,
+            );
+        }
     }
 
     pub(crate) fn end_wasm_export_body(&mut self) {
@@ -883,6 +919,7 @@ impl FunctionBindgen<'_> {
         if self.skip_fn_call_task_management {
             return;
         }
+        let is_async = self.is_async || self.requires_async_porcelain;
         uwriteln!(
             self.src,
             r#"
@@ -898,6 +935,17 @@ impl FunctionBindgen<'_> {
               }});
             "#,
         );
+        if is_async {
+            uwriteln!(
+                self.src,
+                r#"
+                  // (a failure after the task resolved is recorded on the store; the
+                  // caller already has, or is about to get, the task's result)
+                  body.catch(() => {{}});
+                  return await Promise.race([body, finishCompletion()]);
+                "#,
+            );
+        }
     }
 }
 
