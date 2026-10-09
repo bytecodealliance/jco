@@ -233,7 +233,7 @@ impl ResourceIntrinsic {
                     const val = table[(handle << 1) + 1];
                     const own = (val & {table_flag}) !== 0;
                     const rep = val & ~{table_flag};
-                    if (rep === 0 || (scope & {table_flag}) !== 0) {{
+                    if (val === undefined || rep === 0 || (scope & {table_flag}) !== 0) {{
                         // Resource entries occupy scope/rep pairs after the table sentinel.
                         throw new {runtime_error}(`unknown handle index ${{(handle << 1) + 1}}`);
                     }}
@@ -266,7 +266,8 @@ impl ResourceIntrinsic {
                     const val = table[(handle << 1) + 1];
                     const own = (val & {table_flag}) !== 0;
                     const rep = val & ~{table_flag};
-                    if (val === 0 || (scope & {table_flag}) !== 0) {{
+                    // (`val` is undefined past the end of the table)
+                    if (val === undefined || val === 0 || (scope & {table_flag}) !== 0) {{
                         // Resource entries occupy scope/rep pairs after the table sentinel.
                         throw new {runtime_error}(`unknown handle index ${{(handle << 1) + 1}}`);
                     }}
