@@ -252,12 +252,37 @@ pub enum AsyncStreamIntrinsic {
 impl AsyncStreamIntrinsic {
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
+        // Every intrinsic lives in the generated module's scope, so each of
+        // their names must be reserved: an export named e.g. `stream-read`
+        // would otherwise be bound as a local `streamRead` that shadows the
+        // intrinsic the trampolines call.
         [
+            Self::GlobalStreamMap.name(),
+            Self::GlobalStreamTableMap.name(),
             Self::CreateStream.name(),
-            Self::AddStreamEndToTable.name(),
             Self::GetStreamEnd.name(),
+            Self::AddStreamEndToTable.name(),
             Self::DeleteStreamEnd.name(),
             Self::RemoveStreamEndFromTable.name(),
+            Self::StreamEndClass.name(),
+            Self::InternalStreamClass.name(),
+            Self::StreamWritableEndClass.name(),
+            Self::StreamReadableEndClass.name(),
+            Self::HostStreamClass.name(),
+            Self::ExternalStreamClass.name(),
+            Self::PendingValueQueueClass.name(),
+            Self::StreamNew.name(),
+            Self::StreamNewFromLift.name(),
+            Self::StreamRead.name(),
+            Self::StreamWrite.name(),
+            Self::StreamDropReadable.name(),
+            Self::StreamDropWritable.name(),
+            Self::StreamTransfer.name(),
+            Self::StreamCancelRead.name(),
+            Self::StreamCancelWrite.name(),
+            Self::IsStreamLowerableObject.name(),
+            Self::GenStreamHostInjectFn.name(),
+            Self::GenReadFnFromLowerableStream.name(),
         ]
     }
 
