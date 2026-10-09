@@ -16,19 +16,20 @@ export const runtime = {
             throw new Error(`unsupported runtime ABI ${options.requestedAbiVersion}`);
         }
         runtimeCreateCallCount++;
+        const RuntimeError = options.platform?.WebAssembly?.RuntimeError ?? WebAssembly.RuntimeError;
         return {
             abiVersion: 1,
             intrinsics: {
                 resource: {
+                    tableFlag: 1 << 30,
                     tableGet(table, handle) {
                         tableGetCallCount++;
-                        const flag = 1 << 30;
                         const scope = table[handle << 1];
                         const value = table[(handle << 1) + 1];
-                        const own = (value & flag) !== 0;
-                        const rep = value & ~flag;
-                        if (rep === 0 || (scope & flag) !== 0) {
-                            throw new WebAssembly.RuntimeError(`unknown handle index ${(handle << 1) + 1}`);
+                        const own = (value & this.tableFlag) !== 0;
+                        const rep = value & ~this.tableFlag;
+                        if (rep === 0 || (scope & this.tableFlag) !== 0) {
+                            throw new RuntimeError(`unknown handle index ${(handle << 1) + 1}`);
                         }
                         return { rep, scope, own };
                     },

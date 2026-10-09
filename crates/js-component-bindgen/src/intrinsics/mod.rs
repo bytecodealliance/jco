@@ -2508,14 +2508,21 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             else {
                 continue;
             };
-            uwriteln!(
-                output,
-                "const {local_name} = {RUNTIME_INTRINSICS_LOCAL_NAME}.{path};"
-            );
-            uwriteln!(
-                output,
-                "if (typeof {local_name} !== 'function') throw new TypeError('Jco Component Model runtime intrinsic {path} must be a function');"
-            );
+            let (receiver_path, method) = path
+                .rsplit_once('.')
+                .expect("runtime intrinsic paths must name a method on a receiver");
+            output.push_str(&format!(
+                r#"
+                    const {local_name} = (() => {{
+                        const receiver = {RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path};
+                        const intrinsic = receiver?.{method};
+                        if (typeof intrinsic !== 'function') {{
+                            throw new TypeError('Jco Component Model runtime intrinsic {path} must be a function');
+                        }}
+                        return intrinsic.bind(receiver);
+                    }})();
+                "#
+            ));
         }
     }
     if args
