@@ -510,6 +510,33 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('resource handles share the instance handle table with waitables', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: 'shared-handle-table',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'shared-handle-table.wat'),
+            },
+        });
+        try {
+            // future.new took 1 and 2, so the resource gets 3.
+            assert.strictEqual(instance.resourceAfterFuture(), 3);
+            // In a fresh instance: set 1 freed, resource reuses 1, freed, next set reuses 1.
+            const { instance: fresh, cleanup: cleanupFresh } = await setupAsyncTest({
+                component: {
+                    name: 'shared-handle-table-reuse',
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'shared-handle-table.wat'),
+                },
+            });
+            try {
+                assert.strictEqual(fresh.reuseAcrossKinds(), (1 << 16) | (1 << 8) | 1);
+            } finally {
+                await cleanupFresh();
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',

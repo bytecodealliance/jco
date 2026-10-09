@@ -3,6 +3,7 @@
 use std::fmt::Write as _;
 
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
@@ -401,6 +402,8 @@ impl ComponentIntrinsic {
                 let component_async_state_class = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
+                let get_handle_index_space_fn = render_args
+                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::GetHandleIndexSpace));
                 let waitable_class =
                     render_args.require_intrinsic(WaitableIntrinsic::WaitableClass);
                 let promise_with_resolvers_fn =
@@ -459,7 +462,10 @@ impl ComponentIntrinsic {
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
-                            this.handles = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] handles (waitable objects)` }});
+                            this.handles = new {rep_table_class}({{
+                                target: `component [${{this.#componentIdx}}] handles (waitable objects)`,
+                                space: {get_handle_index_space_fn}(this.#componentIdx),
+                            }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
                         }};
 

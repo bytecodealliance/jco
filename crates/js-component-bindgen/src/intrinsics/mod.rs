@@ -910,14 +910,26 @@ impl Intrinsic {
                         #data = [0, null];
                         #size = 0;
                         #target;
+                        // An index space shared with the other handle kinds of a component
+                        // instance (see `getHandleIndexSpace`); without one, this table keeps
+                        // its own free list.
+                        #space = null;
 
                         constructor(args) {{
                             this.target = args?.target;
+                            this.#space = args?.space ?? null;
                         }}
 
                         data() {{ return this.#data; }}
 
                         insert(val) {{
+                            if (this.#space !== null) {{
+                                const rep = this.#space.alloc();
+                                this.#data[rep << 1] = val;
+                                this.#data[(rep << 1) + 1] = null;
+                                this.#size += 1;
+                                return rep;
+                            }}
                             {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
                             const freeIdx = this.#data[0];
                             if (freeIdx === 0) {{
@@ -962,6 +974,18 @@ impl Intrinsic {
                         remove(rep) {{
                             {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new Error('invalid resource rep during remove, (cannot be 0)'); }}
+                            if (this.#space !== null) {{
+                                const baseIdx = rep << 1;
+                                const val = this.#data[baseIdx];
+                                if (val === undefined || val === {rep_table_class}.FREE) {{
+                                    throw new {runtime_error_class}(`unknown handle index ${{rep}}`);
+                                }}
+                                this.#data[baseIdx] = {rep_table_class}.FREE;
+                                this.#data[baseIdx + 1] = null;
+                                this.#size -= 1;
+                                this.#space.release(rep);
+                                return val;
+                            }}
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
                             const baseIdx = rep << 1;
@@ -1473,9 +1497,9 @@ mod tests {
         let remove = Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove);
         let (source, _) = render([get, remove]);
 
-        assert!(source.contains(
-            "throw new WebAssemblyRuntimeError(`unknown handle index ${(handle << 1) + 1}`);"
-        ));
+        assert!(
+            source.contains("throw new WebAssemblyRuntimeError(`unknown handle index ${handle}`);")
+        );
     }
 
     #[test]
