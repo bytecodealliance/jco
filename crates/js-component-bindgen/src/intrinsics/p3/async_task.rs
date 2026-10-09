@@ -491,6 +491,8 @@ impl AsyncTaskIntrinsic {
             Self::TaskReturn => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let task_return_fn = render_args.require_intrinsic(Self::TaskReturn);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
@@ -520,6 +522,13 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata'); }}
                         task.validateResourceBorrowScope();
+
+                        // Canonical ABI `canon_task_return`: the result type must be the one of
+                        // the task's function type.
+                        const expectedResultType = task.returnResultTypeIdx();
+                        if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {{
+                            throw new {runtime_error_class}('task.return result type does not match the function type');
+                        }}
 
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
@@ -1074,6 +1083,7 @@ impl AsyncTaskIntrinsic {
                         #calleeIsAsync = null;
                         #calleeLiftedAsync = false;
                         #funcTypeIsAsync = false;
+                        #returnResultTypeIdx = null;
 
                         #stringEncoding = null;
 
@@ -1351,6 +1361,9 @@ impl AsyncTaskIntrinsic {
                         setCalleeLiftedAsync(v) {{ this.#calleeLiftedAsync = v; }}
                         // (an async-typed function may block however it was lifted)
                         setFuncTypeIsAsync(v) {{ this.#funcTypeIsAsync = v; }}
+                        // The interned result type of the task's function (checked by `task.return`)
+                        setReturnResultTypeIdx(v) {{ this.#returnResultTypeIdx = v; }}
+                        returnResultTypeIdx() {{ return this.#returnResultTypeIdx; }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);

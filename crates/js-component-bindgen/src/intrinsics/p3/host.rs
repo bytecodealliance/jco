@@ -261,6 +261,7 @@ impl HostIntrinsic {
                         // Whether the callee may block depends on the callee (an async lift
                         // may block, however the caller lowered the call), not on the caller.
                         newTask.setCalleeLiftedAsync(calleeIsAsyncInt !== 0);
+                        newTask.setReturnResultTypeIdx(taskReturnTypeIdx >>> 0);
                         newTask.setReturnMemoryIdx(memoryIdx);
                         newTask.setReturnMemory(getMemoryFn);
                         subtask.setChildTask(newTask);
@@ -713,7 +714,6 @@ impl HostIntrinsic {
                                 }}
                             }}, 0);
                         }}
-
 
                         // A callee that trapped while it ran synchronously (for example
                         // one that exited without `task.return`) traps its caller as well,
