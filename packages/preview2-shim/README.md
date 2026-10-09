@@ -74,10 +74,14 @@ The setting affects subsequent requests made through the browser HTTP shim. Call
 `http._setRequestStreaming(false)` to restore portable completion buffering.
 
 Host-side helper functions that build on the public shim surface are exported from `helpers/`
-subpaths, separate from the underscore-prefixed configuration setters. The browser-only
+subpaths, separate from the underscore-prefixed configuration setters. The `writeFileAt` and
+`readFileAt` helpers (`@bytecodealliance/preview2-shim/helpers/filesystem`) move bytes between host
+JavaScript and a preopened directory without a guest, on both builds. The browser-only
 `bufferedInputStream` helper (`@bytecodealliance/preview2-shim/browser/helpers/cli`) feeds a guest a
-fixed stdin buffer. See [Preview 2 shim CLI helpers][book-cli-helpers] in the Jco book.
+fixed stdin buffer. See the [filesystem helpers][book-fs-helpers] and [CLI helpers][book-cli-helpers]
+pages in the Jco book.
 
+[book-fs-helpers]: https://bytecodealliance.github.io/jco/wasi/preview2-shim/helpers/filesystem.html
 [book-cli-helpers]: https://bytecodealliance.github.io/jco/wasi/preview2-shim/helpers/cli.html
 
 Browser applications select storage explicitly. The bundled file-data adapter is ephemeral and must
