@@ -2489,6 +2489,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     flagsAsBigInt: {flags_as_bigint},
                     nodejsCompat: {nodejs_compat},
                     asyncDeterminism: '{determinism}',
+                    platform: {{ WebAssembly }},
                 }});
                 if ({RUNTIME_LOCAL_NAME}?.abiVersion !== {RUNTIME_ABI_VERSION}) {{
                     throw new Error(`incompatible Jco Component Model runtime instance ABI: requested {RUNTIME_ABI_VERSION}, received ${{{RUNTIME_LOCAL_NAME}?.abiVersion}}`);

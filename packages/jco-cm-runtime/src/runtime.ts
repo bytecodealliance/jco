@@ -7,12 +7,6 @@ import {
     type RuntimePlatform,
 } from './types.js';
 
-function defaultPlatform(): RuntimePlatform {
-    return {
-        WebAssembly: globalThis.WebAssembly,
-    };
-}
-
 function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
     if (options.requestedAbiVersion !== RUNTIME_ABI_VERSION) {
         throw new Error(
@@ -21,9 +15,8 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
         );
     }
 
-    const defaults = defaultPlatform();
     const platform: RuntimePlatform = {
-        WebAssembly: options.platform?.WebAssembly ?? defaults.WebAssembly,
+        WebAssembly: options.platform?.WebAssembly ?? globalThis.WebAssembly,
     };
 
     if (typeof platform.WebAssembly?.RuntimeError !== 'function') {
