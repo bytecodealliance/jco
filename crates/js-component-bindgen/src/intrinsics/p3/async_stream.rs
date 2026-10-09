@@ -903,7 +903,10 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component write, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                // (Canonical ABI `End.copy`: only when both sides have elements to
+                                // copy; zero-length reads and writes complete without copying.)
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric
+                                    && buffer.remaining() > 0 && this.#pendingBufferMeta.buffer.remaining() > 0) {{
                                     throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}], send)`);
                                 }}
 
@@ -1009,7 +1012,10 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component read, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                // (Canonical ABI `End.copy`: only when both sides have elements to
+                                // copy; zero-length reads and writes complete without copying.)
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric
+                                    && buffer.remaining() > 0 && this.#pendingBufferMeta.buffer.remaining() > 0) {{
                                     throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}] read)`);
                                 }}
 
