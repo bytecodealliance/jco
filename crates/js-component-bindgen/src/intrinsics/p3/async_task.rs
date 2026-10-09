@@ -1419,6 +1419,8 @@ impl AsyncTaskIntrinsic {
                                 return true;
                             }}
                             if (cstate.hasBackpressure()) {{ return null; }}
+                            // Entries already queued for this instance go first.
+                            if (cstate.hasPendingAdmissions()) {{ return null; }}
                             if (this.needsExclusiveLock()) {{
                                 if (cstate.isExclusivelyLocked()) {{ return null; }}
                                 cstate.exclusiveLock(this.#id);
@@ -1495,6 +1497,22 @@ impl AsyncTaskIntrinsic {
 
                                 return this.#entered;
                             }}
+
+                            // Enter in the order the calls were made: queue behind every
+                            // earlier entry into this instance, whatever it waits for.
+                            const ticket = cstate.takeAdmissionTicket(this.#id);
+                            try {{
+                                return await this.#enterQueued(cstate, ticket);
+                            }} finally {{
+                                cstate.releaseAdmissionTicket(ticket);
+                            }}
+                        }}
+
+                        async #enterQueued(cstate, ticket) {{
+                            await cstate.waitForAdmissionTurn(ticket);
+                            // Cancelled before it started while it was queued: the task was
+                            // retired already and must not park in a wait as a dead entry.
+                            if (this.isResolvedState() || this.isCancelled()) {{ return false; }}
 
                             // Wait until there is no backpressure *and* the exclusive lock (if
                             // needed) is ours. Backpressure can be set while we wait for the
