@@ -436,6 +436,8 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::GetStreamEnd => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_stream_end_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
@@ -467,7 +469,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         if (!streamEnd) {{
-                            throw new Error(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
+                            throw new {runtime_error_class}(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
                         }}
                         if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {{
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
@@ -2330,10 +2332,10 @@ impl AsyncStreamIntrinsic {
 
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
-                            throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
+                            throw new {runtime_error_class}(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
                         if (!(streamEnd instanceof {stream_end_class})) {{
-                            throw new Error('invalid stream type, expected {stream_end_class}');
+                            throw new {runtime_error_class}('invalid stream type, expected {stream_end_class}');
                         }}
                         if (streamEnd.streamTableIdx() !== streamTableIdx) {{
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
@@ -2377,6 +2379,8 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamCancelRead | Self::StreamCancelWrite => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
@@ -2408,7 +2412,7 @@ impl AsyncStreamIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const streamEnd = {get_stream_end_fn}({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
-                        if (!streamEnd) {{ throw new Error('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
+                        if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
                         if (!streamEnd.isCopying()) {{ throw new Error('stream end is not copying, cannot cancel'); }}

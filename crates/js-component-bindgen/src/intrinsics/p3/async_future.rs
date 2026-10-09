@@ -462,6 +462,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::GetFutureEnd => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_future_end_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_future_table_map =
@@ -493,7 +495,7 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         if (!futureEnd) {{
-                            throw new Error(`missing future end (tableIdx [${{tableIdx}}], handle [${{futureEndHandle}}], waitableIdx [${{futureEndWaitableIdx}}])`);
+                            throw new {runtime_error_class}(`missing future end (tableIdx [${{tableIdx}}], handle [${{futureEndHandle}}], waitableIdx [${{futureEndWaitableIdx}}])`);
                         }}
                         if (tableIdx && futureEnd.futureTableIdx() !== tableIdx) {{
                             throw new Error(`future end table idx [${{futureEnd.futureTableIdx()}}] does not match [${{tableIdx}}]`);
@@ -1589,7 +1591,7 @@ impl AsyncFutureIntrinsic {
                             throw new Error(`missing future with waitable idx [${{futureEndWaitableIdx}}] (component [${{componentIdx}}])`);
                         }}
                         if (!(futureEnd instanceof {future_end_class})) {{
-                            throw new Error('invalid future end, expected [{future_end_class}]');
+                            throw new {runtime_error_class}('invalid future end, expected [{future_end_class}]');
                         }}
                         if (futureEnd.isDoneState()) {{
                             const message = futureEnd.isWritable()
@@ -1656,6 +1658,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureCancelRead | Self::FutureCancelWrite => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
                 let is_cancel_write = matches!(self, Self::FutureCancelWrite);
@@ -1696,9 +1700,9 @@ impl AsyncFutureIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
-                        if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
+                        if (!futureEnd) {{ throw new {runtime_error_class}(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
                         if (!(futureEnd instanceof {future_end_class})) {{
-                            throw new Error('invalid future end, expected value of type [{future_end_class}]');
+                            throw new {runtime_error_class}('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
                         if (!futureEnd.isCopying()) {{ throw new Error('future end is not copying, cannot cancel'); }}
@@ -1734,6 +1738,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureDropReadable | Self::FutureDropWritable => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_drop_fn = self.name();
                 let remove_future_end_from_table_fn =
@@ -1760,7 +1766,7 @@ impl AsyncFutureIntrinsic {
                             futureWaitableIdx: futureEndWaitableIdx
                         }});
                         if (!(futureEnd instanceof {future_end_class})) {{
-                            throw new Error('invalid future end, expected [{future_end_class}]');
+                            throw new {runtime_error_class}('invalid future end, expected [{future_end_class}]');
                         }}
 
                         futureEnd.drop();
