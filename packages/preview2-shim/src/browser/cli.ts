@@ -21,7 +21,7 @@ export { _setEnv, _setArgs, environment } from "./environment.js";
 export { _setCwd } from "./config.js";
 
 const symbolDispose = Symbol.dispose ?? Symbol.for("dispose");
-class ComponentExit extends Error {
+export class ComponentExit extends Error {
     exitError = true;
     code: number;
 
@@ -31,15 +31,22 @@ class ComponentExit extends Error {
     }
 }
 
-export const exit: typeof ExitNamespace = {
-    exit(status: ExitNamespace.Result<void, void>): never {
-        throw new ComponentExit(status.tag === "err" ? 1 : 0);
-    },
-    // @ts-expect-error - Available only wasi-cli v0.2.12
-    exitWithCode(code: number): never {
-        throw new ComponentExit(code);
-    },
-};
+function createExit(onExit?: (code: number) => void): typeof ExitNamespace {
+    return {
+        exit(status: ExitNamespace.Result<void, void>): never {
+            const code = status.tag === "err" ? 1 : 0;
+            onExit?.(code);
+            throw new ComponentExit(code);
+        },
+        // @ts-expect-error - Available only wasi-cli v0.2.12
+        exitWithCode(code: number): never {
+            onExit?.(code);
+            throw new ComponentExit(code);
+        },
+    };
+}
+
+export const exit: typeof ExitNamespace = createExit();
 
 export function _setStdin(handler: InputStreamHandler): void {
     stdinStream.handler = handler;
@@ -60,6 +67,7 @@ export interface BrowserCliConfig {
     stdin?: InputStreamHandler;
     stdout?: OutputStreamHandler;
     stderr?: OutputStreamHandler;
+    onExit?: (code: number) => void;
 }
 
 const stdinStream = inputStreamCreate({
@@ -194,7 +202,7 @@ export function createCli(config: BrowserCliConfig = {}): {
             getArguments: () => [...args],
             initialCwd: () => cwd,
         },
-        exit,
+        exit: createExit(config.onExit),
         stdin: { getStdin: () => stdinInstance },
         stdout: { getStdout: () => stdoutInstance },
         stderr: { getStderr: () => stderrInstance },

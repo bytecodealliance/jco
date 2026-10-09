@@ -49,4 +49,47 @@ suite("Browser CLI", () => {
         assert.deepStrictEqual(secondWrites, []);
         assert.strictEqual(first.terminalStdout.getTerminalStdout(), undefined);
     });
+
+    test("exit() throws an exported ComponentExit and reports the code via onExit", async () => {
+        const { createCli, ComponentExit } = await import("../../src/browser/cli.js");
+        const codes: number[] = [];
+        const cli = createCli({ onExit: (code) => codes.push(code) });
+
+        let caught: unknown;
+        try {
+            cli.exit.exit({ tag: "ok", val: undefined });
+        } catch (err) {
+            caught = err;
+        }
+        assert.instanceOf(caught, ComponentExit);
+        assert.strictEqual((caught as InstanceType<typeof ComponentExit>).code, 0);
+        assert.deepStrictEqual(codes, [0]);
+
+        caught = undefined;
+        try {
+            cli.exit.exit({ tag: "err", val: undefined });
+        } catch (err) {
+            caught = err;
+        }
+        assert.instanceOf(caught, ComponentExit);
+        assert.strictEqual((caught as InstanceType<typeof ComponentExit>).code, 1);
+        assert.deepStrictEqual(codes, [0, 1]);
+    });
+
+    test("exitWithCode() reports the code via onExit before throwing", async () => {
+        const { createCli, ComponentExit } = await import("../../src/browser/cli.js");
+        const codes: number[] = [];
+        const cli = createCli({ onExit: (code) => codes.push(code) });
+
+        let caught: unknown;
+        try {
+            // @ts-expect-error - Available only wasi-cli v0.2.12
+            cli.exit.exitWithCode(42);
+        } catch (err) {
+            caught = err;
+        }
+        assert.instanceOf(caught, ComponentExit);
+        assert.strictEqual((caught as InstanceType<typeof ComponentExit>).code, 42);
+        assert.deepStrictEqual(codes, [42]);
+    });
 });
