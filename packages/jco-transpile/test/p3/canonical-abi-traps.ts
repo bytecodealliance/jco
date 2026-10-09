@@ -471,6 +471,28 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         },
     );
 
+    test.concurrent.each(['callbackFirst', 'syncFirst'])(
+        'calls enter in the order they were made (%s, then a stackful export)',
+        async (first: string) => {
+            const steps: number[] = [];
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: `entry-order-${first}`,
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'entry-order.wat'),
+                    imports: { progress: { default: (step: number) => steps.push(step) } },
+                },
+            });
+            try {
+                // Back to back, before either is awaited.
+                await Promise.all([instance[first](), instance.stackfulSecond()]);
+                assert.deepStrictEqual(steps, [1, 2]);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',

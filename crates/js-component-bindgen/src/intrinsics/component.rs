@@ -199,6 +199,7 @@ impl ComponentIntrinsic {
                             // A deadlock is a trap of the whole store: no instance may be entered again.
                             for (const state of {async_state_map}.values()) {{ state.markTrapped(err); }}
                             for (const state of {async_state_map}.values()) {{ state.abandonLockWaiters(); }}
+                            for (const state of {async_state_map}.values()) {{ state.abandonAdmissionWaiters(); }}
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                         }}, 0);
                     }}
@@ -431,6 +432,7 @@ impl ComponentIntrinsic {
                         #syncImportWait = {promise_with_resolvers_fn}();
                         #lockHolderTaskID = null;
                         #lockWaiters = [];
+                        #admissionQueue = [];
                         #lockHandoffScheduled = false;
                         #pendingTaskStarts = 0;
                         #parkedTasks = new Map();
@@ -687,6 +689,35 @@ impl ComponentIntrinsic {
 
                         // Release every queued entry without granting ownership, so that
                         // calls waiting to enter a trapped store fail instead of hanging.
+                        // FIFO admission of tasks entering this instance (Canonical ABI
+                        // `inst.pending`): a task enters only after every task that asked to
+                        // enter before it has entered or given up, so calls enter in the order
+                        // they were made, whatever each waits for on the way.
+                        takeAdmissionTicket(taskID) {{
+                            const ticket = {{ taskID, ...{promise_with_resolvers_fn}() }};
+                            this.#admissionQueue.push(ticket);
+                            return ticket;
+                        }}
+                        hasPendingAdmissions() {{ return this.#admissionQueue.length > 0; }}
+                        waitForAdmissionTurn(ticket) {{
+                            if (this.#admissionQueue[0] === ticket) {{ return; }}
+                            return ticket.promise;
+                        }}
+                        releaseAdmissionTicket(ticket) {{
+                            const idx = this.#admissionQueue.indexOf(ticket);
+                            if (idx === -1) {{ return; }}
+                            this.#admissionQueue.splice(idx, 1);
+                            if (idx === 0 && this.#admissionQueue.length > 0) {{
+                                this.#admissionQueue[0].resolve();
+                            }}
+                        }}
+                        // Release every queued entry (the instance trapped): each then fails
+                        // in `enter()` instead of waiting forever.
+                        abandonAdmissionWaiters() {{
+                            const tickets = this.#admissionQueue.splice(0);
+                            for (const ticket of tickets) {{ ticket.resolve(); }}
+                        }}
+
                         abandonLockWaiters() {{
                             const waiters = this.#lockWaiters.splice(0);
                             for (const waiter of waiters) {{ waiter.resolve(); }}
