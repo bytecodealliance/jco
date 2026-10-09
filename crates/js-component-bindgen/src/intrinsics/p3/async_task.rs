@@ -2514,6 +2514,8 @@ impl AsyncTaskIntrinsic {
                     .require_intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass));
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
                     function {driver_loop_fn}(args) {{
@@ -2625,19 +2627,20 @@ impl AsyncTaskIntrinsic {
                                         return;
 
                                     case 2: // WAIT for a given waitable set
+                                        // (an invalid index traps, like `waitable-set.wait`)
+                                        wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
+                                        if (!(wset instanceof {waitable_set_class})) {{
+                                            throw new {runtime_error_class}(`unknown handle index ${{waitableSetRep}}`);
+                                        }}
+
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
                                             componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
-                                            waitableSetTargets: cstate.handles.get(waitableSetRep).targets(),
+                                            waitableSetTargets: wset.targets(),
                                         }});
-
-                                        wset = cstate.handles.get(waitableSetRep);
-                                        if (!(wset instanceof {waitable_set_class})) {{
-                                            throw new Error(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
-                                        }}
 
                                         wset.waitUntilCallback({{
                                             readyFn: () => true,
