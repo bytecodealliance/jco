@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { suite, test } from "vitest";
+import { suite, test, assert } from "vitest";
 
 import { tsCodegen, FIXTURES_TYPES_DIR } from "./common.js";
 
@@ -12,5 +12,12 @@ suite("preview2-shim types", () => {
                 "iface-namespaces-at-runtime/tsconfig.test.json",
             ),
         });
+    });
+
+    test("WASIShim.getImportObject infers its version from asVersion", async () => {
+        const { diagnostics } = tsCodegen({
+            tsConfigPath: join(FIXTURES_TYPES_DIR, "instantiation-generics/tsconfig.test.json"),
+        });
+        assert.strictEqual(diagnostics.length, 0, diagnostics.map((d) => d.messageText).join("\n"));
     });
 });
