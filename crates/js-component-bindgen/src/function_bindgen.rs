@@ -233,6 +233,12 @@ pub struct FunctionBindgen<'a> {
     /// This can differ from `is_async` when an async component function is
     /// canonically lifted from a synchronous core function.
     pub canonical_abi_async: bool,
+    /// Whether the component-level function type is `async` (independently of
+    /// how it was lifted or lowered)
+    pub func_type_async: bool,
+    /// The interned index of the result tuple type of an exported function,
+    /// which `task.return` must match
+    pub return_result_type_idx: Option<u32>,
 
     /// Whether an async export returning a future needs a non-async outer
     /// function to preserve the future as a distinct awaitable layer.
@@ -762,8 +768,15 @@ impl FunctionBindgen<'_> {
                   callingWasmExport: true,
               }});
               task.setCalleeIsAsync({canonical_abi_async});
+              task.setFuncTypeIsAsync({func_type_async});
+              {set_return_result_type_idx}
             "#,
             canonical_abi_async = self.canonical_abi_async,
+            func_type_async = self.func_type_async,
+            set_return_result_type_idx = self
+                .return_result_type_idx
+                .map(|idx| format!("task.setReturnResultTypeIdx({idx});"))
+                .unwrap_or_default(),
         );
 
         if self.is_async || self.requires_async_porcelain {
@@ -776,7 +789,8 @@ impl FunctionBindgen<'_> {
                           taskID: task.id(),
                           subtaskID: task.currentSubtask()?.id(),
                       }});
-                      throw new Error("failed to enter task");
+                      // (the deadlock detector records why entry was given up on)
+                      throw task.isErrored() ?? new Error("failed to enter task");
                   }}
                 "#,
             );
@@ -849,19 +863,59 @@ impl FunctionBindgen<'_> {
         } else {
             self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn)
         };
-        let await_ = if is_async { "await " } else { "" };
-        let async_ = if is_async { "async " } else { "" };
-
-        uwriteln!(
-            self.src,
-            r#"
-              return {await_}{wrapper}({{
-                  taskID: task.id(),
-                  componentIdx: task.componentIdx(),
-                  fn: {async_}() => {{
-                      try {{
-            "#,
-        );
+        if self.is_async {
+            // The caller of an async-lifted export gets the task's result as
+            // soon as the task resolves (Canonical ABI: `on_resolve` runs at
+            // `task.return`), even when the task keeps running afterwards, e.g.
+            // blocked in a synchronous wait. The body's own completion is raced
+            // against that resolution. (A manually async, sync-typed export
+            // resolves when its core function returns, so it needs no race.)
+            let return_task_res = if self.wrap_async_future_result {
+                "{ value: taskRes }"
+            } else {
+                "taskRes"
+            };
+            let throw_result_err = if self.no_component_error_wrapping {
+                "throw taskRes.val;".to_string()
+            } else {
+                let component_err = self.intrinsic(Intrinsic::ComponentError);
+                format!("throw new {component_err}(taskRes.val);")
+            };
+            uwriteln!(
+                self.src,
+                r#"
+                  const finishCompletion = async () => {{
+                      let taskRes = await task.completionPromise();
+                      if (task.getErrHandling() === 'throw-result-err') {{
+                          if (typeof taskRes !== 'object') {{
+                              return {return_task_res};
+                          }}
+                          if (taskRes.tag === 'err') {{ {throw_result_err} }}
+                          if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
+                      }}
+                      return {return_task_res};
+                  }};
+                  const body = {wrapper}({{
+                      taskID: task.id(),
+                      componentIdx: task.componentIdx(),
+                      fn: async () => {{
+                          try {{
+                "#,
+            );
+        } else {
+            let await_ = if is_async { "await " } else { "" };
+            let async_ = if is_async { "async " } else { "" };
+            uwriteln!(
+                self.src,
+                r#"
+                  return {await_}{wrapper}({{
+                      taskID: task.id(),
+                      componentIdx: task.componentIdx(),
+                      fn: {async_}() => {{
+                          try {{
+                "#,
+            );
+        }
     }
 
     pub(crate) fn end_wasm_export_body(&mut self) {
@@ -884,6 +938,17 @@ impl FunctionBindgen<'_> {
               }});
             "#,
         );
+        if self.is_async {
+            uwriteln!(
+                self.src,
+                r#"
+                  // (a failure after the task resolved is recorded on the store; the
+                  // caller already has, or is about to get, the task's result)
+                  body.catch(() => {{}});
+                  return await Promise.race([body, finishCompletion()]);
+                "#,
+            );
+        }
     }
 }
 
@@ -2320,7 +2385,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                 taskID: task.id(),
                                 subtaskID: task.getParentSubtask()?.id(),
                             }});
-                            throw new Error("failed to enter task");
+                            // (the deadlock detector records why entry was given up on)
+                      throw task.isErrored() ?? new Error("failed to enter task");
                         }}
                         "#,
                     );
@@ -3988,13 +4054,28 @@ impl Bindgen for FunctionBindgen<'_> {
                           return ret;
                       }}
 
-                      // An async lift without a callback completes when its core
-                      // function returns; there is no callback protocol to drive.
+                      // An async lift without a callback (stackful) is done when its core
+                      // function returns, but that function returns no values: the result
+                      // comes only from `task.return`, and returning without having called
+                      // it traps (`task.exit()` throws in that case).
                       if (!task.hasCallback()) {{
-                          {direct_result_lift}
-                          task.resolve([{direct_result}]);
+                          if (!task.isResolvedState() && ret !== undefined) {{
+                              // (legacy: a core function that returns its result directly)
+                              {direct_result_lift}
+                              task.resolve([{direct_result}]);
+                              task.exit();
+                              return {return_direct_result};
+                          }}
                           task.exit();
-                          return {return_direct_result};
+                          let taskRes = await task.completionPromise();
+                          if (task.getErrHandling() === 'throw-result-err') {{
+                              if (typeof taskRes !== 'object') {{
+                                  return {return_task_res};
+                              }}
+                              if (taskRes.tag === 'err') {{ {throw_result_err} }}
+                              if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
+                          }}
+                          return {return_task_res};
                       }}
 
                       const componentState = {get_or_create_async_state_fn}({component_idx_expr});

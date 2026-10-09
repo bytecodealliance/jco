@@ -262,6 +262,13 @@ impl WaitableIntrinsic {
 
                             return task.suspendUntil({{ readyFn: isReady, cancellable }}).then(
                                 (keepGoing) => {{
+                                    // Resumed without an event because the task was torn down
+                                    // (e.g. the store trapped): that is not a cancellation the
+                                    // guest may observe and act on.
+                                    if (!keepGoing && task.isErrored()) {{
+                                        this.decrementNumWaiting();
+                                        throw task.isErrored();
+                                    }}
                                     const readyEvent = keepGoing
                                         ? this.getPendingEvent()
                                         : {{
@@ -471,6 +478,8 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableSetWait => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_set_wait_fn = render_args.require_intrinsic(Self::WaitableSetWait);
                 let current_task_get_fn = render_args
@@ -507,7 +516,7 @@ impl WaitableIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         const wset = cstate.handles.get(waitableSetRep);
                         if (!(wset instanceof {waitable_set_class})) {{
-                            throw new Error(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
+                            throw new {runtime_error_class}(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
                         }}
 
                         const storeEvent = (event) => {store_event_in_component_memory_fn}({{
@@ -543,6 +552,9 @@ impl WaitableIntrinsic {
                     render_args.require_intrinsic(HostIntrinsic::StoreEventInComponentMemory);
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(r#"
                     function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
                         const {{ componentIdx, memoryIdx, getMemoryFn, isAsync }} = ctx;
@@ -567,9 +579,10 @@ impl WaitableIntrinsic {
                         }}
 
                         const cstate = {get_or_create_async_state_fn}(task.componentIdx());
-                        const wset = cstate.handles.get(waitableSetRep);
-                        if (!wset) {{
-                            throw new Error(`missing waitable set [${{waitableSetRep}}] in component [${{componentIdx}}]`);
+                        // (the index must name a waitable set, as for `waitable-set.wait`)
+                        const wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
+                        if (!(wset instanceof {waitable_set_class})) {{
+                            throw new {runtime_error_class}(`unknown handle index ${{waitableSetRep}}`);
                         }}
 
                         let event;
@@ -629,6 +642,8 @@ impl WaitableIntrinsic {
             }
 
             Self::RemoveWaitableSet => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let remove_waitable_set_fn = render_args.require_intrinsic(Self::RemoveWaitableSet);
                 output.push_str(&format!(r#"
@@ -640,7 +655,7 @@ impl WaitableIntrinsic {
 
                         const ws = state.handles.get(waitableSetRep);
                         if (!ws) {{
-                            throw new Error('cannot remove waitable set: no set present with rep [' + waitableSetRep + ']');
+                            throw new {runtime_error_class}('cannot remove waitable set: no set present with rep [' + waitableSetRep + ']');
                         }}
                         if (ws.hasPendingEvent()) {{
                             throw new Error('waitable set cannot be removed with pending items remaining');
@@ -660,6 +675,8 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableJoin => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_join_fn = render_args.require_intrinsic(Self::WaitableJoin);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -694,7 +711,7 @@ impl WaitableIntrinsic {
 
                         const waitableSet = waitableSetRep === 0 ? null : state.handles.get(waitableSetRep);
                         if (waitableSetRep !== 0 && !waitableSet) {{
-                            throw new Error(`missing waitable set [${{waitableSetRep}}] in component idx [${{componentIdx}}]`);
+                            throw new {runtime_error_class}(`missing waitable set [${{waitableSetRep}}] in component idx [${{componentIdx}}]`);
                         }}
 
                         waitable.join(waitableSet);

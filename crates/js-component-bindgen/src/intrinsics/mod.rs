@@ -896,6 +896,8 @@ impl Intrinsic {
             }
 
             Intrinsic::RepTableClass => {
+                let runtime_error_class =
+                    args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let rep_table_class = args.require_intrinsic(Intrinsic::RepTableClass);
                 output.push_str(&format!(r#"
@@ -940,7 +942,7 @@ impl Intrinsic {
 
                         get(rep) {{
                             {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
-                            if (rep === 0) {{ throw new Error('invalid resource rep during get, (cannot be 0)'); }}
+                            if (rep === 0) {{ throw new {runtime_error_class}('invalid resource rep during get, (cannot be 0)'); }}
 
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
@@ -968,7 +970,7 @@ impl Intrinsic {
                             }}
                             const val = this.#data[baseIdx];
                             if (val === {rep_table_class}.FREE) {{
-                                throw new Error(`double removal of rep [${{rep}}] (already freed)`);
+                                throw new {runtime_error_class}(`double removal of rep [${{rep}}] (already freed)`);
                             }}
 
                             this.#data[baseIdx] = {rep_table_class}.FREE;
@@ -1592,7 +1594,7 @@ mod tests {
 
         assert!(source.contains("isManualAsync() { return this.#isManualAsync; }"));
         assert!(source.contains(
-            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() }"
+            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync || this.#funcTypeIsAsync }"
         ));
     }
 
@@ -2549,8 +2551,25 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 
 impl Intrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
+        // Every intrinsic is bound in the generated module's scope, so each
+        // name is reserved against the local names of exports and imports (an
+        // export named `stream-read` must not become a local `streamRead` that
+        // shadows the intrinsic the trampolines call).
         JsHelperIntrinsic::get_global_names()
             .into_iter()
+            .chain(ConversionIntrinsic::get_global_names())
+            .chain(WebIdlIntrinsic::get_global_names())
+            .chain(StringIntrinsic::get_global_names())
+            .chain(ResourceIntrinsic::get_global_names())
+            .chain(LiftIntrinsic::get_global_names())
+            .chain(LowerIntrinsic::get_global_names())
+            .chain(ComponentIntrinsic::get_global_names())
+            .chain(AsyncFutureIntrinsic::get_global_names())
+            .chain(AsyncStreamIntrinsic::get_global_names())
+            .chain(AsyncTaskIntrinsic::get_global_names())
+            .chain(ErrCtxIntrinsic::get_global_names())
+            .chain(p3::host::HostIntrinsic::get_global_names())
+            .chain(p3::waitable::WaitableIntrinsic::get_global_names())
             .chain(vec![
                 // Intrinsic list exactly as below
                 "base64Compile",

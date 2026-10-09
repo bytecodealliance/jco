@@ -187,6 +187,7 @@ impl ComponentIntrinsic {
                                     task.reject(err);
                                 }}
                             }}
+                            for (const state of {async_state_map}.values()) {{ state.abandonLockWaiters(); }}
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                         }}, 0);
                     }}
@@ -489,9 +490,11 @@ impl ComponentIntrinsic {
                             if (current < 0 || current > 2**16) {{
                                 throw new Error(`invalid current backpressure value [${{current}}]`);
                             }}
-                            const newValue = Math.max(0, current - 1);
+                            // Canonical ABI `backpressure.dec`: trap if the counter would go
+                            // below zero.
+                            const newValue = current - 1;
                             if (newValue < 0) {{
-                                throw new Error(`invalid new backpressure value [${{newValue}}], underflow`);
+                                throw new {runtime_error_class}('backpressure counter underflow');
                             }}
                             return this.setBackpressure(newValue);
                         }}
@@ -618,6 +621,13 @@ impl ComponentIntrinsic {
                             }});
                         }}
 
+                        // Release every queued entry without granting ownership, so that
+                        // calls waiting to enter a trapped store fail instead of hanging.
+                        abandonLockWaiters() {{
+                            const waiters = this.#lockWaiters.splice(0);
+                            for (const waiter of waiters) {{ waiter.resolve(); }}
+                        }}
+
                         cancelExclusiveLockWaiter(taskID) {{
                             const idx = this.#lockWaiters.findIndex(waiter => waiter.taskID === taskID);
                             if (idx === -1) {{ return false; }}
@@ -675,13 +685,12 @@ impl ComponentIntrinsic {
                             queueMicrotask(() => {{
                                 this.#lockHandoffScheduled = false;
                                 // A synchronous call triggered by a release handler gets the
-                                // first opportunity to use the unlocked component.
-                                //
-                                // Its release will leave this queued handoff in place.
-                                if (this.#lockHolderTaskID !== null) {{
-                                    this.#scheduleLockHandoff();
-                                    return;
-                                }}
+                                // first opportunity to use the unlocked component. Its own
+                                // release schedules the next handoff; re-queueing one here
+                                // would spin the microtask queue for as long as the holder
+                                // stays blocked (e.g. in a synchronous wait), starving every
+                                // timer, the deadlock detector included.
+                                if (this.#lockHolderTaskID !== null) {{ return; }}
                                 const next = this.#lockWaiters.shift();
                                 if (!next) {{ return; }}
                                 this.#lockHolderTaskID = next.taskID;

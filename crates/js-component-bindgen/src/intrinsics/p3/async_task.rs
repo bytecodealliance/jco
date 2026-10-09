@@ -491,6 +491,8 @@ impl AsyncTaskIntrinsic {
             Self::TaskReturn => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let task_return_fn = render_args.require_intrinsic(Self::TaskReturn);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_global_current_task_meta_fn =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
@@ -520,6 +522,13 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata'); }}
                         task.validateResourceBorrowScope();
+
+                        // Canonical ABI `canon_task_return`: the result type must be the one of
+                        // the task's function type.
+                        const expectedResultType = task.returnResultTypeIdx();
+                        if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {{
+                            throw new {runtime_error_class}('task.return result type does not match the function type');
+                        }}
 
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
@@ -904,6 +913,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskMap);
                 let current_component_idx_globals = render_args
                     .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
+                let global_current_task_meta_obj =
+                    render_args.require_intrinsic(Intrinsic::GlobalCurrentTaskMeta);
                 output.push_str(&format!(
                     r#"
                     function {fn_name}(componentIdx, taskID) {{
@@ -919,6 +930,17 @@ impl AsyncTaskIntrinsic {
 
                         if (taskID) {{
                             return taskMetas.find(meta => meta.task.id() === taskID);
+                        }}
+
+                        // The task whose guest code is running is the one the metadata
+                        // wrappers record for the component (and restore when a suspended
+                        // stack resumes). The component's most recently created task may
+                        // be another one, e.g. a prepared callee that has not entered yet
+                        // while an earlier task of the component is suspended.
+                        const current = {global_current_task_meta_obj}[componentIdx];
+                        if (current && current.taskID !== undefined) {{
+                            const currentMeta = taskMetas.find(meta => meta.task.id() === current.taskID);
+                            if (currentMeta) {{ return currentMeta; }}
                         }}
 
                         const taskMeta = taskMetas[taskMetas.length - 1];
@@ -978,6 +1000,8 @@ impl AsyncTaskIntrinsic {
             // NOTE: since threads are not yet supported, places that would have called out to threads instead run
             // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
+                let store_trap = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1057,6 +1081,9 @@ impl AsyncTaskIntrinsic {
 
                         #getCalleeParamsFn = null;
                         #calleeIsAsync = null;
+                        #calleeLiftedAsync = false;
+                        #funcTypeIsAsync = false;
+                        #returnResultTypeIdx = null;
 
                         #stringEncoding = null;
 
@@ -1328,7 +1355,15 @@ impl AsyncTaskIntrinsic {
 
                         // Legacy manually-async exports are sync-typed in the component
                         // but use JSPI precisely so their guest stack may suspend.
-                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() }}
+                        // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
+                        // an async-lifted callee may, even when called through a sync lowering.
+                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync || this.#funcTypeIsAsync }}
+                        setCalleeLiftedAsync(v) {{ this.#calleeLiftedAsync = v; }}
+                        // (an async-typed function may block however it was lifted)
+                        setFuncTypeIsAsync(v) {{ this.#funcTypeIsAsync = v; }}
+                        // The interned result type of the task's function (checked by `task.return`)
+                        setReturnResultTypeIdx(v) {{ this.#returnResultTypeIdx = v; }}
+                        returnResultTypeIdx() {{ return this.#returnResultTypeIdx; }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -1463,30 +1498,50 @@ impl AsyncTaskIntrinsic {
                                 return this.#entered;
                             }}
 
-                            // Perform intial backpressure check
-                            if (cstate.hasBackpressure()) {{
-                                cstate.addBackpressureWaiter();
+                            // Wait until there is no backpressure *and* the exclusive lock (if
+                            // needed) is ours. Backpressure can be set while we wait for the
+                            // lock (by the task holding it), so it's checked again once the lock
+                            // is acquired, as the Canonical ABI's `enter_implicit_thread` waits
+                            // for both together.
+                            while (true) {{
+                                if (cstate.hasBackpressure()) {{
+                                    cstate.addBackpressureWaiter();
 
-                                const result = await this.waitUntil({{
-                                    readyFn: () => {{
-                                        return !cstate.hasBackpressure();
-                                    }},
-                                    cancellable: true,
-                                }});
+                                    const result = await this.waitUntil({{
+                                        readyFn: () => {{
+                                            return !cstate.hasBackpressure();
+                                        }},
+                                        cancellable: true,
+                                    }});
 
-                                cstate.removeBackpressureWaiter();
+                                    cstate.removeBackpressureWaiter();
 
-                                if (!result || this.isCancelled()) {{
-                                    if (!this.isResolvedState()) {{ this.cancel(); }}
-                                    return false;
+                                    if (!result || this.isCancelled()) {{
+                                        if (!this.isResolvedState()) {{ this.cancel(); }}
+                                        return false;
+                                    }}
                                 }}
+
+                                // Acquire the per-slice exclusive lock (FIFO-queued when
+                                // contended); the first slice runs under this hold and the
+                                // driver loop releases/re-acquires it per slice thereafter.
+                                if (this.needsExclusiveLock()) {{
+                                    await cstate.acquireExclusiveLock(this.#id);
+                                    if (cstate.hasBackpressure()) {{
+                                        cstate.exclusiveRelease(this.#id);
+                                        continue;
+                                    }}
+                                }}
+                                break;
                             }}
 
-                            // Acquire the per-slice exclusive lock (FIFO-queued when
-                            // contended); the first slice runs under this hold and the
-                            // driver loop releases/re-acquires it per slice thereafter.
-                            if (this.needsExclusiveLock()) {{
-                                await cstate.acquireExclusiveLock(this.#id);
+                            // The store may have trapped (e.g. a deadlock was detected) while
+                            // this task waited to enter: it must not run, and its call fails
+                            // with that trap.
+                            if ({store_trap}.error !== null) {{
+                                cstate.exclusiveRelease(this.#id);
+                                this.setErrored({store_trap}.error);
+                                return false;
                             }}
 
                             // Cancellation-before-start may resolve this task while its
@@ -1626,6 +1681,10 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
+                            // A task that already resolved (via `task.return`) has delivered
+                            // its result: a caller must not wait for this block to end
+                            // (Canonical ABI: `on_resolve` runs at `task.return`).
+                            this.settleCompletion();
                             // TODO(threads): store readyFn on the thread
                             const {{ cancellable, readyFn }} = opts;
                             {debug_log_fn}('[{task_class}#immediateSuspend()] args', {{ cancellable, readyFn }});
@@ -1895,7 +1954,8 @@ impl AsyncTaskIntrinsic {
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             if (this.#state !== {task_class}.State.RESOLVED) {{
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                // (Canonical ABI `Task.exit_implicit_thread`: a task must resolve before it exits)
+                                throw new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
                             }}
 
                             this.validateResourceBorrowScope();
@@ -2464,6 +2524,8 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::UnpackCallbackResult => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let unpack_callback_result_fn =
                     render_args.require_intrinsic(Self::UnpackCallbackResult);
                 let i32_typecheck_fn = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
@@ -2472,9 +2534,9 @@ impl AsyncTaskIntrinsic {
                         if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
                         const eventCode = result & 0xF;
                         if (eventCode < 0 || eventCode > 3) {{
-                            throw new Error('invalid async return value [' + eventCode + '], outside callback code range');
+                            throw new {runtime_error_class}('invalid async return value [' + eventCode + '], outside callback code range');
                         }}
-                        if (result < 0 || result >= 2**32) {{ throw new Error('invalid callback result'); }}
+                        if (result < 0 || result >= 2**32) {{ throw new {runtime_error_class}('invalid callback result'); }}
                         // TODO: table max length check?
                         const waitableSetRep = result >> 4;
                         return [eventCode, waitableSetRep];
@@ -2498,6 +2560,8 @@ impl AsyncTaskIntrinsic {
                     .require_intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass));
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!(r#"
                     function {driver_loop_fn}(args) {{
@@ -2526,14 +2590,14 @@ impl AsyncTaskIntrinsic {
                         let unpacked;
                         const unpackCallback = (value) => {{
                             if (!({i32_typecheck}(value))) {{
-                                throw new Error('invalid callback result [' + value + '], not a number');
+                                throw new {runtime_error_class}('invalid callback result [' + value + '], not a number');
                             }}
 
                             unpacked = {unpack_callback_result_fn}(value);
                             callbackCode = unpacked[0];
                             waitableSetRep = unpacked[1];
                             if (callbackCode < 0 || callbackCode > 3) {{
-                                throw new Error('invalid async return value, outside callback code range');
+                                throw new {runtime_error_class}('invalid async return value, outside callback code range');
                             }}
                         }};
 
@@ -2609,19 +2673,20 @@ impl AsyncTaskIntrinsic {
                                         return;
 
                                     case 2: // WAIT for a given waitable set
+                                        // (an invalid index traps, like `waitable-set.wait`)
+                                        wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
+                                        if (!(wset instanceof {waitable_set_class})) {{
+                                            throw new {runtime_error_class}(`unknown handle index ${{waitableSetRep}}`);
+                                        }}
+
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
                                             componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
-                                            waitableSetTargets: cstate.handles.get(waitableSetRep).targets(),
+                                            waitableSetTargets: wset.targets(),
                                         }});
-
-                                        wset = cstate.handles.get(waitableSetRep);
-                                        if (!(wset instanceof {waitable_set_class})) {{
-                                            throw new Error(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
-                                        }}
 
                                         wset.waitUntilCallback({{
                                             readyFn: () => true,

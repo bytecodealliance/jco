@@ -252,12 +252,37 @@ pub enum AsyncStreamIntrinsic {
 impl AsyncStreamIntrinsic {
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
+        // Every intrinsic lives in the generated module's scope, so each of
+        // their names must be reserved: an export named e.g. `stream-read`
+        // would otherwise be bound as a local `streamRead` that shadows the
+        // intrinsic the trampolines call.
         [
+            Self::GlobalStreamMap.name(),
+            Self::GlobalStreamTableMap.name(),
             Self::CreateStream.name(),
-            Self::AddStreamEndToTable.name(),
             Self::GetStreamEnd.name(),
+            Self::AddStreamEndToTable.name(),
             Self::DeleteStreamEnd.name(),
             Self::RemoveStreamEndFromTable.name(),
+            Self::StreamEndClass.name(),
+            Self::InternalStreamClass.name(),
+            Self::StreamWritableEndClass.name(),
+            Self::StreamReadableEndClass.name(),
+            Self::HostStreamClass.name(),
+            Self::ExternalStreamClass.name(),
+            Self::PendingValueQueueClass.name(),
+            Self::StreamNew.name(),
+            Self::StreamNewFromLift.name(),
+            Self::StreamRead.name(),
+            Self::StreamWrite.name(),
+            Self::StreamDropReadable.name(),
+            Self::StreamDropWritable.name(),
+            Self::StreamTransfer.name(),
+            Self::StreamCancelRead.name(),
+            Self::StreamCancelWrite.name(),
+            Self::IsStreamLowerableObject.name(),
+            Self::GenStreamHostInjectFn.name(),
+            Self::GenReadFnFromLowerableStream.name(),
         ]
     }
 
@@ -411,6 +436,8 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::GetStreamEnd => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_stream_end_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
@@ -442,7 +469,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         if (!streamEnd) {{
-                            throw new Error(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
+                            throw new {runtime_error_class}(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
                         }}
                         if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {{
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
@@ -903,7 +930,10 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component write, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                // (Canonical ABI `End.copy`: only when both sides have elements to
+                                // copy; zero-length reads and writes complete without copying.)
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric
+                                    && buffer.remaining() > 0 && this.#pendingBufferMeta.buffer.remaining() > 0) {{
                                     throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}], send)`);
                                 }}
 
@@ -1009,7 +1039,10 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component read, and only unit or numeric types are allowed
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                // (Canonical ABI `End.copy`: only when both sides have elements to
+                                // copy; zero-length reads and writes complete without copying.)
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric
+                                    && buffer.remaining() > 0 && this.#pendingBufferMeta.buffer.remaining() > 0) {{
                                     throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}] read)`);
                                 }}
 
@@ -1061,6 +1094,7 @@ impl AsyncStreamIntrinsic {
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
+
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
@@ -2256,9 +2290,6 @@ impl AsyncStreamIntrinsic {
                 };
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
-                    AsyncTaskIntrinsic::AsyncBlockedConstant,
-                ));
 
                 output.push_str(&format!(r#"
                     function {stream_op_fn}(
@@ -2301,10 +2332,10 @@ impl AsyncStreamIntrinsic {
 
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
-                            throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
+                            throw new {runtime_error_class}(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
                         }}
                         if (!(streamEnd instanceof {stream_end_class})) {{
-                            throw new Error('invalid stream type, expected {stream_end_class}');
+                            throw new {runtime_error_class}('invalid stream type, expected {stream_end_class}');
                         }}
                         if (streamEnd.streamTableIdx() !== streamTableIdx) {{
                             throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
@@ -2325,7 +2356,9 @@ impl AsyncStreamIntrinsic {
                             && !streamEnd.hasPendingEvent()
                             && !streamEnd.isPeerDropped()
                             && !streamEnd.hasPendingBuffer()) {{
-                            return {async_blocked_const};
+                            // -2 tells the conditional trampoline to take its suspending
+                            // slow path (a synchronous copy must block, never report BLOCKED).
+                            return 0xFFFFFFFE;
                         }}
 
                         return streamEnd.copy({{
@@ -2346,12 +2379,14 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamCancelRead | Self::StreamCancelWrite => {
-                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let stream_cancel_fn = self.name();
-                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
+                let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let stream_cancel_fn = self.name();
+                let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let is_cancel_write = matches!(self, Self::StreamCancelWrite);
                 let event_code_enum = format!(
                     "{}.STREAM_{}",
@@ -2377,7 +2412,7 @@ impl AsyncStreamIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const streamEnd = {get_stream_end_fn}({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
-                        if (!streamEnd) {{ throw new Error('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
+                        if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
                         if (!streamEnd.isCopying()) {{ throw new Error('stream end is not copying, cannot cancel'); }}
