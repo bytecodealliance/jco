@@ -262,6 +262,13 @@ impl WaitableIntrinsic {
 
                             return task.suspendUntil({{ readyFn: isReady, cancellable }}).then(
                                 (keepGoing) => {{
+                                    // Resumed without an event because the task was torn down
+                                    // (e.g. the store trapped): that is not a cancellation the
+                                    // guest may observe and act on.
+                                    if (!keepGoing && task.isErrored()) {{
+                                        this.decrementNumWaiting();
+                                        throw task.isErrored();
+                                    }}
                                     const readyEvent = keepGoing
                                         ? this.getPendingEvent()
                                         : {{
