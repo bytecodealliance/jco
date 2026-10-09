@@ -374,6 +374,90 @@ export function _getPreopens(): [Descriptor, string][] {
     return [..._preopens];
 }
 
+export interface WriteFileAtOptions {
+    append?: boolean;
+}
+
+/**
+ * Write bytes into a preopened directory's tree from host JS, without a guest.
+ *
+ * Only uses the public `Descriptor` interface, so it works with any adapter.
+ * @param virtualPath - The preopen's guest-visible path, as passed to `_setPreopens`/`_addPreopen`
+ * @param path - Path relative to `virtualPath`
+ * @param data - Bytes to write
+ * @param options.append - When true, append to the end of the file instead of truncating it
+ */
+export function _writeFileAt(
+    virtualPath: string,
+    path: string,
+    data: Uint8Array,
+    options: WriteFileAtOptions = {},
+): void {
+    const file = openFileAt(virtualPath, path, { create: true, truncate: !options.append });
+    const offset = options.append ? file.stat().size : 0n;
+    file.write(data, offset);
+}
+
+/**
+ * Read the full contents of a file under a preopened directory from host JS, without a guest.
+ *
+ * Only uses the public `Descriptor` interface, so it works with any adapter.
+ * @param virtualPath - The preopen's guest-visible path, as passed to `_setPreopens`/`_addPreopen`
+ * @param path - Path relative to `virtualPath`
+ */
+export function _readFileAt(virtualPath: string, path: string): Uint8Array {
+    const file = openFileAt(virtualPath, path, {});
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    let offset = 0n;
+    for (;;) {
+        const [bytes, eof] = file.read(1024n * 1024n, offset);
+        if (bytes.byteLength > 0) {
+            chunks.push(bytes);
+            length += bytes.byteLength;
+            offset += BigInt(bytes.byteLength);
+        }
+        if (eof) {
+            break;
+        }
+    }
+    const result = new Uint8Array(length);
+    let position = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, position);
+        position += chunk.byteLength;
+    }
+    return result;
+}
+
+function openFileAt(virtualPath: string, path: string, openFlags: OpenFlags): Descriptor {
+    const entry = _preopens.find(([, guestPath]) => guestPath === virtualPath);
+    if (!entry) {
+        throw new Error(`no preopen for ${JSON.stringify(virtualPath)}`);
+    }
+    const [root] = entry;
+
+    const segments = path.split("/").filter((segment) => segment && segment !== ".");
+    const fileName = segments.pop();
+    if (!fileName) {
+        throw new Error(`invalid path: ${JSON.stringify(path)}`);
+    }
+
+    let dir: Descriptor = root;
+    for (const segment of segments) {
+        try {
+            dir.createDirectoryAt(segment);
+        } catch (error) {
+            if (error !== "exist") {
+                throw error;
+            }
+        }
+        dir = dir.openAt({ symlinkFollow: true }, segment, { directory: true }, {});
+    }
+
+    return dir.openAt({ symlinkFollow: true }, fileName, openFlags, {});
+}
+
 /** Reject host paths because browser filesystems require explicit capabilities. */
 export function _createPreopenDescriptor(hostPreopen: string) {
     throw new TypeError(
