@@ -3988,13 +3988,28 @@ impl Bindgen for FunctionBindgen<'_> {
                           return ret;
                       }}
 
-                      // An async lift without a callback completes when its core
-                      // function returns; there is no callback protocol to drive.
+                      // An async lift without a callback (stackful) is done when its core
+                      // function returns, but that function returns no values: the result
+                      // comes only from `task.return`, and returning without having called
+                      // it traps (`task.exit()` throws in that case).
                       if (!task.hasCallback()) {{
-                          {direct_result_lift}
-                          task.resolve([{direct_result}]);
+                          if (!task.isResolvedState() && ret !== undefined) {{
+                              // (legacy: a core function that returns its result directly)
+                              {direct_result_lift}
+                              task.resolve([{direct_result}]);
+                              task.exit();
+                              return {return_direct_result};
+                          }}
                           task.exit();
-                          return {return_direct_result};
+                          let taskRes = await task.completionPromise();
+                          if (task.getErrHandling() === 'throw-result-err') {{
+                              if (typeof taskRes !== 'object') {{
+                                  return {return_task_res};
+                              }}
+                              if (taskRes.tag === 'err') {{ {throw_result_err} }}
+                              if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
+                          }}
+                          return {return_task_res};
                       }}
 
                       const componentState = {get_or_create_async_state_fn}({component_idx_expr});

@@ -1895,7 +1895,8 @@ impl AsyncTaskIntrinsic {
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             if (this.#state !== {task_class}.State.RESOLVED) {{
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                // (Canonical ABI `Task.exit_implicit_thread`: a task must resolve before it exits)
+                                throw new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
                             }}
 
                             this.validateResourceBorrowScope();
