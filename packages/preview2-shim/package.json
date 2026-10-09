@@ -48,7 +48,7 @@
             "default": "./dist/browser/*.js"
         },
         "./instantiation": {
-            "types": "./dist/common/*.d.ts",
+            "types": "./dist/common/instantiation.d.ts",
             "node": "./dist/common/instantiation.js",
             "default": "./dist/common/instantiation.js"
         },

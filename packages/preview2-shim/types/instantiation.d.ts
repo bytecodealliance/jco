@@ -47,9 +47,9 @@ type _WASIImportObject = {
     'wasi:http/outgoing-handler': typeof import('./interfaces/wasi-http-outgoing-handler.d.ts');
 };
 
-type WASIImportObject = VersionedWASIImportObject<''>;
+export type WASIImportObject = VersionedWASIImportObject<''>;
 
-type VersionedWASIImportObject<V extends string> = {
+export type VersionedWASIImportObject<V extends string> = {
     [K in keyof _WASIImportObject as AppendVersion<K, V>]: _WASIImportObject[K];
 };
 
@@ -65,7 +65,7 @@ type AppendVersion<Key extends string | number | symbol, Version extends string>
 /**
  * Sandbox configuration options for WASIShim
  */
-interface SandboxConfig {
+export interface SandboxConfig {
     /** Filesystem-specific preopens mapping (virtual path -> host path or capability). */
     preopens?: Record<string, unknown>;
     /** Environment variables visible to the guest */
@@ -109,7 +109,7 @@ export type WebIncomingHandler = (request: Request) => Response | Promise<Respon
 /**
  * Configuration options for WASIShim
  */
-interface WASIShimConfig {
+export interface WASIShimConfig {
     /** Custom CLI shim */
     cli?: object;
     /** Application-provided filesystem namespaces. */
@@ -152,100 +152,10 @@ interface WASIShimConfig {
 }
 
 /**
- * (EXPERIMENTAL) A class that holds WASI shims and can be used to configure
- * an instantiation of a WebAssembly component transpiled with jco
- * (i.e. via `jco transpile`).
- *
- * Normally, transpiled components contain mapping for WASI interfaces
- * and/or imports that import the relevant packages (ex. `@bytecodealliance/preview2-shim/clocks`)
- * from the right sources.
- *
- * This function makes use of the `WASIShim` object to provide an object that can be easily
- * fed to the `instantiate` function produced by a transpiled component:
- *
- * ```js
- * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
- * // ...
- * import { instantiate } from "path/to/transpiled/component.js"
- * // ...
- * const component = await instantiate(null, new WASIShim().getImportObject())
- * ```
- *
- * You can also replace imports that you'd like to override with custom implementations,
- * by using the `WASIShim` object directly:
- *
- * ```js
- * import { random } from "@bytecodealliance/preview2-shim"
- * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
- * // ...
- * import { instantiate } from "path/to/transpiled/component.js"
- * // ...
- * const customWASIShim = new WASIShim({
- *     random: {
- *         // For these two interfaces we re-use the default provided shim
- *         random: random.random,
- *         insecure-seed: random.insecureSeed,
- *         // For insecure, we can supply our own custom implementation
- *         insecure: {
- *             ...
- *         }
- *     }
- * });
- *
- * const component = await instantiate(null, customWASIShim.getImportObject())
- * ```
- *
- * For sandboxing, you can configure preopens, environment variables, and other
- * capabilities via the `sandbox` option:
- *
- * ```js
- * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
- *
- * // Fully sandboxed - no filesystem, network, or env access
- * const sandboxedShim = new WASIShim({
- *     sandbox: {
- *         preopens: {},           // No filesystem access
- *         env: {},                // No environment variables
- *         args: ['program'],      // Custom arguments
- *         enableNetwork: false,   // Disable network
- *     }
- * });
- *
- * // Node.js only: limited host filesystem access
- * const limitedShim = new WASIShim({
- *     sandbox: {
- *         preopens: {
- *             '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
- *             '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
- *         }
- *     }
- * });
- * ```
- *
- * Browser applications should inject `filesystem` namespaces or explicitly
- * configure `browserFilesystem`; browser preopens never interpret host paths.
- *
- * Note that this object is similar but not identical to the Node `WASI` object --
- * it is solely concerned with shimming of preview2 when dealing with a WebAssembly
- * component transpiled by Jco. While this object *does* work with Node (and the browser)
- * semantics are not the same as Node's `WASI` object.
- *
- * @class WASIShim
+ * Options accepted by `WASIShim.getImportObject`. `V` is inferred from
+ * `asVersion` so the returned `VersionedWASIImportObject<V>` always matches
+ * the version actually requested.
  */
-export class WASIShim {
-    constructor(config?: WASIShimConfig);
-
-    /**
-     * Generate an import object for the shim that can be used with
-     * functions like `instantiate` that are exposed from a transpiled
-     * WebAssembly component.
-     *
-     * @param {options} [opt]
-     * @returns {object}
-     */
-    getImportObject<V extends string = ''>(opts?: GetImportObjectArgs): VersionedWASIImportObject<V>;
-}
-
-interface GetImportObjectArgs {
-    asVersion?: string;
+export interface GetImportObjectArgs<V extends string = string> {
+    asVersion?: V;
 }
