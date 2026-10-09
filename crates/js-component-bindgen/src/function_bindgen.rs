@@ -776,7 +776,8 @@ impl FunctionBindgen<'_> {
                           taskID: task.id(),
                           subtaskID: task.currentSubtask()?.id(),
                       }});
-                      throw new Error("failed to enter task");
+                      // (the deadlock detector records why entry was given up on)
+                      throw task.isErrored() ?? new Error("failed to enter task");
                   }}
                 "#,
             );
@@ -2320,7 +2321,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                 taskID: task.id(),
                                 subtaskID: task.getParentSubtask()?.id(),
                             }});
-                            throw new Error("failed to enter task");
+                            // (the deadlock detector records why entry was given up on)
+                      throw task.isErrored() ?? new Error("failed to enter task");
                         }}
                         "#,
                     );
