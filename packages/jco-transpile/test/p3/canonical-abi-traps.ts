@@ -537,6 +537,47 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('backpressure set by a call keeps a queued stackful call out', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'backpressure-stackful',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'backpressure-stackful.wat'),
+            },
+        });
+        try {
+            // Back to back: the stackful probe is queued behind the first call,
+            // whose first slice sets the backpressure the probe must wait for.
+            const [first, probe] = await Promise.all([instance.setBackpressure(), instance.probe()]);
+            assert.strictEqual(first, 100);
+            assert.strictEqual(probe, 1, 'the probe entered only after the backpressure was cleared');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('a trap raised inside wasm stops a call that was already queued', async () => {
+        const steps: number[] = [];
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'engine-trap',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'engine-trap.wat'),
+                imports: { progress: { default: (step: number) => steps.push(step) } },
+            },
+        });
+        try {
+            const outcomes = await Promise.allSettled([instance.trap(), instance.trap()]);
+            for (const outcome of outcomes) {
+                assert.strictEqual(outcome.status, 'rejected');
+                assert.instanceOf((outcome as PromiseRejectedResult).reason, WebAssembly.RuntimeError);
+            }
+            assert.deepStrictEqual(steps, [1]);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
