@@ -595,6 +595,21 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a sync-lifted, async-typed callee of a sync-lowered call may yield', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'sync-lifted-async-typed-callee',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'sync-lifted-async-typed-callee.wat'),
+            },
+        });
+        try {
+            assert.strictEqual(await instance.run(), 42);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
