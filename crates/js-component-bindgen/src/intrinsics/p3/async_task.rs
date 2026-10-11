@@ -1079,7 +1079,6 @@ impl AsyncTaskIntrinsic {
 
                         #getCalleeParamsFn = null;
                         #calleeIsAsync = null;
-                        #calleeLiftedAsync = false;
                         #admissionTicket = null;
                         #funcTypeIsAsync = false;
                         #returnResultTypeIdx = null;
@@ -1356,8 +1355,7 @@ impl AsyncTaskIntrinsic {
                         // but use JSPI precisely so their guest stack may suspend.
                         // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
                         // an async-lifted callee may, even when called through a sync lowering.
-                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync || this.#funcTypeIsAsync }}
-                        setCalleeLiftedAsync(v) {{ this.#calleeLiftedAsync = v; }}
+                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }}
                         // (an async-typed function may block however it was lifted)
                         setFuncTypeIsAsync(v) {{ this.#funcTypeIsAsync = v; }}
                         // The interned result type of the task's function (checked by `task.return`)

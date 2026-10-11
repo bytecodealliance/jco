@@ -1631,7 +1631,7 @@ mod tests {
 
         assert!(source.contains("isManualAsync() { return this.#isManualAsync; }"));
         assert!(source.contains(
-            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#calleeLiftedAsync || this.#funcTypeIsAsync }"
+            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }"
         ));
     }
 

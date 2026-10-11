@@ -258,9 +258,10 @@ impl HostIntrinsic {
                             stringEncoding,
                         }});
                         newTask.setParentSubtask(subtask);
-                        // Whether the callee may block depends on the callee (an async lift
-                        // may block, however the caller lowered the call), not on the caller.
-                        newTask.setCalleeLiftedAsync(calleeIsAsyncInt !== 0);
+                        // Whether the callee may block depends on the callee's function type
+                        // (FACT passes `types[lift_ty].async_` here), not on how the caller
+                        // lowered the call or how the callee was lifted.
+                        newTask.setFuncTypeIsAsync(calleeIsAsyncInt !== 0);
                         newTask.setReturnResultTypeIdx(taskReturnTypeIdx >>> 0);
                         newTask.setReturnMemoryIdx(memoryIdx);
                         newTask.setReturnMemory(getMemoryFn);
