@@ -578,6 +578,23 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a built-in given an out-of-bounds pointer traps', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'oob-pointer',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'oob-pointer.wat'),
+            },
+        });
+        try {
+            const err = await rejection(instance.pollOutOfBounds());
+            assert.instanceOf(err, WebAssembly.RuntimeError, `unexpected error: ${(err as Error).stack}`);
+            assert.match((err as Error).message, /out of bounds/);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',

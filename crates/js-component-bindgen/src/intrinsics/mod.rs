@@ -1291,7 +1291,7 @@ impl Intrinsic {
 
                 output.push_str(&format!(
                     r#"
-                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false, switchesTask = false) {{
+                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false, switchesTask = false, convertsRangeErrors = true) {{
                           return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
@@ -1315,7 +1315,7 @@ impl Intrinsic {
                                       if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
                                       // A trap is recorded before it propagates: nothing else in
                                       // the store may run after it, not even a queued call.
-                                      throw {record_trap_fn}(componentIdx, err);
+                                      throw {record_trap_fn}(componentIdx, err, convertsRangeErrors);
                                   }}
 
                                   {global_current_task_meta_obj}[componentIdx] = saved;
@@ -1341,7 +1341,7 @@ impl Intrinsic {
                                       {get_or_create_async_state_fn}(componentIdx).throwIfInterrupted();
                                       return result;
                                   }} catch (err) {{
-                                      throw {record_trap_fn}(componentIdx, err);
+                                      throw {record_trap_fn}(componentIdx, err, convertsRangeErrors);
                                   }} finally {{
                                       {global_current_task_meta_obj}[componentIdx] = saved;
                                       if (!switchesTask) {{ {global_current_task_meta_obj}.current = saved; }}
