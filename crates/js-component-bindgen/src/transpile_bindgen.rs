@@ -1935,7 +1935,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, true);
                         const trampoline{i} = {conditional_suspending_fn}(
-                            {guard_trap_fn}({instance_idx}, trampoline{i}Cancel),
+                            {guard_trap_fn}({instance_idx}, trampoline{i}Cancel, true),
                             {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                         );
                         "#,
@@ -1947,7 +1947,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, false);
                         const trampoline{i} = {conditional_suspending_fn}(
-                            {guard_trap_fn}({instance_idx}, trampoline{i}Cancel),
+                            {guard_trap_fn}({instance_idx}, trampoline{i}Cancel, true),
                             {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                         );
                         "#,
@@ -2219,7 +2219,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}(
-                            {guard_trap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {guard_trap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
                             {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
                         );"#,
                     );
@@ -3037,14 +3037,14 @@ impl<'a> Instantiator<'a, '_> {
                 if is_async || func_ty_async {
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}));"
+                        "let trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false));"
                     );
                 } else {
                     // TODO(breaking): once manually specifying async imports is removed,
                     // we can avoid the second check below.
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call})) : {call};"
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false)) : {call};"
                     );
                 }
             }
@@ -3703,7 +3703,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                           const trampoline{i} = {conditional_suspending_fn}(
-                              {guard_trap_fn}(null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true)),
+                              {guard_trap_fn}(null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true), true),
                               (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}(callerComponentIdx, {enter_symmetric_sync_guest_call_fn}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
                           );
                         "#,
@@ -5514,6 +5514,9 @@ impl<'a> Instantiator<'a, '_> {
                 // slow path, however it was lowered)
                 let may_suspend = self.trampoline_may_suspend(*i, trampoline)
                     || matches!(trampoline, Trampoline::SubtaskCancel { .. });
+                // (host imports keep their own errors; only built-ins turn an out-of-bounds
+                // DataView access into the out-of-bounds trap)
+                let converts_range_errors = !matches!(trampoline, Trampoline::LowerImport { .. });
                 let instance_js = self
                     .trampoline_may_leave_instance(trampoline)
                     .map(|instance| instance.as_u32().to_string())
@@ -5525,7 +5528,7 @@ impl<'a> Instantiator<'a, '_> {
                         let guard_trap_fn = this
                             .bindgen
                             .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
-                        format!("{guard_trap_fn}({instance_js}, {expr})")
+                        format!("{guard_trap_fn}({instance_js}, {expr}, {converts_range_errors})")
                     }
                 };
                 let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {

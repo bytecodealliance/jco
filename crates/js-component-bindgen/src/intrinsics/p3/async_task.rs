@@ -2744,7 +2744,7 @@ impl AsyncTaskIntrinsic {
                                         return;
 
                                     default:
-                                        throw new Error(`Unrecognized async function result [${{ret}}]`);
+                                        throw new Error(`Unrecognized async function result [${{callbackCode}}]`);
                                 }}
                             }} catch (err) {{
                                 handleError(err);

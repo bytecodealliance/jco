@@ -325,7 +325,12 @@ impl ComponentIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(
                     r#"
-                    function {record_trap_fn}(componentIdx, err) {{
+                    function {record_trap_fn}(componentIdx, err, convertsRangeErrors = false) {{
+                        // A built-in reading or writing guest memory past its end fails with a
+                        // DataView RangeError: that is the Canonical ABI's out-of-bounds trap.
+                        if (convertsRangeErrors && err instanceof RangeError) {{
+                            err = new {runtime_error_class}('out of bounds memory access');
+                        }}
                         if (err instanceof {runtime_error_class}) {{
                             // (a trampoline without a static instance records against the
                             // component whose guest code is running)
@@ -345,12 +350,12 @@ impl ComponentIntrinsic {
                 let record_trap_fn = render_args.require_intrinsic(Self::RecordTrap);
                 output.push_str(&format!(
                     r#"
-                    function {guard_trap_fn}(componentIdx, fn) {{
+                    function {guard_trap_fn}(componentIdx, fn, convertsRangeErrors = false) {{
                         return function (...args) {{
                             try {{
                                 return fn.apply(this, args);
                             }} catch (err) {{
-                                throw {record_trap_fn}(componentIdx, err);
+                                throw {record_trap_fn}(componentIdx, err, convertsRangeErrors);
                             }}
                         }};
                     }}
