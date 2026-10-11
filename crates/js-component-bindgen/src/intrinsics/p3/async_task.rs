@@ -1080,6 +1080,7 @@ impl AsyncTaskIntrinsic {
                         #getCalleeParamsFn = null;
                         #calleeIsAsync = null;
                         #calleeLiftedAsync = false;
+                        #admissionTicket = null;
                         #funcTypeIsAsync = false;
                         #returnResultTypeIdx = null;
 
@@ -1501,11 +1502,27 @@ impl AsyncTaskIntrinsic {
                             // Enter in the order the calls were made: queue behind every
                             // earlier entry into this instance, whatever it waits for.
                             const ticket = cstate.takeAdmissionTicket(this.#id);
+                            this.#admissionTicket = ticket;
+                            let entered = false;
                             try {{
-                                return await this.#enterQueued(cstate, ticket);
+                                entered = await this.#enterQueued(cstate, ticket);
+                                return entered;
                             }} finally {{
-                                cstate.releaseAdmissionTicket(ticket);
+                                // An entered task keeps the slot until its first slice ends
+                                // (`endFirstSlice`): the next call is admitted once this one
+                                // returned, blocked or trapped, as `Store.invoke` runs a call.
+                                if (!entered) {{ this.endFirstSlice(); }}
                             }}
+                        }}
+
+                        // The first slice of this task ended (it returned, blocked or trapped):
+                        // the next entry into the instance may be admitted (Canonical ABI
+                        // `Store.invoke` runs a call until it first blocks or returns).
+                        endFirstSlice() {{
+                            const ticket = this.#admissionTicket;
+                            if (ticket === null) {{ return; }}
+                            this.#admissionTicket = null;
+                            {get_or_create_async_state_fn}(this.#componentIdx).releaseAdmissionTicket(ticket);
                         }}
 
                         async #enterQueued(cstate, ticket) {{
@@ -1969,6 +1986,7 @@ impl AsyncTaskIntrinsic {
                                 taskID: this.#id,
                             }});
 
+                            this.endFirstSlice();
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             if (this.#state !== {task_class}.State.RESOLVED) {{

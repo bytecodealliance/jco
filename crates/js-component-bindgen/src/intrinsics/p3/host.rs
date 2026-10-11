@@ -510,6 +510,7 @@ impl HostIntrinsic {
                         }};
 
                         const handleCalleeError = (err) => {{
+                            preparedTask.endFirstSlice();
                             {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
                             // NOTE: a good place to reject the parent task, if rejection API is enabled
                             // subtask.reject(err);
@@ -606,6 +607,7 @@ impl HostIntrinsic {
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => jspiCallee.apply(null, startRes),
                                 }});
+                                preparedTask.endFirstSlice();
                             }} catch(err) {{
                                 handleCalleeError(err);
                                 return;
@@ -630,6 +632,7 @@ impl HostIntrinsic {
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => callee.apply(null, startRes),
                                 }});
+                                preparedTask.endFirstSlice();
                             }} catch (err) {{
                                 handleCalleeError(err);
                                 return;
@@ -952,6 +955,7 @@ impl HostIntrinsic {
                                         return jspiCallee.apply(null, startRes);
                                     }}
                                 }});
+                                preparedTask.endFirstSlice();
 
                                 if (!callbackFn) {{
                                     // Async-lifted without a callback (stackful lift): the callee

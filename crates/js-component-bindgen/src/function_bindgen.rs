@@ -2228,6 +2228,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       }} catch (err) {{
                           {call_err_cleanup}
                       }}
+                      task.endFirstSlice();
                     "#,
                     );
                 } else {

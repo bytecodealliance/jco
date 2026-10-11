@@ -841,6 +841,8 @@ impl ComponentIntrinsic {
                             const {{ task, readyFn, cancellable, onResume }} = args;
                             const taskID = task.id();
                             const componentIdx = task.componentIdx();
+                            // (a blocked task ended its first slice)
+                            task.endFirstSlice();
                             {debug_log_fn}('[{component_async_state_class}#suspendTask()]', {{
                                 taskID,
                                 componentIdx: this.#componentIdx,
