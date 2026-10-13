@@ -9,9 +9,23 @@ it installed:
 npm install @bytecodealliance/preview2-shim
 ```
 
-Each subsystem is a subpath export (`@bytecodealliance/preview2-shim/filesystem`, `.../cli`, and
-so on) that resolves to the Node.js build under the `node` condition and to the browser build
-otherwise.
+Every subpath resolves to the Node.js build under the `node` export condition and to the browser
+build otherwise, unless noted:
+
+| Subpath                                           | Contents                                                              |
+| ------------------------------------------------- | --------------------------------------------------------------------- |
+| `@bytecodealliance/preview2-shim`                 | Every subsystem namespace below, re-exported                           |
+| `@bytecodealliance/preview2-shim/cli`             | `wasi:cli` environment, exit, stdio, and terminal interfaces           |
+| `@bytecodealliance/preview2-shim/clocks`          | `wasi:clocks` wall and monotonic clocks                                |
+| `@bytecodealliance/preview2-shim/filesystem`      | `wasi:filesystem` types and preopens, plus browser adapters            |
+| `@bytecodealliance/preview2-shim/http`            | `wasi:http` types and outgoing and incoming handlers                   |
+| `@bytecodealliance/preview2-shim/io`              | `wasi:io` errors, streams, and poll                                    |
+| `@bytecodealliance/preview2-shim/random`          | `wasi:random` secure and insecure randomness                           |
+| `@bytecodealliance/preview2-shim/sockets`         | `wasi:sockets` TCP, UDP, and name lookup                               |
+| `@bytecodealliance/preview2-shim/instantiation`   | `WASIShim`, which assembles an import object (see below)               |
+| `@bytecodealliance/preview2-shim/interfaces/*`    | TypeScript declarations for each WASI interface                        |
+| `@bytecodealliance/preview2-shim/io-worker`       | Node.js only: hooks for extensions running inside the I/O worker       |
+| `@bytecodealliance/preview2-shim/browser/helpers/cli` | Browser only: host-side CLI helpers (see [Helpers](#helpers))      |
 
 ## Instantiation and sandboxing
 
