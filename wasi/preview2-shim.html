@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4629abac.js";
+            window.path_to_searchindex_js = "../searchindex-eb788ab6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-99435715.js"></script>
+        <script src="../toc-f072195e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,7 +180,8 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="preview-2-shim"><a class="header" href="#preview-2-shim">Preview 2 shim</a></h1>
+                        <p>| <code>@bytecodealliance/preview2-shim/helpers/filesystem</code> | Host-side filesystem helpers for both builds (see <a href="#helpers">Helpers</a>)     |</p>
+<h1 id="preview-2-shim"><a class="header" href="#preview-2-shim">Preview 2 shim</a></h1>
 <p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> implements WASI 0.2 (<code>wasi:cli</code>, <code>wasi:clocks</code>,
 <code>wasi:filesystem</code>, <code>wasi:http</code>, <code>wasi:io</code>, <code>wasi:random</code> and <code>wasi:sockets</code>) for Node.js and
 browsers. <code>jco transpile</code> maps 0.2.x WASI imports to it by default, so most applications only need
@@ -234,6 +235,8 @@ underscore-prefixed functions (<code>_setStdin</code>, <code>_setPreopens</code>
 Helpers that only exist for one build are exported under that build’s prefix.</p>
 <ul>
 <li><a href="./preview2-shim/helpers/cli.html">CLI helpers</a>: feed a guest a fixed stdin buffer in the browser.</li>
+<li><a href="./preview2-shim/helpers/filesystem.html">Filesystem helpers</a>: write and read files under a preopen
+from host code, on both builds.</li>
 </ul>
 <h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported platforms</a></h2>
 <h3 id="nodejs"><a class="header" href="#nodejs">Node.js</a></h3>

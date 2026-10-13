@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4629abac.js";
+            window.path_to_searchindex_js = "searchindex-eb788ab6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-99435715.js"></script>
+        <script src="toc-f072195e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -773,6 +773,7 @@ treat WASI like any other import, and see
 <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
 to supply your own implementations at instantiation time.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<p>| <code>@bytecodealliance/preview2-shim/helpers/filesystem</code> | Host-side filesystem helpers for both builds (see <a href="#helpers">Helpers</a>)     |</p>
 <h1 id="preview-2-shim"><a class="header" href="#preview-2-shim">Preview 2 shim</a></h1>
 <p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> implements WASI 0.2 (<code>wasi:cli</code>, <code>wasi:clocks</code>,
 <code>wasi:filesystem</code>, <code>wasi:http</code>, <code>wasi:io</code>, <code>wasi:random</code> and <code>wasi:sockets</code>) for Node.js and
@@ -827,6 +828,8 @@ underscore-prefixed functions (<code>_setStdin</code>, <code>_setPreopens</code>
 Helpers that only exist for one build are exported under that build’s prefix.</p>
 <ul>
 <li><a href="#preview-2-shim-cli-helpers">CLI helpers</a>: feed a guest a fixed stdin buffer in the browser.</li>
+<li><a href="#preview-2-shim-filesystem-helpers">Filesystem helpers</a>: write and read files under a preopen
+from host code, on both builds.</li>
 </ul>
 <h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported platforms</a></h2>
 <h3 id="nodejs"><a class="header" href="#nodejs">Node.js</a></h3>
@@ -892,6 +895,77 @@ cli._setStdin(bufferedInputStream(new Uint8Array([1, 2, 3])));
 </code></pre>
 <p>Prefer <code>createCli</code> or <code>WASIShim</code> when more than one component runs in the same page, since the
 global stream is consumed once and then stays closed.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-2-shim-filesystem-helpers"><a class="header" href="#preview-2-shim-filesystem-helpers">Preview 2 shim filesystem helpers</a></h1>
+<p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> ships host-side helper functions next to its WASI
+implementations. This page covers the filesystem helpers; see <a href="#preview-2-shim">Preview 2 shim</a>
+for the package overview. Helpers build only on the shim’s public surface and are exported from <code>helpers/</code>
+subpaths, separate from the underscore-prefixed functions (<code>_setPreopens</code>, <code>_setFileData</code>, …)
+that exist to configure the shim itself.</p>
+<p>The filesystem helpers move bytes between host JavaScript and a preopened directory without
+involving a guest. They are available under both the browser and <code>node</code> conditions:</p>
+<pre><code class="language-js">import { readFileAt, writeFileAt } from "@bytecodealliance/preview2-shim/helpers/filesystem";
+</code></pre>
+<p>Both helpers use only the public <code>wasi:filesystem/types</code> <code>Descriptor</code> interface, so they work with
+every adapter the shim can be configured with: the Node host filesystem, the browser in-memory
+adapter, OPFS, or an application-provided implementation.</p>
+<h2 id="which-preopens-the-helpers-see"><a class="header" href="#which-preopens-the-helpers-see">Which preopens the helpers see</a></h2>
+<p>The helpers resolve <code>virtualPath</code> against the shim’s <strong>global</strong> preopens, the same set a component
+receives when it is instantiated without isolated preopens. Configure them with the build’s
+compatibility setters before calling a helper:</p>
+<ul>
+<li>Node.js: <code>filesystem._setPreopens({ "/data": "/host/path" })</code> or <code>filesystem._addPreopen(...)</code></li>
+<li>Browser: <code>filesystem._setPreopens({ "/data": { dir: {} } })</code> or <code>filesystem._setFileData(...)</code></li>
+</ul>
+<p>A <code>WASIShim</code> created with <code>sandbox.preopens</code> or <code>browserFilesystem</code> owns an isolated preopen set
+that the helpers cannot reach. Use the global preopens, or operate on that instance’s descriptors
+directly, when a component needs isolation.</p>
+<h2 id="writefileatvirtualpath-path-data-options"><a class="header" href="#writefileatvirtualpath-path-data-options"><code>writeFileAt(virtualPath, path, data, options?)</code></a></h2>
+<p>Writes <code>data</code> (a <code>Uint8Array</code>) to <code>path</code>, resolved relative to the preopen mounted at
+<code>virtualPath</code>. Missing intermediate directories are created. The file is truncated first unless
+<code>options.append</code> is <code>true</code>, in which case the bytes are written after the existing contents.</p>
+<pre><code class="language-js">import { filesystem } from "@bytecodealliance/preview2-shim";
+import { writeFileAt } from "@bytecodealliance/preview2-shim/helpers/filesystem";
+
+filesystem._setPreopens({ "/data": { dir: {} } }); // browser in-memory adapter
+
+const encoder = new TextEncoder();
+writeFileAt("/data", "logs/run.txt", encoder.encode("started\n"));
+writeFileAt("/data", "logs/run.txt", encoder.encode("done\n"), { append: true });
+</code></pre>
+<h2 id="readfileatvirtualpath-path"><a class="header" href="#readfileatvirtualpath-path"><code>readFileAt(virtualPath, path)</code></a></h2>
+<p>Reads the whole file at <code>path</code> under the preopen mounted at <code>virtualPath</code> and returns its contents
+as a single <code>Uint8Array</code>. Large files are read in chunks and joined, so the result is independent of
+the adapter’s read granularity.</p>
+<pre><code class="language-js">import { readFileAt } from "@bytecodealliance/preview2-shim/helpers/filesystem";
+
+const bytes = readFileAt("/data", "logs/run.txt");
+console.log(new TextDecoder().decode(bytes)); // "started\ndone\n"
+</code></pre>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<p>An unknown <code>virtualPath</code> throws a JavaScript <code>Error</code> whose message names the missing preopen.
+Everything else surfaces the adapter’s own WASI <code>error-code</code> string, for example <code>"no-entry"</code> when
+<code>readFileAt</code> targets a file that does not exist or <code>"not-permitted"</code> when the host denies the
+operation. This mirrors what a guest would observe for the same call.</p>
+<h2 id="example-shell-style-redirection"><a class="header" href="#example-shell-style-redirection">Example: shell-style redirection</a></h2>
+<p>A host that runs a CLI component and wants to capture its output file can seed the input before
+instantiation and collect the result afterwards:</p>
+<pre><code class="language-js">import { filesystem } from "@bytecodealliance/preview2-shim";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+import { readFileAt, writeFileAt } from "@bytecodealliance/preview2-shim/helpers/filesystem";
+import { instantiate } from "./dist/transpiled/component.js";
+
+filesystem._setPreopens({ "/work": { dir: {} } });
+writeFileAt("/work", "input.txt", new TextEncoder().encode("hello\n"));
+
+const shim = new WASIShim({ arguments: ["component", "input.txt", "output.txt"] });
+const component = await instantiate(undefined, shim.getImportObject());
+component.run.run();
+
+const output = readFileAt("/work", "output.txt");
+</code></pre>
+<p>See <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
+for how <code>instantiate</code> and <code>WASIShim</code> fit together.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="preview-3-shim"><a class="header" href="#preview-3-shim">Preview 3 shim</a></h1>
 <p><a href="https://www.npmjs.com/package/@bytecodealliance/preview3-shim"><code>@bytecodealliance/preview3-shim</code></a> implements WASI 0.3 (<code>wasi:cli</code>, <code>wasi:clocks</code>,
@@ -1534,7 +1608,7 @@ compatibility limits. Related submodules share their parent API page. See the
 </tbody>
 </table>
 </div>
-<p><a href="#globals">Globals</a> and <a href="#errors">Errors</a> document runtime-wide Node.js
+<p><a href="#globals">Globals</a> and <a href="#errors-1">Errors</a> document runtime-wide Node.js
 APIs. They are not importable as <code>node:globals</code> or <code>node:errors</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="nodeassert"><a class="header" href="#nodeassert"><code>node:assert</code></a></h1>
@@ -1909,7 +1983,7 @@ forward instead of reading <code>Could not resolve 'node:domain'</code>. Importi
 <p><code>active</code> and <code>_stack</code> are reachable on the default import only. An ES module binding cannot throw
 on read, so <code>import { active } from "node:domain"</code> fails at build time instead.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="errors"><a class="header" href="#errors">Errors</a></h1>
+<h1 id="errors-1"><a class="header" href="#errors-1">Errors</a></h1>
 <p>The Node <a href="https://nodejs.org/docs/latest-v24.x/api/errors.html">Errors API</a> is
 cross-cutting behavior rather than a <code>node:errors</code> module. Standard error
 constructors are globals, while individual Node APIs create coded and system
