@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5e9ed119.js";
+            window.path_to_searchindex_js = "searchindex-50a18b63.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-57473397.js"></script>
+        <script src="toc-fb3a1b08.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1951,6 +1951,56 @@ stream, only the returned promise is disposed, as the future or stream was never
 <li>Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
 delivered to the guest are not covered by this mechanism.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-2-shim-cli-helpers"><a class="header" href="#preview-2-shim-cli-helpers">Preview 2 shim CLI helpers</a></h1>
+<p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> ships host-side helper functions next to its WASI
+implementations. Helpers build only on the shim’s public surface and are exported from <code>helpers/</code>
+subpaths, separate from the underscore-prefixed functions (<code>_setStdin</code>, <code>_setPreopens</code>, …) that
+exist to configure the shim itself.</p>
+<p>Helpers that only exist for one build are exported under that build’s prefix. The CLI helper on
+this page is browser-only, because it builds on the browser <code>wasi:io</code> pollables:</p>
+<pre><code class="language-js">import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+</code></pre>
+<h2 id="bufferedinputstreaminput"><a class="header" href="#bufferedinputstreaminput"><code>bufferedInputStream(input)</code></a></h2>
+<p>Builds an <code>InputStreamHandler</code> that serves a fixed buffer to the guest and then reports the stream
+as closed. It replaces the bounded handler that hosts otherwise have to hand-roll whenever a
+guest’s stdin is known up front, such as piping a document into a CLI component.</p>
+<p><code>input</code> is a <code>Uint8Array</code>, or a string that is encoded as UTF-8. Each <code>blockingRead(len)</code> returns
+up to <code>len</code> bytes from what remains of the buffer. Once the buffer is exhausted, further reads raise
+the WASI <code>closed</code> stream error, which the guest observes as end of input. <code>subscribe()</code> returns an
+always-ready pollable, so a guest that polls stdin before reading never blocks.</p>
+<h3 id="feeding-an-isolated-cli"><a class="header" href="#feeding-an-isolated-cli">Feeding an isolated CLI</a></h3>
+<p><code>createCli</code> builds CLI interfaces that do not touch the shim’s global streams:</p>
+<pre><code class="language-js">import { cli } from "@bytecodealliance/preview2-shim";
+import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+
+const isolated = cli.createCli({
+    stdin: bufferedInputStream("first line\nsecond line\n"),
+});
+</code></pre>
+<h3 id="feeding-a-wasishim"><a class="header" href="#feeding-a-wasishim">Feeding a <code>WASIShim</code></a></h3>
+<p><code>WASIShim</code> accepts the same handler through its <code>stdin</code> option and builds an isolated CLI for the
+instance:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+
+const shim = new WASIShim({
+    stdin: bufferedInputStream("input for the guest\n"),
+});
+const component = await instantiate(undefined, shim.getImportObject());
+</code></pre>
+<p>See <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
+for how <code>instantiate</code> and <code>WASIShim</code> fit together.</p>
+<h3 id="replacing-the-global-stdin"><a class="header" href="#replacing-the-global-stdin">Replacing the global stdin</a></h3>
+<p>The compatibility setter installs the handler on the stream shared by every component that does
+not configure its own CLI:</p>
+<pre><code class="language-js">import { cli } from "@bytecodealliance/preview2-shim";
+import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+
+cli._setStdin(bufferedInputStream(new Uint8Array([1, 2, 3])));
+</code></pre>
+<p>Prefer <code>createCli</code> or <code>WASIShim</code> when more than one component runs in the same page, since the
+global stream is consumed once and then stays closed.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="jco-std"><a class="header" href="#jco-std"><code>jco-std</code></a></h1>
 <p><a href="https://www.npmjs.com/package/@bytecodealliance/jco-std"><code>@bytecodealliance/jco-std</code></a> is Jco’s library of reusable JavaScript and
