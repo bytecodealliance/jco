@@ -11,4 +11,4 @@ edit-url-template = "https://github.com/bytecodealliance/jco/tree/main/docs/{pat
 
 [output.html.fold]
 enable = true
-level = 2
+level = 1
