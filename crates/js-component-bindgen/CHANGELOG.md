@@ -1,5 +1,76 @@
 # Changelog
 
+## [2.16.0] - 2026-10-13
+
+### 🚀 Features
+
+- _(bindgen)_ add admission queue for tasks by @vados-cosmonic in #2242
+
+- _(bindgen)_ allow per-instance WebAssembly overrides by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ treat prepare_call's callee flag as the function type's async flag by @vados-cosmonic in #2244
+
+- _(bindgen)_ trap on out-of-bounds pointers given to built-ins by @vados-cosmonic
+
+- _(bindgen)_ admit the next call only once the previous slice has ended by @vados-cosmonic
+
+- _(bindgen)_ use shared index handle space for resources by @vados-cosmonic
+
+- _(bindgen)_ post argument lift subtask index creation by @vados-cosmonic
+
+- _(bindgen)_ record traps at the throw site so queued calls never run by @vados-cosmonic in #2239
+
+- _(bindgen)_ trap on invalid handle indices and callback codes by @vados-cosmonic
+
+- _(bindgen)_ race only async-lifted exports against task resolution by @vados-cosmonic
+
+- _(bindgen)_ stop the lock handoff from spinning while the holder is blocked by @vados-cosmonic
+
+- _(bindgen)_ do not resume a deadlocked wait with a fabricated cancellation by @vados-cosmonic
+
+- _(bindgen)_ deliver a callback export's result at task.return by @vados-cosmonic
+
+- _(bindgen)_ run callbacks that reach a sync start call under JSPI by @vados-cosmonic
+
+- _(bindgen)_ trap when task.return's result type is not the function's by @vados-cosmonic
+
+- _(bindgen)_ trap the caller when an async-lowered callee exits unresolved by @vados-cosmonic
+
+- _(bindgen)_ block synchronous stream and future copies that cannot complete by @vados-cosmonic
+
+- _(bindgen)_ reserve every intrinsic name against local names by @vados-cosmonic
+
+- _(bindgen)_ keep a deferred subtask start from failing outside its call by @vados-cosmonic
+
+- _(bindgen)_ trap on an invalid waitable set in a callback WAIT by @vados-cosmonic
+
+- _(bindgen)_ recheck backpressure after acquiring the exclusive lock by @vados-cosmonic
+
+- _(bindgen)_ let async-lifted callees of sync-lowered calls block by @vados-cosmonic
+
+- _(bindgen)_ resolve stackful async lifts only through task.return by @vados-cosmonic
+
+- _(bindgen)_ allow zero-length same-component non-numeric stream copies by @vados-cosmonic
+
+- _(bindgen)_ trap when waitable-set.poll is given a non-set handle by @vados-cosmonic
+
+- _(bindgen)_ trap on out-of-range resource handle indices by @vados-cosmonic
+
+- _(bindgen)_ trap on backpressure.dec below zero by @vados-cosmonic
+
+- _(bindgen)_ harden per-instance WebAssembly overrides by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ group global overrides under shim options by @vados-cosmonic
+
+
+
+
 ## [2.15.0] - 2026-10-05
 
 ### 🐛 Bug Fixes
