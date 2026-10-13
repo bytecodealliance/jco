@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-50a18b63.js";
+            window.path_to_searchindex_js = "searchindex-4629abac.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-fb3a1b08.js"></script>
+        <script src="toc-99435715.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -744,6 +744,294 @@ console.log(cow.say('Hello Wasm Components!', 'owl'));
 </code></pre>
 <p>There are a number of custom transpilation options available, detailed in the <a href="https://github.com/bytecodealliance/jco?tab=readme-ov-file#api">API section</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="wasi-support"><a class="header" href="#wasi-support">WASI support</a></h1>
+<p>Components that import <a href="https://github.com/WebAssembly/WASI">WASI</a> interfaces need a host implementation of those interfaces at
+runtime. Jco ships two such implementations as npm packages, and <code>jco transpile</code> maps WASI imports
+to them automatically:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>WASI version</th><th>Package</th><th>Mapped imports</th></tr>
+</thead>
+<tbody>
+<tr><td>0.2.x</td><td><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a></td><td><code>wasi:cli</code>, <code>clocks</code>, <code>filesystem</code>, <code>http</code>, <code>io</code>, <code>random</code>, <code>sockets</code></td></tr>
+<tr><td>0.3.x</td><td><a href="https://www.npmjs.com/package/@bytecodealliance/preview3-shim"><code>@bytecodealliance/preview3-shim</code></a></td><td><code>wasi:cli</code>, <code>clocks</code>, <code>filesystem</code>, <code>http</code>, <code>random</code>, <code>sockets</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Both packages provide a Node.js build and a browser build, selected through the package’s <code>node</code>
+export condition, so the same transpiled component runs in either environment.</p>
+<ul>
+<li><a href="#preview-2-shim">Preview 2 shim</a> describes the WASI 0.2 implementation, its browser
+capability model, sandboxing with <code>WASIShim</code>, and the host-side helper functions.</li>
+<li><a href="#preview-3-shim">Preview 3 shim</a> describes the WASI 0.3 implementation and how it maps
+versions.</li>
+</ul>
+<p>The mapping is expressed through the same <code>--map</code> mechanism available to any import; see
+<a href="#wasi-shims">WASI Shims</a> in the Transpiling chapter. Pass <code>--no-wasi-shim</code> to
+treat WASI like any other import, and see
+<a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
+to supply your own implementations at instantiation time.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-2-shim"><a class="header" href="#preview-2-shim">Preview 2 shim</a></h1>
+<p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> implements WASI 0.2 (<code>wasi:cli</code>, <code>wasi:clocks</code>,
+<code>wasi:filesystem</code>, <code>wasi:http</code>, <code>wasi:io</code>, <code>wasi:random</code> and <code>wasi:sockets</code>) for Node.js and
+browsers. <code>jco transpile</code> maps 0.2.x WASI imports to it by default, so most applications only need
+it installed:</p>
+<pre><code class="language-console">npm install @bytecodealliance/preview2-shim
+</code></pre>
+<p>Every subpath resolves to the Node.js build under the <code>node</code> export condition and to the browser
+build otherwise, unless noted:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Subpath</th><th>Contents</th></tr>
+</thead>
+<tbody>
+<tr><td><code>@bytecodealliance/preview2-shim</code></td><td>Every subsystem namespace below, re-exported</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/cli</code></td><td><code>wasi:cli</code> environment, exit, stdio, and terminal interfaces</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/clocks</code></td><td><code>wasi:clocks</code> wall and monotonic clocks</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/filesystem</code></td><td><code>wasi:filesystem</code> types and preopens, plus browser adapters</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/http</code></td><td><code>wasi:http</code> types and outgoing and incoming handlers</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/io</code></td><td><code>wasi:io</code> errors, streams, and poll</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/random</code></td><td><code>wasi:random</code> secure and insecure randomness</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/sockets</code></td><td><code>wasi:sockets</code> TCP, UDP, and name lookup</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/instantiation</code></td><td><code>WASIShim</code>, which assembles an import object (see below)</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/interfaces/*</code></td><td>TypeScript declarations for each WASI interface</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/io-worker</code></td><td>Node.js only: hooks for extensions running inside the I/O worker</td></tr>
+<tr><td><code>@bytecodealliance/preview2-shim/browser/helpers/cli</code></td><td>Browser only: host-side CLI helpers (see <a href="#helpers">Helpers</a>)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="instantiation-and-sandboxing"><a class="header" href="#instantiation-and-sandboxing">Instantiation and sandboxing</a></h2>
+<p><code>WASIShim</code> from <code>@bytecodealliance/preview2-shim/instantiation</code> builds a complete import object
+for a transpiled component and lets each instance carry its own environment, arguments, stdio
+handlers, and preopens:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const shim = new WASIShim({
+    sandbox: {
+        preopens: { "/data": "/tmp/guest-data" }, // Node.js: guest path to host path
+        env: { MODE: "sandboxed" },
+        enableNetwork: false,
+    },
+});
+const component = await instantiate(loader, shim.getImportObject());
+</code></pre>
+<p>See <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
+for the full instantiation flow and for replacing individual interfaces.</p>
+<h2 id="helpers"><a class="header" href="#helpers">Helpers</a></h2>
+<p>Alongside the WASI implementations, the package exports host-side helper functions from <code>helpers/</code>
+subpaths. They build only on the public shim surface and are kept separate from the
+underscore-prefixed functions (<code>_setStdin</code>, <code>_setPreopens</code>, …) that configure the shim itself.
+Helpers that only exist for one build are exported under that build’s prefix.</p>
+<ul>
+<li><a href="#preview-2-shim-cli-helpers">CLI helpers</a>: feed a guest a fixed stdin buffer in the browser.</li>
+</ul>
+<h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported platforms</a></h2>
+<h3 id="nodejs"><a class="header" href="#nodejs">Node.js</a></h3>
+<p>The Node.js build gives a component host filesystem, environment, and network access by default,
+matching the behaviour of ordinary Node.js libraries. It is tested against the Wasmtime WASI
+conformance suite.</p>
+<h3 id="browsers"><a class="header" href="#browsers">Browsers</a></h3>
+<p>The browser build is capability-safe: clocks and randomness use Web APIs, stdout and stderr write
+to the console, stdin is closed, outbound HTTP delegates to <code>fetch</code>, filesystem preopens are empty
+until configured, and raw sockets are unavailable unless the application supplies an adapter.
+Deterministic in-memory filesystem, HTTP, and socket implementations can be opted into for tests
+and self-contained applications.</p>
+<p>The package <a href="https://github.com/bytecodealliance/jco/blob/main/packages/preview2-shim/README.md">README</a> carries the full browser support matrix, listing for each
+interface what is implemented, what needs a host adapter, and what browsers cannot provide.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-2-shim-cli-helpers"><a class="header" href="#preview-2-shim-cli-helpers">Preview 2 shim CLI helpers</a></h1>
+<p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> ships host-side helper functions next to its WASI
+implementations. This page covers the CLI helpers; see <a href="#preview-2-shim">Preview 2 shim</a> for
+the package overview. Helpers build only on the shim’s public surface and are exported from <code>helpers/</code>
+subpaths, separate from the underscore-prefixed functions (<code>_setStdin</code>, <code>_setPreopens</code>, …) that
+exist to configure the shim itself.</p>
+<p>Helpers that only exist for one build are exported under that build’s prefix. The CLI helper on
+this page is browser-only, because it builds on the browser <code>wasi:io</code> pollables:</p>
+<pre><code class="language-js">import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+</code></pre>
+<h2 id="bufferedinputstreaminput"><a class="header" href="#bufferedinputstreaminput"><code>bufferedInputStream(input)</code></a></h2>
+<p>Builds an <code>InputStreamHandler</code> that serves a fixed buffer to the guest and then reports the stream
+as closed. It replaces the bounded handler that hosts otherwise have to hand-roll whenever a
+guest’s stdin is known up front, such as piping a document into a CLI component.</p>
+<p><code>input</code> is a <code>Uint8Array</code>, or a string that is encoded as UTF-8. Each <code>blockingRead(len)</code> returns
+up to <code>len</code> bytes from what remains of the buffer. Once the buffer is exhausted, further reads raise
+the WASI <code>closed</code> stream error, which the guest observes as end of input. <code>subscribe()</code> returns an
+always-ready pollable, so a guest that polls stdin before reading never blocks.</p>
+<h3 id="feeding-an-isolated-cli"><a class="header" href="#feeding-an-isolated-cli">Feeding an isolated CLI</a></h3>
+<p><code>createCli</code> builds CLI interfaces that do not touch the shim’s global streams:</p>
+<pre><code class="language-js">import { cli } from "@bytecodealliance/preview2-shim";
+import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+
+const isolated = cli.createCli({
+    stdin: bufferedInputStream("first line\nsecond line\n"),
+});
+</code></pre>
+<h3 id="feeding-a-wasishim"><a class="header" href="#feeding-a-wasishim">Feeding a <code>WASIShim</code></a></h3>
+<p><code>WASIShim</code> accepts the same handler through its <code>stdin</code> option and builds an isolated CLI for the
+instance:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+
+const shim = new WASIShim({
+    stdin: bufferedInputStream("input for the guest\n"),
+});
+const component = await instantiate(undefined, shim.getImportObject());
+</code></pre>
+<p>See <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
+for how <code>instantiate</code> and <code>WASIShim</code> fit together.</p>
+<h3 id="replacing-the-global-stdin"><a class="header" href="#replacing-the-global-stdin">Replacing the global stdin</a></h3>
+<p>The compatibility setter installs the handler on the stream shared by every component that does
+not configure its own CLI:</p>
+<pre><code class="language-js">import { cli } from "@bytecodealliance/preview2-shim";
+import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
+
+cli._setStdin(bufferedInputStream(new Uint8Array([1, 2, 3])));
+</code></pre>
+<p>Prefer <code>createCli</code> or <code>WASIShim</code> when more than one component runs in the same page, since the
+global stream is consumed once and then stays closed.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-3-shim"><a class="header" href="#preview-3-shim">Preview 3 shim</a></h1>
+<p><a href="https://www.npmjs.com/package/@bytecodealliance/preview3-shim"><code>@bytecodealliance/preview3-shim</code></a> implements WASI 0.3 (<code>wasi:cli</code>, <code>wasi:clocks</code>,
+<code>wasi:filesystem</code>, <code>wasi:http</code>, <code>wasi:random</code> and <code>wasi:sockets</code>) for Node.js and browsers. WASI
+0.3 replaces the <code>wasi:io</code> streams and pollables of 0.2 with <code>stream&lt;T&gt;</code> and <code>future&lt;T&gt;</code> values
+built into the component model, so there is no <code>io</code> subsystem to map.</p>
+<pre><code class="language-console">npm install @bytecodealliance/preview3-shim
+</code></pre>
+<p><code>jco transpile</code> maps every supported 0.3.x version of a WASI interface to the current
+<code>preview3-shim</code> implementation. A component built against an earlier 0.3 release therefore runs
+against the newest implementation, which is acceptable because 0.3 releases are not expected to
+introduce breaking changes.</p>
+<p>Every subpath resolves to the Node.js build under the <code>node</code> export condition and to the browser
+build otherwise, unless noted:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Subpath</th><th>Contents</th></tr>
+</thead>
+<tbody>
+<tr><td><code>@bytecodealliance/preview3-shim</code></td><td>Every subsystem namespace below, re-exported</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/cli</code></td><td><code>wasi:cli</code> environment, exit, run, stdio, and terminal interfaces</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/clocks</code></td><td><code>wasi:clocks</code> wall and monotonic clocks</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/filesystem</code></td><td><code>wasi:filesystem</code> types and preopens, plus browser adapters</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/http</code></td><td><code>wasi:http</code> types, client, and handler</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/random</code></td><td><code>wasi:random</code> secure and insecure randomness</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/sockets</code></td><td><code>wasi:sockets</code> TCP, UDP, and name lookup</td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/stream</code></td><td>Node.js only: <code>stream()</code>, <code>StreamReader</code>, and <code>StreamWriter</code></td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/future</code></td><td>Node.js only: <code>future()</code>, <code>FutureReader</code>, and <code>FutureWriter</code></td></tr>
+<tr><td><code>@bytecodealliance/preview3-shim/interfaces/*</code></td><td>TypeScript declarations for each WASI interface</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="instantiation-and-configuration"><a class="header" href="#instantiation-and-configuration">Instantiation and configuration</a></h2>
+<p>A transpiled 0.3 component imports the shim’s subpaths directly, so running it is a matter of
+configuring the shim’s global state and calling the component’s exports. The CLI setters mirror
+those of the Preview 2 shim, and Preview 3 exports are asynchronous:</p>
+<pre><code class="language-js">import { _setArgs, _setEnv } from "@bytecodealliance/preview3-shim/cli";
+import { _setPreopens } from "@bytecodealliance/preview3-shim/filesystem";
+
+_setArgs(["component", "input.txt"]);
+_setEnv({ MODE: "production" });
+_setPreopens({ "/data": "/tmp/guest-data" }); // Node.js: guest path to host path
+
+const component = await import("./dist/transpiled/component.js");
+await component.run.run();
+</code></pre>
+<p>With <code>--instantiation async</code>, assemble the import object from the shim namespaces yourself,
+keyed by the versioned interface names the component imports:</p>
+<pre><code class="language-js">import { cli, clocks, filesystem, random } from "@bytecodealliance/preview3-shim";
+import { instantiate } from "./dist/transpiled/component.js";
+
+const component = await instantiate(loader, {
+    "wasi:cli/environment@0.3.0": cli.environment,
+    "wasi:cli/stdout@0.3.0": cli.stdout,
+    "wasi:clocks/monotonic-clock@0.3.0": clocks.monotonicClock,
+    "wasi:filesystem/preopens@0.3.0": filesystem.preopens,
+    "wasi:filesystem/types@0.3.0": filesystem.types,
+    "wasi:random/random@0.3.0": random.random,
+});
+</code></pre>
+<p>See <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
+for the instantiation flow; the Preview 3 shim has no <code>WASIShim</code> equivalent yet, so there is no
+per-instance sandbox and the setters above apply to every component in the process.</p>
+<h2 id="working-with-asynchronous-values"><a class="header" href="#working-with-asynchronous-values">Working with asynchronous values</a></h2>
+<p>Preview 3 hosts exchange streams, futures, and async calls with the guest. A host import that
+returns a <code>stream&lt;u8&gt;</code> provides any <code>ReadableStream</code> or async iterable; one that returns a
+<code>future&lt;T&gt;</code> provides a <code>Promise</code>:</p>
+<pre><code class="language-js">async function* lines(source) {
+    try {
+        for await (const chunk of source) {
+            yield chunk;
+        }
+    } finally {
+        await source.close();
+    }
+}
+
+const imports = {
+    "example:host/input": {
+        // stream&lt;u8&gt;
+        open: () =&gt; lines(openSource()),
+        // future&lt;result&lt;_, string&gt;&gt;
+        ready: () =&gt; Promise.resolve({ tag: "ok", val: undefined }),
+    },
+};
+</code></pre>
+<p>On Node.js, <code>stream()</code> and <code>future()</code> build a paired writer and reader so host code can push
+values into a guest-visible stream over time:</p>
+<pre><code class="language-js">import { stream } from "@bytecodealliance/preview3-shim/stream";
+import { future } from "@bytecodealliance/preview3-shim/future";
+
+const { tx, rx } = stream();
+const { tx: doneTx, rx: doneRx } = future();
+
+// Hand rx and doneRx to the guest, then feed it from the host.
+await tx.write(new TextEncoder().encode("first\n"));
+await tx.write(new TextEncoder().encode("second\n"));
+await tx.close();
+await doneTx.write({ tag: "ok", val: undefined });
+</code></pre>
+<p>Two chapters describe the details that matter once data is in flight:</p>
+<ul>
+<li><a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>: why an
+accepted write is not an acknowledgement, and how cancellation races completion.</li>
+<li><a href="#preview-3-host-value-disposal">Preview 3 host value disposal</a>: what happens to
+host-provided values that a guest discards.</li>
+</ul>
+<h2 id="supported-platforms-1"><a class="header" href="#supported-platforms-1">Supported platforms</a></h2>
+<h3 id="nodejs-1"><a class="header" href="#nodejs-1">Node.js</a></h3>
+<p>The Node.js build gives a component host filesystem, environment, and network access by default.
+Standard streams and filesystem operations run in a worker so that blocking host I/O never stalls
+the event loop that drives the component’s asynchronous exports.</p>
+<h3 id="browsers-1"><a class="header" href="#browsers-1">Browsers</a></h3>
+<p>The browser build reuses the Preview 2 shim’s capability model: clocks and randomness use Web
+APIs, stdio is console-backed, outbound HTTP delegates to <code>fetch</code>, and filesystem preopens are
+empty until configured. The same filesystem adapters (<code>InMemoryFilesystemAdapter</code>,
+<code>OpfsFilesystemAdapter</code>, and application-provided ones) are re-exported from
+<code>@bytecodealliance/preview3-shim/filesystem</code>, with descriptors wrapped to expose the 0.3 stream
+based interface. See the <a href="#browsers">Preview 2 shim</a> notes for what each
+interface needs from the embedding application.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="performance"><a class="header" href="#performance">Performance</a></h1>
+<p>Jco aims to make transpiled components run at near-native JavaScript speed, with as little host
+overhead as possible between a component’s exports and the code that calls them. This section
+records how that is measured.</p>
+<ul>
+<li><a href="#benchmarks">Benchmarks</a>: reproducible measurements of Jco tooling and runtime paths.</li>
+</ul>
+<p>For the host-binding optimizations that affect call performance, see
+<a href="#host-bindings">Optimized Host Bindings</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h1>
+<p>Each page in this section describes one benchmark: what it measures, how to run it, and what the
+results mean.</p>
+<ul>
+<li><a href="#development-use-jco-serve">Development-use <code>jco serve</code></a>: throughput and latency of the
+development server.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="development-use-jco-serve"><a class="header" href="#development-use-jco-serve">Development-use <code>jco serve</code></a></h1>
 <p><code>jco serve</code> is a convenient development utility for running Preview 2 HTTP components (in particular
 components that export the <code>wasi:http/incoming-handler</code> interface) in Node.js.</p>
@@ -840,1167 +1128,17 @@ followed by 100 measured sequential requests per mode:</p>
 <p>A larger component, concurrent traffic, different response sizes, pool utilization, or another Node.js
 version can change both the absolute results and the ratios between modes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="host-bindings"><a class="header" href="#host-bindings">Host Bindings</a></h1>
-<p>The default mode for host bindings in JS hosts in Jco is through the high-level JS-based bindgen.</p>
-<p>The benefit of this approach is that all host bindings are available as normal JS imports. For
-example, JavaScript developers can directly import a function like
-<code>import { getRandomBytes } from 'wasi:random/random'</code>, and directly interact with the bindings
-at a high level.</p>
-<p>This also makes it easy to provide custom or virtual implementations for bindings using the same
-host semantic conventions.</p>
-<p>But for performance-sensitive applications, host bindings still need to have a fast path for
-optimized bindgen.</p>
-<h2 id="using-native-host-bindings"><a class="header" href="#using-native-host-bindings">Using Native Host Bindings</a></h2>
-<p>Given a JS host that implements such a binding, the <code>--import-bindings</code> flag may be used to customize
-which host bindings mode to use:</p>
+<h1 id="javascript-ecosystem-interoperability"><a class="header" href="#javascript-ecosystem-interoperability">JavaScript ecosystem interoperability</a></h1>
+<p>Components transpiled by Jco are ordinary ES modules, and components built with Jco can reuse a
+large part of the existing JavaScript ecosystem. This section covers the pieces that make that
+possible.</p>
 <ul>
-<li>The default bindgen mode is <code>--import-bindings=js</code> using high-level JS bindings for all imports.</li>
-<li>When generating <code>--import-bindings=hybrid</code>, Jco will still generate the high-level bindgen for all imports, but
-check for a <code>Symbol.for('cabiLower')</code> and use this optimized bindgen when available on a function-by-function
-basis.</li>
-<li>For <code>--import-bindings=optimized</code>, Jco will omit outputting the high-level JS bindgen for imports, and instead use
-the low-level bindgen function directly, assuming <code>Symbol.for('cabiLower')</code> is defined on all imports.</li>
-<li>For <code>--import-bindings=direct-optimized</code>, instead of reading a <code>Symbol.for('cabiLower')</code>, Jco will assume that
-imports are all these lower functions instead (useful in instantiatio mode).</li>
+<li><a href="#jco-std"><code>jco-std</code></a>: the standard library that gives components access to WASI through
+familiar JavaScript APIs.</li>
+<li><a href="#nodejs-built-in-compatibility">Node.js built-in compatibility</a>: which <code>node:*</code> modules work inside a
+component, and how each one maps onto WASI.</li>
+<li><a href="#express">Express</a>: running an Express application as a component.</li>
 </ul>
-<p>This scheme implies instantiation mode to provide the host bindings, or for the host to support
-providing the imports as a host ESM import scheme such as <code>import { getRandomBytes } from 'wasi:random/random'</code>.</p>
-<h2 id="optimized-host-bindings-spec"><a class="header" href="#optimized-host-bindings-spec">Optimized Host Bindings Spec</a></h2>
-<h3 id="fnsymbolforcabilowercanonopts---corefn"><a class="header" href="#fnsymbolforcabilowercanonopts---corefn"><code>fn[Symbol.for('cabiLower')](canonOpts) -&gt; coreFn</code></a></h3>
-<p>A function that has a native optimized implementation, can expose its native optimized bindgen through
-a <code>Symbol.for('cabiLower')</code> method, taking a <code>canonOpts</code> object.</p>
-<p>The following <code>canonOpts</code> fields may be defined as needed:</p>
-<ul>
-<li><code>memory</code>: The WebAssembly memory object for the component to which we are binding, if needed.</li>
-<li><code>realloc</code>: The realloc function inside of the component we are binding, <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/Binary.md#canonical-definitions">per component model semantics</a>, if needed.</li>
-<li><code>postReturn</code>: The post-return function for the call, if needed.</li>
-<li><code>stringEncoding</code>: If needed, with <code>'utf8'</code> as the default.</li>
-<li><code>resourceTables</code>: If needed, an ordered list of resource tables in which they uniquely appear in the
-function parameters and results of type <code>ResourceTable[]</code>.</li>
-</ul>
-<p>The return value of this function is then a new function, <code>coreFn</code>, which represents an optimized
-native function which can be provided as a direct core function import to the
-<code>WebAssembly.instantiate</code> operation of the core binary for the component being linked, providing a
-direct host-native binding to the inner core binary of the component without needing an intermediate
-lowering operation in the component model semantics.</p>
-<h3 id="resourcetable-number"><a class="header" href="#resourcetable-number"><code>ResourceTable: number[]</code></a></h3>
-<p>Resource handles are tracked in handle tables, a set of shared slab data structures primarily
-relating handles to resource ids (reps) for the particular table. Each resource usually has a unique
-handle table assign for every component it is used in.</p>
-<p>When handles are passed between component functions, resource state needs to be maintained between
-these tables, therefore in optimized bindgen, this shared state needs to be operated on. For example,
-resource creation creates an own handle in the table for that resource of the component caller,
-requiring the creator to populate a table of the caller.</p>
-<p>In optimized bindgen, this is acheived by mutating the data structure accordingly. Great care needs
-to be taken to ensure the full component model semantics are followed in this process.</p>
-<p>The implementation here is based on a JS array of integers. This is done instead of using typed
-arrays because we need resizability without reserving a large buffer like resizable typed arrays
-might for the same use case (and unless that changes in future).</p>
-<p>The number bits are the lowest 29 bits, while the flag bit for all data values is 1 &lt;&lt; 30. We avoid
-the use of the highest bit entirely to not trigger SMI deoptimization.</p>
-<p>Each entry consists of a pair of u32s, with each pair either a free list entry, or a data entry.</p>
-<h4 id="free-list-entries"><a class="header" href="#free-list-entries">Free List Entries:</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th style="text-align: center">index (x, u30)</th><th style="text-align: center"><del>unused</del></th></tr>
-</thead>
-<tbody>
-<tr><td style="text-align: center">32 bits</td><td style="text-align: center">32 bits</td></tr>
-<tr><td style="text-align: center">01xxxxxxxxxxxxxxxxx</td><td style="text-align: center">###################</td></tr>
-</tbody>
-</table>
-</div>
-<p>Free list entries use only the first value in the pair, with the high bit always set
-to indicate that the pair is part of the free list. The first entry pair at indices
-0 and 1 is the free list head, with the initial values of 1 &lt;&lt; 30 and 0 respectively.
-Removing the 1 &lt;&lt; 30 flag gives 0, which indicates the end of the free list.</p>
-<h4 id="data-entries"><a class="header" href="#data-entries">Data Entries:</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th style="text-align: center">scope (x, u30)</th><th style="text-align: center">own(o), rep(x, u30)</th></tr>
-</thead>
-<tbody>
-<tr><td style="text-align: center">32 bits</td><td style="text-align: center">32 bits</td></tr>
-<tr><td style="text-align: center">00xxxxxxxxxxxxxxxxx</td><td style="text-align: center">0oxxxxxxxxxxxxxxxxx</td></tr>
-</tbody>
-</table>
-</div>
-<p>Data entry pairs consist of a first u30 scope value and a second rep value. The field
-is only called the scope for interface shape consistency, but is actually used for the
-ref count for own handles and the scope id for borrow handles. The high bit is never
-set for this first entry to distinguish the pair from the free list. The second value
-in the pair is the rep for the resource, with the high bit in this entry indicating
-if it is an own handle.</p>
-<p>The free list numbering and the handle numbering are the same, indexing by pair, so to
-get from a handle or free list numbering to an index, we multiply by two.</p>
-<p>For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
-the array to get the context and rep respectively. If the high bit is set on the
-context, we throw for an invalid handle. The rep value is masked out from the
-ownership high bit, also throwing for an invalid zero rep.</p>
-<h3 id="resourceinstancesymbolforcabirep"><a class="header" href="#resourceinstancesymbolforcabirep"><code>resourceInstance[Symbol.for('cabiRep')]</code></a></h3>
-<p>Normally imported resource classes do not have to define any special symbols, as they are assigned
-rep numbers when passed in.</p>
-<p>When using hybrid or optimized bindgen, high-level functions may still return and take high-level
-resource classes as parameters. For example, a resource type used optimized in import bindgen might
-still be constructible elsewhere to be passed in as a parameter to an exported function of a
-component attached to that optimized low-level import bindgen.</p>
-<p>As a result, when using low-level bindgen, any high-level resource instances MUST define a
-<code>Symbol.for('cabiRep')</code> symbol in order for these resources to correctly interact with low-level
-bindgen functions referring to those same resources.</p>
-<h3 id="resourceclasssymbolforcabidisposerep---void"><a class="header" href="#resourceclasssymbolforcabidisposerep---void"><code>ResourceClass[Symbol.for('cabiDispose')](rep) -&gt; void</code></a></h3>
-<p>Just like <code>Symbol.dispose</code> is used in high-level bindgen for imported resources to provide a
-destructor for when an own handle to a resource is dropped, low-level bindgen provides this hook
-for imported resources through the <code>cabiDispose</code> function.</p>
-<p>The <code>Symbol.for('cabiDispose')</code> function is an optional destructor which is available as a direct
-static method on the imported resource class.</p>
-<p>Unlike the other low-level functions, this one does not need to be bound and is called directly, as
-it takes the rep directly to handle internal destructor mechanisms.</p>
-<p>Imported resources created externally are always “captured” explicitly when passed in to high-level
-functions, even when defining <code>Symbol.for('cabiRep')</code>, so any GC is implicitly averted. In these
-capture cases their <code>resourceInstance[Symbol.dispose]()</code> disposal will always be called instead
-of <code>cabiDispose</code>, even if they do not define a <code>Symbol.dispose</code>. This allows any custom GC hooks to
-apply correctly.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="wit-type-representations"><a class="header" href="#wit-type-representations">WIT Type Representations</a></h1>
-<p>Similar to any other guest langauge, there are multiple type systems in play when dealing with JS WebAssembly components.</p>
-<p>Types represented in <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WebAssembly Interface Types (“WIT”)</a> must be converted down to types that are familiar for Javascript,
-and <a href="https://www.typescriptlang.org/">Typescript</a> (if dealing with <code>jco types</code> or <code>jco guest-types</code> subcommands).</p>
-<p>This document details the type representations and usage for types that are defined in WIT and built into components.</p>
-<h2 id="basic-types"><a class="header" href="#basic-types">Basic types</a></h2>
-<p>Here is a basic table of conversions between WIT types and JS types:</p>
-<p>More complicated types that are built into WIT but require more work to translate are explained below.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>WIT type</th><th>JS Type</th></tr>
-</thead>
-<tbody>
-<tr><td><code>u8</code></td><td><code>number</code></td></tr>
-<tr><td><code>u16</code></td><td><code>number</code></td></tr>
-<tr><td><code>u32</code></td><td><code>number</code></td></tr>
-<tr><td><code>u64</code></td><td><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a></td></tr>
-<tr><td><code>s8</code></td><td><code>number</code></td></tr>
-<tr><td><code>s16</code></td><td><code>number</code></td></tr>
-<tr><td><code>s32</code></td><td><code>number</code></td></tr>
-<tr><td><code>s64</code></td><td><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a></td></tr>
-<tr><td><code>f32</code></td><td><code>number</code></td></tr>
-<tr><td><code>f64</code></td><td><code>number</code></td></tr>
-<tr><td><code>bool</code></td><td><code>boolean</code></td></tr>
-<tr><td><code>char</code></td><td><code>string</code></td></tr>
-<tr><td><code>string</code></td><td><code>string</code></td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="enums-enum"><a class="header" href="#enums-enum">Enums (<code>enum</code>)</a></h2>
-<p>Jco represents a WIT enum as a union of string literals. By default, the strings preserve the WIT case names:</p>
-<pre><code class="language-wit">enum status { request-pending, request-complete }
-</code></pre>
-<pre><code class="language-ts">export type Status = 'request-pending' | 'request-complete';
-</code></pre>
-<p>Pass <code>--enum-values-screaming-snake-case</code> to use <code>SCREAMING_SNAKE_CASE</code> values at the JavaScript boundary and in generated
-declarations:</p>
-<pre><code class="language-ts">export type Status = 'REQUEST_PENDING' | 'REQUEST_COMPLETE';
-</code></pre>
-<p>The option affects both values passed into a component and values returned from it. It also works with
-<code>--use-namespace-objects</code>; in that mode, for example, <code>Status.RequestPending</code> has the value <code>'REQUEST_PENDING'</code>.</p>
-<h2 id="namespace-objects"><a class="header" href="#namespace-objects">Namespace objects</a></h2>
-<p>WIT enums and variants are represented as TypeScript types by default, so they do not provide JavaScript values for
-constructing cases. Pass <code>--use-namespace-objects</code> to <code>jco transpile</code> to generate namespace objects for enums, flags,
-and variants. The same option on <code>jco types</code> and <code>jco guest-types</code> generates matching declarations.</p>
-<p>For example, given these WIT types:</p>
-<pre><code class="language-wit">enum direction { north, south }
-flags permissions { read, write }
-variant request { open(string), close }
-</code></pre>
-<p>an exported interface provides values like:</p>
-<pre><code class="language-js">api.Direction.North; // 'north'
-api.Permissions.Read | api.Permissions.Write; // 3n
-api.Request.Open('/tmp/file'); // { tag: 'open', val: '/tmp/file' }
-api.Request.Close(); // { tag: 'close' }
-</code></pre>
-<p>The namespace objects are frozen. Aliases of the same WIT type share the same object. Since flag namespace values are
-bit masks, this option implies <code>--flags-as-bigint</code>. It cannot be combined with <code>--variants-inline-cases</code>, and remains
-disabled by default to preserve existing generated APIs.</p>
-<h2 id="variants-variant"><a class="header" href="#variants-variant">Variants (<code>variant</code>)</a></h2>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-variant-one-of-a-set-of-types">Variant section of the WIT IDL</a> for more information on Variants</p>
-</blockquote>
-<p>Variants are like basic enums in most languages with one exception; members of the variant can hold a single data type.
-Alternative variant members may hold <em>different</em> types to represent different cases. For example:</p>
-<pre><code class="language-wit">variant exit-code {
-  success,
-  failure-code(u32),
-  failure-msg(string),
-}
-</code></pre>
-<h3 id="wit-syntax"><a class="header" href="#wit-syntax">WIT syntax</a></h3>
-<pre><code class="language-wit">variant filter {
-    all,
-    none,
-    some(list&lt;string&gt;),
-}
-</code></pre>
-<h3 id="jco-representation"><a class="header" href="#jco-representation">Jco Representation</a></h3>
-<p>Jco represents variants as objects with a <code>tag</code> that represents the variant, and <code>val</code> that represents the content:</p>
-<p>For example, pseudo Typescript for the of the above <code>filter</code> variant would look like the following:</p>
-<pre><code class="language-ts">// Filter with all
-{
-  tag: 'all';
-}
-
-// Filter with None
-{
-  tag: 'none';
-}
-
-// Filter with some and a list of strings
-{
-  tag: 'some';
-  val: string[];
-}
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>WIT <code>variant</code>’s options may only contain <em>one</em> piece of data.</p>
-<p>You can work around this limitation of variants by having the contained type be a <em>tuple</em>,
-(e.g. <code>tuple&lt;string, u32, string&gt;</code>), or using a named record as the related data.</p>
-</blockquote>
-<p>By default, generated TypeScript declarations export a named interface for each variant case. Pass
-<code>--variants-inline-cases</code> to <code>jco transpile</code>, <code>jco types</code>, or <code>jco guest-types</code> to emit the cases directly in the
-discriminated union instead:</p>
-<pre><code class="language-ts">export type Filter = { tag: 'all' } | { tag: 'none' } | { tag: 'some'; val: string[] };
-</code></pre>
-<p>Inlining prevents a generated case name such as <code>OperationCreate</code> from colliding with a WIT record named
-<code>operation-create</code>. The option is disabled by default because existing code may import the named case interfaces.</p>
-<h2 id="records-record"><a class="header" href="#records-record">Records (<code>record</code>)</a></h2>
-<h3 id="wit-syntax-1"><a class="header" href="#wit-syntax-1">WIT Syntax</a></h3>
-<pre><code class="language-wit">record person {
-    name: string,
-    age: u32,
-    favorite-color: option&lt;string&gt;,
-}
-</code></pre>
-<h3 id="jco-representation-1"><a class="header" href="#jco-representation-1">Jco Representation</a></h3>
-<p>Jco represents records as the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">Javascript Object basic data type</a>:</p>
-<p>Given the WIT record above, you can expect to deal with an object similar to the following Typescript:</p>
-<pre><code class="language-ts">interface Person {
-    person: string;
-    age: number;
-    favoriteColor?: number;
-}
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>If using <code>jco guest-types</code> or <code>jco types</code>, you will be able to use Typescript types that
-properly constrain the Typescript code you write.</p>
-</blockquote>
-<h2 id="options-option"><a class="header" href="#options-option">Options (<code>option</code>)</a></h2>
-<h3 id="wit-syntax-2"><a class="header" href="#wit-syntax-2">WIT Syntax</a></h3>
-<pre><code class="language-wit">option&lt;u32, u32&gt;
-option&lt;string, u32&gt;
-</code></pre>
-<h3 id="jco-representation-2"><a class="header" href="#jco-representation-2">Jco Representation</a></h3>
-<p>Jco represents options as an optional value or undefined, so some examples:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr>
-</thead>
-<tbody>
-<tr><td><code>option&lt;u32&gt;</code></td><td><code>number | undefined</code></td><td><code>option&lt;u32&gt;</code> -&gt; <code>number | undefined</code></td></tr>
-<tr><td><code>option&lt;option&lt;u32&gt;&gt;</code></td><td><code>{ tag: "some" | "none", val: number }</code></td><td><code>option&lt;u32&gt;</code> -&gt; <code>number | undefined</code></td></tr>
-</tbody>
-</table>
-</div>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>“single level” <code>option</code>s are easy to reason about, but the doubly nested case (<code>option&lt;option&lt;_&gt;&gt;</code>) is more complex.</p>
-<p>Due to the important distinction between a missing optional versus an <code>option</code> that <em>contains</em> an empty value,
-doubly-nested (or more) <code>option</code>s are encoded with the object encoding described above, rather than as an optional value.</p>
-</blockquote>
-<h3 id="options-in-context-records"><a class="header" href="#options-in-context-records"><code>option</code>s in context: Records</a></h3>
-<p>When used in the context of a <code>record</code> (which becomes a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">JS Object</a>), optional values are represented as optional properties (i.e in TS a <code>propName?: value</code>).</p>
-<h3 id="options-in-context-function-argumentsreturn-values"><a class="header" href="#options-in-context-function-argumentsreturn-values"><code>option</code>s in context: Function arguments/return values</a></h3>
-<p>When used in the context of arguments or return to a function, single level <code>option</code>s are represented as optional values:</p>
-<p>Consider the following interface:</p>
-<pre><code class="language-wit">interface optional {
-    f: func(n: option&lt;u32&gt;) -&gt; string;
-}
-</code></pre>
-<p>An implementation of the function <code>optional.f</code> would look like the following Typescript:</p>
-<pre><code class="language-ts">function f(n?: number): string {
-    if (n === undefined) {
-        return 'no n provided';
-    }
-    return 'n was provided';
-}
-</code></pre>
-<h2 id="result-result"><a class="header" href="#result-result">Result (<code>result</code>)</a></h2>
-<p><code>Result</code> types, as a general concept represent a result that <em>may or may not</em> be present, due to a failure. A result value either contains
-a value that represents a completed computation (<code>SuccessType</code>), or some “error” that indicates a failure (<code>ErrorType</code>).</p>
-<p>You can think of the type of a <code>Result</code> as:</p>
-<pre><code>Result&lt;SuccessType, ErrorType&gt;
-</code></pre>
-<p>The value you ultimately deal with is one <em>or</em> the other – either the successful result or the error that represents the failure.</p>
-<h3 id="wit-syntax-3"><a class="header" href="#wit-syntax-3">WIT Syntax</a></h3>
-<pre><code class="language-wit">result&lt;_, string&gt;
-result&lt;, string&gt;
-result&lt;t,e&gt;
-</code></pre>
-<h3 id="jco-representation-3"><a class="header" href="#jco-representation-3">Jco representation</a></h3>
-<p>In Javsacript, computation that fails or errors are often represented as exceptions – and depending on how
-the <code>result</code> is used, Jco adheres to that representations.</p>
-<p>When used as an <em>output</em> to a function, <code>throw</code>ing an error will suffice. Given the following WIT interface:</p>
-<pre><code class="language-wit">add-overflow: func(lhs: u32, rhs: u32) -&gt; result&lt;u32, string&gt;;
-</code></pre>
-<p>The following JS function would satistfy the WIT interface:</p>
-<pre><code class="language-js">function addOverflow(lhs, rhs) {
-    let sum = lhs + rhs;
-    if (Nan.isNan(sum)) {
-        throw 'ERROR: addition produced non-number value';
-    } else if (sum &gt; 4294967295) {
-        throw 'ERROR: u32 overflow';
-    }
-    return sum;
-}
-</code></pre>
-<p>While JS automatically converts numbers, we must be careful to not attempt passing a number
-that would <em>not</em> fit in a <code>u32</code> (unsigned 32 bit integer) via WebAssembly.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>How JS treats large numbers is not in focus here, but it is worth noting that
-<code>Number.MAX_VALUE + Number.MAX_VALUE === Infinity</code>.</p>
-</blockquote>
-<h3 id="typescript-schema"><a class="header" href="#typescript-schema">Typescript Schema</a></h3>
-<pre><code>type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
-</code></pre>
-<h3 id="results-in-context-function-return-values"><a class="header" href="#results-in-context-function-return-values"><code>result</code>s in context: Function return values</a></h3>
-<p>When a result is returned directly from a function, any thrown error of the function is treated as the result error type,
-while any direct return value is treated as the result success type.</p>
-<p>For guest exports, <code>@bytecodealliance/jco-transpile</code> throws the lifted error payload directly by default. The <code>jco</code>
-API and CLI preserve the historical behavior of wrapping that value in an <code>Error</code> with a <code>payload</code> property. Pass
-<code>noComponentErrorWrapping: true</code> to the API, or <code>--no-component-error-wrapping</code> to the CLI, to make <code>jco</code> throw the
-payload directly. Pass <code>noComponentErrorWrapping: false</code> to <code>jco-transpile</code> to request the compatibility wrapper.</p>
-<p>Consider the following interface:</p>
-<pre><code class="language-wit">interface fallible {
-    f: func(n: u32) -&gt; result&lt;string, string&gt;;
-}
-</code></pre>
-<p>An implementation of the function <code>fallible.f</code> would look like the following Typescript:</p>
-<pre><code class="language-ts">function f(n: number): string {
-    if (n == 42) {
-        return 'correct';
-    }
-    throw 'not correct';
-}
-</code></pre>
-<h3 id="results-in-context-container-types-record-optional-etc"><a class="header" href="#results-in-context-container-types-record-optional-etc"><code>result</code>s in context: Container types (<code>record</code>, <code>optional</code>, etc)</a></h3>
-<p>A <code>result</code> stored inside a container type or in non-function argument/return contexts will look like a variant
-type of the form <code>{ tag: 'ok', val: SuccessType } | { tag: 'err', val: ErrorType }</code>.</p>
-<p>For example, consider the following WIT interface:</p>
-<pre><code class="language-wit">interface fallible-reaction {
-    r: func(r: result&lt;string, string&gt;) -&gt; string;
-}
-</code></pre>
-<p>An implementation of the function <code>fallible-reaction.r</code> would look like the following Typescript:</p>
-<pre><code class="language-ts">type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
-
-function f(input: Result&lt;string, string&gt;): string {
-  switch (input.tag) {
-    case 'ok': return `SUCCESS, returned: [${input.val}]";
-    case 'err': return `ERROR, returned: [${input.val}]";
-    // We we should never reach the case below
-    default: throw Error("something has gone seriously wrong");
-  }
-}
-</code></pre>
-<h3 id="result-considerations-idiomatic-js-errors-for-host-implementations"><a class="header" href="#result-considerations-idiomatic-js-errors-for-host-implementations"><code>result</code> considerations: Idiomatic JS errors for Host implementations</a></h3>
-<p>When running a component in a JS host, it is likely for host functions to throw real JS errors (objects which are descendants of the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error"><code>Error</code> global object</a>),
-rather than the exact type expected by Jco.</p>
-<p>This means that the default conversion mechanism for Jco would be a JS anti-pattern (i.e. <code>throw 12345</code> versus <code>throw new Error("error code 12345")</code>).</p>
-<p>To ensure smooth use of Jco-generated code from hosts, <code>Error</code> objects with a <code>payload</code> property will have the payload extracted as the result error type.</p>
-<p>Consider the following WIT:</p>
-<pre><code class="language-wit">type error-code = u32;
-
-interface only-throws {
-    just-throw: func() -&gt; result&lt;string, error-code&gt;;
-}
-</code></pre>
-<p>Consider the following <strong>host</strong> function adhering to the interface, and making use of idiomatic JS errors:</p>
-<pre><code class="language-js">// The below code assumes interaction with a WIT which looks like a
-function justThrow() {
-    const plainError = new Error('Error for JS users');
-    const errorWithPayload = Object.assign(plainError, { payload: 1111 });
-    throw errorWithPayload;
-}
-</code></pre>
-<h2 id="tuples-tuple"><a class="header" href="#tuples-tuple">Tuples (<code>tuple</code>)</a></h2>
-<p>Tuples are a container type that has a fixed size, types somewhat analogous to a fixed size list.</p>
-<p>Tuples can be combined with type renaming to produce types that carry some semantic meaning. For example:</p>
-<pre><code class="language-wit">type point = tuple&lt;u32,u32&gt;
-</code></pre>
-<p>Note that <code>tuple</code>s can be combined with custom user-defined types like <code>record</code>s and <code>variants</code>, <code>option</code>s and <code>result</code>s. For example:</p>
-<pre><code class="language-wit">variant example-var {
-    nothing,
-    value(u64),
-}
-
-record example-rec {
-    fst: string,
-    snd: u32,
-}
-
-type maybe-num = option&lt;u32&gt;;
-
-type num-or-err-str = result&lt;u32, string&gt;;
-
-type examples = tuple&lt;example-rec, example-var, maybe-num, num-or-err-str&gt;;
-</code></pre>
-<h3 id="wit-syntax-4"><a class="header" href="#wit-syntax-4">WIT Syntax</a></h3>
-<pre><code class="language-wit">tuple&lt;u32, u32&gt;
-tuple&lt;string, u32&gt;
-</code></pre>
-<h3 id="jco-representation-4"><a class="header" href="#jco-representation-4">Jco Representation</a></h3>
-<p>Jco represents tuples as lists (arrays), so some examples:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr>
-</thead>
-<tbody>
-<tr><td><code>tuple&lt;u32, u32&gt;</code></td><td><code>[number, number]</code></td><td><code>tuple&lt;u32, u32&gt;</code> -&gt; <code>[number, number]</code></td></tr>
-<tr><td><code>tuple&lt;string, u32&gt;</code></td><td><code>[string, number]</code></td><td><code>tuple&lt;string, u32&gt;</code> -&gt; <code>[string, number]</code></td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="list-list"><a class="header" href="#list-list">List (<code>list</code>)</a></h2>
-<h3 id="wit-syntax-5"><a class="header" href="#wit-syntax-5">WIT Syntax</a></h3>
-<pre><code>list&lt;u8&gt;
-list&lt;string&gt;
-</code></pre>
-<h3 id="jco-representation-5"><a class="header" href="#jco-representation-5">Jco Representation</a></h3>
-<p>Jco represents lists with native Javscript Arrays, with the exception of a <code>list&lt;u8&gt;</code>:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr>
-</thead>
-<tbody>
-<tr><td><code>list&lt;u8&gt;</code></td><td><code>Uint8Array</code></td><td><code>list&lt;u8&gt;</code> -&gt; <code>Uint8Array</code></td></tr>
-<tr><td><code>list&lt;t&gt;</code></td><td><code>T[]</code></td><td><code>list&lt;string&gt;</code> -&gt; <code>string[]</code></td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="resources-resource"><a class="header" href="#resources-resource">Resources (<code>resource</code>)</a></h2>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-resource">WIT IDL description of Resources</a> for more information</p>
-</blockquote>
-<p>Resources represent values that cannot be copied across a component boundary. A resource
-handle refers to state owned by the resource’s provider, without exposing that state to its
-consumer. In JavaScript, Jco represents the handle as an object whose methods call back into
-the provider.</p>
-<p>Resources are useful for stateful or platform-specific values such as files, sockets, and HTTP
-bodies. Unlike a WIT <code>record</code>, passing a resource does not serialize all of its fields.</p>
-<p>The examples below use a <code>blob</code> resource:</p>
-<h3 id="wit-syntax-6"><a class="header" href="#wit-syntax-6">WIT Syntax</a></h3>
-<pre><code class="language-wit">package docs:resources;
-
-interface blobs {
-    resource blob {
-        constructor(init: list&lt;u8&gt;);
-        write: func(bytes: list&lt;u8&gt;);
-        read: func() -&gt; list&lt;u8&gt;;
-        merge: static func(lhs: borrow&lt;blob&gt;, rhs: borrow&lt;blob&gt;) -&gt; blob;
-    }
-}
-
-world imports-blobs {
-    import blobs;
-}
-
-world exports-blobs {
-    export blobs;
-}
-</code></pre>
-<h3 id="jco-representation-6"><a class="header" href="#jco-representation-6">Jco representation</a></h3>
-<p>The resource is represented as a class. WIT kebab-case names become JavaScript camelCase
-for functions and PascalCase for classes. The <code>blob</code> resource above therefore has the
-following approximate TypeScript shape:</p>
-<pre><code class="language-ts">class Blob implements Disposable {
-    constructor(init: Uint8Array) {}
-
-    write(bytes: Uint8Array): void {}
-
-    read(): Uint8Array {}
-
-    static merge(lhs: Blob, rhs: Blob): Blob {}
-
-    [Symbol.dispose](): void {}
-}
-</code></pre>
-<p>The exact declaration depends on whether the resource is imported or exported. Run
-<code>jco guest-types</code> when implementing a JavaScript guest, or inspect the declarations emitted
-by <code>jco transpile</code> when using a component from a JavaScript host. The generated types are
-the source of truth for the binding being used.</p>
-<h3 id="imports-and-exports-are-from-the-guests-perspective"><a class="header" href="#imports-and-exports-are-from-the-guests-perspective">Imports and exports are from the guest’s perspective</a></h3>
-<p>It is useful to identify the provider and consumer before writing any JavaScript:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>WIT world item</th><th>Resource provider</th><th>Resource consumer</th></tr>
-</thead>
-<tbody>
-<tr><td><code>import blobs</code></td><td>Host</td><td>Guest component</td></tr>
-<tr><td><code>export blobs</code></td><td>Guest component</td><td>Host</td></tr>
-</tbody>
-</table>
-</div>
-<p>An imported resource is implemented by the host and passed to the component during
-instantiation. An exported resource is implemented by the guest and returned to the host
-as part of the component’s exports.</p>
-<h3 id="ownership-and-borrowing"><a class="header" href="#ownership-and-borrowing">Ownership and borrowing</a></h3>
-<p>A resource value is a handle with an associated lifetime. WIT uses two handle modes:</p>
-<ul>
-<li><code>own&lt;blob&gt;</code> transfers ownership to the callee. The receiving side is then responsible for
-eventually dropping the handle.</li>
-<li><code>borrow&lt;blob&gt;</code> temporarily makes the handle available to the callee. Ownership remains
-with the caller, and the callee must not keep using the handle after the call returns.</li>
-</ul>
-<p>Writing <code>blob</code> in a result or parameter is shorthand for an owned handle where WIT permits
-that shorthand. Resource methods implicitly borrow <code>self</code>, so calling <code>blob.read()</code> does not
-consume <code>blob</code>. In the example, <code>merge</code> borrows both arguments and returns a new owned
-resource.</p>
-<p>When a generated resource class implements <code>Disposable</code>, release it deterministically with
-a <code>using</code> declaration:</p>
-<pre><code class="language-ts">{
-    using blob = new Blob(new Uint8Array([1, 2, 3]));
-    blob.write(new Uint8Array([4]));
-    console.log(blob.read());
-} // blob[Symbol.dispose]() is called here
-</code></pre>
-<p>The equivalent JavaScript without a <code>using</code> declaration is:</p>
-<pre><code class="language-js">const blob = new Blob(new Uint8Array([1, 2, 3]));
-try {
-    console.log(blob.read());
-} finally {
-    blob[Symbol.dispose]();
-}
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>Do not use a resource after disposing it or after passing it to a parameter that takes
-<code>own&lt;blob&gt;</code>. JavaScript garbage collection is not a substitute for deterministic cleanup
-when the underlying resource holds files, sockets, or other limited host state.</p>
-</blockquote>
-<p>Whether <code>[Symbol.dispose]()</code> appears on a particular binding is recorded in its generated
-declaration. A provider may also implement <code>[Symbol.dispose]()</code> as a cleanup hook; Jco calls
-that hook when the corresponding owned handle is dropped.</p>
-<h3 id="importing-a-host-resource-into-a-guest"><a class="header" href="#importing-a-host-resource-into-a-guest">Importing a host resource into a guest</a></h3>
-<p>The <code>imports-blobs</code> world declares that the guest needs the host to provide the <code>blobs</code>
-interface. Generate types for the guest implementation with:</p>
-<pre><code class="language-console">jco guest-types wit --world-name imports-blobs -o generated
-</code></pre>
-<p>The generated ambient module uses the WIT package and interface name. Guest TypeScript can
-import the resource class, construct it, and call its methods:</p>
-<pre><code class="language-ts">/// &lt;reference path="./generated/imports-blobs.d.ts" /&gt;
-import { Blob } from 'docs:resources/blobs';
-
-export function processBytes(): Uint8Array {
-    using left = new Blob(new Uint8Array([1, 2]));
-    using right = new Blob(new Uint8Array([3, 4]));
-    using merged = Blob.merge(left, right);
-
-    merged.write(new Uint8Array([5]));
-    return merged.read();
-}
-</code></pre>
-<p><code>Blob</code> is supplied by the host even though it looks like a normal class to the guest. The
-guest can only observe the operations described by WIT.</p>
-<h4 id="providing-the-imported-resource-from-the-host"><a class="header" href="#providing-the-imported-resource-from-the-host">Providing the imported resource from the host</a></h4>
-<p>The host implements the resource with a JavaScript class. Its private fields remain entirely
-on the host:</p>
-<pre><code class="language-ts">class HostBlob {
-    #bytes: number[];
-
-    constructor(init: Uint8Array) {
-        this.#bytes = Array.from(init);
-    }
-
-    write(bytes: Uint8Array): void {
-        this.#bytes.push(...bytes);
-    }
-
-    read(): Uint8Array {
-        return Uint8Array.from(this.#bytes);
-    }
-
-    static merge(lhs: HostBlob, rhs: HostBlob): HostBlob {
-        return new HostBlob(Uint8Array.from([...lhs.#bytes, ...rhs.#bytes]));
-    }
-
-    [Symbol.dispose](): void {
-        this.#bytes.length = 0;
-    }
-}
-</code></pre>
-<p>Transpile the component with explicit instantiation support:</p>
-<pre><code class="language-console">jco transpile component.wasm -o transpiled --instantiation=async
-</code></pre>
-<p>Then provide the class under the WIT interface’s fully qualified name:</p>
-<pre><code class="language-ts">import { readFile } from 'node:fs/promises';
-import { instantiate } from './transpiled/component.js';
-
-const loader = async (path: string) =&gt; WebAssembly.compile(await readFile(new URL(path, import.meta.url)));
-
-const instance = await instantiate(loader, {
-    'docs:resources/blobs': {
-        Blob: HostBlob,
-    },
-});
-</code></pre>
-<p>The property names match the generated JavaScript names: the WIT resource <code>blob</code> becomes
-<code>Blob</code>. Jco invokes methods with the original resource object as <code>this</code>, so private and
-per-instance state work as they do on an ordinary class.</p>
-<p>Real components often have additional imports, such as WASI interfaces. Those implementations
-must be included in the same import object; they are omitted here to keep the resource wiring
-visible.</p>
-<h3 id="exporting-a-guest-resource-to-the-host"><a class="header" href="#exporting-a-guest-resource-to-the-host">Exporting a guest resource to the host</a></h3>
-<p>The <code>exports-blobs</code> world reverses the direction: the guest provides the implementation and
-the host consumes it. First generate the guest declarations:</p>
-<pre><code class="language-console">jco guest-types wit --world-name exports-blobs -o generated
-</code></pre>
-<p>Use the generated resource type as the contract for the guest class, then export the class
-inside an object named after the WIT interface:</p>
-<pre><code class="language-ts">/// &lt;reference path="./generated/exports-blobs.d.ts" /&gt;
-import type { Blob } from 'docs:resources/blobs';
-
-class GuestBlob implements Blob {
-    #bytes: number[];
-
-    constructor(init: Uint8Array) {
-        this.#bytes = Array.from(init);
-    }
-
-    write(bytes: Uint8Array): void {
-        this.#bytes.push(...bytes);
-    }
-
-    read(): Uint8Array {
-        return Uint8Array.from(this.#bytes);
-    }
-
-    static merge(lhs: GuestBlob, rhs: GuestBlob): GuestBlob {
-        return new GuestBlob(Uint8Array.from([...lhs.#bytes, ...rhs.#bytes]));
-    }
-
-    [Symbol.dispose](): void {
-        this.#bytes.length = 0;
-    }
-}
-
-export const blobs = {
-    Blob: GuestBlob,
-};
-</code></pre>
-<p>The interface export is an object rather than a top-level <code>Blob</code> export because the WIT world
-exports the complete <code>blobs</code> interface. The shape of this object can be checked against the
-world module emitted by <code>jco guest-types</code>.</p>
-<h4 id="using-the-exported-resource-from-the-host"><a class="header" href="#using-the-exported-resource-from-the-host">Using the exported resource from the host</a></h4>
-<p>After componentizing and transpiling the guest, instantiate it from the host:</p>
-<pre><code class="language-console">jco componentize guest.js --wit wit --world-name exports-blobs \
-    -o component.wasm
-jco transpile component.wasm -o transpiled --instantiation=async
-</code></pre>
-<p>The instantiated component returns the exported interface. Its resource constructor and
-methods can be used like an ordinary JavaScript class:</p>
-<pre><code class="language-ts">import { readFile } from 'node:fs/promises';
-import { instantiate } from './transpiled/component.js';
-
-const loader = async (path: string) =&gt; WebAssembly.compile(await readFile(new URL(path, import.meta.url)));
-
-const { blobs } = await instantiate(loader, {});
-
-const left = new blobs.Blob(new Uint8Array([1, 2]));
-const right = new blobs.Blob(new Uint8Array([3, 4]));
-const merged = blobs.Blob.merge(left, right);
-
-console.log(merged.read());
-</code></pre>
-<p>The host owns all three handles returned by their constructors and <code>merge</code>. If their generated
-declarations expose <code>[Symbol.dispose]()</code>, the host should dispose each handle when it is no
-longer needed, preferably with <code>using</code>. Check the declarations generated by the Jco version in
-use: disposal support can differ between binding directions and component-model features.</p>
-<p>The important distinction is where the classes originate:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Use case</th><th>Class implementation</th><th>Connection at instantiation</th><th>Calls the resource</th></tr>
-</thead>
-<tbody>
-<tr><td>Guest imports resource</td><td>Host</td><td>Host passes <code>{ Blob: HostBlob }</code></td><td>Guest</td></tr>
-<tr><td>Guest exports resource</td><td>Guest</td><td>Host receives <code>{ blobs }</code></td><td>Host</td></tr>
-</tbody>
-</table>
-</div>
-<p>These are the same WIT resource semantics in opposite directions. In both cases, Jco preserves
-the resource’s identity and routes method calls to the side that owns its underlying state.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="manual-wasm-instantiation-with-wasi-overrides"><a class="header" href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI Overrides</a></h1>
-<p>When a Wasm component depends on functionality provided by WASI, the <code>jco transpile</code> produces a WebAssembly
-module that can be loaded from NodeJS or the Browser that includes usages of unresolved imports like <code>wasi:random/random</code>.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>Normally, WASI imports that need to be sourced from elsewhere would be <em>mapped</em>, using the
-<code>--map</code> option to <code>jco transpile</code>.</p>
-<p>These instructions are for when mapping is insufficient or implementations must be redirected
-or changed at instantiation time.</p>
-</blockquote>
-<p>A common usage of transpilation is to map the imports to a known package, like <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>:</p>
-<pre><code class="language-console">jco transpile \
-    component.wasm \
-    --output dist/transpiled \
-    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>For more information, see the <a href="advanced/transpiling.html#map-configuration">Map Configuration section of the Transpiling documentation</a></p>
-</blockquote>
-<p>Sometimes you may want to use <em>your own</em> implementation of WASI interfaces (whether partial or complete),
-known/resolved only at instantiation time.</p>
-<h2 id="manual-instantiation-of-a-transpiled-component-with-no-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-no-overrides">Manual instantiation of a transpiled component with no overrides</a></h2>
-<p>To use custom instantiations, in NodeJS we must build with the <code>async</code> instantiation mode:</p>
-<pre><code class="language-console">jco transpile \
-    component.wasm \
-    --instantiation async \
-    --output dist/transpiled
-</code></pre>
-<p>We can instantiate the WebAssembly component for use with <em>no</em> custom overrides
-(i.e. the default WASI implementations provided by <code>preview2-shim</code>):</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-async function main() {
-    const wasmESModule = await import("path/to/transpiled/component.js");
-    const loader = async (path) =&gt; {
-      const buf = await readFile(`./dist/transpiled/${path}`);
-      return await WebAssembly.compile(buf.buffer);
-    };
-    const component = wasmESModule.instantiate(loader, new WASIShim().getImportObject());
-    // TODO: add code that utilizes the component's exports
-}
-
-await main();
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>When dealing with browser environments, the <code>loader</code> function is not necessary, and <code>null</code>/<code>undefined</code> can be used.</p>
-</blockquote>
-<p>This is identical to mapping all imports to those provided by <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>.</p>
-<h2 id="manual-instantiation-of-a-transpiled-component-with-custom-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-custom-overrides">Manual instantiation of a transpiled component with custom overrides</a></h2>
-<p>To use custom component overrides in addition to the WASI imports provided by <code>preview2-shim</code>,
-as before build the component with the <code>async</code> instantiation mode:</p>
-<pre><code class="language-console">jco transpile \
-    component.wasm \
-    --instsantiation async \
-    --output dist/transpiled \
-    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
-</code></pre>
-<p>Then write an ES Module like the following:</p>
-<pre><code class="language-js">import { readFile } from "node:fs/promises";
-
-import { random } from "@bytecodealliance/preview2-shim";
-import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-async function main() {
-  /// Load the ES module generated by `jco transpile`
-  const wasmESModule = await import("./dist/transpiled/component.js");
-
-  // Build a customized WASI shim by mizing custom implementations
-  // and the provided implementation
-  const customShim = new WASIShim({
-    random: {
-      // For these two interfaces we re-use the default provided shim
-      random: random.random,
-      "insecure-seed": random.insecureSeed,
-      // For insecure, we can supply our own custom implementation
-      // (in this case, one that is *VERY* insecure)
-      insecure: {
-        getInsecureRandomBytes: (len) =&gt; {
-          return new Uint8Array(Number(len)).fill(0);
-        },
-        getInsecureRandomU64: () =&gt; 42n,
-      },
-    },
-  });
-
-  const loader = async (path) =&gt; {
-    const buf = await readFile(`./dist/transpiled/${path}`);
-    return await WebAssembly.compile(buf.buffer);
-  };
-
-  // Instantiate the Wasm component's ES module
-  const component = await wasmESModule.instantiate(
-    loader,
-    customShim.getImportObject(),
-  );
-
-  // TODO: add code to utilize the component exports
-}
-
-await main();
-</code></pre>
-<p>Using <code>WASIShim</code>, you can generate your own custom implementations of WASI, making use of
-the published shims where necessary.</p>
-<h2 id="versioned-imports-with-wasishim"><a class="header" href="#versioned-imports-with-wasishim">Versioned imports with <code>WASIShim</code></a></h2>
-<p>You can also use versions with the import objects produced by <code>WASIShim</code>:</p>
-<pre><code class="language-typescript">import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
-import type {
-    VersionedWASIImportObject,
-    WASIImportObject,
-} from '@bytecodealliance/preview2-shim/instantiation';
-
-const shim = new WASIShim();
-
-const unversioned: WASIImportObject = shim.getImportObject();
-// console.log('unversioned', unversioned);
-unversioned satisfies WASIImportObject;
-unversioned satisfies VersionedWASIImportObject&lt;''&gt;;
-
-const versioned: VersionedWASIImportObject&lt;'0.2.3'&gt; = shim.getImportObject({
-    asVersion: '0.2.3',
-});
-//console.log('versioned', versioned);
-versioned satisfies VersionedWASIImportObject&lt;'0.2.3'&gt;;
-</code></pre>
-<h2 id="sandboxing-with-wasishim"><a class="header" href="#sandboxing-with-wasishim">Sandboxing with <code>WASIShim</code></a></h2>
-<p>By default, the <code>preview2-shim</code> provides full access to the host filesystem, environment variables,
-and network - matching the default behavior of Node.js libraries. You can use the <code>sandbox</code> option
-to restrict what guests can access.</p>
-<p>Each <code>WASIShim</code> instance has its own isolated preopens, environment variables, and arguments.
-Multiple instances with different configurations will not affect each other:</p>
-<h3 id="fully-sandboxed-instance"><a class="header" href="#fully-sandboxed-instance">Fully sandboxed instance</a></h3>
-<p>To create a fully sandboxed instance with no filesystem, network, or environment access:</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-const sandboxedShim = new WASIShim({
-  sandbox: {
-    preopens: {},           // No filesystem access
-    env: {},                // No environment variables
-    args: ['my-program'],   // Custom arguments
-    enableNetwork: false,   // Disable network access
-  }
-});
-
-const component = await wasmESModule.instantiate(
-  loader,
-  sandboxedShim.getImportObject(),
-);
-</code></pre>
-<h3 id="limited-filesystem-access"><a class="header" href="#limited-filesystem-access">Limited filesystem access</a></h3>
-<p>To provide limited filesystem access by mapping virtual paths to host paths:</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-const limitedShim = new WASIShim({
-  sandbox: {
-    preopens: {
-      '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
-      '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
-    },
-    env: { 'ENV1': '42' },         // Only expose specific env vars
-  }
-});
-
-const component = await wasmESModule.instantiate(
-  loader,
-  limitedShim.getImportObject(),
-);
-</code></pre>
-<h3 id="sandbox-options"><a class="header" href="#sandbox-options">Sandbox options</a></h3>
-<p>The <code>sandbox</code> configuration object supports the following options:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>preopens</code></td><td><code>Record&lt;string, string&gt;</code></td><td>Full filesystem</td><td>Map of virtual paths to host paths. Use <code>{}</code> for no filesystem access.</td></tr>
-<tr><td><code>env</code></td><td><code>Record&lt;string, string&gt;</code></td><td><code>process.env</code></td><td>Environment variables visible to the guest. Use <code>{}</code> for no env access.</td></tr>
-<tr><td><code>args</code></td><td><code>string[]</code></td><td><code>process.argv</code></td><td>Command-line arguments visible to the guest.</td></tr>
-<tr><td><code>enableNetwork</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Whether to enable network access (sockets, HTTP).</td></tr>
-</tbody>
-</table>
-</div>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="detecting-traps"><a class="header" href="#detecting-traps">Detecting Traps</a></h1>
-<p>While some errors are represented at the WIT type level and expected, some internal errors
-may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
-component-model traps they detect with the built-in <code>WebAssembly.RuntimeError</code> class.</p>
-<p>After an instance has trapped, Jco marks the component instance as unusable. Any subsequent
-call throws the original trap without re-entering the component.</p>
-<p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class:</p>
-<pre><code class="language-js">import { instantiate } from "./dist/transpiled/component.js";
-import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-
-const shim = new WASIShim().getImportObject();
-const instance = await instantiate(undefined, shim);
-
-try {
-    instance['ns:pkg/iface'].someFunction();
-} catch (err) {
-    if (err instanceof WebAssembly.RuntimeError) {
-        console.error(`TRAP: ${err}`);
-        // The instance is now disabled and cannot be called again.
-    } else {
-        // Other exceptions are unexpected and should be handled separately.
-        throw err;
-    }
-}
-</code></pre>
-<p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
-thrown as <code>WebAssembly.RuntimeError</code> instances.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="preview-3-streams-and-backpressure"><a class="header" href="#preview-3-streams-and-backpressure">Preview 3 Streams and Backpressure</a></h1>
-<p>Preview 3 WIT <code>stream&lt;T&gt;</code> values are asynchronous sequences of elements.</p>
-<p>Jco accepts JS <code>AsyncIterable</code>s for host-provided readable streams, including
-<code>ReadableStream</code> and async generators (which may be manually constructed). Numeric
-chunks such as <code>Uint8Array</code> are expanded into their individual elements.</p>
-<p>Items passed through iterables are elements, <em>not</em> chunks.</p>
-<p>A component may do many things that are not quite similar to how async iterables work
-natively in JS:</p>
-<ul>
-<li>Consume part of a chunk</li>
-<li>Combine several chunks in one read</li>
-<li>Issue a zero-length readiness read</li>
-<li>Cancel an in-progress read.</li>
-</ul>
-<p>Code that depends on one JavaScript chunk corresponding to one
-component read has to be written with this in mind.</p>
-<h2 id="backpressure-is-not-an-acknowledgement"><a class="header" href="#backpressure-is-not-an-acknowledgement">Backpressure is not an acknowledgement</a></h2>
-<p>Backpressure limits how far a producer should run ahead of a consumer. It does
-not prove that the component has processed a value (i.e. if you are performing an
-operation on stream elements, it does not mean that the component has <em>performed</em>
-the relevant operation).</p>
-<p>In particular:</p>
-<ul>
-<li><code>ReadableStreamDefaultController.enqueue()</code> returns immediately.</li>
-<li><code>WritableStreamDefaultWriter.ready</code> means the stream can accept more data.</li>
-<li>A resolved <code>WritableStreamDefaultWriter.write()</code> means the Web Stream
-accepted the chunk according to its queuing strategy; it is not an
-application-level acknowledgement from the component.</li>
-<li>Runtime readiness probes may request data before the component performs its
-next non-empty read.</li>
-</ul>
-<p><strong>If the producer needs delivery confirmation, this should be expressed in WIT,
-rather than inferring it from Stream object backpressure.</strong></p>
-<p>Use a bounded producer and wait for backpressure before producing more data:</p>
-<pre><code class="language-js">const transform = new TransformStream(
-    undefined,
-    { highWaterMark: 1 },
-    { highWaterMark: 1 },
-);
-const writer = transform.writable.getWriter();
-
-async function produce(source) {
-    try {
-        for await (const chunk of source) {
-            if (writer.desiredSize !== null &amp;&amp; writer.desiredSize &lt;= 0) {
-                await writer.ready;
-            }
-            await writer.write(chunk);
-        }
-        await writer.close();
-    } catch (error) {
-        await writer.abort(error);
-        throw error;
-    }
-}
-
-// Pass transform.readable as the JS representation of stream&lt;u8&gt;.
-</code></pre>
-<p>Try to avoid enqueuing unbounded inputs eagerly, and treat an enqueued typed array as
-immutable; mutating or reusing its storage while it is buffered can change data
-that has not crossed the component boundary yet.</p>
-<h2 id="cancellation-can-race-completion"><a class="header" href="#cancellation-can-race-completion">Cancellation can race completion</a></h2>
-<p>When <code>stream&lt;t&gt;</code>s are cancelled, in-progress copies are automatically resolved.
-Data can become available between the cancellation request and cancellation
-completion, which means the result may therefore report either:</p>
-<ol>
-<li><code>cancelled</code> with no progress; or</li>
-<li><code>completed</code> with the number of elements copied before cancellation ocurred</li>
-</ol>
-<p>Regardless of which occurs, the stream remains usable, it’s up to the producer
-to retain retain values that were fetched from its source but were not copied,
-preserve their order, and offer them to the next read.</p>
-<p>The producer <em>must not</em> start a second write against a stream end that already
-has a copy in progress.</p>
-<p>This means that for custom async iterators, you should likely implement cleanup
-with <code>return()</code> or a generator <code>finally</code> block.</p>
-<p>Also, cancellation of one component read does not necessarily mean that the entire
-WIT stream was dropped:</p>
-<pre><code class="language-js">async function* byteStream(source) {
-    try {
-        for await (const chunk of source) {
-            yield chunk;
-        }
-    } finally {
-        await source.close();
-    }
-}
-</code></pre>
-<h2 id="zero-length-reads-are-readiness-probes"><a class="header" href="#zero-length-reads-are-readiness-probes">Zero-length reads are readiness probes</a></h2>
-<p>A component can read zero elements to wait until data or end-of-stream is
-observable without consuming an element.</p>
-<p>Jco may pull one host chunk to answer that readiness query, but the values
-must remain available for a later non-empty read.</p>
-<p>This has two practical consequences:</p>
-<ol>
-<li>Producing a chunk does not imply that any of its elements were consumed.</li>
-<li>A source with side effects should perform them when producing the value, not
-when assuming the component received it.</li>
-</ol>
-<p>When testing a host stream you should generally include:</p>
-<ul>
-<li>Delayed production</li>
-<li>Chunks larger than the guest read buffer</li>
-<li>Repeated read cancellation</li>
-<li>Zero-length readiness reads</li>
-<li>An end-to-end ordering check.</li>
-</ul>
-<p>Timing-only assertions are not a good idea, and you should generally make sure to
-interact with the stream directly.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="preview-3-host-value-disposal"><a class="header" href="#preview-3-host-value-disposal">Preview 3 Host Value Disposal</a></h1>
-<p>A guest can discard asynchronous values that JavaScript provided before it ever receives
-their result. For example:</p>
-<ul>
-<li>It can cancel an <code>async</code> import call that is still in flight. A Rust guest does this when
-it drops the future returned by an import, which lowers to the <code>subtask.cancel</code> canonical
-built-in.</li>
-<li>It can drop a <code>future&lt;T&gt;</code> provided by the host without reading its value. A Rust guest does
-this when it drops a <code>FutureReader</code>, cancelling any pending read first.</li>
-<li>It can drop a <code>stream&lt;T&gt;</code> provided by the host before reading all of it.</li>
-</ul>
-<p>Jco never waits for the host when this happens: the call, future or stream is treated as
-cancelled immediately, and anything the host produces later is discarded. The host is
-notified by <em>disposing</em> the value it provided.</p>
-<h2 id="async-imports-and-futures"><a class="header" href="#async-imports-and-futures">Async imports and futures</a></h2>
-<p>Return a thenable (usually a <code>Promise</code>) that implements <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/asyncDispose"><code>Symbol.asyncDispose</code></a>
-or <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/dispose"><code>Symbol.dispose</code></a>. This applies to promises returned from <code>async</code> imports
-and to promises lowered into a <code>future&lt;T&gt;</code> (whether returned from an import or passed as an
-argument to an export):</p>
-<pre><code class="language-js">const imports = {
-    'example:websocket/client': {
-        connect(url) {
-            const controller = new AbortController();
-            const pending = openSocket(url, { signal: controller.signal });
-
-            // Called only if the guest discards this call and its result
-            pending[Symbol.asyncDispose] = async () =&gt; {
-                controller.abort();
-                // A socket that opened just before cancellation will never reach the guest
-                const socket = await pending.catch(() =&gt; undefined);
-                socket?.close();
-            };
-
-            return pending;
-        },
-    },
-};
-</code></pre>
-<p>Native promises are extensible, so no wrapper type is needed. Promises without a dispose
-method behave exactly as before.</p>
-<p>If both methods are present, only <code>Symbol.asyncDispose</code> is called.</p>
-<h2 id="streams"><a class="header" href="#streams">Streams</a></h2>
-<p>When the guest drops the readable end of a host-provided stream, Jco cleans up the source in
-the following order of preference:</p>
-<ol>
-<li>Calls <code>return()</code> on the source’s iterator (as <code>for await ... of</code> does when breaking out of
-a loop), which runs any <code>finally</code> blocks in a started generator.</li>
-<li>Otherwise, calls the stream object’s <code>Symbol.asyncDispose</code> or <code>Symbol.dispose</code> method.</li>
-<li>For a <code>ReadableStream</code> without the async iterator protocol, cancels its reader.</li>
-</ol>
-<p>Unlike futures, a stream is cleaned up whenever the guest drops it, including after it has
-read everything, so cleanup must be safe to run on an exhausted source.</p>
-<p>Cancelling a single in-progress read of a stream does <em>not</em> clean up the source, because the
-stream remains usable (see <a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>).</p>
-<h2 id="semantics"><a class="header" href="#semantics">Semantics</a></h2>
-<ul>
-<li>A call or future is disposed <strong>only</strong> when the guest discards it. Values delivered to the
-guest are never disposed: from then on, the guest owns them.</li>
-<li>A promise may be disposed <em>after</em> it settled, if the guest discarded it before the settled
-value was delivered. In that case the value will never reach the guest, and the host is
-responsible for releasing it.</li>
-<li>Disposal is called at most once, asynchronously (never from inside the canonical built-in
-the guest called). The guest does not wait for it.</li>
-<li>Fulfilling or rejecting a promise after disposal (for example with an <code>AbortError</code>) is
-ignored, and does not trap the component.</li>
-<li>Errors thrown (or rejections returned) during disposal are reported with <code>console.error</code>
-and do not affect the guest.</li>
-<li>Providers that ignore disposal, or never settle, do not block the guest.</li>
-</ul>
-<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
-<ul>
-<li>Only async-lowered calls can be cancelled by a guest. Sync-lowered calls to async imports,
-and synchronous imports suspended via JSPI, give the guest no handle with which to cancel the
-individual call, so they are never disposed.</li>
-<li>If a guest cancels an <code>async</code> import call whose result would have contained a future or
-stream, only the returned promise is disposed, as the future or stream was never created.</li>
-<li>Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
-delivered to the guest are not covered by this mechanism.</li>
-</ul>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="preview-2-shim-cli-helpers"><a class="header" href="#preview-2-shim-cli-helpers">Preview 2 shim CLI helpers</a></h1>
-<p><a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a> ships host-side helper functions next to its WASI
-implementations. Helpers build only on the shim’s public surface and are exported from <code>helpers/</code>
-subpaths, separate from the underscore-prefixed functions (<code>_setStdin</code>, <code>_setPreopens</code>, …) that
-exist to configure the shim itself.</p>
-<p>Helpers that only exist for one build are exported under that build’s prefix. The CLI helper on
-this page is browser-only, because it builds on the browser <code>wasi:io</code> pollables:</p>
-<pre><code class="language-js">import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
-</code></pre>
-<h2 id="bufferedinputstreaminput"><a class="header" href="#bufferedinputstreaminput"><code>bufferedInputStream(input)</code></a></h2>
-<p>Builds an <code>InputStreamHandler</code> that serves a fixed buffer to the guest and then reports the stream
-as closed. It replaces the bounded handler that hosts otherwise have to hand-roll whenever a
-guest’s stdin is known up front, such as piping a document into a CLI component.</p>
-<p><code>input</code> is a <code>Uint8Array</code>, or a string that is encoded as UTF-8. Each <code>blockingRead(len)</code> returns
-up to <code>len</code> bytes from what remains of the buffer. Once the buffer is exhausted, further reads raise
-the WASI <code>closed</code> stream error, which the guest observes as end of input. <code>subscribe()</code> returns an
-always-ready pollable, so a guest that polls stdin before reading never blocks.</p>
-<h3 id="feeding-an-isolated-cli"><a class="header" href="#feeding-an-isolated-cli">Feeding an isolated CLI</a></h3>
-<p><code>createCli</code> builds CLI interfaces that do not touch the shim’s global streams:</p>
-<pre><code class="language-js">import { cli } from "@bytecodealliance/preview2-shim";
-import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
-
-const isolated = cli.createCli({
-    stdin: bufferedInputStream("first line\nsecond line\n"),
-});
-</code></pre>
-<h3 id="feeding-a-wasishim"><a class="header" href="#feeding-a-wasishim">Feeding a <code>WASIShim</code></a></h3>
-<p><code>WASIShim</code> accepts the same handler through its <code>stdin</code> option and builds an isolated CLI for the
-instance:</p>
-<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
-import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
-
-const shim = new WASIShim({
-    stdin: bufferedInputStream("input for the guest\n"),
-});
-const component = await instantiate(undefined, shim.getImportObject());
-</code></pre>
-<p>See <a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>
-for how <code>instantiate</code> and <code>WASIShim</code> fit together.</p>
-<h3 id="replacing-the-global-stdin"><a class="header" href="#replacing-the-global-stdin">Replacing the global stdin</a></h3>
-<p>The compatibility setter installs the handler on the stream shared by every component that does
-not configure its own CLI:</p>
-<pre><code class="language-js">import { cli } from "@bytecodealliance/preview2-shim";
-import { bufferedInputStream } from "@bytecodealliance/preview2-shim/browser/helpers/cli";
-
-cli._setStdin(bufferedInputStream(new Uint8Array([1, 2, 3])));
-</code></pre>
-<p>Prefer <code>createCli</code> or <code>WASIShim</code> when more than one component runs in the same page, since the
-global stream is consumed once and then stays closed.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="jco-std"><a class="header" href="#jco-std"><code>jco-std</code></a></h1>
 <p><a href="https://www.npmjs.com/package/@bytecodealliance/jco-std"><code>@bytecodealliance/jco-std</code></a> is Jco’s library of reusable JavaScript and
@@ -5149,6 +4287,1144 @@ to lower their property escapes and Unicode set syntax. Strings, comments, and
 template text stay untouched. Dynamic <code>RegExp</code> constructor strings are not
 rewritten. Unicode tables come from the pinned compiler dependency.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="advanced"><a class="header" href="#advanced">Advanced</a></h1>
+<p>These chapters go deeper into how Jco binds components to JavaScript. They assume familiarity with
+the <a href="#transpiling">Transpiling</a> chapter and the <a href="#wasi-support">WASI support</a> section.</p>
+<ul>
+<li><a href="#host-bindings">Optimized Host Bindings</a>: the fast paths Jco generates for host
+calls, and when they apply.</li>
+<li><a href="#wit-type-representations">WIT Type representations</a>: how each WIT type appears in
+JavaScript.</li>
+<li><a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>:
+instantiating a transpiled component yourself and replacing individual WASI interfaces.</li>
+<li><a href="#detecting-traps">Detecting traps</a>: telling a component trap apart from an ordinary error.</li>
+<li><a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>: how WASI 0.3
+streams flow between host and guest.</li>
+<li><a href="#preview-3-host-value-disposal">Preview 3 host value disposal</a>: what happens to host-provided
+values a guest discards.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="host-bindings"><a class="header" href="#host-bindings">Host Bindings</a></h1>
+<p>The default mode for host bindings in JS hosts in Jco is through the high-level JS-based bindgen.</p>
+<p>The benefit of this approach is that all host bindings are available as normal JS imports. For
+example, JavaScript developers can directly import a function like
+<code>import { getRandomBytes } from 'wasi:random/random'</code>, and directly interact with the bindings
+at a high level.</p>
+<p>This also makes it easy to provide custom or virtual implementations for bindings using the same
+host semantic conventions.</p>
+<p>But for performance-sensitive applications, host bindings still need to have a fast path for
+optimized bindgen.</p>
+<h2 id="using-native-host-bindings"><a class="header" href="#using-native-host-bindings">Using Native Host Bindings</a></h2>
+<p>Given a JS host that implements such a binding, the <code>--import-bindings</code> flag may be used to customize
+which host bindings mode to use:</p>
+<ul>
+<li>The default bindgen mode is <code>--import-bindings=js</code> using high-level JS bindings for all imports.</li>
+<li>When generating <code>--import-bindings=hybrid</code>, Jco will still generate the high-level bindgen for all imports, but
+check for a <code>Symbol.for('cabiLower')</code> and use this optimized bindgen when available on a function-by-function
+basis.</li>
+<li>For <code>--import-bindings=optimized</code>, Jco will omit outputting the high-level JS bindgen for imports, and instead use
+the low-level bindgen function directly, assuming <code>Symbol.for('cabiLower')</code> is defined on all imports.</li>
+<li>For <code>--import-bindings=direct-optimized</code>, instead of reading a <code>Symbol.for('cabiLower')</code>, Jco will assume that
+imports are all these lower functions instead (useful in instantiatio mode).</li>
+</ul>
+<p>This scheme implies instantiation mode to provide the host bindings, or for the host to support
+providing the imports as a host ESM import scheme such as <code>import { getRandomBytes } from 'wasi:random/random'</code>.</p>
+<h2 id="optimized-host-bindings-spec"><a class="header" href="#optimized-host-bindings-spec">Optimized Host Bindings Spec</a></h2>
+<h3 id="fnsymbolforcabilowercanonopts---corefn"><a class="header" href="#fnsymbolforcabilowercanonopts---corefn"><code>fn[Symbol.for('cabiLower')](canonOpts) -&gt; coreFn</code></a></h3>
+<p>A function that has a native optimized implementation, can expose its native optimized bindgen through
+a <code>Symbol.for('cabiLower')</code> method, taking a <code>canonOpts</code> object.</p>
+<p>The following <code>canonOpts</code> fields may be defined as needed:</p>
+<ul>
+<li><code>memory</code>: The WebAssembly memory object for the component to which we are binding, if needed.</li>
+<li><code>realloc</code>: The realloc function inside of the component we are binding, <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/Binary.md#canonical-definitions">per component model semantics</a>, if needed.</li>
+<li><code>postReturn</code>: The post-return function for the call, if needed.</li>
+<li><code>stringEncoding</code>: If needed, with <code>'utf8'</code> as the default.</li>
+<li><code>resourceTables</code>: If needed, an ordered list of resource tables in which they uniquely appear in the
+function parameters and results of type <code>ResourceTable[]</code>.</li>
+</ul>
+<p>The return value of this function is then a new function, <code>coreFn</code>, which represents an optimized
+native function which can be provided as a direct core function import to the
+<code>WebAssembly.instantiate</code> operation of the core binary for the component being linked, providing a
+direct host-native binding to the inner core binary of the component without needing an intermediate
+lowering operation in the component model semantics.</p>
+<h3 id="resourcetable-number"><a class="header" href="#resourcetable-number"><code>ResourceTable: number[]</code></a></h3>
+<p>Resource handles are tracked in handle tables, a set of shared slab data structures primarily
+relating handles to resource ids (reps) for the particular table. Each resource usually has a unique
+handle table assign for every component it is used in.</p>
+<p>When handles are passed between component functions, resource state needs to be maintained between
+these tables, therefore in optimized bindgen, this shared state needs to be operated on. For example,
+resource creation creates an own handle in the table for that resource of the component caller,
+requiring the creator to populate a table of the caller.</p>
+<p>In optimized bindgen, this is acheived by mutating the data structure accordingly. Great care needs
+to be taken to ensure the full component model semantics are followed in this process.</p>
+<p>The implementation here is based on a JS array of integers. This is done instead of using typed
+arrays because we need resizability without reserving a large buffer like resizable typed arrays
+might for the same use case (and unless that changes in future).</p>
+<p>The number bits are the lowest 29 bits, while the flag bit for all data values is 1 &lt;&lt; 30. We avoid
+the use of the highest bit entirely to not trigger SMI deoptimization.</p>
+<p>Each entry consists of a pair of u32s, with each pair either a free list entry, or a data entry.</p>
+<h4 id="free-list-entries"><a class="header" href="#free-list-entries">Free List Entries:</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: center">index (x, u30)</th><th style="text-align: center"><del>unused</del></th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: center">32 bits</td><td style="text-align: center">32 bits</td></tr>
+<tr><td style="text-align: center">01xxxxxxxxxxxxxxxxx</td><td style="text-align: center">###################</td></tr>
+</tbody>
+</table>
+</div>
+<p>Free list entries use only the first value in the pair, with the high bit always set
+to indicate that the pair is part of the free list. The first entry pair at indices
+0 and 1 is the free list head, with the initial values of 1 &lt;&lt; 30 and 0 respectively.
+Removing the 1 &lt;&lt; 30 flag gives 0, which indicates the end of the free list.</p>
+<h4 id="data-entries"><a class="header" href="#data-entries">Data Entries:</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: center">scope (x, u30)</th><th style="text-align: center">own(o), rep(x, u30)</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: center">32 bits</td><td style="text-align: center">32 bits</td></tr>
+<tr><td style="text-align: center">00xxxxxxxxxxxxxxxxx</td><td style="text-align: center">0oxxxxxxxxxxxxxxxxx</td></tr>
+</tbody>
+</table>
+</div>
+<p>Data entry pairs consist of a first u30 scope value and a second rep value. The field
+is only called the scope for interface shape consistency, but is actually used for the
+ref count for own handles and the scope id for borrow handles. The high bit is never
+set for this first entry to distinguish the pair from the free list. The second value
+in the pair is the rep for the resource, with the high bit in this entry indicating
+if it is an own handle.</p>
+<p>The free list numbering and the handle numbering are the same, indexing by pair, so to
+get from a handle or free list numbering to an index, we multiply by two.</p>
+<p>For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
+the array to get the context and rep respectively. If the high bit is set on the
+context, we throw for an invalid handle. The rep value is masked out from the
+ownership high bit, also throwing for an invalid zero rep.</p>
+<h3 id="resourceinstancesymbolforcabirep"><a class="header" href="#resourceinstancesymbolforcabirep"><code>resourceInstance[Symbol.for('cabiRep')]</code></a></h3>
+<p>Normally imported resource classes do not have to define any special symbols, as they are assigned
+rep numbers when passed in.</p>
+<p>When using hybrid or optimized bindgen, high-level functions may still return and take high-level
+resource classes as parameters. For example, a resource type used optimized in import bindgen might
+still be constructible elsewhere to be passed in as a parameter to an exported function of a
+component attached to that optimized low-level import bindgen.</p>
+<p>As a result, when using low-level bindgen, any high-level resource instances MUST define a
+<code>Symbol.for('cabiRep')</code> symbol in order for these resources to correctly interact with low-level
+bindgen functions referring to those same resources.</p>
+<h3 id="resourceclasssymbolforcabidisposerep---void"><a class="header" href="#resourceclasssymbolforcabidisposerep---void"><code>ResourceClass[Symbol.for('cabiDispose')](rep) -&gt; void</code></a></h3>
+<p>Just like <code>Symbol.dispose</code> is used in high-level bindgen for imported resources to provide a
+destructor for when an own handle to a resource is dropped, low-level bindgen provides this hook
+for imported resources through the <code>cabiDispose</code> function.</p>
+<p>The <code>Symbol.for('cabiDispose')</code> function is an optional destructor which is available as a direct
+static method on the imported resource class.</p>
+<p>Unlike the other low-level functions, this one does not need to be bound and is called directly, as
+it takes the rep directly to handle internal destructor mechanisms.</p>
+<p>Imported resources created externally are always “captured” explicitly when passed in to high-level
+functions, even when defining <code>Symbol.for('cabiRep')</code>, so any GC is implicitly averted. In these
+capture cases their <code>resourceInstance[Symbol.dispose]()</code> disposal will always be called instead
+of <code>cabiDispose</code>, even if they do not define a <code>Symbol.dispose</code>. This allows any custom GC hooks to
+apply correctly.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="wit-type-representations"><a class="header" href="#wit-type-representations">WIT Type Representations</a></h1>
+<p>Similar to any other guest langauge, there are multiple type systems in play when dealing with JS WebAssembly components.</p>
+<p>Types represented in <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WebAssembly Interface Types (“WIT”)</a> must be converted down to types that are familiar for Javascript,
+and <a href="https://www.typescriptlang.org/">Typescript</a> (if dealing with <code>jco types</code> or <code>jco guest-types</code> subcommands).</p>
+<p>This document details the type representations and usage for types that are defined in WIT and built into components.</p>
+<h2 id="basic-types"><a class="header" href="#basic-types">Basic types</a></h2>
+<p>Here is a basic table of conversions between WIT types and JS types:</p>
+<p>More complicated types that are built into WIT but require more work to translate are explained below.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>WIT type</th><th>JS Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>u8</code></td><td><code>number</code></td></tr>
+<tr><td><code>u16</code></td><td><code>number</code></td></tr>
+<tr><td><code>u32</code></td><td><code>number</code></td></tr>
+<tr><td><code>u64</code></td><td><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a></td></tr>
+<tr><td><code>s8</code></td><td><code>number</code></td></tr>
+<tr><td><code>s16</code></td><td><code>number</code></td></tr>
+<tr><td><code>s32</code></td><td><code>number</code></td></tr>
+<tr><td><code>s64</code></td><td><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a></td></tr>
+<tr><td><code>f32</code></td><td><code>number</code></td></tr>
+<tr><td><code>f64</code></td><td><code>number</code></td></tr>
+<tr><td><code>bool</code></td><td><code>boolean</code></td></tr>
+<tr><td><code>char</code></td><td><code>string</code></td></tr>
+<tr><td><code>string</code></td><td><code>string</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="enums-enum"><a class="header" href="#enums-enum">Enums (<code>enum</code>)</a></h2>
+<p>Jco represents a WIT enum as a union of string literals. By default, the strings preserve the WIT case names:</p>
+<pre><code class="language-wit">enum status { request-pending, request-complete }
+</code></pre>
+<pre><code class="language-ts">export type Status = 'request-pending' | 'request-complete';
+</code></pre>
+<p>Pass <code>--enum-values-screaming-snake-case</code> to use <code>SCREAMING_SNAKE_CASE</code> values at the JavaScript boundary and in generated
+declarations:</p>
+<pre><code class="language-ts">export type Status = 'REQUEST_PENDING' | 'REQUEST_COMPLETE';
+</code></pre>
+<p>The option affects both values passed into a component and values returned from it. It also works with
+<code>--use-namespace-objects</code>; in that mode, for example, <code>Status.RequestPending</code> has the value <code>'REQUEST_PENDING'</code>.</p>
+<h2 id="namespace-objects"><a class="header" href="#namespace-objects">Namespace objects</a></h2>
+<p>WIT enums and variants are represented as TypeScript types by default, so they do not provide JavaScript values for
+constructing cases. Pass <code>--use-namespace-objects</code> to <code>jco transpile</code> to generate namespace objects for enums, flags,
+and variants. The same option on <code>jco types</code> and <code>jco guest-types</code> generates matching declarations.</p>
+<p>For example, given these WIT types:</p>
+<pre><code class="language-wit">enum direction { north, south }
+flags permissions { read, write }
+variant request { open(string), close }
+</code></pre>
+<p>an exported interface provides values like:</p>
+<pre><code class="language-js">api.Direction.North; // 'north'
+api.Permissions.Read | api.Permissions.Write; // 3n
+api.Request.Open('/tmp/file'); // { tag: 'open', val: '/tmp/file' }
+api.Request.Close(); // { tag: 'close' }
+</code></pre>
+<p>The namespace objects are frozen. Aliases of the same WIT type share the same object. Since flag namespace values are
+bit masks, this option implies <code>--flags-as-bigint</code>. It cannot be combined with <code>--variants-inline-cases</code>, and remains
+disabled by default to preserve existing generated APIs.</p>
+<h2 id="variants-variant"><a class="header" href="#variants-variant">Variants (<code>variant</code>)</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-variant-one-of-a-set-of-types">Variant section of the WIT IDL</a> for more information on Variants</p>
+</blockquote>
+<p>Variants are like basic enums in most languages with one exception; members of the variant can hold a single data type.
+Alternative variant members may hold <em>different</em> types to represent different cases. For example:</p>
+<pre><code class="language-wit">variant exit-code {
+  success,
+  failure-code(u32),
+  failure-msg(string),
+}
+</code></pre>
+<h3 id="wit-syntax"><a class="header" href="#wit-syntax">WIT syntax</a></h3>
+<pre><code class="language-wit">variant filter {
+    all,
+    none,
+    some(list&lt;string&gt;),
+}
+</code></pre>
+<h3 id="jco-representation"><a class="header" href="#jco-representation">Jco Representation</a></h3>
+<p>Jco represents variants as objects with a <code>tag</code> that represents the variant, and <code>val</code> that represents the content:</p>
+<p>For example, pseudo Typescript for the of the above <code>filter</code> variant would look like the following:</p>
+<pre><code class="language-ts">// Filter with all
+{
+  tag: 'all';
+}
+
+// Filter with None
+{
+  tag: 'none';
+}
+
+// Filter with some and a list of strings
+{
+  tag: 'some';
+  val: string[];
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>WIT <code>variant</code>’s options may only contain <em>one</em> piece of data.</p>
+<p>You can work around this limitation of variants by having the contained type be a <em>tuple</em>,
+(e.g. <code>tuple&lt;string, u32, string&gt;</code>), or using a named record as the related data.</p>
+</blockquote>
+<p>By default, generated TypeScript declarations export a named interface for each variant case. Pass
+<code>--variants-inline-cases</code> to <code>jco transpile</code>, <code>jco types</code>, or <code>jco guest-types</code> to emit the cases directly in the
+discriminated union instead:</p>
+<pre><code class="language-ts">export type Filter = { tag: 'all' } | { tag: 'none' } | { tag: 'some'; val: string[] };
+</code></pre>
+<p>Inlining prevents a generated case name such as <code>OperationCreate</code> from colliding with a WIT record named
+<code>operation-create</code>. The option is disabled by default because existing code may import the named case interfaces.</p>
+<h2 id="records-record"><a class="header" href="#records-record">Records (<code>record</code>)</a></h2>
+<h3 id="wit-syntax-1"><a class="header" href="#wit-syntax-1">WIT Syntax</a></h3>
+<pre><code class="language-wit">record person {
+    name: string,
+    age: u32,
+    favorite-color: option&lt;string&gt;,
+}
+</code></pre>
+<h3 id="jco-representation-1"><a class="header" href="#jco-representation-1">Jco Representation</a></h3>
+<p>Jco represents records as the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">Javascript Object basic data type</a>:</p>
+<p>Given the WIT record above, you can expect to deal with an object similar to the following Typescript:</p>
+<pre><code class="language-ts">interface Person {
+    person: string;
+    age: number;
+    favoriteColor?: number;
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>If using <code>jco guest-types</code> or <code>jco types</code>, you will be able to use Typescript types that
+properly constrain the Typescript code you write.</p>
+</blockquote>
+<h2 id="options-option"><a class="header" href="#options-option">Options (<code>option</code>)</a></h2>
+<h3 id="wit-syntax-2"><a class="header" href="#wit-syntax-2">WIT Syntax</a></h3>
+<pre><code class="language-wit">option&lt;u32, u32&gt;
+option&lt;string, u32&gt;
+</code></pre>
+<h3 id="jco-representation-2"><a class="header" href="#jco-representation-2">Jco Representation</a></h3>
+<p>Jco represents options as an optional value or undefined, so some examples:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td><code>option&lt;u32&gt;</code></td><td><code>number | undefined</code></td><td><code>option&lt;u32&gt;</code> -&gt; <code>number | undefined</code></td></tr>
+<tr><td><code>option&lt;option&lt;u32&gt;&gt;</code></td><td><code>{ tag: "some" | "none", val: number }</code></td><td><code>option&lt;u32&gt;</code> -&gt; <code>number | undefined</code></td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>“single level” <code>option</code>s are easy to reason about, but the doubly nested case (<code>option&lt;option&lt;_&gt;&gt;</code>) is more complex.</p>
+<p>Due to the important distinction between a missing optional versus an <code>option</code> that <em>contains</em> an empty value,
+doubly-nested (or more) <code>option</code>s are encoded with the object encoding described above, rather than as an optional value.</p>
+</blockquote>
+<h3 id="options-in-context-records"><a class="header" href="#options-in-context-records"><code>option</code>s in context: Records</a></h3>
+<p>When used in the context of a <code>record</code> (which becomes a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">JS Object</a>), optional values are represented as optional properties (i.e in TS a <code>propName?: value</code>).</p>
+<h3 id="options-in-context-function-argumentsreturn-values"><a class="header" href="#options-in-context-function-argumentsreturn-values"><code>option</code>s in context: Function arguments/return values</a></h3>
+<p>When used in the context of arguments or return to a function, single level <code>option</code>s are represented as optional values:</p>
+<p>Consider the following interface:</p>
+<pre><code class="language-wit">interface optional {
+    f: func(n: option&lt;u32&gt;) -&gt; string;
+}
+</code></pre>
+<p>An implementation of the function <code>optional.f</code> would look like the following Typescript:</p>
+<pre><code class="language-ts">function f(n?: number): string {
+    if (n === undefined) {
+        return 'no n provided';
+    }
+    return 'n was provided';
+}
+</code></pre>
+<h2 id="result-result"><a class="header" href="#result-result">Result (<code>result</code>)</a></h2>
+<p><code>Result</code> types, as a general concept represent a result that <em>may or may not</em> be present, due to a failure. A result value either contains
+a value that represents a completed computation (<code>SuccessType</code>), or some “error” that indicates a failure (<code>ErrorType</code>).</p>
+<p>You can think of the type of a <code>Result</code> as:</p>
+<pre><code>Result&lt;SuccessType, ErrorType&gt;
+</code></pre>
+<p>The value you ultimately deal with is one <em>or</em> the other – either the successful result or the error that represents the failure.</p>
+<h3 id="wit-syntax-3"><a class="header" href="#wit-syntax-3">WIT Syntax</a></h3>
+<pre><code class="language-wit">result&lt;_, string&gt;
+result&lt;, string&gt;
+result&lt;t,e&gt;
+</code></pre>
+<h3 id="jco-representation-3"><a class="header" href="#jco-representation-3">Jco representation</a></h3>
+<p>In Javsacript, computation that fails or errors are often represented as exceptions – and depending on how
+the <code>result</code> is used, Jco adheres to that representations.</p>
+<p>When used as an <em>output</em> to a function, <code>throw</code>ing an error will suffice. Given the following WIT interface:</p>
+<pre><code class="language-wit">add-overflow: func(lhs: u32, rhs: u32) -&gt; result&lt;u32, string&gt;;
+</code></pre>
+<p>The following JS function would satistfy the WIT interface:</p>
+<pre><code class="language-js">function addOverflow(lhs, rhs) {
+    let sum = lhs + rhs;
+    if (Nan.isNan(sum)) {
+        throw 'ERROR: addition produced non-number value';
+    } else if (sum &gt; 4294967295) {
+        throw 'ERROR: u32 overflow';
+    }
+    return sum;
+}
+</code></pre>
+<p>While JS automatically converts numbers, we must be careful to not attempt passing a number
+that would <em>not</em> fit in a <code>u32</code> (unsigned 32 bit integer) via WebAssembly.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>How JS treats large numbers is not in focus here, but it is worth noting that
+<code>Number.MAX_VALUE + Number.MAX_VALUE === Infinity</code>.</p>
+</blockquote>
+<h3 id="typescript-schema"><a class="header" href="#typescript-schema">Typescript Schema</a></h3>
+<pre><code>type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
+</code></pre>
+<h3 id="results-in-context-function-return-values"><a class="header" href="#results-in-context-function-return-values"><code>result</code>s in context: Function return values</a></h3>
+<p>When a result is returned directly from a function, any thrown error of the function is treated as the result error type,
+while any direct return value is treated as the result success type.</p>
+<p>For guest exports, <code>@bytecodealliance/jco-transpile</code> throws the lifted error payload directly by default. The <code>jco</code>
+API and CLI preserve the historical behavior of wrapping that value in an <code>Error</code> with a <code>payload</code> property. Pass
+<code>noComponentErrorWrapping: true</code> to the API, or <code>--no-component-error-wrapping</code> to the CLI, to make <code>jco</code> throw the
+payload directly. Pass <code>noComponentErrorWrapping: false</code> to <code>jco-transpile</code> to request the compatibility wrapper.</p>
+<p>Consider the following interface:</p>
+<pre><code class="language-wit">interface fallible {
+    f: func(n: u32) -&gt; result&lt;string, string&gt;;
+}
+</code></pre>
+<p>An implementation of the function <code>fallible.f</code> would look like the following Typescript:</p>
+<pre><code class="language-ts">function f(n: number): string {
+    if (n == 42) {
+        return 'correct';
+    }
+    throw 'not correct';
+}
+</code></pre>
+<h3 id="results-in-context-container-types-record-optional-etc"><a class="header" href="#results-in-context-container-types-record-optional-etc"><code>result</code>s in context: Container types (<code>record</code>, <code>optional</code>, etc)</a></h3>
+<p>A <code>result</code> stored inside a container type or in non-function argument/return contexts will look like a variant
+type of the form <code>{ tag: 'ok', val: SuccessType } | { tag: 'err', val: ErrorType }</code>.</p>
+<p>For example, consider the following WIT interface:</p>
+<pre><code class="language-wit">interface fallible-reaction {
+    r: func(r: result&lt;string, string&gt;) -&gt; string;
+}
+</code></pre>
+<p>An implementation of the function <code>fallible-reaction.r</code> would look like the following Typescript:</p>
+<pre><code class="language-ts">type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
+
+function f(input: Result&lt;string, string&gt;): string {
+  switch (input.tag) {
+    case 'ok': return `SUCCESS, returned: [${input.val}]";
+    case 'err': return `ERROR, returned: [${input.val}]";
+    // We we should never reach the case below
+    default: throw Error("something has gone seriously wrong");
+  }
+}
+</code></pre>
+<h3 id="result-considerations-idiomatic-js-errors-for-host-implementations"><a class="header" href="#result-considerations-idiomatic-js-errors-for-host-implementations"><code>result</code> considerations: Idiomatic JS errors for Host implementations</a></h3>
+<p>When running a component in a JS host, it is likely for host functions to throw real JS errors (objects which are descendants of the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error"><code>Error</code> global object</a>),
+rather than the exact type expected by Jco.</p>
+<p>This means that the default conversion mechanism for Jco would be a JS anti-pattern (i.e. <code>throw 12345</code> versus <code>throw new Error("error code 12345")</code>).</p>
+<p>To ensure smooth use of Jco-generated code from hosts, <code>Error</code> objects with a <code>payload</code> property will have the payload extracted as the result error type.</p>
+<p>Consider the following WIT:</p>
+<pre><code class="language-wit">type error-code = u32;
+
+interface only-throws {
+    just-throw: func() -&gt; result&lt;string, error-code&gt;;
+}
+</code></pre>
+<p>Consider the following <strong>host</strong> function adhering to the interface, and making use of idiomatic JS errors:</p>
+<pre><code class="language-js">// The below code assumes interaction with a WIT which looks like a
+function justThrow() {
+    const plainError = new Error('Error for JS users');
+    const errorWithPayload = Object.assign(plainError, { payload: 1111 });
+    throw errorWithPayload;
+}
+</code></pre>
+<h2 id="tuples-tuple"><a class="header" href="#tuples-tuple">Tuples (<code>tuple</code>)</a></h2>
+<p>Tuples are a container type that has a fixed size, types somewhat analogous to a fixed size list.</p>
+<p>Tuples can be combined with type renaming to produce types that carry some semantic meaning. For example:</p>
+<pre><code class="language-wit">type point = tuple&lt;u32,u32&gt;
+</code></pre>
+<p>Note that <code>tuple</code>s can be combined with custom user-defined types like <code>record</code>s and <code>variants</code>, <code>option</code>s and <code>result</code>s. For example:</p>
+<pre><code class="language-wit">variant example-var {
+    nothing,
+    value(u64),
+}
+
+record example-rec {
+    fst: string,
+    snd: u32,
+}
+
+type maybe-num = option&lt;u32&gt;;
+
+type num-or-err-str = result&lt;u32, string&gt;;
+
+type examples = tuple&lt;example-rec, example-var, maybe-num, num-or-err-str&gt;;
+</code></pre>
+<h3 id="wit-syntax-4"><a class="header" href="#wit-syntax-4">WIT Syntax</a></h3>
+<pre><code class="language-wit">tuple&lt;u32, u32&gt;
+tuple&lt;string, u32&gt;
+</code></pre>
+<h3 id="jco-representation-4"><a class="header" href="#jco-representation-4">Jco Representation</a></h3>
+<p>Jco represents tuples as lists (arrays), so some examples:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td><code>tuple&lt;u32, u32&gt;</code></td><td><code>[number, number]</code></td><td><code>tuple&lt;u32, u32&gt;</code> -&gt; <code>[number, number]</code></td></tr>
+<tr><td><code>tuple&lt;string, u32&gt;</code></td><td><code>[string, number]</code></td><td><code>tuple&lt;string, u32&gt;</code> -&gt; <code>[string, number]</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="list-list"><a class="header" href="#list-list">List (<code>list</code>)</a></h2>
+<h3 id="wit-syntax-5"><a class="header" href="#wit-syntax-5">WIT Syntax</a></h3>
+<pre><code>list&lt;u8&gt;
+list&lt;string&gt;
+</code></pre>
+<h3 id="jco-representation-5"><a class="header" href="#jco-representation-5">Jco Representation</a></h3>
+<p>Jco represents lists with native Javscript Arrays, with the exception of a <code>list&lt;u8&gt;</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td><code>list&lt;u8&gt;</code></td><td><code>Uint8Array</code></td><td><code>list&lt;u8&gt;</code> -&gt; <code>Uint8Array</code></td></tr>
+<tr><td><code>list&lt;t&gt;</code></td><td><code>T[]</code></td><td><code>list&lt;string&gt;</code> -&gt; <code>string[]</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="resources-resource"><a class="header" href="#resources-resource">Resources (<code>resource</code>)</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-resource">WIT IDL description of Resources</a> for more information</p>
+</blockquote>
+<p>Resources represent values that cannot be copied across a component boundary. A resource
+handle refers to state owned by the resource’s provider, without exposing that state to its
+consumer. In JavaScript, Jco represents the handle as an object whose methods call back into
+the provider.</p>
+<p>Resources are useful for stateful or platform-specific values such as files, sockets, and HTTP
+bodies. Unlike a WIT <code>record</code>, passing a resource does not serialize all of its fields.</p>
+<p>The examples below use a <code>blob</code> resource:</p>
+<h3 id="wit-syntax-6"><a class="header" href="#wit-syntax-6">WIT Syntax</a></h3>
+<pre><code class="language-wit">package docs:resources;
+
+interface blobs {
+    resource blob {
+        constructor(init: list&lt;u8&gt;);
+        write: func(bytes: list&lt;u8&gt;);
+        read: func() -&gt; list&lt;u8&gt;;
+        merge: static func(lhs: borrow&lt;blob&gt;, rhs: borrow&lt;blob&gt;) -&gt; blob;
+    }
+}
+
+world imports-blobs {
+    import blobs;
+}
+
+world exports-blobs {
+    export blobs;
+}
+</code></pre>
+<h3 id="jco-representation-6"><a class="header" href="#jco-representation-6">Jco representation</a></h3>
+<p>The resource is represented as a class. WIT kebab-case names become JavaScript camelCase
+for functions and PascalCase for classes. The <code>blob</code> resource above therefore has the
+following approximate TypeScript shape:</p>
+<pre><code class="language-ts">class Blob implements Disposable {
+    constructor(init: Uint8Array) {}
+
+    write(bytes: Uint8Array): void {}
+
+    read(): Uint8Array {}
+
+    static merge(lhs: Blob, rhs: Blob): Blob {}
+
+    [Symbol.dispose](): void {}
+}
+</code></pre>
+<p>The exact declaration depends on whether the resource is imported or exported. Run
+<code>jco guest-types</code> when implementing a JavaScript guest, or inspect the declarations emitted
+by <code>jco transpile</code> when using a component from a JavaScript host. The generated types are
+the source of truth for the binding being used.</p>
+<h3 id="imports-and-exports-are-from-the-guests-perspective"><a class="header" href="#imports-and-exports-are-from-the-guests-perspective">Imports and exports are from the guest’s perspective</a></h3>
+<p>It is useful to identify the provider and consumer before writing any JavaScript:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>WIT world item</th><th>Resource provider</th><th>Resource consumer</th></tr>
+</thead>
+<tbody>
+<tr><td><code>import blobs</code></td><td>Host</td><td>Guest component</td></tr>
+<tr><td><code>export blobs</code></td><td>Guest component</td><td>Host</td></tr>
+</tbody>
+</table>
+</div>
+<p>An imported resource is implemented by the host and passed to the component during
+instantiation. An exported resource is implemented by the guest and returned to the host
+as part of the component’s exports.</p>
+<h3 id="ownership-and-borrowing"><a class="header" href="#ownership-and-borrowing">Ownership and borrowing</a></h3>
+<p>A resource value is a handle with an associated lifetime. WIT uses two handle modes:</p>
+<ul>
+<li><code>own&lt;blob&gt;</code> transfers ownership to the callee. The receiving side is then responsible for
+eventually dropping the handle.</li>
+<li><code>borrow&lt;blob&gt;</code> temporarily makes the handle available to the callee. Ownership remains
+with the caller, and the callee must not keep using the handle after the call returns.</li>
+</ul>
+<p>Writing <code>blob</code> in a result or parameter is shorthand for an owned handle where WIT permits
+that shorthand. Resource methods implicitly borrow <code>self</code>, so calling <code>blob.read()</code> does not
+consume <code>blob</code>. In the example, <code>merge</code> borrows both arguments and returns a new owned
+resource.</p>
+<p>When a generated resource class implements <code>Disposable</code>, release it deterministically with
+a <code>using</code> declaration:</p>
+<pre><code class="language-ts">{
+    using blob = new Blob(new Uint8Array([1, 2, 3]));
+    blob.write(new Uint8Array([4]));
+    console.log(blob.read());
+} // blob[Symbol.dispose]() is called here
+</code></pre>
+<p>The equivalent JavaScript without a <code>using</code> declaration is:</p>
+<pre><code class="language-js">const blob = new Blob(new Uint8Array([1, 2, 3]));
+try {
+    console.log(blob.read());
+} finally {
+    blob[Symbol.dispose]();
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Do not use a resource after disposing it or after passing it to a parameter that takes
+<code>own&lt;blob&gt;</code>. JavaScript garbage collection is not a substitute for deterministic cleanup
+when the underlying resource holds files, sockets, or other limited host state.</p>
+</blockquote>
+<p>Whether <code>[Symbol.dispose]()</code> appears on a particular binding is recorded in its generated
+declaration. A provider may also implement <code>[Symbol.dispose]()</code> as a cleanup hook; Jco calls
+that hook when the corresponding owned handle is dropped.</p>
+<h3 id="importing-a-host-resource-into-a-guest"><a class="header" href="#importing-a-host-resource-into-a-guest">Importing a host resource into a guest</a></h3>
+<p>The <code>imports-blobs</code> world declares that the guest needs the host to provide the <code>blobs</code>
+interface. Generate types for the guest implementation with:</p>
+<pre><code class="language-console">jco guest-types wit --world-name imports-blobs -o generated
+</code></pre>
+<p>The generated ambient module uses the WIT package and interface name. Guest TypeScript can
+import the resource class, construct it, and call its methods:</p>
+<pre><code class="language-ts">/// &lt;reference path="./generated/imports-blobs.d.ts" /&gt;
+import { Blob } from 'docs:resources/blobs';
+
+export function processBytes(): Uint8Array {
+    using left = new Blob(new Uint8Array([1, 2]));
+    using right = new Blob(new Uint8Array([3, 4]));
+    using merged = Blob.merge(left, right);
+
+    merged.write(new Uint8Array([5]));
+    return merged.read();
+}
+</code></pre>
+<p><code>Blob</code> is supplied by the host even though it looks like a normal class to the guest. The
+guest can only observe the operations described by WIT.</p>
+<h4 id="providing-the-imported-resource-from-the-host"><a class="header" href="#providing-the-imported-resource-from-the-host">Providing the imported resource from the host</a></h4>
+<p>The host implements the resource with a JavaScript class. Its private fields remain entirely
+on the host:</p>
+<pre><code class="language-ts">class HostBlob {
+    #bytes: number[];
+
+    constructor(init: Uint8Array) {
+        this.#bytes = Array.from(init);
+    }
+
+    write(bytes: Uint8Array): void {
+        this.#bytes.push(...bytes);
+    }
+
+    read(): Uint8Array {
+        return Uint8Array.from(this.#bytes);
+    }
+
+    static merge(lhs: HostBlob, rhs: HostBlob): HostBlob {
+        return new HostBlob(Uint8Array.from([...lhs.#bytes, ...rhs.#bytes]));
+    }
+
+    [Symbol.dispose](): void {
+        this.#bytes.length = 0;
+    }
+}
+</code></pre>
+<p>Transpile the component with explicit instantiation support:</p>
+<pre><code class="language-console">jco transpile component.wasm -o transpiled --instantiation=async
+</code></pre>
+<p>Then provide the class under the WIT interface’s fully qualified name:</p>
+<pre><code class="language-ts">import { readFile } from 'node:fs/promises';
+import { instantiate } from './transpiled/component.js';
+
+const loader = async (path: string) =&gt; WebAssembly.compile(await readFile(new URL(path, import.meta.url)));
+
+const instance = await instantiate(loader, {
+    'docs:resources/blobs': {
+        Blob: HostBlob,
+    },
+});
+</code></pre>
+<p>The property names match the generated JavaScript names: the WIT resource <code>blob</code> becomes
+<code>Blob</code>. Jco invokes methods with the original resource object as <code>this</code>, so private and
+per-instance state work as they do on an ordinary class.</p>
+<p>Real components often have additional imports, such as WASI interfaces. Those implementations
+must be included in the same import object; they are omitted here to keep the resource wiring
+visible.</p>
+<h3 id="exporting-a-guest-resource-to-the-host"><a class="header" href="#exporting-a-guest-resource-to-the-host">Exporting a guest resource to the host</a></h3>
+<p>The <code>exports-blobs</code> world reverses the direction: the guest provides the implementation and
+the host consumes it. First generate the guest declarations:</p>
+<pre><code class="language-console">jco guest-types wit --world-name exports-blobs -o generated
+</code></pre>
+<p>Use the generated resource type as the contract for the guest class, then export the class
+inside an object named after the WIT interface:</p>
+<pre><code class="language-ts">/// &lt;reference path="./generated/exports-blobs.d.ts" /&gt;
+import type { Blob } from 'docs:resources/blobs';
+
+class GuestBlob implements Blob {
+    #bytes: number[];
+
+    constructor(init: Uint8Array) {
+        this.#bytes = Array.from(init);
+    }
+
+    write(bytes: Uint8Array): void {
+        this.#bytes.push(...bytes);
+    }
+
+    read(): Uint8Array {
+        return Uint8Array.from(this.#bytes);
+    }
+
+    static merge(lhs: GuestBlob, rhs: GuestBlob): GuestBlob {
+        return new GuestBlob(Uint8Array.from([...lhs.#bytes, ...rhs.#bytes]));
+    }
+
+    [Symbol.dispose](): void {
+        this.#bytes.length = 0;
+    }
+}
+
+export const blobs = {
+    Blob: GuestBlob,
+};
+</code></pre>
+<p>The interface export is an object rather than a top-level <code>Blob</code> export because the WIT world
+exports the complete <code>blobs</code> interface. The shape of this object can be checked against the
+world module emitted by <code>jco guest-types</code>.</p>
+<h4 id="using-the-exported-resource-from-the-host"><a class="header" href="#using-the-exported-resource-from-the-host">Using the exported resource from the host</a></h4>
+<p>After componentizing and transpiling the guest, instantiate it from the host:</p>
+<pre><code class="language-console">jco componentize guest.js --wit wit --world-name exports-blobs \
+    -o component.wasm
+jco transpile component.wasm -o transpiled --instantiation=async
+</code></pre>
+<p>The instantiated component returns the exported interface. Its resource constructor and
+methods can be used like an ordinary JavaScript class:</p>
+<pre><code class="language-ts">import { readFile } from 'node:fs/promises';
+import { instantiate } from './transpiled/component.js';
+
+const loader = async (path: string) =&gt; WebAssembly.compile(await readFile(new URL(path, import.meta.url)));
+
+const { blobs } = await instantiate(loader, {});
+
+const left = new blobs.Blob(new Uint8Array([1, 2]));
+const right = new blobs.Blob(new Uint8Array([3, 4]));
+const merged = blobs.Blob.merge(left, right);
+
+console.log(merged.read());
+</code></pre>
+<p>The host owns all three handles returned by their constructors and <code>merge</code>. If their generated
+declarations expose <code>[Symbol.dispose]()</code>, the host should dispose each handle when it is no
+longer needed, preferably with <code>using</code>. Check the declarations generated by the Jco version in
+use: disposal support can differ between binding directions and component-model features.</p>
+<p>The important distinction is where the classes originate:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Use case</th><th>Class implementation</th><th>Connection at instantiation</th><th>Calls the resource</th></tr>
+</thead>
+<tbody>
+<tr><td>Guest imports resource</td><td>Host</td><td>Host passes <code>{ Blob: HostBlob }</code></td><td>Guest</td></tr>
+<tr><td>Guest exports resource</td><td>Guest</td><td>Host receives <code>{ blobs }</code></td><td>Host</td></tr>
+</tbody>
+</table>
+</div>
+<p>These are the same WIT resource semantics in opposite directions. In both cases, Jco preserves
+the resource’s identity and routes method calls to the side that owns its underlying state.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="manual-wasm-instantiation-with-wasi-overrides"><a class="header" href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI Overrides</a></h1>
+<p>When a Wasm component depends on functionality provided by WASI, the <code>jco transpile</code> produces a WebAssembly
+module that can be loaded from NodeJS or the Browser that includes usages of unresolved imports like <code>wasi:random/random</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Normally, WASI imports that need to be sourced from elsewhere would be <em>mapped</em>, using the
+<code>--map</code> option to <code>jco transpile</code>.</p>
+<p>These instructions are for when mapping is insufficient or implementations must be redirected
+or changed at instantiation time.</p>
+</blockquote>
+<p>A common usage of transpilation is to map the imports to a known package, like <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>:</p>
+<pre><code class="language-console">jco transpile \
+    component.wasm \
+    --output dist/transpiled \
+    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>For more information, see the <a href="advanced/transpiling.html#map-configuration">Map Configuration section of the Transpiling documentation</a></p>
+</blockquote>
+<p>Sometimes you may want to use <em>your own</em> implementation of WASI interfaces (whether partial or complete),
+known/resolved only at instantiation time.</p>
+<h2 id="manual-instantiation-of-a-transpiled-component-with-no-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-no-overrides">Manual instantiation of a transpiled component with no overrides</a></h2>
+<p>To use custom instantiations, in NodeJS we must build with the <code>async</code> instantiation mode:</p>
+<pre><code class="language-console">jco transpile \
+    component.wasm \
+    --instantiation async \
+    --output dist/transpiled
+</code></pre>
+<p>We can instantiate the WebAssembly component for use with <em>no</em> custom overrides
+(i.e. the default WASI implementations provided by <code>preview2-shim</code>):</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+async function main() {
+    const wasmESModule = await import("path/to/transpiled/component.js");
+    const loader = async (path) =&gt; {
+      const buf = await readFile(`./dist/transpiled/${path}`);
+      return await WebAssembly.compile(buf.buffer);
+    };
+    const component = wasmESModule.instantiate(loader, new WASIShim().getImportObject());
+    // TODO: add code that utilizes the component's exports
+}
+
+await main();
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>When dealing with browser environments, the <code>loader</code> function is not necessary, and <code>null</code>/<code>undefined</code> can be used.</p>
+</blockquote>
+<p>This is identical to mapping all imports to those provided by <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>.</p>
+<h2 id="manual-instantiation-of-a-transpiled-component-with-custom-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-custom-overrides">Manual instantiation of a transpiled component with custom overrides</a></h2>
+<p>To use custom component overrides in addition to the WASI imports provided by <code>preview2-shim</code>,
+as before build the component with the <code>async</code> instantiation mode:</p>
+<pre><code class="language-console">jco transpile \
+    component.wasm \
+    --instsantiation async \
+    --output dist/transpiled \
+    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
+</code></pre>
+<p>Then write an ES Module like the following:</p>
+<pre><code class="language-js">import { readFile } from "node:fs/promises";
+
+import { random } from "@bytecodealliance/preview2-shim";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+async function main() {
+  /// Load the ES module generated by `jco transpile`
+  const wasmESModule = await import("./dist/transpiled/component.js");
+
+  // Build a customized WASI shim by mizing custom implementations
+  // and the provided implementation
+  const customShim = new WASIShim({
+    random: {
+      // For these two interfaces we re-use the default provided shim
+      random: random.random,
+      "insecure-seed": random.insecureSeed,
+      // For insecure, we can supply our own custom implementation
+      // (in this case, one that is *VERY* insecure)
+      insecure: {
+        getInsecureRandomBytes: (len) =&gt; {
+          return new Uint8Array(Number(len)).fill(0);
+        },
+        getInsecureRandomU64: () =&gt; 42n,
+      },
+    },
+  });
+
+  const loader = async (path) =&gt; {
+    const buf = await readFile(`./dist/transpiled/${path}`);
+    return await WebAssembly.compile(buf.buffer);
+  };
+
+  // Instantiate the Wasm component's ES module
+  const component = await wasmESModule.instantiate(
+    loader,
+    customShim.getImportObject(),
+  );
+
+  // TODO: add code to utilize the component exports
+}
+
+await main();
+</code></pre>
+<p>Using <code>WASIShim</code>, you can generate your own custom implementations of WASI, making use of
+the published shims where necessary.</p>
+<h2 id="versioned-imports-with-wasishim"><a class="header" href="#versioned-imports-with-wasishim">Versioned imports with <code>WASIShim</code></a></h2>
+<p>You can also use versions with the import objects produced by <code>WASIShim</code>:</p>
+<pre><code class="language-typescript">import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import type {
+    VersionedWASIImportObject,
+    WASIImportObject,
+} from '@bytecodealliance/preview2-shim/instantiation';
+
+const shim = new WASIShim();
+
+const unversioned: WASIImportObject = shim.getImportObject();
+// console.log('unversioned', unversioned);
+unversioned satisfies WASIImportObject;
+unversioned satisfies VersionedWASIImportObject&lt;''&gt;;
+
+const versioned: VersionedWASIImportObject&lt;'0.2.3'&gt; = shim.getImportObject({
+    asVersion: '0.2.3',
+});
+//console.log('versioned', versioned);
+versioned satisfies VersionedWASIImportObject&lt;'0.2.3'&gt;;
+</code></pre>
+<h2 id="sandboxing-with-wasishim"><a class="header" href="#sandboxing-with-wasishim">Sandboxing with <code>WASIShim</code></a></h2>
+<p>By default, the <code>preview2-shim</code> provides full access to the host filesystem, environment variables,
+and network - matching the default behavior of Node.js libraries. You can use the <code>sandbox</code> option
+to restrict what guests can access.</p>
+<p>Each <code>WASIShim</code> instance has its own isolated preopens, environment variables, and arguments.
+Multiple instances with different configurations will not affect each other:</p>
+<h3 id="fully-sandboxed-instance"><a class="header" href="#fully-sandboxed-instance">Fully sandboxed instance</a></h3>
+<p>To create a fully sandboxed instance with no filesystem, network, or environment access:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const sandboxedShim = new WASIShim({
+  sandbox: {
+    preopens: {},           // No filesystem access
+    env: {},                // No environment variables
+    args: ['my-program'],   // Custom arguments
+    enableNetwork: false,   // Disable network access
+  }
+});
+
+const component = await wasmESModule.instantiate(
+  loader,
+  sandboxedShim.getImportObject(),
+);
+</code></pre>
+<h3 id="limited-filesystem-access"><a class="header" href="#limited-filesystem-access">Limited filesystem access</a></h3>
+<p>To provide limited filesystem access by mapping virtual paths to host paths:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const limitedShim = new WASIShim({
+  sandbox: {
+    preopens: {
+      '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+      '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+    },
+    env: { 'ENV1': '42' },         // Only expose specific env vars
+  }
+});
+
+const component = await wasmESModule.instantiate(
+  loader,
+  limitedShim.getImportObject(),
+);
+</code></pre>
+<h3 id="sandbox-options"><a class="header" href="#sandbox-options">Sandbox options</a></h3>
+<p>The <code>sandbox</code> configuration object supports the following options:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>preopens</code></td><td><code>Record&lt;string, string&gt;</code></td><td>Full filesystem</td><td>Map of virtual paths to host paths. Use <code>{}</code> for no filesystem access.</td></tr>
+<tr><td><code>env</code></td><td><code>Record&lt;string, string&gt;</code></td><td><code>process.env</code></td><td>Environment variables visible to the guest. Use <code>{}</code> for no env access.</td></tr>
+<tr><td><code>args</code></td><td><code>string[]</code></td><td><code>process.argv</code></td><td>Command-line arguments visible to the guest.</td></tr>
+<tr><td><code>enableNetwork</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Whether to enable network access (sockets, HTTP).</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="detecting-traps"><a class="header" href="#detecting-traps">Detecting Traps</a></h1>
+<p>While some errors are represented at the WIT type level and expected, some internal errors
+may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
+component-model traps they detect with the built-in <code>WebAssembly.RuntimeError</code> class.</p>
+<p>After an instance has trapped, Jco marks the component instance as unusable. Any subsequent
+call throws the original trap without re-entering the component.</p>
+<p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class:</p>
+<pre><code class="language-js">import { instantiate } from "./dist/transpiled/component.js";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const shim = new WASIShim().getImportObject();
+const instance = await instantiate(undefined, shim);
+
+try {
+    instance['ns:pkg/iface'].someFunction();
+} catch (err) {
+    if (err instanceof WebAssembly.RuntimeError) {
+        console.error(`TRAP: ${err}`);
+        // The instance is now disabled and cannot be called again.
+    } else {
+        // Other exceptions are unexpected and should be handled separately.
+        throw err;
+    }
+}
+</code></pre>
+<p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
+thrown as <code>WebAssembly.RuntimeError</code> instances.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-3-streams-and-backpressure"><a class="header" href="#preview-3-streams-and-backpressure">Preview 3 Streams and Backpressure</a></h1>
+<p>Preview 3 WIT <code>stream&lt;T&gt;</code> values are asynchronous sequences of elements.</p>
+<p>Jco accepts JS <code>AsyncIterable</code>s for host-provided readable streams, including
+<code>ReadableStream</code> and async generators (which may be manually constructed). Numeric
+chunks such as <code>Uint8Array</code> are expanded into their individual elements.</p>
+<p>Items passed through iterables are elements, <em>not</em> chunks.</p>
+<p>A component may do many things that are not quite similar to how async iterables work
+natively in JS:</p>
+<ul>
+<li>Consume part of a chunk</li>
+<li>Combine several chunks in one read</li>
+<li>Issue a zero-length readiness read</li>
+<li>Cancel an in-progress read.</li>
+</ul>
+<p>Code that depends on one JavaScript chunk corresponding to one
+component read has to be written with this in mind.</p>
+<h2 id="backpressure-is-not-an-acknowledgement"><a class="header" href="#backpressure-is-not-an-acknowledgement">Backpressure is not an acknowledgement</a></h2>
+<p>Backpressure limits how far a producer should run ahead of a consumer. It does
+not prove that the component has processed a value (i.e. if you are performing an
+operation on stream elements, it does not mean that the component has <em>performed</em>
+the relevant operation).</p>
+<p>In particular:</p>
+<ul>
+<li><code>ReadableStreamDefaultController.enqueue()</code> returns immediately.</li>
+<li><code>WritableStreamDefaultWriter.ready</code> means the stream can accept more data.</li>
+<li>A resolved <code>WritableStreamDefaultWriter.write()</code> means the Web Stream
+accepted the chunk according to its queuing strategy; it is not an
+application-level acknowledgement from the component.</li>
+<li>Runtime readiness probes may request data before the component performs its
+next non-empty read.</li>
+</ul>
+<p><strong>If the producer needs delivery confirmation, this should be expressed in WIT,
+rather than inferring it from Stream object backpressure.</strong></p>
+<p>Use a bounded producer and wait for backpressure before producing more data:</p>
+<pre><code class="language-js">const transform = new TransformStream(
+    undefined,
+    { highWaterMark: 1 },
+    { highWaterMark: 1 },
+);
+const writer = transform.writable.getWriter();
+
+async function produce(source) {
+    try {
+        for await (const chunk of source) {
+            if (writer.desiredSize !== null &amp;&amp; writer.desiredSize &lt;= 0) {
+                await writer.ready;
+            }
+            await writer.write(chunk);
+        }
+        await writer.close();
+    } catch (error) {
+        await writer.abort(error);
+        throw error;
+    }
+}
+
+// Pass transform.readable as the JS representation of stream&lt;u8&gt;.
+</code></pre>
+<p>Try to avoid enqueuing unbounded inputs eagerly, and treat an enqueued typed array as
+immutable; mutating or reusing its storage while it is buffered can change data
+that has not crossed the component boundary yet.</p>
+<h2 id="cancellation-can-race-completion"><a class="header" href="#cancellation-can-race-completion">Cancellation can race completion</a></h2>
+<p>When <code>stream&lt;t&gt;</code>s are cancelled, in-progress copies are automatically resolved.
+Data can become available between the cancellation request and cancellation
+completion, which means the result may therefore report either:</p>
+<ol>
+<li><code>cancelled</code> with no progress; or</li>
+<li><code>completed</code> with the number of elements copied before cancellation ocurred</li>
+</ol>
+<p>Regardless of which occurs, the stream remains usable, it’s up to the producer
+to retain retain values that were fetched from its source but were not copied,
+preserve their order, and offer them to the next read.</p>
+<p>The producer <em>must not</em> start a second write against a stream end that already
+has a copy in progress.</p>
+<p>This means that for custom async iterators, you should likely implement cleanup
+with <code>return()</code> or a generator <code>finally</code> block.</p>
+<p>Also, cancellation of one component read does not necessarily mean that the entire
+WIT stream was dropped:</p>
+<pre><code class="language-js">async function* byteStream(source) {
+    try {
+        for await (const chunk of source) {
+            yield chunk;
+        }
+    } finally {
+        await source.close();
+    }
+}
+</code></pre>
+<h2 id="zero-length-reads-are-readiness-probes"><a class="header" href="#zero-length-reads-are-readiness-probes">Zero-length reads are readiness probes</a></h2>
+<p>A component can read zero elements to wait until data or end-of-stream is
+observable without consuming an element.</p>
+<p>Jco may pull one host chunk to answer that readiness query, but the values
+must remain available for a later non-empty read.</p>
+<p>This has two practical consequences:</p>
+<ol>
+<li>Producing a chunk does not imply that any of its elements were consumed.</li>
+<li>A source with side effects should perform them when producing the value, not
+when assuming the component received it.</li>
+</ol>
+<p>When testing a host stream you should generally include:</p>
+<ul>
+<li>Delayed production</li>
+<li>Chunks larger than the guest read buffer</li>
+<li>Repeated read cancellation</li>
+<li>Zero-length readiness reads</li>
+<li>An end-to-end ordering check.</li>
+</ul>
+<p>Timing-only assertions are not a good idea, and you should generally make sure to
+interact with the stream directly.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-3-host-value-disposal"><a class="header" href="#preview-3-host-value-disposal">Preview 3 Host Value Disposal</a></h1>
+<p>A guest can discard asynchronous values that JavaScript provided before it ever receives
+their result. For example:</p>
+<ul>
+<li>It can cancel an <code>async</code> import call that is still in flight. A Rust guest does this when
+it drops the future returned by an import, which lowers to the <code>subtask.cancel</code> canonical
+built-in.</li>
+<li>It can drop a <code>future&lt;T&gt;</code> provided by the host without reading its value. A Rust guest does
+this when it drops a <code>FutureReader</code>, cancelling any pending read first.</li>
+<li>It can drop a <code>stream&lt;T&gt;</code> provided by the host before reading all of it.</li>
+</ul>
+<p>Jco never waits for the host when this happens: the call, future or stream is treated as
+cancelled immediately, and anything the host produces later is discarded. The host is
+notified by <em>disposing</em> the value it provided.</p>
+<h2 id="async-imports-and-futures"><a class="header" href="#async-imports-and-futures">Async imports and futures</a></h2>
+<p>Return a thenable (usually a <code>Promise</code>) that implements <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/asyncDispose"><code>Symbol.asyncDispose</code></a>
+or <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/dispose"><code>Symbol.dispose</code></a>. This applies to promises returned from <code>async</code> imports
+and to promises lowered into a <code>future&lt;T&gt;</code> (whether returned from an import or passed as an
+argument to an export):</p>
+<pre><code class="language-js">const imports = {
+    'example:websocket/client': {
+        connect(url) {
+            const controller = new AbortController();
+            const pending = openSocket(url, { signal: controller.signal });
+
+            // Called only if the guest discards this call and its result
+            pending[Symbol.asyncDispose] = async () =&gt; {
+                controller.abort();
+                // A socket that opened just before cancellation will never reach the guest
+                const socket = await pending.catch(() =&gt; undefined);
+                socket?.close();
+            };
+
+            return pending;
+        },
+    },
+};
+</code></pre>
+<p>Native promises are extensible, so no wrapper type is needed. Promises without a dispose
+method behave exactly as before.</p>
+<p>If both methods are present, only <code>Symbol.asyncDispose</code> is called.</p>
+<h2 id="streams"><a class="header" href="#streams">Streams</a></h2>
+<p>When the guest drops the readable end of a host-provided stream, Jco cleans up the source in
+the following order of preference:</p>
+<ol>
+<li>Calls <code>return()</code> on the source’s iterator (as <code>for await ... of</code> does when breaking out of
+a loop), which runs any <code>finally</code> blocks in a started generator.</li>
+<li>Otherwise, calls the stream object’s <code>Symbol.asyncDispose</code> or <code>Symbol.dispose</code> method.</li>
+<li>For a <code>ReadableStream</code> without the async iterator protocol, cancels its reader.</li>
+</ol>
+<p>Unlike futures, a stream is cleaned up whenever the guest drops it, including after it has
+read everything, so cleanup must be safe to run on an exhausted source.</p>
+<p>Cancelling a single in-progress read of a stream does <em>not</em> clean up the source, because the
+stream remains usable (see <a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>).</p>
+<h2 id="semantics"><a class="header" href="#semantics">Semantics</a></h2>
+<ul>
+<li>A call or future is disposed <strong>only</strong> when the guest discards it. Values delivered to the
+guest are never disposed: from then on, the guest owns them.</li>
+<li>A promise may be disposed <em>after</em> it settled, if the guest discarded it before the settled
+value was delivered. In that case the value will never reach the guest, and the host is
+responsible for releasing it.</li>
+<li>Disposal is called at most once, asynchronously (never from inside the canonical built-in
+the guest called). The guest does not wait for it.</li>
+<li>Fulfilling or rejecting a promise after disposal (for example with an <code>AbortError</code>) is
+ignored, and does not trap the component.</li>
+<li>Errors thrown (or rejections returned) during disposal are reported with <code>console.error</code>
+and do not affect the guest.</li>
+<li>Providers that ignore disposal, or never settle, do not block the guest.</li>
+</ul>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li>Only async-lowered calls can be cancelled by a guest. Sync-lowered calls to async imports,
+and synchronous imports suspended via JSPI, give the guest no handle with which to cancel the
+individual call, so they are never disposed.</li>
+<li>If a guest cancels an <code>async</code> import call whose result would have contained a future or
+stream, only the returned promise is disposed, as the future or stream was never created.</li>
+<li>Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
+delivered to the guest are not covered by this mechanism.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
+<p>When something goes wrong with a transpiled or componentized module, start here.</p>
+<ul>
+<li><a href="#common-issues">Common issues</a>: known failure modes, what causes them, and how to resolve
+them.</li>
+</ul>
+<p>If a problem is not covered, please <a href="https://github.com/bytecodealliance/jco/issues">open an issue</a>
+with the exact command, the Jco version, and the output you saw.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 <h2 id="componentize-js-0193-fallback"><a class="header" href="#componentize-js-0193-fallback">componentize-js 0.19.3 fallback</a></h2>
 <h3 id="symptom"><a class="header" href="#symptom">Symptom</a></h3>
@@ -5169,6 +5445,16 @@ wkg get --format wit wasi:random@0.2.10
 wkg get --format wit wasi:io@0.2.10
 </code></pre>
 <p>After updating the packages, make sure your entry WIT file and any vendored dependency files reference the newer versions before componentizing again.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor Guide</a></h1>
+<p>Jco is a <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project, and contributions of every
+size are welcome.</p>
+<ul>
+<li><a href="#contributing-to-the-codebase">Contributing to the Codebase</a>: repository layout, building, and running the
+test suites.</li>
+<li><a href="#contributing-to-docs">Contributing to Docs</a>: building this book locally and submitting
+changes to it.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="contributing-to-the-codebase"><a class="header" href="#contributing-to-the-codebase">Contributing to the Codebase</a></h1>
 <p>Development is based on a standard NodeJS workflow, with <a href="https://pnpm.io"><code>pnpm</code></a> as the package manager, i.e.:</p>
