@@ -28,8 +28,8 @@ export const runtime = {
                         const value = table[(handle << 1) + 1];
                         const own = (value & this.tableFlag) !== 0;
                         const rep = value & ~this.tableFlag;
-                        if (rep === 0 || (scope & this.tableFlag) !== 0) {
-                            throw new RuntimeError(`unknown handle index ${(handle << 1) + 1}`);
+                        if (value === undefined || rep === 0 || (scope & this.tableFlag) !== 0) {
+                            throw new RuntimeError(`unknown handle index ${handle}`);
                         }
                         return { rep, scope, own };
                     },

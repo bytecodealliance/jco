@@ -18,7 +18,7 @@ async function checkRuntime() {
     assert.equal(instance.run(42), 42);
     assert.throws(() => instance.invalid(0), {
         constructor: CustomRuntimeError,
-        message: 'unknown handle index 1',
+        message: 'unknown handle index 0',
     });
     assert.throws(() => instance.run(24), {
         constructor: CustomRuntimeError,
