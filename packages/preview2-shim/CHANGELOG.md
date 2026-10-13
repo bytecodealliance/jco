@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.29.0] - 2026-10-13
+
+### 🚀 Features
+
+- _(p2-shim)_ add host-side write/read helpers for browser preopens by @eduardomourar in #2237
+
+- _(p2-shim)_ add buffered input stream helper for browser cli stdin by @eduardomourar in #2236
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ export component exit and add on exit hook to browser by @eduardomourar in #2235
+
+- _(p2-shim)_ instantiation types not exported by @eduardomourar in #2233
+
+### 🧪 Testing
+
+- _(p2-shim)_ regression tests for symlink by @eduardomourar in #2234
+
+- _(p2-shim)_ exercise instantiation generic types by @eduardomourar
+
 ## [0.28.0] - 2026-10-05
 
 ### 🐛 Bug Fixes
