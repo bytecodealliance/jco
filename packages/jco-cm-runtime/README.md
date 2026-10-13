@@ -52,12 +52,15 @@ providers must not rely on it for automatic cleanup.
 it and returns `{ rep, scope, own }`. The table layout is part of the runtime
 ABI:
 
-- Slots 0 and 1 form a sentinel, and resource handles start at 1.
-- Slot `handle << 1` contains the scope. Bit 30 marks a vacant entry.
+- Slots 0 and 1 form a sentinel, and resource handles start at 1. Handle indices
+  are allocated from a space shared by every handle kind of a component instance,
+  so a table may have holes for indices that belong to other kinds.
+- Slot `handle << 1` contains the scope. Bit 30 marks a freed entry.
 - Slot `(handle << 1) + 1` contains the representation, with bit 30 indicating
-  ownership. Clear that bit to obtain `rep`.
-- A decoded representation of zero or a vacant entry must trap using the
-  selected `WebAssembly.RuntimeError` constructor. Missing slots decode to zero.
+  ownership. Clear that bit to obtain `rep`. A freed entry stores zero.
+- A slot past the end of the table, a decoded representation of zero or a freed
+  entry must trap with `unknown handle index <handle>` using the selected
+  `WebAssembly.RuntimeError` constructor.
 
 Changes to this table encoding or these calling conventions require a new
 runtime ABI version, independently of the npm package version.
