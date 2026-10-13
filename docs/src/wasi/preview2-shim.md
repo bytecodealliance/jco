@@ -13,23 +13,6 @@ Each subsystem is a subpath export (`@bytecodealliance/preview2-shim/filesystem`
 so on) that resolves to the Node.js build under the `node` condition and to the browser build
 otherwise.
 
-## Node.js
-
-The Node.js build gives a component host filesystem, environment, and network access by default,
-matching the behaviour of ordinary Node.js libraries. It is tested against the Wasmtime WASI
-conformance suite.
-
-## Browsers
-
-The browser build is capability-safe: clocks and randomness use Web APIs, stdout and stderr write
-to the console, stdin is closed, outbound HTTP delegates to `fetch`, filesystem preopens are empty
-until configured, and raw sockets are unavailable unless the application supplies an adapter.
-Deterministic in-memory filesystem, HTTP, and socket implementations can be opted into for tests
-and self-contained applications.
-
-The package [README][p2-readme] carries the full browser support matrix, listing for each
-interface what is implemented, what needs a host adapter, and what browsers cannot provide.
-
 ## Instantiation and sandboxing
 
 `WASIShim` from `@bytecodealliance/preview2-shim/instantiation` builds a complete import object
@@ -63,3 +46,22 @@ Helpers that only exist for one build are exported under that build's prefix.
 
 [npm-p2-shim]: https://www.npmjs.com/package/@bytecodealliance/preview2-shim
 [p2-readme]: https://github.com/bytecodealliance/jco/blob/main/packages/preview2-shim/README.md
+
+## Supported platforms
+
+### Node.js
+
+The Node.js build gives a component host filesystem, environment, and network access by default,
+matching the behaviour of ordinary Node.js libraries. It is tested against the Wasmtime WASI
+conformance suite.
+
+### Browsers
+
+The browser build is capability-safe: clocks and randomness use Web APIs, stdout and stderr write
+to the console, stdin is closed, outbound HTTP delegates to `fetch`, filesystem preopens are empty
+until configured, and raw sockets are unavailable unless the application supplies an adapter.
+Deterministic in-memory filesystem, HTTP, and socket implementations can be opted into for tests
+and self-contained applications.
+
+The package [README][p2-readme] carries the full browser support matrix, listing for each
+interface what is implemented, what needs a host adapter, and what browsers cannot provide.
