@@ -78,7 +78,7 @@ subpaths, separate from the underscore-prefixed configuration setters. The brows
 `bufferedInputStream` helper (`@bytecodealliance/preview2-shim/browser/helpers/cli`) feeds a guest a
 fixed stdin buffer. See [Preview 2 shim CLI helpers][book-cli-helpers] in the Jco book.
 
-[book-cli-helpers]: https://bytecodealliance.github.io/jco/advanced/preview2-shim-helpers/cli.html
+[book-cli-helpers]: https://bytecodealliance.github.io/jco/wasi/preview2-shim/helpers/cli.html
 
 Browser applications select storage explicitly. The bundled file-data adapter is ephemeral and must
 be opted into:

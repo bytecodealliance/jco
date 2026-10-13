@@ -8,3 +8,7 @@ src = "src"
 [output.html]
 git-repository-url = "https://github.com/bytecodealliance/jco"
 edit-url-template = "https://github.com/bytecodealliance/jco/tree/main/docs/{path}"
+
+[output.html.fold]
+enable = true
+level = 2

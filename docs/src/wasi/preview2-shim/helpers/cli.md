@@ -1,7 +1,8 @@
 # Preview 2 shim CLI helpers
 
 [`@bytecodealliance/preview2-shim`][npm-p2-shim] ships host-side helper functions next to its WASI
-implementations. Helpers build only on the shim's public surface and are exported from `helpers/`
+implementations. This page covers the CLI helpers; see [Preview 2 shim](../../preview2-shim.md) for
+the package overview. Helpers build only on the shim's public surface and are exported from `helpers/`
 subpaths, separate from the underscore-prefixed functions (`_setStdin`, `_setPreopens`, ...) that
 exist to configure the shim itself.
 
@@ -53,7 +54,7 @@ const shim = new WASIShim({
 const component = await instantiate(undefined, shim.getImportObject());
 ```
 
-See [Manual Wasm instantiation with WASI overrides](../manual-wasm-instantiation-with-wasi-overrides.md)
+See [Manual Wasm instantiation with WASI overrides](../../../advanced/manual-wasm-instantiation-with-wasi-overrides.md)
 for how `instantiate` and `WASIShim` fit together.
 
 ### Replacing the global stdin
