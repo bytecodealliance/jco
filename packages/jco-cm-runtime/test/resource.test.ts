@@ -24,15 +24,15 @@ describe('resource.tableGet', () => {
     });
 
     test.each([
-        { table: [TABLE_FLAG, 0], handle: 0, index: 1 },
-        { table: [TABLE_FLAG, 0, TABLE_FLAG, 42], handle: 1, index: 3 },
-        { table: [TABLE_FLAG, 0, 0, 0], handle: 1, index: 3 },
-        { table: [TABLE_FLAG, 0], handle: 4, index: 9 },
-    ])('traps for an invalid handle at index $index', ({ table, handle, index }) => {
+        { name: 'the sentinel at index 0', table: [TABLE_FLAG, 0], handle: 0 },
+        { name: 'a freed entry', table: [TABLE_FLAG, 0, TABLE_FLAG, 0], handle: 1 },
+        { name: 'a zero rep', table: [TABLE_FLAG, 0, 0, 0], handle: 1 },
+        { name: 'an index past the end of the table', table: [TABLE_FLAG, 0], handle: 4 },
+    ])('traps for $name', ({ table, handle }) => {
         const { tableGet } = createRuntime().intrinsics.resource;
 
         expect(() => tableGet(table, handle)).toThrowError(WebAssembly.RuntimeError);
-        expect(() => tableGet(table, handle)).toThrow(`unknown handle index ${index}`);
+        expect(() => tableGet(table, handle)).toThrow(`unknown handle index ${handle}`);
     });
 
     test('uses the injected RuntimeError realm', () => {
