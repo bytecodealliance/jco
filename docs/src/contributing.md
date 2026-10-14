@@ -88,6 +88,21 @@ There are three test suites in jco:
 >
 > The command above runs a single test file -- the name of the file is relative to `packages/jco/test`.
 
+### Browser test setup
+
+Install Chrome and select the installed executable before running browser tests:
+
+```sh
+export PUPPETEER_EXECUTABLE_PATH="$(node scripts/install-puppeteer.mjs)"
+```
+
+The installer downloads the current stable Chrome release by default.
+Set `PUPPETEER_VERSION` to an exact Chrome for Testing version to pin the installation.
+The script prints the executable path to stdout and diagnostics to stderr.
+GitHub Actions jobs automatically receive `PUPPETEER_EXECUTABLE_PATH` through `GITHUB_ENV`,
+so tests use the installed version even when Puppeteer expects a different revision.
+This also applies when the browser is already cached.
+
 ### Testing Rust-side bindgen changes
 
 When working on the Rust bindgen crate (`crates/js-component-bindgen`), you generally must build `jco-transpile` to see
