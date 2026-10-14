@@ -48,9 +48,9 @@
     }
   },
   "scripts": {
-    "build": "tsc --project tsconfig.build.json && node scripts/build-workers.mjs",
-    "build:watch": "tsc --watch",
-    "types:check": "tsc --noEmit",
+    "build": "tsc --project tsconfig.build.json && tsc --project tsconfig.build.browser.json && node scripts/build-workers.mjs",
+    "build:watch": "tsc --build --watch tsconfig.build.json tsconfig.build.browser.json",
+    "types:check": "tsc --noEmit && tsc --project tsconfig.browser.json --noEmit",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
