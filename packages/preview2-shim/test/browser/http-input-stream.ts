@@ -70,7 +70,7 @@ afterEach(() => {
 
 suite("Browser HTTP input stream", () => {
     test.each([true, false])(
-        "only unconsumed response futures abort Fetch on drop (consumed=%s)",
+        "settled response futures do not abort Fetch on drop (consumed=%s)",
         async (consumed) => {
             let signal: AbortSignal | null | undefined;
             vi.stubGlobal(
@@ -95,7 +95,7 @@ suite("Browser HTTP input stream", () => {
                 assert.ok(future.get());
             }
             dispose(future);
-            assert.strictEqual(signal.aborted, !consumed);
+            assert.strictEqual(signal.aborted, false);
         },
     );
 

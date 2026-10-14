@@ -881,7 +881,7 @@ suite("Instantiation", () => {
         });
         const imports = shim.getImportObject();
         assert.strictEqual(receivedPreopens, configuredPreopens);
-        assert.strictEqual(receivedPreopens["/guest"], capability);
+        assert.strictEqual(receivedPreopens?.["/guest"], capability);
         assert.strictEqual(imports["wasi:filesystem/types"], filesystem.types);
         assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
     });
@@ -1105,7 +1105,7 @@ suite("Sandboxing", () => {
             /access-denied/,
         );
         assert.strictEqual(dispatched, 0, "denied HTTP must not reach the configured handler");
-        assert.strictEqual(
+        assert.strictEqual<unknown>(
             allowed["wasi:http/outgoing-handler"].handle({} as any, undefined),
             "dispatched",
         );
@@ -1308,7 +1308,7 @@ suite("Sandboxing", () => {
             const testDir = mkdtempSync(join(tmpdir(), "jco-symlink-follow-"));
             try {
                 writeFileSync(join(testDir, "real.txt"), "target contents");
-                symlinkSync(join(testDir, "real.txt"), join(testDir, "link.txt"));
+                symlinkSync("real.txt", join(testDir, "link.txt"));
 
                 const shim = new WASIShim({ sandbox: { preopens: { "/test": testDir } } });
                 const [rootDescriptor] = shim
@@ -1329,6 +1329,11 @@ suite("Sandboxing", () => {
                     lstatSync(join(testDir, "followed.txt")).isSymbolicLink(),
                     false,
                     "following the symlink should hard-link the real file",
+                );
+                assert.strictEqual(
+                    lstatSync(join(testDir, "followed.txt")).ino,
+                    lstatSync(join(testDir, "real.txt")).ino,
+                    "the hard link should refer to the symlink target",
                 );
             } finally {
                 rmSync(testDir, { recursive: true, force: true });
