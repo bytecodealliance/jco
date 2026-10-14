@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.19.0] - 2026-10-14
+
+### 🧪 Testing
+
+- _(transpile)_ cover canonical ABI async regressions by @vados-cosmonic in #2238
+
+- _(transpile)_ move inline WebAssembly override scripts into fixtures by @vados-cosmonic in #2224
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update preview3-shim to 0.10.0 by @vados-cosmonic in #2255
+
+- _(transpile)_ update preview2-shim to v0.29.0 by @vados-cosmonic
+
 ## [0.18.0] - 2026-10-06
 
 ### 🧪 Testing
