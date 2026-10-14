@@ -54,7 +54,7 @@ importers:
         version: 21.2.0
       '@commitlint/load':
         specifier: ^21.2.0
-        version: 21.2.0(@types/node@24.13.3)(typescript@7.0.2)
+        version: 21.2.0(@types/node@26.6.4)(typescript@7.0.2)
       '@commitlint/read':
         specifier: ^21.2.1
         version: 21.2.1(conventional-commits-parser@7.1.2)
@@ -456,8 +456,8 @@ importers:
         specifier: ^0.18.0
         version: 0.18.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.28.0
-        version: 0.28.0
+        specifier: ^0.29.0
+        version: 0.29.0
       binaryen:
         specifier: ^132.0.0
         version: 132.0.0
@@ -572,8 +572,8 @@ importers:
         specifier: ^0.15.0
         version: 0.15.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.28.0
-        version: 0.28.0
+        specifier: ^0.29.0
+        version: 0.29.0
       '@types/node':
         specifier: ^24.12.4
         version: 24.13.3
@@ -599,8 +599,8 @@ importers:
   packages/jco-transpile:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.28.0
-        version: 0.28.0
+        specifier: ^0.29.0
+        version: 0.29.0
       '@bytecodealliance/preview3-shim':
         specifier: ^0.9.0
         version: 0.9.0
@@ -682,8 +682,8 @@ importers:
         specifier: 0.3.2
         version: 0.3.2
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.28.0
-        version: 0.28.0
+        specifier: ^0.29.0
+        version: 0.29.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.25.2
@@ -1113,6 +1113,9 @@ packages:
 
   '@bytecodealliance/preview2-shim@0.28.0':
     resolution: {integrity: sha512-55y59uAzYMTA1bTepmgC7LmK8DUyhOU+y7cfKQRV7wRVABMYna4t7KYpBUkO8VhI+FbDn5cq0ghPLelaP24OpQ==}
+
+  '@bytecodealliance/preview2-shim@0.29.0':
+    resolution: {integrity: sha512-Lhr/LNOx3sxWIo0jimsk64LwmkbbAkmrFbXBUjfu9+A0U4vuZZMm88UoZApLrGKiG8exkTCUXP9ndM4WmDQn6A==}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -5843,7 +5846,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.19.3':
     dependencies:
-      '@bytecodealliance/jco': 1.32.1
+      '@bytecodealliance/jco': 1.37.0
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
@@ -6099,6 +6102,10 @@ snapshots:
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
 
+  '@bytecodealliance/preview2-shim@0.29.0':
+    dependencies:
+      '@bytecodealliance/jco-node-fs': 0.3.2
+
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.17.9
@@ -6250,14 +6257,14 @@ snapshots:
       - '@types/node'
       - typescript
 
-  '@commitlint/load@21.2.0(@types/node@24.13.3)(typescript@7.0.2)':
+  '@commitlint/load@21.2.0(@types/node@26.6.4)(typescript@7.0.2)':
     dependencies:
       '@commitlint/config-validator': 21.2.0
       '@commitlint/execute-rule': 21.0.1
       '@commitlint/resolve-extends': 21.2.0
       '@commitlint/types': 21.2.0
       cosmiconfig: 9.0.2(typescript@7.0.2)
-      cosmiconfig-typescript-loader: 6.3.0(@types/node@24.13.3)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2)
+      cosmiconfig-typescript-loader: 6.3.0(@types/node@26.6.4)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2)
       es-toolkit: 1.50.0
       is-plain-obj: 4.1.0
       picocolors: 1.1.1
@@ -8286,6 +8293,13 @@ snapshots:
   cosmiconfig-typescript-loader@6.3.0(@types/node@24.13.3)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2):
     dependencies:
       '@types/node': 24.13.3
+      cosmiconfig: 9.0.2(typescript@7.0.2)
+      jiti: 2.6.1
+      typescript: 7.0.2
+
+  cosmiconfig-typescript-loader@6.3.0(@types/node@26.6.4)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2):
+    dependencies:
+      '@types/node': 26.6.4
       cosmiconfig: 9.0.2(typescript@7.0.2)
       jiti: 2.6.1
       typescript: 7.0.2
