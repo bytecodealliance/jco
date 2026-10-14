@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { posix } from "node:path";
 import { createRequire } from "node:module";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { suite, test } from "vitest";
-import { componentizeFixture, transpileComponent } from "../helpers.js";
+import { componentizeFixture, setupAsyncTest, transpileComponent } from "../helpers.js";
 import { hasJspi } from "../common.js";
 
 const isNode24 = process.versions.node.split(".")[0] === "24";
@@ -24,6 +25,12 @@ suite("node:url in components", () => {
             // Avoid importing Node 24-only named exports during collection on other hosts.
             const { run: runInNode } = await import("../fixtures/componentize/node-url/source.js");
             const expected = JSON.parse(runInNode());
+            // Node 24's pathToFileURL still uses the host path.sep when restoring
+            // a trailing slash, even with { windows: false }. On Windows, "/"
+            // becomes "file:////". Use the POSIX root invariant for this case;
+            // retain the native differential oracle for every other path.
+            // https://github.com/nodejs/node/blob/v24.21.0/lib/internal/url.js#L1594-L1600
+            expected.posixFiles["/"] = ["file:///", "/", true, "2f"];
             assert.strictEqual(expected.stableSort, "a=2&a=1&z=1&z=0");
             assert.deepEqual(expected.identity, Array(10).fill(true));
             const { componentPath } = await componentizeFixture({
@@ -73,13 +80,24 @@ suite("node:url in components", () => {
                 copy: true,
                 extraArgs: ["--backend", backend],
             });
-            const { modulePath } = await transpileComponent({ componentPath, name: "node-url-cwd" });
-            const component = await import(modulePath);
-            for (const path of ["relative", "a/../two words#?%", "", "/absolute"]) {
-                assert.deepEqual(JSON.parse(component.fromCwd(path)), {
-                    href: pathToFileURL(path).href,
-                    path: resolve(path),
-                });
+            // WASI supplies a guest cwd. Native Windows cwd and URL defaults
+            // are not an oracle for the component's POSIX-default node:url.
+            const guestCwd = "/workspace/project";
+            const imports = new WASIShim().getImportObject();
+            imports["wasi:cli/environment"] = { ...imports["wasi:cli/environment"], initialCwd: () => guestCwd };
+            const { instance, cleanup } = await setupAsyncTest({
+                component: { name: "node-url-cwd", path: componentPath, imports },
+            });
+            try {
+                for (const path of ["relative", "a/../two words#?%", "", "/absolute"]) {
+                    const expectedPath = posix.resolve(guestCwd, path);
+                    assert.deepEqual(JSON.parse(instance.fromCwd(path)), {
+                        href: pathToFileURL(expectedPath, { windows: false }).href,
+                        path: expectedPath,
+                    });
+                }
+            } finally {
+                await cleanup();
             }
         },
     );

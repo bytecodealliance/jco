@@ -2,9 +2,9 @@
 //
 // The adapter unit tests (`builtins.js`) call the plugin's hooks directly, which cannot
 // tell whether `jco componentize` uses it at all. These build a real component and run it.
-import { cwd } from "node:process";
-import { join, posix, win32 } from "node:path";
+import { posix, win32 } from "node:path";
 
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 import { assert, expect, suite, test } from "vitest";
 
 import { componentizeFixture, setupAsyncTest } from "../helpers.js";
@@ -14,8 +14,13 @@ suite("node:path in a component", () => {
         const { componentPath, stderr } = await componentizeFixture({ fixture: "node-path", bundle: true, copy: true });
         assert.strictEqual(stderr, "");
 
+        // The guest defaults to POSIX, independently of the host OS. Give it a
+        // WASI cwd instead of implicitly using the native process's cwd.
+        const guestCwd = "/workspace/project";
+        const imports = new WASIShim().getImportObject();
+        imports["wasi:cli/environment"] = { ...imports["wasi:cli/environment"], initialCwd: () => guestCwd };
         const { instance, cleanup } = await setupAsyncTest({
-            component: { name: "node-path", path: componentPath },
+            component: { name: "node-path", path: componentPath, imports },
         });
 
         try {
@@ -24,7 +29,7 @@ suite("node:path in a component", () => {
             assert.strictEqual(instance.lexical(), "a/c|C:\\a\\b|\\|true");
 
             // resolve() of a relative path goes through wasi:cli/environment#initial-cwd.
-            assert.strictEqual(instance.fromCwd(), join(cwd(), "relative"));
+            assert.strictEqual(instance.fromCwd(), posix.resolve(guestCwd, "relative"));
 
             // Exercise the lazily loaded matcher, including its brace-expansion dependency.
             // Repeated calls also cover reuse after the first initialization.

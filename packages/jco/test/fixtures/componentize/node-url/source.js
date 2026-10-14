@@ -175,15 +175,23 @@ export function run() {
         "",
         "a/b",
     ].map((d) => [domainToASCII(d), domainToUnicode(d)]);
-    report.posixFiles = ["/tmp/a b#c?d%é", "/tmp/back\\slash", "/tmp/a\nb\tc\rd", "/a/../b/", "/"].map((p) => {
-        const parsed = pathToFileURL(p);
-        return [
-            parsed.href,
-            fileURLToPath(parsed),
-            Buffer.isBuffer(fileURLToPathBuffer(parsed)),
-            fileURLToPathBuffer(parsed).toString("hex"),
-        ];
-    });
+    report.posixFiles = Object.fromEntries(
+        ["/tmp/a b#c?d%é", "/tmp/back\\slash", "/tmp/a\nb\tc\rd", "/a/../b/", "/"].map((p) => {
+            // Pin the native oracle's path semantics too: its default is Windows
+            // on Windows hosts, while components always default to POSIX.
+            const options = { windows: false };
+            const parsed = pathToFileURL(p, options);
+            return [
+                p,
+                [
+                    parsed.href,
+                    fileURLToPath(parsed, options),
+                    Buffer.isBuffer(fileURLToPathBuffer(parsed, options)),
+                    fileURLToPathBuffer(parsed, options).toString("hex"),
+                ],
+            ];
+        }),
+    );
     report.windowsFiles = [
         "C:\\Program Files\\a#b?c.txt",
         "C:/a/../b/",
@@ -301,10 +309,10 @@ export function run() {
         () => domainToASCII(),
         () => domainToUnicode(),
         () => fileURLToPath("https://example.com"),
-        () => fileURLToPath("file:///a%2Fb"),
+        () => fileURLToPath("file:///a%2Fb", { windows: false }),
         () => fileURLToPath("file:///C:/a%5Cb", { windows: true }),
         () => fileURLToPath("file:///relative", { windows: true }),
-        () => fileURLToPath("file:///a/%FF"),
+        () => fileURLToPath("file:///a/%FF", { windows: false }),
         () => pathToFileURL(42),
         () => format(new URL("https://example.com"), []),
         () => urlToHttpOptions(null),
