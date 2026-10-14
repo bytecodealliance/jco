@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.8.0] - 2026-10-14
+
+### 🚀 Features
+
+- _(std)_ support Node crypto, streams and async context by @vados-cosmonic
+
+- _(std)_ expose shared Node 24 path implementation for WASI P3 by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(std)_ allow test execution without an engine console by @vados-cosmonic
+
+- _(std)_ preserve legacy URL identity and provider prototypes by @vados-cosmonic
+
+- _(std)_ allow host I/O progress and defer HTTP globals by @vados-cosmonic
+
+- _(std)_ support Python 3.10 in TTY test helper by @vados-cosmonic
+
+- _(std)_ restore the wasi tls host provider by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(std)_ cover test execution without a console by @vados-cosmonic
+
+- _(std)_ cover legacy URL adapters and provider isolation by @vados-cosmonic
+
+- _(std)_ cover HTTP resource polling progress by @vados-cosmonic
+
+- _(std)_ cover crypto, streams and utility compatibility by @vados-cosmonic
+
+- _(std)_ add note about tty pty python script by @vados-cosmonic in #2232
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update preview2-shim to v0.29.0 by @vados-cosmonic
+
 ## [0.7.0] - 2026-10-06
 
 ### ⚙️ Miscellaneous Tasks
