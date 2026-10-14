@@ -141,8 +141,7 @@ export function earlyDispose(finalizer) {
     finalizer();
 }
 
-const _Error = Error;
-const IoError = class Error extends _Error {
+class IoError extends Error {
     payload: any;
     constructor(payload: any) {
         super(payload);
@@ -151,7 +150,7 @@ const IoError = class Error extends _Error {
     toDebugString() {
         return this.message;
     }
-};
+}
 
 function streamIoErrorCall(call, id, payload) {
     try {
