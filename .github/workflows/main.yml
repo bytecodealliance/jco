@@ -500,11 +500,18 @@ jobs:
       - name: Build jco
         run: pnpm run build
 
+      - name: Build preview2-shim
+        run: pnpm --filter '@bytecodealliance/preview2-shim' --fail-if-no-match run build
+
+      - name: Build preview3-shim
+        if: ${{ matrix.workspace == 'preview3-shim' }}
+        run: pnpm --filter '@bytecodealliance/preview3-shim' --fail-if-no-match run build
+
       - name: Test Workspaces
         env:
           TEST_PUPPETEER_LAUNCH_ARGS: |
             --no-sandbox
-        run: pnpm --filter 'packages/${{ matrix.workspace }}' run test
+        run: pnpm --filter '@bytecodealliance/${{ matrix.workspace }}' --fail-if-no-match run test
 
   test-jco-node-fs:
     name: Test jco-node-fs (${{ matrix.os }})
