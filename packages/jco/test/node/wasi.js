@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { assert, expect, suite, test } from "vitest";
 import { worldMetadataFor } from "../../src/cmd/componentize.js";
 import { WASI_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
@@ -79,7 +80,7 @@ suite("node:wasi", () => {
             const { esModuleOutputPath, cleanup } = await setupAsyncTest({
                 component: { name: `node-wasi-${backend}`, path: componentPath, skipInstantiation: true },
             });
-            const runner = join(FIXTURE.pathname, "run.js");
+            const runner = fileURLToPath(new URL("run.js", FIXTURE));
             try {
                 const denied = await run(process.execPath, [runner, esModuleOutputPath, "denied"]);
                 expect(denied.status, denied.stderr).toBe(0);
