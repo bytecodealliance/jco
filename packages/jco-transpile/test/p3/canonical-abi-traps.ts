@@ -213,7 +213,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         },
     );
 
-    test.concurrent('a deferred async-lowered callee start is attributed to its own task', async () => {
+    test.concurrent('a deferred fused adapter start restores the callee task context', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
@@ -222,17 +222,21 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
             },
         });
         try {
-            // Each call returns its subtask's state (low nibble) before the
-            // callee has returned: STARTING (0) or STARTED (1).
+            const waitForCompleted = async (expected: number) => {
+                for (let i = 0; i < 50 && instance.completed() !== expected; i++) {
+                    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                }
+                assert.strictEqual(instance.completed(), expected);
+            };
+            // The first call enters and raises backpressure before yielding;
+            // the second must therefore take the delayed STARTING path.
             const states = (packed: number) => [(packed >>> 8) & 0xf, packed & 0xf];
-            for (const state of states(await instance.run())) {
-                assert.include([0, 1], state);
-            }
+            assert.deepEqual(states(await instance.run()), [1, 0]);
+            await waitForCompleted(2);
             // Neither the first callee's `task.return` nor the second callee's
             // deferred entry failed outside the call: the instance is still usable.
-            for (const state of states(await instance.run())) {
-                assert.include([0, 1], state);
-            }
+            assert.deepEqual(states(await instance.run()), [1, 0]);
+            await waitForCompleted(4);
         } finally {
             await cleanup();
         }

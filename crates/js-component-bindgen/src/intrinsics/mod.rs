@@ -1724,8 +1724,14 @@ mod tests {
         assert!(source.contains("startSubtask();"));
         assert!(source.contains("registerSubtaskProgress();"));
         assert!(source.contains("driveJspiCallee();"));
-        assert!(source.contains("} else if (enteredSynchronously === null) {"));
+        let delayed_start = source
+            .find("} else if (enteredSynchronously === null) {")
+            .expect("async start intrinsic should contain the delayed-entry branch");
+        let delayed_source = &source[delayed_start..];
         assert!(source.contains("const enterPromise = preparedTask.enter().then(started => {"));
+        assert!(delayed_source.contains("taskID: preparedTask.id(),"));
+        assert!(delayed_source.contains("componentIdx: preparedTask.componentIdx(),"));
+        assert!(delayed_source.contains("fn: startSubtask,"));
         assert!(source.contains("if (subtask.isReturned()) {"));
         assert!(source.contains("callerComponentState.handles.remove(subtask.waitableRep())"));
     }
