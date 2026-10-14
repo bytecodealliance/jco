@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.10.0] - 2026-10-14
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ compile browser imports with browser conditions by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.29.0 by @vados-cosmonic
+
 ## [0.9.0] - 2026-10-06
 
 ### ⚙️ Miscellaneous Tasks
