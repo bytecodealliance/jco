@@ -708,7 +708,17 @@ impl HostIntrinsic {
                                         throw preparedTask.isErrored() ?? new Error("task failed to start");
                                     }}
 
-                                    startSubtask();
+                                    // PrepareCall installs the callee task before the eager
+                                    // path runs, but that metadata is gone by the time a
+                                    // contended entry resumes in this timer. Fused adapters
+                                    // can execute context.get while lowering their inputs,
+                                    // so restore the same task context around the delayed
+                                    // start that the eager path observes.
+                                    {with_global_current_task_meta_fn}({{
+                                        taskID: preparedTask.id(),
+                                        componentIdx: preparedTask.componentIdx(),
+                                        fn: startSubtask,
+                                    }});
 
                                     if (callee._jcoMaySuspend === false) {{
                                         driveDirectCallee();
