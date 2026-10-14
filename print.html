@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eb788ab6.js";
+            window.path_to_searchindex_js = "searchindex-f81371ce.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f072195e.js"></script>
@@ -5594,6 +5594,16 @@ pnpm run test api.js
 </code></pre>
 <p>The command above runs a single test file – the name of the file is relative to <code>packages/jco/test</code>.</p>
 </blockquote>
+<h3 id="browser-test-setup"><a class="header" href="#browser-test-setup">Browser test setup</a></h3>
+<p>Install Chrome and select the installed executable before running browser tests:</p>
+<pre><code class="language-sh">export PUPPETEER_EXECUTABLE_PATH="$(node scripts/install-puppeteer.mjs)"
+</code></pre>
+<p>The installer downloads the current stable Chrome release by default.
+Set <code>PUPPETEER_VERSION</code> to an exact Chrome for Testing version to pin the installation.
+The script prints the executable path to stdout and diagnostics to stderr.
+GitHub Actions jobs automatically receive <code>PUPPETEER_EXECUTABLE_PATH</code> through <code>GITHUB_ENV</code>,
+so tests use the installed version even when Puppeteer expects a different revision.
+This also applies when the browser is already cached.</p>
 <h3 id="testing-rust-side-bindgen-changes"><a class="header" href="#testing-rust-side-bindgen-changes">Testing Rust-side bindgen changes</a></h3>
 <p>When working on the Rust bindgen crate (<code>crates/js-component-bindgen</code>), you generally must build <code>jco-transpile</code> to see
 changes appear in Jco, along with configuring Jco to use the workspace’s version of <code>jco-transpile</code> rather than a released one:</p>
