@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.38.0] - 2026-10-14
+
+### 🚀 Features
+
+- _(jco)_ support node:path with a WASI P3 environment by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ resolve WASI fixture runner URLs as native paths by @vados-cosmonic
+
+- _(jco)_ honor synchronous QuickJS builds and isolate WIT files by @vados-cosmonic
+
+- _(jco)_ preserve console globals and suspend HTTP client polling by @vados-cosmonic
+
+- _(jco)_ correct Node builtin bundling and host callback bindings by @vados-cosmonic
+
+- _(jco)_ make plugin timing diagnostics opt-in by @vados-cosmonic
+
+- _(jco)_ repair node component bundling and host wiring by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ use POSIX expectations for component path APIs by @vados-cosmonic in #2249
+
+- _(jco)_ isolate dependency links and exercise QuickJS test globals by @vados-cosmonic in #2230
+
+- _(jco)_ update portable globals fixtures and builtin contracts by @vados-cosmonic
+
+- _(jco)_ align HTTP and stream component fixtures by @vados-cosmonic
+
+- _(jco)_ cover builtin adapters, globals and async context by @vados-cosmonic
+
+- _(jco)_ add note about tty pty python script by @vados-cosmonic
+
+- _(jco)_ guard component tests by runtime capabilities by @vados-cosmonic in #2225
+
+- _(jco)_ skip confirmed componentize-qjs regressions by @vados-cosmonic
+
+- _(jco)_ restore remaining reviewed test coverage by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.19.0 by @vados-cosmonic
+
+- _(jco)_ update jco-std to v0.8.0 by @vados-cosmonic
+
+- _(jco)_ update preview2-shim to v0.29.0 by @vados-cosmonic
+
 ## [1.37.0] - 2026-10-06
 
 ### ⚙️ Miscellaneous Tasks
