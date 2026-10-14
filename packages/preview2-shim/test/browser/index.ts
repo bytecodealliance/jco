@@ -64,7 +64,9 @@ suite("browser", () => {
                 return;
             }
             const chunks: Uint8Array[] = [];
-            stream.on("data", (chunk) => chunks.push(chunk));
+            stream.on("data", (chunk) => {
+                chunks.push(typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk);
+            });
             stream.on("end", () => {
                 stream.respond({
                     ":status": 200,

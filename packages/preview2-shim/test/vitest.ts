@@ -11,7 +11,7 @@ export default defineConfig({
         printConsoleTrace: true,
         passWithNoTests: false,
         include: ["test/*.ts", "test/browser/**/*.ts"],
-        exclude: ["test/common.ts", "test/vitest.ts"],
+        exclude: ["test/common.ts", "test/filesystem-conformance.ts", "test/vitest.ts"],
         testTimeout: DEFAULT_TIMEOUT_MS,
         hookTimeout: DEFAULT_TIMEOUT_MS,
         teardownTimeout: DEFAULT_TIMEOUT_MS,

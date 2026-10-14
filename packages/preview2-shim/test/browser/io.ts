@@ -135,8 +135,8 @@ suite("Browser I/O", () => {
                 }),
         });
         const child = input.subscribe();
-        const blocked = child.block();
-        const polled = poll.poll([child]) as Promise<Uint32Array>;
+        const blocked = Promise.resolve(child.block());
+        const polled = Promise.resolve(poll.poll([child]));
 
         (input as any)[symbolDispose]();
 
