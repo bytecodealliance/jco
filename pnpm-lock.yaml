@@ -450,11 +450,11 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: workspace:^
-        version: link:../jco-std
+        specifier: ^0.8.0
+        version: 0.8.0(@bytecodealliance/preview2-shim@0.29.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.18.0
-        version: 0.18.0
+        specifier: ^0.19.0
+        version: 0.19.0
       '@bytecodealliance/preview2-shim':
         specifier: ^0.29.0
         version: 0.29.0
@@ -1059,6 +1059,14 @@ packages:
       '@bytecodealliance/preview2-shim':
         optional: true
 
+  '@bytecodealliance/jco-std@0.8.0':
+    resolution: {integrity: sha512-1+gGdFldVZKZY6OR1IBhc1j7PDgR+ToAXzAsftXgqWryTNuW0o+//o30l4QEfcheTt/aB0gE9IGyiGpLNS2a5w==}
+    peerDependencies:
+      '@bytecodealliance/preview2-shim': ^0.29.0
+    peerDependenciesMeta:
+      '@bytecodealliance/preview2-shim':
+        optional: true
+
   '@bytecodealliance/jco-transpile@0.11.0':
     resolution: {integrity: sha512-0mTr0qGd3Y55BczPO127NTgfY/lSpRgDMElifTnSzbidsyAo4wa4zrSoqwQpBrSiJvXqTLGm1sRT2zkwGaGelw==}
 
@@ -1070,6 +1078,9 @@ packages:
 
   '@bytecodealliance/jco-transpile@0.18.0':
     resolution: {integrity: sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg==}
+
+  '@bytecodealliance/jco-transpile@0.19.0':
+    resolution: {integrity: sha512-KemFWyj2AurWO74UyJjVWVa08zb/+JcrnzJLBfkkCgyPkzGhxBCAtAPL+fvSSs06N2n92U786IBUdpgau26oOw==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -5620,7 +5631,7 @@ packages:
 
   web-streams-polyfill@4.2.0:
     resolution: {integrity: sha512-0rYDzGOh9EZpig92umN5g5D/9A1Kff7k0/mzPSSCY8jEQeYkgRMoY7LhbXtUCWzLCMX0TUE9aoHkjFNB7D9pfA==}
-    engines: {node: '>= 14'}
+    engines: {node: '>= 8'}
 
   webdriver-bidi-protocol@0.4.3:
     resolution: {integrity: sha512-uuN0goWfxP22B7J/uAgBpOYNPttC+XVseYE+rSY5+rQ+YBeVz/VORw8WbmLVcqW78zNg5A4qnjNXYUWR3il2ig==}
@@ -5984,6 +5995,20 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.28.0
 
+  '@bytecodealliance/jco-std@0.8.0(@bytecodealliance/preview2-shim@0.29.0)':
+    dependencies:
+      '@noble/hashes': 1.8.0
+      acorn: 8.17.0
+      acorn-walk: 8.3.5
+      minimatch: 10.2.6
+      punycode: 2.3.1
+      readable-stream: 4.7.0
+      urlpattern-polyfill: 10.1.0
+      web-streams-polyfill: 4.2.0
+      whatwg-url: 14.2.0
+    optionalDependencies:
+      '@bytecodealliance/preview2-shim': 0.29.0
+
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
       '@bytecodealliance/preview2-shim': 0.21.0
@@ -6009,6 +6034,13 @@ snapshots:
     dependencies:
       '@bytecodealliance/preview2-shim': 0.28.0
       '@bytecodealliance/preview3-shim': 0.9.0
+      binaryen: 132.0.0
+      oxc-minify: 0.151.0
+
+  '@bytecodealliance/jco-transpile@0.19.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.29.0
+      '@bytecodealliance/preview3-shim': 0.10.0
       binaryen: 132.0.0
       oxc-minify: 0.151.0
 
