@@ -15,6 +15,8 @@ same one locally with:
 curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s 0.10.14+7d59c7ec9
 ```
 
-Newer `moon` releases (0.1.20261012 and later) reject the `moon.mod.json` manifests
-that `wit-bindgen moonbit` currently generates, so the pin has to move together with
-the `wit-bindgen` version once it emits `moon.mod` manifests.
+CI also pins `wit-bindgen-cli` to 0.63.0, which generates `moon.mod` and `moon.pkg`
+manifests. The issue-2178 caller supplies a `moon.pkg` with its `greet` import in
+place of the generated package manifest. A `moon.pkg.json` override is ignored
+when the generated `moon.pkg` is present. Update the toolchain pins and fixture
+manifests together.

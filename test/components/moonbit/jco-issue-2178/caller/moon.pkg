@@ -1,0 +1,5 @@
+import {
+  "test/jco-bug/interface/test/jco-bug/greet" @greet,
+}
+
+warnings = "-44"
