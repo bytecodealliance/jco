@@ -369,7 +369,7 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
     }
 
     setPathWithQuery(pathWithQuery: string | undefined) {
-        if (pathWithQuery && !pathWithQuery.match(/^[a-zA-Z0-9.\-_~!$&'()*+,;=:@%?/]+$/)) {
+        if (pathWithQuery && !pathWithQuery.match(/^[/?][a-zA-Z0-9.\-_~!$&'()*+,;=:@%?/]*$/)) {
             throw undefined;
         }
         this.#pathWithQuery = pathWithQuery;
