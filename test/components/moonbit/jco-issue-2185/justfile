@@ -1,4 +1,4 @@
-wit_bindgen := env_var_or_default("WIT_BINDGEN", "wit-bindgen")
+wit_bindgen := env_var_or_default("MOONBIT_WIT_BINDGEN", env_var_or_default("WIT_BINDGEN", "wit-bindgen"))
 wasm_tools := env_var_or_default("WASM_TOOLS", "wasm-tools")
 moon := env_var_or_default("MOON", "moon")
 just := env_var_or_default("JUST", just_executable())
