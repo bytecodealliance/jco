@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.0] - 2026-10-15
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ strict parsing for http path-with-query by @andreiltd in #2262
+
+- _(p2-shim)_ avoid leaking Node globals in IO error declarations by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ repair fixtures and expectations exposed by CI by @vados-cosmonic in #2254
+
 ## [0.29.0] - 2026-10-13
 
 ### 🚀 Features
