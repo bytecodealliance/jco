@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.11.0] - 2026-10-15
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ strict parsing for http path-with-query by @andreiltd
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.30.0 by @vados-cosmonic
+
 ## [0.10.0] - 2026-10-14
 
 ### 🐛 Bug Fixes
