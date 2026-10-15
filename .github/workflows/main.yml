@@ -900,6 +900,8 @@ jobs:
 
   test-extended:
     runs-on: ${{ matrix.os }}
+    env:
+      MOONBIT_WIT_BINDGEN_VERSION: 0.63.0
     needs:
       - build
     permissions:
@@ -928,7 +930,7 @@ jobs:
           tool: wasm-tools
       - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
         with:
-          tool: wit-bindgen-cli@0.63.0
+          tool: wit-bindgen-cli
       - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
         with:
           tool: wac-cli
@@ -949,8 +951,22 @@ jobs:
       - name: Install the Rust WASI P2 target
         run: rustup target add wasm32-wasip2
 
-      # Keep MoonBit and wit-bindgen pinned. Update them together with the fixture
-      # manifests when the generated MoonBit project format changes.
+      - name: Cache MoonBit wit-bindgen
+        id: cache-moonbit-wit-bindgen
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/moonbit-wit-bindgen
+          key: moonbit-wit-bindgen-${{ runner.os }}-${{ runner.arch }}-${{ env.MOONBIT_WIT_BINDGEN_VERSION }}
+
+      - name: Install MoonBit wit-bindgen
+        if: steps.cache-moonbit-wit-bindgen.outputs.cache-hit != 'true'
+        run: |
+          cargo install wit-bindgen-cli --version "$MOONBIT_WIT_BINDGEN_VERSION" --locked \
+            --no-default-features --features moonbit \
+            --root "$RUNNER_TEMP/moonbit-wit-bindgen"
+
+      # Keep MoonBit and its dedicated wit-bindgen pinned. Update them together
+      # with the fixture manifests when the generated project format changes.
       - name: Install MoonBit
         env:
           MOONBIT_VERSION: 0.10.14+7d59c7ec9
@@ -982,6 +998,7 @@ jobs:
       - name: Build extended component tree
         working-directory: test/components
         env:
+          MOONBIT_WIT_BINDGEN: ${{ runner.temp }}/moonbit-wit-bindgen/bin/wit-bindgen
           WASI_SDK: ${{ steps.wasi-sdk.outputs.wasi-sdk-path }}
         run: just build
 
