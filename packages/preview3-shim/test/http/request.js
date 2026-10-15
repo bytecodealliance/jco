@@ -6,9 +6,65 @@ import { Fields, HttpError, RequestOptions, Request } from "@bytecodealliance/pr
 
 import { FutureReader, future } from "@bytecodealliance/preview3-shim/future";
 import { StreamReader, stream } from "@bytecodealliance/preview3-shim/stream";
+import {
+  Fields as BrowserFields,
+  Request as BrowserRequest,
+} from "../../dist/browser/http/types.js";
 
 const ENCODER = new TextEncoder();
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
+
+testRequestPaths("Node.js", Request, Fields, "/");
+testRequestPaths("Browser", BrowserRequest, BrowserFields, "");
+
+function testRequestPaths(name, RequestClass, FieldsClass, emptyPath) {
+  function createRequest() {
+    const headers = new FieldsClass();
+    const trailers = Promise.resolve({ tag: "ok", val: undefined });
+    const [request] = RequestClass.new(headers, undefined, trailers, undefined);
+    return request;
+  }
+
+  describe(`${name} HTTP request paths`, () => {
+    test.each([
+      undefined,
+      "",
+      "/",
+      "/a?b=c",
+      "?a",
+      "//a/b",
+      "/a/../../bar",
+      "/http://other.example/x",
+      "?url=http://other.example/x",
+    ])("accepts %j", (path) => {
+      const req = createRequest();
+      req.setPathWithQuery("/previous");
+
+      req.setPathWithQuery(path);
+
+      expect(req.getPathWithQuery()).toBe(path === "" ? emptyPath : path);
+    });
+
+    test.each([
+      "http://other.example/x",
+      "https://other.example:8443/",
+      "other.example/x",
+      "a/b/c",
+      "../..",
+      "*",
+      "x",
+    ])("rejects %j without changing the path", (path) => {
+      const req = createRequest();
+      req.setPathWithQuery("/original?query=true");
+
+      expect(() => req.setPathWithQuery(path)).toThrowError(
+        expect.objectContaining({ payload: { tag: "invalid-syntax" } }),
+      );
+
+      expect(req.getPathWithQuery()).toBe("/original?query=true");
+    });
+  });
+}
 
 describe("Request", () => {
   const headers = new Fields();

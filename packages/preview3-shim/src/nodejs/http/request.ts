@@ -667,7 +667,10 @@ function validateUrlPart(value, part) {
     throw new HttpError("invalid-syntax", `Invalid ${part}: ${value}`);
   }
 
-  if (part === UrlPart.PATH_WITH_QUERY && /[ <>`]/.test(value)) {
+  if (
+    part === UrlPart.PATH_WITH_QUERY &&
+    ((value !== "" && !value.startsWith("/") && !value.startsWith("?")) || /[ <>`]/.test(value))
+  ) {
     throw new HttpError("invalid-syntax", `Invalid ${part}: ${value}`);
   }
 
