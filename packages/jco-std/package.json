@@ -750,7 +750,7 @@
     "@bytecodealliance/componentize-js": "^0.23.0",
     "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
     "@bytecodealliance/jco-transpile": "^0.15.0",
-    "@bytecodealliance/preview2-shim": "^0.29.0",
+    "@bytecodealliance/preview2-shim": "^0.30.0",
     "@types/node": "^24.12.4",
     "@types/which": "^3.0.4",
     "hono": "^4.13.7",
@@ -760,7 +760,7 @@
     "which": "^5.0.0"
   },
   "peerDependencies": {
-    "@bytecodealliance/preview2-shim": "^0.29.0"
+    "@bytecodealliance/preview2-shim": "^0.30.0"
   },
   "peerDependenciesMeta": {
     "@bytecodealliance/preview2-shim": {
