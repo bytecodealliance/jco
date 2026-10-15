@@ -928,7 +928,7 @@ jobs:
           tool: wasm-tools
       - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
         with:
-          tool: wit-bindgen-cli
+          tool: wit-bindgen-cli@0.63.0
       - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
         with:
           tool: wac-cli
@@ -949,11 +949,8 @@ jobs:
       - name: Install the Rust WASI P2 target
         run: rustup target add wasm32-wasip2
 
-      # Pinned: moon 0.1.20261012 (toolchain 0.10.15) rejects the `moon.mod.json`
-      # manifests that `wit-bindgen moonbit` generates, so an unpinned install
-      # breaks the MoonBit fixtures whenever MoonBit ships a release. Bump this
-      # together with wit-bindgen once it emits `moon.mod` manifests
-      # (https://github.com/bytecodealliance/wit-bindgen/pull/1741).
+      # Keep MoonBit and wit-bindgen pinned. Update them together with the fixture
+      # manifests when the generated MoonBit project format changes.
       - name: Install MoonBit
         env:
           MOONBIT_VERSION: 0.10.14+7d59c7ec9

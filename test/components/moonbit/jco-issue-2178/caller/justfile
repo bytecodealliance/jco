@@ -13,7 +13,7 @@ gen-bindings:
     rm -rf {{bindings_dir}}
     {{wit_bindgen}} moonbit wit --world consumer --out-dir {{bindings_dir}}
     cp component.mbt {{bindings_dir}}/gen/world/consumer/impl.mbt
-    cp moon.pkg.json {{bindings_dir}}/gen/world/consumer/moon.pkg.json
+    cp moon.pkg {{bindings_dir}}/gen/world/consumer/moon.pkg
 
 # Build moonbit wasm component (MoonBit strings are UTF-16)
 build: gen-bindings
