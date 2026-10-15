@@ -232,6 +232,9 @@ export class Request implements RequestT {
   }
 
   setPathWithQuery(pathWithQuery: string | undefined): void {
+    if (pathWithQuery && !pathWithQuery.startsWith("/") && !pathWithQuery.startsWith("?")) {
+      throw new HttpError({ tag: "invalid-syntax" }, `Invalid pathWithQuery: ${pathWithQuery}`);
+    }
     this.#pathWithQuery = pathWithQuery;
   }
 
