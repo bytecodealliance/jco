@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.20.0] - 2026-10-16
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update preview2-shim to v0.30.0 by @vados-cosmonic
+
+## New Contributors
+
+- @ryan-surname-p made their first contribution in [#2261](https://github.com/bytecodealliance/jco/pull/2261)
+
 ## [0.19.0] - 2026-10-14
 
 ### 🧪 Testing
