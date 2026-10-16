@@ -450,11 +450,11 @@ importers:
         specifier: npm:@bytecodealliance/componentize-js@^0.19.3
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
-        specifier: ^0.8.0
-        version: 0.8.0(@bytecodealliance/preview2-shim@0.30.0)
+        specifier: ^0.9.0
+        version: 0.9.0(@bytecodealliance/preview2-shim@0.30.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.19.0
-        version: 0.19.0
+        specifier: ^0.20.0
+        version: 0.20.0
       '@bytecodealliance/preview2-shim':
         specifier: ^0.30.0
         version: 0.30.0
@@ -1059,10 +1059,10 @@ packages:
       '@bytecodealliance/preview2-shim':
         optional: true
 
-  '@bytecodealliance/jco-std@0.8.0':
-    resolution: {integrity: sha512-1+gGdFldVZKZY6OR1IBhc1j7PDgR+ToAXzAsftXgqWryTNuW0o+//o30l4QEfcheTt/aB0gE9IGyiGpLNS2a5w==}
+  '@bytecodealliance/jco-std@0.9.0':
+    resolution: {integrity: sha512-esKLDuR5QKNg4JL4fVeIqaf5qHcb+JNOCDMgTJ8PWwp5dmGeV0EWuE5a4h+h55LD+v59Ivq/w6C01NExIhu9XA==}
     peerDependencies:
-      '@bytecodealliance/preview2-shim': ^0.29.0
+      '@bytecodealliance/preview2-shim': ^0.30.0
     peerDependenciesMeta:
       '@bytecodealliance/preview2-shim':
         optional: true
@@ -1079,8 +1079,8 @@ packages:
   '@bytecodealliance/jco-transpile@0.18.0':
     resolution: {integrity: sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg==}
 
-  '@bytecodealliance/jco-transpile@0.19.0':
-    resolution: {integrity: sha512-KemFWyj2AurWO74UyJjVWVa08zb/+JcrnzJLBfkkCgyPkzGhxBCAtAPL+fvSSs06N2n92U786IBUdpgau26oOw==}
+  '@bytecodealliance/jco-transpile@0.20.0':
+    resolution: {integrity: sha512-FJ8Ue1vsqY8loI6TgYe50Dvt5HVFu0DoiJ7r1NLN/UEa+kbLlO2cbl4vwsLmJrMff8yBRkzb5P7rIN1PCvVGgg==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -5998,7 +5998,7 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.28.0
 
-  '@bytecodealliance/jco-std@0.8.0(@bytecodealliance/preview2-shim@0.30.0)':
+  '@bytecodealliance/jco-std@0.9.0(@bytecodealliance/preview2-shim@0.30.0)':
     dependencies:
       '@noble/hashes': 1.8.0
       acorn: 8.17.0
@@ -6040,9 +6040,9 @@ snapshots:
       binaryen: 132.0.0
       oxc-minify: 0.151.0
 
-  '@bytecodealliance/jco-transpile@0.19.0':
+  '@bytecodealliance/jco-transpile@0.20.0':
     dependencies:
-      '@bytecodealliance/preview2-shim': 0.29.0
+      '@bytecodealliance/preview2-shim': 0.30.0
       '@bytecodealliance/preview3-shim': 0.10.0
       binaryen: 132.0.0
       oxc-minify: 0.151.0
