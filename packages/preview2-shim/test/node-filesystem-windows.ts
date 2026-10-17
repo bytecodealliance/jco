@@ -1,6 +1,6 @@
-import { lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, mkdirSync, readlinkSync, realpathSync, statSync, utimesSync } from "node:fs";
 
-import { beforeEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 
 vi.mock("node:process", async (importOriginal) => ({
     ...(await importOriginal<typeof import("node:process")>()),
@@ -12,6 +12,8 @@ vi.mock("node:fs", async (importOriginal) => ({
     lstatSync: vi.fn(),
     readlinkSync: vi.fn(),
     realpathSync: vi.fn((path: string) => path),
+    mkdirSync: vi.fn(),
+    utimesSync: vi.fn(),
 }));
 vi.mock("../src/io/worker-io.js", () => ({
     earlyDispose: vi.fn(),
@@ -25,8 +27,10 @@ import { ioCall, registerDispose } from "../src/io/worker-io.js";
 
 import { _createPreopenDescriptor } from "../src/nodejs/filesystem.js";
 
-beforeEach(() => {
-    vi.clearAllMocks();
+// These tests stay sequential because the Windows platform, filesystem, and
+// worker module mocks are shared. Each test explicitly resets its own setup.
+function setupWindowsMocks() {
+    vi.resetAllMocks();
     const stats = {
         isFile: () => true,
         isDirectory: () => false,
@@ -39,7 +43,46 @@ beforeEach(() => {
     } as ReturnType<typeof statSync>;
     vi.mocked(statSync).mockReturnValue(stats);
     vi.mocked(lstatSync).mockReturnValue(stats);
-});
+}
+
+test.each([true, false])(
+    "Windows virtual directory honors mutate-directory=%s",
+    (mutateDirectory) => {
+        setupWindowsMocks();
+        vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<
+            typeof statSync
+        >);
+        const root = _createPreopenDescriptor("C:/sandbox", { enableMutateDirectory: true });
+        const flags = { read: true, mutateDirectory };
+        const dir = root.openAt({}, "nested", { directory: true }, flags);
+        flags.mutateDirectory = !mutateDirectory;
+        dir.getFlags().mutateDirectory = !mutateDirectory;
+        expect(dir.getFlags().mutateDirectory).toBe(mutateDirectory);
+        const stamp = {
+            tag: "timestamp",
+            val: { seconds: 1_600_000_000n, nanoseconds: 500_000_000 },
+        } as const;
+        if (mutateDirectory) {
+            dir.createDirectoryAt("child");
+            expect(mkdirSync).toHaveBeenCalledWith("C:/sandbox/nested/child");
+            dir.setTimes(stamp, stamp);
+            expect(utimesSync).toHaveBeenCalledWith(
+                "C:/sandbox/nested",
+                1_600_000_000.5,
+                1_600_000_000.5,
+            );
+        } else {
+            expect(() => dir.createDirectoryAt("child")).toThrow("read-only");
+            expect(() => dir.openAt({}, "new.txt", { create: true }, { write: true })).toThrow(
+                "read-only",
+            );
+            expect(() => dir.setTimes(stamp, stamp)).toThrow("read-only");
+            expect(mkdirSync).not.toHaveBeenCalled();
+            expect(utimesSync).not.toHaveBeenCalled();
+        }
+        expect(ioCall).not.toHaveBeenCalled();
+    },
+);
 
 for (const symlinkFollow of [false, true]) {
     test.each([
@@ -48,6 +91,7 @@ for (const symlinkFollow of [false, true]) {
         ["?/C:/Users/test/app.wit", "//?/C:/Users/test/app.wit"],
         ["server/share/app.wit", "//server/share/app.wit"],
     ])(`Windows root resolves %s (follow=${symlinkFollow})`, (path, expected) => {
+        setupWindowsMocks();
         const root = _createPreopenDescriptor("/");
         root.statAt({ symlinkFollow }, path);
         expect(symlinkFollow ? statSync : lstatSync).toHaveBeenCalledWith(expected, {
@@ -57,12 +101,14 @@ for (const symlinkFollow of [false, true]) {
 }
 
 test("Windows drive normalization does not replace an explicit preopen", () => {
+    setupWindowsMocks();
     const root = _createPreopenDescriptor("D:/sandbox");
     root.statAt({}, "C:/outside/app.wit");
     expect(lstatSync).toHaveBeenCalledWith("D:/sandbox/C:/outside/app.wit", { bigint: true });
 });
 
 test("Windows readlink targets use WASI path separators", () => {
+    setupWindowsMocks();
     vi.mocked(readlinkSync).mockReturnValue("nested\\target.txt");
     const root = _createPreopenDescriptor("C:/sandbox");
     expect(root.readlinkAt("link.txt")).toBe("nested/target.txt");
@@ -70,6 +116,7 @@ test("Windows readlink targets use WASI path separators", () => {
 
 for (const read of [false, true]) {
     test(`rejects a writable Windows directory without opening it (read=${read})`, () => {
+        setupWindowsMocks();
         vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<
             typeof statSync
         >);
@@ -83,6 +130,7 @@ for (const read of [false, true]) {
 }
 
 test("reads a Windows directory without opening it as a file", () => {
+    setupWindowsMocks();
     vi.mocked(statSync).mockReturnValue({
         isDirectory: () => true,
         isFile: () => false,
@@ -112,6 +160,7 @@ test.each([
     ["?/C:/Users/test/wit", "C:/Users/test/wit/app.wit"],
     ["?/UNC/server/share/wit", "//server/share/wit/app.wit"],
 ])("resolves entries of a directory opened at %s through the Windows root", (path, expected) => {
+    setupWindowsMocks();
     // Node's realpathSync() stats the root of a namespaced path, which is not a directory
     vi.mocked(realpathSync).mockImplementationOnce((path) => {
         if (/^[\\/]{2}\?[\\/]/.test(String(path))) {

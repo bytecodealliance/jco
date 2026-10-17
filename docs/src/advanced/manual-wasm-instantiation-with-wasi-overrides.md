@@ -62,6 +62,42 @@ await main();
 
 This is identical to mapping all imports to those provided by [`@bytecodealliance/preview2-shim`][npm-p2-shim].
 
+### Node filesystem directory capabilities
+
+The Node Preview 2 shim preserves legacy directory behavior by default, including
+rejecting `mutate-directory` requests. To enable support for guests such as Perry,
+create an isolated filesystem and provide it to `WASIShim`:
+
+```js
+const shim = new WASIShim({
+    filesystem: filesystem.createFilesystem({
+        preopens: { "/data": "/tmp/guest-data" },
+        enableMutateDirectory: true,
+    }),
+});
+```
+
+Here `filesystem` comes from `@bytecodealliance/preview2-shim` on Node.js.
+The option is off by default because enforcing these permissions breaks some
+adapted Preview 1 guests that omit the flag. With the option enabled, preopens
+permit reads and mutations, subject to host permissions. A guest opening a child
+directory must request the WASI
+`mutate-directory` flag if it will modify entries, change metadata, or open files
+for writing. Without that flag, mutation attempts through the directory handle
+fail with `read-only`; the handle can still be used for reads.
+
+Rust-based guests may also send `mutate-directory` when opening regular files.
+With the option enabled, the shim accepts these requests and removes that directory-only flag from the
+returned file's flags. File writes still require `write` and a parent directory
+that permits mutation. The option does not grant additional write access and
+does not change other filesystem instances or previously opened handles.
+
+For components using global filesystem imports, pass `{ enableMutateDirectory: true }`
+as the second argument to `filesystem._setPreopens(...)` before running the guest.
+
+See the [Preview 2 shim's sandboxing documentation](https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim#notes-on-sandboxing)
+for the Node implementation's capability and preopen behavior.
+
 ## Manual instantiation of a transpiled component with custom overrides
 
 To use custom component overrides in addition to the WASI imports provided by `preview2-shim`,
