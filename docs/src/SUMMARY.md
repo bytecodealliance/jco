@@ -2,6 +2,7 @@
 
 - [Introduction](./introduction.md)
 - [Creating new JS components](./creating-new-js-components.md)
+    - [Perry backend](./perry.md)
 - [Transpiling](./transpiling.md)
 - [Example Workflow](./example.md)
 - [WASI support](./wasi/index.md)
