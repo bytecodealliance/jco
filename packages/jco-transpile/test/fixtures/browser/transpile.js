@@ -73,8 +73,7 @@ async function transpileOne(componentPath) {
     // for resolving relative URLs. In instantiation mode that is only safe because nothing is
     // fetched relative to the module: the core modules are handed over via getCoreModule
     // below (bindgen otherwise falls back to fetching them next to `import.meta.url`) and the
-    // imports are passed in rather than imported, so the generated source has no static
-    // imports of its own.
+    // component imports are passed in rather than imported.
     const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     let module;
     try {
