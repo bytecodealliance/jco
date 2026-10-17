@@ -237,21 +237,75 @@ const component = await instantiate(loader, sandboxedShim.getImportObject());
 
 ### Notes on sandboxing
 
-- By default (when no options are passed), the shim is providing full access to match typical
-  Node.js library behavior. In browsers, filesystem preopens remain empty until the application
-  explicitly injects filesystem namespaces or selects the ephemeral file-data adapter.
-- `sandbox.preopens` maps guest paths to Node.js host paths on Node.js. With
-  `browserFilesystem`, the same option maps guest paths to capabilities understood by its adapter
-  and overrides `browserFilesystem.preopens`. A custom `filesystem` can implement
-  `createPreopens(preopens)` to interpret the provided properties and return its own
-  `wasi:filesystem/preopens` namespace. The shim passes those properties through unchanged.
-- Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
-  Multiple instances with different configurations will not affect each other.
-- The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and
-  affect all components not using `WASIShim` with explicit configuration. For isolation, prefer
-  using `WASIShim` with the `sandbox` option containing `preopens` and `env`.
-- When `sandbox.enableNetwork: false`, socket operations and outbound HTTP receive instance-local
-  denied network capabilities.
+#### Directory mutation compatibility (Node.js)
+
+Node filesystems preserve the existing behavior by default: `mutate-directory`
+requests fail with `unsupported`, and omitting that flag on a child directory
+does not make it read-only. Some guests, including adapted Preview 1 components,
+depend on that behavior. See the earlier [implementation discussion](https://github.com/bytecodealliance/jco/pull/1303).
+
+Opt in to `mutate-directory` support for guests that use its permission semantics:
+
+```js
+import { filesystem } from "@bytecodealliance/preview2-shim";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const guestFilesystem = filesystem.createFilesystem({
+    preopens: { "/data": "/tmp/guest-data" },
+    enableMutateDirectory: true,
+});
+const shim = new WASIShim({ filesystem: guestFilesystem });
+```
+
+With this option, preopens have `read` and `mutate-directory` capabilities,
+subject to host permissions. A child directory opened without
+`mutateDirectory: true` rejects mutations, metadata changes, and writable,
+create, or truncate opens with `read-only`. Request the flag for writable
+directory handles. Returned flags are snapshots and cannot change permissions.
+
+Some WASI guests, including Rust-based runtimes, also request `mutate-directory`
+when opening a regular file. When enabled, the shim accepts and clears that
+directory-only flag on files. This grants no additional authority: the original
+request passes the parent permission check, file writes still require `write`,
+and directories retain the flag for subsequent mutation checks. Wasmtime also
+accepts the extra file flag, but its broader permission semantics are still
+[under discussion](https://github.com/bytecodealliance/wasmtime/issues/12912).
+
+For components using the global filesystem imports, opt in with
+`filesystem._setPreopens({ "/data": "/tmp/guest-data" }, { enableMutateDirectory: true })`.
+`_addPreopen` accepts the same options as its third argument. The option is
+captured by each new preopen and inherited by its descendants; it does not
+change existing handles or other filesystem instances.
+
+These rules apply to the Node filesystem implementation. Browser adapters and
+application-provided filesystem implementations define their own behavior.
+
+#### Default access
+
+By default (when no options are passed), the shim is providing full access to match typical
+Node.js library behavior. In browsers, filesystem preopens remain empty until the application
+explicitly injects filesystem namespaces or selects the ephemeral file-data adapter.
+
+#### Preopen mappings
+
+`sandbox.preopens` maps guest paths to Node.js host paths on Node.js. With
+`browserFilesystem`, the same option maps guest paths to capabilities understood by its adapter
+and overrides `browserFilesystem.preopens`. A custom `filesystem` can implement
+`createPreopens(preopens)` to interpret the provided properties and return its own
+`wasi:filesystem/preopens` namespace. The shim passes those properties through unchanged.
+
+#### Instance isolation and global configuration
+
+Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
+Multiple instances with different configurations will not affect each other.
+The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and
+affect all components not using `WASIShim` with explicit configuration. For isolation, prefer
+using `WASIShim` with the `sandbox` option containing `preopens` and `env`.
+
+#### Network access
+
+When `sandbox.enableNetwork: false`, socket operations and outbound HTTP receive instance-local
+denied network capabilities.
 
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 

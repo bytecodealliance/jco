@@ -1,6 +1,7 @@
 import { types as TypesNamespace, preopens as PreopensNamespace } from "../../types/filesystem.js";
 import type {
     Descriptor as IDescriptor,
+    DescriptorFlags,
     DescriptorType,
     DirectoryEntryStream as IDirectoryEntryStream,
 } from "../../types/interfaces/wasi-filesystem-types.js";
@@ -53,6 +54,15 @@ const isWindows = platform === "win32";
 const isMac = platform === "darwin";
 const hostPath = isWindows ? win32 : posix;
 const MAX_SYMLINKS = 40;
+
+export interface NodeFilesystemOptions {
+    /**
+     * Accept mutate-directory and enforce directory mutation capabilities.
+     * Defaults to false for compatibility with guests, including adapted
+     * Preview 1 components, that omit the flag on writable directories.
+     */
+    enableMutateDirectory?: boolean;
+}
 
 function normalizeHostPath(path: string) {
     return isWindows ? path.replace(/\\/g, "/") : path;
@@ -117,13 +127,21 @@ class Descriptor implements IDescriptor {
     #hostPreopen;
     #fileResourceId;
     #finalizer;
-    #mode;
+    #mode!: DescriptorFlags;
+    #enableMutateDirectory = false;
     #fullPath;
     #virtualDirectory = false;
     private _id = 0;
 
-    static _createPreopen(hostPreopen) {
+    static _createPreopen(
+        hostPreopen,
+        { enableMutateDirectory = false }: NodeFilesystemOptions = {},
+    ) {
         const descriptor = new Descriptor();
+        descriptor.#enableMutateDirectory = enableMutateDirectory;
+        if (enableMutateDirectory) {
+            descriptor.#mode = { read: true, mutateDirectory: true };
+        }
         descriptor.#hostPreopen = hostPreopen.endsWith("/")
             ? hostPreopen.slice(0, -1) || "/"
             : hostPreopen;
@@ -137,7 +155,7 @@ class Descriptor implements IDescriptor {
         return descriptor;
     }
 
-    static _create(fileResourceId, mode, fullPath) {
+    static _create(fileResourceId, mode, fullPath, enableMutateDirectory) {
         const descriptor = new Descriptor();
         descriptor.#fileResourceId = fileResourceId;
         descriptor.#finalizer = registerDispose(
@@ -146,14 +164,16 @@ class Descriptor implements IDescriptor {
             fileResourceId,
             closeFileResource,
         );
-        descriptor.#mode = mode;
+        descriptor.#enableMutateDirectory = enableMutateDirectory;
+        descriptor.#mode = enableMutateDirectory ? { ...mode } : mode;
         descriptor.#fullPath = fullPath;
         return descriptor;
     }
 
-    static _createVirtualDirectory(mode, fullPath) {
+    static _createVirtualDirectory(mode, fullPath, enableMutateDirectory) {
         const descriptor = new Descriptor();
-        descriptor.#mode = mode;
+        descriptor.#enableMutateDirectory = enableMutateDirectory;
+        descriptor.#mode = enableMutateDirectory ? { ...mode } : mode;
         descriptor.#fullPath = fullPath;
         descriptor.#virtualDirectory = true;
         return descriptor;
@@ -226,7 +246,21 @@ class Descriptor implements IDescriptor {
     }
 
     getFlags() {
-        return this.#mode;
+        return this.#enableMutateDirectory ? { ...this.#mode } : this.#mode;
+    }
+
+    #assertCanMutateDirectory() {
+        // Opt-in: enforcing this by default breaks adapted Preview 1 guests
+        // that omit the flag. See jco#1303 and wasmtime#12912.
+        if (!this.#enableMutateDirectory) {
+            return;
+        }
+        if (this.getType() !== "directory") {
+            throw "not-directory";
+        }
+        if (!this.#mode.mutateDirectory) {
+            throw "read-only";
+        }
     }
 
     getType() {
@@ -254,6 +288,13 @@ class Descriptor implements IDescriptor {
         if (this.#hostPreopen) {
             throw "invalid";
         }
+        if (this.#enableMutateDirectory) {
+            if (this.getType() === "directory") {
+                this.#assertCanMutateDirectory();
+            } else if (!this.#mode.write) {
+                throw "read-only";
+            }
+        }
         let stats;
         if (
             dataAccessTimestamp.tag === "no-change" ||
@@ -270,7 +311,11 @@ class Descriptor implements IDescriptor {
             dataModificationTimestamp.tag === "no-change" && stats.dataModificationTimestamp,
         );
         try {
-            ioCall(FILESYSTEM_DESCRIPTOR_SET_TIMES, this.#fileResourceId, { atime, mtime });
+            if (this.#virtualDirectory) {
+                utimesSync(this.#fullPath, atime, mtime);
+            } else {
+                ioCall(FILESYSTEM_DESCRIPTOR_SET_TIMES, this.#fileResourceId, { atime, mtime });
+            }
         } catch (e) {
             throw convertFsError(e);
         }
@@ -279,9 +324,9 @@ class Descriptor implements IDescriptor {
     #getNewTimestamp(newTimestamp, maybeNow) {
         switch (newTimestamp.tag) {
             case "no-change":
-                return timestampToMs(maybeNow);
+                return timestampToMs(maybeNow) / 1000;
             case "timestamp":
-                return timestampToMs(newTimestamp.val);
+                return timestampToMs(newTimestamp.val) / 1000;
             default:
                 return Math.floor(Date.now() / 1e3);
         }
@@ -344,6 +389,7 @@ class Descriptor implements IDescriptor {
 
     createDirectoryAt(path) {
         const fullPath = this.#getFullPath(path, false);
+        this.#assertCanMutateDirectory();
         try {
             mkdirSync(fullPath);
         } catch (e) {
@@ -397,12 +443,13 @@ class Descriptor implements IDescriptor {
 
     setTimesAt(pathFlags, path, dataAccessTimestamp, dataModificationTimestamp) {
         const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
+        this.#assertCanMutateDirectory();
         let stats;
         if (
             dataAccessTimestamp.tag === "no-change" ||
             dataModificationTimestamp.tag === "no-change"
         ) {
-            stats = this.stat();
+            stats = this.statAt(pathFlags, path);
         }
         const atime = this.#getNewTimestamp(
             dataAccessTimestamp,
@@ -418,7 +465,7 @@ class Descriptor implements IDescriptor {
 
         let metadataSetFn = pathFlags.symlinkFollow ? utimesSync : lutimesSync;
         try {
-            metadataSetFn(fullPath, atime / 1000, mtime / 1000);
+            metadataSetFn(fullPath, atime, mtime);
         } catch (e) {
             throw convertFsError(e);
         }
@@ -427,6 +474,8 @@ class Descriptor implements IDescriptor {
     linkAt(oldPathFlags, oldPath, newDescriptor, newPath) {
         const oldFullPath = this.#getFullPath(oldPath, oldPathFlags.symlinkFollow);
         const newFullPath = newDescriptor.#getFullPath(newPath, false);
+        this.#assertCanMutateDirectory();
+        newDescriptor.#assertCanMutateDirectory();
         // Windows doesn't automatically fail on trailing slashes
         if (isWindows && newFullPath.endsWith("/")) {
             throw "no-entry";
@@ -440,6 +489,17 @@ class Descriptor implements IDescriptor {
 
     openAt(pathFlags, path, openFlags, descriptorFlags) {
         const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
+        // Check the original request before normalizing the returned flags.
+        // WASI open-at requires read-only if mutate-directory is requested
+        // through a base without that capability, even when opening a file.
+        if (
+            descriptorFlags.write ||
+            descriptorFlags.mutateDirectory ||
+            openFlags.create ||
+            openFlags.truncate
+        ) {
+            this.#assertCanMutateDirectory();
+        }
         let fsOpenFlags = 0x0;
         if (openFlags.create) {
             fsOpenFlags |= constants.O_CREAT;
@@ -469,7 +529,10 @@ class Descriptor implements IDescriptor {
         if (!pathFlags.symlinkFollow) {
             fsOpenFlags |= constants.O_NOFOLLOW;
         }
-        if (descriptorFlags.requestedWriteSync || descriptorFlags.mutateDirectory) {
+        if (
+            descriptorFlags.requestedWriteSync ||
+            (descriptorFlags.mutateDirectory && !this.#enableMutateDirectory)
+        ) {
             throw "unsupported";
         }
         // Currently throw to match Wasmtime
@@ -506,7 +569,11 @@ class Descriptor implements IDescriptor {
                     if (descriptorFlags.write || openFlags.create || openFlags.truncate) {
                         throw "is-directory";
                     }
-                    return Descriptor._createVirtualDirectory(descriptorFlags, fullPath);
+                    return Descriptor._createVirtualDirectory(
+                        descriptorFlags,
+                        fullPath,
+                        this.#enableMutateDirectory,
+                    );
                 }
             } catch (e: any) {
                 if (e === "is-directory") {
@@ -531,7 +598,26 @@ class Descriptor implements IDescriptor {
                 closeFileResource(id);
                 throw "is-directory";
             }
-            const descriptor = descriptorCreate(id, descriptorFlags, fullPath);
+            // Rust's WASI runtime requests mutate-directory on writable files
+            // too, including through Perry. When enabled, accept and clear this
+            // directory-only flag on files, as Wasmtime also does. Its broader
+            // permission semantics remain disputed (wasmtime#12912).
+            // This grants no additional authority:
+            // - The original request already passed the base directory's rights check.
+            // - File writes still require write.
+            // - Directories retain mutate-directory for mutations and writable child opens.
+            const descriptor = descriptorCreate(
+                id,
+                this.#enableMutateDirectory
+                    ? {
+                          ...descriptorFlags,
+                          mutateDirectory:
+                              type === "directory" && !!descriptorFlags.mutateDirectory,
+                      }
+                    : descriptorFlags,
+                fullPath,
+                this.#enableMutateDirectory,
+            );
             if (fullPath.endsWith("/") && type !== "directory") {
                 descriptor[symbolDispose]();
                 throw "not-directory";
@@ -557,6 +643,7 @@ class Descriptor implements IDescriptor {
 
     removeDirectoryAt(path) {
         const fullPath = this.#getFullPath(path, false);
+        this.#assertCanMutateDirectory();
         try {
             rmdirSync(fullPath);
         } catch (e: any) {
@@ -570,6 +657,8 @@ class Descriptor implements IDescriptor {
     renameAt(oldPath, newDescriptor, newPath) {
         const oldFullPath = this.#getFullPath(oldPath, false);
         const newFullPath = newDescriptor.#getFullPath(newPath, false);
+        this.#assertCanMutateDirectory();
+        newDescriptor.#assertCanMutateDirectory();
         try {
             renameSync(oldFullPath, newFullPath);
         } catch (e: any) {
@@ -582,6 +671,7 @@ class Descriptor implements IDescriptor {
 
     symlinkAt(target, path) {
         const fullPath = this.#getFullPath(path, false);
+        this.#assertCanMutateDirectory();
         if (target.startsWith("/")) {
             throw "not-permitted";
         }
@@ -610,6 +700,7 @@ class Descriptor implements IDescriptor {
 
     unlinkFileAt(path) {
         const fullPath = this.#getFullPath(path, false);
+        this.#assertCanMutateDirectory();
         try {
             if (fullPath.endsWith("/")) {
                 let isDir = false;
@@ -826,9 +917,15 @@ export const types: typeof TypesNamespace = {
 };
 
 /** Create isolated filesystem namespaces from Node.js host-path preopens. */
-export function createFilesystem({ preopens }: { preopens: Record<string, string> }) {
+export function createFilesystem({
+    preopens,
+    enableMutateDirectory = false,
+}: { preopens: Record<string, string> } & NodeFilesystemOptions) {
     const entries: Array<[Descriptor, string]> = Object.entries(preopens).map(
-        ([virtualPath, hostPath]) => [descriptorCreatePreopen(hostPath), virtualPath],
+        ([virtualPath, hostPath]) => [
+            descriptorCreatePreopen(hostPath, { enableMutateDirectory }),
+            virtualPath,
+        ],
     );
     return {
         types,
@@ -842,10 +939,10 @@ export function createFilesystem({ preopens }: { preopens: Record<string, string
  * Replace all preopens with the given set.
  * @param {Record<string, string>} preopens - Map of virtual paths to host paths
  */
-export function _setPreopens(preopens) {
+export function _setPreopens(preopens, options: NodeFilesystemOptions = {}) {
     preopenEntries = [];
     for (const [virtualPath, hostPreopen] of Object.entries(preopens)) {
-        _addPreopen(virtualPath, hostPreopen);
+        _addPreopen(virtualPath, hostPreopen, options);
     }
 }
 
@@ -854,8 +951,11 @@ export function _setPreopens(preopens) {
  * @param {string} virtualPath - The virtual path visible to the guest
  * @param {string} hostPreopen - The host filesystem path
  */
-export function _addPreopen(virtualPath, hostPreopen) {
-    const preopenEntry: [Descriptor, string] = [descriptorCreatePreopen(hostPreopen), virtualPath];
+export function _addPreopen(virtualPath, hostPreopen, options: NodeFilesystemOptions = {}) {
+    const preopenEntry: [Descriptor, string] = [
+        descriptorCreatePreopen(hostPreopen, options),
+        virtualPath,
+    ];
     preopenEntries.push(preopenEntry);
 }
 
@@ -884,8 +984,8 @@ export function _getPreopens() {
  * @param  hostPreopen - The host filesystem path
  * @returns A preopen descriptor
  */
-export function _createPreopenDescriptor(hostPreopen: string) {
-    return descriptorCreatePreopen(hostPreopen);
+export function _createPreopenDescriptor(hostPreopen: string, options: NodeFilesystemOptions = {}) {
+    return descriptorCreatePreopen(hostPreopen, options);
 }
 
 function convertFsError(e) {
