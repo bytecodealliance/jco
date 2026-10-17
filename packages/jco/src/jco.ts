@@ -48,9 +48,9 @@ const FEATURE_CHOICES = ["clocks", "http", "random", "stdio", "fetch-event", "al
 program
     .command("componentize")
     .description("Create a component from a JavaScript or TypeScript module")
-    .usage("<source> --wit wit-world.wit -o <component-path>")
+    .usage("<source> [--wit wit-world.wit] -o <component-path>")
     .argument("<source>", "JavaScript or TypeScript source file to build")
-    .requiredOption("-w, --wit <path>", "WIT path to build with")
+    .option("-w, --wit <path>", "WIT path to build with (required except for Perry)")
     .option("-n, --world-name <name>", "WIT world to build")
     .option("--aot", "Enable Weval AOT compilation of JS")
     .option("--aot-min-stack-size-bytes <number>", "Set the min stack size to be used during AOT")
@@ -62,9 +62,11 @@ program
     .option("--preview2-adapter <adapter>", "provide a custom preview2 adapter path")
     .addOption(
         new Option("--backend <backend>", "componentization backend")
-            .choices(["starlingmonkey", "sm", "quickjs", "qjs"])
+            .choices(["starlingmonkey", "sm", "quickjs", "qjs", "perry"])
             .default("starlingmonkey"),
     )
+    .option("--backend-perry-package <name>", "project-installed Perry CLI package (default: @perryts/perry)")
+    .option("--backend-perry-cli-path <path>", "Perry CLI executable or JS launcher (relative to invocation directory)")
     .option(
         "--backend-qjs-disable-async",
         "disable async (enable the 'sync' option) when buliding with componentize-qjs",
@@ -74,35 +76,35 @@ program
     .option("--engine <path>", "use a specific StarlingMonkey build (StarlingMonkey backend only)")
     .option(
         "--cwd <path>",
-        "directory componentization runs from; paths the component sees are made relative to it (default: the process working directory)",
+        "directory componentization runs from; also selects Perry package resolution (default: source directory)",
     )
-    .option("--bundle", "bundle source and its dependencies before componentization (automatic for TypeScript)")
+    .option("--bundle", "bundle source and dependencies (automatic for TypeScript with StarlingMonkey/QuickJS)")
     .option("--bundle-config <path>", "merge a Rolldown configuration module into the component bundle")
+    // Defaults live in the adapters so backend validation can distinguish explicit
+    // Node compatibility flags from omitted options (Perry rejects these flags).
     .addOption(
         new Option(
             "--with-nodejs-http-via <implementation>",
-            "implementation used by bundled node:http and node:https code",
-        )
-            .choices(["direct", "wasi-sockets", "wasi-http"])
-            .default("direct"),
+            "implementation used by bundled node:http and node:https code (default: direct)",
+        ).choices(["direct", "wasi-sockets", "wasi-http"]),
     )
     .addOption(
-        new Option("--with-nodejs-http2-via <implementation>", "implementation used by bundled node:http2 code")
-            .choices(["direct", "wasi-sockets", "wasi-http"])
-            .default("direct"),
+        new Option(
+            "--with-nodejs-http2-via <implementation>",
+            "implementation used by bundled node:http2 code (default: direct)",
+        ).choices(["direct", "wasi-sockets", "wasi-http"]),
     )
     .addOption(
         new Option(
             "--with-nodejs-crypto-via <implementation>",
-            "key derivation implementation used by bundled node:crypto code",
-        )
-            .choices(["portable", "direct"])
-            .default("portable"),
+            "key derivation implementation used by bundled node:crypto code (default: portable)",
+        ).choices(["portable", "direct"]),
     )
     .addOption(
-        new Option("--with-nodejs-vfs-via <implementation>", "implementation used by bundled node:vfs code")
-            .choices(["direct", "wasi-filesystem"])
-            .default("direct"),
+        new Option(
+            "--with-nodejs-vfs-via <implementation>",
+            "implementation used by bundled node:vfs code (default: direct)",
+        ).choices(["direct", "wasi-filesystem"]),
     )
     .option(
         "--with-nodejs-vfs-wasi-config <module>",

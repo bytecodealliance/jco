@@ -1,5 +1,8 @@
 # NodeJS built-in compatibility
 
+The [Perry backend](../perry.md) compiles supported Node-style APIs using Perry's
+own WASI P2 implementations. It does not enable the Jco adapters described here.
+
 Jco's long-term goal is to let existing Node.js programs become WebAssembly
 components with as few source changes as possible.
 

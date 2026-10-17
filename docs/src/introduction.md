@@ -8,7 +8,7 @@
 - WASI Preview2 support in Node.js & browsers.
 - Component builds of Wasm Tools helpers, available for use as a library or CLI commands for use in native JS environments
 - Optimization helper for Components via Binaryen.
-- `componentize` command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
+- `componentize` command to create components from JavaScript or TypeScript using StarlingMonkey, QuickJS, or the experimental [Perry backend](./perry.md).
 
 > Note: This is an experimental project. **No guarantees** are provided for stability, security or support and breaking changes may be made without notice.
 
