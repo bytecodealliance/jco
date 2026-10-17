@@ -43,6 +43,7 @@ packages:
   - examples/components/node-sveltekit-server
   - examples/components/nodejs-platform
   - examples/components/node-fetch
+  - examples/components/perry-filesystem
   - examples/components/p3-stream-echo-qjs
   - examples/components/string-reverse
   - examples/components/string-reverse-upper

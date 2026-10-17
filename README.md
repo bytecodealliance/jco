@@ -27,7 +27,7 @@ Jco (`jco`) provides a [Javascript][js]-native toolchain for working with [WebAs
 With Jco (and related projects in this repository), you can:
 
 - **Scaffold a new JavaScript or TypeScript component project** from a WIT world with `jco scaffold`
-- **Build WebAssembly components** from Javascript/Typescript with [`componentize-js`][cjs] or [`componentize-qjs`][cqjs]
+- **Build WebAssembly components** from Javascript/Typescript with [`componentize-js`][cjs], [`componentize-qjs`][cqjs], or the experimental [project-installed Perry backend](docs/src/perry.md) for WASI P2 commands
 - **"Transpile" WebAssembly components** into ES modules that can run in environments like NodeJS and the browser, combining platform-native WebAssembly core support with the advanced features of WebAssembly Components
 - **Run WebAssembly components** whether single-shot applications or web servers (similar to [`wasmtime run`][wasmtime-run]/[`wasmtime serve`][wasmtime-serve])
 - **Reuse WebAssembly component workflows** (e.g. building components, transpiling, etc) from your own JS projects

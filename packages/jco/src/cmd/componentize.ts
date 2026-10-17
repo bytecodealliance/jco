@@ -8,6 +8,7 @@ import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { engineCompatPlugin } from "../engine-compat.js";
 import { styleText, isWindows } from "../common.js";
+import { componentizePerry } from "./componentize/perry.js";
 import {
     nodeBuiltinPlugin,
     nodeGlobals,
@@ -29,10 +30,11 @@ const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
 /** Features that should be used for --debug mode */
 const DEBUG_FEATURES = ["stdio"];
 
-type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm";
+type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm" | "perry";
 
 export interface ComponentizeOptions {
-    wit: string;
+    /** Required by the JavaScript engine backends; Perry supplies its own WASI P2 world. */
+    wit?: string;
     out: string;
     /**
      * Directory componentization runs from.
@@ -59,7 +61,11 @@ export interface ComponentizeOptions {
     withNodejsCryptoVia?: "portable" | "direct";
     withNodejsHttp2Via?: NodejsHttp2Via;
     backend?: ComponentizeJSBackend;
-    backendQjsDisableAsync: boolean;
+    /** Project-installed npm package exposing Perry's CLI (supports npm aliases). */
+    backendPerryPackage?: string;
+    /** Explicit Perry CLI path, relative to the invocation directory. */
+    backendPerryCliPath?: string;
+    backendQjsDisableAsync?: boolean;
     backendQjsStubWasi?: boolean;
     aot?: boolean;
     aotMinStackSizeBytes?: number;
@@ -92,6 +98,7 @@ const COMPONENTIZE_BACKENDS: Record<string, ComponentizeJSBackend> = {
     sm: "starlingmonkey",
     quickjs: "quickjs",
     qjs: "quickjs",
+    perry: "perry",
 };
 
 const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
@@ -231,6 +238,15 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         );
     }
     const isTypeScript = sourceType === "typescript";
+    if (backend === "perry") {
+        // Perry compiles the original module graph, including TypeScript and Node-style
+        // builtins, to WASI. Do not erase types or inject Jco's Node compatibility layer.
+        await writeComponent(opts.out, await componentizePerry(jsSource, opts));
+        return;
+    }
+    if (!opts.wit) {
+        throw new Error(`--wit is required for the ${backend} backend`);
+    }
     const shouldBundle = opts.bundle === true || isTypeScript;
 
     // Perform bundling
@@ -344,22 +360,31 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
     }
 
     // Write out the component
-    await writeFile(opts.out, component);
+    await writeComponent(opts.out, component);
+}
 
-    console.log(`${styleText("green", "OK")} Successfully written ${styleText("bold", opts.out)}.`);
+async function writeComponent(out: string, component: Uint8Array) {
+    await writeFile(out, component);
+    console.log(`${styleText("green", "OK")} Successfully written ${styleText("bold", out)}.`);
 }
 
 function normalizeBackend(backend = "starlingmonkey") {
     const normalized = COMPONENTIZE_BACKENDS[backend];
     if (!normalized) {
         throw new Error(
-            `Unknown componentization backend "${backend}". Expected one of: starlingmonkey, sm, quickjs, qjs.`,
+            `Unknown componentization backend "${backend}". Expected one of: starlingmonkey, sm, quickjs, qjs, perry.`,
         );
     }
     return normalized;
 }
 
 function validateBackendOptions(backend: ComponentizeJSBackend, opts: ComponentizeOptions) {
+    for (const option of ["backendPerryPackage", "backendPerryCliPath"] as const) {
+        if (backend !== "perry" && opts[option] !== undefined) {
+            const flag = option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+            throw new Error(`--${flag} is only supported by the perry backend`);
+        }
+    }
     if (backend === "starlingmonkey") {
         return;
     }

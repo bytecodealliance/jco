@@ -219,10 +219,10 @@ QuickJS uses an async-capable runtime by default, even for synchronous WIT world
 components targeting hosts without async support, such as Node.js 22 when running Jco-generated
 JavaScript, add `--backend-qjs-disable-async` to select the non-async runtime.
 
-The accepted backend names are `starlingmonkey`/`sm` and `quickjs`/`qjs`. The existing `--engine <path>`
+The accepted backend names are `starlingmonkey`/`sm`, `quickjs`/`qjs`, and `perry`. The existing `--engine <path>`
 option supplies a custom StarlingMonkey build and is valid only with the StarlingMonkey backend.
 
-TypeScript entry modules are transformed and bundled automatically:
+With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:
 
 ```
 jco componentize app.ts --wit wit -n world-name -o component.wasm
@@ -230,6 +230,30 @@ jco componentize app.ts --wit wit -n world-name -o component.wasm
 
 The TypeScript transform erases types but does not perform semantic type checking. Run `tsc --noEmit`
 separately when required.
+
+#### Experimental Perry backend
+
+Perry is selected independently of Jco. Use a WASI-enabled source-built CLI:
+
+```sh
+jco componentize app.ts --backend perry --backend-perry-cli-path /path/to/perry -o component.wasm
+jco transpile component.wasm --bindgen-enable-wasm-exnref -o transpiled
+```
+
+Without a CLI path, Jco resolves `@perryts/perry` from the source project. Use
+`--backend-perry-package <name>` for an npm alias or a local package; the two
+selectors are mutually exclusive. Jco checks WASI support with an isolated
+`--target wasi --no-link` compile before compiling the application. Failed checks
+identify the CLI and explain how to select a WASI-enabled build. Perry compiles
+the original source and supported Node-style APIs to
+WASI P2; Jco's bundler and Node adapters are not enabled. Omit `--wit` and
+`--world-name`: custom WIT bindings are not supported upstream yet.
+
+Perry's published `0.5.1520` release does not include the WASI target. A compiler
+built with `target-wasi`, its matching runtime and wasi-sdk are required. See the
+[Perry backend guide](https://bytecodealliance.github.io/jco/perry.html) for setup,
+guest declaration generation, a filesystem example on ordinary Node, limitations,
+and dependency-management tradeoffs.
 
 #### Experimental Node.js built-in compatibility
 

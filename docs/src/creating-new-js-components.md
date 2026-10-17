@@ -1,7 +1,16 @@
 # Creating new JavaScript and TypeScript components
 
-Jco exposes [`componentize-js`][cjs] and [`componentize-qjs`][cqjs] to make it easy to build components
-from JavaScript or TypeScript ES module source code.
+Jco can build WebAssembly components from JavaScript or TypeScript using several backends:
+
+| Backend | Selection | Installation and component interfaces |
+| --- | --- | --- |
+| [StarlingMonkey](./starlingmonkey.md) | Default; `--backend starlingmonkey` or `sm` | Included with Jco through `componentize-js`; builds against your WIT world. |
+| [QuickJS](./quickjs.md) | `--backend quickjs` or `qjs` | Included with Jco through `componentize-qjs`; builds against your WIT world. |
+| [Perry](./perry.md) (experimental) | `--backend perry` | User-selected compiler and WASI toolchain; produces WASI P2 commands without custom WIT bindings. |
+
+The backend guides cover setup, complete build/run examples, and backend-specific options.
+The scaffolding and bundling workflows below apply to StarlingMonkey and QuickJS;
+Perry's guide describes its separate workflow.
 
 ## Scaffold a project from WIT
 
@@ -98,16 +107,17 @@ Building a JavaScript component is as easy as calling `jco componentize`, with a
 jco componentize -w wit -o dist/component.wasm component.js
 ```
 
-StarlingMonkey is the default backend, but you can use [`componentize-qjs`][qjs] which is powered by [`quickjs-ng`][quickjs-ng] by passing `--backend quickjs` or `--backend qjs`:
+[StarlingMonkey](./starlingmonkey.md) is the default backend. Select
+[QuickJS](./quickjs.md) with `--backend quickjs` or `--backend qjs`:
 
 ```console
 jco componentize --backend qjs -w wit -o dist/component.wasm component.js
 ```
 
 The StarlingMonkey backend also accepts the aliases `starlingmonkey` and `sm`. Note that `--engine <path>`
-allows supplying a a custom StarlingMonkey build and cannot be combined with the `componentize-qjs` backend.
+allows supplying a compatible custom ComponentizeJS engine build and is only supported by the StarlingMonkey backend.
 
-TypeScript entry modules are transformed and bundled automatically:
+With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:
 
 ```console
 jco componentize -w wit -o dist/component.wasm component.ts
@@ -120,15 +130,13 @@ from the entry project.
 
 There are many examples in the [Jco component examples folder][jco-component-examples]
 
-[cjs]: https://github.com/bytecodealliance/componentize-js
-[cqjs]: https://github.com/andreiltd/componentize-qjs
-[quickjs-ng]: https://github.com/quickjs-ng/quickjs
 [jco-component-examples]: https://github.com/bytecodealliance/jco/tree/main/examples/components
 
 ## Bundling
 
-By default, Jco passes a JavaScript source module directly to the selected componentization backend with no
-intermediate processing. TypeScript entry modules are always bundled so the backend receives generated JavaScript.
+With StarlingMonkey and QuickJS, Jco passes a JavaScript source module directly to the selected backend by default.
+TypeScript entry modules are always bundled so those backends receive generated JavaScript.
+The [Perry backend](./perry.md) handles its own source graph and does not use Jco's bundler.
 
 Use `--bundle` to bundle the entry module and its local or npm package dependencies before componentization.
 Package resolution starts from the entry module's project, and `wasi:*` imports remain external so they can
