@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f81371ce.js";
+            window.path_to_searchindex_js = "searchindex-f597822c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f072195e.js"></script>
@@ -5137,6 +5137,34 @@ await main();
 <p>When dealing with browser environments, the <code>loader</code> function is not necessary, and <code>null</code>/<code>undefined</code> can be used.</p>
 </blockquote>
 <p>This is identical to mapping all imports to those provided by <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>.</p>
+<h3 id="node-filesystem-directory-capabilities"><a class="header" href="#node-filesystem-directory-capabilities">Node filesystem directory capabilities</a></h3>
+<p>The Node Preview 2 shim preserves legacy directory behavior by default, including
+rejecting <code>mutate-directory</code> requests. To enable support for guests such as Perry,
+create an isolated filesystem and provide it to <code>WASIShim</code>:</p>
+<pre><code class="language-js">const shim = new WASIShim({
+    filesystem: filesystem.createFilesystem({
+        preopens: { "/data": "/tmp/guest-data" },
+        enableMutateDirectory: true,
+    }),
+});
+</code></pre>
+<p>Here <code>filesystem</code> comes from <code>@bytecodealliance/preview2-shim</code> on Node.js.
+The option is off by default because enforcing these permissions breaks some
+adapted Preview 1 guests that omit the flag. With the option enabled, preopens
+permit reads and mutations, subject to host permissions. A guest opening a child
+directory must request the WASI
+<code>mutate-directory</code> flag if it will modify entries, change metadata, or open files
+for writing. Without that flag, mutation attempts through the directory handle
+fail with <code>read-only</code>; the handle can still be used for reads.</p>
+<p>Rust-based guests may also send <code>mutate-directory</code> when opening regular files.
+With the option enabled, the shim accepts these requests and removes that directory-only flag from the
+returned file’s flags. File writes still require <code>write</code> and a parent directory
+that permits mutation. The option does not grant additional write access and
+does not change other filesystem instances or previously opened handles.</p>
+<p>For components using global filesystem imports, pass <code>{ enableMutateDirectory: true }</code>
+as the second argument to <code>filesystem._setPreopens(...)</code> before running the guest.</p>
+<p>See the <a href="https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim#notes-on-sandboxing">Preview 2 shim’s sandboxing documentation</a>
+for the Node implementation’s capability and preopen behavior.</p>
 <h2 id="manual-instantiation-of-a-transpiled-component-with-custom-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-custom-overrides">Manual instantiation of a transpiled component with custom overrides</a></h2>
 <p>To use custom component overrides in addition to the WASI imports provided by <code>preview2-shim</code>,
 as before build the component with the <code>async</code> instantiation mode:</p>
