@@ -2,6 +2,8 @@
 
 - [Introduction](./introduction.md)
 - [Creating new JS components](./creating-new-js-components.md)
+    - [StarlingMonkey backend](./starlingmonkey.md)
+    - [QuickJS backend](./quickjs.md)
     - [Perry backend](./perry.md)
 - [Transpiling](./transpiling.md)
 - [Example Workflow](./example.md)

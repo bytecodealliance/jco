@@ -27,21 +27,12 @@ $ pnpm exec jco --version
 Local usage can be preferable to ensure the project is reproducible and self-contained, but requires
 replacing all `jco` shell calls in the following example with either `./node_modules/.bin/jco` or `npx jco`.
 
-### Installing ComponentizeJS
+### Componentization backend
 
-To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:
-
-```shell
-$ pnpm install -g @bytecodealliance/componentize-js
-```
-
-Or locally:
-
-```shell
-$ pnpm install @bytecodealliance/componentize-js
-```
-
-Now the `jco componentize` command will be ready to use.
+Jco includes ComponentizeJS as a dependency, so `jco componentize` is ready to use
+after installing Jco. This example uses the default [StarlingMonkey backend](./starlingmonkey.md).
+See that guide for current setup and engine options, or the [QuickJS backend](./quickjs.md)
+guide for an alternative using the same WIT workflow.
 
 ### Creating a Component with ComponentizeJS
 
