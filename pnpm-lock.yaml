@@ -323,6 +323,12 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/jco
 
+  examples/components/perry-filesystem:
+    dependencies:
+      '@bytecodealliance/preview2-shim':
+        specifier: ^0.30.0
+        version: 0.30.0
+
   examples/components/string-reverse:
     dependencies:
       '@bytecodealliance/jco':
