@@ -67,19 +67,19 @@ jobs:
           pnpm --filter '@bytecodealliance/jco' run build:test:components
 
       - name: Upload jco build transpiled output
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Upload jco build TS output
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Upload artifacts for js tests
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: js-generated-tests
           path: packages/jco-transpile/test/fixtures/generated
@@ -88,7 +88,7 @@ jobs:
         run: pnpm --filter '@bytecodealliance/jco-transpile' run build
 
       - name: Upload jco-transpile vendor
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jco-transpile-vendor
           path: |
@@ -98,7 +98,7 @@ jobs:
         run: pnpm --filter '@bytecodealliance/preview2-shim' run build
 
       - name: Upload preview2-shim build output
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
