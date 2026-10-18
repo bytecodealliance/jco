@@ -177,19 +177,19 @@ jobs:
         run: pnpm install
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore preview2-shim build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
@@ -266,19 +266,19 @@ jobs:
           pnpm run test:setup:puppeteer
 
       - name: Restore jco-transpile build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-transpile-vendor
           path: packages/jco-transpile/vendor
 
       - name: Restore artifacts for JS tests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-generated-tests
           path: packages/jco-transpile/test/fixtures/generated
 
       - name: Restore preview2-shim build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
@@ -334,25 +334,25 @@ jobs:
         run: pnpm install
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore artifacts for JS tests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-generated-tests
           path: packages/jco-transpile/test/fixtures/generated
 
       - name: Restore preview2-shim build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
@@ -411,25 +411,25 @@ jobs:
             node_modules
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore artifacts for JS tests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-generated-tests
           path: packages/jco-transpile/test/fixtures/generated
 
       - name: Restore preview2-shim build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
@@ -571,19 +571,19 @@ jobs:
         run: pnpm install
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore jco-transpile vendor
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-transpile-vendor
           path: packages/jco-transpile/vendor
@@ -808,25 +808,25 @@ jobs:
           deno-version: v2.x
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore artifacts for JS tests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: js-generated-tests
           path: packages/jco-transpile/test/fixtures/generated
 
       - name: Restore jco-transpile vendor
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-transpile-vendor
           path: |
@@ -978,19 +978,19 @@ jobs:
       - run: pnpm install
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore jco-transpile vendor
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-transpile-vendor
           path: packages/jco-transpile/vendor
