@@ -941,12 +941,12 @@ jobs:
         id: perry-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: perry-wasi-ubuntu24-${{ runner.arch }}-${{ hashFiles('scripts/ci/build-perry-wasi.sh') }}
+          key: perry-wasi-ubuntu24-${{ runner.arch }}-${{ hashFiles('scripts/ci/build-perry-wasi.mjs') }}
           path: ${{ runner.temp }}/perry-wasi
 
       - name: Build pinned Perry compiler and WASI runtime
         if: steps.perry-cache.outputs.cache-hit != 'true'
-        run: bash scripts/ci/build-perry-wasi.sh "$RUNNER_TEMP/perry-wasi"
+        run: node scripts/ci/build-perry-wasi.mjs "$RUNNER_TEMP/perry-wasi"
 
       # Save before the example runs, so a Jco regression does not force another
       # compiler build. Never restore a different recipe through a prefix key.

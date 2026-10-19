@@ -199,28 +199,9 @@ actual host contents and directory entries, as well as guest output.
 The normal CI workflow's `examples-perry` job runs the example's `all` script and
 these tests on Ubuntu 24.04 / Node 24, restoring the workspace shim build for the
 E2Es. The
-[pinned build recipe](https://github.com/bytecodealliance/jco/blob/main/scripts/ci/build-perry-wasi.sh)
+[pinned build recipe](https://github.com/bytecodealliance/jco/blob/main/scripts/ci/build-perry-wasi.mjs)
 builds the unreleased WASI compiler and its matching runtime, verifies the SDK
 checksum, and caches the finished compiler, runtime archive, and SDK. The cache
 key includes the runner architecture and recipe contents. Cache hits skip the
 source build; CI supplies `TEST_PERRY_BIN` and verifies the executable before
 running tests.
-
-## Version ownership and dependency choices
-
-| Approach | Installation and upgrades | Maintenance tradeoff |
-| --- | --- | --- |
-| Project-installed package (used here) | Users install and pin the compiler; Jco does not upgrade it. | Jco maintains a narrow CLI adapter and validates the resulting component. Users need explicit setup and compatibility guidance. |
-| Regular dependency | Installed automatically; Jco chooses the supported range. | Easiest initial setup, but compiler size and version changes affect every Jco installation. A compiler upgrade can change generated behavior even when Jco's own API stays stable. |
-| Optional dependency | Normally installed automatically, but installation failure is tolerated. | Still couples the default compiler version to Jco; absence must be handled at runtime. It is not an opt-in install mechanism. |
-| Required peer dependency | Advertises a compatible range; npm can install missing peers. | Makes compatibility visible, but incompatible ranges can cause installation conflicts and require coordinated Jco updates. |
-| Optional peer dependency | Advertises compatibility without requiring installation. | A reasonable future choice once Perry's contract stabilizes; the declared version range still needs maintenance. |
-
-Project-local loading avoids forcing a compiler upgrade through a Jco dependency
-update. It does not guarantee compatibility with every Perry version: CLI
-changes, language changes, and WASI runtime changes still require testing. Keep a
-known-working compiler/toolchain combination pinned. Jco preserves compiler
-diagnostics and rejects output that is not a decodable WASI P2 command component.
-
-See [npm's dependency documentation](https://docs.npmjs.com/cli/v11/configuring-npm/package-json#peerdependencies)
-for peer, optional-peer, and optional-dependency installation behavior.
