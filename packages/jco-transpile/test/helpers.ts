@@ -2,7 +2,7 @@ import { version, env, argv, execArgv } from 'node:process';
 import { createServer as createNetServer } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
 import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from 'node:path';
-import { cp, mkdtemp, writeFile, stat, mkdir, readFile } from 'node:fs/promises';
+import { cp, mkdtemp, writeFile, stat, mkdir, readFile, rm } from 'node:fs/promises';
 import { spawn, exec as syncExec } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { URL, fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,12 +11,13 @@ import { promisify } from 'node:util';
 import mime from 'mime';
 import ts from 'typescript-compiler-api';
 import which from 'which';
+import { assert, vi } from 'vitest';
 
 const exec = promisify(syncExec);
 
 import { componentize } from '@bytecodealliance/componentize-js';
 
-import { transpileBytes } from '../src/index.js';
+import { transpileBytes, writeFiles } from '../src/index.js';
 import type { TranspilationOptions } from '../src/transpile.js';
 
 /** Stable path to the jco's fixture directory containing WIT files */
@@ -128,6 +129,192 @@ export async function nodeExec(cmd: string, ...args) {
  */
 export async function getTmpDir() {
     return mkdtemp(normalize(tmpdir() + sep));
+}
+
+/**
+ * Collect unhandled rejections while `fn` runs
+ *
+ * The listener is process-wide, so concurrent tests may observe each other's unhandled
+ * rejections, which are failures regardless of which test caused them.
+ */
+export async function collectUnhandledRejections(fn: () => Promise<void>): Promise<unknown[]> {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+        await fn();
+        // Let any late settlement propagate before checking
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    } finally {
+        process.off('unhandledRejection', onUnhandled);
+    }
+    return unhandled;
+}
+
+/** Prepare a two-core component in an isolated directory with controllable external Wasm loads. */
+async function prepareLoadingFixture(componentPath: string, name: string, instantiation?: 'async') {
+    const { files } = await transpileBytes(await readComponentBytes(componentPath), {
+        name,
+        instantiation,
+        tlaCompat: true,
+        base64Cutoff: 0,
+        nodejsCompat: false,
+        minify: false,
+    });
+    const corePaths = [`${name}.core.wasm`, `${name}.core2.wasm`];
+    assert.deepEqual(
+        Object.keys(files)
+            .filter((path) => /\.core\d*\.wasm$/.test(path))
+            .sort(),
+        corePaths,
+    );
+    const modules = new Map(
+        Object.entries(files)
+            .filter(([path]) => path.endsWith('.wasm'))
+            .map(([path, bytes]) => [path, new WebAssembly.Module(bytes)]),
+    );
+    const helperPath = [...modules.keys()].find((path) => path.includes('.conditional-suspending-'));
+    if (instantiation === 'async') {
+        assert.isString(helperPath, 'fixture must emit an external helper');
+    }
+    const outputDir = await getTmpDir();
+    try {
+        await writeFiles(files, { baseDir: outputDir });
+        await writeFile(join(outputDir, 'package.json'), JSON.stringify({ type: 'module' }));
+    } catch (error) {
+        await rm(outputDir, { recursive: true, force: true });
+        throw error;
+    }
+    return {
+        corePaths,
+        helperPath,
+        modules,
+        import: () => import(pathToFileURL(join(outputDir, `${name}.js`)).href),
+        response: (path: string) =>
+            new Response(Uint8Array.from(files[path]).buffer, { headers: { 'Content-Type': 'application/wasm' } }),
+        cleanup: () => rm(outputDir, { recursive: true, force: true }),
+    };
+}
+
+type LoadingFixture = Awaited<ReturnType<typeof prepareLoadingFixture>>;
+type LoadControls = { release(): void; restore?(): void };
+type ObserveInitialization = (start: () => unknown) => Promise<unknown>;
+
+/**
+ * Control individual core and helper module loads during explicit instantiation.
+ * Keep this loader unmocked: Vitest attaches handlers to promises returned by mocks.
+ */
+export function createCoreLoader(fixture: LoadingFixture) {
+    const pending = new Map<string, PromiseWithResolvers<WebAssembly.Module>>();
+    const requested: string[] = [];
+
+    return {
+        requested,
+        defer(path: string) {
+            assert.isTrue(fixture.modules.has(path));
+            const load = Promise.withResolvers<WebAssembly.Module>();
+            pending.set(path, load);
+            return load;
+        },
+        getCoreModule(path: string) {
+            requested.push(path);
+            const module = fixture.modules.get(path);
+            if (!module) {
+                throw new Error(`Unexpected module request: ${path}`);
+            }
+            return pending.get(path)?.promise ?? module;
+        },
+        release() {
+            for (const [path, load] of pending) {
+                load.resolve(fixture.modules.get(path)!);
+            }
+        },
+    };
+}
+
+/**
+ * Control the two core fetches made by automatic initialization.
+ * Tests using this helper must run sequentially because it replaces globalThis.fetch.
+ */
+export function createFetchLoader(fixture: LoadingFixture) {
+    const [firstCorePath, secondCorePath] = fixture.corePaths;
+    const firstFetch = Promise.withResolvers<Response>();
+    const secondFetch = Promise.withResolvers<Response>();
+    const requested: string[] = [];
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+        const path = basename(new URL(String(input)).pathname);
+        requested.push(path);
+        if (path === firstCorePath) {
+            return firstFetch.promise;
+        }
+        if (path === secondCorePath) {
+            return secondFetch.promise;
+        }
+        throw new Error(`Unexpected module request: ${path}`);
+    });
+
+    return {
+        firstFetch,
+        secondFetch,
+        requested,
+        release() {
+            firstFetch.resolve(fixture.response(firstCorePath));
+            secondFetch.resolve(fixture.response(secondCorePath));
+        },
+        restore() {
+            fetch.mockRestore();
+        },
+    };
+}
+
+// Catch only overall initialization; controlled core promises stay unobserved by the test.
+async function captureInitializationError(start: () => unknown): Promise<unknown> {
+    try {
+        await start();
+        return undefined;
+    } catch (error) {
+        return error;
+    }
+}
+
+/**
+ * Run an initialization scenario, checking for unhandled rejections through cleanup.
+ * The scenario controls individual loads and observes only the overall initialization;
+ * pending loads are released and fetch interception is restored even on failure.
+ */
+export async function withLoadingFixture<C extends LoadControls>(
+    componentPath: string,
+    name: string,
+    instantiation: 'async' | undefined,
+    createControls: (fixture: LoadingFixture) => C,
+    scenario: (fixture: LoadingFixture, controls: C, observe: ObserveInitialization) => Promise<void>,
+) {
+    const fixture = await prepareLoadingFixture(componentPath, name, instantiation);
+    let controls: C | undefined;
+    let initialization: Promise<unknown> | undefined;
+
+    const unhandled = await collectUnhandledRejections(async () => {
+        try {
+            controls = createControls(fixture);
+            await scenario(fixture, controls, (start) => {
+                initialization = captureInitializationError(start);
+                return initialization;
+            });
+        } finally {
+            try {
+                controls?.release();
+                await initialization;
+            } finally {
+                try {
+                    controls?.restore?.();
+                } finally {
+                    await fixture.cleanup();
+                }
+            }
+        }
+    });
+
+    assert.deepEqual(unhandled, []);
 }
 
 /**

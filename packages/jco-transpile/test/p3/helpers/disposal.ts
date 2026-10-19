@@ -5,6 +5,8 @@ import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { setupAsyncTest } from '../../helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from '../../common.js';
 
+export { collectUnhandledRejections } from '../../helpers.js';
+
 /** Wait for a promise, failing the test rather than hanging if it never settles */
 export function withTimeout<T>(promise: Promise<T>, what: string, timeoutMs = 2_000): Promise<T> {
     let timer: ReturnType<typeof setTimeout>;
@@ -43,26 +45,6 @@ export function disposablePending<T>(
         disposed: disposed.promise,
         disposeCount: () => disposeCount,
     };
-}
-
-/**
- * Collect unhandled rejections while `fn` runs
- *
- * The listener is process-wide, so concurrent tests may observe each other's unhandled
- * rejections, which are failures regardless of which test caused them.
- */
-export async function collectUnhandledRejections(fn: () => Promise<void>): Promise<unknown[]> {
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on('unhandledRejection', onUnhandled);
-    try {
-        await fn();
-        // Let any late settlement propagate before checking
-        await new Promise((resolve) => setTimeout(resolve, 20));
-    } finally {
-        process.off('unhandledRejection', onUnhandled);
-    }
-    return unhandled;
 }
 
 /** Host implementation of `jco:test-components/host-value-disposal-host` */

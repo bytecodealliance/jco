@@ -2654,9 +2654,6 @@ impl Intrinsic {
                 "Int32Array",
                 "Object",
                 "process",
-                // Keep imported resource classes from shadowing the global used by
-                // the initialization runner (`instanceof Promise`, `new Promise`)
-                // and the core-load rejection handlers (`Promise.resolve`).
                 "Promise",
                 "String",
                 "TextDecoder",
