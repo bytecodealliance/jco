@@ -9,6 +9,7 @@ import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import mime from 'mime';
+import type { Browser } from 'puppeteer';
 import ts from 'typescript-compiler-api';
 import which from 'which';
 import { assert, vi } from 'vitest';
@@ -827,12 +828,12 @@ export async function readFixtureFlags(fixturePath: string): Promise<Transpilati
             opts.tlaCompat = true;
         } else if (arg === '--strict') {
             opts.strict = true;
-        } else if (arg === '--runtime-module') {
-            const runtimeModule = args[idx + 1];
-            if (!runtimeModule) {
+        } else if (arg === '--cm-runtime-es-module') {
+            const cmRuntimeEsModule = args[idx + 1];
+            if (!cmRuntimeEsModule) {
                 throw new Error('missing runtime module specifier');
             }
-            opts.runtimeModule = runtimeModule;
+            opts.cmRuntimeEsModule = cmRuntimeEsModule;
             idx++;
         } else if (arg === '--flags-as-bigint') {
             opts.flagsAsBigInt = true;
@@ -979,4 +980,56 @@ export async function composeCallerCallee(args) {
     await exec(cmd);
 
     return await ensureFile(outputComponentPath);
+}
+
+/** Run an ES module test in the browser harness and report browser diagnostics on failure. */
+export async function runBrowserCase({
+    browser,
+    serverPort,
+    module,
+    exportName = 'test',
+    args = [],
+}: {
+    browser: Browser;
+    serverPort: number;
+    module: string;
+    exportName?: string;
+    args?: unknown[];
+}) {
+    const page = await browser.newPage();
+    const diagnostics: string[] = [];
+    page.on('console', (message) => diagnostics.push(`console.${message.type()}: ${message.text()}`));
+    page.on('pageerror', (error) => diagnostics.push(`pageerror: ${error.stack ?? error.message}`));
+    page.on('requestfailed', (request) =>
+        diagnostics.push(`requestfailed: ${request.failure()?.errorText} ${request.url()}`),
+    );
+
+    try {
+        const params = new URLSearchParams({ module, export: exportName, args: JSON.stringify(args) });
+        const url = `http://localhost:${serverPort}/jco-transpile/test/fixtures/browser/harness.html#${params}`;
+        const response = await page.goto(url);
+        assert.ok(response?.ok(), `failed to load ${url}: HTTP ${response?.status()}`);
+        const result = await page.evaluate(() => window.__jcoTest);
+        if (!result.ok) {
+            assert.fail(
+                [`${result.error.name}: ${result.error.message}`, result.error.stack, ...diagnostics]
+                    .filter(Boolean)
+                    .join('\n'),
+            );
+        }
+        if (env.JCO_DEBUG && diagnostics.length) {
+            console.log(diagnostics.join('\n'));
+        }
+        return result.value;
+    } finally {
+        await page.close();
+    }
+}
+
+declare global {
+    interface Window {
+        __jcoTest: Promise<
+            { ok: true; value: unknown } | { ok: false; error: { name: string; message: string; stack?: string } }
+        >;
+    }
 }

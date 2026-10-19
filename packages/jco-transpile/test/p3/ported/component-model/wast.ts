@@ -221,7 +221,7 @@ suite('component-model WAST', () => {
                 if (instrumentRuntime) {
                     resetTableGetCallCount();
                 }
-                const runtimeModule = instrumentRuntime
+                const cmRuntimeEsModule = instrumentRuntime
                     ? new URL('../../../fixtures/custom-runtime-provider.js', import.meta.url).href
                     : undefined;
                 const mod = (await import(pathToFileURL(scriptPath).href)) as WastTestModule;
@@ -238,10 +238,10 @@ suite('component-model WAST', () => {
                             name: componentName,
                             path: wasmPath,
                         },
-                        jco: runtimeModule
+                        jco: cmRuntimeEsModule
                             ? {
                                   transpile: {
-                                      extraArgs: { runtimeModule },
+                                      extraArgs: { cmRuntimeEsModule },
                                   },
                               }
                             : undefined,
@@ -285,10 +285,10 @@ suite('component-model WAST', () => {
                                         outputDir,
                                         skipInstantiation: true,
                                     },
-                                    jco: runtimeModule
+                                    jco: cmRuntimeEsModule
                                         ? {
                                               transpile: {
-                                                  extraArgs: { runtimeModule },
+                                                  extraArgs: { cmRuntimeEsModule },
                                               },
                                           }
                                         : undefined,

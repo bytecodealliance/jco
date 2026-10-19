@@ -9,9 +9,8 @@ import { afterAll, assert, beforeAll, suite, test } from 'vitest';
 
 import { transpileBytes, writeFiles } from '../../src/index.js';
 import { WEBIDL_FIXTURES_DIR, COMPONENT_FIXTURES_DIR } from '../common.js';
-import { getTmpDir, setupAsyncTest, startTestWebServer } from '../helpers.js';
+import { getTmpDir, runBrowserCase, setupAsyncTest, startTestWebServer } from '../helpers.js';
 
-const HARNESS_PATH = 'jco-transpile/test/fixtures/browser/harness.html';
 const TRANSPILE_CASE_MODULE = '/jco-transpile/test/fixtures/browser/transpile.js';
 const JSPI_CASE_MODULE = '/jco-transpile/test/fixtures/browser/jspi.js';
 const RUNTIME_COMPONENTS_URL = '/jco-transpile/test/fixtures/components/runtime';
@@ -80,6 +79,8 @@ suite('Browser', () => {
         // NOTE: all components are handled by a single page, so the bindgen component
         // is only fetched and instantiated once for the whole set
         const results = (await runBrowserCase({
+            browser,
+            serverPort,
             module: TRANSPILE_CASE_MODULE,
             exportName: 'transpile',
             args: [BROWSER_COMPONENTS.map((name) => `${RUNTIME_COMPONENTS_URL}/${name}`)],
@@ -112,7 +113,7 @@ suite('Browser', () => {
             const outDir = resolve(tmpDir, fixture);
             const { files } = await transpileBytes(component, { name: fixture });
             await writeFiles(files, { baseDir: outDir });
-            await runBrowserCase({ module: `/tmpdir/${fixture}/${fixture}.js` });
+            await runBrowserCase({ browser, serverPort, module: `/tmpdir/${fixture}/${fixture}.js` });
         });
     }
 
@@ -138,6 +139,8 @@ suite('Browser', () => {
         });
         try {
             const value = await runBrowserCase({
+                browser,
+                serverPort,
                 module: JSPI_CASE_MODULE,
                 exportName: 'jspi',
                 args: [`/tmpdir/jspi/async_call/async_call.js`],
@@ -147,51 +150,4 @@ suite('Browser', () => {
             await component.cleanup();
         }
     });
-
-    async function runBrowserCase({
-        module,
-        exportName = 'test',
-        args = [],
-    }: {
-        module: string;
-        exportName?: string;
-        args?: unknown[];
-    }) {
-        const page = await browser.newPage();
-        const diagnostics: string[] = [];
-        page.on('console', (message) => diagnostics.push(`console.${message.type()}: ${message.text()}`));
-        page.on('pageerror', (error) => diagnostics.push(`pageerror: ${error.stack ?? error.message}`));
-        page.on('requestfailed', (request) =>
-            diagnostics.push(`requestfailed: ${request.failure()?.errorText} ${request.url()}`),
-        );
-
-        try {
-            const params = new URLSearchParams({ module, export: exportName, args: JSON.stringify(args) });
-            const url = `http://localhost:${serverPort}/${HARNESS_PATH}#${params}`;
-            const response = await page.goto(url);
-            assert.ok(response?.ok(), `failed to load ${url}: HTTP ${response?.status()}`);
-            const result = await page.evaluate(() => window.__jcoTest);
-            if (!result.ok) {
-                assert.fail(
-                    [`${result.error.name}: ${result.error.message}`, result.error.stack, ...diagnostics]
-                        .filter(Boolean)
-                        .join('\n'),
-                );
-            }
-            if (env.JCO_DEBUG && diagnostics.length) {
-                console.log(diagnostics.join('\n'));
-            }
-            return result.value;
-        } finally {
-            await page.close();
-        }
-    }
 });
-
-declare global {
-    interface Window {
-        __jcoTest: Promise<
-            { ok: true; value: unknown } | { ok: false; error: { name: string; message: string; stack?: string } }
-        >;
-    }
-}

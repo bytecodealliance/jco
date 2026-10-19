@@ -1,6 +1,6 @@
 export { runtime } from './runtime.js';
 export {
-    RUNTIME_ABI_VERSION,
+    RUNTIME_API_VERSION,
     type AsyncDeterminism,
     type ComponentModelRuntime,
     type ComponentModelRuntimeProvider,
@@ -9,7 +9,7 @@ export {
     type ResourceRep,
     type ResourceScope,
     type ResourceTableEntry,
-    type RuntimeAbiVersion,
+    type RuntimeApiVersion,
     type RuntimeErrorConstructor,
     type RuntimeIntrinsics,
     type RuntimeOptions,

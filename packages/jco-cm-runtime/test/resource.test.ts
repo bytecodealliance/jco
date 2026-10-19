@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
-import { RUNTIME_ABI_VERSION, runtime, type ComponentModelRuntimeProvider } from '../src/index.js';
+import { RUNTIME_API_VERSION, runtime, type ComponentModelRuntimeProvider } from '../src/index.js';
 
 const TABLE_FLAG = 1 << 30;
 
 function createRuntime() {
     return runtime.create({
-        requestedAbiVersion: RUNTIME_ABI_VERSION,
+        requestedApiVersion: RUNTIME_API_VERSION,
         strict: false,
         flagsAsBigInt: false,
         nodejsCompat: true,
@@ -38,7 +38,7 @@ describe('resource.tableGet', () => {
     test('uses the injected RuntimeError realm', () => {
         class CustomRuntimeError extends Error {}
         const instance = runtime.create({
-            requestedAbiVersion: RUNTIME_ABI_VERSION,
+            requestedApiVersion: RUNTIME_API_VERSION,
             strict: false,
             flagsAsBigInt: false,
             nodejsCompat: true,
@@ -51,10 +51,10 @@ describe('resource.tableGet', () => {
 });
 
 describe('runtime provider', () => {
-    test('rejects an incompatible requested ABI', () => {
+    test('rejects an incompatible requested API', () => {
         expect(() =>
             runtime.create({
-                requestedAbiVersion: 2,
+                requestedApiVersion: 2,
                 strict: false,
                 flagsAsBigInt: false,
                 nodejsCompat: true,
@@ -74,7 +74,7 @@ describe('runtime provider', () => {
 
     test('supports structurally typed alternative providers', () => {
         const alternative = {
-            abiVersion: RUNTIME_ABI_VERSION,
+            apiVersion: RUNTIME_API_VERSION,
             create: (options) => runtime.create(options),
         } satisfies ComponentModelRuntimeProvider;
 

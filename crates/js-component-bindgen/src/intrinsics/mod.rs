@@ -9,7 +9,7 @@ use wasmtime_environ::Trap;
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
-pub(crate) const RUNTIME_ABI_VERSION: u32 = 1;
+pub(crate) const RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const RUNTIME_PROVIDER_LOCAL_NAME: &str = "_jcoRuntimeProvider";
 const RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
 const RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
@@ -2465,7 +2465,7 @@ impl RenderIntrinsicsArgs<'_> {
             .expect("intrinsic dependency collector lock should not be poisoned")
             .insert(intrinsic);
         intrinsic
-            .binding(self.transpile_opts.runtime_module.is_some())
+            .binding(self.transpile_opts.cm_runtime_es_module.is_some())
             .local_name()
     }
 
@@ -2498,7 +2498,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         debug_assert!(args.take_discovered_intrinsics().is_empty());
         let mut source = Source::default();
         if matches!(
-            intrinsic.binding(args.transpile_opts.runtime_module.is_some()),
+            intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some()),
             IntrinsicBinding::Inline { .. }
         ) {
             intrinsic.render(&mut source, args);
@@ -2517,7 +2517,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
     let mut output = Source::default();
     if uses_external_runtime(
         args.intrinsics,
-        args.transpile_opts.runtime_module.is_some(),
+        args.transpile_opts.cm_runtime_es_module.is_some(),
     ) {
         uwriteln!(
             output,
@@ -2525,19 +2525,19 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                 if (typeof {RUNTIME_PROVIDER_LOCAL_NAME}?.create !== 'function') {{
                     throw new TypeError('Jco Component Model runtime provider must define create(options)');
                 }}
-                if ({RUNTIME_PROVIDER_LOCAL_NAME}.abiVersion !== {RUNTIME_ABI_VERSION}) {{
-                    throw new Error(`incompatible Jco Component Model runtime ABI: requested {RUNTIME_ABI_VERSION}, supported ${{{RUNTIME_PROVIDER_LOCAL_NAME}.abiVersion}}`);
+                if ({RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion !== {RUNTIME_API_VERSION}) {{
+                    throw new Error(`incompatible Jco Component Model runtime API: requested {RUNTIME_API_VERSION}, supported ${{{RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion}}`);
                 }}
                 const {RUNTIME_LOCAL_NAME} = {RUNTIME_PROVIDER_LOCAL_NAME}.create({{
-                    requestedAbiVersion: {RUNTIME_ABI_VERSION},
+                    requestedApiVersion: {RUNTIME_API_VERSION},
                     strict: {strict},
                     flagsAsBigInt: {flags_as_bigint},
                     nodejsCompat: {nodejs_compat},
                     asyncDeterminism: '{determinism}',
                     platform: {{ WebAssembly }},
                 }});
-                if ({RUNTIME_LOCAL_NAME}?.abiVersion !== {RUNTIME_ABI_VERSION}) {{
-                    throw new Error(`incompatible Jco Component Model runtime instance ABI: requested {RUNTIME_ABI_VERSION}, received ${{{RUNTIME_LOCAL_NAME}?.abiVersion}}`);
+                if ({RUNTIME_LOCAL_NAME}?.apiVersion !== {RUNTIME_API_VERSION}) {{
+                    throw new Error(`incompatible Jco Component Model runtime instance API: requested {RUNTIME_API_VERSION}, received ${{{RUNTIME_LOCAL_NAME}?.apiVersion}}`);
                 }}
                 const {RUNTIME_INTRINSICS_LOCAL_NAME} = {RUNTIME_LOCAL_NAME}.intrinsics;
             "#,
@@ -2549,7 +2549,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
 
         for intrinsic in args.intrinsics.iter() {
             let IntrinsicBinding::Runtime { local_name, path } =
-                intrinsic.binding(args.transpile_opts.runtime_module.is_some())
+                intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some())
             else {
                 continue;
             };

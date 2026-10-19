@@ -1,6 +1,6 @@
-export const RUNTIME_ABI_VERSION = 1 as const;
+export const RUNTIME_API_VERSION = 1 as const;
 
-export type RuntimeAbiVersion = number;
+export type RuntimeApiVersion = number;
 export type AsyncDeterminism = 'random' | 'deterministic';
 
 export type ResourceHandle = number;
@@ -19,7 +19,7 @@ export interface RuntimePlatform {
 }
 
 export interface RuntimeOptions {
-    readonly requestedAbiVersion: RuntimeAbiVersion;
+    readonly requestedApiVersion: RuntimeApiVersion;
     readonly strict: boolean;
     readonly flagsAsBigInt: boolean;
     readonly nodejsCompat: boolean;
@@ -42,12 +42,12 @@ export interface RuntimeIntrinsics {
 }
 
 export interface ComponentModelRuntime {
-    readonly abiVersion: RuntimeAbiVersion;
+    readonly apiVersion: RuntimeApiVersion;
     readonly intrinsics: RuntimeIntrinsics;
     dispose?(): void;
 }
 
 export interface ComponentModelRuntimeProvider {
-    readonly abiVersion: RuntimeAbiVersion;
+    readonly apiVersion: RuntimeApiVersion;
     create(options: RuntimeOptions): ComponentModelRuntime;
 }

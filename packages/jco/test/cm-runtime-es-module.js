@@ -16,15 +16,15 @@ import { exec, getTmpDir } from "./helpers.js";
 const fixture = fileURLToPath(
     new URL("../../jco-transpile/test/fixtures/components/runtime/resources.2.component.wat", import.meta.url),
 );
-const runtimeModule = "test-runtime-provider";
+const cmRuntimeEsModule = "test-runtime-provider";
 const runtimeFixture = new URL("../../jco-transpile/test/fixtures/custom-runtime-provider.js", import.meta.url);
 const jcoPackageDir = fileURLToPath(new URL("../", import.meta.url));
 const localTranspilerDir = fileURLToPath(new URL("../../jco-transpile/", import.meta.url));
 
 async function installRuntimeInConsumer(dir) {
-    const packageDir = join(dir, "node_modules", runtimeModule);
+    const packageDir = join(dir, "node_modules", cmRuntimeEsModule);
     await mkdir(packageDir, { recursive: true });
-    await writeFile(join(packageDir, "package.json"), JSON.stringify({ name: runtimeModule, type: "module" }));
+    await writeFile(join(packageDir, "package.json"), JSON.stringify({ name: cmRuntimeEsModule, type: "module" }));
     await copyFile(runtimeFixture, join(packageDir, "index.js"));
     const provider = await import(pathToFileURL(join(packageDir, "index.js")).href);
     provider.resetRuntimeCreateCallCount();
@@ -74,14 +74,14 @@ describe("custom Component Model runtime", () => {
             const { files } = await transpile(await readFile(fixture), {
                 name,
                 instantiation: "sync",
-                runtimeModule,
+                cmRuntimeEsModule,
             });
             for (const [filename, bytes] of Object.entries(files)) {
                 await mkdir(dirname(join(dir, filename)), { recursive: true });
                 await writeFile(join(dir, filename), bytes);
             }
             const source = await readFile(join(dir, `${name}.js`), "utf8");
-            expect(source).toContain(`from "${runtimeModule}"`);
+            expect(source).toContain(`from "${cmRuntimeEsModule}"`);
             await instantiateFromDir(dir, name);
             expect(provider.runtimeCreateCallCount).toBe(1);
         } finally {
@@ -89,7 +89,7 @@ describe("custom Component Model runtime", () => {
         }
     });
 
-    test("the command handler forwards runtimeModule to generated bindings", async () => {
+    test("the command handler forwards cmRuntimeEsModule to generated bindings", async () => {
         const dir = await getTmpDir();
         const name = "runtime-cli";
 
@@ -99,11 +99,11 @@ describe("custom Component Model runtime", () => {
                 name,
                 outDir: dir,
                 instantiation: "sync",
-                runtimeModule,
+                cmRuntimeEsModule,
                 quiet: true,
             });
             const source = await readFile(join(dir, `${name}.js`), "utf8");
-            expect(source).toContain(`from "${runtimeModule}"`);
+            expect(source).toContain(`from "${cmRuntimeEsModule}"`);
             await instantiateFromDir(dir, name);
             expect(provider.runtimeCreateCallCount).toBe(1);
         } finally {
@@ -130,11 +130,11 @@ describe("custom Component Model runtime", () => {
                 dir,
                 "--instantiation",
                 "sync",
-                "--runtime-module",
-                runtimeModule,
+                "--cm-runtime-es-module",
+                cmRuntimeEsModule,
             );
             const source = await readFile(join(dir, `${name}.js`), "utf8");
-            expect(source).toContain(`from "${runtimeModule}"`);
+            expect(source).toContain(`from "${cmRuntimeEsModule}"`);
             await instantiateFromDir(dir, name);
             expect(provider.runtimeCreateCallCount).toBe(1);
         } finally {

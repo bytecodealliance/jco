@@ -31,7 +31,7 @@ $ cargo add js-component-bindgen
 ```
 
 Generated JavaScript includes its runtime intrinsics inline by default. To
-select an external runtime provider, set `TranspileOpts::runtime_module` to
+select an external runtime provider, set `TranspileOpts::cm_runtime_es_module` to
 `@bytecodealliance/jco-cm-runtime` or another module specifier. Make the selected
 module resolvable from the generated output; it must export a `runtime` provider.
 Currently, external providers implement `resource.tableGet`, while the remaining

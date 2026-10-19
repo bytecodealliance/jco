@@ -223,10 +223,10 @@ fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
     if opts.use_namespace_objects {
         opts.flags_as_bigint = true;
     }
-    if let Some(runtime_module) = &opts.runtime_module {
+    if let Some(cm_runtime_es_module) = &opts.cm_runtime_es_module {
         ensure!(
-            !runtime_module.is_empty() && !runtime_module.chars().any(char::is_control),
-            "runtimeModule must be a non-empty module specifier without control characters"
+            !cm_runtime_es_module.is_empty() && !cm_runtime_es_module.chars().any(char::is_control),
+            "cmRuntimeEsModule must be a non-empty module specifier without control characters"
         );
     }
     Ok(())
@@ -464,22 +464,22 @@ mod tests {
     }
 
     #[test]
-    fn validates_runtime_module_specifiers() {
+    fn validates_cm_runtime_es_module_specifiers() {
         let mut default = TranspileOpts::default();
         normalize_namespace_object_options(&mut default).unwrap();
-        assert!(default.runtime_module.is_none());
+        assert!(default.cm_runtime_es_module.is_none());
 
         let mut custom = TranspileOpts::builder()
             .name("component".into())
-            .runtime_module("./runtime.js".into())
+            .cm_runtime_es_module("./runtime.js".into())
             .build();
         normalize_namespace_object_options(&mut custom).unwrap();
-        assert_eq!(custom.runtime_module.as_deref(), Some("./runtime.js"));
+        assert_eq!(custom.cm_runtime_es_module.as_deref(), Some("./runtime.js"));
 
         for invalid in ["", "runtime\nmodule"] {
             let mut opts = TranspileOpts::builder()
                 .name("component".into())
-                .runtime_module(invalid.into())
+                .cm_runtime_es_module(invalid.into())
                 .build();
             assert!(normalize_namespace_object_options(&mut opts).is_err());
         }
@@ -526,7 +526,7 @@ mod tests {
             &component,
             TranspileOpts::builder()
                 .name("resource-runtime".into())
-                .runtime_module("./custom-runtime.js".into())
+                .cm_runtime_es_module("./custom-runtime.js".into())
                 .instantiation_mode(InstantiationMode::Sync)
                 .build(),
         )
