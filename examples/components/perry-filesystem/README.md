@@ -228,6 +228,6 @@ the same component fails with the default shim settings.
 
 [perry-guide]: ../../../docs/src/perry.md
 [contributing]: ../../../docs/src/contributing.md
-[perry-tests]: ../../../docs/src/perry.md#testing-and-ci
+[perry-tests]: ../../../packages/jco/test/perry/e2e.js
 [p2-shim]: https://www.npmjs.com/package/@bytecodealliance/preview2-shim
 [cm-book]: https://component-model.bytecodealliance.org/

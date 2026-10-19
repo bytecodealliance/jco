@@ -159,49 +159,7 @@ checks on its descendants. The flag is accepted and cleared on regular files;
 file writes still require write permission. See the
 [shim's directory mutation options](https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim#directory-mutation-compatibility-nodejs)
 for details. The example exercises reading and metadata and remains usable with
-`0.30.0`; the tests below also cover mutations with the workspace shim.
+`0.30.0`.
 
 The repository contains a [filesystem example](https://github.com/bytecodealliance/jco/tree/main/examples/components/perry-filesystem)
 with build scripts and a Node.js demo.
-
-## Testing and CI
-
-Perry tests use the regular Jco Vitest configuration. After the normal checkout
-setup, build the workspace shim and run the adapter tests and real-compiler
-filesystem tests from the repository root:
-
-```sh
-pnpm --filter @bytecodealliance/preview2-shim build
-TEST_PERRY_BIN=/absolute/path/to/perry \
-  pnpm --filter @bytecodealliance/jco test perry
-```
-
-Set `WASI_SDK_PATH` and `PERRY_RUNTIME_DIR` for that compiler as described above.
-The real-compiler tests skip when `TEST_PERRY_BIN` is unset or the file is absent.
-A present compiler must pass Jco's WASI capability check and complete the build;
-unsupported compilers and missing runtime/SDK files fail the tests.
-
-The adapter tests always run, using isolated CLI test doubles to cover resolution,
-option validation, diagnostics, and output preservation. The real-compiler tests
-exercise both explicit CLI selection and a project-local package containing the
-selected binary. Each generates declarations, compiles a TypeScript guest,
-transpiles it, and runs it in ordinary Node without experimental flags. They use
-isolated projects linked to the built workspace shim. Creating and changing input
-after compilation verifies host filesystem access at runtime.
-
-The read/stat cases use the filesystem example. Mutation cases additionally
-exercise file creation, overwrite/truncation, append, UTF-8 byte sizes, directory
-listing, rename, unlink, mkdir and rmdir. The same compiled mutation guest first
-runs with default shim settings, which must reject the write without changing the
-host files, then succeeds with `enableMutateDirectory: true`. The tests verify
-actual host contents and directory entries, as well as guest output.
-
-The normal CI workflow's `examples-perry` job runs the example's `all` script and
-these tests on Ubuntu 24.04 / Node 24, restoring the workspace shim build for the
-E2Es. The
-[pinned build recipe](https://github.com/bytecodealliance/jco/blob/main/scripts/ci/build-perry-wasi.mjs)
-builds the unreleased WASI compiler and its matching runtime, verifies the SDK
-checksum, and caches the finished compiler, runtime archive, and SDK. The cache
-key includes the runner architecture and recipe contents. Cache hits skip the
-source build; CI supplies `TEST_PERRY_BIN` and verifies the executable before
-running tests.
