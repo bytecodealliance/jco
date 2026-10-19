@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f597822c.js";
+            window.path_to_searchindex_js = "searchindex-b8857ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f072195e.js"></script>
+        <script src="toc-af2ca8c9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,6 +183,9 @@
                         <h1 id="creating-new-javascript-and-typescript-components"><a class="header" href="#creating-new-javascript-and-typescript-components">Creating new JavaScript and TypeScript components</a></h1>
 <p>Jco exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> and <a href="https://github.com/andreiltd/componentize-qjs"><code>componentize-qjs</code></a> to make it easy to build components
 from JavaScript or TypeScript ES module source code.</p>
+<p>The experimental <a href="./perry.html">Perry backend</a> also compiles source to WASI P2
+commands using a project-installed compiler. It has its own toolchain requirements
+and does not yet support custom WIT bindings.</p>
 <h2 id="scaffold-a-project-from-wit"><a class="header" href="#scaffold-a-project-from-wit">Scaffold a project from WIT</a></h2>
 <p>The quickest way to start a new component is with <code>jco scaffold</code>.</p>
 <p><code>jco scaffold</code> uses an existing WIT package file or directory to produce a JS component project that builds for
@@ -247,7 +250,7 @@ copied <code>wit/</code> package, and use <code>pnpm check</code>, <code>pnpm te
 </code></pre>
 <p>The StarlingMonkey backend also accepts the aliases <code>starlingmonkey</code> and <code>sm</code>. Note that <code>--engine &lt;path&gt;</code>
 allows supplying a a custom StarlingMonkey build and cannot be combined with the <code>componentize-qjs</code> backend.</p>
-<p>TypeScript entry modules are transformed and bundled automatically:</p>
+<p>With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.ts
 </code></pre>
 <p>Jco uses Rolldown’s native TypeScript support to erase type syntax. This does not perform semantic type
@@ -256,8 +259,9 @@ projects can import local modules and npm dependencies, and Jco discovers the ne
 from the entry project.</p>
 <p>There are many examples in the <a href="https://github.com/bytecodealliance/jco/tree/main/examples/components">Jco component examples folder</a></p>
 <h2 id="bundling"><a class="header" href="#bundling">Bundling</a></h2>
-<p>By default, Jco passes a JavaScript source module directly to the selected componentization backend with no
-intermediate processing. TypeScript entry modules are always bundled so the backend receives generated JavaScript.</p>
+<p>With StarlingMonkey and QuickJS, Jco passes a JavaScript source module directly to the selected backend by default.
+TypeScript entry modules are always bundled so those backends receive generated JavaScript.
+The <a href="./perry.html">Perry backend</a> handles its own source graph and does not use Jco’s bundler.</p>
 <p>Use <code>--bundle</code> to bundle the entry module and its local or npm package dependencies before componentization.
 Package resolution starts from the entry module’s project, and <code>wasi:*</code> imports remain external so they can
 be matched to component capabilities.</p>
@@ -322,7 +326,7 @@ introduced by the transform must be resolvable and compatible with the component
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="transpiling.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="perry.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -336,7 +340,7 @@ introduced by the transform must be resolvable and compatible with the component
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="transpiling.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="perry.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
