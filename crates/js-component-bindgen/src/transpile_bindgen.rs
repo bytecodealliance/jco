@@ -49,7 +49,7 @@ use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{
-    AsyncDeterminismProfile, Intrinsic, RUNTIME_PROVIDER_LOCAL_NAME, RenderIntrinsicsArgs,
+    AsyncDeterminismProfile, CM_RUNTIME_PROVIDER_LOCAL_NAME, Intrinsic, RenderIntrinsicsArgs,
     render_intrinsics, uses_external_runtime,
 };
 use crate::names::{
@@ -613,7 +613,7 @@ impl JsBindgen<'_> {
         if uses_external_runtime(&self.all_intrinsics, opts.cm_runtime_es_module.is_some()) {
             uwriteln!(
                 output,
-                "import {{ runtime as {RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
+                "import {{ runtime as {CM_RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
                 js_string_literal(opts.cm_runtime_es_module.as_deref().unwrap()),
             );
         }

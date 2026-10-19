@@ -13,7 +13,7 @@ export const runtime = {
     apiVersion: 1,
     create(options) {
         if (options.requestedApiVersion !== 1) {
-            throw new Error(`unsupported runtime API ${options.requestedApiVersion}`);
+            throw new Error(`unsupported JavaScript CM runtime API ${options.requestedApiVersion}`);
         }
         runtimeCreateCallCount++;
         const RuntimeError = options.platform?.WebAssembly?.RuntimeError ?? WebAssembly.RuntimeError;

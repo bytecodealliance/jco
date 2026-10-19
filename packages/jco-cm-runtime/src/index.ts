@@ -1,6 +1,6 @@
 export { runtime } from './runtime.js';
 export {
-    RUNTIME_API_VERSION,
+    CM_RUNTIME_API_VERSION,
     type AsyncDeterminism,
     type ComponentModelRuntime,
     type ComponentModelRuntimeProvider,
