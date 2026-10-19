@@ -34,37 +34,61 @@ For background on components and WASI, see the [Component Model Book][cm-book].
 
 ## Prerequisites
 
-Complete the repository's [normal build/setup][contributing] first. This example
-uses the current checkout's Jco CLI because the Perry backend is not yet in a
-published Jco release. From the repository root, build its JavaScript:
+This example uses the current checkout's Jco CLI because the Perry backend is not
+yet in a published Jco release. Complete the repository's
+[normal build/setup][contributing] first.
 
-```console
-pnpm --filter @bytecodealliance/jco build:ts
-```
+The quickstart below targets **Ubuntu 24.04 on x86_64**, with Node.js 24, pnpm 11,
+and Rust installed through `rustup`. It also requires Git, `curl`, GnuPG (`gpg`),
+and `sudo`. The example has been validated on Node 24.21.0 without experimental
+flags.
 
-You also need a **WASI-enabled Perry compiler**, its matching runtime archive,
-and wasi-sdk. The published `@perryts/perry@0.5.1520` package predates the WASI
-target. Follow the [Perry backend guide][perry-guide] for the tested source
-revision and toolchain setup, including `WASI_SDK_PATH` and `PERRY_RUNTIME_DIR`.
-
-Perry is deliberately absent from this example's dependencies. You select a
-source-built executable or install a compiler package yourself. Use a Node.js
-version supporting the Wasm instructions emitted by that compiler; this example
-has been validated on Node 24.21.0 without experimental flags.
+You need a **WASI-enabled Perry compiler**, its matching runtime archive, and
+wasi-sdk. The published `@perryts/perry@0.5.1520` package predates the WASI target.
+The quickstart builds the tested compiler and runtime from source; `pnpm install`
+alone does not install them.
 
 ## Quickstart
 
-After configuring the compiler toolchain, run from the repository root:
+Run these commands from the repository root in the same Bash shell:
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm --filter @bytecodealliance/jco build:ts
+
+# Build and install Perry, its WASI runtime, and wasi-sdk.
+export PERRY_TOOLCHAIN_DIR="$HOME/.local/share/jco/perry-wasi"
+node scripts/ci/build-perry-wasi.mjs "$PERRY_TOOLCHAIN_DIR"
+
+# Configure the example to use the installed compiler and matching runtime/SDK.
+export JCO_PERRY_CLI_PATH="$PERRY_TOOLCHAIN_DIR/bin/perry"
+export PERRY_RUNTIME_DIR="$PERRY_TOOLCHAIN_DIR/runtime"
+export WASI_SDK_PATH="$PERRY_TOOLCHAIN_DIR/wasi-sdk"
+"$JCO_PERRY_CLI_PATH" --version
+
 cd examples/components/perry-filesystem
-pnpm install
-JCO_PERRY_CLI_PATH=/absolute/path/to/perry pnpm run all
+pnpm run all
 ```
 
-This example is a pnpm workspace member. Installing dependencies does not install
-Perry: provision its compiler and runtime before running this example or the
-repository-wide example sweep.
+The [build script](../../../scripts/ci/build-perry-wasi.mjs) uses `sudo` to add the
+LLVM apt repository and install LLVM 22 development packages. It downloads and
+checks wasi-sdk 34, installs Rust `nightly-2026-10-08` with the `wasm32-wasip2`
+target, and builds Perry revision `3945beb23ebeca54846a30d89cb4971de59b0c6c` with
+WASI support and its matching runtime. Allow time for this source build.
+The installed files remain in `PERRY_TOOLCHAIN_DIR`; temporary build files are
+removed automatically.
+
+The script's automatic LLVM installation is specific to Ubuntu 24.04, and its
+SDK download is for Linux x86_64. On another Linux x86_64 distribution with LLVM
+22 and its development dependencies already installed, set `LLVM_SYS_221_PREFIX`
+to that LLVM installation before invoking the script. For other platforms, use
+the [Perry backend guide][perry-guide] to build an equivalent toolchain.
+
+When returning in a new shell, repeat the four `export` commands above to select
+the installed toolchain, then run `pnpm run all` from this example directory.
+You do not need to rebuild Perry for each run. `PERRY_RUNTIME_DIR` contains
+`libperry_runtime.a`, and `WASI_SDK_PATH` contains the SDK's `bin/` and `share/`
+directories; both variables are needed in addition to the compiler path.
 
 The `all` script will:
 
@@ -100,8 +124,10 @@ From this example directory, install the Preview 2 shim:
 pnpm install
 ```
 
-To use a project-installed compiler, install your chosen WASI-enabled package
-explicitly, for example `pnpm add --save-dev /path/to/perry-cli-package`.
+If you followed the quickstart, keep its three compiler/runtime/SDK environment
+variables set. To use a project-installed compiler instead, install your chosen
+WASI-enabled package explicitly, for example
+`pnpm add --save-dev /path/to/perry-cli-package`.
 Its manifest must expose a `perry` executable as described in the
 [backend guide][perry-guide]. A source-built executable can instead be selected
 by path in the build step below.
@@ -124,14 +150,15 @@ versions in the resulting component.
 
 ### Build the WebAssembly component
 
-Compile with an explicit executable:
+With the quickstart's environment variables still set, compile the component:
 
 ```console
-pnpm run build:component --backend-perry-cli-path /absolute/path/to/perry
+pnpm run build:component
 ```
 
-Alternatively, set `JCO_PERRY_CLI_PATH` for the build script or run
-`pnpm run build:component` with the compiler installed as `@perryts/perry`.
+Alternatively, pass an explicit executable with
+`pnpm run build:component --backend-perry-cli-path /absolute/path/to/perry`, or
+leave `JCO_PERRY_CLI_PATH` unset with the compiler installed as `@perryts/perry`.
 For an aliased/local package, use
 `pnpm run build:component --backend-perry-package my-perry`.
 Explicit selectors override the example's environment variable. Relative CLI
@@ -181,20 +208,6 @@ runs to verify that the guest accesses the host filesystem at runtime.
 Additional mutation fixtures exercise writes and directory operations with the
 built workspace shim's `enableMutateDirectory` option, including a check that
 the same component fails with the default shim settings.
-
-## Continuous integration
-
-The normal test workflow runs this example's `all` script and the real Perry
-E2E suite in the `examples-perry` job on Ubuntu 24.04 / Node 24.
-Until a WASI-enabled compiler is released,
-[the CI build recipe](../../../scripts/ci/build-perry-wasi.sh) builds Perry from
-a fixed source revision with a pinned Rust toolchain and checksum-verified WASI
-SDK. It caches the finished compiler, matching WASI runtime archive, and SDK.
-
-The cache key includes the runner architecture and build recipe, so changing a
-pin or build command invalidates it. Cache hits skip the source build entirely.
-The cache is saved before running the example so a Jco test failure does not
-force a compiler rebuild on the next run.
 
 ## Potential Issues
 
