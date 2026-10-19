@@ -9,10 +9,10 @@ use wasmtime_environ::Trap;
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
-pub(crate) const RUNTIME_API_VERSION: u32 = 1;
-pub(crate) const RUNTIME_PROVIDER_LOCAL_NAME: &str = "_jcoRuntimeProvider";
-const RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
-const RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
+pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
+pub(crate) const CM_RUNTIME_PROVIDER_LOCAL_NAME: &str = "_jcoRuntimeProvider";
+const CM_RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
+const CM_RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -2522,24 +2522,24 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         uwriteln!(
             output,
             r#"
-                if (typeof {RUNTIME_PROVIDER_LOCAL_NAME}?.create !== 'function') {{
+                if (typeof {CM_RUNTIME_PROVIDER_LOCAL_NAME}?.create !== 'function') {{
                     throw new TypeError('Jco Component Model runtime provider must define create(options)');
                 }}
-                if ({RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion !== {RUNTIME_API_VERSION}) {{
-                    throw new Error(`incompatible Jco Component Model runtime API: requested {RUNTIME_API_VERSION}, supported ${{{RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion}}`);
+                if ({CM_RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
+                    throw new Error(`incompatible Jco JavaScript Component Model runtime API: requested {CM_RUNTIME_API_VERSION}, supported ${{{CM_RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion}}`);
                 }}
-                const {RUNTIME_LOCAL_NAME} = {RUNTIME_PROVIDER_LOCAL_NAME}.create({{
-                    requestedApiVersion: {RUNTIME_API_VERSION},
+                const {CM_RUNTIME_LOCAL_NAME} = {CM_RUNTIME_PROVIDER_LOCAL_NAME}.create({{
+                    requestedApiVersion: {CM_RUNTIME_API_VERSION},
                     strict: {strict},
                     flagsAsBigInt: {flags_as_bigint},
                     nodejsCompat: {nodejs_compat},
                     asyncDeterminism: '{determinism}',
                     platform: {{ WebAssembly }},
                 }});
-                if ({RUNTIME_LOCAL_NAME}?.apiVersion !== {RUNTIME_API_VERSION}) {{
-                    throw new Error(`incompatible Jco Component Model runtime instance API: requested {RUNTIME_API_VERSION}, received ${{{RUNTIME_LOCAL_NAME}?.apiVersion}}`);
+                if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
+                    throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
                 }}
-                const {RUNTIME_INTRINSICS_LOCAL_NAME} = {RUNTIME_LOCAL_NAME}.intrinsics;
+                const {CM_RUNTIME_INTRINSICS_LOCAL_NAME} = {CM_RUNTIME_LOCAL_NAME}.intrinsics;
             "#,
             strict = args.transpile_opts.strict,
             flags_as_bigint = args.transpile_opts.flags_as_bigint,
@@ -2559,7 +2559,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             output.push_str(&format!(
                 r#"
                     const {local_name} = (() => {{
-                        const receiver = {RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path};
+                        const receiver = {CM_RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path};
                         const intrinsic = receiver?.{method};
                         if (typeof intrinsic !== 'function') {{
                             throw new TypeError('Jco Component Model runtime intrinsic {path} must be a function');
@@ -2742,9 +2742,9 @@ impl Intrinsic {
                 "imports",
                 "instantiateCore",
                 "isLE",
-                RUNTIME_PROVIDER_LOCAL_NAME,
-                RUNTIME_LOCAL_NAME,
-                RUNTIME_INTRINSICS_LOCAL_NAME,
+                CM_RUNTIME_PROVIDER_LOCAL_NAME,
+                CM_RUNTIME_LOCAL_NAME,
+                CM_RUNTIME_INTRINSICS_LOCAL_NAME,
                 "scopeId",
                 "symbolCabiDispose",
                 "symbolCabiLower",

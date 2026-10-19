@@ -98,7 +98,7 @@ suite('External Component Model runtime', () => {
         {
             name: 'an incompatible instance API',
             provider: '{ apiVersion: 1, create() { return { apiVersion: 2 }; } }',
-            error: 'runtime instance API: requested 1, received 2',
+            error: 'runtime API instance: requested 1, received 2',
         },
         {
             name: 'a non-function intrinsic',

@@ -126,7 +126,7 @@ suite('External Component Model runtime in the browser', () => {
         {
             kind: 'instance',
             provider: '{ apiVersion: 1, create() { return { apiVersion: 2 }; } }',
-            error: 'runtime instance API: requested 1, received 2',
+            error: 'runtime API instance: requested 1, received 2',
         },
     ])('rejects an incompatible $kind API version', async ({ kind, provider, error }) => {
         const name = `invalid-${kind}`;

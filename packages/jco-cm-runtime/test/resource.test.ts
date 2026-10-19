@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
-import { RUNTIME_API_VERSION, runtime, type ComponentModelRuntimeProvider } from '../src/index.js';
+import { CM_RUNTIME_API_VERSION, runtime, type ComponentModelRuntimeProvider } from '../src/index.js';
 
 const TABLE_FLAG = 1 << 30;
 
 function createRuntime() {
     return runtime.create({
-        requestedApiVersion: RUNTIME_API_VERSION,
+        requestedApiVersion: CM_RUNTIME_API_VERSION,
         strict: false,
         flagsAsBigInt: false,
         nodejsCompat: true,
@@ -38,7 +38,7 @@ describe('resource.tableGet', () => {
     test('uses the injected RuntimeError realm', () => {
         class CustomRuntimeError extends Error {}
         const instance = runtime.create({
-            requestedApiVersion: RUNTIME_API_VERSION,
+            requestedApiVersion: CM_RUNTIME_API_VERSION,
             strict: false,
             flagsAsBigInt: false,
             nodejsCompat: true,
@@ -74,7 +74,7 @@ describe('runtime provider', () => {
 
     test('supports structurally typed alternative providers', () => {
         const alternative = {
-            apiVersion: RUNTIME_API_VERSION,
+            apiVersion: CM_RUNTIME_API_VERSION,
             create: (options) => runtime.create(options),
         } satisfies ComponentModelRuntimeProvider;
 
