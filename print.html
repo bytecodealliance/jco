@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b8857ad3.js";
+            window.path_to_searchindex_js = "searchindex-b10cf315.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-af2ca8c9.js"></script>
+        <script src="toc-b62a3033.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,11 +197,22 @@
 <p>If you find a mistake, omission, ambiguity, or other problem, please let us know via <a href="https://github.com/bytecodealliance/jco/issues">GitHub issues</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="creating-new-javascript-and-typescript-components"><a class="header" href="#creating-new-javascript-and-typescript-components">Creating new JavaScript and TypeScript components</a></h1>
-<p>Jco exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> and <a href="https://github.com/andreiltd/componentize-qjs"><code>componentize-qjs</code></a> to make it easy to build components
-from JavaScript or TypeScript ES module source code.</p>
-<p>The experimental <a href="#perry-backend">Perry backend</a> also compiles source to WASI P2
-commands using a project-installed compiler. It has its own toolchain requirements
-and does not yet support custom WIT bindings.</p>
+<p>Jco can build WebAssembly components from JavaScript or TypeScript using several backends:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th>Selection</th><th>Installation and component interfaces</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="#starlingmonkey-backend">StarlingMonkey</a></td><td>Default; <code>--backend starlingmonkey</code> or <code>sm</code></td><td>Included with Jco through <code>componentize-js</code>; builds against your WIT world.</td></tr>
+<tr><td><a href="#quickjs-backend">QuickJS</a></td><td><code>--backend quickjs</code> or <code>qjs</code></td><td>Included with Jco through <code>componentize-qjs</code>; builds against your WIT world.</td></tr>
+<tr><td><a href="#perry-backend">Perry</a> (experimental)</td><td><code>--backend perry</code></td><td>User-selected compiler and WASI toolchain; produces WASI P2 commands without custom WIT bindings.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The backend guides cover setup, complete build/run examples, and backend-specific options.
+The scaffolding and bundling workflows below apply to StarlingMonkey and QuickJS;
+Perry’s guide describes its separate workflow.</p>
 <h2 id="scaffold-a-project-from-wit"><a class="header" href="#scaffold-a-project-from-wit">Scaffold a project from WIT</a></h2>
 <p>The quickest way to start a new component is with <code>jco scaffold</code>.</p>
 <p><code>jco scaffold</code> uses an existing WIT package file or directory to produce a JS component project that builds for
@@ -261,11 +272,12 @@ copied <code>wit/</code> package, and use <code>pnpm check</code>, <code>pnpm te
 <p>Building a JavaScript component is as easy as calling <code>jco componentize</code>, with a few options:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.js
 </code></pre>
-<p>StarlingMonkey is the default backend, but you can use [<code>componentize-qjs</code>][qjs] which is powered by <a href="https://github.com/quickjs-ng/quickjs"><code>quickjs-ng</code></a> by passing <code>--backend quickjs</code> or <code>--backend qjs</code>:</p>
+<p><a href="#starlingmonkey-backend">StarlingMonkey</a> is the default backend. Select
+<a href="#quickjs-backend">QuickJS</a> with <code>--backend quickjs</code> or <code>--backend qjs</code>:</p>
 <pre><code class="language-console">jco componentize --backend qjs -w wit -o dist/component.wasm component.js
 </code></pre>
 <p>The StarlingMonkey backend also accepts the aliases <code>starlingmonkey</code> and <code>sm</code>. Note that <code>--engine &lt;path&gt;</code>
-allows supplying a a custom StarlingMonkey build and cannot be combined with the <code>componentize-qjs</code> backend.</p>
+allows supplying a compatible custom ComponentizeJS engine build and is only supported by the StarlingMonkey backend.</p>
 <p>With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.ts
 </code></pre>
@@ -334,6 +346,207 @@ will be rejected.</p>
 an explicit <code>tsconfig</code> setting. TSX follows the JSX mode and runtime configured by that project. Any JSX runtime
 introduced by the transform must be resolvable and compatible with the component environment.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="starlingmonkey-backend"><a class="header" href="#starlingmonkey-backend">StarlingMonkey backend</a></h1>
+<p>StarlingMonkey is Jco’s default backend for <code>jco componentize</code>. It uses
+<a href="https://github.com/bytecodealliance/ComponentizeJS"><code>componentize-js</code></a> to embed the
+<a href="https://github.com/bytecodealliance/StarlingMonkey">StarlingMonkey</a> JavaScript
+runtime, based on SpiderMonkey, in a WebAssembly component. Your WIT world defines
+the component’s imports and exports, including custom interfaces.</p>
+<p>Select it explicitly with <code>--backend starlingmonkey</code> or the alias <code>--backend sm</code>.
+Omitting <code>--backend</code> selects the same backend.</p>
+<h2 id="installation-and-version-ownership"><a class="header" href="#installation-and-version-ownership">Installation and version ownership</a></h2>
+<p>Jco installs ComponentizeJS as a regular dependency, including its engine build.
+You do not need to install ComponentizeJS or build StarlingMonkey separately for
+the standard workflow. Updating Jco can update its backend dependencies; commit
+your package manager’s lockfile to keep builds reproducible.</p>
+<p>Start a project with Jco as a development dependency and the Preview 2 shim for
+running the transpiled component on Node.js:</p>
+<pre><code class="language-sh">mkdir starlingmonkey-app
+cd starlingmonkey-app
+npm init -y
+npm pkg set type=module
+npm install --save-dev @bytecodealliance/jco
+npm install @bytecodealliance/preview2-shim
+</code></pre>
+<h2 id="generate-declarations-compile-and-run-on-nodejs"><a class="header" href="#generate-declarations-compile-and-run-on-nodejs">Generate declarations, compile, and run on Node.js</a></h2>
+<p>Save a custom world as <code>hello.wit</code>:</p>
+<pre><code class="language-wit">package example:hello;
+
+world hello {
+    export greet: func(name: string) -&gt; string;
+}
+</code></pre>
+<p>Implement its export in <code>hello.ts</code>:</p>
+<pre><code class="language-ts">export function greet(name: string): string {
+    return `Hello, ${name}!`;
+}
+</code></pre>
+<p>Generate guest declarations, compile with StarlingMonkey, and transpile the
+result for JavaScript hosts:</p>
+<pre><code class="language-sh">npx jco guest-types hello.wit --world-name hello -o types
+npx jco componentize hello.ts --backend starlingmonkey --wit hello.wit --world-name hello -o hello.wasm
+npx jco transpile hello.wasm -o transpiled
+</code></pre>
+<p><code>guest-types</code> describes the WIT world in TypeScript declarations. ComponentizeJS
+generates the runtime bindings from the WIT supplied to <code>componentize</code>.
+The TypeScript transform erases types without checking them; run your project’s
+type checker separately when needed.</p>
+<p>Save <code>run.mjs</code>:</p>
+<pre><code class="language-js">import { greet } from './transpiled/hello.js';
+
+console.log(greet('components'));
+</code></pre>
+<p>Run <code>node run.mjs</code>; it prints <code>Hello, components!</code>. This synchronous example
+does not require experimental Node flags. The generated module uses the Preview 2
+shim for WASI imports. See <a href="#transpiling">Transpiling</a> for custom import maps
+and manual instantiation.</p>
+<p>For a larger project, <a href="#scaffold-a-project-from-wit">scaffold from your WIT</a>
+to generate declarations, implementation skeletons, and build scripts together.</p>
+<h2 id="source-modules-and-runtime-apis"><a class="header" href="#source-modules-and-runtime-apis">Source modules and runtime APIs</a></h2>
+<p>TypeScript entries are bundled automatically. For JavaScript entries with local
+or npm dependencies, opt in to Jco’s bundler with <code>--bundle</code>:</p>
+<pre><code class="language-sh">npx jco componentize app.js --bundle --wit wit -o app.wasm
+</code></pre>
+<p>See <a href="#bundling">Bundling</a> for configuration and
+TypeScript module resolution. Supported <code>node:</code> imports are supplied by Jco’s
+experimental <a href="#nodejs-built-in-compatibility">Node.js compatibility adapters</a>
+during bundling; the guest is not a Node.js process. StarlingMonkey also supplies
+web APIs such as <code>fetch</code>, streams, and text encoding, backed by the component’s
+available capabilities.</p>
+<p>ComponentizeJS evaluates top-level module code while preparing the component’s
+initial snapshot. Put work that must happen on each invocation inside exported
+functions, rather than relying on top-level code to run each time a host loads
+the component.</p>
+<h2 id="wasi-features"><a class="header" href="#wasi-features">WASI features</a></h2>
+<p>The <code>--disable</code> and <code>--enable</code> options control StarlingMonkey’s <code>clocks</code>, <code>http</code>,
+<code>random</code>, <code>stdio</code>, and <code>fetch-event</code> features. Both accept <code>all</code>.
+For the pure greeting above, build without the engine’s optional WASI features:</p>
+<pre><code class="language-sh">npx jco componentize hello.ts --wit hello.wit --disable all -o pure.wasm
+</code></pre>
+<p>Only disable capabilities your source and WIT world do not require. Disabling
+<code>stdio</code> removes guest console/error output; disabling <code>random</code> makes its random
+values deterministic. Feature switches cannot remove imports explicitly required
+by the selected WIT world. Inspect the resulting requirements with <code>jco wit</code>.</p>
+<p>If Jco warns that it is falling back to ComponentizeJS 0.19.3 for older WASI HTTP
+interfaces, follow the <a href="#componentize-js-0193-fallback">WASI dependency upgrade guidance</a>.</p>
+<h2 id="engine-aot-and-debugging-options"><a class="header" href="#engine-aot-and-debugging-options">Engine, AOT, and debugging options</a></h2>
+<p>These options apply only to StarlingMonkey; Jco rejects them for QuickJS and Perry.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--engine &lt;path&gt;</code></td><td>Supply a compatible custom ComponentizeJS engine Wasm build.</td></tr>
+<tr><td><code>--aot</code></td><td>Enable ComponentizeJS’s Weval ahead-of-time compilation.</td></tr>
+<tr><td><code>--aot-min-stack-size-bytes &lt;number&gt;</code></td><td>Configure the minimum stack size for AOT.</td></tr>
+<tr><td><code>--weval-bin &lt;path&gt;</code> / <code>--wizer-bin &lt;path&gt;</code></td><td>Select custom tool binaries for compilation or initialization.</td></tr>
+<tr><td><code>--preview2-adapter &lt;path&gt;</code></td><td>Supply a custom Preview 2 adapter.</td></tr>
+<tr><td><code>--debug-starlingmonkey-build</code></td><td>Use ComponentizeJS’s debug engine build.</td></tr>
+<tr><td><code>--debug-bindings</code> / <code>--debug-bindings-dir &lt;dir&gt;</code></td><td>Inspect generated bindings and metadata.</td></tr>
+<tr><td><code>--debug-binary</code> / <code>--debug-binary-path &lt;path&gt;</code></td><td>Inspect the generated core Wasm binary.</td></tr>
+<tr><td><code>--debug-enable-wizer-logging</code></td><td>Enable Wizer call diagnostics.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Custom engine and tool builds must match the ComponentizeJS version Jco uses.
+See <a href="https://github.com/bytecodealliance/ComponentizeJS">ComponentizeJS</a> for engine
+and AOT details, and <code>jco componentize --help</code> for the full CLI reference.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="quickjs-backend"><a class="header" href="#quickjs-backend">QuickJS backend</a></h1>
+<p><code>jco componentize --backend quickjs</code> builds components with
+<a href="https://github.com/andreiltd/componentize-qjs"><code>componentize-qjs</code></a>, which embeds
+the <a href="https://github.com/quickjs-ng/quickjs">QuickJS-NG</a> JavaScript engine.
+The alias <code>--backend qjs</code> selects the same backend. Your WIT world defines the
+component’s imports and exports, including custom interfaces.</p>
+<h2 id="installation-and-version-ownership-1"><a class="header" href="#installation-and-version-ownership-1">Installation and version ownership</a></h2>
+<p><code>componentize-qjs</code> is a regular Jco dependency. Installing Jco includes the backend
+and its packaged runtime; you do not need a separate QuickJS CLI installation.
+The package selects a native compiler binding for the build machine. See
+<a href="https://github.com/andreiltd/componentize-qjs">componentize-qjs</a> for supported
+platforms. Commit your package manager’s lockfile to pin the backend alongside Jco.</p>
+<p>Start a project with Jco and the Preview 2 shim used by the transpiled component:</p>
+<pre><code class="language-sh">mkdir quickjs-app
+cd quickjs-app
+npm init -y
+npm pkg set type=module
+npm install --save-dev @bytecodealliance/jco
+npm install @bytecodealliance/preview2-shim
+</code></pre>
+<h2 id="generate-declarations-compile-and-run-on-nodejs-1"><a class="header" href="#generate-declarations-compile-and-run-on-nodejs-1">Generate declarations, compile, and run on Node.js</a></h2>
+<p>Save <code>hello.wit</code>:</p>
+<pre><code class="language-wit">package example:hello;
+
+world hello {
+    export greet: func(name: string) -&gt; string;
+}
+</code></pre>
+<p>Implement the export in <code>hello.ts</code>:</p>
+<pre><code class="language-ts">export function greet(name: string): string {
+    return `Hello, ${name}!`;
+}
+</code></pre>
+<p>Generate declarations and build with the synchronous QuickJS runtime for this
+synchronous world:</p>
+<pre><code class="language-sh">npx jco guest-types hello.wit --world-name hello -o types
+npx jco componentize hello.ts --backend quickjs --backend-qjs-disable-async --wit hello.wit --world-name hello -o hello.wasm
+npx jco transpile hello.wasm -o transpiled
+</code></pre>
+<p><code>guest-types</code> generates declarations for authoring against the WIT world; the
+backend generates its runtime bindings during componentization. TypeScript
+entries are bundled and have their type syntax erased automatically, without
+semantic type checking. Run your project’s type checker separately when needed.</p>
+<p>Save <code>run.mjs</code>:</p>
+<pre><code class="language-js">import { greet } from './transpiled/hello.js';
+
+console.log(greet('components'));
+</code></pre>
+<p>Run <code>node run.mjs</code>; it prints <code>Hello, components!</code> without experimental Node
+flags. <a href="#transpiling">Transpiling</a> describes how WASI imports are mapped to the
+Preview 2 shim and how to supply custom host imports.</p>
+<h2 id="synchronous-and-async-runtimes"><a class="header" href="#synchronous-and-async-runtimes">Synchronous and async runtimes</a></h2>
+<p>QuickJS embeds an async-capable Component Model runtime by default, even when
+your WIT exports are synchronous. That output requires a host with the necessary
+async support. Pass <code>--backend-qjs-disable-async</code> to select the packaged
+non-async runtime for synchronous components, as in the Node.js example above.</p>
+<p>This is a componentization choice, separate from <code>jco transpile --async-mode</code>.
+It does not convert async WIT functions to synchronous functions. Keep the
+default runtime when your world uses Component Model async features and select
+a host and transpilation configuration that support them. See the upstream
+<a href="https://github.com/andreiltd/componentize-qjs#async-exports">async examples</a>.</p>
+<h2 id="wasi-imports-and-stubs"><a class="header" href="#wasi-imports-and-stubs">WASI imports and stubs</a></h2>
+<p>The embedded runtime can add WASI imports beyond those written explicitly in
+your world. Inspect the finished component with <code>jco wit hello.wasm</code> to see its
+complete requirements.</p>
+<p>For code that does not use WASI, <code>--backend-qjs-stub-wasi</code> replaces WASI imports
+with trapping stubs. For example, the greeting can be built with:</p>
+<pre><code class="language-sh">npx jco componentize hello.ts --backend qjs --backend-qjs-disable-async --backend-qjs-stub-wasi --wit hello.wit -o pure.wasm
+</code></pre>
+<p>Calling a replaced WASI function traps. This option does not emulate filesystem,
+console, clock, or other host services; use the normal runtime and supply its
+imports when the application needs them. It does not remove custom non-WASI
+imports from your world.</p>
+<p>StarlingMonkey’s <code>--disable</code> and <code>--enable</code> feature switches, <code>--engine</code>, AOT,
+and engine-debug options are not supported by this backend. Use QuickJS’s
+backend-specific switches and <code>jco componentize --help</code> for the Jco CLI surface;
+the standalone <code>componentize-qjs</code> CLI has a different set of options.</p>
+<h2 id="modules-and-nodejs-compatibility"><a class="header" href="#modules-and-nodejs-compatibility">Modules and Node.js compatibility</a></h2>
+<p>For JavaScript entries, pass <code>--bundle</code> to bundle local modules and npm packages
+with Jco. TypeScript entries already take this path:</p>
+<pre><code class="language-sh">npx jco componentize app.js --backend qjs --bundle --wit wit -o app.wasm
+</code></pre>
+<p>Bundling also supplies Jco’s experimental
+<a href="#nodejs-built-in-compatibility">Node.js compatibility adapters</a> for supported
+<code>node:</code> imports. These can introduce additional component imports, and their
+runtime requirements still apply; selecting QuickJS does not embed Node.js.
+QuickJS’s host timer adapters require the async runtime and are omitted when
+<code>--backend-qjs-disable-async</code> is set.</p>
+<p>Both backend initialization and module evaluation happen while preparing the
+component snapshot. Put work that must happen at runtime in exported functions.
+See <a href="#bundling">Bundling</a> for module resolution and
+Rolldown configuration, or <a href="#scaffold-a-project-from-wit">scaffold a project</a>
+to generate an implementation skeleton from WIT.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="perry-backend"><a class="header" href="#perry-backend">Perry backend</a></h1>
 <p><code>jco componentize --backend perry</code> compiles JavaScript or TypeScript with a
 <a href="https://github.com/PerryTS/perry">Perry</a> CLI selected by path or installed in the
@@ -400,7 +613,7 @@ checks include the selected CLI path, compiler diagnostics and setup guidance.
 The check has a 30-second timeout and does not link the WASI runtime. The actual
 build still needs the matching runtime and SDK, and its output is validated as a
 WASI P2 command before Jco writes the destination file.</p>
-<h2 id="generate-declarations-compile-and-run-on-nodejs"><a class="header" href="#generate-declarations-compile-and-run-on-nodejs">Generate declarations, compile, and run on Node.js</a></h2>
+<h2 id="generate-declarations-compile-and-run-on-nodejs-2"><a class="header" href="#generate-declarations-compile-and-run-on-nodejs-2">Generate declarations, compile, and run on Node.js</a></h2>
 <p>Use a WASI P2 command WIT package to generate declarations. A convenient source
 is Jco’s bundled snapshot, copied by the scaffold command:</p>
 <pre><code class="language-sh">jco scaffold perry-app --wit builtin:wasi-command@0.2.x --target nodejs
@@ -756,14 +969,11 @@ $ pnpm exec jco --version
 </code></pre>
 <p>Local usage can be preferable to ensure the project is reproducible and self-contained, but requires
 replacing all <code>jco</code> shell calls in the following example with either <code>./node_modules/.bin/jco</code> or <code>npx jco</code>.</p>
-<h3 id="installing-componentizejs"><a class="header" href="#installing-componentizejs">Installing ComponentizeJS</a></h3>
-<p>To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:</p>
-<pre><code class="language-shell">$ pnpm install -g @bytecodealliance/componentize-js
-</code></pre>
-<p>Or locally:</p>
-<pre><code class="language-shell">$ pnpm install @bytecodealliance/componentize-js
-</code></pre>
-<p>Now the <code>jco componentize</code> command will be ready to use.</p>
+<h3 id="componentization-backend"><a class="header" href="#componentization-backend">Componentization backend</a></h3>
+<p>Jco includes ComponentizeJS as a dependency, so <code>jco componentize</code> is ready to use
+after installing Jco. This example uses the default <a href="#starlingmonkey-backend">StarlingMonkey backend</a>.
+See that guide for current setup and engine options, or the <a href="#quickjs-backend">QuickJS backend</a>
+guide for an alternative using the same WIT workflow.</p>
 <h3 id="creating-a-component-with-componentizejs"><a class="header" href="#creating-a-component-with-componentizejs">Creating a Component with ComponentizeJS</a></h3>
 <p>This Cowsay component uses the following WIT file (<a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WIT</a> is the typing language used for defining Components):</p>
 <p>cowsay.wit</p>

@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b8857ad3.js";
+            window.path_to_searchindex_js = "searchindex-b10cf315.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-af2ca8c9.js"></script>
+        <script src="toc-b62a3033.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,14 +197,11 @@ $ pnpm exec jco --version
 </code></pre>
 <p>Local usage can be preferable to ensure the project is reproducible and self-contained, but requires
 replacing all <code>jco</code> shell calls in the following example with either <code>./node_modules/.bin/jco</code> or <code>npx jco</code>.</p>
-<h3 id="installing-componentizejs"><a class="header" href="#installing-componentizejs">Installing ComponentizeJS</a></h3>
-<p>To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:</p>
-<pre><code class="language-shell">$ pnpm install -g @bytecodealliance/componentize-js
-</code></pre>
-<p>Or locally:</p>
-<pre><code class="language-shell">$ pnpm install @bytecodealliance/componentize-js
-</code></pre>
-<p>Now the <code>jco componentize</code> command will be ready to use.</p>
+<h3 id="componentization-backend"><a class="header" href="#componentization-backend">Componentization backend</a></h3>
+<p>Jco includes ComponentizeJS as a dependency, so <code>jco componentize</code> is ready to use
+after installing Jco. This example uses the default <a href="./starlingmonkey.html">StarlingMonkey backend</a>.
+See that guide for current setup and engine options, or the <a href="./quickjs.html">QuickJS backend</a>
+guide for an alternative using the same WIT workflow.</p>
 <h3 id="creating-a-component-with-componentizejs"><a class="header" href="#creating-a-component-with-componentizejs">Creating a Component with ComponentizeJS</a></h3>
 <p>This Cowsay component uses the following WIT file (<a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WIT</a> is the typing language used for defining Components):</p>
 <p>cowsay.wit</p>

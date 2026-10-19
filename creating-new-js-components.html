@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b8857ad3.js";
+            window.path_to_searchindex_js = "searchindex-b10cf315.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-af2ca8c9.js"></script>
+        <script src="toc-b62a3033.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,11 +181,22 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="creating-new-javascript-and-typescript-components"><a class="header" href="#creating-new-javascript-and-typescript-components">Creating new JavaScript and TypeScript components</a></h1>
-<p>Jco exposes <a href="https://github.com/bytecodealliance/componentize-js"><code>componentize-js</code></a> and <a href="https://github.com/andreiltd/componentize-qjs"><code>componentize-qjs</code></a> to make it easy to build components
-from JavaScript or TypeScript ES module source code.</p>
-<p>The experimental <a href="./perry.html">Perry backend</a> also compiles source to WASI P2
-commands using a project-installed compiler. It has its own toolchain requirements
-and does not yet support custom WIT bindings.</p>
+<p>Jco can build WebAssembly components from JavaScript or TypeScript using several backends:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th>Selection</th><th>Installation and component interfaces</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="./starlingmonkey.html">StarlingMonkey</a></td><td>Default; <code>--backend starlingmonkey</code> or <code>sm</code></td><td>Included with Jco through <code>componentize-js</code>; builds against your WIT world.</td></tr>
+<tr><td><a href="./quickjs.html">QuickJS</a></td><td><code>--backend quickjs</code> or <code>qjs</code></td><td>Included with Jco through <code>componentize-qjs</code>; builds against your WIT world.</td></tr>
+<tr><td><a href="./perry.html">Perry</a> (experimental)</td><td><code>--backend perry</code></td><td>User-selected compiler and WASI toolchain; produces WASI P2 commands without custom WIT bindings.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The backend guides cover setup, complete build/run examples, and backend-specific options.
+The scaffolding and bundling workflows below apply to StarlingMonkey and QuickJS;
+Perry’s guide describes its separate workflow.</p>
 <h2 id="scaffold-a-project-from-wit"><a class="header" href="#scaffold-a-project-from-wit">Scaffold a project from WIT</a></h2>
 <p>The quickest way to start a new component is with <code>jco scaffold</code>.</p>
 <p><code>jco scaffold</code> uses an existing WIT package file or directory to produce a JS component project that builds for
@@ -245,11 +256,12 @@ copied <code>wit/</code> package, and use <code>pnpm check</code>, <code>pnpm te
 <p>Building a JavaScript component is as easy as calling <code>jco componentize</code>, with a few options:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.js
 </code></pre>
-<p>StarlingMonkey is the default backend, but you can use [<code>componentize-qjs</code>][qjs] which is powered by <a href="https://github.com/quickjs-ng/quickjs"><code>quickjs-ng</code></a> by passing <code>--backend quickjs</code> or <code>--backend qjs</code>:</p>
+<p><a href="./starlingmonkey.html">StarlingMonkey</a> is the default backend. Select
+<a href="./quickjs.html">QuickJS</a> with <code>--backend quickjs</code> or <code>--backend qjs</code>:</p>
 <pre><code class="language-console">jco componentize --backend qjs -w wit -o dist/component.wasm component.js
 </code></pre>
 <p>The StarlingMonkey backend also accepts the aliases <code>starlingmonkey</code> and <code>sm</code>. Note that <code>--engine &lt;path&gt;</code>
-allows supplying a a custom StarlingMonkey build and cannot be combined with the <code>componentize-qjs</code> backend.</p>
+allows supplying a compatible custom ComponentizeJS engine build and is only supported by the StarlingMonkey backend.</p>
 <p>With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.ts
 </code></pre>
@@ -326,7 +338,7 @@ introduced by the transform must be resolvable and compatible with the component
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="perry.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="starlingmonkey.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -340,7 +352,7 @@ introduced by the transform must be resolvable and compatible with the component
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="perry.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="starlingmonkey.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
