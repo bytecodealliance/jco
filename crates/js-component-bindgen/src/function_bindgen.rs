@@ -1991,11 +1991,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 self.emit_list_bounds_check(&result, &len, size);
-                uwriteln!(self.src, "let i = 0;");
+                uwriteln!(self.src, "let i{tmp} = 0;");
                 uwriteln!(self.src, "for (const [key, value] of {entries}) {{");
-                uwriteln!(self.src, "const base = {result} + i * {size};");
+                uwriteln!(self.src, "const base = {result} + i{tmp} * {size};");
                 self.src.push_str(&body);
-                uwriteln!(self.src, "i++;");
+                uwriteln!(self.src, "i{tmp}++;");
                 uwrite!(self.src, "}}\n");
 
                 results.push(result);

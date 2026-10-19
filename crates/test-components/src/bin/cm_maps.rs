@@ -30,6 +30,26 @@ impl Guest for Component {
     fn host_roundtrip(values: Map<String, u32>) -> Map<String, u32> {
         cm_maps_host::roundtrip(&values)
     }
+
+    /// Round-trips sibling maps through the host in a single call.
+    fn host_roundtrip_siblings(
+        first: Map<String, u32>,
+        second: Map<String, u32>,
+    ) -> (Map<String, u32>, Map<String, u32>) {
+        cm_maps_host::roundtrip_siblings(&first, &second)
+    }
+
+    /// Round-trips nested maps through the host.
+    fn host_roundtrip_nested(
+        values: Map<String, Map<u32, String>>,
+    ) -> Map<String, Map<u32, String>> {
+        cm_maps_host::roundtrip_nested(&values)
+    }
+
+    /// Round-trips maps nested inside a list through the host.
+    fn host_roundtrip_list(values: Vec<Map<String, u32>>) -> Vec<Map<String, u32>> {
+        cm_maps_host::roundtrip_list(&values)
+    }
 }
 
 fn main() {}

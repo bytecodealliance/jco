@@ -762,6 +762,10 @@ world async-call-g2g-callee {
 
 interface cm-maps-host {
     roundtrip: func(values: map<string, u32>) -> map<string, u32>;
+    roundtrip-siblings: func(first: map<string, u32>, second: map<string, u32>)
+        -> tuple<map<string, u32>, map<string, u32>>;
+    roundtrip-nested: func(values: map<string, map<u32, string>>) -> map<string, map<u32, string>>;
+    roundtrip-list: func(values: list<map<string, u32>>) -> list<map<string, u32>>;
 }
 
 interface cm-maps-api {
@@ -774,6 +778,10 @@ interface cm-maps-api {
     bigint-keys: func() -> map<u64, string>;
     structured-values: func(values: map<bool, map-value>) -> map<bool, map-value>;
     host-roundtrip: func(values: map<string, u32>) -> map<string, u32>;
+    host-roundtrip-siblings: func(first: map<string, u32>, second: map<string, u32>)
+        -> tuple<map<string, u32>, map<string, u32>>;
+    host-roundtrip-nested: func(values: map<string, map<u32, string>>) -> map<string, map<u32, string>>;
+    host-roundtrip-list: func(values: list<map<string, u32>>) -> list<map<string, u32>>;
 }
 
 world cm-maps {
