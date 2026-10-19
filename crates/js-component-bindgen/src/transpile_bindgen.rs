@@ -561,6 +561,18 @@ impl JsBindgen<'_> {
                     self.intrinsic(Intrinsic::FetchCompile)
                 );
             }
+            if matches!(
+                self.opts.instantiation_mode,
+                None | Some(InstantiationMode::Async)
+            ) {
+                // Observe each load before another declaration can throw or
+                // initialization can suspend. Keep the original value so its
+                // error still propagates when the module is consumed.
+                uwriteln!(
+                    compilation_promises,
+                    "Promise.resolve({local_name}).catch(() => {{}});"
+                );
+            }
         }
 
         // Render the telemery directive
@@ -1189,21 +1201,6 @@ impl<'a> Instantiator<'a, '_> {
 
             let i = self.lowering_options.push((options, i, *lower_ty));
             assert_eq!(i, *index);
-        }
-
-        if let Some(InstantiationMode::Async) = self.bindgen.opts.instantiation_mode {
-            // To avoid uncaught promise rejection errors, we attach an intermediate
-            // Promise.all with a rejection handler, if there are multiple promises.
-            if self.modules.len() > 1 {
-                self.src.js_init.push_str("Promise.all([");
-                for i in 0..self.modules.len() {
-                    if i > 0 {
-                        self.src.js_init.push_str(", ");
-                    }
-                    self.src.js_init.push_str(&format!("module{i}"));
-                }
-                uwriteln!(self.src.js_init, "]).catch(() => {{}});");
-            }
         }
 
         // Set up global stream map, which is used by intrinsics like stream.transfer.
