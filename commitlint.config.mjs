@@ -43,6 +43,7 @@ const config = {
                 'p3-shim',
                 'transpile',
                 'rolldown-plugin-jco',
+                'runtime',
                 'std',
             ],
         ],
