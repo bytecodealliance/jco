@@ -3,16 +3,13 @@ import { join } from 'node:path';
 import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
 import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
+import { assert, describe, suite, test } from 'vitest';
 
 import { transpile, transpileBytes, writeFiles } from '../src/index.js';
-import { parse } from '../src/wasm-tools.js';
-import { componentNew, componentEmbed } from '../src/wasm-tools.js';
+import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 
-import { suite, test, assert, describe } from 'vitest';
-
-import { readFixtureFlags, getTmpDir, getRandomPort } from './helpers.js';
-
-import { getDefaultComponentFixtures, COMPONENT_FIXTURES_DIR } from './common.js';
+import { COMPONENT_FIXTURES_DIR, getDefaultComponentFixtures } from './common.js';
+import { getRandomPort, getTmpDir, readFixtureFlags } from './helpers.js';
 
 suite('codegen', async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -93,6 +90,68 @@ suite(`Naming`, () => {
         assert.isOk(bindingsSource.includes('class Thing$1{'));
         assert.isOk(bindingsSource.includes('Thing: Thing$1'));
     });
+
+    test.concurrent.each(['synchronous', 'promise-returning'] as const)(
+        'Imported resource named promise does not shadow the Promise global (%s module loading)',
+        async (moduleLoading) => {
+            const witSource = `
+                package test:test;
+
+                interface resource-import-and-export {
+                    resource promise {
+                        constructor();
+                    }
+                }
+
+                world test {
+                    import resource-import-and-export;
+                    export resource-import-and-export;
+                }
+            `;
+            const component = await componentNew(await componentEmbed({ witSource, dummy: true }));
+            const name = 'promise-resource-naming';
+            const { files } = await transpileBytes(component, { name, instantiation: 'async', minify: false });
+            const modules = new Map<string, WebAssembly.Module>();
+            for (const [path, bytes] of Object.entries(files)) {
+                if (path.endsWith('.wasm')) {
+                    modules.set(path, new WebAssembly.Module(bytes));
+                }
+            }
+
+            class PromiseResource {}
+
+            const componentImports = { 'test:test/resource-import-and-export': { Promise: PromiseResource } };
+            // Keep core instantiation synchronous so the loader alone determines
+            // whether initialization returns a Promise.
+            const instantiateCore = (module: WebAssembly.Module, coreImports: WebAssembly.Imports) =>
+                new WebAssembly.Instance(module, coreImports);
+
+            const outDir = await getTmpDir();
+            try {
+                await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+                await writeFile(join(outDir, `${name}.js`), files[`${name}.js`]);
+                const { instantiate } = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
+                const initialization = instantiate(
+                    (path: string) => {
+                        const module = modules.get(path);
+                        return moduleLoading === 'promise-returning' ? Promise.resolve(module) : module;
+                    },
+                    componentImports,
+                    instantiateCore,
+                );
+                // Check before awaiting, which would hide the return-type distinction.
+                if (moduleLoading === 'synchronous') {
+                    assert.notInstanceOf(initialization, Promise);
+                } else {
+                    assert.instanceOf(initialization, Promise);
+                }
+                const instance = await initialization;
+                assert.isFunction(instance['test:test/resource-import-and-export'].Promise);
+            } finally {
+                await rm(outDir, { recursive: true, force: true });
+            }
+        },
+    );
 
     test.concurrent(`Instantiation helper deduping`, async () => {
         const fixtureName = 'instantiation-helper-naming';
