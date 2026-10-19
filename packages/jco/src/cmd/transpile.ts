@@ -171,7 +171,7 @@ export interface TranspileOpts {
     noTypescript?: boolean;
     wasiShim?: boolean;
     /** Optional module specifier imported by generated bindings, never loaded during transpilation. */
-    runtimeModule?: string;
+    cmRuntimeEsModule?: string;
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;

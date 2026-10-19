@@ -162,7 +162,7 @@ export interface TranspilationOptions {
     perfStringsSkipCopyUtf16Validation?: boolean;
 
     /** Optional ES module specifier imported by generated bindings for the Component Model runtime */
-    runtimeModule?: string;
+    cmRuntimeEsModule?: string;
 
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
@@ -347,7 +347,7 @@ export async function transpileBytes(
         strict: opts.strict === true,
         perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
-        runtimeModule: opts.runtimeModule,
+        cmRuntimeEsModule: opts.cmRuntimeEsModule,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,

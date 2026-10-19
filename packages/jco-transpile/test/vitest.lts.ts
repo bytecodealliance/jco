@@ -21,7 +21,7 @@ export default defineConfig({
         disableConsoleIntercept: true,
         printConsoleTrace: true,
         passWithNoTests: false,
-        include: ['test/*.ts'],
+        include: ['test/*.ts', 'test/external-runtime/*.ts'],
         exclude: [
             'test/helpers.ts',
             'test/common.ts',

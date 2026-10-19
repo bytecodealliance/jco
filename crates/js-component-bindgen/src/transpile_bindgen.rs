@@ -139,7 +139,7 @@ pub struct TranspileOpts {
     pub perf_strings_skip_copy_utf16_validation: bool,
     /// ES module providing the Component Model runtime implementation used by
     /// generated bindings. The module must export a `runtime` provider.
-    pub runtime_module: Option<String>,
+    pub cm_runtime_es_module: Option<String>,
     /// Represent WIT flags as bigint values instead of objects of booleans.
     #[builder(default)]
     pub flags_as_bigint: bool,
@@ -610,11 +610,11 @@ impl JsBindgen<'_> {
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
-        if uses_external_runtime(&self.all_intrinsics, opts.runtime_module.is_some()) {
+        if uses_external_runtime(&self.all_intrinsics, opts.cm_runtime_es_module.is_some()) {
             uwriteln!(
                 output,
                 "import {{ runtime as {RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
-                js_string_literal(opts.runtime_module.as_deref().unwrap()),
+                js_string_literal(opts.cm_runtime_es_module.as_deref().unwrap()),
             );
         }
 

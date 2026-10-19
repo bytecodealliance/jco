@@ -10,15 +10,15 @@ export function resetRuntimeCreateCallCount() {
 }
 
 export const runtime = {
-    abiVersion: 1,
+    apiVersion: 1,
     create(options) {
-        if (options.requestedAbiVersion !== 1) {
-            throw new Error(`unsupported runtime ABI ${options.requestedAbiVersion}`);
+        if (options.requestedApiVersion !== 1) {
+            throw new Error(`unsupported runtime API ${options.requestedApiVersion}`);
         }
         runtimeCreateCallCount++;
         const RuntimeError = options.platform?.WebAssembly?.RuntimeError ?? WebAssembly.RuntimeError;
         return {
-            abiVersion: 1,
+            apiVersion: 1,
             intrinsics: {
                 resource: {
                     tableFlag: 1 << 30,
