@@ -61,9 +61,10 @@ API is versioned independently from the npm package version.
 
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
-with `apiVersion: 1` and `intrinsics.resource.tableGet`. Generated bindings
+with `apiVersion: 1`, `intrinsics.resource.tableGet`, and `intrinsics.conversion`.
+Generated bindings
 pass `requestedApiVersion: 1` to `create`, check both API versions, and verify
-that the required intrinsic is callable. Other runtime intrinsics continue to
+that each required intrinsic is callable. Other runtime intrinsics continue to
 be generated inline.
 
 Generated bindings pass the selected WebAssembly implementation in
@@ -79,6 +80,20 @@ Each call to the generated `instantiate` function creates a fresh runtime;
 direct ES module output creates its runtime when the module is evaluated.
 Generated bindings currently do not invoke the optional `dispose()` hook, so
 providers must not rely on it for automatic cleanup.
+
+### Conversions
+
+`intrinsics.conversion` implements all helpers from bindgen's `conversion.rs`:
+numeric coercion and validation, integer/float bitcasts, character conversion,
+string/result formatting, and 64-bit word splitting/merging. The exported
+`ConversionIntrinsics` interface describes their arguments and results.
+
+`options.strict` selects the same numeric checks as inline generation.
+The 8/16/32-bit integer conversions validate before coercion; 64-bit conversions
+coerce with `BigInt` before checking range. Without strict mode, integer values
+wrap to their target widths. Bitcast scratch arrays are private to each runtime
+instance. Conversion errors retain the inline implementation's JavaScript error
+types and messages.
 
 ### Resource tables
 

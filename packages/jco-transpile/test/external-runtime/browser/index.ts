@@ -1,4 +1,4 @@
-import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { env } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -70,7 +70,13 @@ suite('External Component Model runtime in the browser', () => {
                     });
                     await writeFiles(files, { baseDir: outDir });
                     if (provider === 'custom') {
-                        await copyFile(CUSTOM_PROVIDER, join(outDir, 'provider.js'));
+                        await writeFile(
+                            join(outDir, 'provider.js'),
+                            (await readFile(CUSTOM_PROVIDER, 'utf8')).replace(
+                                '../../../jco-cm-runtime/dist/index.js',
+                                '/jco-cm-runtime/dist/index.js',
+                            ),
+                        );
                     }
                     const result = await runBrowserCase({
                         browser,

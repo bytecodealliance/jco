@@ -25,7 +25,13 @@ async function installRuntimeInConsumer(dir) {
     const packageDir = join(dir, "node_modules", cmRuntimeEsModule);
     await mkdir(packageDir, { recursive: true });
     await writeFile(join(packageDir, "package.json"), JSON.stringify({ name: cmRuntimeEsModule, type: "module" }));
-    await copyFile(runtimeFixture, join(packageDir, "index.js"));
+    await writeFile(
+        join(packageDir, "index.js"),
+        (await readFile(runtimeFixture, "utf8")).replace(
+            "../../../jco-cm-runtime/dist/index.js",
+            new URL("../../jco-cm-runtime/dist/index.js", import.meta.url).href,
+        ),
+    );
     const provider = await import(pathToFileURL(join(packageDir, "index.js")).href);
     provider.resetRuntimeCreateCallCount();
     return provider;

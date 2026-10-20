@@ -50,6 +50,30 @@ pub enum ConversionIntrinsic {
 }
 
 impl ConversionIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::I32ToF32 => "conversion.i32ToF32",
+            Self::I64ToF64 => "conversion.i64ToF64",
+            Self::F32ToI32 => "conversion.f32ToI32",
+            Self::F64ToI64 => "conversion.f64ToI64",
+            Self::I32ToChar => "conversion.i32ToChar",
+            Self::ToBigInt64 => "conversion.toInt64",
+            Self::ToBigUint64 => "conversion.toUint64",
+            Self::ToInt16 => "conversion.toInt16",
+            Self::ToInt32 => "conversion.toInt32",
+            Self::ToInt8 => "conversion.toInt8",
+            Self::ToString => "conversion.toString",
+            Self::ToUint16 => "conversion.toUint16",
+            Self::ToUint32 => "conversion.toUint32",
+            Self::ToUint8 => "conversion.toUint8",
+            Self::ToResultString => "conversion.toResultString",
+            Self::RequireValidNumericPrimitive => "conversion.requireValidNumericPrimitive",
+            Self::IsValidNumericPrimitive => "conversion.isValidNumericPrimitive",
+            Self::MergeBigInt64 => "conversion.mergeInt64",
+            Self::SplitBigInt64 => "conversion.splitInt64",
+        }
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -394,6 +418,74 @@ impl ConversionIntrinsic {
                 const {name} = (l, h) => (BigInt(l|0) | (BigInt(h|0) << 32n));
                 ");
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TranspileOpts;
+    use crate::intrinsics::{Intrinsic, render_intrinsics};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn conversion_runtime_bindings_replace_inline_implementations_and_storage() {
+        let conversions = [
+            ConversionIntrinsic::I32ToF32,
+            ConversionIntrinsic::I64ToF64,
+            ConversionIntrinsic::F32ToI32,
+            ConversionIntrinsic::F64ToI64,
+            ConversionIntrinsic::I32ToChar,
+            ConversionIntrinsic::ToBigInt64,
+            ConversionIntrinsic::ToBigUint64,
+            ConversionIntrinsic::ToInt16,
+            ConversionIntrinsic::ToInt32,
+            ConversionIntrinsic::ToInt8,
+            ConversionIntrinsic::ToString,
+            ConversionIntrinsic::ToUint16,
+            ConversionIntrinsic::ToUint32,
+            ConversionIntrinsic::ToUint8,
+            ConversionIntrinsic::ToResultString,
+            ConversionIntrinsic::RequireValidNumericPrimitive,
+            ConversionIntrinsic::IsValidNumericPrimitive,
+            ConversionIntrinsic::MergeBigInt64,
+            ConversionIntrinsic::SplitBigInt64,
+        ];
+        for external in [false, true] {
+            for strict in [false, true] {
+                let mut intrinsics: BTreeSet<_> =
+                    conversions.into_iter().map(Intrinsic::Conversion).collect();
+                let opts = TranspileOpts {
+                    cm_runtime_es_module: external.then(|| "./runtime.js".into()),
+                    strict,
+                    ..TranspileOpts::default()
+                };
+                let source = render_intrinsics(
+                    RenderIntrinsicsArgs::builder()
+                        .intrinsics(&mut intrinsics)
+                        .transpile_opts(&opts)
+                        .build(),
+                );
+                assert_eq!(source.contains("const i32ToF32I ="), !external);
+                assert_eq!(source.contains("const i64ToF64I ="), !external);
+                assert_eq!(source.contains("function toInt32(val)"), !external);
+                assert_eq!(source.contains("_jcoRuntimeProvider.create("), external);
+                if external {
+                    assert!(source.contains(&format!("strict: {strict},")));
+                    for conversion in conversions {
+                        assert!(source.contains(&format!(
+                            "runtime intrinsic {} must be a function",
+                            conversion.runtime_path()
+                        )));
+                        assert!(source.contains(&format!("const {} = (() =>", conversion.name())));
+                    }
+                    assert_eq!(
+                        source.matches("return intrinsic.bind(receiver);").count(),
+                        19
+                    );
+                }
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -103,18 +103,31 @@ suite('External Component Model runtime', () => {
         {
             name: 'a non-function intrinsic',
             provider:
-                '{ apiVersion: 1, create() { return { apiVersion: 1, intrinsics: { resource: { tableGet: 0 } } }; } }',
+                '{ apiVersion: 1, create(options) { const instance = defaultRuntime.create(options); instance.intrinsics.resource.tableGet = 0; return instance; } }',
             error: 'runtime intrinsic resource.tableGet must be a function',
         },
         {
             name: 'a missing resource namespace',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 1, intrinsics: {} }; } }',
+            provider:
+                '{ apiVersion: 1, create(options) { const instance = defaultRuntime.create(options); delete instance.intrinsics.resource; return instance; } }',
             error: 'runtime intrinsic resource.tableGet must be a function',
+        },
+        {
+            name: 'a non-function conversion intrinsic',
+            provider:
+                '{ apiVersion: 1, create(options) { const instance = defaultRuntime.create(options); instance.intrinsics.conversion.toUint32 = 0; return instance; } }',
+            error: 'runtime intrinsic conversion.toUint32 must be a function',
+        },
+        {
+            name: 'a missing conversion namespace',
+            provider:
+                '{ apiVersion: 1, create(options) { const instance = defaultRuntime.create(options); delete instance.intrinsics.conversion; return instance; } }',
+            error: 'runtime intrinsic conversion.toUint32 must be a function',
         },
         {
             name: 'missing intrinsics',
             provider: '{ apiVersion: 1, create() { return { apiVersion: 1 }; } }',
-            error: 'runtime intrinsic resource.tableGet must be a function',
+            error: 'runtime intrinsic conversion.toUint32 must be a function',
         },
     ])('rejects $name during instantiation', async ({ provider, error }) => {
         const outDir = await getTmpDir();
@@ -127,7 +140,11 @@ suite('External Component Model runtime', () => {
             });
             await writeFiles(files, { baseDir: outDir });
             await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
-            await writeFile(join(outDir, 'provider.js'), `export const runtime = ${provider};`);
+            await writeFile(
+                join(outDir, 'provider.js'),
+                `import { runtime as defaultRuntime } from ${JSON.stringify(defaultCmRuntimeEsModule)};
+export const runtime = ${provider};`,
+            );
             const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
             assert.throws(
                 () => bindings.instantiate((moduleName: string) => new WebAssembly.Module(files[moduleName]), {}),
@@ -189,9 +206,13 @@ suite('External Component Model runtime', () => {
                 join(packageDir, 'package.json'),
                 JSON.stringify({ name: cmRuntimeEsModule, type: 'module' }),
             );
-            await copyFile(
+            const providerSource = await readFile(
                 new URL('../fixtures/custom-runtime-provider.js', import.meta.url),
+                'utf8',
+            );
+            await writeFile(
                 join(packageDir, 'index.js'),
+                providerSource.replace('../../../jco-cm-runtime/dist/index.js', defaultCmRuntimeEsModule),
             );
             const provider = await import(pathToFileURL(join(packageDir, 'index.js')).href);
             provider.resetRuntimeCreateCallCount();

@@ -1,4 +1,5 @@
 import { createResourceIntrinsics } from './intrinsics/resource.js';
+import { createConversionIntrinsics } from './intrinsics/conversion.js';
 import {
     CM_RUNTIME_API_VERSION,
     type ComponentModelRuntime,
@@ -26,6 +27,7 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
     return {
         apiVersion: CM_RUNTIME_API_VERSION,
         intrinsics: {
+            conversion: createConversionIntrinsics(options.strict),
             resource: createResourceIntrinsics(platform.WebAssembly.RuntimeError),
         },
     };

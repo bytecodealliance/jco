@@ -1,4 +1,5 @@
 export { runtime } from './runtime.js';
+export type { ConversionIntrinsics } from './intrinsics/conversion.js';
 export {
     CM_RUNTIME_API_VERSION,
     type AsyncDeterminism,

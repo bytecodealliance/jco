@@ -1,3 +1,5 @@
+import type { ConversionIntrinsics } from './intrinsics/conversion.js';
+
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
 export type RuntimeApiVersion = number;
@@ -38,6 +40,7 @@ export interface ResourceIntrinsics {
 }
 
 export interface RuntimeIntrinsics {
+    readonly conversion: ConversionIntrinsics;
     readonly resource: ResourceIntrinsics;
 }
 

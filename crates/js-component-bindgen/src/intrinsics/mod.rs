@@ -2570,12 +2570,13 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             ));
         }
     }
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
+    let inline_conversion = |intrinsic| {
+        args.intrinsics.contains(&Intrinsic::Conversion(intrinsic))
+            && !Intrinsic::Conversion(intrinsic)
+                .is_runtime_provided(args.transpile_opts.cm_runtime_es_module.is_some())
+    };
+    if inline_conversion(ConversionIntrinsic::F32ToI32)
+        || inline_conversion(ConversionIntrinsic::I32ToF32)
     {
         output.push_str(
             "
@@ -2585,12 +2586,8 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         );
     }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
+    if inline_conversion(ConversionIntrinsic::F64ToI64)
+        || inline_conversion(ConversionIntrinsic::I64ToF64)
     {
         output.push_str(
             "
@@ -2687,6 +2684,10 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::Conversion(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+            },
             Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
                 IntrinsicBinding::Runtime {
                     local_name: self.name(),
