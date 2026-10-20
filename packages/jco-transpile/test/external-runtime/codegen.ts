@@ -4,7 +4,7 @@ import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
 import { assert, suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../../src/index.js';
+import { transpile, writeFiles } from '../transpilation.js';
 
 import {
     resetRuntimeCreateCallCount,
@@ -144,7 +144,10 @@ suite('External Component Model runtime', () => {
     });
 
     test('keeps canon resource.rep self-contained by default', async () => {
-        const { files, imports } = await transpile(fixture, { name: 'external-runtime-resource' });
+        const { files, imports } = await transpile(fixture, {
+            name: 'external-runtime-resource',
+            cmRuntimeEsModule: undefined,
+        });
         const source = new TextDecoder().decode(files['external-runtime-resource.js']);
 
         assert.notInclude(source, '_jcoRuntimeProvider');

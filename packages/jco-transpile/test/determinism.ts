@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Buffer } from 'node:buffer';
 
-import { transpileBytes } from '../src/index.js';
+import { transpileBytes } from './transpilation.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 import { suite, test, assert } from 'vitest';

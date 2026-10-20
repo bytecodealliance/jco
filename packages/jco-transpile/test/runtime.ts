@@ -4,7 +4,7 @@ import { URL, fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile, writeFiles } from '../src/index.js';
+import { transpile, writeFiles } from './transpilation.js';
 
 import { getDefaultComponentFixtures, LOCAL_TEST_COMPONENTS_JS_DIR } from './common.js';
 import { nodeExec, readFixtureFlags, runTSCodegen } from './helpers.js';

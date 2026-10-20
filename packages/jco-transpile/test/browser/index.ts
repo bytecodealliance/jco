@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { env } from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +7,7 @@ import { componentize } from '@bytecodealliance/componentize-js';
 import puppeteer, { type Browser } from 'puppeteer';
 import { afterAll, assert, beforeAll, suite, test } from 'vitest';
 
-import { transpileBytes, writeFiles } from '../../src/index.js';
+import { defaultRuntimeUrl, externalRuntime, transpileBytes, writeFiles } from '../transpilation.js';
 import { WEBIDL_FIXTURES_DIR, COMPONENT_FIXTURES_DIR } from '../common.js';
 import { getTmpDir, runBrowserCase, setupAsyncTest, startTestWebServer } from '../helpers.js';
 
@@ -48,6 +48,9 @@ suite('Browser', () => {
 
     beforeAll(async () => {
         tmpDir = await getTmpDir();
+        if (externalRuntime) {
+            await cp(new URL('.', defaultRuntimeUrl), join(tmpDir, 'cm-runtime'), { recursive: true });
+        }
         const server = await startTestWebServer({
             routes: [
                 { urlPrefix: '/tmpdir/', basePathURL: pathToFileURL(`${tmpDir}/`) },
@@ -83,7 +86,10 @@ suite('Browser', () => {
             serverPort,
             module: TRANSPILE_CASE_MODULE,
             exportName: 'transpile',
-            args: [BROWSER_COMPONENTS.map((name) => `${RUNTIME_COMPONENTS_URL}/${name}`)],
+            args: [
+                BROWSER_COMPONENTS.map((name) => `${RUNTIME_COMPONENTS_URL}/${name}`),
+                externalRuntime ? `http://localhost:${serverPort}/tmpdir/cm-runtime/index.js` : undefined,
+            ],
         })) as { path: string; ok: boolean; exports?: string[]; error?: string }[];
 
         const failures = results.filter((result) => !result.ok);
@@ -111,7 +117,10 @@ suite('Browser', () => {
                 worldName: `${fixture === 'dom' ? 'window' : fixture}-test`,
             });
             const outDir = resolve(tmpDir, fixture);
-            const { files } = await transpileBytes(component, { name: fixture });
+            const { files } = await transpileBytes(component, {
+                name: fixture,
+                cmRuntimeEsModule: externalRuntime ? '../cm-runtime/index.js' : undefined,
+            });
             await writeFiles(files, { baseDir: outDir });
             await runBrowserCase({ browser, serverPort, module: `/tmpdir/${fixture}/${fixture}.js` });
         });
@@ -131,6 +140,7 @@ suite('Browser', () => {
             jco: {
                 transpile: {
                     extraArgs: {
+                        cmRuntimeEsModule: externalRuntime ? '../../cm-runtime/index.js' : undefined,
                         asyncImports: ['something:test/test-interface#call-async'],
                         asyncExports: ['run-async'],
                     },

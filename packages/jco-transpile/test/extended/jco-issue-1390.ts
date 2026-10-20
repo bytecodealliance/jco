@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../../src/index.js';
+import { transpile, writeFiles } from '../transpilation.js';
 import { EXTENDED_TEST_COMPONENTS_DIR } from '../common.js';
 
 suite('jco issue 1390', () => {

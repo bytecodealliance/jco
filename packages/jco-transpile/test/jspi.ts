@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile } from '../src/index.js';
+import { transpile } from './transpilation.js';
 
 import { getTmpDir, setupAsyncTest } from './helpers.js';
 import { AsyncFunction } from './common.js';

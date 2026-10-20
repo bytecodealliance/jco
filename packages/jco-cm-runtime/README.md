@@ -27,6 +27,33 @@ jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-run
 The module name is written into the generated bindings and resolved when those
 bindings are loaded. The runtime package can be released independently of Jco.
 
+The package's `runtime` export provides the default implementation. Alternative
+providers can import it under a local name, delegate unchanged operations to
+`create(options)`, and replace selected methods:
+
+```js
+import { runtime as defaultRuntime } from '@bytecodealliance/jco-cm-runtime';
+
+export const runtime = {
+    apiVersion: defaultRuntime.apiVersion,
+    create(options) {
+        const instance = defaultRuntime.create(options);
+        return {
+            ...instance,
+            intrinsics: {
+                ...instance.intrinsics,
+                resource: {
+                    ...instance.intrinsics.resource,
+                    tableGet(table, handle) {
+                        return instance.intrinsics.resource.tableGet(table, handle);
+                    },
+                },
+            },
+        };
+    },
+};
+```
+
 This package is currently experimental. Its JavaScript Component Model runtime
 API is versioned independently from the npm package version.
 

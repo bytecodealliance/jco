@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer, { type Browser } from 'puppeteer';
 import { afterAll, assert, beforeAll, expect, suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../../../src/index.js';
+import { transpile, writeFiles } from '../../transpilation.js';
 import { parse } from '../../../src/wasm-tools.js';
 import { getTmpDir, runBrowserCase, startTestWebServer } from '../../helpers.js';
 

@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile, transpileBytes } from '../src/transpile.js';
+import { transpile, transpileBytes } from './transpilation.js';
 
 import { readComponentBytes } from './helpers.js';
 

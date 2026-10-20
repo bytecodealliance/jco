@@ -5,7 +5,7 @@ import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
 import { assert, describe, suite, test } from 'vitest';
 
-import { transpile, transpileBytes, writeFiles } from '../src/index.js';
+import { transpile, transpileBytes, writeFiles } from './transpilation.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 
 import { COMPONENT_FIXTURES_DIR, getDefaultComponentFixtures } from './common.js';
