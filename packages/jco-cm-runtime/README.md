@@ -61,9 +61,9 @@ API is versioned independently from the npm package version.
 
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
-with `apiVersion: 1`, `intrinsics.resource.tableGet`, and `intrinsics.conversion`.
-Generated bindings
-pass `requestedApiVersion: 1` to `create`, check both API versions, and verify
+with `apiVersion: 1`, `intrinsics.resource.tableGet`, `intrinsics.conversion`,
+and `intrinsics.jsHelper`. Generated bindings pass `requestedApiVersion: 1`
+to `create`, check both API versions, and verify
 that each required intrinsic is callable. Other runtime intrinsics continue to
 be generated inline.
 
@@ -94,6 +94,14 @@ coerce with `BigInt` before checking range. Without strict mode, integer values
 wrap to their target widths. Bitcast scratch arrays are private to each runtime
 instance. Conversion errors retain the inline implementation's JavaScript error
 types and messages.
+
+### JavaScript helpers
+
+`intrinsics.jsHelper.emptyFunc` ignores its arguments and returns `undefined`.
+`intrinsics.jsHelper.dataView(memory)` caches a `DataView` for the most recently
+used memory buffer. Each runtime owns its cache; memory growth or switching
+buffers refreshes the view. Both ordinary and shared memory buffers are supported.
+The `JsHelperIntrinsics` type describes these helpers.
 
 ### Resource tables
 

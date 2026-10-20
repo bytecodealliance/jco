@@ -16,6 +16,13 @@ pub enum JsHelperIntrinsic {
 }
 
 impl JsHelperIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::EmptyFunc => "jsHelper.emptyFunc",
+            Self::DataView => "jsHelper.dataView",
+        }
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         ["emptyFunc", "dataView"]
@@ -39,6 +46,46 @@ impl JsHelperIntrinsic {
                 let dv = new DataView(new ArrayBuffer());
                 const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
             "),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TranspileOpts;
+    use crate::intrinsics::{Intrinsic, render_intrinsics};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn external_helpers_do_not_emit_inline_cache_or_functions() {
+        for external in [false, true] {
+            let mut intrinsics = BTreeSet::from([
+                Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc),
+                Intrinsic::JsHelper(JsHelperIntrinsic::DataView),
+            ]);
+            let opts = TranspileOpts {
+                cm_runtime_es_module: external.then(|| "./runtime.js".into()),
+                ..TranspileOpts::default()
+            };
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+            assert_eq!(source.contains("let dv = new DataView"), !external);
+            assert_eq!(source.contains("const emptyFunc = () => {};"), !external);
+            assert_eq!(source.contains("const dataView = mem =>"), !external);
+            for intrinsic in [JsHelperIntrinsic::EmptyFunc, JsHelperIntrinsic::DataView] {
+                assert_eq!(source.contains(intrinsic.runtime_path()), external);
+            }
+            if external {
+                assert_eq!(
+                    source.matches("return intrinsic.bind(receiver);").count(),
+                    2
+                );
+            }
         }
     }
 }

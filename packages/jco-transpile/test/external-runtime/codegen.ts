@@ -127,7 +127,7 @@ suite('External Component Model runtime', () => {
         {
             name: 'missing intrinsics',
             provider: '{ apiVersion: 1, create() { return { apiVersion: 1 }; } }',
-            error: 'runtime intrinsic conversion.toUint32 must be a function',
+            error: /runtime intrinsic [\w.]+ must be a function/,
         },
     ])('rejects $name during instantiation', async ({ provider, error }) => {
         const outDir = await getTmpDir();
