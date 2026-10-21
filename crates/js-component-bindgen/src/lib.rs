@@ -271,10 +271,7 @@ fn normalize_transpile_config(config: &mut TranspileConfig) -> Result<()> {
     normalize_namespace_object_options(&mut config.opts)?;
     #[cfg(feature = "external-runtime")]
     if let Some(cm_runtime_es_module) = &config.cm_runtime_es_module {
-        ensure!(
-            !cm_runtime_es_module.is_empty() && !cm_runtime_es_module.chars().any(char::is_control),
-            "cmRuntimeEsModule must be a non-empty module specifier without control characters"
-        );
+        intrinsics::runtime::module_specifier(cm_runtime_es_module, "runtime")?;
     }
     Ok(())
 }
@@ -518,10 +515,10 @@ mod tests {
         assert!(default.cm_runtime_es_module.is_none());
 
         let mut custom = TranspileConfig::builder()
-            .cm_runtime_es_module("./runtime.js".into())
+            .cm_runtime_es_module("./runtime".into())
             .build();
         normalize_transpile_config(&mut custom).unwrap();
-        assert_eq!(custom.cm_runtime_es_module.as_deref(), Some("./runtime.js"));
+        assert_eq!(custom.cm_runtime_es_module.as_deref(), Some("./runtime"));
 
         for invalid in ["", "runtime\nmodule"] {
             let mut config = TranspileConfig::builder()
@@ -533,7 +530,7 @@ mod tests {
 
     #[cfg(all(feature = "transpile-bindgen", feature = "external-runtime"))]
     #[test]
-    fn resource_rep_uses_external_runtime_provider() {
+    fn resource_rep_uses_named_runtime_exports() {
         let component = wat::parse_str(
             r#"
                 (component
@@ -577,43 +574,54 @@ mod tests {
                         .instantiation_mode(InstantiationMode::Sync)
                         .build(),
                 )
-                .cm_runtime_es_module("./custom-runtime.js".into())
+                .cm_runtime_es_module("./custom-runtime".into())
                 .build(),
         )
         .unwrap();
         let source = generated_javascript(&transpiled);
 
         let import_position = source
-            .find("import { runtime as _jcoRuntimeProvider } from \"./custom-runtime.js\";")
+            .find("import { tableGet as rscTableGet } from \"./custom-runtime/intrinsics/resource.js\";")
             .unwrap();
         let instantiate_position = source.find("export function instantiate(").unwrap();
-        let create_position = source.find("_jcoRuntimeProvider.create(").unwrap();
+        let realm_position = source.find("const WebAssembly = options?").unwrap();
+        let context_position = source
+            .find("const _jcoResourceTableGetContext = { RuntimeError: WebAssembly.RuntimeError };")
+            .unwrap();
         assert!(import_position < instantiate_position);
-        assert!(instantiate_position < create_position);
-        assert!(source.contains("const rscTableGet = (() => {"));
-        assert!(source.contains("return intrinsic.bind(receiver);"));
-        assert!(source.contains("rscTableGet("));
-        assert!(!source.contains("function rscTableGet(table, handle)"));
-        assert_eq!(source.matches("_jcoRuntimeProvider.create(").count(), 1);
+        assert!(instantiate_position < realm_position);
+        assert!(realm_position < context_position);
         assert!(
-            !transpiled
-                .imports
-                .contains(&"./custom-runtime.js".to_string())
+            source.contains("rscTableGet(_jcoResourceTableGetContext, handleTable0, handle).rep")
         );
+        assert!(!source.contains("function rscTableGet(table, handle)"));
+        assert!(!source.contains("_jcoRuntimeProvider"));
+        assert!(!source.contains(".bind(receiver)"));
+        assert_eq!(source.matches("tableGet as rscTableGet").count(), 1);
+        assert_eq!(
+            source.matches("const _jcoResourceTableGetContext").count(),
+            1
+        );
+        assert!(source.contains("from \"./custom-runtime/runtime.js\""));
+        assert!(!transpiled.imports.contains(&"./custom-runtime".to_string()));
     }
 
-    #[cfg(feature = "transpile-bindgen")]
+    #[cfg(all(feature = "transpile-bindgen", feature = "external-runtime"))]
     #[test]
     fn unrelated_component_does_not_import_external_runtime() {
         let component = wat::parse_str("(component)").unwrap();
-        let transpiled = transpile(
+        let transpiled = transpile_with_config(
             &component,
-            TranspileOpts::builder().name("adder".into()).build(),
+            TranspileConfig::builder()
+                .opts(TranspileOpts::builder().name("adder".into()).build())
+                .cm_runtime_es_module("unused-runtime".into())
+                .build(),
         )
         .unwrap();
         let source = generated_javascript(&transpiled);
 
         assert!(!source.contains("_jcoRuntimeProvider"));
-        assert!(!source.contains("@bytecodealliance/jco-cm-runtime"));
+        assert!(!source.contains("unused-runtime"));
+        assert!(!source.contains("_jcoResourceTableGetContext"));
     }
 }
