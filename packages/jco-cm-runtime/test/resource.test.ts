@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { CM_RUNTIME_API_VERSION, runtime, type ComponentModelRuntimeProvider } from '../src/index.js';
 
 const TABLE_FLAG = 1 << 30;
+const TABLE_OWN = 2 ** 32;
 
 function createRuntime() {
     return runtime.create({
@@ -17,15 +18,24 @@ function createRuntime() {
 describe('resource.tableGet', () => {
     test('reads owned and borrowed resource entries', () => {
         const { tableGet } = createRuntime().intrinsics.resource;
-        const table = [TABLE_FLAG, 0, 7, 42 | TABLE_FLAG, 11, 24];
+        const table = [TABLE_FLAG, 0, 7, 42 + TABLE_OWN, 11, 24];
 
         expect(tableGet(table, 1)).toEqual({ rep: 42, scope: 7, own: true });
         expect(tableGet(table, 2)).toEqual({ rep: 24, scope: 11, own: false });
     });
 
+    // see: https://github.com/bytecodealliance/jco/issues/2293
+    test.each([0x40000000, 0x7ffffff0, 0x80000010, 0xc0000010, 0xffffffff])('keeps every bit of rep %i', (rep) => {
+        const { tableGet } = createRuntime().intrinsics.resource;
+        const table = [TABLE_FLAG, 0, 0, rep + TABLE_OWN, 3, rep];
+
+        expect(tableGet(table, 1)).toEqual({ rep, scope: 0, own: true });
+        expect(tableGet(table, 2)).toEqual({ rep, scope: 3, own: false });
+    });
+
     test('accepts zero representations for owned and borrowed resources', () => {
         const { tableGet } = createRuntime().intrinsics.resource;
-        const table = [TABLE_FLAG, 0, 0, TABLE_FLAG, 3, 0];
+        const table = [TABLE_FLAG, 0, 0, TABLE_OWN, 3, 0];
 
         expect(tableGet(table, 1)).toEqual({ rep: 0, scope: 0, own: true });
         expect(tableGet(table, 2)).toEqual({ rep: 0, scope: 3, own: false });
@@ -36,7 +46,7 @@ describe('resource.tableGet', () => {
         { name: 'a freed entry', table: [TABLE_FLAG, 0, TABLE_FLAG, 0], handle: 1 },
         {
             name: 'a hole belonging to another handle kind',
-            table: Object.assign([TABLE_FLAG, 0], { 4: 0, 5: TABLE_FLAG }),
+            table: Object.assign([TABLE_FLAG, 0], { 4: 0, 5: TABLE_OWN }),
             handle: 1,
         },
         { name: 'an index past the end of the table', table: [TABLE_FLAG, 0], handle: 4 },
@@ -66,13 +76,13 @@ describe('runtime provider', () => {
     test('rejects an incompatible requested API', () => {
         expect(() =>
             runtime.create({
-                requestedApiVersion: 2,
+                requestedApiVersion: 1,
                 strict: false,
                 flagsAsBigInt: false,
                 nodejsCompat: true,
                 asyncDeterminism: 'random',
             }),
-        ).toThrow('requested 2, supported 1');
+        ).toThrow('requested 1, supported 2');
     });
 
     test('creates isolated runtime objects', () => {

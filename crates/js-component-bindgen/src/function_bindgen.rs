@@ -2877,8 +2877,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         let rsc_table_remove = self
                             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-                        let rsc_flag = self
-                            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
+                        let rsc_own_flag = self.intrinsic(Intrinsic::Resource(
+                            ResourceIntrinsic::ResourceTableOwnFlag,
+                        ));
                         if !imported {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
@@ -2942,7 +2943,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 r#"
-                                  var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};
+                                  var {rep} = handleTable{tid}[({handle} << 1) + 1] % {rsc_own_flag};
                                   var {rsc} = captureTable{rid}.get({rep});
                                   if (!{rsc}) {{
                                       {rsc} = Object.create({local_name}.prototype);
@@ -3085,18 +3086,18 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // handle. This is because it is not possible for borrow handles to be passed
                                 // back reentrantly.
                                 // We then set the handle to the rep per the local borrow rule.
-                                let rsc_flag = self.intrinsic(Intrinsic::Resource(
-                                    ResourceIntrinsic::ResourceTableFlag,
+                                let rsc_own_flag = self.intrinsic(Intrinsic::Resource(
+                                    ResourceIntrinsic::ResourceTableOwnFlag,
                                 ));
                                 let own_handle = format!("handle{}", self.tmp());
                                 uwriteln!(
                                     self.src,
                                     r#"
                                       var {own_handle} = {op}[{symbol_resource_handle}];
-                                      if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
+                                      if (!{own_handle} || !(handleTable{tid}[({own_handle} << 1) + 1] >= {rsc_own_flag})) {{
                                           throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                       }}
-                                      var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};
+                                      var {handle} = handleTable{tid}[({own_handle} << 1) + 1] - {rsc_own_flag};
                                     "#,
                                 );
                             }

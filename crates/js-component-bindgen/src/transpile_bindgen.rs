@@ -6994,7 +6994,8 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::SymbolResourceRep);
             instantiator.add_intrinsic(Intrinsic::SymbolDispose);
             instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-            instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
+            instantiator
+                .add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableOwnFlag));
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
             let table_ty = &component_types[*ty_idx];
             let resource_component_idx = table_ty.unwrap_concrete_instance();
@@ -7062,7 +7063,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                 let rsc_table_remove =
                                     ResourceIntrinsic::ResourceTableRemove.name();
                                 let tid = tid.as_u32();
-                                let rsc_flag = ResourceIntrinsic::ResourceTableFlag.name();
+                                let rsc_own_flag = ResourceIntrinsic::ResourceTableOwnFlag.name();
                                 let component_idx = component_idx.as_u32();
 
                                 // Mirrors `Instruction::HandleLift` in `function_bindgen.rs`:
@@ -7072,7 +7073,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                     format!(
                                         r#"
                                       (handle) => {{
-                                          const rep = handleTable{tid}[(handle << 1) + 1] & ~{rsc_flag};
+                                          const rep = handleTable{tid}[(handle << 1) + 1] % {rsc_own_flag};
                                           let resourceObj = captureTable{rid}.get(rep);
                                           if (!resourceObj) {{
                                               resourceObj = Object.create({local_name}.prototype);

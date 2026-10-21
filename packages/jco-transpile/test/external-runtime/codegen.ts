@@ -88,33 +88,33 @@ suite('External Component Model runtime', () => {
     test.each([
         {
             name: 'a missing factory',
-            provider: '{ apiVersion: 1 }',
+            provider: '{ apiVersion: 2 }',
             error: 'runtime provider must define create(options)',
         },
         {
             name: 'an incompatible provider API before calling its factory',
-            provider: '{ apiVersion: 2, create() { throw new Error("factory must not run"); } }',
-            error: 'runtime API: requested 1, supported 2',
+            provider: '{ apiVersion: 1, create() { throw new Error("factory must not run"); } }',
+            error: 'runtime API: requested 2, supported 1',
         },
         {
             name: 'an incompatible instance API',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 2 }; } }',
-            error: 'runtime API instance: requested 1, received 2',
+            provider: '{ apiVersion: 2, create() { return { apiVersion: 1 }; } }',
+            error: 'runtime API instance: requested 2, received 1',
         },
         {
             name: 'a non-function intrinsic',
             provider:
-                '{ apiVersion: 1, create() { return { apiVersion: 1, intrinsics: { resource: { tableGet: 0 } } }; } }',
+                '{ apiVersion: 2, create() { return { apiVersion: 2, intrinsics: { resource: { tableGet: 0 } } }; } }',
             error: 'runtime intrinsic resource.tableGet must be a function',
         },
         {
             name: 'a missing resource namespace',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 1, intrinsics: {} }; } }',
+            provider: '{ apiVersion: 2, create() { return { apiVersion: 2, intrinsics: {} }; } }',
             error: 'runtime intrinsic resource.tableGet must be a function',
         },
         {
             name: 'missing intrinsics',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 1 }; } }',
+            provider: '{ apiVersion: 2, create() { return { apiVersion: 2 }; } }',
             error: 'runtime intrinsic resource.tableGet must be a function',
         },
     ])('rejects $name during instantiation', async ({ provider, error }) => {
