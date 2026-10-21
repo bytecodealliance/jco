@@ -345,7 +345,8 @@ impl ResourceIntrinsic {
                 let resource_transfer_borrow_fn = self.name();
                 let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
                 let resource_borrows = render_args.require_intrinsic(Self::ResourceCallBorrows);
-                let rsc_table_get = render_args.require_intrinsic(Self::ResourceTableGet);
+                let table_get_call =
+                    render_args.intrinsic_call(Self::ResourceTableGet, "fromTable, handle");
                 let rsc_table_create_borrow =
                     render_args.require_intrinsic(Self::ResourceTableCreateBorrow);
                 let scope_id = render_args.require_intrinsic(Intrinsic::ScopeId);
@@ -360,7 +361,7 @@ impl ResourceIntrinsic {
                     r#"
                     function {resource_transfer_borrow_fn}(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const {{ rep, own }} = {rsc_table_get}(fromTable, handle);
+                        const {{ rep, own }} = {table_get_call};
 
                         let toTable = {handle_tables}[toTid];
                         if (!toTable) {{
