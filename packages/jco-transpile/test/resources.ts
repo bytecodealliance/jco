@@ -85,11 +85,11 @@ suite('resources', () => {
         { name: 'inline', cmRuntimeEsModule: undefined },
         {
             name: 'external',
-            cmRuntimeEsModule: new URL('../../jco-cm-runtime/dist/index.js', import.meta.url).href,
+            cmRuntimeEsModule: new URL('../../jco-cm-runtime/dist/', import.meta.url).href,
         },
         {
             name: 'custom',
-            cmRuntimeEsModule: new URL('./fixtures/custom-runtime-provider.js', import.meta.url).href,
+            cmRuntimeEsModule: new URL('./fixtures/custom-runtime/', import.meta.url).href,
         },
     ])('resource reps survive own and borrow transfers ($name runtime)', async ({ cmRuntimeEsModule }) => {
         const { instance, cleanup } = await setupAsyncTest({
