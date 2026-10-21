@@ -25,10 +25,18 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./runtime": {
+            "types": "./dist/runtime.d.ts",
+            "default": "./dist/runtime.js"
+        },
+        "./intrinsics/resource": {
+            "types": "./dist/intrinsics/resource.d.ts",
+            "default": "./dist/intrinsics/resource.js"
         }
     },
     "scripts": {
-        "build": "tsc -p tsconfig.build.json",
+        "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
         "types:check": "tsc -p tsconfig.json",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
