@@ -70,6 +70,7 @@ jobs:
       - name: Build and test Component Model runtime
         run: |
           pnpm --filter '@bytecodealliance/jco-cm-runtime' run build
+          pnpm --filter '@bytecodealliance/jco-cm-runtime' run types:check
           pnpm --filter '@bytecodealliance/jco-cm-runtime' run test
 
       - name: Upload Component Model runtime build output

@@ -1,233 +1,250 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { URL, fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { assert, suite, test } from 'vitest';
+import { assert, expect, test } from 'vitest';
 
 import { transpile, writeFiles } from '../../src/index.js';
-
-import {
-    resetRuntimeCreateCallCount,
-    resetTableGetCallCount,
-    runtimeCreateCallCount,
-    tableGetCallCount,
-} from '../fixtures/custom-runtime-provider.js';
 import { getTmpDir, nodeExec } from '../helpers.js';
 
-suite('External Component Model runtime', () => {
-    const fixture = fileURLToPath(new URL('../fixtures/components/runtime/resources.2.component.wat', import.meta.url));
-    const resourceFixture = fileURLToPath(
-        new URL('../fixtures/components/runtime/external-runtime-resource.component.wat', import.meta.url),
+const resourceFixture = fileURLToPath(
+    new URL('../fixtures/components/runtime/external-runtime-resource.component.wat', import.meta.url),
+);
+const defaultBase = new URL('../../../jco-cm-runtime/dist/', import.meta.url).href;
+const customBase = new URL('../fixtures/custom-runtime/', import.meta.url);
+
+for (const instantiation of ['sync', 'async'] as const) {
+    test.concurrent.each([false, true])(
+        `uses the selected realm without a platform global (${instantiation}, minify=%s)`,
+        async (minify) => {
+            const outDir = await getTmpDir();
+            try {
+                const { files } = await transpile(resourceFixture, {
+                    name: 'component',
+                    instantiation,
+                    minify,
+                    cmRuntimeEsModule: defaultBase,
+                });
+                await writeFiles(files, { baseDir: outDir });
+                await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+                await nodeExec(
+                    fileURLToPath(new URL('../fixtures/external-runtime/override-platform.mjs', import.meta.url)),
+                    join(outDir, 'component.js'),
+                );
+            } finally {
+                await rm(outDir, { recursive: true, force: true });
+            }
+        },
     );
-    const defaultCmRuntimeEsModule = new URL('../../../jco-cm-runtime/dist/index.js', import.meta.url).href;
+}
 
-    for (const instantiation of ['sync', 'async'] as const) {
-        test.each([false, true])(
-            `uses the selected WebAssembly realm without a platform global (${instantiation}, minify=%s)`,
-            async (minify) => {
-                const outDir = await getTmpDir();
-                const name = 'external-runtime-platform';
-                try {
-                    const { files } = await transpile(resourceFixture, {
-                        name,
-                        instantiation,
-                        minify,
-                        cmRuntimeEsModule: defaultCmRuntimeEsModule,
-                    });
-                    await writeFiles(files, { baseDir: outDir });
-                    await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
-                    await nodeExec(
-                        fileURLToPath(new URL('../fixtures/external-runtime/override-platform.mjs', import.meta.url)),
-                        join(outDir, `${name}.js`),
-                    );
-                } finally {
-                    await rm(outDir, { recursive: true, force: true });
+for (const instantiation of ['sync', 'async', undefined] as const) {
+    test.concurrent.each([false, true])(
+        `uses narrow stable contexts with independent stores (${instantiation ?? 'direct'}, minify=%s)`,
+        async (minify) => {
+            const outDir = await getTmpDir();
+            try {
+                await cp(customBase, join(outDir, 'runtime'), { recursive: true });
+                await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+                const { files } = await transpile(resourceFixture, {
+                    name: 'component',
+                    instantiation,
+                    minify,
+                    cmRuntimeEsModule: './runtime/',
+                });
+                await writeFiles(files, { baseDir: outDir });
+                const runtime = await import(pathToFileURL(join(outDir, 'runtime/intrinsics/resource.js')).href);
+                const bindings = await import(pathToFileURL(join(outDir, 'component.js')).href);
+                const load = (name: string) => new WebAssembly.Module(files[name]);
+                const first = instantiation ? await bindings.instantiate(load, {}) : bindings;
+                assert.strictEqual(first.run(42), 42);
+                assert.strictEqual(first.run(24), 24);
+                assert.strictEqual(runtime.tableGetCallCount, 2);
+                assert.strictEqual(runtime.contexts.size, 1);
+                const [context] = runtime.contexts;
+                assert.strictEqual(context.RuntimeError, WebAssembly.RuntimeError);
+                if (instantiation) {
+                    const [second, third] = await Promise.all([
+                        bindings.instantiate(load, {}),
+                        bindings.instantiate(load, {}),
+                    ]);
+                    assert.strictEqual(second.run(7), 7);
+                    assert.strictEqual(third.run(8), 8);
+                    assert.strictEqual(first.run(9), 9);
+                    assert.strictEqual(runtime.contexts.size, 3);
+                    const tables = [...runtime.tables.values()].map((value: Set<unknown>) => [...value][0]);
+                    assert.strictEqual(new Set(tables).size, 3);
+                    assert.throws(() => first.invalid(0), WebAssembly.RuntimeError, 'unknown handle index 0');
+                    assert.strictEqual(second.run(10), 10);
+                } else {
+                    assert.throws(() => first.invalid(0), WebAssembly.RuntimeError, 'unknown handle index 0');
                 }
-            },
-        );
-    }
+                assert.throws(() => first.run(42), WebAssembly.RuntimeError, 'cannot enter component instance');
+            } finally {
+                await rm(outDir, { recursive: true, force: true });
+            }
+        },
+    );
+}
 
-    for (const instantiation of ['sync', 'async', undefined] as const) {
-        test.each([false, true])(
-            `preserves the intrinsic receiver (${instantiation ?? 'direct'}, minify=%s)`,
-            async (minify) => {
-                const outDir = await getTmpDir();
-                const name = 'external-runtime-receiver';
-                const cmRuntimeEsModule = new URL('../fixtures/custom-runtime-provider.js', import.meta.url).href;
-                resetTableGetCallCount();
-                try {
-                    const { files } = await transpile(resourceFixture, {
-                        name,
-                        instantiation,
-                        minify,
-                        cmRuntimeEsModule,
-                    });
-                    await writeFiles(files, { baseDir: outDir });
-                    await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
-                    const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
-                    const instance = instantiation
-                        ? await bindings.instantiate(
-                              (moduleName: string) => new WebAssembly.Module(files[moduleName]),
-                              {},
-                          )
-                        : bindings;
-
-                    assert.strictEqual(instance.run(42), 42);
-                    assert.strictEqual(instance.run(24), 24);
-                    assert.strictEqual(tableGetCallCount, 2);
-                    assert.throws(() => instance.invalid(0), WebAssembly.RuntimeError, 'unknown handle index 0');
-                    assert.throws(() => instance.run(42), WebAssembly.RuntimeError, 'cannot enter component instance');
-                } finally {
-                    await rm(outDir, { recursive: true, force: true });
-                }
-            },
-        );
-    }
-
-    test.each([
-        {
-            name: 'a missing factory',
-            provider: '{ apiVersion: 1 }',
-            error: 'runtime provider must define create(options)',
-        },
-        {
-            name: 'an incompatible provider API before calling its factory',
-            provider: '{ apiVersion: 2, create() { throw new Error("factory must not run"); } }',
-            error: 'runtime API: requested 1, supported 2',
-        },
-        {
-            name: 'an incompatible instance API',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 2 }; } }',
-            error: 'runtime API instance: requested 1, received 2',
-        },
-        {
-            name: 'a non-function intrinsic',
-            provider:
-                '{ apiVersion: 1, create() { return { apiVersion: 1, intrinsics: { resource: { tableGet: 0 } } }; } }',
-            error: 'runtime intrinsic resource.tableGet must be a function',
-        },
-        {
-            name: 'a missing resource namespace',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 1, intrinsics: {} }; } }',
-            error: 'runtime intrinsic resource.tableGet must be a function',
-        },
-        {
-            name: 'missing intrinsics',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 1 }; } }',
-            error: 'runtime intrinsic resource.tableGet must be a function',
-        },
-    ])('rejects $name during instantiation', async ({ provider, error }) => {
+test.concurrent.each(['independent', 'reexport'] as const)(
+    'loads a %s package installed only beside generated bindings',
+    async (implementation) => {
         const outDir = await getTmpDir();
-        const name = 'external-runtime-invalid-provider';
+        const packageDir = join(outDir, 'node_modules/test-runtime-provider');
         try {
+            await cp(customBase, packageDir, { recursive: true });
+            if (implementation === 'reexport') {
+                await writeFile(
+                    join(packageDir, 'intrinsics/resource.js'),
+                    `export { tableGet } from ${JSON.stringify(defaultBase + 'intrinsics/resource.js')};`,
+                );
+            }
+            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
             const { files } = await transpile(resourceFixture, {
-                name,
+                name: 'component',
                 instantiation: 'sync',
-                cmRuntimeEsModule: './provider.js',
+                cmRuntimeEsModule: 'test-runtime-provider',
             });
             await writeFiles(files, { baseDir: outDir });
-            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
-            await writeFile(join(outDir, 'provider.js'), `export const runtime = ${provider};`);
-            const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
-            assert.throws(
-                () => bindings.instantiate((moduleName: string) => new WebAssembly.Module(files[moduleName]), {}),
-                error,
-            );
+            const bindings = await import(pathToFileURL(join(outDir, 'component.js')).href);
+            const instance = bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
+            assert.strictEqual(instance.run(42), 42);
+            assert.throws(() => instance.invalid(0), WebAssembly.RuntimeError, 'unknown handle index 0');
         } finally {
             await rm(outDir, { recursive: true, force: true });
         }
-    });
+    },
+);
 
-    test('does not depend on the optional runtime package', async () => {
-        const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
-        assert.notProperty(manifest.dependencies, '@bytecodealliance/jco-cm-runtime');
-    });
-
-    test('keeps canon resource.rep self-contained by default', async () => {
-        const { files, imports } = await transpile(fixture, { name: 'external-runtime-resource' });
-        const source = new TextDecoder().decode(files['external-runtime-resource.js']);
-
-        assert.notInclude(source, '_jcoRuntimeProvider');
-        assert.include(source, 'function rscTableGet(table, handle)');
-        assert.include(source, 'rscTableGet(');
-        assert.notInclude(imports, '@bytecodealliance/jco-cm-runtime');
-    });
-
-    test('places custom runtime creation inside each instantiation', async () => {
-        const cmRuntimeEsModule = './test-runtime-provider.js';
-        const { files, imports } = await transpile(fixture, {
-            name: 'external-runtime-instantiation',
-            instantiation: 'sync',
-            cmRuntimeEsModule,
+test.concurrent.each(['sync', 'async', undefined] as const)('rejects API-v1 metadata (%s)', async (instantiation) => {
+    const outDir = await getTmpDir();
+    try {
+        await cp(customBase, join(outDir, 'runtime'), { recursive: true });
+        await writeFile(join(outDir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+        const { files } = await transpile(resourceFixture, {
+            name: 'component',
+            instantiation,
+            cmRuntimeEsModule: './runtime',
         });
-        const source = new TextDecoder().decode(files['external-runtime-instantiation.js']);
-        const importPosition = source.indexOf(
-            'import { runtime as _jcoRuntimeProvider } from "./test-runtime-provider.js";',
-        );
-        const instantiatePosition = source.indexOf('export function instantiate(');
-        const createPosition = source.indexOf('_jcoRuntimeProvider.create(');
+        await writeFiles(files, { baseDir: outDir });
+        await expect(
+            (async () => {
+                const bindings = await import(pathToFileURL(join(outDir, 'component.js')).href);
+                if (instantiation) {
+                    await bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
+                }
+            })(),
+        ).rejects.toThrow('runtime API: requested 2, supported 1');
+    } finally {
+        await rm(outDir, { recursive: true, force: true });
+    }
+});
 
-        assert.isAtLeast(importPosition, 0);
-        assert.isAbove(instantiatePosition, importPosition);
-        assert.isAbove(createPosition, instantiatePosition);
-        assert.lengthOf(source.match(/_jcoRuntimeProvider\.create\(/g) ?? [], 1);
-        assert.notInclude(imports, cmRuntimeEsModule);
-    });
-
-    test('loads a bare runtime module installed only with the generated component', async () => {
-        const outDir = await getTmpDir();
-        const name = 'external-runtime-local-package';
-        const cmRuntimeEsModule = 'test-runtime-provider';
-        const packageDir = join(outDir, 'node_modules', cmRuntimeEsModule);
-
-        try {
-            await mkdir(packageDir, { recursive: true });
+test.concurrent.each(['export', 'subpath'] as const)('native ESM rejects a missing %s', async (missing) => {
+    const outDir = await getTmpDir();
+    const packageDir = join(outDir, 'node_modules/test-runtime-provider');
+    try {
+        await cp(customBase, packageDir, { recursive: true });
+        if (missing === 'export') {
+            await writeFile(join(packageDir, 'intrinsics/resource.js'), 'export {};');
+        } else {
             await writeFile(
                 join(packageDir, 'package.json'),
-                JSON.stringify({ name: cmRuntimeEsModule, type: 'module' }),
+                JSON.stringify({ type: 'module', exports: { './runtime': './runtime.js' } }),
             );
-            await copyFile(
-                new URL('../fixtures/custom-runtime-provider.js', import.meta.url),
-                join(packageDir, 'index.js'),
-            );
-            const provider = await import(pathToFileURL(join(packageDir, 'index.js')).href);
-            provider.resetRuntimeCreateCallCount();
-
-            const { files } = await transpile(fixture, { name, instantiation: 'sync', cmRuntimeEsModule });
-            await writeFiles(files, { baseDir: outDir });
-            const source = new TextDecoder().decode(files[`${name}.js`]);
-            assert.include(source, `from "${cmRuntimeEsModule}"`);
-
-            const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
-            bindings.instantiate((moduleName: string) => new WebAssembly.Module(files[moduleName]), {});
-            assert.strictEqual(provider.runtimeCreateCallCount, 1);
-        } finally {
-            await rm(outDir, { recursive: true, force: true });
         }
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+        const { files } = await transpile(resourceFixture, {
+            name: 'component',
+            instantiation: 'sync',
+            cmRuntimeEsModule: 'test-runtime-provider',
+        });
+        await writeFiles(files, { baseDir: outDir });
+        await writeFile(join(outDir, 'load.mjs'), "import './component.js';");
+        await expect(nodeExec(join(outDir, 'load.mjs'))).rejects.toThrow(missing === 'export' ? 'tableGet' : 'exports');
+    } finally {
+        await rm(outDir, { recursive: true, force: true });
+    }
+});
+
+test.concurrent('keeps inline output self-contained and transpilation independent of runtime installation', async () => {
+    const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+    assert.notProperty(manifest.dependencies, '@bytecodealliance/jco-cm-runtime');
+    const { files } = await transpile(resourceFixture, { name: 'component' });
+    const source = new TextDecoder().decode(files['component.js']);
+    assert.include(source, 'function rscTableGet(table, handle)');
+    assert.notInclude(source, '_jcoRuntime');
+    const external = await transpile(resourceFixture, {
+        name: 'component',
+        instantiation: 'sync',
+        cmRuntimeEsModule: 'not-installed-runtime',
     });
+    const named = new TextDecoder().decode(external.files['component.js']);
+    assert.include(named, 'from "not-installed-runtime/intrinsics/resource"');
+    assert.include(named, 'from "not-installed-runtime/runtime"');
+    assert.notInclude(named, '_jcoRuntimeProvider');
+    assert.notInclude(named, '.bind(receiver)');
+    assert.lengthOf(named.match(/tableGet as rscTableGet/g) ?? [], 1);
+    assert.isAbove(named.indexOf('const _jcoResourceTableGetContext'), named.indexOf('const WebAssembly = options?'));
+    assert.notInclude(external.imports, 'not-installed-runtime');
+});
 
-    test('creates a fresh runtime instance for each generated store', async () => {
+test.concurrent('reserves the named intrinsic alias against component exports', async () => {
+    const outDir = await getTmpDir();
+    try {
+        const wat = (await readFile(resourceFixture, 'utf8')).replace(
+            '(func (export "run") (param "value"',
+            '(func (export "rsc-table-get") (param "value"',
+        );
+        const component = join(outDir, 'collision.wat');
+        await writeFile(component, wat);
+        const { files } = await transpile(component, {
+            name: 'component',
+            instantiation: 'sync',
+            cmRuntimeEsModule: defaultBase,
+        });
+        await writeFiles(files, { baseDir: outDir });
+        const bindings = await import(pathToFileURL(join(outDir, 'component.js')).href);
+        const instance = bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
+        assert.strictEqual(instance.rscTableGet(42), 42);
+    } finally {
+        await rm(outDir, { recursive: true, force: true });
+    }
+});
+
+test.concurrent.each(['relative', 'file-url'] as const)(
+    'loads a %s directory base with spaces and quotes',
+    async (kind) => {
         const outDir = await getTmpDir();
-        const name = 'external-runtime-two-stores';
-        const cmRuntimeEsModule = new URL('../fixtures/custom-runtime-provider.js', import.meta.url).href;
-        resetRuntimeCreateCallCount();
-
+        const directory = "runtime with 'quotes'";
         try {
-            const { files } = await transpile(fixture, {
-                name,
+            await cp(customBase, join(outDir, directory), { recursive: true });
+            const cmRuntimeEsModule =
+                kind === 'relative' ? `./${directory}/` : pathToFileURL(join(outDir, directory)).href;
+            const { files } = await transpile(resourceFixture, {
+                name: 'component',
                 instantiation: 'sync',
                 cmRuntimeEsModule,
             });
             await writeFiles(files, { baseDir: outDir });
-            const bindings = await import(pathToFileURL(join(outDir, `${name}.js`)).href);
-            const getCoreModule = (moduleName: string) => new WebAssembly.Module(files[moduleName]);
-
-            bindings.instantiate(getCoreModule, {});
-            bindings.instantiate(getCoreModule, {});
-
-            assert.strictEqual(runtimeCreateCallCount, 2);
+            const bindings = await import(pathToFileURL(join(outDir, 'component.js')).href);
+            const instance = bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
+            assert.strictEqual(instance.run(42), 42);
         } finally {
             await rm(outDir, { recursive: true, force: true });
         }
-    });
+    },
+);
+
+test.concurrent.each([
+    ['', 'non-empty base'],
+    ['runtime\nmodule', 'control characters'],
+    ['data:text/javascript,', 'unsupported URL scheme'],
+    ['./runtime?version=2', 'query or fragment'],
+    ['file:///runtime#version', 'query or fragment'],
+    ['./provider.js', 'directory base'],
+])('rejects invalid base %j through the transpiler API', async (cmRuntimeEsModule, message) => {
+    await expect(transpile(resourceFixture, { name: 'component', cmRuntimeEsModule })).rejects.toThrow(message);
 });

@@ -7,7 +7,7 @@ import { suite, test, assert, expect, beforeAll, vi } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
-import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime-provider.js';
+import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime/intrinsics/resource.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
@@ -222,7 +222,7 @@ suite('component-model WAST', () => {
                     resetTableGetCallCount();
                 }
                 const cmRuntimeEsModule = instrumentRuntime
-                    ? new URL('../../../fixtures/custom-runtime-provider.js', import.meta.url).href
+                    ? new URL('../../../fixtures/custom-runtime/', import.meta.url).href
                     : undefined;
                 const mod = (await import(pathToFileURL(scriptPath).href)) as WastTestModule;
                 const artifacts = mod.wastTestArtifacts ?? [];

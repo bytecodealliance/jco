@@ -1,37 +1,40 @@
-import { createResourceIntrinsics } from './intrinsics/resource.js';
-import {
-    CM_RUNTIME_API_VERSION,
-    type ComponentModelRuntime,
-    type ComponentModelRuntimeProvider,
-    type RuntimeOptions,
-    type RuntimePlatform,
-} from './types.js';
+/** Experimental JavaScript Component Model runtime contract, independent of package version. */
+export const CM_RUNTIME_API_VERSION = 2 as const;
 
-function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
-    if (options.requestedApiVersion !== CM_RUNTIME_API_VERSION) {
-        throw new Error(
-            `incompatible Jco JavaScript Component Model runtime API: requested ${options.requestedApiVersion}, ` +
-                `supported ${CM_RUNTIME_API_VERSION}`,
-        );
-    }
+export type RuntimeApiVersion = number;
+export type ResourceHandle = number;
+export type ResourceRep = number;
+export type ResourceScope = number;
 
-    const platform: RuntimePlatform = {
-        WebAssembly: options.platform?.WebAssembly ?? globalThis.WebAssembly,
-    };
-
-    if (typeof platform.WebAssembly?.RuntimeError !== 'function') {
-        throw new TypeError('Jco Component Model runtime requires WebAssembly.RuntimeError');
-    }
-
-    return {
-        apiVersion: CM_RUNTIME_API_VERSION,
-        intrinsics: {
-            resource: createResourceIntrinsics(platform.WebAssembly.RuntimeError),
-        },
-    };
+export interface RuntimeErrorConstructor {
+    new (message?: string): Error;
+    readonly prototype: Error;
 }
 
-export const runtime = {
-    apiVersion: CM_RUNTIME_API_VERSION,
-    create: createRuntime,
-} satisfies ComponentModelRuntimeProvider;
+/** Trap capability from the WebAssembly implementation selected by the bindings. */
+export interface TrapContext {
+    readonly RuntimeError: RuntimeErrorConstructor;
+}
+
+/** Stable per-instantiation capability; the table and handle remain call operands. */
+export type ResourceTableGetContext = TrapContext;
+
+export interface ResourceTableEntry {
+    readonly rep: ResourceRep;
+    readonly scope: ResourceScope;
+    readonly own: boolean;
+}
+
+/** Exports required at the public intrinsics/resource subpath. */
+export interface ResourceModule {
+    readonly tableGet: (
+        context: ResourceTableGetContext,
+        table: ArrayLike<number>,
+        handle: ResourceHandle,
+    ) => ResourceTableEntry;
+}
+
+/** Type-only conformance map. No runtime registry or factory is required. */
+export interface RuntimeModuleContracts {
+    readonly 'intrinsics/resource': ResourceModule;
+}

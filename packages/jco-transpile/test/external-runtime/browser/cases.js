@@ -3,7 +3,6 @@ async function loadProvider(path) {
         return undefined;
     }
     const provider = await import(path);
-    provider.resetRuntimeCreateCallCount();
     provider.resetTableGetCallCount();
     return provider;
 }
@@ -25,7 +24,7 @@ function exerciseInstances(instance, sibling, provider) {
         invalidHandle: captureTrap(() => instance.invalid(0)),
         afterTrap: captureTrap(() => instance.run(42)),
         siblingValue: sibling ? sibling.run(7) : null,
-        runtimeCreates: provider?.runtimeCreateCallCount ?? null,
+        contexts: provider?.contexts.size ?? null,
         tableGets,
     };
 }

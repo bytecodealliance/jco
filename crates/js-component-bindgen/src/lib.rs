@@ -224,10 +224,7 @@ fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
         opts.flags_as_bigint = true;
     }
     if let Some(cm_runtime_es_module) = &opts.cm_runtime_es_module {
-        ensure!(
-            !cm_runtime_es_module.is_empty() && !cm_runtime_es_module.chars().any(char::is_control),
-            "cmRuntimeEsModule must be a non-empty module specifier without control characters"
-        );
+        intrinsics::runtime::module_specifier(cm_runtime_es_module, "runtime")?;
     }
     Ok(())
 }
@@ -471,10 +468,10 @@ mod tests {
 
         let mut custom = TranspileOpts::builder()
             .name("component".into())
-            .cm_runtime_es_module("./runtime.js".into())
+            .cm_runtime_es_module("./runtime".into())
             .build();
         normalize_namespace_object_options(&mut custom).unwrap();
-        assert_eq!(custom.cm_runtime_es_module.as_deref(), Some("./runtime.js"));
+        assert_eq!(custom.cm_runtime_es_module.as_deref(), Some("./runtime"));
 
         for invalid in ["", "runtime\nmodule"] {
             let mut opts = TranspileOpts::builder()
@@ -487,7 +484,7 @@ mod tests {
 
     #[cfg(feature = "transpile-bindgen")]
     #[test]
-    fn resource_rep_uses_external_runtime_provider() {
+    fn resource_rep_uses_named_runtime_exports() {
         let component = wat::parse_str(
             r#"
                 (component
@@ -526,7 +523,7 @@ mod tests {
             &component,
             TranspileOpts::builder()
                 .name("resource-runtime".into())
-                .cm_runtime_es_module("./custom-runtime.js".into())
+                .cm_runtime_es_module("./custom-runtime".into())
                 .instantiation_mode(InstantiationMode::Sync)
                 .build(),
         )
@@ -534,22 +531,29 @@ mod tests {
         let source = generated_javascript(&transpiled);
 
         let import_position = source
-            .find("import { runtime as _jcoRuntimeProvider } from \"./custom-runtime.js\";")
+            .find("import { tableGet as rscTableGet } from \"./custom-runtime/intrinsics/resource.js\";")
             .unwrap();
         let instantiate_position = source.find("export function instantiate(").unwrap();
-        let create_position = source.find("_jcoRuntimeProvider.create(").unwrap();
+        let realm_position = source.find("const WebAssembly = options?").unwrap();
+        let context_position = source
+            .find("const _jcoResourceTableGetContext = { RuntimeError: WebAssembly.RuntimeError };")
+            .unwrap();
         assert!(import_position < instantiate_position);
-        assert!(instantiate_position < create_position);
-        assert!(source.contains("const rscTableGet = (() => {"));
-        assert!(source.contains("return intrinsic.bind(receiver);"));
-        assert!(source.contains("rscTableGet("));
-        assert!(!source.contains("function rscTableGet(table, handle)"));
-        assert_eq!(source.matches("_jcoRuntimeProvider.create(").count(), 1);
+        assert!(instantiate_position < realm_position);
+        assert!(realm_position < context_position);
         assert!(
-            !transpiled
-                .imports
-                .contains(&"./custom-runtime.js".to_string())
+            source.contains("rscTableGet(_jcoResourceTableGetContext, handleTable0, handle).rep")
         );
+        assert!(!source.contains("function rscTableGet(table, handle)"));
+        assert!(!source.contains("_jcoRuntimeProvider"));
+        assert!(!source.contains(".bind(receiver)"));
+        assert_eq!(source.matches("tableGet as rscTableGet").count(), 1);
+        assert_eq!(
+            source.matches("const _jcoResourceTableGetContext").count(),
+            1
+        );
+        assert!(source.contains("from \"./custom-runtime/runtime.js\""));
+        assert!(!transpiled.imports.contains(&"./custom-runtime".to_string()));
     }
 
     #[cfg(feature = "transpile-bindgen")]
@@ -558,12 +562,16 @@ mod tests {
         let component = wat::parse_str("(component)").unwrap();
         let transpiled = transpile(
             &component,
-            TranspileOpts::builder().name("adder".into()).build(),
+            TranspileOpts::builder()
+                .name("adder".into())
+                .cm_runtime_es_module("unused-runtime".into())
+                .build(),
         )
         .unwrap();
         let source = generated_javascript(&transpiled);
 
         assert!(!source.contains("_jcoRuntimeProvider"));
-        assert!(!source.contains("@bytecodealliance/jco-cm-runtime"));
+        assert!(!source.contains("unused-runtime"));
+        assert!(!source.contains("_jcoResourceTableGetContext"));
     }
 }

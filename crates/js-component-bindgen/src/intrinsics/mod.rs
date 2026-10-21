@@ -9,10 +9,10 @@ use wasmtime_environ::Trap;
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
-pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
-pub(crate) const CM_RUNTIME_PROVIDER_LOCAL_NAME: &str = "_jcoRuntimeProvider";
-const CM_RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
-const CM_RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
+pub(crate) mod runtime;
+use runtime::{
+    CM_RUNTIME_API_VERSION, RuntimeContext, RuntimeImport, TABLE_GET_CONTEXT, VERSION_LOCAL,
+};
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -207,14 +207,34 @@ pub(crate) enum IntrinsicBinding {
     },
     Runtime {
         local_name: &'static str,
-        path: &'static str,
+        import: RuntimeImport,
     },
 }
 
 impl IntrinsicBinding {
-    fn local_name(self) -> &'static str {
+    pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::Inline { local_name } | Self::Runtime { local_name, .. } => local_name,
+        }
+    }
+
+    /// Render a call, inserting only the context required by this operation.
+    pub(crate) fn call(self, operands: &str) -> String {
+        let name = self.local_name();
+        match self {
+            Self::Runtime {
+                import:
+                    RuntimeImport {
+                        context: Some(context),
+                        ..
+                    },
+                ..
+            } => {
+                let context = context.local_name();
+                let separator = if operands.is_empty() { "" } else { ", " };
+                format!("{name}({context}{separator}{operands})")
+            }
+            _ => format!("{name}({operands})"),
         }
     }
 }
@@ -2456,6 +2476,14 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 impl RenderIntrinsicsArgs<'_> {
+    pub(crate) fn intrinsic_call(&self, intrinsic: impl Into<Intrinsic>, operands: &str) -> String {
+        let intrinsic = intrinsic.into();
+        self.require_intrinsic(intrinsic);
+        intrinsic
+            .binding(self.transpile_opts.cm_runtime_es_module.is_some())
+            .call(operands)
+    }
+
     /// Retrieve an intrinsic's name and register it as a dependency of the
     /// intrinsic currently being rendered.
     pub fn require_intrinsic(&self, intrinsic: impl Into<Intrinsic>) -> &'static str {
@@ -2522,52 +2550,25 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         uwriteln!(
             output,
             r#"
-                if (typeof {CM_RUNTIME_PROVIDER_LOCAL_NAME}?.create !== 'function') {{
-                    throw new TypeError('Jco Component Model runtime provider must define create(options)');
+                if ({VERSION_LOCAL} !== {CM_RUNTIME_API_VERSION}) {{
+                    throw new Error(`incompatible Jco JavaScript Component Model runtime API: requested {CM_RUNTIME_API_VERSION}, supported ${{{VERSION_LOCAL}}}`);
                 }}
-                if ({CM_RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
-                    throw new Error(`incompatible Jco JavaScript Component Model runtime API: requested {CM_RUNTIME_API_VERSION}, supported ${{{CM_RUNTIME_PROVIDER_LOCAL_NAME}.apiVersion}}`);
-                }}
-                const {CM_RUNTIME_LOCAL_NAME} = {CM_RUNTIME_PROVIDER_LOCAL_NAME}.create({{
-                    requestedApiVersion: {CM_RUNTIME_API_VERSION},
-                    strict: {strict},
-                    flagsAsBigInt: {flags_as_bigint},
-                    nodejsCompat: {nodejs_compat},
-                    asyncDeterminism: '{determinism}',
-                    platform: {{ WebAssembly }},
-                }});
-                if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
-                    throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
-                }}
-                const {CM_RUNTIME_INTRINSICS_LOCAL_NAME} = {CM_RUNTIME_LOCAL_NAME}.intrinsics;
             "#,
-            strict = args.transpile_opts.strict,
-            flags_as_bigint = args.transpile_opts.flags_as_bigint,
-            nodejs_compat = !args.transpile_opts.nodejs_compat_disabled,
-            determinism = args.determinism_profile,
         );
-
+        let mut contexts = BTreeSet::new();
         for intrinsic in args.intrinsics.iter() {
-            let IntrinsicBinding::Runtime { local_name, path } =
-                intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some())
-            else {
-                continue;
-            };
-            let (receiver_path, method) = path
-                .rsplit_once('.')
-                .expect("runtime intrinsic paths must name a method on a receiver");
-            output.push_str(&format!(
-                r#"
-                    const {local_name} = (() => {{
-                        const receiver = {CM_RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path};
-                        const intrinsic = receiver?.{method};
-                        if (typeof intrinsic !== 'function') {{
-                            throw new TypeError('Jco Component Model runtime intrinsic {path} must be a function');
-                        }}
-                        return intrinsic.bind(receiver);
-                    }})();
-                "#
-            ));
+            if let IntrinsicBinding::Runtime {
+                import:
+                    RuntimeImport {
+                        context: Some(context),
+                        ..
+                    },
+                ..
+            } = intrinsic.binding(true)
+                && contexts.insert(context.local_name())
+            {
+                context.render(&mut output);
+            }
         }
     }
     if args
@@ -2690,7 +2691,11 @@ impl Intrinsic {
             Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
                 IntrinsicBinding::Runtime {
                     local_name: self.name(),
-                    path: "resource.tableGet",
+                    import: RuntimeImport {
+                        suffix: "intrinsics/resource",
+                        export: "tableGet",
+                        context: Some(RuntimeContext::ResourceTableGet),
+                    },
                 }
             }
             _ => IntrinsicBinding::Inline {
@@ -2742,9 +2747,8 @@ impl Intrinsic {
                 "imports",
                 "instantiateCore",
                 "isLE",
-                CM_RUNTIME_PROVIDER_LOCAL_NAME,
-                CM_RUNTIME_LOCAL_NAME,
-                CM_RUNTIME_INTRINSICS_LOCAL_NAME,
+                VERSION_LOCAL,
+                TABLE_GET_CONTEXT,
                 "scopeId",
                 "symbolCabiDispose",
                 "symbolCabiLower",

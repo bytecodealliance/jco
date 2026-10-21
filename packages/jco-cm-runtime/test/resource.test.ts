@@ -1,83 +1,45 @@
-import { describe, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
 
-import { CM_RUNTIME_API_VERSION, runtime, type ComponentModelRuntimeProvider } from '../src/index.js';
+import * as resource from '../src/intrinsics/resource.js';
+import { CM_RUNTIME_API_VERSION, type ResourceModule } from '../src/runtime.js';
 
 const TABLE_FLAG = 1 << 30;
+const context = { RuntimeError: WebAssembly.RuntimeError };
+const { tableGet } = resource satisfies ResourceModule;
 
-function createRuntime() {
-    return runtime.create({
-        requestedApiVersion: CM_RUNTIME_API_VERSION,
-        strict: false,
-        flagsAsBigInt: false,
-        nodejsCompat: true,
-        asyncDeterminism: 'random',
-    });
-}
-
-describe('resource.tableGet', () => {
-    test('reads owned and borrowed resource entries', () => {
-        const { tableGet } = createRuntime().intrinsics.resource;
-        const table = [TABLE_FLAG, 0, 7, 42 | TABLE_FLAG, 11, 24];
-
-        expect(tableGet(table, 1)).toEqual({ rep: 42, scope: 7, own: true });
-        expect(tableGet(table, 2)).toEqual({ rep: 24, scope: 11, own: false });
-    });
-
-    test.each([
-        { name: 'the sentinel at index 0', table: [TABLE_FLAG, 0], handle: 0 },
-        { name: 'a freed entry', table: [TABLE_FLAG, 0, TABLE_FLAG, 0], handle: 1 },
-        { name: 'a zero rep', table: [TABLE_FLAG, 0, 0, 0], handle: 1 },
-        { name: 'an index past the end of the table', table: [TABLE_FLAG, 0], handle: 4 },
-    ])('traps for $name', ({ table, handle }) => {
-        const { tableGet } = createRuntime().intrinsics.resource;
-
-        expect(() => tableGet(table, handle)).toThrowError(WebAssembly.RuntimeError);
-        expect(() => tableGet(table, handle)).toThrow(`unknown handle index ${handle}`);
-    });
-
-    test('uses the injected RuntimeError realm', () => {
-        class CustomRuntimeError extends Error {}
-        const instance = runtime.create({
-            requestedApiVersion: CM_RUNTIME_API_VERSION,
-            strict: false,
-            flagsAsBigInt: false,
-            nodejsCompat: true,
-            asyncDeterminism: 'random',
-            platform: { WebAssembly: { RuntimeError: CustomRuntimeError } },
-        });
-
-        expect(() => instance.intrinsics.resource.tableGet([TABLE_FLAG, 0], 0)).toThrowError(CustomRuntimeError);
-    });
+test.concurrent('reads owned and borrowed entries without changing the table', () => {
+    const table = Object.freeze([TABLE_FLAG, 0, 7, 42 | TABLE_FLAG, 11, 24]);
+    expect(tableGet(context, table, 1)).toEqual({ rep: 42, scope: 7, own: true });
+    expect(tableGet(context, table, 2)).toEqual({ rep: 24, scope: 11, own: false });
+    expect(CM_RUNTIME_API_VERSION).toBe(2);
 });
 
-describe('runtime provider', () => {
-    test('rejects an incompatible requested API', () => {
-        expect(() =>
-            runtime.create({
-                requestedApiVersion: 2,
-                strict: false,
-                flagsAsBigInt: false,
-                nodejsCompat: true,
-                asyncDeterminism: 'random',
-            }),
-        ).toThrow('requested 2, supported 1');
+test.concurrent.each([
+    { name: 'sentinel', table: [TABLE_FLAG, 0], handle: 0 },
+    { name: 'freed entry', table: [TABLE_FLAG, 0, TABLE_FLAG, 42], handle: 1 },
+    { name: 'zero rep', table: [TABLE_FLAG, 0, 0, 0], handle: 1 },
+    { name: 'missing index', table: [TABLE_FLAG, 0], handle: 4 },
+    { name: 'hole for another handle kind', table: [TABLE_FLAG, 0, , , 7, 42], handle: 1 },
+])('traps for $name in the selected realm', ({ table, handle }) => {
+    class CustomRuntimeError extends Error {}
+    // Sparse arrays have undefined holes at runtime, just like out-of-bounds reads.
+    const sparseTable = table as number[];
+    expect(() => tableGet({ RuntimeError: CustomRuntimeError }, sparseTable, handle)).toThrowError(CustomRuntimeError);
+    expect(() => tableGet(context, sparseTable, handle)).toThrow(`unknown handle index ${handle}`);
+});
+
+test.concurrent('uses only the explicit context, including reentrant table reads', () => {
+    class OuterTrap extends Error {}
+    class InnerTrap extends Error {}
+    const outer = { RuntimeError: OuterTrap };
+    const inner = { RuntimeError: InnerTrap };
+    const table = new Proxy([TABLE_FLAG, 0, 0, 0], {
+        get(target, key, receiver) {
+            if (key === '2') {
+                expect(() => tableGet(inner, [TABLE_FLAG, 0], 0)).toThrowError(InnerTrap);
+            }
+            return Reflect.get(target, key, receiver);
+        },
     });
-
-    test('creates isolated runtime objects', () => {
-        const first = createRuntime();
-        const second = createRuntime();
-
-        expect(first).not.toBe(second);
-        expect(first.intrinsics).not.toBe(second.intrinsics);
-        expect(first.intrinsics.resource).not.toBe(second.intrinsics.resource);
-    });
-
-    test('supports structurally typed alternative providers', () => {
-        const alternative = {
-            apiVersion: CM_RUNTIME_API_VERSION,
-            create: (options) => runtime.create(options),
-        } satisfies ComponentModelRuntimeProvider;
-
-        expect(alternative.create).toBeTypeOf('function');
-    });
+    expect(() => tableGet.call(null, outer, table, 1)).toThrowError(OuterTrap);
 });
